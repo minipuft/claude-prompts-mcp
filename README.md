@@ -8,6 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge&logo=opensource)](https://opensource.org/licenses/MIT)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-ff6b35?style=for-the-badge&logo=anthropic)](https://modelcontextprotocol.io)
 [![Node.js](https://img.shields.io/badge/Node.js-16%2B-339933?style=for-the-badge&logo=node.js)](https://nodejs.org)
+[![smithery badge](https://smithery.ai/badge/@minipuft/claude-prompts-mcp)](https://smithery.ai/server/@minipuft/claude-prompts-mcp)
 
 **🚀 The Universal Model Context Protocol Server for Any MCP Client**
 
@@ -126,6 +127,14 @@ Get your AI command center running in **under a minute**:
 # Clone → Install → Launch → Profit! 🚀
 git clone https://github.com/minipuft/claude-prompts-mcp.git
 cd claude-prompts-mcp/server && npm install && npm run build && npm start
+```
+
+### Installing via Smithery
+
+To install Claude Prompts MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@minipuft/claude-prompts-mcp):
+
+```bash
+npx -y @smithery/cli install @minipuft/claude-prompts-mcp --client claude
 ```
 
 ### 🔌 **Universal MCP Client Integration**
