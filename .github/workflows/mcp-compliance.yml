@@ -8,6 +8,7 @@ on:
       - 'server/src/transport/**'
       - 'server/src/orchestration/**'
       - 'server/package.json'
+      - '.github/workflows/mcp-compliance.yml'
   pull_request:
     branches: [main]
     paths:

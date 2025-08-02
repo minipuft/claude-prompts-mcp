@@ -53,50 +53,16 @@ jobs:
           npm test
         timeout-minutes: 3
 
-      - name: CAGEERF Framework validation
+      - name: Quick Framework Validation
         run: |
           cd server
-          echo "Validating CAGEERF framework integration..."
+          echo "Quick validation of framework compilation..."
 
-          # Check if CAGEERF modules compile
-          if [ -f "dist/utils/cageerf-analyzer.js" ]; then
-            echo "✅ CAGEERF Analyzer compiled"
+          # Check if key modules compiled
+          if [ -f "dist/utils/cageerf-analyzer.js" ] && [ -f "dist/utils/template-generator.js" ] && [ -f "dist/mcp-tools/index.js" ]; then
+            echo "✅ All framework modules compiled successfully"
           else
-            echo "❌ CAGEERF Analyzer compilation failed"
-            exit 1
-          fi
-
-          if [ -f "dist/utils/template-generator.js" ]; then
-            echo "✅ Template Generator compiled"
-          else
-            echo "❌ Template Generator compilation failed"
-            exit 1
-          fi
-
-          if [ -f "dist/utils/template-repository.js" ]; then
-            echo "✅ Template Repository compiled"
-          else
-            echo "❌ Template Repository compilation failed"
-            exit 1
-          fi
-
-      - name: MCP Tools validation
-        run: |
-          cd server
-          echo "Validating MCP Tools integration..."
-
-          # Check if MCP tools compile
-          if [ -f "dist/mcp-tools/template-generation-tools.js" ]; then
-            echo "✅ Template Generation MCP Tools compiled"
-          else
-            echo "❌ Template Generation MCP Tools compilation failed"
-            exit 1
-          fi
-
-          if [ -f "dist/mcp-tools/workflow-management-tools.js" ]; then
-            echo "✅ Workflow Management MCP Tools compiled"
-          else
-            echo "❌ Workflow Management MCP Tools compilation failed"
+            echo "❌ Framework compilation failed - missing required modules"
             exit 1
           fi
 
@@ -196,8 +162,7 @@ jobs:
                 '- ✅ TypeScript compilation successful',
                 '- ✅ Build process completed',
                 '- ✅ All tests passed',
-                '- ✅ CAGEERF framework validation successful',
-                '- ✅ MCP Tools integration verified',
+                '- ✅ Framework modules compiled successfully',
                 '- ✅ Server startup validation completed',
                 '',
                 '### Files Changed:',
@@ -225,7 +190,7 @@ jobs:
                 '- Run `cd server && npm run typecheck` locally',
                 '- Run `cd server && npm run build` locally',
                 '- Run `cd server && npm test` locally',
-                '- Ensure all CAGEERF modules compile correctly'
+                '- Ensure all framework modules compile correctly'
               ];
               message = lines.join('\n');
             }

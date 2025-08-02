@@ -3,8 +3,19 @@ name: Performance Monitoring
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'server/src/utils/**'
+      - 'server/src/mcp-tools/**'
+      - 'server/src/orchestration/**'
+      - 'server/package.json'
+      - '.github/workflows/performance-monitoring.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'server/src/utils/**'
+      - 'server/src/mcp-tools/**'
+      - 'server/src/orchestration/**'
+      - 'server/package.json'
   schedule:
     # Run performance tests daily at 2 AM UTC
     - cron: '0 2 * * *'

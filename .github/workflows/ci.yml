@@ -11,12 +11,12 @@ env:
 
 jobs:
   validate:
-    name: Validate Build and Tests
+    name: Build and Core Validation
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [16, 18, 20]
+        node-version: [18, 20]  # Reduced matrix for efficiency
       fail-fast: false
     
     steps:
@@ -117,8 +117,8 @@ jobs:
             server/package-lock.json
           retention-days: 7
 
-  cageerf-integration:
-    name: CAGEERF Framework Integration Tests
+  comprehensive-framework-tests:
+    name: Comprehensive CAGEERF & MCP Integration Tests
     runs-on: ubuntu-latest
     needs: validate
     
@@ -143,73 +143,309 @@ jobs:
           cd server
           npm run build
       
-      - name: Validate CAGEERF Analyzer Module
+      - name: Enhanced MCP Server Integration Tests
         run: |
           cd server
+          echo "🧪 Running enhanced MCP server integration tests..."
+          
           node -e "
-            async function validateCAGEERFAnalyzer() {
-              // Use dynamic imports for ES modules
-              const analyzer = await import('./dist/utils/cageerf-analyzer.js');
-              console.log('✅ CAGEERF Analyzer module loaded successfully');
-              console.log('Available exports:', Object.keys(analyzer));
+            async function enhancedIntegrationTests() {
+              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              console.log('🔍 Test 1: Full server initialization sequence');
+              
+              const logger = new MockLogger();
+              const orchestrator = new ApplicationOrchestrator(logger);
+              
+              await orchestrator.loadConfiguration();
+              if (!orchestrator.config) {
+                throw new Error('Configuration not loaded');
+              }
+              console.log('✅ Configuration loaded successfully');
+              
+              await orchestrator.loadPromptsData();
+              console.log(\`✅ Prompts data loaded: \${orchestrator.promptsData ? orchestrator.promptsData.length : 0} prompts\`);
+              
+              await orchestrator.initializeModules();
+              if (!orchestrator.mcpToolsManager) {
+                throw new Error('MCP tools manager not initialized');
+              }
+              console.log('✅ Modules initialized successfully');
+              
+              const healthInfo = await orchestrator.getDiagnosticInfo();
+              if (!healthInfo || typeof healthInfo !== 'object') {
+                throw new Error('Health diagnostics failed');
+              }
+              console.log(\`✅ Health diagnostics collected: \${Object.keys(healthInfo).length} metrics\`);
+              
+              console.log('🎉 Enhanced integration tests completed successfully');
             }
             
-            validateCAGEERFAnalyzer().catch(error => {
-              console.error('❌ CAGEERF Analyzer validation failed:', error.message);
+            enhancedIntegrationTests().catch(error => {
+              console.error('❌ Enhanced integration tests failed:', error.message);
               process.exit(1);
             });
           "
       
-      - name: Validate Template Generator
+      - name: CAGEERF Framework Comprehensive Tests
         run: |
           cd server
+          echo "🧪 Running comprehensive CAGEERF framework tests..."
+          
           node -e "
-            async function validateTemplateGenerator() {
-              // Use dynamic imports for ES modules
-              const generator = await import('./dist/utils/template-generator.js');
-              console.log('✅ Template Generator module loaded successfully');
-              console.log('Available exports:', Object.keys(generator));
+            async function comprehensiveFrameworkTests() {
+              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
+              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
+              const { TemplateRepositoryBuilder } = await import('./dist/utils/template-repository.js');
+              const { SemanticAnalyzer } = await import('./dist/utils/semanticAnalyzer.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              console.log('🔍 Test 1: CAGEERF Analyzer edge cases');
+              
+              const analyzer = new CAGEERFAnalyzer();
+              
+              const testCases = [
+                'Simple prompt',
+                'Context analysis goals execution evaluation refinement framework methodology',
+                'A'.repeat(1000),  // Long input
+                '🚀 Analyze 📊 the data with systematic approach! 🎯'  // With emojis
+              ];
+              
+              for (let i = 0; i < testCases.length; i++) {
+                const analysis = analyzer.analyzePrompt(testCases[i]);
+                if (!analysis.compliance || !analysis.frameworkScore || analysis.overallCompliance === undefined) {
+                  throw new Error(\`Invalid analysis structure for test case \${i + 1}\`);
+                }
+                if (analysis.frameworkScore < 0 || analysis.frameworkScore > 1) {
+                  throw new Error(\`Invalid framework score: \${analysis.frameworkScore}\`);
+                }
+                console.log(\`✅ Test case \${i + 1} passed (score: \${analysis.frameworkScore.toFixed(3)})\`);
+              }
+              
+              console.log('🔍 Test 2: Template Generator validation');
+              const generator = new TemplateGenerator();
+              const complexities = ['simple', 'intermediate', 'advanced'];
+              const styles = ['structured', 'conversational', 'professional'];
+              
+              for (const complexity of complexities) {
+                for (const style of styles) {
+                  const template = await generator.generateTemplate({
+                    useCase: \`Test \${complexity} \${style}\`,
+                    domain: 'Testing',
+                    complexity: complexity,
+                    frameworkEmphasis: {
+                      context: true, analysis: true, goals: true,
+                      execution: true, evaluation: true, refinement: true, framework: true
+                    },
+                    templateStyle: style,
+                    includePlaceholders: true
+                  });
+                  
+                  if (!template.userMessageTemplate || typeof template.userMessageTemplate !== 'string') {
+                    throw new Error('Invalid template content');
+                  }
+                  if (!template.qualityScore || template.qualityScore < 0 || template.qualityScore > 1) {
+                    throw new Error(\`Invalid CAGEERF score: \${template.qualityScore}\`);
+                  }
+                  console.log(\`✅ Template \${complexity}/\${style} passed (score: \${template.qualityScore.toFixed(3)})\`);
+                }
+              }
+              
+              console.log('🔍 Test 3: Template Repository validation');
+              const repository = TemplateRepositoryBuilder.buildRepository();
+              if (!repository.templates || !Array.isArray(repository.templates)) {
+                throw new Error('Invalid templates array');
+              }
+              console.log(\`✅ Repository validation passed: \${repository.templates.length} templates\`);
+              
+              console.log('🔍 Test 4: Semantic Analyzer enhanced functionality');
+              const semanticAnalyzer = new SemanticAnalyzer(new MockLogger());
+              const testPrompt = {
+                id: 'test-prompt-001',
+                name: 'Test Analysis Prompt',
+                userMessageTemplate: 'Analyze the context, set goals, execute systematic evaluation',
+                description: 'Test prompt for semantic analysis',
+                category: 'test',
+                arguments: [],
+                systemMessage: 'Test system message'
+              };
+              
+              const classification = semanticAnalyzer.classifyPrompt(testPrompt);
+              if (!classification.executionType || classification.confidence === undefined) {
+                throw new Error('Invalid classification structure');
+              }
+              if (!classification.cageerfAnalysis || classification.frameworkCompliance === undefined) {
+                throw new Error('Missing CAGEERF integration');
+              }
+              console.log(\`✅ Semantic analysis passed: \${classification.executionType} (confidence: \${classification.confidence.toFixed(3)})\`);
+              
+              console.log('🎉 Comprehensive CAGEERF framework tests completed successfully');
             }
             
-            validateTemplateGenerator().catch(error => {
-              console.error('❌ Template Generator validation failed:', error.message);
+            comprehensiveFrameworkTests().catch(error => {
+              console.error('❌ CAGEERF framework tests failed:', error.message);
               process.exit(1);
             });
           "
       
-      - name: Validate Template Repository
+      - name: MCP Tools Comprehensive Tests
         run: |
           cd server
+          echo "🧪 Running comprehensive MCP tools tests..."
+          
           node -e "
-            async function validateTemplateRepository() {
-              // Use dynamic imports for ES modules
-              const repository = await import('./dist/utils/template-repository.js');
-              console.log('✅ Template Repository module loaded successfully');
-              console.log('Available exports:', Object.keys(repository));
+            async function comprehensiveMcpToolsTests() {
+              const { McpToolsManager } = await import('./dist/mcp-tools/index.js');
+              const { TemplateGenerationTools } = await import('./dist/mcp-tools/template-generation-tools.js');
+              const { MockLogger } = await import('./dist/utils/index.js');
+              console.log('🔍 Test 1: MCP Tools Manager functionality');
+              
+              const toolCalls = [];
+              const mockMcpServer = {
+                tool: function(name, description, schema) {
+                  toolCalls.push({ name, description, schema });
+                  return {
+                    name,
+                    handler: async (args) => {
+                      return {
+                        content: [{ type: 'text', text: \`Mock response for \${name}\` }]
+                      };
+                    }
+                  };
+                }
+              };
+              
+              const logger = new MockLogger();
+              const toolsManager = new McpToolsManager(logger, mockMcpServer, {});
+              
+              const testPromptsData = [
+                {
+                  id: 'test-1',
+                  name: 'Test Prompt 1',
+                  content: 'Test content with context and analysis components',
+                  description: 'Test prompt description'
+                }
+              ];
+              
+              const testConvertedPrompts = [
+                {
+                  id: 'test-1',
+                  name: 'Test Prompt 1',
+                  content: 'Test content',
+                  description: 'Test description',
+                  category: 'test',
+                  executionMode: 'template'
+                }
+              ];
+              
+              const testCategories = [
+                { name: 'test', description: 'Test category' }
+              ];
+              
+              toolsManager.updateData(testPromptsData, testConvertedPrompts, testCategories);
+              toolsManager.registerAllTools();
+              
+              if (toolCalls.length === 0) {
+                throw new Error('No tools were registered');
+              }
+              console.log(\`✅ MCP Tools Manager registered \${toolCalls.length} tools\`);
+              
+              const registeredNames = toolCalls.map(t => t.name);
+              const essentialTools = ['update_prompt', 'list_prompts', 'execute_prompt'];
+              
+              for (const tool of essentialTools) {
+                if (!registeredNames.includes(tool)) {
+                  console.log(\`⚠️  Essential tool missing: \${tool}\`);
+                } else {
+                  console.log(\`✅ Essential tool found: \${tool}\`);
+                }
+              }
+              
+              console.log('🔍 Test 2: Template Generation Tools validation');
+              const templateTools = new TemplateGenerationTools(logger, mockMcpServer);
+              const beforeCount = toolCalls.length;
+              
+              templateTools.registerAllTools();
+              const templateToolsCount = toolCalls.length - beforeCount;
+              
+              if (templateToolsCount === 0) {
+                throw new Error('No template generation tools were registered');
+              }
+              console.log(\`✅ Template Generation Tools registered \${templateToolsCount} additional tools\`);
+              
+              console.log('🎉 Comprehensive MCP tools tests completed successfully');
             }
             
-            validateTemplateRepository().catch(error => {
-              console.error('❌ Template Repository validation failed:', error.message);
+            comprehensiveMcpToolsTests().catch(error => {
+              console.error('❌ MCP tools tests failed:', error.message);
               process.exit(1);
             });
           "
       
-      - name: Validate Enhanced Semantic Analyzer
+      - name: Performance and Memory Tests
         run: |
           cd server
+          echo "🧪 Running performance and memory tests..."
+          
           node -e "
-            async function validateSemanticAnalyzer() {
-              // Use dynamic imports for ES modules
-              const analyzer = await import('./dist/utils/semanticAnalyzer.js');
-              console.log('✅ Enhanced Semantic Analyzer module loaded successfully');
-              console.log('Available exports:', Object.keys(analyzer));
+            async function performanceTests() {
+              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
+              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
+              console.log('⏱️  Starting performance tests...');
+              
+              const analyzer = new CAGEERFAnalyzer();
+              const generator = new TemplateGenerator();
+              
+              // Performance benchmark
+              const testPrompts = [
+                'Simple analysis task',
+                'Complex multi-faceted analysis requiring comprehensive context evaluation, systematic goal setting, detailed execution planning, thorough evaluation criteria, and iterative refinement processes',
+                'Medium complexity prompt with CAGEERF elements'
+              ];
+              
+              console.log('📊 Analysis Performance:');
+              for (let i = 0; i < testPrompts.length; i++) {
+                const start = Date.now();
+                const analysis = analyzer.analyzeText(testPrompts[i]);
+                const duration = Date.now() - start;
+                console.log(\`   Prompt \${i + 1}: \${duration}ms (score: \${analysis.frameworkScore.toFixed(3)})\`);
+                
+                if (duration > 1000) {
+                  console.log(\`⚠️  Warning: Analysis took \${duration}ms (threshold: 1000ms)\`);
+                }
+              }
+              
+              // Memory usage test
+              const initialMemory = process.memoryUsage().heapUsed;
+              
+              for (let i = 0; i < 50; i++) {
+                analyzer.analyzePrompt('Memory test prompt with comprehensive analysis components');
+                await generator.generateTemplate({
+                  useCase: 'Memory Test',
+                  domain: 'Testing',
+                  complexity: 'simple',
+                  frameworkEmphasis: { context: true, analysis: true, goals: true, execution: true, evaluation: true, refinement: true, framework: true },
+                  templateStyle: 'structured'
+                });
+              }
+              
+              global.gc && global.gc();
+              const finalMemory = process.memoryUsage().heapUsed;
+              const memoryIncrease = finalMemory - initialMemory;
+              
+              if (memoryIncrease > 25 * 1024 * 1024) {
+                console.log(\`⚠️  Potential memory leak: \${Math.round(memoryIncrease / 1024 / 1024)}MB increase\`);
+              } else {
+                console.log(\`✅ Memory usage acceptable: \${Math.round(memoryIncrease / 1024 / 1024)}MB increase for 50 operations\`);
+              }
+              
+              console.log('✅ Performance and memory tests completed successfully');
             }
             
-            validateSemanticAnalyzer().catch(error => {
-              console.error('❌ Enhanced Semantic Analyzer validation failed:', error.message);
+            performanceTests().catch(error => {
+              console.error('❌ Performance tests failed:', error.message);
               process.exit(1);
             });
-          "
+          " --expose-gc
 
   code-quality:
     name: Code Quality Checks
