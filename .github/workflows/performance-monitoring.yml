@@ -103,64 +103,87 @@ jobs:
           echo "✅ TypeScript compilation performance test completed"
       
       - name: Run Server Startup Performance Test
+        timeout-minutes: 5
         run: |
           cd server
           echo "🔍 Testing server startup performance..."
           
+          # Verify build artifacts exist before running performance tests
+          if [ ! -f "dist/index.js" ]; then
+            echo "❌ Build artifacts missing - cannot run performance tests"
+            exit 1
+          fi
+          
           node -e "
             async function startupPerformanceTest() {
-              // Use dynamic imports for ES modules
-              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
-              const { MockLogger } = await import('./dist/utils/index.js');
-              const fs = await import('fs');
-              const results = {};
-              const logger = new MockLogger();
+              const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Startup performance test timed out after 30 seconds')), 30000);
+              });
               
-              // Test 1: Configuration loading
-              const configStart = Date.now();
-              const orchestrator = new ApplicationOrchestrator(logger);
-              await orchestrator.loadConfiguration();
-              results.config_load_ms = Date.now() - configStart;
+              const testPromise = async () => {
+                // Use dynamic imports for ES modules
+                const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+                const { MockLogger } = await import('./dist/utils/index.js');
+                const fs = await import('fs');
+                const results = {};
+                const logger = new MockLogger();
+                
+                console.log('🔄 Starting startup performance measurement...');
+                
+                // Test 1: Configuration loading
+                const configStart = Date.now();
+                const orchestrator = new ApplicationOrchestrator(logger);
+                await orchestrator.loadConfiguration();
+                results.config_load_ms = Date.now() - configStart;
+                console.log(\`   ✅ Config loaded in \${results.config_load_ms}ms\`);
+                
+                // Test 2: Prompts data loading
+                const promptsStart = Date.now();
+                await orchestrator.loadPromptsData();
+                results.prompts_load_ms = Date.now() - promptsStart;
+                results.prompts_count = orchestrator.promptsData ? orchestrator.promptsData.length : 0;
+                console.log(\`   ✅ Prompts loaded in \${results.prompts_load_ms}ms (\${results.prompts_count} prompts)\`);
+                
+                // Test 3: Module initialization
+                const modulesStart = Date.now();
+                await orchestrator.initializeModules();
+                results.modules_init_ms = Date.now() - modulesStart;
+                console.log(\`   ✅ Modules initialized in \${results.modules_init_ms}ms\`);
+                
+                // Test 4: Total startup time
+                results.total_startup_ms = results.config_load_ms + results.prompts_load_ms + results.modules_init_ms;
+                
+                // Memory usage
+                const memUsage = process.memoryUsage();
+                results.memory_heap_mb = Math.round(memUsage.heapUsed / 1024 / 1024 * 100) / 100;
+                results.memory_rss_mb = Math.round(memUsage.rss / 1024 / 1024 * 100) / 100;
+                
+                console.log('📊 Startup Performance Results:');
+                console.log(\`   Config loading: \${results.config_load_ms}ms\`);
+                console.log(\`   Prompts loading: \${results.prompts_load_ms}ms\`);
+                console.log(\`   Modules init: \${results.modules_init_ms}ms\`);
+                console.log(\`   Total startup: \${results.total_startup_ms}ms\`);
+                console.log(\`   Prompts loaded: \${results.prompts_count}\`);
+                console.log(\`   Memory (heap): \${results.memory_heap_mb}MB\`);
+                console.log(\`   Memory (RSS): \${results.memory_rss_mb}MB\`);
+                
+                // Save results
+                const resultsText = Object.entries(results)
+                  .map(([key, value]) => \`\${key}=\${value}\`)
+                  .join('\n');
+                fs.default.writeFileSync('../performance-results/startup.txt', resultsText);
+                
+                return results;
+              };
               
-              // Test 2: Prompts data loading
-              const promptsStart = Date.now();
-              await orchestrator.loadPromptsData();
-              results.prompts_load_ms = Date.now() - promptsStart;
-              results.prompts_count = orchestrator.promptsData ? orchestrator.promptsData.length : 0;
-              
-              // Test 3: Module initialization
-              const modulesStart = Date.now();
-              await orchestrator.initializeModules();
-              results.modules_init_ms = Date.now() - modulesStart;
-              
-              // Test 4: Total startup time
-              results.total_startup_ms = results.config_load_ms + results.prompts_load_ms + results.modules_init_ms;
-              
-              // Memory usage
-              const memUsage = process.memoryUsage();
-              results.memory_heap_mb = Math.round(memUsage.heapUsed / 1024 / 1024 * 100) / 100;
-              results.memory_rss_mb = Math.round(memUsage.rss / 1024 / 1024 * 100) / 100;
-              
-              console.log('📊 Startup Performance Results:');
-              console.log('   Config loading:', results.config_load_ms + 'ms');
-              console.log('   Prompts loading:', results.prompts_load_ms + 'ms');
-              console.log('   Modules init:', results.modules_init_ms + 'ms');
-              console.log('   Total startup:', results.total_startup_ms + 'ms');
-              console.log('   Prompts loaded:', results.prompts_count);
-              console.log('   Memory (heap):', results.memory_heap_mb + 'MB');
-              console.log('   Memory (RSS):', results.memory_rss_mb + 'MB');
-              
-              // Save results
-              const resultsText = Object.entries(results)
-                .map(([key, value]) => \`\${key}=\${value}\`)
-                .join('\n');
-              fs.default.writeFileSync('../performance-results/startup.txt', resultsText);
-              
-              console.log('✅ Server startup performance test completed');
+              // Race between timeout and test completion
+              const results = await Promise.race([timeoutPromise, testPromise()]);
+              console.log('✅ Server startup performance test completed successfully');
             }
             
             startupPerformanceTest().catch(error => {
-              console.error('❌ Startup performance test failed:', error);
+              console.error('❌ Startup performance test failed:', error.message);
+              console.error('Stack trace:', error.stack);
               process.exit(1);
             });
           "

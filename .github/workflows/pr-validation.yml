@@ -71,13 +71,29 @@ jobs:
           cd server
           echo "Testing server startup capability..."
 
-          # Enhanced cross-platform timeout and process management
-          npm run start:debug > startup.log 2>&1 &
+          # Verify build artifacts exist
+          if [ ! -f "dist/index.js" ]; then
+            echo "❌ Build artifacts missing - dist/index.js not found"
+            exit 1
+          fi
+
+          # Test help command first (quick validation)
+          echo "Testing help command..."
+          if ! npm run help > help.log 2>&1; then
+            echo "❌ Help command failed"
+            cat help.log
+            exit 1
+          fi
+          echo "✅ Help command succeeded"
+
+          # Test server startup with timeout
+          echo "Testing server startup with enhanced monitoring..."
+          timeout 10s npm run start:debug > startup.log 2>&1 &
           SERVER_PID=$!
           echo "Server started with PID: $SERVER_PID"
 
           # Wait for server to initialize
-          sleep 5
+          sleep 3
 
           # Check if server is still running
           if kill -0 $SERVER_PID 2>/dev/null; then
@@ -88,7 +104,7 @@ jobs:
             kill $SERVER_PID 2>/dev/null || true
 
             # Wait for graceful shutdown
-            for i in {1..5}; do
+            for i in {1..3}; do
               if ! kill -0 $SERVER_PID 2>/dev/null; then
                 echo "✅ Server stopped gracefully"
                 break
@@ -103,8 +119,12 @@ jobs:
             fi
           else
             echo "❌ Server failed to start or crashed"
+            echo "Build artifacts check:"
+            ls -la dist/ | head -10
             echo "Startup log contents:"
             cat startup.log || echo "No startup log found"
+            echo "Help log contents:"
+            cat help.log || echo "No help log found"
             exit 1
           fi
 
