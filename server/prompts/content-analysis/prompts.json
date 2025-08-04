@@ -1,0 +1,18 @@
+{
+  "prompts": [
+    {
+      "id": "video_frame_extractor",
+      "name": "Intelligent Video Frame Extractor",
+      "category": "content-analysis",
+      "description": "Analyzes video transcript content to intelligently identify and extract the most valuable visual moments for note enhancement",
+      "file": "video_frame_extractor.md",
+      "arguments": [
+        {
+          "name": "video_url",
+          "description": "URL of the video to analyze and extract frames from",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

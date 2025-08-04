@@ -1,61 +1,109 @@
-# Advanced Note Integration with Content Analysis Chain
+# Advanced Note Integration v2 with Smart Visual Timing
 
 ## Description
-Advanced workflow that processes YouTube videos and other content through comprehensive transcript analysis, strategic chunking, and content analysis chain to transform raw material into publication-ready, interconnected notes optimized for Obsidian knowledge management systems with strategic callout usage.
+Enhanced master workflow that intelligently chains specialized prompts with optimized visual extraction timing - extracts images after note creation for more accurate and contextually relevant visual selection.
 
 ## User Message Template
-**ADVANCED NOTE INTEGRATION WITH COMPREHENSIVE CONTENT PROCESSING**
+**ENHANCED NOTE INTEGRATION WITH INTELLIGENT VISUAL TIMING**
 
-Transform YouTube videos and other content into publication-ready, interconnected notes using comprehensive transcript analysis and strategic content processing:
+Master workflow with optimized visual extraction sequence for maximum accuracy and relevance:
 
-**CONTENT TO INTEGRATE:**
-```
-{{content}}
-```
+**CONTENT TO PROCESS:** {{content}}
+**DOMAIN:** {{domain}} (default: creative_arts)
+**ANALYSIS DEPTH:** {{analysis_depth}} (default: comprehensive)
 
-**INTEGRATION PARAMETERS:**
-- **Domain**: {{domain}} (auto-detect if not specified)
-- **Analysis Depth**: {{analysis_depth}} (default: comprehensive)
-- **Integration Level**: {{integration_level}} (default: advanced)
-- **Quality Standards**: {{quality_standards}} (default: comprehensive)
+**OPTIMIZED WORKFLOW SEQUENCE:**
+1. **Vault Analysis** → Understanding existing structure
+2. **Content Preservation** → Complete transcript analysis  
+3. **Note Construction** → Professional content creation
+4. **Smart Visual Extraction** → Content-aware image selection
+5. **Content Enhancement** → Visual integration & refinement
+6. **Metadata Optimization** → Professional frontmatter
+7. **Vault Integration** → Strategic network connections
+8. **Quality Assurance** → Final validation
 
-**STRATEGIC CALLOUT USAGE REQUIREMENTS:**
-Use Obsidian callouts ONLY when they enhance information flow and organization:
+**KEY IMPROVEMENT:**
+Visual extraction now occurs AFTER note creation, allowing for:
+- Content-aware timestamp selection based on actual analysis
+- More relevant visual moments that support written content
+- Intelligent frame selection based on narrative structure
+- Better alignment between visuals and textual analysis
 
-**WHEN TO USE CALLOUTS:**
-- **Complex techniques** that need step-by-step breakdown
-- **Critical warnings** that could impact user success
-- **Key insights** that summarize important concepts
-- **Practical applications** that require special attention
-- **Historical context** or expert quotes that add authority
+Execute this enhanced chain for superior content integration with contextually accurate visual elements.
 
-**WHEN NOT TO USE CALLOUTS:**
-- Simple bullet points or lists
-- Basic information that flows naturally in text
-- Every section heading or paragraph
-- Routine explanations or descriptions
-- Excessive visual emphasis that clutters content
+## Chain Steps
 
-**STRATEGIC CALLOUT TYPES:**
-- `> [!tip]` - Only for genuinely valuable practical advice
-- `> [!example]` - Only for complex technique breakdowns
-- `> [!warning]` - Only for critical cautions or limitations
-- `> [!abstract]` - Only for core philosophy or key concepts
-- `> [!quote]` - Only for authoritative references or master examples
+1. promptId: vault_structure_analyzer
+   stepName: Vault Context Analysis
+   inputMapping:
+     content_topic: domain
+     vault_path: vault_context
+   outputMapping:
+     vault_analysis: vault_structure
 
-**CONTENT PROCESSING WORKFLOW:**
-1. **Extract & Analyze**: Process source content comprehensively
-2. **Structure Naturally**: Use headers, bullet points, and natural text flow
-3. **Strategic Callouts**: Apply callouts ONLY where they enhance understanding
-4. **Strategic Integration**: Link to existing vault notes and MOCs
-5. **Quality Validation**: Ensure clean, readable formatting
-6. **S.P.A.R.C. Methodology**: Apply Strategic, Personal, Archive, Refined, Connectivity principles
+2. promptId: content_preservation_analysis
+   stepName: Content Analysis & Strategic Planning
+   inputMapping:
+     content: content
+     existing_content: existing_notes
+     analysis_depth: analysis_depth
+   outputMapping:
+     analyzed_content: content_analysis
 
-**REQUIRED DELIVERABLES:**
-- Complete markdown note with proper frontmatter
-- Minimal, strategic callout usage for maximum impact
-- Cross-references to existing vault notes
-- MOC integration updates
-- Clean, professional formatting following vault standards
+3. promptId: layered_note_structure
+   stepName: Professional Note Construction
+   inputMapping:
+     analyzed_content: content_analysis
+     vault_context: vault_structure
+     structure_type: structure_type
+   outputMapping:
+     structured_note: note_content
 
-Execute this workflow systematically, prioritizing readability and natural flow over visual emphasis.
+4. promptId: video_frame_extractor
+   stepName: Smart Visual Integration
+   inputMapping:
+     video_url: content
+     domain: domain
+     project_name: note_content
+   outputMapping:
+     visual_assets: extracted_visuals
+
+5. promptId: smart_content_refinement
+   stepName: Visual Enhancement & Formatting
+   inputMapping:
+     raw_content: note_content
+     vault_context: vault_structure
+     integration_level: integration_level
+     target_readability: target_readability
+   outputMapping:
+     refined_content: enhanced_note
+
+6. promptId: obsidian_metadata_optimizer
+   stepName: Metadata & Frontmatter Optimization
+   inputMapping:
+     note_content: enhanced_note
+     vault_structure: vault_structure
+     metadata_depth: metadata_depth
+   outputMapping:
+     optimized_metadata: final_metadata
+
+7. promptId: deep_vault_integration
+   stepName: Strategic Vault Integration
+   inputMapping:
+     content: enhanced_note
+     vault_context: vault_structure
+     integration_level: integration_level
+     domain: domain
+     quality_standards: quality_standards
+   outputMapping:
+     integration_results: vault_connections
+
+8. promptId: note_quality_assurance
+   stepName: Final Quality Validation
+   inputMapping:
+     note_content: enhanced_note
+     original_source: content
+     quality_standards: quality_standards
+   outputMapping:
+     quality_report: final_validation
+

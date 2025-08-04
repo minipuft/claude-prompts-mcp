@@ -232,70 +232,6 @@
       ]
     },
     {
-      "id": "noteIntegration",
-      "name": "Advanced Note Integration with Content Analysis Chain",
-      "category": "content_processing",
-      "description": "Advanced workflow that processes YouTube videos and other content through comprehensive transcript analysis, strategic chunking, and content analysis chain to transform raw material into publication-ready, interconnected notes optimized for Obsidian knowledge management systems with strategic callout usage.",
-      "file": "noteIntegration.md",
-      "arguments": [
-        {
-          "name": "content",
-          "description": "YouTube URL or other content to be comprehensively processed and integrated",
-          "required": false
-        },
-        {
-          "name": "existing_notes",
-          "description": "Any existing notes to preserve and integrate with",
-          "required": false
-        },
-        {
-          "name": "vault_context",
-          "description": "Context about the vault structure and existing content for strategic integration",
-          "required": false
-        },
-        {
-          "name": "domain",
-          "description": "Knowledge domain for appropriate formatting strategy (e.g., 'creative_arts', 'technical', 'personal_development')",
-          "required": false
-        },
-        {
-          "name": "analysis_depth",
-          "description": "Analysis depth: 'surface', 'standard', 'comprehensive', 'exhaustive' (default: comprehensive)",
-          "required": false
-        },
-        {
-          "name": "structure_type",
-          "description": "Structure type: 'comprehensive', 'method_focused', 'reference_optimized' (default: comprehensive)",
-          "required": false
-        },
-        {
-          "name": "integration_level",
-          "description": "Integration level: 'basic', 'standard', 'advanced', 'network_optimized' (default: advanced)",
-          "required": false
-        },
-        {
-          "name": "target_readability",
-          "description": "Target readability: 'concise', 'balanced', 'comprehensive' (default: comprehensive)",
-          "required": false
-        },
-        {
-          "name": "metadata_depth",
-          "description": "Metadata depth: 'essential', 'comprehensive', 'advanced', 'network_optimized' (default: advanced)",
-          "required": false
-        },
-        {
-          "name": "quality_standards",
-          "description": "Quality standards: 'basic', 'professional', 'comprehensive', 'academic' (default: comprehensive)",
-          "required": false
-        },
-        {
-          "name": "enhancement_level",
-          "description": "Enhancement intensity: 'standard', 'comprehensive', 'showcase' (default: comprehensive)",
-          "required": false
-        }
-      ]
-    },
-    {
       "id": "vault_structure_analyzer",
       "name": "Vault Structure Analyzer",
       "category": "content_processing",
@@ -373,6 +309,99 @@
           "name": "content",
           "description": "The content to analyze and map to appropriate Obsidian callout types",
           "required": true
+        }
+      ]
+    },
+    {
+      "id": "video_frame_extractor",
+      "name": "Video Frame Extractor",
+      "category": "content_processing",
+      "description": "Downloads YouTube videos and extracts high-quality frames using FFmpeg for cinematography analysis, then cleans up the video file. Optimized for Windows compatibility and vault integration.",
+      "file": "video_frame_extractor.md",
+      "arguments": [
+        {
+          "name": "video_url",
+          "description": "YouTube URL to extract frames from",
+          "required": true
+        },
+        {
+          "name": "domain",
+          "description": "Domain folder for organization (default: cinematography)",
+          "required": false
+        },
+        {
+          "name": "timestamps",
+          "description": "Comma-separated timestamps (default: 00:00:30,00:02:00,00:04:00,00:08:00)",
+          "required": false
+        },
+        {
+          "name": "project_name",
+          "description": "Project name for file naming (default: video-analysis)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "noteIntegration",
+      "name": "Advanced Note Integration v2 with Smart Visual Timing",
+      "category": "content_processing",
+      "description": "Enhanced master workflow that intelligently chains specialized prompts with optimized visual extraction timing - extracts images after note creation for more accurate and contextually relevant visual selection.",
+      "file": "noteIntegration.md",
+      "arguments": [
+        {
+          "name": "content",
+          "description": "YouTube URL or other content to be comprehensively processed",
+          "required": true
+        },
+        {
+          "name": "existing_notes",
+          "description": "Any existing notes to preserve and integrate",
+          "required": false
+        },
+        {
+          "name": "vault_context",
+          "description": "Context about vault structure for strategic integration",
+          "required": false
+        },
+        {
+          "name": "domain",
+          "description": "Knowledge domain (e.g., 'creative_arts', 'technical', 'personal_development')",
+          "required": false
+        },
+        {
+          "name": "analysis_depth",
+          "description": "Analysis depth: 'surface', 'standard', 'comprehensive', 'exhaustive'",
+          "required": false
+        },
+        {
+          "name": "structure_type",
+          "description": "Structure type: 'comprehensive', 'method_focused', 'reference_optimized'",
+          "required": false
+        },
+        {
+          "name": "integration_level",
+          "description": "Integration level: 'basic', 'standard', 'advanced', 'network_optimized'",
+          "required": false
+        },
+        {
+          "name": "target_readability",
+          "description": "Target readability: 'concise', 'balanced', 'comprehensive'",
+          "required": false
+        },
+        {
+          "name": "metadata_depth",
+          "description": "Metadata depth: 'essential', 'comprehensive', 'advanced', 'network_optimized'",
+          "required": false
+        },
+        {
+          "name": "quality_standards",
+          "description": "Quality standards: 'basic', 'professional', 'comprehensive', 'academic'",
+          "required": false
+        },
+        {
+          "name": "enhancement_level",
+          "description": "Enhancement intensity: 'standard', 'comprehensive', 'showcase'",
+          "required": false
         }
       ]
     }

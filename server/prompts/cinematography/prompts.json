@@ -1,0 +1,230 @@
+{
+  "prompts": [
+    {
+      "id": "visual_content_analyzer",
+      "name": "Visual Content Analyzer",
+      "category": "cinematography",
+      "description": "Comprehensive visual analysis of video frames for cinematography and animation elements, color theory, composition, and visual storytelling techniques.",
+      "file": "visual_content_analyzer.md",
+      "arguments": [
+        {
+          "name": "source_url",
+          "description": "URL or source of the video content being analyzed",
+          "required": true
+        },
+        {
+          "name": "content_title",
+          "description": "Title of the video or content piece",
+          "required": true
+        },
+        {
+          "name": "duration",
+          "description": "Duration of the video content",
+          "required": false
+        },
+        {
+          "name": "frame_count",
+          "description": "Number of frames being analyzed",
+          "required": false
+        },
+        {
+          "name": "analysis_type",
+          "description": "Type of analysis (case_study, technique_analysis, color_study, comparative_analysis)",
+          "required": true
+        },
+        {
+          "name": "analysis_focus",
+          "description": "Primary focus area (cinematography, animation, color_theory, composition, lighting)",
+          "required": false
+        },
+        {
+          "name": "analysis_depth",
+          "description": "Depth of analysis (overview, detailed, comprehensive, frame_by_frame)",
+          "required": false
+        },
+        {
+          "name": "target_domain",
+          "description": "Target domain (education, case_study, technique_reference, comparative_analysis)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "animation_technique_analyzer",
+      "name": "Animation Technique Analyzer",
+      "category": "cinematography",
+      "description": "Specialized analysis of animation techniques, principles, and methods for educational and professional development purposes.",
+      "file": "animation_technique_analyzer.md",
+      "arguments": [
+        {
+          "name": "source_url",
+          "description": "URL or source of the animation content",
+          "required": true
+        },
+        {
+          "name": "animation_title",
+          "description": "Title of the animated work",
+          "required": true
+        },
+        {
+          "name": "director_studio",
+          "description": "Director name and/or animation studio",
+          "required": false
+        },
+        {
+          "name": "animation_type",
+          "description": "Type of animation (traditional, 3D, mixed_media, stop_motion, experimental)",
+          "required": true
+        },
+        {
+          "name": "duration",
+          "description": "Duration of the animated content",
+          "required": false
+        },
+        {
+          "name": "analysis_focus",
+          "description": "Primary focus of analysis (technique_study, educational_reference, professional_assessment)",
+          "required": true
+        },
+        {
+          "name": "technique_focus",
+          "description": "Specific technique focus (character_animation, effects, timing, principles, style)",
+          "required": false
+        },
+        {
+          "name": "educational_level",
+          "description": "Target educational level (beginner, intermediate, advanced, professional)",
+          "required": false
+        },
+        {
+          "name": "analysis_depth",
+          "description": "Analysis depth (overview, detailed, comprehensive, technique_breakdown)",
+          "required": false
+        },
+        {
+          "name": "comparison_type",
+          "description": "Type of comparison (industry_standard, historical_context, technique_evolution)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "cinematography_analysis",
+      "name": "Cinematography Analysis",
+      "category": "cinematography",
+      "description": "Professional cinematography analysis covering composition, lighting, camera work, color theory, and visual storytelling techniques for film and animation.",
+      "file": "cinematography_analysis.md",
+      "arguments": [
+        {
+          "name": "source_url",
+          "description": "URL or source of the content being analyzed",
+          "required": true
+        },
+        {
+          "name": "content_title",
+          "description": "Title of the film or video content",
+          "required": true
+        },
+        {
+          "name": "director_dp",
+          "description": "Director and/or Director of Photography names",
+          "required": false
+        },
+        {
+          "name": "genre",
+          "description": "Genre classification of the content",
+          "required": false
+        },
+        {
+          "name": "format",
+          "description": "Format type (film, animation, digital, mixed_media)",
+          "required": true
+        },
+        {
+          "name": "duration",
+          "description": "Duration of the content",
+          "required": false
+        },
+        {
+          "name": "analysis_type",
+          "description": "Type of cinematography analysis (case_study, technique_analysis, comparative_study, educational_reference)",
+          "required": true
+        },
+        {
+          "name": "focus_area",
+          "description": "Primary focus area (composition, lighting, color, camera_work, visual_storytelling)",
+          "required": false
+        },
+        {
+          "name": "technical_level",
+          "description": "Technical analysis level (basic, intermediate, advanced, professional)",
+          "required": false
+        },
+        {
+          "name": "analysis_scope",
+          "description": "Scope of analysis (sequence_analysis, comparative_study, technique_breakdown, full_work_analysis)",
+          "required": false
+        },
+        {
+          "name": "educational_purpose",
+          "description": "Educational purpose (film_studies, technical_training, artistic_reference, case_study)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "visualAnalysis",
+      "name": "Visual Analysis Master Chain",
+      "category": "cinematography",
+      "description": "Master chain workflow for comprehensive visual analysis of animation and cinematography content, including intelligent frame extraction and multi-layered analysis.",
+      "file": "visualAnalysis.md",
+      "arguments": [
+        {
+          "name": "content_url",
+          "description": "URL of the video content to analyze",
+          "required": true
+        },
+        {
+          "name": "analysis_type",
+          "description": "Type of analysis (animation_case_study, cinematography_analysis, color_theory_study, technique_breakdown, comparative_analysis)",
+          "required": false
+        },
+        {
+          "name": "focus_domain",
+          "description": "Primary domain focus (animation, cinematography, mixed_media, experimental)",
+          "required": false
+        },
+        {
+          "name": "analysis_depth",
+          "description": "Analysis depth level (overview, detailed, comprehensive, academic)",
+          "required": false
+        },
+        {
+          "name": "educational_level",
+          "description": "Target educational level (beginner, intermediate, advanced, professional)",
+          "required": false
+        },
+        {
+          "name": "visual_focus",
+          "description": "Visual analysis focus (composition, color_theory, animation_techniques, cinematography, visual_storytelling)",
+          "required": false
+        },
+        {
+          "name": "frame_strategy",
+          "description": "Frame selection strategy (automatic, manual_timestamps, content_driven, comparative_moments)",
+          "required": false
+        },
+        {
+          "name": "output_format",
+          "description": "Output format (case_study, technique_reference, educational_guide, comparative_analysis)",
+          "required": false
+        },
+        {
+          "name": "vault_integration",
+          "description": "Level of vault integration (full_integration, minimal_integration, standalone)",
+          "required": false
+        }
+      ]
+    }
+  ]
+}
