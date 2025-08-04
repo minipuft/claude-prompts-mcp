@@ -7,7 +7,9 @@ module.exports = {
     '<rootDir>/tests/**/*.test.ts'
   ],
   transform: {
-    '^.+\\.ts$': 'ts-jest'
+    '^.+\\.ts$': ['ts-jest', {
+      tsconfig: 'tsconfig.test.json'
+    }]
   },
   collectCoverageFrom: [
     'dist/**/*.js',
@@ -19,8 +21,6 @@ module.exports = {
   testTimeout: 30000,
   verbose: true,
   maxWorkers: 1,
-  // Disable setup file for now to avoid ES module issues
-  // setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   // Module resolution
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
   // Allow importing .js files from TypeScript
