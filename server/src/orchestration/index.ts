@@ -207,7 +207,10 @@ export class ApplicationOrchestrator {
       });
 
       // Secondary strategy: If we're specifically in a dist directory
-      if (scriptPath.includes(path.sep + "dist" + path.sep)) {
+      // Use path.normalize to ensure cross-platform compatibility
+      const normalizedScriptPath = path.normalize(scriptPath);
+      const distPattern = path.normalize(path.sep + "dist" + path.sep);
+      if (normalizedScriptPath.includes(distPattern) || scriptPath.includes('/dist/') || scriptPath.includes('\\dist\\')) {
         strategies.push({
           name: "process.argv[1] (dist-aware)",
           path: path.dirname(path.dirname(scriptPath)), // Fixed: go up 2 levels, not 3

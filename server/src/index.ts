@@ -399,6 +399,11 @@ async function main(): Promise<void> {
     const isStartupTest = args.includes('--startup-test');
     if (isStartupTest) {
       console.error("DEBUG: Running in startup validation mode");
+      console.error(`DEBUG: Platform: ${process.platform}`);
+      console.error(`DEBUG: Node.js version: ${process.version}`);
+      console.error(`DEBUG: Working directory: ${process.cwd()}`);
+      console.error(`DEBUG: MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || 'not set'}`);
+      console.error(`DEBUG: MCP_PROMPTS_CONFIG_PATH: ${process.env.MCP_PROMPTS_CONFIG_PATH || 'not set'}`);
     }
 
     // Setup error handlers first
@@ -409,8 +414,39 @@ async function main(): Promise<void> {
 
     // Initialize the application using the orchestrator
     console.error("DEBUG: About to call startApplication()...");
-    orchestrator = await startApplication();
-    console.error("DEBUG: startApplication() completed successfully");
+    try {
+      orchestrator = await startApplication();
+      console.error("DEBUG: startApplication() completed successfully");
+    } catch (startupError) {
+      const error = startupError instanceof Error ? startupError : new Error(String(startupError));
+      console.error("DEBUG: startApplication() failed with error:", error.message);
+      console.error("DEBUG: Error stack:", error.stack);
+      
+      // Additional diagnostics for Windows
+      if (process.platform === 'win32') {
+        console.error("DEBUG: Windows-specific diagnostics:");
+        console.error(`DEBUG: Process argv: ${JSON.stringify(process.argv)}`);
+        console.error(`DEBUG: Environment keys: ${Object.keys(process.env).filter(k => k.startsWith('MCP_')).join(', ')}`);
+        
+        // Check if paths exist
+        const fs = await import('fs');
+        const path = await import('path');
+        
+        const serverRoot = process.env.MCP_SERVER_ROOT || process.cwd();
+        console.error(`DEBUG: Checking server root: ${serverRoot}`);
+        console.error(`DEBUG: Server root exists: ${fs.existsSync(serverRoot)}`);
+        
+        const configPath = path.join(serverRoot, 'config.json');
+        console.error(`DEBUG: Config path: ${configPath}`);
+        console.error(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
+        
+        const promptsConfigPath = path.join(serverRoot, 'promptsConfig.json');
+        console.error(`DEBUG: Prompts config path: ${promptsConfigPath}`);
+        console.error(`DEBUG: Prompts config exists: ${fs.existsSync(promptsConfigPath)}`);
+      }
+      
+      throw error;
+    }
 
     // Get logger reference for global error handling
     console.error("DEBUG: Getting logger reference...");
