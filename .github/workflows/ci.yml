@@ -75,20 +75,36 @@ jobs:
         env:
           MCP_SERVER_ROOT: ${{ github.workspace }}/server
         run: |
-          Write-Host "Testing server startup with validation mode..."
-          npm run start:test > startup.log 2>&1
-          $exitCode = $LASTEXITCODE
-          
-          if ($exitCode -eq 0) {
-            Write-Host "✅ Server startup validation passed"
-            Write-Host "Startup log contents:"
-            Get-Content startup.log -Tail 10
+          echo "Testing server startup with validation mode..."
+          echo "Environment check:"
+          echo "MCP_SERVER_ROOT=$env:MCP_SERVER_ROOT"
+          echo "Working directory: $(Get-Location)"
+          echo "Build artifacts:"
+          if (Test-Path "dist") {
+            Get-ChildItem dist -Name | Select-Object -First 5
           } else {
-            Write-Host "❌ Server startup validation failed"
-            Write-Host "Build artifacts check:"
-            Get-ChildItem dist\ | Select-Object -First 5
-            Write-Host "Startup log contents:"
-            if (Test-Path startup.log) { Get-Content startup.log } else { Write-Host "No startup log found" }
+            echo "❌ dist directory not found"
+            exit 1
+          }
+          
+          echo "Starting server validation test..."
+          if ((npm run start:test *>&1 | Tee-Object -FilePath startup.log | Out-String) -and $LASTEXITCODE -eq 0) {
+            echo "✅ Server startup validation passed"
+            echo "Startup log (last 10 lines):"
+            Get-Content startup.log -Tail 10 -ErrorAction SilentlyContinue
+          } else {
+            echo "❌ Server startup validation failed with exit code: $LASTEXITCODE"
+            echo "Complete startup log:"
+            if (Test-Path startup.log) {
+              Get-Content startup.log -ErrorAction SilentlyContinue
+            } else {
+              echo "No startup log found"
+            }
+            echo "Node.js and npm versions:"
+            node --version
+            npm --version
+            echo "Package.json scripts:"
+            Get-Content package.json | Select-String '"start:test"'
             exit 1
           }
         shell: powershell
