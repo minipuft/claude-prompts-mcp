@@ -37,18 +37,16 @@ jobs:
           cache-dependency-path: server/package-lock.json
       
       - name: Install dependencies
-        run: |
-          cd server
-          npm ci --prefer-offline --no-audit
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
       
       - name: Build project
-        run: |
-          cd server
-          npm run build
+        working-directory: server
+        run: npm run build
       
       - name: MCP SDK Version Compliance
+        working-directory: server
         run: |
-          cd server
           echo "🔍 Validating MCP SDK version and compatibility..."
           
           node -e "
@@ -84,8 +82,8 @@ jobs:
           "
       
       - name: MCP Server Initialization Validation
+        working-directory: server
         run: |
-          cd server
           echo "🔍 Testing MCP server initialization and protocol compliance..."
           
           node -e "
@@ -134,8 +132,8 @@ jobs:
           "
       
       - name: MCP Tools Registration Validation
+        working-directory: server
         run: |
-          cd server
           echo "🔍 Testing MCP tools registration and schema compliance..."
           
           node -e "
@@ -219,8 +217,8 @@ jobs:
           "
       
       - name: MCP Transport Layer Validation
+        working-directory: server
         run: |
-          cd server
           echo "🔍 Testing MCP transport layer compliance..."
           
           node -e "
@@ -263,8 +261,8 @@ jobs:
           "
       
       - name: MCP Message Format Validation
+        working-directory: server
         run: |
-          cd server
           echo "🔍 Testing MCP message format compliance..."
           
           node -e "
@@ -329,8 +327,8 @@ jobs:
           "
       
       - name: MCP Error Handling Validation
+        working-directory: server
         run: |
-          cd server
           echo "🔍 Testing MCP error handling compliance..."
           
           node -e "
@@ -386,8 +384,8 @@ jobs:
           "
       
       - name: MCP Protocol Integration Test
+        working-directory: server
         run: |
-          cd server
           echo "🔍 Running end-to-end MCP protocol integration test..."
           
           node -e "
@@ -468,8 +466,8 @@ jobs:
           "
       
       - name: MCP Performance and Resource Validation
+        working-directory: server
         run: |
-          cd server
           echo "🔍 Testing MCP performance and resource usage..."
           
           node -e "

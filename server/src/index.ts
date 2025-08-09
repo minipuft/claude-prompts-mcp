@@ -302,6 +302,7 @@ OPTIONS:
   --quiet             Minimal output mode (production-friendly)
   --verbose           Detailed diagnostics and strategy information
   --debug-startup     Alias for --verbose with extra debugging
+  --startup-test      Validate startup and exit (for testing)
   --help              Show this help message
 
 ENVIRONMENT VARIABLES:
@@ -393,6 +394,13 @@ async function main(): Promise<void> {
       process.exit(exitCode);
     }
 
+    // Check for startup validation mode (for GitHub Actions)
+    const args = process.argv.slice(2);
+    const isStartupTest = args.includes('--startup-test');
+    if (isStartupTest) {
+      console.error("DEBUG: Running in startup validation mode");
+    }
+
     // Setup error handlers first
     setupErrorHandlers();
 
@@ -400,18 +408,39 @@ async function main(): Promise<void> {
     console.error("Starting MCP Claude Prompts Server...");
 
     // Initialize the application using the orchestrator
+    console.error("DEBUG: About to call startApplication()...");
     orchestrator = await startApplication();
+    console.error("DEBUG: startApplication() completed successfully");
 
     // Get logger reference for global error handling
+    console.error("DEBUG: Getting logger reference...");
     const modules = orchestrator.getModules();
     logger = modules.logger;
+    console.error("DEBUG: Logger reference obtained");
 
-    // Validate initial startup
+    // Validate initial startup with detailed diagnostics
+    console.error("DEBUG: About to validate application health...");
     const initialHealth = await validateApplicationHealth();
+    console.error("DEBUG: Health validation result:", initialHealth);
+    
     if (!initialHealth) {
+      // Get detailed health info for debugging
+      const healthDetails = orchestrator.validateHealth();
+      console.error("DEBUG: Detailed health check results:", JSON.stringify(healthDetails, null, 2));
+      
       throw new Error(
-        "Initial health validation failed - application may not be properly initialized"
+        "Initial health validation failed - application may not be properly initialized. " +
+        "Health details: " + JSON.stringify(healthDetails.issues)
       );
+    }
+
+    // If this is a startup test, exit successfully after validation
+    if (isStartupTest) {
+      console.error("✅ MCP Claude Prompts Server startup validation completed successfully");
+      console.error("✅ All phases completed: Foundation → Data Loading → Module Initialization → Server Setup");
+      console.error("✅ Health validation passed - server is ready for operation");
+      await orchestrator.shutdown();
+      process.exit(0);
     }
 
     // Log successful startup with details

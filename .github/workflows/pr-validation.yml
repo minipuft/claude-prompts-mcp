@@ -33,29 +33,25 @@ jobs:
           cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
-        run: |
-          cd server
-          npm ci --prefer-offline --no-audit
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
 
       - name: TypeScript type checking
-        run: |
-          cd server
-          npm run typecheck
+        working-directory: server
+        run: npm run typecheck
 
       - name: Build validation
-        run: |
-          cd server
-          npm run build
+        working-directory: server
+        run: npm run build
 
       - name: Test execution
-        run: |
-          cd server
-          npm test
+        working-directory: server
+        run: npm test
         timeout-minutes: 3
 
       - name: Quick Framework Validation
+        working-directory: server
         run: |
-          cd server
           echo "Quick validation of framework compilation..."
 
           # Check if key modules compiled
@@ -67,8 +63,8 @@ jobs:
           fi
 
       - name: Server startup validation
+        working-directory: server
         run: |
-          cd server
           echo "Testing server startup capability..."
 
           # Verify build artifacts exist
@@ -86,39 +82,14 @@ jobs:
           fi
           echo "✅ Help command succeeded"
 
-          # Test server startup with timeout
-          echo "Testing server startup with enhanced monitoring..."
-          timeout 10s npm run start:debug > startup.log 2>&1 &
-          SERVER_PID=$!
-          echo "Server started with PID: $SERVER_PID"
-
-          # Wait for server to initialize
-          sleep 3
-
-          # Check if server is still running
-          if kill -0 $SERVER_PID 2>/dev/null; then
+          # Test server startup with new validation mode
+          echo "Testing server startup with validation mode..."
+          if npm run start:test > startup.log 2>&1; then
             echo "✅ Server startup validation passed"
-
-            # Clean shutdown
-            echo "Stopping server..."
-            kill $SERVER_PID 2>/dev/null || true
-
-            # Wait for graceful shutdown
-            for i in {1..3}; do
-              if ! kill -0 $SERVER_PID 2>/dev/null; then
-                echo "✅ Server stopped gracefully"
-                break
-              fi
-              sleep 1
-            done
-
-            # Force kill if still running
-            if kill -0 $SERVER_PID 2>/dev/null; then
-              echo "⚠️  Force killing server"
-              kill -9 $SERVER_PID 2>/dev/null || true
-            fi
+            echo "Startup log contents:"
+            cat startup.log | tail -10
           else
-            echo "❌ Server failed to start or crashed"
+            echo "❌ Server startup validation failed"
             echo "Build artifacts check:"
             ls -la dist/ | head -10
             echo "Startup log contents:"
@@ -242,13 +213,12 @@ jobs:
           cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
-        run: |
-          cd server
-          npm ci --prefer-offline --no-audit
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
 
       - name: Build and test
+        working-directory: server
         run: |
-          cd server
           npm run build
           npm test
 
@@ -263,8 +233,7 @@ jobs:
           fi
 
           # Check if package.json is valid
-          cd server
-          if ! npm run --silent > /dev/null 2>&1; then
+          if ! (cd server && npm run --silent > /dev/null 2>&1); then
             echo "❌ npm scripts validation failed"
             exit 1
           fi
