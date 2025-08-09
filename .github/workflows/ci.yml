@@ -73,14 +73,11 @@ jobs:
         if: runner.os == 'Windows'
         working-directory: server
         env:
-          MCP_SERVER_ROOT: ${{ github.workspace }}\server
+          MCP_SERVER_ROOT: ${{ github.workspace }}/server
         run: |
           Write-Host "Testing server startup with validation mode..."
-          if (& npm run start:test *> startup.log) {
-            $exitCode = $LASTEXITCODE
-          } else {
-            $exitCode = $LASTEXITCODE
-          }
+          npm run start:test > startup.log 2>&1
+          $exitCode = $LASTEXITCODE
           
           if ($exitCode -eq 0) {
             Write-Host "✅ Server startup validation passed"
