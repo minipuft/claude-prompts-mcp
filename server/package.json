@@ -24,6 +24,7 @@
     "start:debug": "node dist/index.js --debug-startup",
     "start:production": "node dist/index.js --quiet --transport=stdio",
     "start:development": "node dist/index.js --verbose --transport=sse",
+    "start:test": "node dist/index.js --startup-test",
     "help": "node dist/index.js --help",
     "test": "jest",
     "test:unit": "jest tests/unit",

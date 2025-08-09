@@ -302,6 +302,7 @@ OPTIONS:
   --quiet             Minimal output mode (production-friendly)
   --verbose           Detailed diagnostics and strategy information
   --debug-startup     Alias for --verbose with extra debugging
+  --startup-test      Validate startup and exit (for testing)
   --help              Show this help message
 
 ENVIRONMENT VARIABLES:
@@ -393,25 +394,96 @@ async function main(): Promise<void> {
       process.exit(exitCode);
     }
 
+    // Check for startup validation mode (for GitHub Actions)
+    const args = process.argv.slice(2);
+    const isStartupTest = args.includes('--startup-test');
+    const isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
+    
+    if (isStartupTest) {
+      // In CI mode, use console.log for debug to avoid stderr issues
+      const debugLog = isCI ? console.log : console.error;
+      debugLog("DEBUG: Running in startup validation mode");
+      debugLog(`DEBUG: Platform: ${process.platform}`);
+      debugLog(`DEBUG: Node.js version: ${process.version}`);
+      debugLog(`DEBUG: Working directory: ${process.cwd()}`);
+      debugLog(`DEBUG: MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || 'not set'}`);
+      debugLog(`DEBUG: MCP_PROMPTS_CONFIG_PATH: ${process.env.MCP_PROMPTS_CONFIG_PATH || 'not set'}`);
+    }
+
     // Setup error handlers first
     setupErrorHandlers();
 
-    // Use stderr for startup message to avoid interfering with stdio transport
-    console.error("Starting MCP Claude Prompts Server...");
+    // Use appropriate output stream based on environment
+    const statusLog = isCI ? console.log : console.error;
+    statusLog("Starting MCP Claude Prompts Server...");
 
     // Initialize the application using the orchestrator
-    orchestrator = await startApplication();
+    const debugLog = isCI ? console.log : console.error;
+    debugLog("DEBUG: About to call startApplication()...");
+    try {
+      orchestrator = await startApplication();
+      debugLog("DEBUG: startApplication() completed successfully");
+    } catch (startupError) {
+      const error = startupError instanceof Error ? startupError : new Error(String(startupError));
+      debugLog("DEBUG: startApplication() failed with error:", error.message);
+      debugLog("DEBUG: Error stack:", error.stack);
+      
+      // Additional diagnostics for Windows
+      if (process.platform === 'win32') {
+        debugLog("DEBUG: Windows-specific diagnostics:");
+        debugLog(`DEBUG: Process argv: ${JSON.stringify(process.argv)}`);
+        debugLog(`DEBUG: Environment keys: ${Object.keys(process.env).filter(k => k.startsWith('MCP_')).join(', ')}`);
+        
+        // Check if paths exist
+        const fs = await import('fs');
+        const path = await import('path');
+        
+        const serverRoot = process.env.MCP_SERVER_ROOT || process.cwd();
+        debugLog(`DEBUG: Checking server root: ${serverRoot}`);
+        debugLog(`DEBUG: Server root exists: ${fs.existsSync(serverRoot)}`);
+        
+        const configPath = path.join(serverRoot, 'config.json');
+        debugLog(`DEBUG: Config path: ${configPath}`);
+        debugLog(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
+        
+        const promptsConfigPath = path.join(serverRoot, 'promptsConfig.json');
+        debugLog(`DEBUG: Prompts config path: ${promptsConfigPath}`);
+        debugLog(`DEBUG: Prompts config exists: ${fs.existsSync(promptsConfigPath)}`);
+      }
+      
+      throw error;
+    }
 
     // Get logger reference for global error handling
+    debugLog("DEBUG: Getting logger reference...");
     const modules = orchestrator.getModules();
     logger = modules.logger;
+    debugLog("DEBUG: Logger reference obtained");
 
-    // Validate initial startup
+    // Validate initial startup with detailed diagnostics
+    debugLog("DEBUG: About to validate application health...");
     const initialHealth = await validateApplicationHealth();
+    debugLog("DEBUG: Health validation result:", initialHealth);
+    
     if (!initialHealth) {
+      // Get detailed health info for debugging
+      const healthDetails = orchestrator.validateHealth();
+      debugLog("DEBUG: Detailed health check results:", JSON.stringify(healthDetails, null, 2));
+      
       throw new Error(
-        "Initial health validation failed - application may not be properly initialized"
+        "Initial health validation failed - application may not be properly initialized. " +
+        "Health details: " + JSON.stringify(healthDetails.issues)
       );
+    }
+
+    // If this is a startup test, exit successfully after validation
+    if (isStartupTest) {
+      const successLog = isCI ? console.log : console.error;
+      successLog("✅ MCP Claude Prompts Server startup validation completed successfully");
+      successLog("✅ All phases completed: Foundation → Data Loading → Module Initialization → Server Setup");
+      successLog("✅ Health validation passed - server is ready for operation");
+      await orchestrator.shutdown();
+      process.exit(0);
     }
 
     // Log successful startup with details
