@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [18, 20]  # Reduced matrix for efficiency
+        node-version: [18, 20]
       fail-fast: false
     
     steps:
@@ -33,78 +33,28 @@ jobs:
           cache-dependency-path: server/package-lock.json
       
       - name: Install dependencies
-        run: |
-          cd server
-          npm ci --prefer-offline --no-audit
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
       
       - name: TypeScript type checking
-        run: |
-          cd server
-          npm run typecheck
+        working-directory: server  
+        run: npm run typecheck
       
       - name: Build project
-        run: |
-          cd server
-          npm run build
+        working-directory: server
+        run: npm run build
       
-      - name: Run tests
-        run: |
-          cd server
-          npm test
+      - name: Run server integration tests
+        working-directory: server
+        run: npm run test:server-integration
         timeout-minutes: 5
       
-      - name: Validate MCP server startup (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cd server
-          # Use a cross-platform timeout approach with error capture
-          if command -v timeout >/dev/null 2>&1; then
-            timeout 10s npm run start:debug 2>&1 | head -20 || true
-            exit_code=$?
-            if [ $exit_code -eq 124 ]; then
-              echo "✅ Server startup timeout (expected)"
-            else
-              echo "❌ Server startup failed with exit code: $exit_code"
-              echo "Server output (last 20 lines shown above)"
-              exit 1
-            fi
-          elif command -v gtimeout >/dev/null 2>&1; then
-            # macOS with coreutils installed
-            gtimeout 10s npm run start:debug 2>&1 | head -20 || true
-            exit_code=$?
-            if [ $exit_code -eq 124 ]; then
-              echo "✅ Server startup timeout (expected)"
-            else
-              echo "❌ Server startup failed with exit code: $exit_code"
-              echo "Server output (last 20 lines shown above)"
-              exit 1
-            fi
-          else
-            # Fallback: use background process with sleep and capture output
-            npm run start:debug > startup_output.log 2>&1 &
-            server_pid=$!
-            sleep 10
-            if kill -0 $server_pid 2>/dev/null; then
-              echo "✅ Server startup timeout (expected)"
-              kill $server_pid 2>/dev/null || true
-            else
-              echo "❌ Server startup failed"
-              echo "Server output:"
-              cat startup_output.log | head -20
-              exit 1
-            fi
-          fi
-      
-      - name: Validate MCP server startup (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          cd server
-          $job = Start-Job -ScriptBlock { npm run start:debug }
-          Start-Sleep -Seconds 10
-          Stop-Job $job
-          Remove-Job $job
-          Write-Host "✅ Server startup timeout (expected)"
-        shell: powershell
+      - name: Validate MCP server startup (Cross-Platform)
+        working-directory: server
+        env:
+          MCP_SERVER_ROOT: ${{ github.workspace }}/server
+        run: npm run test:ci-startup
+        timeout-minutes: 3
       
       - name: Upload build artifacts
         if: matrix.os == 'ubuntu-latest' && matrix.node-version == '18'
@@ -117,8 +67,8 @@ jobs:
             server/package-lock.json
           retention-days: 7
 
-  comprehensive-framework-tests:
-    name: Comprehensive CAGEERF & MCP Integration Tests
+  enhanced-tests:
+    name: Enhanced Framework Tests
     runs-on: ubuntu-latest
     needs: validate
     
@@ -134,318 +84,27 @@ jobs:
           cache-dependency-path: server/package-lock.json
       
       - name: Install dependencies
-        run: |
-          cd server
-          npm ci --prefer-offline --no-audit
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
       
       - name: Build project
-        run: |
-          cd server
-          npm run build
+        working-directory: server
+        run: npm run build
       
-      - name: Enhanced MCP Server Integration Tests
-        run: |
-          cd server
-          echo "🧪 Running enhanced MCP server integration tests..."
-          
-          node -e "
-            async function enhancedIntegrationTests() {
-              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
-              const { MockLogger } = await import('./dist/utils/index.js');
-              console.log('🔍 Test 1: Full server initialization sequence');
-              
-              const logger = new MockLogger();
-              const orchestrator = new ApplicationOrchestrator(logger);
-              
-              await orchestrator.loadConfiguration();
-              if (!orchestrator.config) {
-                throw new Error('Configuration not loaded');
-              }
-              console.log('✅ Configuration loaded successfully');
-              
-              await orchestrator.loadPromptsData();
-              console.log(\`✅ Prompts data loaded: \${orchestrator.promptsData ? orchestrator.promptsData.length : 0} prompts\`);
-              
-              await orchestrator.initializeModules();
-              if (!orchestrator.mcpToolsManager) {
-                throw new Error('MCP tools manager not initialized');
-              }
-              console.log('✅ Modules initialized successfully');
-              
-              const healthInfo = await orchestrator.getDiagnosticInfo();
-              if (!healthInfo || typeof healthInfo !== 'object') {
-                throw new Error('Health diagnostics failed');
-              }
-              console.log(\`✅ Health diagnostics collected: \${Object.keys(healthInfo).length} metrics\`);
-              
-              console.log('🎉 Enhanced integration tests completed successfully');
-            }
-            
-            enhancedIntegrationTests().catch(error => {
-              console.error('❌ Enhanced integration tests failed:', error.message);
-              process.exit(1);
-            });
-          "
+      - name: Run CAGEERF framework tests
+        working-directory: server
+        run: npm run test:cageerf-framework
+        timeout-minutes: 10
       
-      - name: CAGEERF Framework Comprehensive Tests
-        run: |
-          cd server
-          echo "🧪 Running comprehensive CAGEERF framework tests..."
-          
-          node -e "
-            async function comprehensiveFrameworkTests() {
-              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
-              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
-              const { TemplateRepositoryBuilder } = await import('./dist/utils/template-repository.js');
-              const { SemanticAnalyzer } = await import('./dist/utils/semanticAnalyzer.js');
-              const { MockLogger } = await import('./dist/utils/index.js');
-              console.log('🔍 Test 1: CAGEERF Analyzer edge cases');
-              
-              const analyzer = new CAGEERFAnalyzer();
-              
-              const testCases = [
-                'Simple prompt',
-                'Context analysis goals execution evaluation refinement framework methodology',
-                'A'.repeat(1000),  // Long input
-                '🚀 Analyze 📊 the data with systematic approach! 🎯'  // With emojis
-              ];
-              
-              for (let i = 0; i < testCases.length; i++) {
-                const analysis = analyzer.analyzePrompt(testCases[i]);
-                if (!analysis.compliance || !analysis.frameworkScore || analysis.overallCompliance === undefined) {
-                  throw new Error(\`Invalid analysis structure for test case \${i + 1}\`);
-                }
-                if (analysis.frameworkScore < 0 || analysis.frameworkScore > 1) {
-                  throw new Error(\`Invalid framework score: \${analysis.frameworkScore}\`);
-                }
-                console.log(\`✅ Test case \${i + 1} passed (score: \${analysis.frameworkScore.toFixed(3)})\`);
-              }
-              
-              console.log('🔍 Test 2: Template Generator validation');
-              const generator = new TemplateGenerator();
-              const complexities = ['simple', 'intermediate', 'advanced'];
-              const styles = ['structured', 'conversational', 'professional'];
-              
-              for (const complexity of complexities) {
-                for (const style of styles) {
-                  const template = await generator.generateTemplate({
-                    useCase: \`Test \${complexity} \${style}\`,
-                    domain: 'Testing',
-                    complexity: complexity,
-                    frameworkEmphasis: {
-                      context: true, analysis: true, goals: true,
-                      execution: true, evaluation: true, refinement: true, framework: true
-                    },
-                    templateStyle: style,
-                    includePlaceholders: true
-                  });
-                  
-                  if (!template.userMessageTemplate || typeof template.userMessageTemplate !== 'string') {
-                    throw new Error('Invalid template content');
-                  }
-                  if (!template.qualityScore || template.qualityScore < 0 || template.qualityScore > 1) {
-                    throw new Error(\`Invalid CAGEERF score: \${template.qualityScore}\`);
-                  }
-                  console.log(\`✅ Template \${complexity}/\${style} passed (score: \${template.qualityScore.toFixed(3)})\`);
-                }
-              }
-              
-              console.log('🔍 Test 3: Template Repository validation');
-              const repository = TemplateRepositoryBuilder.buildRepository();
-              if (!repository.templates || !Array.isArray(repository.templates)) {
-                throw new Error('Invalid templates array');
-              }
-              console.log(\`✅ Repository validation passed: \${repository.templates.length} templates\`);
-              
-              console.log('🔍 Test 4: Semantic Analyzer enhanced functionality');
-              const semanticAnalyzer = new SemanticAnalyzer(new MockLogger());
-              const testPrompt = {
-                id: 'test-prompt-001',
-                name: 'Test Analysis Prompt',
-                userMessageTemplate: 'Analyze the context, set goals, execute systematic evaluation',
-                description: 'Test prompt for semantic analysis',
-                category: 'test',
-                arguments: [],
-                systemMessage: 'Test system message'
-              };
-              
-              const classification = semanticAnalyzer.classifyPrompt(testPrompt);
-              if (!classification.executionType || classification.confidence === undefined) {
-                throw new Error('Invalid classification structure');
-              }
-              if (!classification.cageerfAnalysis || classification.frameworkCompliance === undefined) {
-                throw new Error('Missing CAGEERF integration');
-              }
-              console.log(\`✅ Semantic analysis passed: \${classification.executionType} (confidence: \${classification.confidence.toFixed(3)})\`);
-              
-              console.log('🎉 Comprehensive CAGEERF framework tests completed successfully');
-            }
-            
-            comprehensiveFrameworkTests().catch(error => {
-              console.error('❌ CAGEERF framework tests failed:', error.message);
-              process.exit(1);
-            });
-          "
+      - name: Run MCP tools tests
+        working-directory: server
+        run: npm run test:mcp-tools
+        timeout-minutes: 10
       
-      - name: MCP Tools Comprehensive Tests
-        run: |
-          cd server
-          echo "🧪 Running comprehensive MCP tools tests..."
-          
-          node -e "
-            async function comprehensiveMcpToolsTests() {
-              const { McpToolsManager } = await import('./dist/mcp-tools/index.js');
-              const { TemplateGenerationTools } = await import('./dist/mcp-tools/template-generation-tools.js');
-              const { MockLogger } = await import('./dist/utils/index.js');
-              console.log('🔍 Test 1: MCP Tools Manager functionality');
-              
-              const toolCalls = [];
-              const mockMcpServer = {
-                tool: function(name, description, schema) {
-                  toolCalls.push({ name, description, schema });
-                  return {
-                    name,
-                    handler: async (args) => {
-                      return {
-                        content: [{ type: 'text', text: \`Mock response for \${name}\` }]
-                      };
-                    }
-                  };
-                }
-              };
-              
-              const logger = new MockLogger();
-              const toolsManager = new McpToolsManager(logger, mockMcpServer, {});
-              
-              const testPromptsData = [
-                {
-                  id: 'test-1',
-                  name: 'Test Prompt 1',
-                  content: 'Test content with context and analysis components',
-                  description: 'Test prompt description'
-                }
-              ];
-              
-              const testConvertedPrompts = [
-                {
-                  id: 'test-1',
-                  name: 'Test Prompt 1',
-                  content: 'Test content',
-                  description: 'Test description',
-                  category: 'test',
-                  executionMode: 'template'
-                }
-              ];
-              
-              const testCategories = [
-                { name: 'test', description: 'Test category' }
-              ];
-              
-              toolsManager.updateData(testPromptsData, testConvertedPrompts, testCategories);
-              toolsManager.registerAllTools();
-              
-              if (toolCalls.length === 0) {
-                throw new Error('No tools were registered');
-              }
-              console.log(\`✅ MCP Tools Manager registered \${toolCalls.length} tools\`);
-              
-              const registeredNames = toolCalls.map(t => t.name);
-              const essentialTools = ['update_prompt', 'list_prompts', 'execute_prompt'];
-              
-              for (const tool of essentialTools) {
-                if (!registeredNames.includes(tool)) {
-                  console.log(\`⚠️  Essential tool missing: \${tool}\`);
-                } else {
-                  console.log(\`✅ Essential tool found: \${tool}\`);
-                }
-              }
-              
-              console.log('🔍 Test 2: Template Generation Tools validation');
-              const templateTools = new TemplateGenerationTools(logger, mockMcpServer);
-              const beforeCount = toolCalls.length;
-              
-              templateTools.registerAllTools();
-              const templateToolsCount = toolCalls.length - beforeCount;
-              
-              if (templateToolsCount === 0) {
-                throw new Error('No template generation tools were registered');
-              }
-              console.log(\`✅ Template Generation Tools registered \${templateToolsCount} additional tools\`);
-              
-              console.log('🎉 Comprehensive MCP tools tests completed successfully');
-            }
-            
-            comprehensiveMcpToolsTests().catch(error => {
-              console.error('❌ MCP tools tests failed:', error.message);
-              process.exit(1);
-            });
-          "
-      
-      - name: Performance and Memory Tests
-        run: |
-          cd server
-          echo "🧪 Running performance and memory tests..."
-          
-          node -e "
-            async function performanceTests() {
-              const { CAGEERFAnalyzer } = await import('./dist/utils/cageerf-analyzer.js');
-              const { TemplateGenerator } = await import('./dist/utils/template-generator.js');
-              console.log('⏱️  Starting performance tests...');
-              
-              const analyzer = new CAGEERFAnalyzer();
-              const generator = new TemplateGenerator();
-              
-              // Performance benchmark
-              const testPrompts = [
-                'Simple analysis task',
-                'Complex multi-faceted analysis requiring comprehensive context evaluation, systematic goal setting, detailed execution planning, thorough evaluation criteria, and iterative refinement processes',
-                'Medium complexity prompt with CAGEERF elements'
-              ];
-              
-              console.log('📊 Analysis Performance:');
-              for (let i = 0; i < testPrompts.length; i++) {
-                const start = Date.now();
-                const analysis = analyzer.analyzeText(testPrompts[i]);
-                const duration = Date.now() - start;
-                console.log(\`   Prompt \${i + 1}: \${duration}ms (score: \${analysis.frameworkScore.toFixed(3)})\`);
-                
-                if (duration > 1000) {
-                  console.log(\`⚠️  Warning: Analysis took \${duration}ms (threshold: 1000ms)\`);
-                }
-              }
-              
-              // Memory usage test
-              const initialMemory = process.memoryUsage().heapUsed;
-              
-              for (let i = 0; i < 50; i++) {
-                analyzer.analyzePrompt('Memory test prompt with comprehensive analysis components');
-                await generator.generateTemplate({
-                  useCase: 'Memory Test',
-                  domain: 'Testing',
-                  complexity: 'simple',
-                  frameworkEmphasis: { context: true, analysis: true, goals: true, execution: true, evaluation: true, refinement: true, framework: true },
-                  templateStyle: 'structured'
-                });
-              }
-              
-              global.gc && global.gc();
-              const finalMemory = process.memoryUsage().heapUsed;
-              const memoryIncrease = finalMemory - initialMemory;
-              
-              if (memoryIncrease > 25 * 1024 * 1024) {
-                console.log(\`⚠️  Potential memory leak: \${Math.round(memoryIncrease / 1024 / 1024)}MB increase\`);
-              } else {
-                console.log(\`✅ Memory usage acceptable: \${Math.round(memoryIncrease / 1024 / 1024)}MB increase for 50 operations\`);
-              }
-              
-              console.log('✅ Performance and memory tests completed successfully');
-            }
-            
-            performanceTests().catch(error => {
-              console.error('❌ Performance tests failed:', error.message);
-              process.exit(1);
-            });
-          " --expose-gc
+      - name: Run performance and memory tests
+        working-directory: server
+        run: npm run test:performance-memory
+        timeout-minutes: 15
 
   code-quality:
     name: Code Quality Checks
@@ -463,9 +122,8 @@ jobs:
           cache-dependency-path: server/package-lock.json
       
       - name: Install dependencies
-        run: |
-          cd server
-          npm ci --prefer-offline --no-audit
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
       
       - name: Check for sensitive files
         run: |
@@ -478,8 +136,8 @@ jobs:
           fi
       
       - name: Validate TypeScript files
+        working-directory: server
         run: |
-          cd server
           find src -name "*.ts" -exec echo "Checking {}" \;
           if find src -name "*.js" | grep -q .; then
             echo "❌ JavaScript files found in TypeScript source directory"
@@ -490,8 +148,8 @@ jobs:
           fi
       
       - name: Check package.json consistency
+        working-directory: server
         run: |
-          cd server
           if npm ls --depth=0 >/dev/null 2>&1; then
             echo "✅ Package.json dependencies are consistent"
           else
@@ -501,8 +159,8 @@ jobs:
           fi
       
       - name: Validate build artifacts
+        working-directory: server
         run: |
-          cd server
           npm run build
           if [ -d "dist" ] && [ -f "dist/index.js" ]; then
             echo "✅ Build artifacts generated successfully"
