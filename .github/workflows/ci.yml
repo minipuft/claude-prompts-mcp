@@ -107,35 +107,100 @@ jobs:
           Write-Host "`nStarting server validation test..." -ForegroundColor Yellow
           Write-Host "Command: npm run start:test" -ForegroundColor Gray
           
-          # Run the command and capture output and exit code separately
-          $output = npm run start:test 2>&1
-          $exitCode = $LASTEXITCODE
+          # Configure PowerShell to handle stderr gracefully
+          $ErrorActionPreference = "Continue"
+          
+          # Run the command using Start-Process for better control
+          $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+          $processInfo.FileName = "npm"
+          $processInfo.Arguments = "run start:test"
+          $processInfo.RedirectStandardOutput = $true
+          $processInfo.RedirectStandardError = $true
+          $processInfo.UseShellExecute = $false
+          $processInfo.CreateNoWindow = $true
+          
+          $process = New-Object System.Diagnostics.Process
+          $process.StartInfo = $processInfo
+          
+          # Start the process
+          $process.Start() | Out-Null
+          
+          # Read output streams
+          $stdout = $process.StandardOutput.ReadToEnd()
+          $stderr = $process.StandardError.ReadToEnd()
+          
+          # Wait for process to complete
+          $process.WaitForExit()
+          $exitCode = $process.ExitCode
+          
+          # Combine stdout and stderr for complete output
+          $output = @()
+          if ($stdout) { $output += $stdout -split "`n" }
+          if ($stderr) { $output += $stderr -split "`n" }
+          $output = $output | Where-Object { $_ -ne "" }
           
           # Save output to log file for debugging
           $output | Out-File -FilePath startup.log -Encoding UTF8
           
-          # Check results
-          if ($exitCode -eq 0) {
+          # Analyze output for success indicators
+          $hasSuccessMessage = $output -match "Server startup validation completed successfully"
+          $hasHealthValidation = $output -match "Health validation passed"
+          
+          # Check results - consider both exit code and success messages
+          if ($exitCode -eq 0 -and ($hasSuccessMessage -or $hasHealthValidation)) {
             Write-Host "✅ Server startup validation PASSED" -ForegroundColor Green
             Write-Host "`nServer startup output (last 10 lines):" -ForegroundColor Yellow
             $output | Select-Object -Last 10 | ForEach-Object { Write-Host $_ -ForegroundColor Gray }
+            
+            # Show debug vs. non-debug message counts for diagnostics
+            $debugMessages = $output | Where-Object { $_ -match "DEBUG:" }
+            $nonDebugMessages = $output | Where-Object { $_ -notmatch "DEBUG:" -and $_ -ne "" }
+            Write-Host "`nOutput analysis:" -ForegroundColor Cyan
+            Write-Host "  Debug messages: $($debugMessages.Count)" -ForegroundColor Gray
+            Write-Host "  Other messages: $($nonDebugMessages.Count)" -ForegroundColor Gray
+            
           } else {
             Write-Host "❌ Server startup validation FAILED with exit code: $exitCode" -ForegroundColor Red
             
-            Write-Host "`nComplete server startup output:" -ForegroundColor Yellow
-            $output | ForEach-Object { Write-Host $_ -ForegroundColor Gray }
+            # Separate debug and error messages for better analysis
+            $debugMessages = $output | Where-Object { $_ -match "DEBUG:" }
+            $errorMessages = $output | Where-Object { $_ -match "(ERROR|Error|error|FAILED|Failed)" -and $_ -notmatch "DEBUG:" }
+            $otherMessages = $output | Where-Object { $_ -notmatch "DEBUG:" -and $_ -notmatch "(ERROR|Error|error|FAILED|Failed)" -and $_ -ne "" }
+            
+            if ($debugMessages.Count -gt 0) {
+              Write-Host "`nDebug messages ($($debugMessages.Count)):" -ForegroundColor Cyan
+              $debugMessages | Select-Object -First 5 | ForEach-Object { Write-Host $_ -ForegroundColor Gray }
+              if ($debugMessages.Count -gt 5) {
+                Write-Host "... and $($debugMessages.Count - 5) more debug messages" -ForegroundColor Gray
+              }
+            }
+            
+            if ($errorMessages.Count -gt 0) {
+              Write-Host "`nError messages ($($errorMessages.Count)):" -ForegroundColor Red
+              $errorMessages | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+            }
+            
+            if ($otherMessages.Count -gt 0) {
+              Write-Host "`nOther output ($($otherMessages.Count) lines):" -ForegroundColor Yellow
+              $otherMessages | Select-Object -Last 10 | ForEach-Object { Write-Host $_ -ForegroundColor Gray }
+            }
             
             Write-Host "`nDiagnostic information:" -ForegroundColor Yellow
             Write-Host "Node.js version: $(node --version)" -ForegroundColor White
             Write-Host "npm version: $(npm --version)" -ForegroundColor White
+            Write-Host "Process exit code: $exitCode" -ForegroundColor White
             
             # Check package.json for start:test script
             if (Test-Path "package.json") {
-              $packageContent = Get-Content package.json -Raw | ConvertFrom-Json
-              if ($packageContent.scripts.'start:test') {
-                Write-Host "start:test script found: $($packageContent.scripts.'start:test')" -ForegroundColor White
-              } else {
-                Write-Host "❌ start:test script not found in package.json" -ForegroundColor Red
+              try {
+                $packageContent = Get-Content package.json -Raw | ConvertFrom-Json
+                if ($packageContent.scripts.'start:test') {
+                  Write-Host "start:test script found: $($packageContent.scripts.'start:test')" -ForegroundColor White
+                } else {
+                  Write-Host "❌ start:test script not found in package.json" -ForegroundColor Red
+                }
+              } catch {
+                Write-Host "❌ Error reading package.json: $_" -ForegroundColor Red
               }
             }
             
