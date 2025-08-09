@@ -1,0 +1,58 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_ENV: test
+
+jobs:
+  validate:
+    name: Cross-Platform Validation
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18, 20]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+      
+      - name: TypeScript validation
+        working-directory: server
+        run: npm run typecheck
+      
+      - name: Build validation
+        working-directory: server
+        run: npm run build
+      
+      - name: CI startup validation
+        working-directory: server
+        env:
+          MCP_SERVER_ROOT: ${{ github.workspace }}/server
+        run: npm run test:ci-startup
+        timeout-minutes: 3
+      
+      - name: Upload artifacts
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '18'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: server/dist/
+          retention-days: 7
