@@ -38,6 +38,8 @@ Thumbs.db
 test/
 test-output/
 tests/
+# Allow essential CI test files
+!server/tests/ci-startup-validation.js
 
 # Admin UI (temporary)
 admin-ui/
