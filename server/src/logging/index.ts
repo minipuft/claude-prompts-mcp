@@ -32,11 +32,13 @@ export class EnhancedLogger implements Logger {
   private logFile: string;
   private transport: string;
   private enableDebug: boolean;
+  private isCI: boolean;
 
   constructor(config: LoggingConfig) {
     this.logFile = config.logFile;
     this.transport = config.transport;
     this.enableDebug = config.enableDebug || false;
+    this.isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
   }
 
   /**
@@ -77,9 +79,30 @@ export class EnhancedLogger implements Logger {
   }
 
   /**
-   * Log to console only when not using STDIO transport
+   * Log to console based on transport and environment
    */
   private logToConsole(level: LogLevel, message: string, ...args: any[]): void {
+    // In CI environment, always log errors and warnings regardless of transport
+    // This ensures critical issues are visible in CI output
+    if (this.isCI) {
+      if (level === LogLevel.ERROR || level === LogLevel.WARN) {
+        switch (level) {
+          case LogLevel.ERROR:
+            console.error(`[ERROR] ${message}`, ...args);
+            break;
+          case LogLevel.WARN:
+            console.warn(`[WARN] ${message}`, ...args);
+            break;
+        }
+        return;
+      }
+      // In CI, suppress DEBUG messages unless explicitly enabled
+      if (level === LogLevel.DEBUG && !this.enableDebug) {
+        return;
+      }
+    }
+
+    // Standard logging for non-CI environments
     if (this.transport !== TransportType.STDIO) {
       switch (level) {
         case LogLevel.INFO:

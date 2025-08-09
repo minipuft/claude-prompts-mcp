@@ -40,6 +40,8 @@
     "test:mcp-tools": "node tests/scripts/mcp-tools.js",
     "test:performance-memory": "node --expose-gc tests/scripts/performance-memory.js",
     "test:all-enhanced": "npm run test:server-integration && npm run test:cageerf-framework && npm run test:mcp-tools",
+    "test:ci-startup": "node tests/ci-startup-validation.js",
+    "test:ci-startup-verbose": "VERBOSE=true node tests/ci-startup-validation.js",
     "prepublishOnly": "npm run build"
   },
   "repository": {

@@ -397,72 +397,78 @@ async function main(): Promise<void> {
     // Check for startup validation mode (for GitHub Actions)
     const args = process.argv.slice(2);
     const isStartupTest = args.includes('--startup-test');
+    const isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
+    
     if (isStartupTest) {
-      console.error("DEBUG: Running in startup validation mode");
-      console.error(`DEBUG: Platform: ${process.platform}`);
-      console.error(`DEBUG: Node.js version: ${process.version}`);
-      console.error(`DEBUG: Working directory: ${process.cwd()}`);
-      console.error(`DEBUG: MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || 'not set'}`);
-      console.error(`DEBUG: MCP_PROMPTS_CONFIG_PATH: ${process.env.MCP_PROMPTS_CONFIG_PATH || 'not set'}`);
+      // In CI mode, use console.log for debug to avoid stderr issues
+      const debugLog = isCI ? console.log : console.error;
+      debugLog("DEBUG: Running in startup validation mode");
+      debugLog(`DEBUG: Platform: ${process.platform}`);
+      debugLog(`DEBUG: Node.js version: ${process.version}`);
+      debugLog(`DEBUG: Working directory: ${process.cwd()}`);
+      debugLog(`DEBUG: MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || 'not set'}`);
+      debugLog(`DEBUG: MCP_PROMPTS_CONFIG_PATH: ${process.env.MCP_PROMPTS_CONFIG_PATH || 'not set'}`);
     }
 
     // Setup error handlers first
     setupErrorHandlers();
 
-    // Use stderr for startup message to avoid interfering with stdio transport
-    console.error("Starting MCP Claude Prompts Server...");
+    // Use appropriate output stream based on environment
+    const statusLog = isCI ? console.log : console.error;
+    statusLog("Starting MCP Claude Prompts Server...");
 
     // Initialize the application using the orchestrator
-    console.error("DEBUG: About to call startApplication()...");
+    const debugLog = isCI ? console.log : console.error;
+    debugLog("DEBUG: About to call startApplication()...");
     try {
       orchestrator = await startApplication();
-      console.error("DEBUG: startApplication() completed successfully");
+      debugLog("DEBUG: startApplication() completed successfully");
     } catch (startupError) {
       const error = startupError instanceof Error ? startupError : new Error(String(startupError));
-      console.error("DEBUG: startApplication() failed with error:", error.message);
-      console.error("DEBUG: Error stack:", error.stack);
+      debugLog("DEBUG: startApplication() failed with error:", error.message);
+      debugLog("DEBUG: Error stack:", error.stack);
       
       // Additional diagnostics for Windows
       if (process.platform === 'win32') {
-        console.error("DEBUG: Windows-specific diagnostics:");
-        console.error(`DEBUG: Process argv: ${JSON.stringify(process.argv)}`);
-        console.error(`DEBUG: Environment keys: ${Object.keys(process.env).filter(k => k.startsWith('MCP_')).join(', ')}`);
+        debugLog("DEBUG: Windows-specific diagnostics:");
+        debugLog(`DEBUG: Process argv: ${JSON.stringify(process.argv)}`);
+        debugLog(`DEBUG: Environment keys: ${Object.keys(process.env).filter(k => k.startsWith('MCP_')).join(', ')}`);
         
         // Check if paths exist
         const fs = await import('fs');
         const path = await import('path');
         
         const serverRoot = process.env.MCP_SERVER_ROOT || process.cwd();
-        console.error(`DEBUG: Checking server root: ${serverRoot}`);
-        console.error(`DEBUG: Server root exists: ${fs.existsSync(serverRoot)}`);
+        debugLog(`DEBUG: Checking server root: ${serverRoot}`);
+        debugLog(`DEBUG: Server root exists: ${fs.existsSync(serverRoot)}`);
         
         const configPath = path.join(serverRoot, 'config.json');
-        console.error(`DEBUG: Config path: ${configPath}`);
-        console.error(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
+        debugLog(`DEBUG: Config path: ${configPath}`);
+        debugLog(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
         
         const promptsConfigPath = path.join(serverRoot, 'promptsConfig.json');
-        console.error(`DEBUG: Prompts config path: ${promptsConfigPath}`);
-        console.error(`DEBUG: Prompts config exists: ${fs.existsSync(promptsConfigPath)}`);
+        debugLog(`DEBUG: Prompts config path: ${promptsConfigPath}`);
+        debugLog(`DEBUG: Prompts config exists: ${fs.existsSync(promptsConfigPath)}`);
       }
       
       throw error;
     }
 
     // Get logger reference for global error handling
-    console.error("DEBUG: Getting logger reference...");
+    debugLog("DEBUG: Getting logger reference...");
     const modules = orchestrator.getModules();
     logger = modules.logger;
-    console.error("DEBUG: Logger reference obtained");
+    debugLog("DEBUG: Logger reference obtained");
 
     // Validate initial startup with detailed diagnostics
-    console.error("DEBUG: About to validate application health...");
+    debugLog("DEBUG: About to validate application health...");
     const initialHealth = await validateApplicationHealth();
-    console.error("DEBUG: Health validation result:", initialHealth);
+    debugLog("DEBUG: Health validation result:", initialHealth);
     
     if (!initialHealth) {
       // Get detailed health info for debugging
       const healthDetails = orchestrator.validateHealth();
-      console.error("DEBUG: Detailed health check results:", JSON.stringify(healthDetails, null, 2));
+      debugLog("DEBUG: Detailed health check results:", JSON.stringify(healthDetails, null, 2));
       
       throw new Error(
         "Initial health validation failed - application may not be properly initialized. " +
@@ -472,9 +478,10 @@ async function main(): Promise<void> {
 
     // If this is a startup test, exit successfully after validation
     if (isStartupTest) {
-      console.error("✅ MCP Claude Prompts Server startup validation completed successfully");
-      console.error("✅ All phases completed: Foundation → Data Loading → Module Initialization → Server Setup");
-      console.error("✅ Health validation passed - server is ready for operation");
+      const successLog = isCI ? console.log : console.error;
+      successLog("✅ MCP Claude Prompts Server startup validation completed successfully");
+      successLog("✅ All phases completed: Foundation → Data Loading → Module Initialization → Server Setup");
+      successLog("✅ Health validation passed - server is ready for operation");
       await orchestrator.shutdown();
       process.exit(0);
     }
