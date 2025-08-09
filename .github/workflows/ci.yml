@@ -52,25 +52,48 @@ jobs:
       - name: Validate MCP server startup (Unix)
         if: runner.os != 'Windows'
         working-directory: server
+        env:
+          MCP_SERVER_ROOT: ${{ github.workspace }}/server
         run: |
-          timeout 10s npm run start:debug 2>&1 | head -20 || true
-          exit_code=$?
-          if [ $exit_code -eq 124 ]; then
-            echo "✅ Server startup timeout (expected)"
+          echo "Testing server startup with validation mode..."
+          if npm run start:test > startup.log 2>&1; then
+            echo "✅ Server startup validation passed"
+            echo "Startup log contents:"
+            cat startup.log | tail -10
           else
-            echo "❌ Server startup failed with exit code: $exit_code"
+            echo "❌ Server startup validation failed"
+            echo "Build artifacts check:"
+            ls -la dist/ | head -5
+            echo "Startup log contents:"
+            cat startup.log || echo "No startup log found"
             exit 1
           fi
       
       - name: Validate MCP server startup (Windows)
         if: runner.os == 'Windows'
         working-directory: server
+        env:
+          MCP_SERVER_ROOT: ${{ github.workspace }}\server
         run: |
-          $job = Start-Job -ScriptBlock { npm run start:debug }
-          Start-Sleep -Seconds 10
-          Stop-Job $job
-          Remove-Job $job
-          Write-Host "✅ Server startup timeout (expected)"
+          Write-Host "Testing server startup with validation mode..."
+          if (& npm run start:test *> startup.log) {
+            $exitCode = $LASTEXITCODE
+          } else {
+            $exitCode = $LASTEXITCODE
+          }
+          
+          if ($exitCode -eq 0) {
+            Write-Host "✅ Server startup validation passed"
+            Write-Host "Startup log contents:"
+            Get-Content startup.log -Tail 10
+          } else {
+            Write-Host "❌ Server startup validation failed"
+            Write-Host "Build artifacts check:"
+            Get-ChildItem dist\ | Select-Object -First 5
+            Write-Host "Startup log contents:"
+            if (Test-Path startup.log) { Get-Content startup.log } else { Write-Host "No startup log found" }
+            exit 1
+          }
         shell: powershell
       
       - name: Upload build artifacts
