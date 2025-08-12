@@ -1,0 +1,241 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, develop]
+
+env:
+  NODE_ENV: test
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
+
+jobs:
+  pr-quality-gates:
+    name: Pull Request Quality Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+
+      - name: TypeScript type checking
+        working-directory: server
+        run: npm run typecheck
+
+      - name: Build validation
+        working-directory: server
+        run: npm run build
+
+      - name: Test execution
+        working-directory: server
+        run: npm test
+        timeout-minutes: 3
+
+      - name: Quick Framework Validation
+        working-directory: server
+        run: |
+          echo "Quick validation of framework compilation..."
+
+          # Check if key modules compiled
+          if [ -f "dist/utils/cageerf-analyzer.js" ] && [ -f "dist/utils/template-generator.js" ] && [ -f "dist/mcp-tools/index.js" ]; then
+            echo "✅ All framework modules compiled successfully"
+          else
+            echo "❌ Framework compilation failed - missing required modules"
+            exit 1
+          fi
+
+      - name: Server startup validation
+        working-directory: server
+        run: |
+          echo "Testing server startup capability..."
+
+          # Verify build artifacts exist
+          if [ ! -f "dist/index.js" ]; then
+            echo "❌ Build artifacts missing - dist/index.js not found"
+            exit 1
+          fi
+
+          # Test help command first (quick validation)
+          echo "Testing help command..."
+          if ! npm run help > help.log 2>&1; then
+            echo "❌ Help command failed"
+            cat help.log
+            exit 1
+          fi
+          echo "✅ Help command succeeded"
+
+          # Test server startup with new validation mode
+          echo "Testing server startup with validation mode..."
+          if npm run start:test > startup.log 2>&1; then
+            echo "✅ Server startup validation passed"
+            echo "Startup log contents:"
+            cat startup.log | tail -10
+          else
+            echo "❌ Server startup validation failed"
+            echo "Build artifacts check:"
+            ls -la dist/ | head -10
+            echo "Startup log contents:"
+            cat startup.log || echo "No startup log found"
+            echo "Help log contents:"
+            cat help.log || echo "No help log found"
+            exit 1
+          fi
+
+      - name: Changed files analysis
+        run: |
+          echo "Analyzing changed files in this PR..."
+
+          # Robust file diff with error handling
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt 2>/dev/null; then
+            echo "✅ Successfully analyzed changed files"
+          else
+            echo "⚠️  Could not determine changed files, using fallback"
+            # Fallback: get files changed in current commit
+            git diff --name-only HEAD~1 HEAD > changed_files.txt 2>/dev/null || echo "No changes detected" > changed_files.txt
+          fi
+
+          echo "Files changed in this PR:"
+          cat changed_files.txt || echo "No changed files detected"
+
+          # Check if TypeScript files were modified
+          if grep -q "\.ts$" changed_files.txt; then echo "✅ TypeScript files modified - validation completed"; fi
+
+          # Check if CAGEERF files were modified
+          if grep -q "cageerf\|template-generator\|template-repository" changed_files.txt; then echo "⚠️  CAGEERF framework files modified - ensure compatibility"; fi
+
+          # Check if MCP tools were modified
+          if grep -q "mcp-tools" changed_files.txt; then echo "⚠️  MCP tools modified - ensure protocol compliance"; fi
+
+      - name: Comment PR with validation results
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            let changedFiles = '';
+            try {
+              changedFiles = fs.readFileSync('changed_files.txt', 'utf8').trim();
+              if (!changedFiles) {
+                changedFiles = 'No changes detected';
+              }
+            } catch (e) {
+              console.log(`Warning: Could not read changed_files.txt: ${e.message}`);
+              changedFiles = 'Unable to read changed files (this is normal for some PR types)';
+            }
+            const status = '${{ job.status }}';
+            const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            let message;
+            if (status === 'success') {
+              const lines = [
+                '## ✅ PR Validation Passed!',
+                '',
+                '**All quality gates have passed for this pull request.**',
+                '',
+                '### Validation Summary:',
+                '- ✅ TypeScript compilation successful',
+                '- ✅ Build process completed',
+                '- ✅ All tests passed',
+                '- ✅ Framework modules compiled successfully',
+                '- ✅ Server startup validation completed',
+                '',
+                '### Files Changed:',
+                '```',
+                changedFiles,
+                '```',
+                '',
+                `[View detailed results](${runUrl})`
+              ];
+              message = lines.join('\n');
+            } else {
+              const lines = [
+                '## ❌ PR Validation Failed',
+                '',
+                '**Quality gates failed for this pull request.**',
+                '',
+                `Please check the [detailed logs](${runUrl}) and fix the issues before merging.`,
+                '',
+                '### Files Changed:',
+                '```',
+                changedFiles,
+                '```',
+                '',
+                '**Common fixes:**',
+                '- Run `cd server && npm run typecheck` locally',
+                '- Run `cd server && npm run build` locally',
+                '- Run `cd server && npm test` locally',
+                '- Ensure all framework modules compile correctly'
+              ];
+              message = lines.join('\n');
+            }
+            // Check if a comment already exists
+            const comments = await github.rest.issues.listComments({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number });
+            const botComment = comments.data.find(comment => comment.user.type === 'Bot' && comment.body.includes('PR Validation'));
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: botComment.id, body: message });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: message });
+            }
+
+  compatibility-check:
+    name: Compatibility Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.base.ref == 'main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Build and test
+        working-directory: server
+        run: |
+          npm run build
+          npm test
+
+      - name: Check for breaking changes
+        run: |
+          echo "Checking for potential breaking changes..."
+
+          # Check if main entry points exist
+          if [ ! -f "server/dist/index.js" ]; then
+            echo "❌ Main entry point missing"
+            exit 1
+          fi
+
+          # Check if package.json is valid
+          if ! (cd server && npm run --silent > /dev/null 2>&1); then
+            echo "❌ npm scripts validation failed"
+            exit 1
+          fi
+
+          echo "✅ No breaking changes detected"

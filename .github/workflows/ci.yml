@@ -1,0 +1,171 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_ENV: test
+
+jobs:
+  validate:
+    name: Build and Core Validation
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18, 20]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+      
+      - name: TypeScript type checking
+        working-directory: server  
+        run: npm run typecheck
+      
+      - name: Build project
+        working-directory: server
+        run: npm run build
+      
+      - name: Run server integration tests
+        working-directory: server
+        run: npm run test:server-integration
+        timeout-minutes: 5
+      
+      - name: Validate MCP server startup (Cross-Platform)
+        working-directory: server
+        env:
+          MCP_SERVER_ROOT: ${{ github.workspace }}/server
+        run: npm run test:ci-startup
+        timeout-minutes: 3
+      
+      - name: Upload build artifacts
+        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '18'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            server/dist/
+            server/package.json
+            server/package-lock.json
+          retention-days: 7
+
+  enhanced-tests:
+    name: Enhanced Framework Tests
+    runs-on: ubuntu-latest
+    needs: validate
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+      
+      - name: Build project
+        working-directory: server
+        run: npm run build
+      
+      - name: Run CAGEERF framework tests
+        working-directory: server
+        run: npm run test:cageerf-framework
+        timeout-minutes: 10
+      
+      - name: Run MCP tools tests
+        working-directory: server
+        run: npm run test:mcp-tools
+        timeout-minutes: 10
+      
+      - name: Run performance and memory tests
+        working-directory: server
+        run: npm run test:performance-memory
+        timeout-minutes: 15
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+      
+      - name: Check for sensitive files
+        run: |
+          if find . -name "*.env*" -o -name "*.key" -o -name "*.pem" -o -name "*.p12" | grep -v node_modules | grep -q .; then
+            echo "❌ Sensitive files found in repository"
+            find . -name "*.env*" -o -name "*.key" -o -name "*.pem" -o -name "*.p12" | grep -v node_modules
+            exit 1
+          else
+            echo "✅ No sensitive files found"
+          fi
+      
+      - name: Validate TypeScript files
+        working-directory: server
+        run: |
+          find src -name "*.ts" -exec echo "Checking {}" \;
+          if find src -name "*.js" | grep -q .; then
+            echo "❌ JavaScript files found in TypeScript source directory"
+            find src -name "*.js"
+            exit 1
+          else
+            echo "✅ All source files are TypeScript"
+          fi
+      
+      - name: Check package.json consistency
+        working-directory: server
+        run: |
+          if npm ls --depth=0 >/dev/null 2>&1; then
+            echo "✅ Package.json dependencies are consistent"
+          else
+            echo "❌ Package.json dependency issues found"
+            npm ls --depth=0 || true
+            exit 1
+          fi
+      
+      - name: Validate build artifacts
+        working-directory: server
+        run: |
+          npm run build
+          if [ -d "dist" ] && [ -f "dist/index.js" ]; then
+            echo "✅ Build artifacts generated successfully"
+          else
+            echo "❌ Build artifacts missing"
+            ls -la dist/ || echo "dist directory not found"
+            exit 1
+          fi
