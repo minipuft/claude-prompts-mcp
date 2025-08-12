@@ -1,10 +1,12 @@
 /**
- * Semantic Analyzer Module
+ * Enhanced Semantic Analyzer Module
  * Intelligent content-based detection of prompt types and execution requirements
+ * Integrated with CAGEERF framework analysis for comprehensive prompt evaluation
  * Replaces header-based detection with semantic analysis
  */
 
 import { ConvertedPrompt } from "../types/index.js";
+import { CAGEERFAnalyzer, CAGEERFAnalysis } from "./cageerf-analyzer.js";
 
 export type ExecutionType = "template" | "workflow" | "chain" | "auto";
 export type PromptClassification = {
@@ -13,17 +15,25 @@ export type PromptClassification = {
   confidence: number;
   reasoning: string[];
   suggestedGates: string[];
+  cageerfAnalysis?: CAGEERFAnalysis;
+  frameworkCompliance?: number;
+  methodologyScore?: number;
 };
 
 /**
- * Semantic Analyzer for intelligent prompt classification
+ * Enhanced Semantic Analyzer for intelligent prompt classification with CAGEERF integration
  */
 export class SemanticAnalyzer {
+  private cageerfAnalyzer: CAGEERFAnalyzer;
+  
+  constructor() {
+    this.cageerfAnalyzer = new CAGEERFAnalyzer();
+  }
   
   /**
-   * Analyze a prompt and classify its execution requirements
+   * Analyze a prompt and classify its execution requirements with CAGEERF framework analysis
    */
-  analyzePrompt(prompt: ConvertedPrompt): PromptClassification {
+  analyzePrompt(prompt: ConvertedPrompt, includeCageerfAnalysis: boolean = true): PromptClassification {
     const reasoning: string[] = [];
     let executionType: ExecutionType = "template";
     let requiresExecution = false;
@@ -55,6 +65,31 @@ export class SemanticAnalyzer {
     
     // Step 4: Combine analyses
     const combinedAnalysis = this.combineAnalyses(contentAnalysis, structuralAnalysis);
+    
+    // Step 5: CAGEERF framework analysis (optional)
+    let cageerfAnalysis: CAGEERFAnalysis | undefined;
+    let frameworkCompliance: number | undefined;
+    let methodologyScore: number | undefined;
+    
+    if (includeCageerfAnalysis) {
+      cageerfAnalysis = this.cageerfAnalyzer.analyzePrompt(prompt);
+      frameworkCompliance = cageerfAnalysis.overallCompliance;
+      methodologyScore = cageerfAnalysis.frameworkScore;
+      
+      // Enhance confidence and execution type based on CAGEERF analysis
+      const enhancedAnalysis = this.enhanceWithCageerfInsights(combinedAnalysis, cageerfAnalysis);
+      
+      return {
+        executionType: enhancedAnalysis.executionType,
+        requiresExecution: enhancedAnalysis.requiresExecution,
+        confidence: enhancedAnalysis.confidence,
+        reasoning: enhancedAnalysis.reasoning,
+        suggestedGates: enhancedAnalysis.suggestedGates,
+        cageerfAnalysis,
+        frameworkCompliance,
+        methodologyScore
+      };
+    }
     
     return {
       executionType: combinedAnalysis.executionType,
@@ -173,8 +208,8 @@ export class SemanticAnalyzer {
     let requiresExecution = false;
 
     // Analyze complexity indicators
-    const userTemplate = prompt.userMessageTemplate;
-    const argumentCount = prompt.arguments.length;
+    const userTemplate = prompt.userMessageTemplate || '';
+    const argumentCount = prompt.arguments?.length || 0;
     
     // Multiple arguments suggest complex processing
     if (argumentCount > 2) {
@@ -261,13 +296,86 @@ export class SemanticAnalyzer {
   }
 
   /**
-   * Get human-readable analysis summary
+   * Enhance analysis with CAGEERF framework insights
+   */
+  private enhanceWithCageerfInsights(
+    basicAnalysis: Partial<PromptClassification>,
+    cageerfAnalysis: CAGEERFAnalysis
+  ): PromptClassification {
+    // Ensure all required properties have default values
+    const enhancedAnalysis: PromptClassification = {
+      executionType: basicAnalysis.executionType || "template",
+      requiresExecution: basicAnalysis.requiresExecution || false,
+      confidence: basicAnalysis.confidence || 0,
+      reasoning: basicAnalysis.reasoning || [],
+      suggestedGates: basicAnalysis.suggestedGates || [],
+      cageerfAnalysis: basicAnalysis.cageerfAnalysis,
+      frameworkCompliance: basicAnalysis.frameworkCompliance,
+      methodologyScore: basicAnalysis.methodologyScore
+    };
+    
+    // Enhance confidence based on framework compliance
+    if (cageerfAnalysis.frameworkScore > 0.7) {
+      enhancedAnalysis.confidence = Math.min(1.0, enhancedAnalysis.confidence + 0.2);
+      enhancedAnalysis.reasoning = [
+        ...enhancedAnalysis.reasoning,
+        `High CAGEERF framework compliance (${Math.round(cageerfAnalysis.frameworkScore * 100)}%) indicates structured approach`
+      ];
+    }
+    
+    // Upgrade execution type based on framework components
+    const { compliance } = cageerfAnalysis;
+    const hasStrongExecution = compliance.execution.confidence > 0.6;
+    const hasStrongGoals = compliance.goals.confidence > 0.6;
+    const hasFrameworkStructure = compliance.framework.confidence > 0.5;
+    
+    if (hasStrongExecution && hasStrongGoals && enhancedAnalysis.executionType === "template") {
+      enhancedAnalysis.executionType = "workflow";
+      enhancedAnalysis.requiresExecution = true;
+      enhancedAnalysis.reasoning = [
+        ...enhancedAnalysis.reasoning,
+        "CAGEERF analysis indicates strong execution and goals components - upgraded to workflow"
+      ];
+    }
+    
+    // Add CAGEERF-specific gate suggestions
+    const cageerfGates: string[] = [];
+    if (compliance.evaluation.confidence < 0.4) {
+      cageerfGates.push("quality_validation");
+    }
+    if (compliance.context.confidence < 0.4) {
+      cageerfGates.push("contextual_validation");
+    }
+    if (compliance.goals.confidence < 0.4) {
+      cageerfGates.push("objective_clarity");
+    }
+    if (hasFrameworkStructure) {
+      cageerfGates.push("framework_compliance");
+    }
+    
+    enhancedAnalysis.suggestedGates = Array.from(new Set([
+      ...enhancedAnalysis.suggestedGates,
+      ...cageerfGates
+    ]));
+    
+    return enhancedAnalysis;
+  }
+
+  /**
+   * Get human-readable analysis summary with CAGEERF integration
    */
   getAnalysisSummary(classification: PromptClassification): string {
     const confidence = Math.round(classification.confidence * 100);
     
-    let summary = `🧠 **Semantic Analysis**: ${classification.executionType} (${confidence}% confidence)\n`;
+    let summary = `🧠 **Enhanced Semantic Analysis**: ${classification.executionType} (${confidence}% confidence)\n`;
     summary += `⚡ **Execution Required**: ${classification.requiresExecution ? 'Yes' : 'No'}\n`;
+    
+    // Add CAGEERF framework information if available
+    if (classification.frameworkCompliance !== undefined) {
+      const frameworkScore = Math.round(classification.frameworkCompliance * 100);
+      const methodologyScore = Math.round((classification.methodologyScore || 0) * 100);
+      summary += `🎯 **CAGEERF Compliance**: ${frameworkScore}% | **Methodology Score**: ${methodologyScore}%\n`;
+    }
     
     if (classification.suggestedGates.length > 0) {
       summary += `🛡️ **Suggested Gates**: ${classification.suggestedGates.join(', ')}\n`;
@@ -280,6 +388,25 @@ export class SemanticAnalyzer {
       });
     }
     
+    // Add CAGEERF insights if available
+    if (classification.cageerfAnalysis) {
+      summary += `\n${this.cageerfAnalyzer.getAnalysisSummary(classification.cageerfAnalysis)}`;
+    }
+    
     return summary;
+  }
+
+  /**
+   * Get CAGEERF analysis only (for focused framework analysis)
+   */
+  getCageerfAnalysis(prompt: ConvertedPrompt): CAGEERFAnalysis {
+    return this.cageerfAnalyzer.analyzePrompt(prompt);
+  }
+  
+  /**
+   * Legacy alias for analyzePrompt - maintains backward compatibility
+   */
+  classifyPrompt(prompt: ConvertedPrompt, includeCageerfAnalysis: boolean = true): PromptClassification {
+    return this.analyzePrompt(prompt, includeCageerfAnalysis);
   }
 }

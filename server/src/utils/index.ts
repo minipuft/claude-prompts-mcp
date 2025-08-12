@@ -184,3 +184,41 @@ export function parseArgs(args: string[]): Record<string, string> {
 
   return parsed;
 }
+
+/**
+ * Mock logger for testing purposes
+ */
+export class MockLogger {
+  info(message: string, ...args: any[]): void {
+    console.log(`[INFO] ${message}`, ...args);
+  }
+
+  error(message: string, ...args: any[]): void {
+    console.error(`[ERROR] ${message}`, ...args);
+  }
+
+  warn(message: string, ...args: any[]): void {
+    console.warn(`[WARN] ${message}`, ...args);
+  }
+
+  debug(message: string, ...args: any[]): void {
+    console.log(`[DEBUG] ${message}`, ...args);
+  }
+
+  setTransport(_transport: string): void {
+    // Mock implementation - no-op
+  }
+
+  setDebugEnabled(_enabled: boolean): void {
+    // Mock implementation - no-op
+  }
+
+  logStartupInfo(transport: string, config: any): void {
+    this.info(`Mock startup - Transport: ${transport}`);
+    this.debug("Mock config:", JSON.stringify(config, null, 2));
+  }
+
+  logMemoryUsage(): void {
+    this.info(`Mock memory usage: ${JSON.stringify(process.memoryUsage())}`);
+  }
+}
