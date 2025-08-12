@@ -5,13 +5,14 @@
 
 import { Logger } from "../logging/index.js";
 import { PromptManager } from "../prompts/index.js";
-import { ConvertedPrompt } from "../types/index.js";
+import { ConvertedPrompt, WorkflowExecutionResult } from "../types/index.js";
 import {
   PromptError,
   ValidationError,
   handleError as utilsHandleError,
 } from "../utils/errorHandling.js";
 import { ConversationManager } from "./conversation-manager.js";
+import { WorkflowEngine } from "./workflow-engine.js";
 
 /**
  * Chain execution state tracking
@@ -33,6 +34,7 @@ export class PromptExecutor {
   private conversationManager: ConversationManager;
   private convertedPrompts: ConvertedPrompt[] = [];
   private currentChainExecution: ChainExecutionState | null = null;
+  private workflowEngine?: WorkflowEngine;
 
   constructor(
     logger: Logger,
@@ -42,6 +44,13 @@ export class PromptExecutor {
     this.logger = logger;
     this.promptManager = promptManager;
     this.conversationManager = conversationManager;
+  }
+
+  /**
+   * Set the workflow engine for workflow execution
+   */
+  setWorkflowEngine(workflowEngine: WorkflowEngine): void {
+    this.workflowEngine = workflowEngine;
   }
 
   /**
@@ -361,17 +370,76 @@ export class PromptExecutor {
   }
 
   /**
+   * Execute a workflow
+   */
+  async executeWorkflow(
+    workflowId: string,
+    inputs: Record<string, any> = {}
+  ): Promise<WorkflowExecutionResult> {
+    if (!this.workflowEngine) {
+      throw new PromptError("Workflow engine not available");
+    }
+
+    try {
+      this.logger.info(`Executing workflow: ${workflowId}`);
+      
+      // Add workflow execution to conversation history
+      this.conversationManager.addToConversationHistory({
+        role: "system",
+        content: `Starting workflow execution: ${workflowId}`,
+        timestamp: Date.now(),
+      });
+
+      const result = await this.workflowEngine.executeWorkflow(
+        workflowId,
+        inputs,
+        { gateValidation: true }, // Enable gate validation by default
+        'server' // Default to server runtime
+      );
+
+      // Add completion to conversation history
+      this.conversationManager.addToConversationHistory({
+        role: "system",
+        content: `Workflow execution completed: ${workflowId} (${result.status})`,
+        timestamp: Date.now(),
+      });
+
+      this.logger.info(`Workflow execution completed: ${workflowId} (${result.status})`);
+      return result;
+
+    } catch (error) {
+      const { message } = this.handleError(
+        error,
+        `Error executing workflow '${workflowId}'`
+      );
+      
+      // Add error to conversation history
+      this.conversationManager.addToConversationHistory({
+        role: "system",
+        content: `Workflow execution failed: ${workflowId} - ${message}`,
+        timestamp: Date.now(),
+      });
+
+      throw error;
+    }
+  }
+
+  /**
    * Get executor statistics
    */
   getExecutorStats(): {
     currentChain: ChainExecutionState | null;
     totalPrompts: number;
     conversationStats: any;
+    workflowsAvailable: number;
+    activeWorkflowExecutions: number;
   } {
     return {
       currentChain: this.currentChainExecution,
       totalPrompts: this.convertedPrompts.length,
       conversationStats: this.conversationManager.getConversationStats(),
+      workflowsAvailable: this.workflowEngine?.listWorkflows().length || 0,
+      activeWorkflowExecutions: this.workflowEngine?.getActiveExecutions().length || 0,
     };
   }
 }

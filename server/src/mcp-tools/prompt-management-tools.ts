@@ -57,6 +57,79 @@ export class PromptManagementTools {
   }
 
   /**
+   * Record learning data for prompt management operations
+   */
+  private recordLearningData(
+    operation: string,
+    promptId: string,
+    classification: PromptClassification
+  ): void {
+    const timestamp = Date.now();
+    
+    const learningData = {
+      timestamp,
+      operation,
+      promptId,
+      classification: {
+        executionType: classification.executionType,
+        confidence: classification.confidence,
+        requiresExecution: classification.requiresExecution,
+        suggestedGates: classification.suggestedGates,
+      },
+      context: 'prompt_management'
+    };
+
+    this.logger.debug(`Recording learning data for ${operation}:${promptId}`, learningData);
+    
+    // Track confidence trends for prompt lifecycle management
+    this.trackConfidenceTrend(promptId, classification.confidence, timestamp, operation);
+    
+    // This could be enhanced to store in a persistent learning database
+    // For now, just log for analysis purposes
+  }
+
+  /**
+   * Track confidence trends for prompt lifecycle management
+   */
+  private trackConfidenceTrend(
+    promptId: string,
+    confidence: number,
+    timestamp: number,
+    operation: string
+  ): void {
+    // This would typically interface with the main analytics system
+    // For now, we'll create a simplified version that logs trends
+    
+    const confidenceData = {
+      promptId,
+      confidence: Math.round(confidence * 100),
+      timestamp,
+      operation,
+      trend: this.calculateConfidenceTrend(promptId, confidence)
+    };
+
+    this.logger.info(`📊 Confidence tracking for ${promptId}: ${confidenceData.confidence}% (${confidenceData.trend}) via ${operation}`);
+  }
+
+  /**
+   * Calculate confidence trend for a prompt
+   */
+  private calculateConfidenceTrend(promptId: string, currentConfidence: number): string {
+    // In a full implementation, this would track historical confidence data
+    // For now, we'll provide basic categorization
+    
+    if (currentConfidence >= 0.8) {
+      return "HIGH_CONFIDENCE";
+    } else if (currentConfidence >= 0.6) {
+      return "MODERATE_CONFIDENCE";
+    } else if (currentConfidence >= 0.4) {
+      return "LOW_CONFIDENCE";
+    } else {
+      return "NEEDS_IMPROVEMENT";
+    }
+  }
+
+  /**
    * Analyze a prompt and generate intelligent feedback
    */
   private analyzePromptIntelligence(promptData: PromptData, userMessageTemplate: string, systemMessage?: string, isChain?: boolean, chainSteps?: any[]): {
@@ -159,6 +232,7 @@ export class PromptManagementTools {
   registerUpdatePrompt(): void {
     this.mcpServer.tool(
       "update_prompt",
+      "🔄 UPDATE PROMPT: Modify existing prompts with intelligent CAGEERF analysis and validation. Supports content updates, argument modifications, and category changes with semantic analysis.",
       {
         id: z.string().describe("Unique identifier for the prompt"),
         name: z.string().describe("Display name for the prompt"),
@@ -263,6 +337,9 @@ export class PromptManagementTools {
           };
           
           const analysis = this.analyzePromptIntelligence(promptData, args.userMessageTemplate, args.systemMessage, args.isChain, args.chainSteps);
+          
+          // Record learning data for prompt management usage
+          this.recordLearningData('update_prompt', args.id, analysis.classification);
           
           // Create enhanced response with intelligent feedback
           let enhancedMessage = `${result.message}\n\n`;
@@ -540,6 +617,7 @@ export class PromptManagementTools {
   registerDeletePrompt(): void {
     this.mcpServer.tool(
       "delete_prompt",
+      "🗑️ DELETE PROMPT: Remove prompts from the system with comprehensive validation and backup creation. Includes safety checks and category management.",
       {
         id: z.string().describe("Unique identifier for the prompt to delete"),
         fullServerRestart: z
@@ -801,6 +879,7 @@ export class PromptManagementTools {
   registerModifyPromptSection(): void {
     this.mcpServer.tool(
       "modify_prompt_section",
+      "✏️ MODIFY PROMPT SECTION: Update specific sections of prompts with precision editing and validation. Supports content modification, argument updates, and metadata changes.",
       {
         id: z.string().describe("Unique identifier of the prompt to modify"),
         section_name: z
@@ -858,6 +937,9 @@ export class PromptManagementTools {
             
             const afterAnalysis = this.semanticAnalyzer.analyzePrompt(updatedPrompt);
             analysisComparison = this.comparePromptAnalyses(beforeAnalysis, afterAnalysis, args.id);
+            
+            // Record learning data for the modification
+            this.recordLearningData('modify_prompt_section', args.id, afterAnalysis);
           }
 
           // Create enhanced response with analysis
@@ -917,6 +999,7 @@ export class PromptManagementTools {
   registerReloadPrompts(): void {
     this.mcpServer.tool(
       "reload_prompts",
+      "🔄 RELOAD PROMPTS: Refresh all prompts from disk with hot-reloading and system refresh. Supports full server restart or graceful reload modes.",
       {
         fullServerRestart: z
           .boolean()

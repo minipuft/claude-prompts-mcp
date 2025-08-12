@@ -122,6 +122,10 @@ export interface ConvertedPrompt {
   gates?: GateDefinition[];
   executionMode?: 'auto' | 'template' | 'chain' | 'workflow';
   requiresExecution?: boolean; // Whether this prompt should be executed rather than returned
+  // Workflow-related properties
+  isWorkflow?: boolean; // Whether this prompt is a workflow
+  workflowDefinition?: Workflow; // Full workflow definition
+  workflowId?: string; // Reference to registered workflow
 }
 
 // Prompt Loading Types
@@ -209,8 +213,35 @@ export interface ExpressResponse {
 }
 
 // Gate Validation Types
+export type GateRequirementType = 
+  | 'content_length'
+  | 'keyword_presence'
+  | 'format_validation'
+  | 'section_validation'
+  | 'custom'
+  // New content quality gates
+  | 'readability_score'
+  | 'grammar_quality'
+  | 'tone_analysis'
+  // New structure gates
+  | 'hierarchy_validation'
+  | 'link_validation'
+  | 'code_quality'
+  // New completeness gates
+  | 'required_fields'
+  | 'completeness_score'
+  | 'citation_validation'
+  // New security gates
+  | 'security_scan'
+  | 'privacy_compliance'
+  | 'content_policy'
+  // New workflow gates
+  | 'dependency_validation'
+  | 'context_consistency'
+  | 'resource_availability';
+
 export interface GateRequirement {
-  type: 'content_length' | 'keyword_presence' | 'format_validation' | 'section_validation' | 'custom';
+  type: GateRequirementType;
   criteria: any;
   weight?: number;
   required?: boolean;
@@ -320,4 +351,243 @@ export enum GateType {
   APPROVAL = "approval",
   CONDITION = "condition",
   QUALITY = "quality",
+}
+
+// ===== Workflow Foundation Types =====
+
+/**
+ * Runtime targets for workflow execution
+ */
+export type RuntimeTarget = 'desktop' | 'cli' | 'server' | 'web';
+
+/**
+ * Workflow step configuration
+ */
+export interface StepConfig {
+  /** Prompt ID for prompt steps */
+  promptId?: string;
+  /** Tool name for tool steps */
+  toolName?: string;
+  /** Gate ID for gate steps */
+  gateId?: string;
+  /** Condition expression for condition steps */
+  condition?: string;
+  /** Parameters for step execution */
+  parameters?: Record<string, any>;
+  /** Timeout in milliseconds */
+  timeout?: number;
+}
+
+/**
+ * Error handling configuration for workflow steps
+ */
+export interface ErrorHandling {
+  /** Action to take on step failure */
+  action: 'stop' | 'skip' | 'retry' | 'rollback';
+  /** Maximum retries for this step */
+  maxRetries?: number;
+  /** Fallback step to execute on failure */
+  fallbackStep?: string;
+}
+
+/**
+ * Workflow step definition
+ */
+export interface WorkflowStep {
+  /** Unique identifier for the step */
+  id: string;
+  /** Display name for the step */
+  name: string;
+  /** Type of step execution */
+  type: 'prompt' | 'tool' | 'gate' | 'condition' | 'parallel';
+  /** Step configuration */
+  config: StepConfig;
+  /** Dependencies (step IDs that must complete before this step) */
+  dependencies: string[];
+  /** Step timeout in milliseconds */
+  timeout?: number;
+  /** Number of retries for this step */
+  retries?: number;
+  /** Error handling configuration */
+  onError?: ErrorHandling;
+}
+
+/**
+ * Dependency graph for workflow execution order
+ */
+export interface DependencyGraph {
+  /** All step IDs in the workflow */
+  nodes: string[];
+  /** Dependency edges as [from, to] tuples */
+  edges: [string, string][];
+  /** Pre-computed topological order (optional) */
+  topologicalOrder?: string[];
+}
+
+/**
+ * Retry policy for workflow execution
+ */
+export interface RetryPolicy {
+  /** Maximum number of retries */
+  maxRetries: number;
+  /** Backoff strategy for retries */
+  backoffStrategy: 'linear' | 'exponential';
+  /** Types of errors that should trigger retries */
+  retryableErrors: string[];
+  /** Base delay between retries in milliseconds */
+  baseDelay?: number;
+  /** Maximum delay between retries in milliseconds */
+  maxDelay?: number;
+}
+
+/**
+ * Workflow metadata
+ */
+export interface WorkflowMetadata {
+  /** Author of the workflow */
+  author?: string;
+  /** Creation timestamp */
+  created: Date;
+  /** Last modification timestamp */
+  modified: Date;
+  /** Tags for categorization */
+  tags: string[];
+  /** Target runtime environments */
+  runtime: RuntimeTarget[];
+  /** Version of the workflow */
+  version: string;
+}
+
+/**
+ * Gate configuration for workflow validation
+ */
+export interface WorkflowGate {
+  /** Gate identifier */
+  id: string;
+  /** Gate name */
+  name: string;
+  /** Gate type */
+  type: GateType;
+  /** Step IDs this gate applies to */
+  appliesTo: string[];
+  /** Gate requirements */
+  requirements: GateRequirement[];
+  /** Action to take on gate failure */
+  failureAction: 'stop' | 'retry' | 'skip' | 'rollback';
+}
+
+/**
+ * Complete workflow definition
+ */
+export interface Workflow {
+  /** Unique workflow identifier */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Optional description */
+  description?: string;
+  /** Workflow version */
+  version: string;
+  /** Workflow steps */
+  steps: WorkflowStep[];
+  /** Dependency graph */
+  dependencies: DependencyGraph;
+  /** Retry policy */
+  retryPolicy: RetryPolicy;
+  /** Workflow metadata */
+  metadata: WorkflowMetadata;
+  /** Optional gates for validation */
+  gates?: WorkflowGate[];
+}
+
+/**
+ * Workflow execution context
+ */
+export interface WorkflowExecutionContext {
+  /** Workflow being executed */
+  workflow: Workflow;
+  /** Input parameters */
+  inputs: Record<string, any>;
+  /** Current step results */
+  stepResults: Record<string, any>;
+  /** Execution start time */
+  startTime: number;
+  /** Current runtime target */
+  runtime: RuntimeTarget;
+  /** Execution options */
+  options: WorkflowExecutionOptions;
+}
+
+/**
+ * Workflow execution options
+ */
+export interface WorkflowExecutionOptions {
+  /** Whether to require step confirmation */
+  stepConfirmation?: boolean;
+  /** Whether to validate gates */
+  gateValidation?: boolean;
+  /** Overall execution timeout */
+  timeout?: number;
+  /** Whether to run in parallel where possible */
+  parallelExecution?: boolean;
+}
+
+/**
+ * Workflow execution result
+ */
+export interface WorkflowExecutionResult {
+  /** Workflow ID */
+  workflowId: string;
+  /** Execution ID */
+  executionId: string;
+  /** Final execution status */
+  status: 'completed' | 'failed' | 'timeout' | 'cancelled';
+  /** Start time */
+  startTime: number;
+  /** End time */
+  endTime: number;
+  /** Results from each step */
+  stepResults: Record<string, StepResult>;
+  /** Final workflow result */
+  finalResult?: any;
+  /** Error information if failed */
+  error?: {
+    message: string;
+    step?: string;
+    code?: string;
+  };
+}
+
+/**
+ * Workflow execution plan
+ */
+export interface WorkflowExecutionPlan {
+  /** Workflow ID */
+  workflowId: string;
+  /** Execution order of steps */
+  executionOrder: string[];
+  /** Parallel execution groups */
+  parallelGroups: string[][];
+  /** Estimated execution time */
+  estimatedDuration: number;
+  /** Validation results */
+  validationResults: ValidationResult;
+}
+
+/**
+ * Workflow validation result
+ */
+export interface WorkflowValidationResult {
+  /** Whether workflow is valid */
+  valid: boolean;
+  /** Validation errors */
+  errors: string[];
+  /** Validation warnings */
+  warnings: string[];
+  /** Dependency graph validation */
+  dependencyValidation: {
+    valid: boolean;
+    cycles: string[][];
+    unreachableNodes: string[];
+  };
 }

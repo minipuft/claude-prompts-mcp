@@ -25,6 +25,8 @@ import {
 import { createGateEvaluator, GateEvaluator } from "../utils/gateValidation.js";
 import { SemanticAnalyzer, PromptClassification } from "../utils/semanticAnalyzer.js";
 import { PromptManagementTools } from "./prompt-management-tools.js";
+// import { GateManagementTools } from "./gate-management-tools.js"; // TODO: Add when gate management tools are implemented
+import { TemplateGenerationTools } from "./template-generation-tools.js";
 
 /**
  * MCP Tools Manager class
@@ -36,6 +38,8 @@ export class McpToolsManager {
   private configManager: ConfigManager;
   private promptManagementTools: PromptManagementTools;
   private gateEvaluator: GateEvaluator;
+  // private gateManagementTools?: GateManagementTools; // TODO: Add when gate management tools are implemented
+  private templateGenerationTools: TemplateGenerationTools;
   private semanticAnalyzer: SemanticAnalyzer;
   private promptsData: PromptData[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
@@ -85,7 +89,15 @@ export class McpToolsManager {
       onRefresh,
       onRestart
     );
+    this.templateGenerationTools = new TemplateGenerationTools(logger, mcpServer);
   }
+
+  /**
+   * Set gate management tools (called after initialization)
+   */
+  // setGateManagementTools(gateManagementTools: GateManagementTools): void {
+  //   this.gateManagementTools = gateManagementTools;
+  // } // TODO: Add when gate management tools are implemented
 
   /**
    * Register all MCP tools with the server
@@ -101,11 +113,16 @@ export class McpToolsManager {
     this.promptManagementTools.registerModifyPromptSection();
     this.promptManagementTools.registerReloadPrompts();
 
-    // Also register the old name as an alias for backward compatibility
-    this.registerProcessSlashCommandAlias();
-
     // Register analytics tool
     this.registerExecutionAnalytics();
+
+    // Register gate management tools if available
+    // if (this.gateManagementTools) {
+    //   this.registerGateManagementTools(); // TODO: Add when gate management tools are implemented
+    // }
+
+    // Register template generation tools
+    this.templateGenerationTools.registerAllTools();
 
     this.logger.info("All MCP tools registered successfully");
   }
@@ -125,7 +142,7 @@ export class McpToolsManager {
   }
 
   /**
-   * Register execute_prompt tool (enhanced version of process_slash_command)
+   * Register execute_prompt tool with intelligent execution mode detection
    */
   private registerExecutePrompt(): void {
     this.mcpServer.tool(
@@ -222,13 +239,20 @@ export class McpToolsManager {
           // Check if we should return template info instead of executing
           const trimmedCommandArgs = commandArgs.trim();
 
+          // Use smart execution decision instead of static onEmptyInvocation
+          const shouldExecute = this.determineSmartExecutionBehavior(
+            convertedPrompt,
+            trimmedCommandArgs,
+            effectiveExecutionMode,
+            extra
+          );
+
           if (
             effectiveExecutionMode === "template" ||
-            (trimmedCommandArgs === "" &&
-              convertedPrompt.onEmptyInvocation === "return_template")
+            !shouldExecute
           ) {
             this.logger.info(
-              `Returning template info for '${prefix}${commandName}' (mode: ${effectiveExecutionMode})`
+              `Returning template info for '${prefix}${commandName}' (mode: ${effectiveExecutionMode}, smart decision: ${shouldExecute})`
             );
 
             return this.generateTemplateInfo(convertedPrompt, prefix);
@@ -973,6 +997,196 @@ export class McpToolsManager {
   }
 
   /**
+   * Determine whether to execute a prompt or return template info using intelligent analysis
+   */
+  private determineSmartExecutionBehavior(
+    convertedPrompt: ConvertedPrompt,
+    commandArgs: string,
+    executionMode: string,
+    extra: any
+  ): boolean {
+    // If user explicitly provided arguments, always execute
+    if (commandArgs.trim() !== "") {
+      this.logger.debug(`Smart execution: executing due to provided arguments for ${convertedPrompt.id}`);
+      return true;
+    }
+
+    // If execution mode is explicitly template, respect that
+    if (executionMode === "template") {
+      this.logger.debug(`Smart execution: returning template due to explicit template mode for ${convertedPrompt.id}`);
+      return false;
+    }
+
+    // Use semantic analysis to make intelligent decision
+    const classification = this.semanticAnalyzer.analyzePrompt(convertedPrompt);
+    
+    // Check for previous message context that could be used as input
+    const hasPreviousContext = this.detectPreviousMessageContext(extra);
+    
+    // Decision matrix based on multiple factors
+    const shouldExecute = this.evaluateExecutionDecision(
+      convertedPrompt,
+      classification,
+      hasPreviousContext
+    );
+
+    this.logger.info(
+      `🧠 Smart execution decision for ${convertedPrompt.id}: ${shouldExecute ? 'EXECUTE' : 'TEMPLATE'} ` +
+      `(confidence: ${Math.round(classification.confidence * 100)}%, context: ${hasPreviousContext}, ` +
+      `type: ${classification.executionType}, requires_execution: ${classification.requiresExecution})`
+    );
+
+    return shouldExecute;
+  }
+
+  /**
+   * Detect if there's meaningful previous message context available
+   */
+  private detectPreviousMessageContext(extra: any): boolean {
+    // Enhanced context detection with actual conversation analysis
+    
+    // Check if we have access to conversation context through the MCP extra parameter
+    if (extra && extra.conversation && extra.conversation.messages) {
+      const messages = extra.conversation.messages;
+      
+      // Look for recent user messages with substantial content
+      const recentUserMessages = messages
+        .filter((msg: any) => msg.role === 'user')
+        .slice(-3); // Last 3 user messages
+      
+      for (const message of recentUserMessages) {
+        if (message.content && typeof message.content === 'string') {
+          const content = message.content.trim();
+          
+          // Check for meaningful content (not just commands)
+          if (content.length > 20 && !content.startsWith('>>') && !content.startsWith('/')) {
+            this.logger.debug(`Context detected: meaningful user content found (${content.length} chars)`);
+            return true;
+          }
+        }
+      }
+      
+      this.logger.debug('No meaningful previous context found in conversation');
+      return false;
+    }
+    
+    // Fallback: check if there are any execution analytics indicating recent activity
+    if (this.executionHistory.length > 0) {
+      const recentExecution = this.executionHistory[this.executionHistory.length - 1];
+      const timeSinceLastExecution = Date.now() - recentExecution.metadata.startTime;
+      
+      // If there was recent execution within 5 minutes, assume context is available
+      if (timeSinceLastExecution < 300000) { // 5 minutes
+        this.logger.debug('Context inferred from recent execution activity');
+        return true;
+      }
+    }
+    
+    // Conservative default: assume some context is usually available in interactive sessions
+    this.logger.debug('Using conservative context assumption');
+    return true;
+  }
+
+  /**
+   * Evaluate execution decision based on multiple factors
+   */
+  private evaluateExecutionDecision(
+    prompt: ConvertedPrompt,
+    classification: PromptClassification,
+    hasContext: boolean
+  ): boolean {
+    const reasoningLog: string[] = [];
+
+    // 1. High confidence action prompts should execute if context is available
+    if (classification.requiresExecution && classification.confidence > 0.7 && hasContext) {
+      reasoningLog.push(`High confidence action (${Math.round(classification.confidence * 100)}%) with context`);
+      this.logExecutionReasoning(prompt.id, true, reasoningLog);
+      return true;
+    }
+
+    // 2. Specific prompt patterns that should always execute with context
+    const actionKeywords = [
+      'refine', 'analyze', 'process', 'improve', 'enhance', 'organize', 'transform',
+      'review', 'evaluate', 'summarize', 'extract', 'convert', 'generate', 'create'
+    ];
+    
+    const isActionOriented = actionKeywords.some(keyword => 
+      prompt.name.toLowerCase().includes(keyword) || 
+      prompt.id.toLowerCase().includes(keyword)
+    );
+
+    if (isActionOriented && hasContext) {
+      reasoningLog.push(`Action-oriented prompt with context available`);
+      this.logExecutionReasoning(prompt.id, true, reasoningLog);
+      return true;
+    }
+
+    // 3. Prompts that expect previous_message should execute when context is available
+    if (prompt.userMessageTemplate.includes('{{previous_message}}') && hasContext) {
+      reasoningLog.push(`Template uses {{previous_message}} with context available`);
+      this.logExecutionReasoning(prompt.id, true, reasoningLog);
+      return true;
+    }
+
+    // 4. Chain prompts should usually execute
+    if (prompt.isChain) {
+      reasoningLog.push(`Chain prompt detected`);
+      this.logExecutionReasoning(prompt.id, true, reasoningLog);
+      return true;
+    }
+
+    // 5. Specific prompt categories that benefit from execution
+    const executionFriendlyCategories = ['analysis', 'development', 'content_processing'];
+    if (executionFriendlyCategories.includes(prompt.category) && hasContext) {
+      reasoningLog.push(`Execution-friendly category (${prompt.category}) with context`);
+      this.logExecutionReasoning(prompt.id, true, reasoningLog);
+      return true;
+    }
+
+    // 6. Special handling for common template-returning prompts
+    const templatePreferredPatterns = [
+      /template/i, /format/i, /structure/i, /example/i, /guide/i
+    ];
+    
+    const seemsTemplateOriented = templatePreferredPatterns.some(pattern =>
+      pattern.test(prompt.name) || pattern.test(prompt.description)
+    );
+
+    // 7. Check if this is clearly an informational/template request
+    if (seemsTemplateOriented && !classification.requiresExecution && !hasContext) {
+      reasoningLog.push(`Template-oriented prompt without execution context`);
+      this.logExecutionReasoning(prompt.id, false, reasoningLog);
+      return false;
+    }
+
+    // 8. For prompts with explicit "return_template" setting, be more conservative
+    if (prompt.onEmptyInvocation === "return_template" && 
+        !classification.requiresExecution &&
+        classification.confidence < 0.6 &&
+        !isActionOriented) {
+      reasoningLog.push(`Explicit return_template setting with low execution confidence`);
+      this.logExecutionReasoning(prompt.id, false, reasoningLog);
+      return false;
+    }
+
+    // 9. Default decision based on semantic analysis
+    const decision = classification.requiresExecution;
+    reasoningLog.push(`Default semantic analysis decision: ${decision ? 'execute' : 'template'}`);
+    this.logExecutionReasoning(prompt.id, decision, reasoningLog);
+    return decision;
+  }
+
+  /**
+   * Log execution reasoning for transparency and debugging
+   */
+  private logExecutionReasoning(promptId: string, decision: boolean, reasoning: string[]): void {
+    this.logger.debug(
+      `🧠 Execution decision for ${promptId}: ${decision ? 'EXECUTE' : 'TEMPLATE'}\n` +
+      `   Reasoning: ${reasoning.join('; ')}`
+    );
+  }
+
+  /**
    * Generate template information response
    */
   private generateTemplateInfo(convertedPrompt: ConvertedPrompt, prefix: string): ToolResponse {
@@ -1282,94 +1496,6 @@ export class McpToolsManager {
     this.logger.info("Execution analytics have been reset");
   }
 
-  /**
-   * Register backward compatibility alias for process_slash_command
-   */
-  private registerProcessSlashCommandAlias(): void {
-    this.mcpServer.tool(
-      "process_slash_command",
-      "⚠️ DEPRECATED: Use 'execute_prompt' instead. Legacy command processor for backward compatibility.",
-      {
-        command: z
-          .string()
-          .describe(
-            "DEPRECATED: Use execute_prompt instead. Command to process with legacy behavior."
-          ),
-      },
-      async ({ command }: { command: string }, extra: any) => {
-        this.logger.warn(`Using deprecated 'process_slash_command' tool. Please use 'execute_prompt' instead.`);
-        
-        // Call the original implementation for backward compatibility
-        try {
-          const match = command.match(/^(>>|\/)([a-zA-Z0-9_-]+)\s*(.*)/);
-          if (!match) {
-            throw new ValidationError(
-              "Invalid command format. Use >>command_name [arguments] or /command_name [arguments]"
-            );
-          }
-
-          const [, prefix, commandName, commandArgs] = match;
-          const matchingPrompt = this.promptsData.find(
-            (prompt) => prompt.id === commandName || prompt.name === commandName
-          );
-
-          if (!matchingPrompt) {
-            throw new PromptError(
-              `Unknown command: ${prefix}${commandName}. Type >>listprompts to see available commands.`
-            );
-          }
-
-          const convertedPrompt = this.convertedPrompts.find(
-            (cp) => cp.id === matchingPrompt.id
-          );
-
-          if (!convertedPrompt) {
-            throw new PromptError(
-              `Could not find converted prompt data for ${matchingPrompt.id}. Server data might be inconsistent.`
-            );
-          }
-
-          // Use legacy behavior (original logic)
-          const trimmedCommandArgs = commandArgs.trim();
-          if (
-            trimmedCommandArgs === "" &&
-            convertedPrompt.onEmptyInvocation === "return_template"
-          ) {
-            return this.generateTemplateInfo(convertedPrompt, prefix);
-          }
-
-          const promptArgValues: Record<string, string> = {};
-          if (trimmedCommandArgs !== "") {
-            this.parseCommandArguments(
-              trimmedCommandArgs,
-              matchingPrompt,
-              promptArgValues,
-              prefix,
-              commandName
-            );
-          }
-
-          matchingPrompt.arguments.forEach((arg) => {
-            if (!promptArgValues[arg.name]) {
-              promptArgValues[arg.name] = `{{previous_message}}`;
-            }
-          });
-
-          if (convertedPrompt.isChain) {
-            return this.handleChainPrompt(convertedPrompt);
-          }
-
-          return await this.processRegularPrompt(convertedPrompt, promptArgValues);
-        } catch (error) {
-          const { message, isError } = this.handleError(error, "Error processing legacy command");
-          return {
-            content: [{ type: "text", text: message }],
-            isError,
-          };
-        }
-      }
-    );
-  }
 
   /**
    * Register listprompts tool
@@ -1377,6 +1503,7 @@ export class McpToolsManager {
   private registerListPrompts(): void {
     this.mcpServer.tool(
       "listprompts",
+      "📋 LIST AVAILABLE PROMPTS: Get a comprehensive list of all available prompts with intelligent filtering and category organization. Usage: >>listprompts [filter_text]",
       {
         command: z
           .string()
@@ -1679,6 +1806,142 @@ export class McpToolsManager {
       content: [{ type: "text", text: listpromptsText }],
     };
   }
+
+  /**
+   * Register consolidated gate management tool
+   */
+  /*
+  private registerGateManagementTools(): void { // TODO: Add when gate management tools are implemented
+    if (!this.gateManagementTools) {
+      return;
+    }
+
+    this.mcpServer.tool(
+      "manage_gates",
+      "🔒 Comprehensive gate management: list, create, evaluate, and manage validation gates for content quality control",
+      {
+        action: z
+          .enum(["list", "create", "evaluate", "stats", "types", "test"])
+          .describe("Gate management action: 'list' (show all gates), 'create' (register new gate), 'evaluate' (test content), 'stats' (performance metrics), 'types' (available gate types), 'test' (validate gate behavior)"),
+        gate_id: z
+          .string()
+          .optional()
+          .describe("Gate ID (required for evaluate/stats/test actions)"),
+        content: z
+          .string()
+          .optional()
+          .describe("Content to evaluate (required for evaluate/test actions)"),
+        gate_definition: z
+          .string()
+          .optional()
+          .describe("Gate definition JSON (required for create action)"),
+        gate_type: z
+          .string()
+          .optional()
+          .describe("Gate type for template creation (e.g., 'readability_score', 'grammar_quality')"),
+        gate_name: z
+          .string()
+          .optional()
+          .describe("Gate name for template creation"),
+        requirements: z
+          .string()
+          .optional()
+          .describe("Additional requirements JSON for template creation"),
+        expected_result: z
+          .boolean()
+          .optional()
+          .describe("Expected test result (true/false) for test action"),
+        context: z
+          .string()
+          .optional()
+          .describe("Additional context JSON for evaluation"),
+      },
+      async ({ 
+        action, 
+        gate_id, 
+        content, 
+        gate_definition, 
+        gate_type, 
+        gate_name, 
+        requirements,
+        expected_result,
+        context 
+      }: { 
+        action: string; 
+        gate_id?: string; 
+        content?: string; 
+        gate_definition?: string; 
+        gate_type?: string; 
+        gate_name?: string; 
+        requirements?: string;
+        expected_result?: boolean;
+        context?: string;
+      }) => {
+        try {
+          this.logger.debug(`Gate management action: ${action}`);
+
+          switch (action) {
+            case "list":
+              return await this.gateManagementTools!.listGates();
+
+            case "create":
+              if (!gate_definition) {
+                return {
+                  content: [{ type: "text", text: "Error: gate_definition is required for create action" }],
+                  isError: true,
+                };
+              }
+              return await this.gateManagementTools!.registerGate(gate_definition);
+
+            case "evaluate":
+              if (!gate_id || !content) {
+                return {
+                  content: [{ type: "text", text: "Error: gate_id and content are required for evaluate action" }],
+                  isError: true,
+                };
+              }
+              return await this.gateManagementTools!.evaluateGate(gate_id, content, context);
+
+            case "stats":
+              if (!gate_id) {
+                return {
+                  content: [{ type: "text", text: "Error: gate_id is required for stats action" }],
+                  isError: true,
+                };
+              }
+              return await this.gateManagementTools!.getGateStats(gate_id);
+
+            case "types":
+              return await this.gateManagementTools!.getGateTypes();
+
+            case "test":
+              if (!gate_id || !content) {
+                return {
+                  content: [{ type: "text", text: "Error: gate_id and content are required for test action" }],
+                  isError: true,
+                };
+              }
+              return await this.gateManagementTools!.testGate(gate_id, content, expected_result);
+
+            default:
+              return {
+                content: [{ type: "text", text: `Error: Unknown action '${action}'. Available actions: list, create, evaluate, stats, types, test` }],
+                isError: true,
+              };
+          }
+        } catch (error) {
+          this.logger.error(`Error in manage_gates tool (${action}):`, error);
+          return {
+            content: [{ type: "text", text: this.handleError(error, `manage_gates_${action}`).message }],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    this.logger.info("Gate management tool registered successfully");
+  }
+  */
 
   /**
    * Error handling helper
