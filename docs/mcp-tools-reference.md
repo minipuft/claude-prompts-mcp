@@ -54,19 +54,6 @@ These tools provide the main functionality for prompt discovery and execution wi
 {"command": ">>notes my content", "execution_mode": "chain", "step_confirmation": true}
 ```
 
-### `process_slash_command` ⚠️ **DEPRECATED**
-
-**Legacy tool maintained for backward compatibility. Use `execute_prompt` instead.**
-
-**Description**: "⚠️ DEPRECATED: Use 'execute_prompt' instead. Legacy command processor for backward compatibility."
-
-**Parameters**:
-
-- `command` (string, required): The full command string, including the slash prefix and any arguments.
-  - Example: `"/content_analysis Hello world"`
-  - Example: `">>friendly_greeting name=\"Developer\""`
-
-**Note**: This tool provides the original v1.0.0 functionality without enhanced features like gate validation, analytics tracking, or chain management. It will be removed in v2.0.0.
 
 ### `listprompts`
 

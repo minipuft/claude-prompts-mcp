@@ -79,6 +79,16 @@
       "id": "system",
       "name": "System",
       "description": "Prompts related to System"
+    },
+    {
+      "id": "cinematography",
+      "name": "cinematography",
+      "description": "Prompts related to cinematography"
+    },
+    {
+      "id": "content-analysis",
+      "name": "content-analysis",
+      "description": "Prompts related to content-analysis"
     }
   ],
   "prompts": [],
@@ -95,6 +105,8 @@
     "prompts/creative/prompts.json",
     "prompts/debugging/prompts.json",
     "prompts/content_processing/prompts.json",
-    "prompts/system/prompts.json"
+    "prompts/system/prompts.json",
+    "prompts/cinematography/prompts.json",
+    "prompts/content-analysis/prompts.json"
   ]
 }

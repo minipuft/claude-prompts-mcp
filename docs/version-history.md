@@ -15,7 +15,8 @@ This document tracks the evolution of the Claude Prompts MCP Server, documenting
 #### **Universal Prompt Execution System**
 - **New Tool**: `execute_prompt` replaces `process_slash_command` with enhanced capabilities
 - **Execution Mode Detection**: Automatic detection of `auto`, `template`, `chain`, and `workflow` modes
-- **Backward Compatibility**: Legacy `process_slash_command` tool maintained as deprecated alias
+- **Smart Execution Logic**: Dynamic execution decisions based on context and semantic analysis
+- **Tool Removal**: `process_slash_command` deprecated tool has been removed (users should use `execute_prompt`)
 - **Enhanced Interface**: Support for execution mode, gate validation, and step confirmation parameters
 
 #### **Comprehensive Gate Validation System**

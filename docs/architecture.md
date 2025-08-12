@@ -67,7 +67,7 @@ The `ApplicationOrchestrator` is the heart of the server. It manages the entire 
 
     - Initializes the `PromptExecutor` with the loaded prompts.
     - Initializes the `McpToolsManager` and passes it references to other modules.
-    - Registers all MCP tools (e.g., `process_slash_command`, `update_prompt`).
+    - Registers all MCP tools (e.g., `execute_prompt`, `update_prompt`).
     - Registers all loaded prompts with the MCP Server instance.
 
 4.  **Phase 4: Server Startup**
@@ -92,9 +92,9 @@ The `ApplicationOrchestrator` is the heart of the server. It manages the entire 
 ### `McpToolsManager`
 
 - **Responsibilities**: Registers and implements all the interactive capabilities of the server exposed as MCP tools.
-- **Interaction Model**: This is the primary way users and clients interact with the server. Instead of a traditional REST API for prompts, clients invoke tools like `process_slash_command`.
+- **Interaction Model**: This is the primary way users and clients interact with the server. Instead of a traditional REST API for prompts, clients invoke tools like `execute_prompt`.
 - **Key Tools**:
-  - `process_slash_command`: The main entry point for running prompts (e.g., `/content_analysis ...`).
+  - `execute_prompt`: The main entry point for running prompts with intelligent execution mode detection (e.g., `>>content_analysis ...`).
   - `listprompts`: Discovers available commands.
   - `update_prompt`, `delete_prompt`, etc.: A suite of tools for dynamically managing prompts.
 
@@ -118,7 +118,7 @@ The system uses a flexible, file-based storage model:
 ## Data Flow: Prompt Execution
 
 1.  A user in an MCP client types a command (e.g., `>>friendly_greeting name="Dev"`).
-2.  The client sends a `tool_code` request to the server for the `process_slash_command` tool with the command string as an argument.
+2.  The client sends a `tool_code` request to the server for the `execute_prompt` tool with the command string as an argument.
 3.  The `TransportManager` receives the request and passes it to the `McpToolsManager`.
 4.  `McpToolsManager` parses the command, identifies the prompt ID (`friendly_greeting`), and extracts the arguments (`{name: "Dev"}`).
 5.  It invokes the `PromptManager`'s templating engine, which injects the arguments into the prompt's user message template.

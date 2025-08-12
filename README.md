@@ -60,7 +60,7 @@ This isn't just another prompt server – it's a **living, breathing prompt ecos
 **🌟 Why This Changes Everything:**
 
 - **🧠 True Intelligence**: System understands prompts like a human - no configuration needed
-- **🔄 Self-Evolving System**: Your AI assistant literally builds and improves its own capabilities in real-time  
+- **🔄 Self-Evolving System**: Your AI assistant literally builds and improves its own capabilities in real-time
 - **🎮 Zero Friction**: Never configure execution modes, quality gates, or headers - everything just works
 - **⚡ Instant Perfection**: Create → Auto-detect → Execute optimally in one seamless flow
 - **🌱 Learning System**: Detection accuracy improves through usage - gets smarter over time
@@ -81,6 +81,7 @@ This is what **truly intelligent AI infrastructure** looks like – where the sy
 - 🚀 **Universal MCP Integration** → works with Claude Desktop, Cursor Windsurf, and any MCP client
 - 📱 **Multi-Transport Support** → STDIO for Claude Desktop + SSE/REST for web
 - 🛠️ **Dynamic Management Tools** → update, delete, reload prompts on-the-fly
+- 🤖 **Claude Code Support** → Harness Anthropic’s coding model for refactoring, doc generation, note-taking, research and any complex workflows that arises
 
 </td>
 <td width="50%">
@@ -324,6 +325,7 @@ This server implements the **Model Context Protocol (MCP)** standard and works w
 
 - 🎯 **Claude Desktop** → Full integration support
 - 🚀 **Cursor Windsurf** → Native MCP compatibility
+- 🤖 **Claude Code** → Full native support
 
 </td>
 <td width="33%">

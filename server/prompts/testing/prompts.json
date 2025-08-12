@@ -90,6 +90,55 @@
           "required": true
         }
       ]
+    },
+    {
+      "id": "test_prompt_validation_template",
+      "name": "Test Prompt Validation Template",
+      "category": "testing",
+      "description": "CAGEERF-compliant template for test prompt validation in testing domain",
+      "file": "test_prompt_validation_template.md",
+      "arguments": [
+        {
+          "name": "creative_challenge",
+          "description": "Creative challenge or innovation opportunity",
+          "required": true
+        },
+        {
+          "name": "innovation_goal",
+          "description": "Primary innovation objective",
+          "required": true
+        },
+        {
+          "name": "context_factors",
+          "description": "Environmental context and situational factors",
+          "required": true
+        },
+        {
+          "name": "analysis_methodology",
+          "description": "Systematic analysis approach and methodology",
+          "required": true
+        },
+        {
+          "name": "objectives",
+          "description": "Clear goals and expected outcomes",
+          "required": true
+        },
+        {
+          "name": "implementation_steps",
+          "description": "Step-by-step execution methodology",
+          "required": true
+        },
+        {
+          "name": "success_criteria",
+          "description": "Evaluation criteria and validation methods",
+          "required": false
+        },
+        {
+          "name": "methodology_framework",
+          "description": "Structured framework and systematic approach",
+          "required": false
+        }
+      ]
     }
   ]
 }
