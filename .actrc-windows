@@ -1,0 +1,40 @@
+# Act Configuration for Windows Container Testing
+# Enhanced configuration for cross-platform CI/CD testing
+
+# Ubuntu/Linux platforms (working)
+-P ubuntu-latest=catthehacker/ubuntu:act-22.04
+-P ubuntu-20.04=catthehacker/ubuntu:act-20.04
+-P ubuntu-18.04=catthehacker/ubuntu:act-18.04
+
+# Windows alternatives - using Node.js images that can simulate Windows testing
+# Since true Windows containers aren't available in WSL2/Docker Desktop Linux mode,
+# we use Node.js images to test cross-platform Node.js compatibility
+-P windows-latest=node:18-windowsservercore-ltsc2022
+-P windows-2022=node:18-windowsservercore-ltsc2022
+-P windows-2019=node:16-windowsservercore-ltsc2019
+
+# Alternative: Use Ubuntu with Windows-style path testing
+# -P windows-latest=catthehacker/ubuntu:act-22.04
+# -P windows-2022=catthehacker/ubuntu:act-22.04
+
+# macOS simulation using Ubuntu (closest we can get locally)
+-P macos-latest=catthehacker/ubuntu:act-22.04
+-P macos-13=catthehacker/ubuntu:act-22.04
+-P macos-12=catthehacker/ubuntu:act-22.04
+
+# Environment variables for testing
+--env NODE_ENV=test
+--env CI=true
+--env RUNNER_OS=Linux
+
+# Enable verbose output
+--verbose
+
+# Container settings optimized for WSL2
+--container-daemon-socket unix:///var/run/docker.sock
+
+# Network settings for better compatibility
+--network host
+
+# Use artifact server for better performance
+--artifact-server-path /tmp/act-artifacts

@@ -1,0 +1,21 @@
+# Enhanced Windows Testing Configuration
+
+# Primary testing (Linux-based but Windows-compatible Node.js testing)
+-P ubuntu-latest=catthehacker/ubuntu:act-22.04
+-P windows-latest=node:18-alpine
+-P windows-2022=node:18-alpine  
+-P windows-2019=node:16-alpine
+-P macos-latest=catthehacker/ubuntu:act-22.04
+
+# Environment variables for Windows simulation
+--env NODE_ENV=test
+--env CI=true
+--env RUNNER_OS=Windows
+--env RUNNER_TEMP=/tmp
+--env RUNNER_TOOL_CACHE=/opt/hostedtoolcache
+
+# Enhanced settings
+--verbose
+--container-daemon-socket unix:///var/run/docker.sock
+--artifact-server-path /tmp/act-artifacts
+--bind
