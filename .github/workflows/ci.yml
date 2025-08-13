@@ -20,6 +20,14 @@ jobs:
       fail-fast: false
     
     steps:
+      - name: Configure Git for Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          git config --global core.autocrlf true
+          git config --global core.longpaths true
+          git config --global core.preloadindex true
+          git config --global core.fscache true
+      
       - name: Checkout repository
         uses: actions/checkout@v4
         with:

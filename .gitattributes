@@ -1,0 +1,104 @@
+# Cross-Platform Line Ending Configuration for MCP Claude Prompts Server
+# Ensures consistent behavior across Windows, macOS, and Linux development environments
+
+# Default behavior: normalize line endings to LF on checkin, convert to native on checkout
+* text=auto
+
+# Explicitly declare text files and line ending handling
+*.md text
+*.json text
+*.js text
+*.ts text
+*.mjs text
+*.yml text
+*.yaml text
+*.txt text
+*.html text
+*.css text
+*.scss text
+*.xml text
+*.config text
+*.gitignore text
+*.gitattributes text
+
+# Shell scripts should always use LF (for cross-platform compatibility)
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Windows batch files should use CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files (declare as binary to prevent line ending conversion)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+
+# Node.js specific files
+package.json text
+package-lock.json text
+.nvmrc text
+.node-version text
+
+# Git files
+.gitignore text
+.gitattributes text
+.gitkeep text
+
+# GitHub and CI/CD files
+.github/** text
+
+# MCP Server specific files
+promptsConfig.json text
+config.json text
+*.mcp text
+
+# Ensure consistent handling of sensitive files
+*.env text
+*.key binary
+*.pem binary
+*.p12 binary
+*.pfx binary
+
+# Documentation files
+README* text
+LICENSE* text
+CHANGELOG* text
+CONTRIBUTING* text
+*.md text
+
+# TypeScript and JavaScript configuration
+tsconfig.json text
+jsconfig.json text
+.eslintrc* text
+.prettierrc* text
+*.config.js text
+*.config.ts text
+
+# Line ending overrides for specific problematic files
+# (These patterns help prevent Windows-specific issues)
+server/dist/** binary
+node_modules/** binary
+coverage/** binary
+logs/** binary
+
+# Special handling for files that might cause Windows issues
+# Exclude problematic characters and ensure proper encoding
+*.log text
+*.tmp binary
+*.cache binary
+
+# AI and prompt specific files (ensure proper text handling)
+server/prompts/**/*.md text
+server/prompts/**/*.json text
