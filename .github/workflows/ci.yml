@@ -19,37 +19,44 @@ jobs:
         node-version: [18, 20]
       fail-fast: false
     
+    defaults:
+      run:
+        shell: bash
+    
     steps:
       - name: Detect Platform Environment
         id: platform
-        continue-on-error: true
+        shell: bash
         run: |
-          if [ "${ACT}" = "true" ]; then
+          if [ "$ACT" = "true" ]; then
             echo "environment=act" >> $GITHUB_OUTPUT
             echo "🎭 Running in ACT (local testing environment)"
           else
             echo "environment=github" >> $GITHUB_OUTPUT
-            echo "🚀 Running in GitHub Actions"
+            echo "🚀 Running in GitHub Actions"  
           fi
           echo "os=${{ matrix.os }}" >> $GITHUB_OUTPUT
       
       - name: Configure Git for Windows
         if: matrix.os == 'windows-latest'
         continue-on-error: true
+        shell: pwsh
         run: |
-          echo "Configuring Git for Windows environment"
-          git config --global core.autocrlf true || echo "Warning: Could not set autocrlf"
-          git config --global core.longpaths true || echo "Warning: Could not set longpaths"
-          git config --global core.preloadindex true || echo "Warning: Could not set preloadindex"
-          git config --global core.fscache true || echo "Warning: Could not set fscache"
-          echo "Git configuration completed (with possible warnings)"
+          Write-Host "Configuring Git for Windows environment"
+          try { git config --global core.autocrlf true } catch { Write-Host "Warning: Could not set autocrlf" }
+          try { git config --global core.longpaths true } catch { Write-Host "Warning: Could not set longpaths" }
+          try { git config --global core.preloadindex true } catch { Write-Host "Warning: Could not set preloadindex" }
+          try { git config --global core.fscache true } catch { Write-Host "Warning: Could not set fscache" }
+          Write-Host "Git configuration completed (with possible warnings)"
       
       - name: Checkout repository
+        if: success() || failure()
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
       - name: Setup Node.js ${{ matrix.node-version }}
+        if: success()
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
@@ -57,23 +64,28 @@ jobs:
           cache-dependency-path: server/package-lock.json
       
       - name: Install dependencies
+        if: success()
         working-directory: server
         run: npm ci --prefer-offline --no-audit
       
       - name: TypeScript type checking
+        if: success()
         working-directory: server  
         run: npm run typecheck
       
       - name: Build project
+        if: success()
         working-directory: server
         run: npm run build
       
       - name: Run server integration tests
+        if: success()
         working-directory: server
         run: npm run test:server-integration
         timeout-minutes: 5
       
       - name: Validate MCP server startup (Cross-Platform)
+        if: success()
         working-directory: server
         env:
           MCP_SERVER_ROOT: ${{ github.workspace }}/server
@@ -139,6 +151,7 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Setup Node.js
+        if: success()
         uses: actions/setup-node@v4
         with:
           node-version: '18'
@@ -146,6 +159,7 @@ jobs:
           cache-dependency-path: server/package-lock.json
       
       - name: Install dependencies
+        if: success()
         working-directory: server
         run: npm ci --prefer-offline --no-audit
       
