@@ -4,6 +4,7 @@ import nunjucks from "nunjucks";
 import path from "path"; // Import path module
 import { fileURLToPath } from "url"; // For ES module __dirname equivalent
 import { PromptData } from "../types.js";
+import { escapeJsonForNunjucks, unescapeJsonFromNunjucks } from "./index.js";
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -105,14 +106,38 @@ export function validateJsonArguments(
  */
 export function processTemplate(
   template: string,
-  args: Record<string, string>,
+  args: Record<string, any>,
   specialContext: Record<string, string> = {}
 ): string {
-  const context = { ...specialContext, ...args };
+  // Pre-escape any string values that might contain Nunjucks syntax
+  const escapedArgs: Record<string, any> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (typeof value === 'string' && (value.includes('{{') || value.includes('{%') || value.includes('{#'))) {
+      escapedArgs[key] = escapeJsonForNunjucks(value);
+    } else {
+      // Pass non-string values (arrays, objects) directly to Nunjucks
+      escapedArgs[key] = value;
+    }
+  }
+
+  const context = { ...specialContext, ...escapedArgs };
 
   try {
     // Use Nunjucks to render the template with the combined context
-    return nunjucksEnv.renderString(template, context);
+    const rendered = nunjucksEnv.renderString(template, context);
+    
+    // Unescape any values that were escaped for Nunjucks
+    let unescapedResult = rendered;
+    for (const [key, value] of Object.entries(escapedArgs)) {
+      if (typeof value === 'string' && value !== args[key]) {
+        // This arg was escaped, so we need to unescape it in the result
+        const originalValue = args[key];
+        const escapedValue = value;
+        unescapedResult = unescapedResult.replace(new RegExp(escapedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), originalValue);
+      }
+    }
+    
+    return unescapedResult;
   } catch (error) {
     // Log the Nunjucks rendering error for debugging purposes.
     // The error will be re-thrown and should be handled by the calling function

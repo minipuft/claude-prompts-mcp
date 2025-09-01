@@ -31,49 +31,6 @@ Transform prompt management from file-based configuration to an intuitive web in
 - Authentication and user management for multi-user environments
 - Dark/light theme support matching Claude Desktop aesthetic
 
-### 🧠 Enhanced Context & Memory Management
-
-**Status**: Planned
-**Priority**: High
-**Estimated Effort**: 3-4 weeks
-
-Implement intelligent conversation context handling and memory persistence.
-
-**Core Features**:
-
-- **Per-Conversation Memory**: Store and retrieve conversation context by session ID
-- **Smart Context Injection**: Automatically include relevant previous messages based on relevance
-- **Memory Summarization**: Compress long conversation histories while preserving key information
-- **Context Templates**: Define how previous context should be formatted for different prompt types
-- **Memory Search**: Find and reference specific past conversation elements
-
-**Technical Implementation**:
-
-```typescript
-interface ConversationMemory {
-  sessionId: string;
-  messages: ConversationMessage[];
-  summary: string;
-  keyTopics: string[];
-  lastAccessed: Date;
-  metadata: Record<string, any>;
-}
-
-interface ContextStrategy {
-  maxMessages: number;
-  includeSystemMessages: boolean;
-  summarizationThreshold: number;
-  relevanceScoring: boolean;
-}
-```
-
-**Storage Options**:
-
-- SQLite for local development
-- PostgreSQL/MongoDB for production deployments
-- Redis for high-performance caching
-- File-based storage for simple setups
-
 ### ⚡ Simplified Installation & Configuration
 
 **Status**: Planned

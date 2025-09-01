@@ -7,6 +7,14 @@
 export * from "./errorHandling.js";
 export * from "./jsonUtils.js";
 
+// Re-export framework system from new locations (maintaining backward compatibility)
+export * from "../frameworks/index.js";
+
+// Re-export gate system from new locations (maintaining backward compatibility)
+export * from "../gates/index.js";
+
+// Template system removed - functionality moved to methodology guides
+
 // Additional utilities extracted from index.ts
 
 /**
@@ -122,6 +130,58 @@ export function isValidJson(str: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Escape JSON string for safe processing through Nunjucks templates
+ * Replaces problematic characters that Nunjucks might interpret as template syntax
+ */
+export function escapeJsonForNunjucks(jsonStr: string): string {
+  return jsonStr
+    .replace(/\{\{/g, '\\{\\{')  // Escape Nunjucks variable syntax
+    .replace(/\}\}/g, '\\}\\}')  // Escape Nunjucks variable syntax  
+    .replace(/\{%/g, '\\{\\%')   // Escape Nunjucks tag syntax
+    .replace(/%\}/g, '\\%\\}')   // Escape Nunjucks tag syntax
+    .replace(/\{#/g, '\\{\\#')   // Escape Nunjucks comment syntax
+    .replace(/#\}/g, '\\#\\}');  // Escape Nunjucks comment syntax
+}
+
+/**
+ * Unescape JSON string after Nunjucks processing
+ * Reverses the escaping applied by escapeJsonForNunjucks
+ */
+export function unescapeJsonFromNunjucks(escapedStr: string): string {
+  return escapedStr
+    .replace(/\\{\\{/g, '{{')     // Restore Nunjucks variable syntax
+    .replace(/\\}\\}/g, '}}')     // Restore Nunjucks variable syntax
+    .replace(/\\{\\%/g, '{%')     // Restore Nunjucks tag syntax  
+    .replace(/\\%\\}/g, '%}')     // Restore Nunjucks tag syntax
+    .replace(/\\{\\#/g, '{#')     // Restore Nunjucks comment syntax
+    .replace(/\\#\\}/g, '#}');    // Restore Nunjucks comment syntax
+}
+
+/**
+ * Safely parse JSON with Nunjucks compatibility
+ * Attempts to parse JSON, applying escaping if necessary
+ */
+export function safeJsonParse(jsonStr: string): { success: boolean; data?: any; error?: string } {
+  try {
+    // First try direct parsing
+    const data = JSON.parse(jsonStr);
+    return { success: true, data };
+  } catch (directError) {
+    try {
+      // If direct parsing fails, try with unescaping
+      const unescaped = unescapeJsonFromNunjucks(jsonStr);
+      const data = JSON.parse(unescaped);
+      return { success: true, data };
+    } catch (unescapeError) {
+      return { 
+        success: false, 
+        error: `JSON parsing failed: ${directError instanceof Error ? directError.message : String(directError)}` 
+      };
+    }
   }
 }
 

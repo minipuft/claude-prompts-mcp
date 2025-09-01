@@ -19,19 +19,20 @@ _Supercharge your AI workflows with battle-tested prompt engineering, intelligen
 
 </div>
 
-## 🌟 What Makes This Special? (v1.1.0 - "Intelligent Execution")
+## 🌟 What Makes This Special? (v1.2.0 - "Three-Tier Execution Architecture")
 
-- **🧠 Semantic Analysis Engine** → Automatically detects execution types without manual configuration
-- **🎯 Universal Prompt Execution** → Single tool with intelligent mode detection and auto-execution
-- **🛡️ Smart Quality Gates** → Auto-assigned validation based on prompt complexity and type
-- **🔄 Zero-Configuration Reliability** → No headers or manual setup required - just works intelligently
-- **📊 Learning Analytics** → System improves detection accuracy through usage patterns
+- **🎯 Smart Execution Model** → Automatically routes between prompts (basic), templates (framework-aware), chains, and workflows
+- **🧠 Semantic Analysis Engine** → Intelligent classification detects execution type and framework requirements
+- **⚡ Three-Tier Performance** → From instant variable substitution to comprehensive methodology-guided processing
+- **🔧 Unified Creation Tools** → Create prompts or templates with type-specific optimization
+- **🛡️ Smart Quality Gates** → Auto-assigned validation based on execution type and complexity
+- **🔄 Migration & Analysis Tools** → Analyze existing prompts and migrate between execution types
 - **🔥 Intelligent Hot-Reload System** → Update prompts instantly without restarts
 - **🎨 Advanced Template Engine** → Nunjucks-powered with conditionals, loops, and dynamic data
 - **⚡ Multi-Phase Orchestration** → Robust startup sequence with comprehensive health monitoring
 - **🚀 Universal MCP Compatibility** → Works flawlessly with Claude Desktop, Cursor Windsurf, and any MCP client
 
-Transform your AI assistant experience from scattered prompts to a **truly intelligent execution engine** that automatically understands and optimally executes any prompt across any MCP-compatible platform.
+Transform your AI assistant experience with a **three-tier intelligent execution architecture** that automatically routes between basic prompts, framework-aware templates, and orchestrated workflows across any MCP-compatible platform.
 
 ## 🚀 Revolutionary Interactive Prompt Management
 
@@ -40,21 +41,25 @@ Transform your AI assistant experience from scattered prompts to a **truly intel
 This isn't just another prompt server – it's a **living, breathing prompt ecosystem** that evolves through natural conversation with your AI assistant. Imagine being able to:
 
 ```bash
-# 🗣️ Create new prompts by talking to your AI
-"Hey Claude, create a new prompt called 'code_reviewer' that analyzes code for security issues"
-→ Claude creates, tests, and registers the prompt instantly
+# 🎯 Create basic prompts for simple variable substitution
+>>create_prompt code_formatter "Format {{language}} code with {{style}} conventions"
+→ Creates fast, lightweight prompt with basic variable replacement
 
-# ✏️ Refine prompts through conversation
-"That code reviewer prompt needs to also check for performance issues"
-→ Claude modifies the prompt and hot-reloads it immediately
+# 🧠 Create framework-aware templates for complex reasoning
+>>create_template code_reviewer "Analyze code for security, performance, and maintainability issues"
+→ Creates CAGEERF/ReACT methodology-enhanced template with quality gates
 
-# 🔍 Discover and iterate on your prompt library
->>listprompts
-→ Browse your growing collection, then ask: "Improve the research_assistant prompt to be more thorough"
+# 🔍 Analyze existing prompts to understand their execution type
+>>analyze_type my_prompt
+→ Shows: "Type: template, Framework: CAGEERF, Confidence: 85%"
 
-# 🧠 Execute prompts with zero configuration - system auto-detects everything
->>content_analysis my content
-→ Automatic semantic analysis detects workflow type, applies quality gates, executes perfectly
+# 🔄 Migrate prompts between execution types
+>>migrate_type my_basic_prompt template
+→ Upgrades basic prompt to framework-aware template with enhanced capabilities
+
+# ⚡ Execute with automatic type detection and optimization
+>>my_prompt input="analyze this code"
+→ System detects type, applies appropriate processing, executes optimally
 ```
 
 **🌟 Why This Changes Everything:**

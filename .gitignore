@@ -19,7 +19,7 @@ out/
 server/.env*
 .env*
 
-# Logs and Debug Files  
+# Logs and Debug Files
 server/logs/
 logs/
 *.log
@@ -79,3 +79,8 @@ core
 report.*.json
 *.diagraw
 heapdump-*
+
+# Claude-Code setup
+context-memory/
+plans/
+CLAUDE.md

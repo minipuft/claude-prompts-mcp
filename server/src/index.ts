@@ -4,7 +4,7 @@
  */
 
 import { Logger } from "./logging/index.js";
-import { startApplication } from "./orchestration/index.js";
+import { startApplication } from "./runtime/application.js";
 
 /**
  * Health check and validation state

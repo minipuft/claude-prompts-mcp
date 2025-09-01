@@ -62,25 +62,6 @@
       ]
     },
     {
-      "id": "test_analyzer",
-      "name": "Test Analyzer",
-      "category": "analysis",
-      "description": "A test prompt for content analysis with configurable depth",
-      "file": "test_analyzer.md",
-      "arguments": [
-        {
-          "name": "content",
-          "description": "The content to be analyzed",
-          "required": true
-        },
-        {
-          "name": "depth",
-          "description": "The depth of analysis (basic, detailed, or comprehensive)",
-          "required": false
-        }
-      ]
-    },
-    {
       "id": "advanced_analysis_engine",
       "name": "Advanced Analysis Engine",
       "category": "analysis",

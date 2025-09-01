@@ -139,6 +139,30 @@
           "required": false
         }
       ]
+    },
+    {
+      "id": "test_workflow_validation",
+      "name": "Test Workflow Validation",
+      "category": "testing",
+      "description": "A test prompt to validate the complete MCP workflow functionality",
+      "file": "test_workflow_validation.md",
+      "arguments": [
+        {
+          "name": "test_scenario",
+          "description": "The test scenario to analyze",
+          "required": true
+        },
+        {
+          "name": "technical_requirements",
+          "description": "Technical requirements to consider",
+          "required": false
+        },
+        {
+          "name": "expected_outcome",
+          "description": "What outcome is expected from this test",
+          "required": true
+        }
+      ]
     }
   ]
 }

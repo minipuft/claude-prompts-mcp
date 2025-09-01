@@ -13,15 +13,18 @@ import {
   PromptsConfigFile,
 } from "../types/index.js";
 import { safeWriteFile } from "./promptUtils.js";
+import { CategoryManager, createCategoryManager } from "./category-manager.js";
 
 /**
  * Prompt Loader class
  */
 export class PromptLoader {
   private logger: Logger;
+  private categoryManager: CategoryManager;
 
   constructor(logger: Logger) {
     this.logger = logger;
+    this.categoryManager = createCategoryManager(logger);
   }
 
   /**
@@ -98,8 +101,22 @@ export class PromptLoader {
         promptsConfig.imports = [];
       }
 
-      // Get the categories from the config
-      const categories = promptsConfig.categories;
+      // Load and validate categories using CategoryManager
+      const categoryValidation = await this.categoryManager.loadCategories(promptsConfig.categories);
+      
+      if (!categoryValidation.isValid) {
+        this.logger.error("❌ Category validation failed:");
+        categoryValidation.issues.forEach(issue => this.logger.error(`  - ${issue}`));
+        throw new Error(`Category validation failed: ${categoryValidation.issues.join('; ')}`);
+      }
+
+      if (categoryValidation.warnings.length > 0) {
+        this.logger.warn("⚠️ Category validation warnings:");
+        categoryValidation.warnings.forEach(warning => this.logger.warn(`  - ${warning}`));
+      }
+
+      // Get validated categories
+      const categories = this.categoryManager.getCategories();
 
       // Initialize an array to store all prompts
       let allPrompts: PromptData[] = [];
@@ -268,6 +285,28 @@ export class PromptLoader {
       this.logger.info(`   Total prompts collected: ${allPrompts.length}`);
       this.logger.info(`   Categories available: ${categories.length}`);
 
+      // Validate category-prompt relationships using CategoryManager
+      this.logger.info(`🔍 Validating category-prompt relationships...`);
+      const promptCategoryValidation = this.categoryManager.validatePromptCategories(allPrompts);
+      
+      if (!promptCategoryValidation.isValid) {
+        this.logger.error("❌ Category-prompt relationship validation failed:");
+        promptCategoryValidation.issues.forEach(issue => this.logger.error(`  - ${issue}`));
+        this.logger.warn("Continuing with loading but some prompts may not display correctly");
+      }
+
+      if (promptCategoryValidation.warnings.length > 0) {
+        this.logger.warn("⚠️ Category-prompt relationship warnings:");
+        promptCategoryValidation.warnings.forEach(warning => this.logger.warn(`  - ${warning}`));
+      }
+
+      // Generate category statistics for debugging
+      const categoryStats = this.categoryManager.getCategoryStatistics(allPrompts);
+      this.logger.info(`📊 Category Statistics:`);
+      this.logger.info(`   Categories with prompts: ${categoryStats.categoriesWithPrompts}/${categoryStats.totalCategories}`);
+      this.logger.info(`   Empty categories: ${categoryStats.emptyCategoriesCount}`);
+      this.logger.info(`   Average prompts per category: ${categoryStats.averagePromptsPerCategory.toFixed(1)}`);
+
       const result = { promptsData: allPrompts, categories };
       this.logger.info(
         `✅ PromptLoader.loadCategoryPrompts() completed successfully`
@@ -278,6 +317,13 @@ export class PromptLoader {
       this.logger.error(`❌ PromptLoader.loadCategoryPrompts() FAILED:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Get the CategoryManager instance for external access
+   */
+  getCategoryManager(): CategoryManager {
+    return this.categoryManager;
   }
 
   /**
@@ -306,7 +352,7 @@ export class PromptLoader {
         /## System Message\s*\n([\s\S]*?)(?=\n##|$)/
       );
       const userMessageMatch = content.match(
-        /## User Message Template\s*\n([\s\S]*?)(?=\n##|$)/
+        /## User Message Template\s*\n([\s\S]*)$/
       );
 
       const systemMessage = systemMessageMatch

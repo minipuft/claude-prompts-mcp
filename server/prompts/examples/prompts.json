@@ -28,30 +28,6 @@
           "required": false
         }
       ]
-    },
-    {
-      "id": "nunjucks_advanced_features",
-      "name": "Nunjucks Advanced Features Example",
-      "category": "examples",
-      "description": "Demonstrates advanced Nunjucks features like macros and setting variables.",
-      "file": "nunjucks_advanced_features.md",
-      "arguments": [
-        {
-          "name": "user1_data",
-          "description": "An object containing data for the first user (e.g., {name: \"Alice\", email: \"alice@example.com\", is_vip: true}).",
-          "required": false
-        },
-        {
-          "name": "user2_data",
-          "description": "An object containing data for the second user (e.g., {name: \"Bob\", join_date: \"2023-05-15\"}).",
-          "required": false
-        },
-        {
-          "name": "preferred_style",
-          "description": "User's preferred style (e.g., \"dark\", \"light\", or other).",
-          "required": false
-        }
-      ]
     }
   ]
 }

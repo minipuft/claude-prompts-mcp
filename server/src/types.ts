@@ -2,6 +2,9 @@
  * Type definitions for the prompt management system
  */
 
+// Import gate types from the main types module
+import type { GateDefinition } from "./types/index.js";
+
 // ===== Configuration Types =====
 
 /**
@@ -163,6 +166,8 @@ export interface PromptData {
   tools?: boolean;
   /** Defines behavior when prompt is invoked without its defined arguments */
   onEmptyInvocation?: "execute_if_possible" | "return_template";
+  /** Optional gates for validation */
+  gates?: GateDefinition[];
 }
 
 /**

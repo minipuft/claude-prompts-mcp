@@ -42,6 +42,10 @@
     "test:all-enhanced": "npm run test:server-integration && npm run test:cageerf-framework && npm run test:mcp-tools",
     "test:ci-startup": "node tests/ci-startup-validation.js",
     "test:ci-startup-verbose": "VERBOSE=true node tests/ci-startup-validation.js",
+    "validate:dependencies": "node scripts/validate-dependencies.js",
+    "validate:architecture": "node scripts/validate-architecture.js", 
+    "validate:circular": "npx madge --circular --extensions ts,js src/",
+    "validate:all": "npm run validate:dependencies && npm run validate:architecture && npm run validate:circular",
     "prepublishOnly": "npm run build"
   },
   "repository": {
@@ -82,6 +86,7 @@
     "@types/node": "^20.11.19",
     "@types/ws": "^8.5.14",
     "jest": "^29.7.0",
+    "madge": "^8.0.0",
     "ts-jest": "^29.1.2",
     "typescript": "^5.3.3",
     "ws": "^8.18.1"

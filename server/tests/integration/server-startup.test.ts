@@ -3,16 +3,16 @@
  * Tests extracted from GitHub Actions inline scripts
  */
 
-import { ApplicationOrchestrator } from '../../dist/orchestration/index.js';
+import { Application } from '../../dist/runtime/application.js';
 import { MockLogger } from '../helpers/test-helpers.js';
 
 describe('Server Startup Integration', () => {
   let logger: MockLogger;
-  let orchestrator: ApplicationOrchestrator;
+  let orchestrator: Application;
 
   beforeEach(() => {
     logger = new MockLogger();
-    orchestrator = new ApplicationOrchestrator(logger);
+    orchestrator = new Application(logger);
   });
 
   afterEach(() => {
@@ -46,7 +46,7 @@ describe('Server Startup Integration', () => {
 
     test('should handle initialization errors gracefully', async () => {
       // Test with invalid configuration path
-      const invalidOrchestrator = new ApplicationOrchestrator(logger);
+      const invalidOrchestrator = new Application(logger);
       
       // Override method to force error  
       const originalLoadConfig = invalidOrchestrator.loadConfiguration;
@@ -160,7 +160,7 @@ describe('Server Startup Integration', () => {
   describe('Error Recovery', () => {
     test('should handle configuration loading errors', async () => {
       // Create orchestrator that will fail configuration loading
-      const failingOrchestrator = new ApplicationOrchestrator(logger);
+      const failingOrchestrator = new Application(logger);
       
       // Override the config loading to fail
       failingOrchestrator.loadConfiguration = async () => {

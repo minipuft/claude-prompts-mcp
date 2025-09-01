@@ -3,7 +3,7 @@
  * Tests extracted from GitHub Actions inline scripts
  */
 
-import { CAGEERFAnalyzer } from '../../dist/utils/cageerf-analyzer.js';
+import { CAGEERFAnalyzer } from '../../dist/frameworks/legacy/cageerf-analyzer.js';
 import { createConvertedPrompt } from '../helpers/test-helpers.js';
 
 describe('CAGEERF Analyzer', () => {

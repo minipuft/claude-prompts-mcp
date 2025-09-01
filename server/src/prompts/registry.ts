@@ -11,7 +11,7 @@ import {
   ConvertedPrompt,
   RegistrationMode,
 } from "../types/index.js";
-import { TemplateProcessor } from "./template-processor.js";
+// TemplateProcessor functionality consolidated into UnifiedPromptProcessor
 
 /**
  * Prompt Registry class
@@ -20,20 +20,92 @@ export class PromptRegistry {
   private logger: Logger;
   private mcpServer: any;
   private configManager: ConfigManager;
-  private templateProcessor: TemplateProcessor;
+  // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
   private conversationHistory: ConversationHistoryItem[] = [];
   private readonly MAX_HISTORY_SIZE = 100;
+
+  /**
+   * Direct template processing method (minimal implementation)
+   * Replaces templateProcessor calls for basic template processing
+   */
+  private async processTemplateDirect(
+    template: string,
+    args: Record<string, string>,
+    specialContext: Record<string, string> = {},
+    toolsEnabled: boolean = false
+  ): Promise<string> {
+    // Import jsonUtils for basic template processing
+    const { processTemplate } = await import("../utils/jsonUtils.js");
+    const { getAvailableTools } = await import("../utils/index.js");
+    
+    const enhancedSpecialContext = { ...specialContext };
+    if (toolsEnabled) {
+      enhancedSpecialContext["tools_available"] = getAvailableTools();
+    }
+    
+    return processTemplate(template, args, enhancedSpecialContext);
+  }
 
   constructor(
     logger: Logger,
     mcpServer: any,
-    configManager: ConfigManager,
-    templateProcessor: TemplateProcessor
+    configManager: ConfigManager
   ) {
     this.logger = logger;
     this.mcpServer = mcpServer;
     this.configManager = configManager;
-    this.templateProcessor = templateProcessor;
+    // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
+  }
+
+  /**
+   * Register MCP resources for prompt schemas (enables AI auto-discovery)
+   */
+  async registerPromptResources(prompts: ConvertedPrompt[]): Promise<void> {
+    try {
+      this.logger.info(`Registering MCP resources for ${prompts.length} prompts...`);
+      
+      for (const prompt of prompts) {
+        const resourceUri = `prompt://${prompt.id}/schema`;
+        const schema = {
+          name: prompt.name,
+          id: prompt.id,
+          description: prompt.description,
+          category: prompt.category,
+          arguments: prompt.arguments.map(arg => ({
+            name: arg.name,
+            description: arg.description || `Argument: ${arg.name}`,
+            required: arg.required,
+            type: 'string'
+          })),
+          usage: `>>${prompt.id} ${prompt.arguments.map(arg => `${arg.name}="value"`).join(' ')}`,
+          examples: [
+            {
+              description: 'Basic usage',
+              command: `>>${prompt.id} ${prompt.arguments.slice(0, 1).map(arg => `${arg.name}="example value"`).join(' ')}`
+            }
+          ]
+        };
+        
+        // Register resource with MCP server
+        this.mcpServer.resource(
+          resourceUri,
+          `Prompt schema for ${prompt.name}`,
+          'application/json',
+          () => ({
+            contents: [{
+              type: 'text',
+              text: JSON.stringify(schema, null, 2)
+            }]
+          })
+        );
+        
+        this.logger.debug(`Registered resource: ${resourceUri}`);
+      }
+      
+      this.logger.info(`Successfully registered ${prompts.length} prompt resources`);
+    } catch (error) {
+      this.logger.error('Error registering prompt resources:', error);
+    }
   }
 
   /**
@@ -47,6 +119,9 @@ export class PromptRegistry {
 
       // Unregister existing prompts if possible
       await this.unregisterAllPrompts();
+
+      // Register MCP resources for AI auto-discovery
+      await this.registerPromptResources(prompts);
 
       const config = this.configManager.getConfig();
       const registrationMode = config.prompts.registrationMode || "both";
@@ -241,7 +316,8 @@ export class PromptRegistry {
         }
 
         // Process the template with special context
-        userMessageText = await this.templateProcessor.processTemplateAsync(
+        // Using direct processing since TemplateProcessor was consolidated
+        userMessageText = await this.processTemplateDirect(
           userMessageText,
           args,
           { previous_message: this.getPreviousMessage() },
@@ -438,7 +514,8 @@ export class PromptRegistry {
       }
 
       // Process template with context
-      const userMessageText = await this.templateProcessor.processTemplateAsync(
+      // Using direct processing since TemplateProcessor was consolidated
+      const userMessageText = await this.processTemplateDirect(
         convertedPrompt.userMessageTemplate,
         args,
         { previous_message: this.getPreviousMessage() },

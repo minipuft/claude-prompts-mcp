@@ -1,6 +1,8 @@
-# MCP Tools Reference (v1.1.0)
+# MCP Tools Reference (v1.3.0 - Consolidated Tools)
 
-This document provides a comprehensive reference for all MCP (Model Context Protocol) tools available in the server. The primary way to interact with the server is by invoking these tools through a compatible MCP client (like Claude Desktop or Cursor Windsurf), not through a traditional REST API.
+> ⚠️ **Note**: This documentation describes legacy tools. The server now uses **3 consolidated tools**: `prompt_engine`, `prompt_manager`, and `system_control`. For current tool reference, see the [Execution Architecture Guide](./execution-architecture-guide.md).
+
+This document provides a reference for MCP (Model Context Protocol) tools. The primary way to interact with the server is through these consolidated tools via compatible MCP clients (like Claude Desktop or Cursor Windsurf).
 
 ## Interaction Model
 
