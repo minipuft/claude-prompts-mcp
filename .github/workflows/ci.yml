@@ -20,13 +20,29 @@ jobs:
       fail-fast: false
     
     steps:
+      - name: Detect Platform Environment
+        id: platform
+        continue-on-error: true
+        run: |
+          if [ "${ACT}" = "true" ]; then
+            echo "environment=act" >> $GITHUB_OUTPUT
+            echo "🎭 Running in ACT (local testing environment)"
+          else
+            echo "environment=github" >> $GITHUB_OUTPUT
+            echo "🚀 Running in GitHub Actions"
+          fi
+          echo "os=${{ matrix.os }}" >> $GITHUB_OUTPUT
+      
       - name: Configure Git for Windows
         if: matrix.os == 'windows-latest'
+        continue-on-error: true
         run: |
-          git config --global core.autocrlf true
-          git config --global core.longpaths true
-          git config --global core.preloadindex true
-          git config --global core.fscache true
+          echo "Configuring Git for Windows environment"
+          git config --global core.autocrlf true || echo "Warning: Could not set autocrlf"
+          git config --global core.longpaths true || echo "Warning: Could not set longpaths"
+          git config --global core.preloadindex true || echo "Warning: Could not set preloadindex"
+          git config --global core.fscache true || echo "Warning: Could not set fscache"
+          echo "Git configuration completed (with possible warnings)"
       
       - name: Checkout repository
         uses: actions/checkout@v4
