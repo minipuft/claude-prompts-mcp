@@ -5,7 +5,7 @@
  */
 
 import { ConvertedPrompt } from "../../types/index.js";
-import { SemanticAnalysis } from "../../analysis/semantic-analyzer.js";
+import { ConfigurableSemanticAnalysis } from "../../analysis/configurable-semantic-analyzer.js";
 import {
   IMethodologyGuide,
   BaseMethodologyGuide,
@@ -209,7 +209,7 @@ export class ReACTMethodologyGuide extends BaseMethodologyGuide {
   /**
    * Guide execution steps using ReACT methodology
    */
-  guideExecutionSteps(prompt: ConvertedPrompt, semanticAnalysis: SemanticAnalysis): StepGuidance {
+  guideExecutionSteps(prompt: ConvertedPrompt, semanticAnalysis: ConfigurableSemanticAnalysis): StepGuidance {
     const executionSteps: ExecutionStep[] = [
       {
         id: "systematic_reasoning",

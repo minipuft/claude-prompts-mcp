@@ -31,19 +31,31 @@ import {
   validateJsonArguments
 } from "../utils/index.js";
 import { modifyPromptSection, safeWriteFile } from "../prompts/promptUtils.js";
-import { SemanticAnalyzer } from "../analysis/semantic-analyzer.js";
+import { ConfigurableSemanticAnalyzer, ConfigurableSemanticAnalysis } from "../analysis/configurable-semantic-analyzer.js";
+import { FrameworkStateManager } from "../frameworks/framework-state-manager.js";
+import { FrameworkManager } from "../frameworks/framework-manager.js";
 
 /**
  * Prompt classification interface for management operations
  */
 export interface PromptClassification {
-  executionType: "prompt" | "template" | "chain" | "workflow";
+  executionType: "prompt" | "template" | "chain";
   requiresExecution: boolean;
   requiresFramework: boolean;
   confidence: number;
   reasoning: string[];
   suggestedGates: string[];
   framework?: string;
+  // Enhanced with configurable analysis information
+  analysisMode?: string;
+  capabilities?: {
+    canDetectStructure: boolean;
+    canAnalyzeComplexity: boolean;
+    canRecommendFramework: boolean;
+    hasSemanticUnderstanding: boolean;
+  };
+  limitations?: string[];
+  warnings?: string[];
 }
 
 /**
@@ -53,7 +65,9 @@ export class ConsolidatedPromptManager {
   private logger: Logger;
   private mcpServer: any;
   private configManager: ConfigManager;
-  private semanticAnalyzer: SemanticAnalyzer;
+  private semanticAnalyzer: ConfigurableSemanticAnalyzer;
+  private frameworkStateManager?: FrameworkStateManager;
+  private frameworkManager?: FrameworkManager;
   private onRefresh: () => Promise<void>;
   private onRestart: (reason: string) => Promise<void>;
 
@@ -66,7 +80,9 @@ export class ConsolidatedPromptManager {
     logger: Logger,
     mcpServer: any,
     configManager: ConfigManager,
-    semanticAnalyzer: SemanticAnalyzer,
+    semanticAnalyzer: ConfigurableSemanticAnalyzer,
+    frameworkStateManager: FrameworkStateManager | undefined,
+    frameworkManager: FrameworkManager | undefined,
     onRefresh: () => Promise<void>,
     onRestart: (reason: string) => Promise<void>
   ) {
@@ -74,6 +90,8 @@ export class ConsolidatedPromptManager {
     this.mcpServer = mcpServer;
     this.configManager = configManager;
     this.semanticAnalyzer = semanticAnalyzer;
+    this.frameworkStateManager = frameworkStateManager;
+    this.frameworkManager = frameworkManager;
     this.onRefresh = onRefresh;
     this.onRestart = onRestart;
   }
@@ -92,12 +110,28 @@ export class ConsolidatedPromptManager {
   }
 
   /**
+   * Set framework state manager (called during initialization)
+   */
+  setFrameworkStateManager(frameworkStateManager: FrameworkStateManager): void {
+    this.frameworkStateManager = frameworkStateManager;
+    this.logger.debug("Framework state manager set in PromptManager");
+  }
+
+  /**
+   * Set framework manager (called during initialization)
+   */
+  setFrameworkManager(frameworkManager: FrameworkManager): void {
+    this.frameworkManager = frameworkManager;
+    this.logger.debug("Framework manager set in PromptManager");
+  }
+
+  /**
    * Register the consolidated prompt manager tool
    */
   registerTool(): void {
     this.mcpServer.tool(
       "prompt_manager",
-      "📝 INTELLIGENT PROMPT MANAGER: Complete lifecycle management with smart analysis, category organization, and comprehensive CRUD operations. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.\n\n🎯 NEW: Type-specific creation commands:\n- 'create_prompt': Create basic prompt (fast variable substitution)\n- 'create_template': Create framework-aware template (intelligent analysis)\n- 'analyze_type': Analyze existing prompt and recommend type\n- 'migrate_type': Convert between prompt and template types",
+      "📝 INTELLIGENT PROMPT MANAGER: Complete lifecycle management with configurable analysis, category organization, and comprehensive CRUD operations. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.\n\n🔬 ANALYSIS MODES:\n- 'structural': Honest analysis based on template structure (default)\n- 'semantic': LLM-powered intelligent analysis (requires integration)\n- 'hybrid': Enhanced structural analysis with pattern matching\n\n🎯 Type-specific creation commands:\n- 'create_prompt': Create basic prompt (fast variable substitution)\n- 'create_template': Create framework-aware template (intelligent analysis)\n- 'analyze_type': Analyze existing prompt and recommend type\n- 'migrate_type': Convert between prompt and template types",
       {
         action: z
           .enum(["create", "create_prompt", "create_template", "analyze_type", "migrate_type", "update", "delete", "modify", "reload", "list"])
@@ -191,7 +225,7 @@ export class ConsolidatedPromptManager {
         filter: z
           .string()
           .optional()
-          .describe("Intelligent filter for list operation. Examples: 'type:prompt', 'type:template', 'category:code', 'framework:needed', 'confidence:>80', or text search"),
+          .describe("Intelligent filter for list operation. Examples: 'type:prompt', 'type:template', 'category:code', 'framework:needed', or text search"),
 
         // Options
         options: z
@@ -299,15 +333,12 @@ export class ConsolidatedPromptManager {
     // Perform intelligent analysis
     const analysis = await this.analyzePromptIntelligence(promptData);
 
-    let response = `✅ **Prompt Created**: ${args.name} (${args.id})\n\n`;
-    response += `${result.message}\n\n`;
-    response += `${analysis.feedback}\n`;
+    let response = `✅ **Prompt Created**: ${args.name} (${args.id})\n`;
+    response += `📝 ${args.description}\n`;
+    response += `${analysis.feedback}`;
 
     if (analysis.suggestions.length > 0) {
-      response += `\n💡 **Suggestions**:\n`;
-      analysis.suggestions.forEach((suggestion, i) => {
-        response += `${i + 1}. ${suggestion}\n`;
-      });
+      response += `💡 ${analysis.suggestions.join(' • ')}\n`;
     }
 
     await this.handleSystemRefresh(args.full_restart, `Prompt created: ${args.id}`);
@@ -392,7 +423,7 @@ export class ConsolidatedPromptManager {
       dependencies.forEach(dep => {
         response += `- ${dep.name} (${dep.id})\n`;
       });
-      response += `\nDeleting will break these chain/workflow references.\n\n`;
+      response += `\nDeleting will break these chain references.\n\n`;
     }
 
     const result = await this.deletePromptImplementation(args.id);
@@ -553,9 +584,11 @@ export class ConsolidatedPromptManager {
           messages.push(`✅ Removed from category: ${categoryImport}`);
           promptFound = true;
 
-          // Clean up empty category if needed
+          // Automatically clean up empty category
           if (categoryData.prompts.length === 0) {
-            messages.push(`ℹ️ Category is now empty - consider cleanup`);
+            this.logger.info(`Category ${categoryImport} is now empty, performing automatic cleanup`);
+            const cleanupResult = await this.cleanupEmptyCategory(categoryImport, promptsConfig, PROMPTS_FILE);
+            messages.push(`🧹 **Automatic Category Cleanup**:\n${cleanupResult.message}`);
           }
 
           break;
@@ -567,6 +600,64 @@ export class ConsolidatedPromptManager {
 
     if (!promptFound) {
       throw new PromptError(`Prompt not found: ${id}`);
+    }
+
+    return { message: messages.join('\n') };
+  }
+
+  /**
+   * Clean up empty category (remove from config and delete folder)
+   */
+  private async cleanupEmptyCategory(
+    categoryImport: string,
+    promptsConfig: PromptsConfigFile,
+    promptsFile: string
+  ): Promise<{ message: string }> {
+    const promptsConfigDir = path.dirname(promptsFile);
+    const categoryPath = path.join(promptsConfigDir, categoryImport);
+    const categoryDir = path.dirname(categoryPath);
+    const messages: string[] = [];
+
+    try {
+      // Extract category ID from import path (e.g., "examples/prompts.json" -> "examples")
+      const categoryId = categoryImport.split('/')[0];
+
+      // Remove from categories array
+      const categoryIndex = promptsConfig.categories.findIndex(cat => cat.id === categoryId);
+      if (categoryIndex > -1) {
+        const removedCategory = promptsConfig.categories.splice(categoryIndex, 1)[0];
+        messages.push(`✅ Removed category definition: ${removedCategory.name}`);
+      }
+
+      // Remove from imports array
+      const importIndex = promptsConfig.imports.findIndex(imp => imp === categoryImport);
+      if (importIndex > -1) {
+        promptsConfig.imports.splice(importIndex, 1);
+        messages.push(`✅ Removed import path: ${categoryImport}`);
+      }
+
+      // Save updated config
+      await safeWriteFile(promptsFile, JSON.stringify(promptsConfig, null, 2), "utf8");
+      messages.push(`✅ Updated promptsConfig.json`);
+
+      // Delete empty category folder and its contents
+      try {
+        // Delete prompts.json file
+        await fs.unlink(categoryPath);
+        messages.push(`✅ Deleted category file: ${categoryImport}`);
+
+        // Delete category directory if empty
+        await fs.rmdir(categoryDir);
+        messages.push(`✅ Deleted empty category folder: ${path.basename(categoryDir)}`);
+      } catch (folderError: any) {
+        if (folderError.code !== "ENOENT") {
+          messages.push(`⚠️ Could not delete category folder: ${folderError.message}`);
+        }
+      }
+
+    } catch (error: any) {
+      this.logger.error(`Failed to cleanup category ${categoryImport}:`, error);
+      messages.push(`❌ Category cleanup failed: ${error.message}`);
     }
 
     return { message: messages.join('\n') };
@@ -593,14 +684,14 @@ export class ConsolidatedPromptManager {
       });
 
       // Create directory and files
-      const categoryDir = path.join(path.dirname(promptsFile), "prompts", effectiveCategory);
+      const categoryDir = path.join(path.dirname(promptsFile), effectiveCategory);
       await fs.mkdir(categoryDir, { recursive: true });
 
       const categoryPromptsPath = path.join(categoryDir, "prompts.json");
       await safeWriteFile(categoryPromptsPath, JSON.stringify({ prompts: [] }, null, 2), "utf8");
 
       // Add to imports
-      const relativePath = path.join("prompts", effectiveCategory, "prompts.json").replace(/\\/g, "/");
+      const relativePath = path.join(effectiveCategory, "prompts.json").replace(/\\/g, "/");
       if (!promptsConfig.imports.includes(relativePath)) {
         promptsConfig.imports.push(relativePath);
       }
@@ -623,7 +714,7 @@ export class ConsolidatedPromptManager {
     promptsFile: string
   ): Promise<{ exists: boolean }> {
     const promptFilename = `${promptData.id}.md`;
-    const categoryDir = path.join(path.dirname(promptsFile), "prompts", effectiveCategory);
+    const categoryDir = path.join(path.dirname(promptsFile), effectiveCategory);
     const promptPath = path.join(categoryDir, promptFilename);
 
     // Create markdown content
@@ -687,7 +778,7 @@ export class ConsolidatedPromptManager {
   }
 
   /**
-   * Analyze prompt for intelligence feedback
+   * Analyze prompt for intelligence feedback (compact format)
    */
   private async analyzePromptIntelligence(promptData: any): Promise<{
     classification: PromptClassification;
@@ -709,35 +800,121 @@ export class ConsolidatedPromptManager {
 
     const classification = await this.analyzePrompt(tempPrompt);
 
-    // Generate feedback
-    const confidence = Math.round(classification.confidence * 100);
-    let feedback = `🧠 **Intelligent Analysis**: ${classification.executionType} (${confidence}% confidence)\n`;
-    feedback += `⚡ **Execution Required**: ${classification.requiresExecution ? 'Yes' : 'No'}\n`;
-
+    // Build analysis-aware feedback showing current capabilities
+    const analysisIcon = this.getAnalysisIcon(classification.analysisMode || classification.framework);
+    let feedback = `${analysisIcon} ${classification.executionType}`;
+    
+    // Add gates info if present
     if (classification.suggestedGates.length > 0) {
-      feedback += `🛡️ **Auto-assigned Gates**: ${classification.suggestedGates.join(', ')}\n`;
+      feedback += ` • gates: ${classification.suggestedGates.slice(0, 2).join(', ')}`;
+    }
+    feedback += '\n';
+
+    // Analysis status line (show what analysis is actually doing)
+    if (classification.analysisMode === 'disabled' || classification.framework === 'disabled') {
+      feedback += `⚠️ Semantic analysis disabled - using basic structure detection\n`;
+    } else if (classification.analysisMode === 'structural') {
+      feedback += `🔧 Structural analysis mode - no semantic understanding\n`;
+    } else if (classification.analysisMode === 'fallback' || classification.framework === 'fallback') {
+      feedback += `🚨 Analysis failed - using fallback detection\n`;
     }
 
-    // Generate suggestions
+    // Show key limitations if present
+    const importantLimitations = classification.limitations?.filter(l => 
+      l.includes('disabled') || l.includes('No semantic') || l.includes('Framework recommendation unavailable')) || [];
+    
+    if (importantLimitations.length > 0) {
+      const shortLimitation = importantLimitations[0].length > 50 
+        ? importantLimitations[0].substring(0, 47) + '...'
+        : importantLimitations[0];
+      feedback += `⚠️ ${shortLimitation}\n`;
+    }
+
+    // Generate capability-aware suggestions
     const suggestions: string[] = [];
 
-    if (classification.confidence < 0.7) {
-      suggestions.push("Consider adding more structured language to improve execution confidence");
+    if (classification.analysisMode === 'disabled' || classification.framework === 'disabled') {
+      suggestions.push("💡 Enable semantic analysis for enhanced capabilities");
+      suggestions.push("🎯 Framework recommendation unavailable");
+    } else if (classification.analysisMode === 'structural') {
+      suggestions.push("💡 Configure LLM integration for intelligent analysis");
+    } else if (classification.analysisMode === 'fallback' || classification.framework === 'fallback') {
+      suggestions.push("🚨 Fix analysis configuration");
     }
-
-    if (classification.requiresExecution && !promptData.userMessageTemplate.toLowerCase().includes('step')) {
-      suggestions.push("Consider adding step-by-step structure for clearer execution guidance");
-    }
-
-    if (promptData.arguments.length > 3 && classification.confidence < 0.8) {
-      suggestions.push("Complex prompts benefit from clear section headers and structured templates");
+    
+    if (!classification.capabilities?.canRecommendFramework) {
+      suggestions.push("🎯 Framework recommendation unavailable");
     }
 
     return { classification, feedback, suggestions };
   }
 
   /**
-   * Analyze prompt using semantic analyzer
+   * Get analysis icon based on analysis mode/framework
+   */
+  private getAnalysisIcon(mode: string | undefined): string {
+    switch (mode) {
+      case 'disabled': return '🔧'; // Basic structural detection
+      case 'structural': return '🔬'; // Structural analysis
+      case 'hybrid': return '🔍'; // Enhanced structural
+      case 'semantic': return '🧠'; // Full semantic analysis
+      case 'fallback': return '🚨'; // Error fallback
+      case 'configurable': return '🧠'; // Configured semantic analysis
+      default: return '🧠'; // Default intelligent analysis
+    }
+  }
+
+  /**
+   * Create fallback analysis when semantic analysis is disabled
+   */
+  private createDisabledAnalysisFallback(prompt: ConvertedPrompt): PromptClassification {
+    const hasChainSteps = Boolean(prompt.chainSteps?.length) || Boolean(prompt.isChain);
+    const hasComplexArgs = (prompt.arguments?.length || 0) > 2;
+    const hasTemplateVars = /\{\{.*?\}\}/g.test(prompt.userMessageTemplate || '');
+    
+    // Basic execution type detection without semantic analysis
+    let executionType: 'prompt' | 'template' | 'chain' = 'prompt';
+    if (hasChainSteps) {
+      executionType = 'chain';
+    } else if (hasComplexArgs || hasTemplateVars) {
+      executionType = 'template';
+    }
+    
+    return {
+      executionType,
+      requiresExecution: true,
+      requiresFramework: false, // Conservative - don't assume framework needed
+      confidence: 0.7, // High confidence in basic structural facts
+      reasoning: [
+        "Semantic analysis unavailable - using basic structural detection",
+        `Detected ${executionType} type from file structure`,
+        "Framework recommendation unavailable"
+      ],
+      suggestedGates: ['basic_validation'],
+      framework: 'disabled',
+      // Analysis metadata
+      analysisMode: 'disabled',
+      capabilities: {
+        canDetectStructure: true,
+        canAnalyzeComplexity: false,
+        canRecommendFramework: false,
+        hasSemanticUnderstanding: false
+      },
+      limitations: [
+        "Semantic analysis unavailable (no LLM integration)",
+        "No intelligent framework recommendations available", 
+        "Limited complexity analysis capabilities"
+      ],
+      warnings: [
+        "⚠️ Semantic analysis unavailable",
+        "💡 Configure LLM integration in config for semantic analysis",
+        "🔧 Using basic structural detection only"
+      ]
+    };
+  }
+
+  /**
+   * Analyze prompt using semantic analyzer (configuration-aware)
    */
   private async analyzePrompt(prompt: ConvertedPrompt): Promise<PromptClassification> {
     try {
@@ -749,10 +926,15 @@ export class ConsolidatedPromptManager {
         confidence: analysis.confidence,
         reasoning: analysis.reasoning,
         suggestedGates: analysis.suggestedGates,
-        framework: 'semantic'
+        framework: 'configurable',
+        // Enhanced configurable analysis information
+        analysisMode: analysis.analysisMetadata.mode,
+        capabilities: analysis.capabilities,
+        limitations: analysis.limitations,
+        warnings: analysis.warnings
       };
     } catch (error) {
-      this.logger.error(`Semantic analysis failed for ${prompt.id}:`, error);
+      this.logger.error(`Configurable semantic analysis failed for ${prompt.id}:`, error);
       return {
         executionType: prompt.isChain ? 'chain' : 'template',
         requiresExecution: true,
@@ -760,7 +942,16 @@ export class ConsolidatedPromptManager {
         confidence: 0.5,
         reasoning: [`Fallback analysis: ${error}`],
         suggestedGates: ['execution_validation'],
-        framework: 'fallback'
+        framework: 'fallback',
+        analysisMode: 'fallback',
+        capabilities: {
+          canDetectStructure: false,
+          canAnalyzeComplexity: false,
+          canRecommendFramework: false,
+          hasSemanticUnderstanding: false
+        },
+        limitations: ['Analysis failed - using minimal fallback'],
+        warnings: ['⚠️ Analysis error occurred', '🚨 Using minimal fallback analysis']
       };
     }
   }
@@ -773,19 +964,13 @@ export class ConsolidatedPromptManager {
     after: PromptClassification,
     promptId: string
   ): string | null {
-    const beforeConfidence = Math.round(before.confidence * 100);
-    const afterConfidence = Math.round(after.confidence * 100);
-
     const changes: string[] = [];
 
     if (before.executionType !== after.executionType) {
       changes.push(`🔄 **Type**: ${before.executionType} → ${after.executionType}`);
     }
 
-    if (Math.abs(before.confidence - after.confidence) > 0.1) {
-      const trend = after.confidence > before.confidence ? "📈" : "📉";
-      changes.push(`${trend} **Confidence**: ${beforeConfidence}% → ${afterConfidence}%`);
-    }
+    // Confidence comparisons removed - focusing on actionable changes
 
     const beforeGates = new Set(before.suggestedGates);
     const afterGates = new Set(after.suggestedGates);
@@ -808,7 +993,7 @@ export class ConsolidatedPromptManager {
   }
 
   /**
-   * Find prompt dependencies (chains/workflows that reference this prompt)
+   * Find prompt dependencies (chains that reference this prompt)
    */
   private findPromptDependencies(promptId: string): ConvertedPrompt[] {
     return this.convertedPrompts.filter(prompt => {
@@ -843,20 +1028,7 @@ export class ConsolidatedPromptManager {
     const intentMatch = filterText.match(/intent:([a-z-_\s]+)/i);
     if (intentMatch) filters.intent = intentMatch[1].trim();
 
-    const confidenceMatch = filterText.match(/confidence:([<>]?)(\d+)(?:-(\d+))?/);
-    if (confidenceMatch) {
-      const [, operator, num1, num2] = confidenceMatch;
-      const val1 = parseInt(num1);
-      const val2 = num2 ? parseInt(num2) : undefined;
-
-      if (operator === '>') {
-        filters.confidence = { min: val1 };
-      } else if (operator === '<') {
-        filters.confidence = { max: val1 };
-      } else if (val2) {
-        filters.confidence = { min: val1, max: val2 };
-      }
-    }
+    // Confidence filtering removed - focusing on actionable filters only
 
     if (filterText.includes('execution:required')) filters.execution = true;
     else if (filterText.includes('execution:optional')) filters.execution = false;
@@ -914,13 +1086,9 @@ export class ConsolidatedPromptManager {
 
       for (const prompt of prompts) {
         const classification = await this.analyzePrompt(prompt);
-        const confidence = Math.round(classification.confidence * 100);
+        const typeIcon = classification.executionType === "chain" ? "🔗" : "📄";
 
-        const confidenceIcon = confidence > 75 ? "🟢" : confidence > 50 ? "🟡" : "🔴";
-        const typeIcon = classification.executionType === "workflow" ? "⚙️" :
-                         classification.executionType === "chain" ? "🔗" : "📄";
-
-        response += `### ${typeIcon} ${prompt.id} ${confidenceIcon}\n\n`;
+        response += `### ${typeIcon} ${prompt.id}\n\n`;
         response += `**Description**: ${prompt.description}\n\n`;
 
         // Add usage guidance for LLMs
@@ -935,7 +1103,7 @@ export class ConsolidatedPromptManager {
         response += `\n\n`;
 
         // Add semantic analysis
-        response += `🧠 **Analysis**: ${classification.executionType} (${confidence}% confidence)`;
+        response += `🧠 **Analysis**: ${classification.executionType}`;
 
         if (classification.requiresExecution) {
           response += ` • Requires execution`;
@@ -964,12 +1132,7 @@ export class ConsolidatedPromptManager {
       if (filters.category) response += `- **Category**: ${filters.category}\n`;
       if (filters.intent) response += `- **Intent**: "${filters.intent}"\n`;
       if (filters.text) response += `- **Search**: "${filters.text}"\n`;
-      if (filters.confidence) {
-        const { min, max } = filters.confidence;
-        if (min && max) response += `- **Confidence**: ${min}%-${max}%\n`;
-        else if (min) response += `- **Confidence**: >${min}%\n`;
-        else if (max) response += `- **Confidence**: <${max}%\n`;
-      }
+      // Confidence filtering removed - focusing on actionable filters
       if (filters.execution !== undefined) {
         response += `- **Execution**: ${filters.execution ? 'Required' : 'Optional'}\n`;
       }
@@ -988,16 +1151,12 @@ export class ConsolidatedPromptManager {
     if (Object.keys(filters).length === 0) return true;
 
     const classification = await this.analyzePrompt(prompt);
-    const confidence = Math.round(classification.confidence * 100);
 
     if (filters.type && classification.executionType !== filters.type) return false;
 
     if (filters.category && prompt.category !== filters.category) return false;
 
-    if (filters.confidence) {
-      if (filters.confidence.min && confidence < filters.confidence.min) return false;
-      if (filters.confidence.max && confidence > filters.confidence.max) return false;
-    }
+    // Confidence filtering removed - all prompts pass confidence checks
 
     if (filters.execution !== undefined &&
         filters.execution !== classification.requiresExecution) return false;
@@ -1119,10 +1278,9 @@ export class ConsolidatedPromptManager {
       for (const { prompt, classification } of prompts) {
         const executionIcon = this.getExecutionTypeIcon(classification.executionType);
         const frameworkIcon = classification.requiresFramework ? '🧠' : '⚡';
-        const confidenceScore = Math.round(classification.confidence * 100);
 
         result += `\n**${executionIcon} ${prompt.name}** \`${prompt.id}\`\n`;
-        result += `   ${frameworkIcon} **Type**: ${classification.executionType} (${confidenceScore}% confidence)\n`;
+        result += `   ${frameworkIcon} **Type**: ${classification.executionType}\n`;
 
         if (classification.requiresFramework) {
           result += `   🎯 **Framework**: CAGEERF/ReACT ready\n`;
@@ -1161,8 +1319,7 @@ export class ConsolidatedPromptManager {
     switch (executionType) {
       case 'prompt': return '⚡'; // Fast basic prompts
       case 'template': return '🧠'; // Smart framework-aware templates
-      case 'chain': return '🔗'; // Sequential execution
-      case 'workflow': return '⚙️'; // Complex orchestration
+      case 'chain': return '🔗'; // LLM-driven multi-step execution
       default: return '❓';
     }
   }
@@ -1183,12 +1340,14 @@ export class ConsolidatedPromptManager {
 
     const result = await this.createPrompt(promptData);
 
-    // Add type-specific feedback
+    // Use unified clean format (no marketing text)
     const resultText = result.content[0]?.text || '';
-    const enhancedResult = `✅ **Basic Prompt Created**: ${args.name}\n` +
-      `🚀 **Execution Type**: Fast variable substitution (no framework processing)\n` +
-      `📋 **Use Case**: Simple text replacement and basic prompts\n\n` +
-      resultText;
+    const analysisMatch = resultText.match(/🧠 .*$/m);
+    const analysisLine = analysisMatch ? analysisMatch[0] : '';
+    
+    const enhancedResult = `✅ **Prompt Created**: ${args.name} (${args.id})\n` +
+      `📝 ${args.description || 'Basic prompt for variable substitution'}\n` +
+      (analysisLine ? `${analysisLine}` : '');
 
     return {
       content: [{ type: "text", text: enhancedResult }],
@@ -1202,6 +1361,29 @@ export class ConsolidatedPromptManager {
   private async createFrameworkTemplate(args: any): Promise<ToolResponse> {
     this.validateRequiredFields(args, ['id', 'name', 'user_message_template']);
 
+    // Get active framework context if available
+    let frameworkSystemPrompt = '';
+    let activeFrameworkName = 'Framework';
+    
+    this.logger.debug(`Framework managers available: StateManager=${!!this.frameworkStateManager}, FrameworkManager=${!!this.frameworkManager}`);
+    
+    if (this.frameworkStateManager && this.frameworkManager) {
+      try {
+        const activeFramework = this.frameworkStateManager.getActiveFramework();
+        activeFrameworkName = activeFramework.name;
+        
+        // Get system prompt template from active framework
+        frameworkSystemPrompt = activeFramework.systemPromptTemplate.replace(/\{PROMPT_NAME\}/g, args.name);
+        
+        this.logger.info(`Framework template creation using ${activeFrameworkName} methodology`);
+        this.logger.debug(`System prompt length: ${frameworkSystemPrompt.length} characters`);
+      } catch (error) {
+        this.logger.warn("Failed to get framework context for template creation:", error);
+      }
+    } else {
+      this.logger.warn("Framework managers not available for template creation");
+    }
+
     // Ensure framework-appropriate defaults
     const templateData = {
       ...args,
@@ -1212,13 +1394,19 @@ export class ConsolidatedPromptManager {
 
     const result = await this.createPrompt(templateData);
 
-    // Add type-specific feedback with framework guidance
+    // Use unified clean format with framework context
     const resultText = result.content[0]?.text || '';
-    const enhancedResult = `✅ **Framework Template Created**: ${args.name}\n` +
-      `🧠 **Execution Type**: Intelligent analysis with framework guidance\n` +
-      `🎯 **Framework Benefits**: CAGEERF methodology, structured reasoning, systematic approach\n` +
-      `📋 **Use Case**: Complex analysis, structured reasoning, methodology-driven responses\n\n` +
-      resultText;
+    const analysisMatch = resultText.match(/🧠 .*$/m);
+    const analysisLine = analysisMatch ? analysisMatch[0] : '';
+    
+    let enhancedResult = `✅ **Prompt Created**: ${args.name} (${args.id})\n` +
+      `📝 ${args.description || 'Framework-enhanced template for structured analysis'}\n` +
+      (analysisLine ? `${analysisLine}` : '');
+
+    // Add framework system prompt if available
+    if (frameworkSystemPrompt) {
+      enhancedResult += `\n\n## Active Framework System Prompt\n${frameworkSystemPrompt}`;
+    }
 
     return {
       content: [{ type: "text", text: enhancedResult }],
@@ -1245,7 +1433,6 @@ export class ConsolidatedPromptManager {
 
     let recommendation = `🔍 **Prompt Type Analysis**: ${prompt.name}\n\n`;
     recommendation += `📊 **Current Execution Type**: ${analysis.executionType}\n`;
-    recommendation += `🎯 **Confidence**: ${Math.round(analysis.confidence * 100)}%\n`;
     recommendation += `🧠 **Framework Recommended**: ${analysis.requiresFramework ? 'Yes' : 'No'}\n\n`;
 
     recommendation += `📋 **Analysis Details**:\n`;
@@ -1367,7 +1554,9 @@ export function createConsolidatedPromptManager(
   logger: Logger,
   mcpServer: any,
   configManager: ConfigManager,
-  semanticAnalyzer: SemanticAnalyzer,
+  semanticAnalyzer: ConfigurableSemanticAnalyzer,
+  frameworkStateManager: FrameworkStateManager | undefined,
+  frameworkManager: FrameworkManager | undefined,
   onRefresh: () => Promise<void>,
   onRestart: (reason: string) => Promise<void>
 ): ConsolidatedPromptManager {
@@ -1376,6 +1565,8 @@ export function createConsolidatedPromptManager(
     mcpServer,
     configManager,
     semanticAnalyzer,
+    frameworkStateManager,
+    frameworkManager,
     onRefresh,
     onRestart
   );

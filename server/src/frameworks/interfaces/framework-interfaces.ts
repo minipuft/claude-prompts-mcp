@@ -133,7 +133,7 @@ export interface EnhancedSemanticResult extends SemanticAnalysisResult {
 /**
  * Execution types for semantic analysis
  */
-export type ExecutionType = "template" | "workflow" | "chain" | "auto";
+export type ExecutionType = "template" | "chain" | "auto";
 
 /**
  * Framework registry entry structure

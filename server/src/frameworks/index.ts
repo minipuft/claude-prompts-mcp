@@ -5,7 +5,6 @@
 
 // Essential framework components
 export * from './interfaces/index.js';
-export * from './analysis/index.js';
 
 // Framework managers (stateless orchestration and stateful management)
 export * from './framework-manager.js';

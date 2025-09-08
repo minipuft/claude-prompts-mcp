@@ -43,7 +43,7 @@ Template for the user message with {{placeholders}}.
 
 **🧠 Automatic Detection**: The system automatically analyzes your prompt content to determine:
 
-- **Execution Type**: Whether it's a template, workflow, or chain
+- **Execution Type**: Whether it's a basic prompt, template, or chain
 - **Quality Gates**: Appropriate validation based on complexity
 - **Execution Requirements**: Whether execution or template return is needed
 
@@ -55,7 +55,7 @@ If you want to provide explicit hints to Claude (completely optional):
 # Prompt Title
 
 _Optional execution hints for Claude:_
-**🎯 EXECUTION TYPE**: Workflow Template | Chain Workflow | Template
+**🎯 EXECUTION TYPE**: Chain Template | Multi-Step Chain | Template
 **⚡ EXECUTION REQUIRED**: This template requires execution / outputs instructions
 
 ## Description
@@ -88,7 +88,7 @@ The system now uses advanced semantic analysis to automatically understand promp
 
 The system analyzes prompt content using advanced patterns:
 
-- **Workflow Detection**: Identifies systematic, framework-based approaches
+- **Chain Detection**: Identifies systematic, multi-step approaches
 - **Action Detection**: Recognizes analysis, processing, and execution requirements
 - **Instruction Generation**: Detects templates that output step-by-step guidance
 - **Template Information**: Identifies prompts that return data vs. executable content
@@ -97,7 +97,7 @@ The system analyzes prompt content using advanced patterns:
 
 Prompts are automatically classified into types:
 
-- **`workflow`**: Requires execution with quality validation (confidence-based)
+- **`chain`**: Requires execution with quality validation (confidence-based)
 - **`chain`**: Multi-step sequential execution with step tracking
 - **`template`**: Returns information or configuration data
 
@@ -107,14 +107,14 @@ Quality gates are intelligently assigned based on:
 
 - **Content Complexity**: More arguments = more validation
 - **Analysis Requirements**: Analysis prompts get keyword presence checks
-- **Workflow Patterns**: Step-by-step content gets completion validation
+- **Chain Patterns**: Step-by-step content gets completion validation
 - **Chain Operations**: Multi-step chains get step completion gates
 
 #### **⚡ Smart Execution Decisions**
 
 The system automatically decides whether to:
 
-- **Execute immediately**: For high-confidence workflows
+- **Execute immediately**: For high-confidence chains
 - **Return template info**: For information-only prompts
 - **Apply quality gates**: Based on prompt complexity and type
 - **Enable step confirmation**: For sensitive or complex chains
@@ -127,7 +127,7 @@ The system automatically decides whether to:
 # System automatically detects and executes appropriately
 >>content_analysis "your content here"
 
-# System auto-detects this is a workflow, applies quality gates, executes
+# System auto-detects this is a chain, applies quality gates, executes
 >>notes "research data to analyze"
 
 # System detects this is a template info request, returns guidance
@@ -138,9 +138,9 @@ The system automatically decides whether to:
 
 ```bash
 # Force specific execution mode
->>execute_prompt {"command": ">>content_analysis data", "execution_mode": "workflow"}
+>>execute_prompt {"command": ">>content_analysis data", "execution_mode": "chain"}
 
-# Enable step confirmation for sensitive workflows
+# Enable step confirmation for sensitive chains
 >>execute_prompt {"command": ">>notes data", "step_confirmation": true}
 ```
 

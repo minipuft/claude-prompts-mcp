@@ -119,7 +119,7 @@ export class ConsolidatedSystemControl {
             "status", "switch_framework", "list_frameworks", "analytics", 
             "health", "diagnostics", "reset_metrics", "switch_history", "config"
           ])
-          .describe("System action: 'status' (comprehensive overview), 'switch_framework' (change methodology), 'list_frameworks' (available options), 'analytics' (execution metrics), 'health' (system health), 'diagnostics' (detailed analysis), 'reset_metrics' (clear stats), 'switch_history' (framework changes), 'config' (system configuration)"),
+          .describe("System action: 'status' (comprehensive overview), 'switch_framework' (change methodology), 'list_frameworks' (available options), 'analytics' (execution metrics), 'health' (system health), 'diagnostics' (detailed analysis), 'reset_metrics' (clear switching metrics), 'switch_history' (framework changes), 'config' (system configuration)"),
           
         // Framework parameters
         framework: z
@@ -323,12 +323,12 @@ export class ConsolidatedSystemControl {
     // Performance Metrics
     if (include_metrics) {
       response += "## 🎯 Performance Breakdown\n\n";
-      const frameworkMetrics = systemHealth.performanceMetrics;
-      response += `**Framework Switches**: ${frameworkMetrics.totalSwitches}\n`;
-      response += `**Framework Success Rate**: ${frameworkMetrics.totalSwitches > 0 
-        ? Math.round((frameworkMetrics.successfulSwitches / frameworkMetrics.totalSwitches) * 100) 
+      const switchingMetrics = systemHealth.switchingMetrics;
+      response += `**Framework Switches**: ${switchingMetrics.totalSwitches}\n`;
+      response += `**Framework Switch Success Rate**: ${switchingMetrics.totalSwitches > 0 
+        ? Math.round((switchingMetrics.successfulSwitches / switchingMetrics.totalSwitches) * 100) 
         : 100}%\n`;
-      response += `**Framework Response Time**: ${Math.round(frameworkMetrics.averageResponseTime)}ms\n`;
+      response += `**Framework Switch Time**: ${Math.round(switchingMetrics.averageResponseTime)}ms\n`;
       
       response += `\n**Execution Modes**:\n`;
       Object.entries(this.systemAnalytics.executionsByMode).forEach(([mode, count]) => {
@@ -363,7 +363,7 @@ export class ConsolidatedSystemControl {
     response += "- `analytics` - View detailed execution analytics\n";
     response += "- `health` - Check system health status\n";
     response += "- `diagnostics` - Run comprehensive system diagnostics\n";
-    response += "- `reset_metrics` - Reset performance counters\n";
+    response += "- `reset_metrics` - Reset framework switching counters\n";
     response += "- `switch_history` - View framework change history\n";
 
     return { content: [{ type: "text", text: response }] };
@@ -570,11 +570,11 @@ export class ConsolidatedSystemControl {
     
     // Performance Health
     response += "## 📊 Performance Health\n\n";
-    response += `**Framework Switches**: ${health.performanceMetrics.totalSwitches}\n`;
-    response += `**Framework Success Rate**: ${health.performanceMetrics.totalSwitches > 0 
-      ? Math.round((health.performanceMetrics.successfulSwitches / health.performanceMetrics.totalSwitches) * 100) 
+    response += `**Framework Switches**: ${health.switchingMetrics.totalSwitches}\n`;
+    response += `**Framework Switch Success Rate**: ${health.switchingMetrics.totalSwitches > 0 
+      ? Math.round((health.switchingMetrics.successfulSwitches / health.switchingMetrics.totalSwitches) * 100) 
       : 100}%\n`;
-    response += `**Average Response Time**: ${Math.round(health.performanceMetrics.averageResponseTime)}ms\n`;
+    response += `**Framework Switch Time**: ${Math.round(health.switchingMetrics.averageResponseTime)}ms\n`;
     response += `**Execution Success Rate**: ${this.getSuccessRate()}%\n\n`;
     
     // Issues
@@ -706,7 +706,7 @@ export class ConsolidatedSystemControl {
   }
 
   /**
-   * Reset system metrics
+   * Reset framework switching metrics
    */
   private async resetMetrics(args: {
     confirm?: boolean;
@@ -715,7 +715,7 @@ export class ConsolidatedSystemControl {
       return {
         content: [{
           type: "text",
-          text: "❌ Metrics reset cancelled. Set 'confirm: true' to reset all performance metrics."
+          text: "❌ Metrics reset cancelled. Set 'confirm: true' to reset all switching performance metrics."
         }]
       };
     }
@@ -743,7 +743,7 @@ export class ConsolidatedSystemControl {
     response += `**Failed**: ${this.systemAnalytics.failedExecutions}\n`;
     response += `**Average Time**: ${this.formatExecutionTime(this.systemAnalytics.averageExecutionTime)}\n\n`;
     
-    response += "✅ All performance metrics have been reset. Monitoring will start fresh.";
+    response += "✅ All switching performance metrics have been reset. Framework switching monitoring will start fresh.";
 
     return { content: [{ type: "text", text: response }] };
   }

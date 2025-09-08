@@ -11,7 +11,7 @@ import {
   FrameworkExecutionContext,
   FrameworkSelectionCriteria 
 } from "../../frameworks/framework-manager.js";
-import { SemanticAnalysis } from "../../analysis/semantic-analyzer.js";
+import { ConfigurableSemanticAnalysis } from "../../analysis/configurable-semantic-analyzer.js";
 import { 
   IMethodologyGuide,
   MethodologyEnhancement 
@@ -93,7 +93,7 @@ export class FrameworkInjector {
    */
   async injectFrameworkContext(
     prompt: ConvertedPrompt,
-    semanticAnalysis: SemanticAnalysis,
+    semanticAnalysis: ConfigurableSemanticAnalysis,
     userFrameworkPreference?: string
   ): Promise<FrameworkInjectionResult> {
     const startTime = Date.now();
@@ -113,7 +113,7 @@ export class FrameworkInjector {
       // Prepare framework selection criteria based on semantic analysis
       const executionType = semanticAnalysis.executionType;
       const selectionCriteria: FrameworkSelectionCriteria = {
-        executionType: executionType as "template" | "chain" | "workflow",
+        executionType: executionType as "template" | "chain",
         complexity: semanticAnalysis.complexity,
         userPreference: (userFrameworkPreference || this.config.userPreferenceOverride) as any
       };
@@ -162,7 +162,7 @@ export class FrameworkInjector {
    */
   async injectSystemPrompt(
     prompt: ConvertedPrompt,
-    semanticAnalysis: SemanticAnalysis
+    semanticAnalysis: ConfigurableSemanticAnalysis
   ): Promise<string> {
     const result = await this.injectFrameworkContext(prompt, semanticAnalysis);
     return result.enhancedPrompt.frameworkSystemPrompt || "";
@@ -173,7 +173,7 @@ export class FrameworkInjector {
    */
   async getFrameworkGuidelines(
     prompt: ConvertedPrompt,
-    semanticAnalysis: SemanticAnalysis
+    semanticAnalysis: ConfigurableSemanticAnalysis
   ): Promise<string[]> {
     const result = await this.injectFrameworkContext(prompt, semanticAnalysis);
     return result.frameworkContext.executionGuidelines;
@@ -187,7 +187,7 @@ export class FrameworkInjector {
   private performFrameworkInjection(
     prompt: ConvertedPrompt,
     frameworkContext: FrameworkExecutionContext,
-    semanticAnalysis: SemanticAnalysis
+    semanticAnalysis: ConfigurableSemanticAnalysis
   ): FrameworkInjectionResult['enhancedPrompt'] {
     const framework = frameworkContext.selectedFramework;
     const systemPrompt = frameworkContext.systemPrompt;

@@ -2,8 +2,8 @@
  * Comprehensive type definitions for the MCP Prompts Server
  * Consolidates all type definitions from across the application
  * 
- * This module provides unified type definitions for the ExecutionEngine architecture,
- * including strategy patterns, workflow orchestration, and performance monitoring.
+ * This module provides unified type definitions for the 3-tier execution architecture,
+ * including strategy patterns, chain orchestration, and performance monitoring.
  */
 
 // Import PromptData specifically for use within this module
@@ -48,11 +48,18 @@ export type {
   PromptsConfig,
   PromptsConfigFile,
   PromptsFile,
-  RegistrationMode,
   ServerConfig,
   TextMessageContent,
   TransportConfig,
   TransportsConfig,
+  // New analysis configuration types
+  AnalysisMode,
+  LLMProvider,
+  LLMIntegrationConfig,
+  SemanticAnalysisConfig,
+  AnalysisConfig,
+  // Logging configuration types
+  LoggingConfig,
 } from "../types.js";
 
 // ===== Execution Engine Types =====
@@ -100,7 +107,7 @@ export interface UnifiedExecutionResult {
   /** Execution end timestamp */
   endTime: number;
   /** Strategy-specific result content */
-  result: string | ChainExecutionResult | WorkflowExecutionResult;
+  result: string | ChainExecutionResult;
   /** Error information if execution failed */
   error?: {
     message: string;
@@ -152,8 +159,6 @@ export interface ExecutionStats {
   promptExecutions: number;
   /** Number of chain strategy executions */
   chainExecutions: number;
-  /** Number of workflow strategy executions */
-  workflowExecutions: number;
   /** Number of failed executions */
   failedExecutions: number;
   /** Average execution time in milliseconds */
@@ -226,14 +231,14 @@ export interface ChainStep {
   outputMapping?: Record<string, string>; // Maps this step's outputs to chain outputs
   qualityGates?: GateDefinition[]; // Optional custom quality gates for this step
   
-  // NEW: Advanced workflow capabilities (optional - preserves backward compatibility)
+  // NEW: Advanced chain capabilities (optional - preserves backward compatibility)
   dependencies?: string[]; // Step IDs that must complete before this step (enables dependency resolution)
   parallelGroup?: string; // Group ID for parallel execution (steps with same group run concurrently)
   timeout?: number; // Step-specific timeout in milliseconds
   retries?: number; // Number of retries for this step
-  onError?: ErrorHandling; // Error handling configuration (stop/skip/retry/rollback)
+  // onError removed - workflow types eliminated
   stepType?: 'prompt' | 'tool' | 'gate' | 'condition'; // Extended step types beyond prompt execution
-  config?: StepConfig; // Advanced step configuration for non-prompt steps
+  // config removed - workflow types eliminated
 }
 
 export interface ChainExecutionState {
@@ -268,8 +273,8 @@ export interface EnhancedChainExecutionOptions {
   enableDependencyResolution?: boolean;  // Enable step dependency resolution and topological ordering
   enableParallelExecution?: boolean;     // Enable parallel execution of steps in same parallel group
   executionTimeout?: number;             // Chain-wide timeout in milliseconds (overrides individual step timeouts)
-  retryPolicy?: RetryPolicy;             // Chain-wide retry configuration (can be overridden by step-level settings)
-  advancedGateValidation?: boolean;      // Use workflow-grade comprehensive gate validation
+  // retryPolicy removed - workflow types eliminated
+  advancedGateValidation?: boolean;      // Use comprehensive gate validation
   stepConfirmation?: boolean;            // Require confirmation before executing each step
   continueOnFailure?: boolean;           // Continue chain execution even if non-critical steps fail
 }
@@ -291,12 +296,12 @@ export interface AdvancedChainExecutionContext {
   skippedSteps: Set<string>;             // Step IDs that were skipped due to dependencies/conditions
   stepResults: Record<string, StepResult>; // Detailed results from each step
   
-  // Dependency management
-  dependencyGraph?: DependencyGraph;      // Computed dependency graph for execution ordering
+  // Dependency management (workflow types removed)
+  // dependencyGraph removed - workflow types eliminated
   executionPlan?: {
     executionOrder: string[];             // Topologically sorted step execution order
     parallelGroups: Map<string, string[]>; // Parallel execution groups
-    dependencyGraph: DependencyGraph;     // Dependency graph used for execution planning
+    // dependencyGraph removed - workflow types eliminated
   };
   
   // Advanced execution state
@@ -329,15 +334,8 @@ export interface ConvertedPrompt {
   onEmptyInvocation?: "execute_if_possible" | "return_template";
   // Gate validation properties
   gates?: GateDefinition[];
-  executionMode?: 'prompt' | 'template' | 'chain'; // Phase 2: Removed workflow
+  executionMode?: 'prompt' | 'template' | 'chain'; // 3-tier execution model
   requiresExecution?: boolean; // Whether this prompt should be executed rather than returned
-  // Deprecated workflow-related properties (kept for compatibility during Phase 2 migration)
-  /** @deprecated Phase 2: Use advanced chain features instead */
-  isWorkflow?: boolean; // Whether this prompt is a workflow
-  /** @deprecated Phase 2: Use advanced chain features instead */
-  workflowDefinition?: Workflow; // Full workflow definition
-  /** @deprecated Phase 2: Use advanced chain features instead */
-  workflowId?: string; // Reference to registered workflow
 }
 
 // Prompt Loading Types
@@ -604,7 +602,6 @@ export enum ExecutionMode {
   AUTO = "auto",
   TEMPLATE = "template", 
   CHAIN = "chain",
-  WORKFLOW = "workflow",
 }
 
 export enum StepStatus {
@@ -622,244 +619,5 @@ export enum GateType {
   QUALITY = "quality",
 }
 
-// ===== Workflow Foundation Types =====
-
-/**
- * Runtime targets for workflow execution
- */
-export type RuntimeTarget = 'desktop' | 'cli' | 'server' | 'web';
-
-/**
- * Workflow step configuration
- */
-export interface StepConfig {
-  /** Prompt ID for prompt steps */
-  promptId?: string;
-  /** Tool name for tool steps */
-  toolName?: string;
-  /** Gate ID for gate steps */
-  gateId?: string;
-  /** Condition expression for condition steps */
-  condition?: string;
-  /** Parameters for step execution */
-  parameters?: Record<string, any>;
-  /** Timeout in milliseconds */
-  timeout?: number;
-}
-
-/**
- * Error handling configuration for workflow steps
- */
-export interface ErrorHandling {
-  /** Action to take on step failure */
-  action: 'stop' | 'skip' | 'retry' | 'rollback';
-  /** Maximum retries for this step */
-  maxRetries?: number;
-  /** Fallback step to execute on failure */
-  fallbackStep?: string;
-}
-
-/**
- * Workflow step definition
- */
-export interface WorkflowStep {
-  /** Unique identifier for the step */
-  id: string;
-  /** Display name for the step */
-  name: string;
-  /** Type of step execution */
-  type: 'prompt' | 'tool' | 'gate' | 'condition' | 'parallel';
-  /** Step configuration */
-  config: StepConfig;
-  /** Dependencies (step IDs that must complete before this step) */
-  dependencies: string[];
-  /** Step timeout in milliseconds */
-  timeout?: number;
-  /** Number of retries for this step */
-  retries?: number;
-  /** Error handling configuration */
-  onError?: ErrorHandling;
-}
-
-/**
- * Dependency graph for workflow execution order
- */
-export interface DependencyGraph {
-  /** All step IDs in the workflow */
-  nodes: string[];
-  /** Dependency edges as [from, to] tuples */
-  edges: [string, string][];
-  /** Pre-computed topological order (optional) */
-  topologicalOrder?: string[];
-}
-
-/**
- * Retry policy for workflow execution
- */
-export interface RetryPolicy {
-  /** Maximum number of retries */
-  maxRetries: number;
-  /** Backoff strategy for retries */
-  backoffStrategy: 'linear' | 'exponential';
-  /** Types of errors that should trigger retries */
-  retryableErrors: string[];
-  /** Base delay between retries in milliseconds */
-  baseDelay?: number;
-  /** Maximum delay between retries in milliseconds */
-  maxDelay?: number;
-}
-
-/**
- * Workflow metadata
- */
-export interface WorkflowMetadata {
-  /** Author of the workflow */
-  author?: string;
-  /** Creation timestamp */
-  created: Date;
-  /** Last modification timestamp */
-  modified: Date;
-  /** Tags for categorization */
-  tags: string[];
-  /** Target runtime environments */
-  runtime: RuntimeTarget[];
-  /** Version of the workflow */
-  version: string;
-}
-
-/**
- * Gate configuration for workflow validation
- */
-export interface WorkflowGate {
-  /** Gate identifier */
-  id: string;
-  /** Gate name */
-  name: string;
-  /** Gate type */
-  type: GateType;
-  /** Step IDs this gate applies to */
-  appliesTo: string[];
-  /** Gate requirements */
-  requirements: GateRequirement[];
-  /** Action to take on gate failure */
-  failureAction: 'stop' | 'retry' | 'skip' | 'rollback';
-}
-
-/**
- * Complete workflow definition
- */
-export interface Workflow {
-  /** Unique workflow identifier */
-  id: string;
-  /** Display name */
-  name: string;
-  /** Optional description */
-  description?: string;
-  /** Workflow version */
-  version: string;
-  /** Workflow steps */
-  steps: WorkflowStep[];
-  /** Dependency graph */
-  dependencies: DependencyGraph;
-  /** Retry policy */
-  retryPolicy: RetryPolicy;
-  /** Workflow metadata */
-  metadata: WorkflowMetadata;
-  /** Optional gates for validation */
-  gates?: WorkflowGate[];
-}
-
-/**
- * Workflow execution context
- */
-export interface WorkflowExecutionContext {
-  /** Workflow being executed */
-  workflow: Workflow;
-  /** Input parameters */
-  inputs: Record<string, any>;
-  /** Current step results */
-  stepResults: Record<string, any>;
-  /** Execution start time */
-  startTime: number;
-  /** Current runtime target */
-  runtime: RuntimeTarget;
-  /** Execution options */
-  options: WorkflowExecutionOptions;
-}
-
-/**
- * Workflow execution options
- * @deprecated Phase 2: Use EnhancedChainExecutionOptions instead
- */
-export interface WorkflowExecutionOptions {
-  /** Whether to require step confirmation */
-  stepConfirmation?: boolean;
-  /** Whether to validate gates */
-  gateValidation?: boolean;
-  /** Overall execution timeout */
-  timeout?: number;
-  /** Whether to run in parallel where possible */
-  parallelExecution?: boolean;
-}
-
-/**
- * Workflow execution result
- * @deprecated Phase 2: Use ChainExecutionResult with advanced chain features instead
- */
-export interface WorkflowExecutionResult {
-  /** Workflow ID */
-  workflowId: string;
-  /** Execution ID */
-  executionId: string;
-  /** Final execution status */
-  status: 'completed' | 'failed' | 'timeout' | 'cancelled';
-  /** Start time */
-  startTime: number;
-  /** End time */
-  endTime: number;
-  /** Results from each step */
-  stepResults: Record<string, StepResult>;
-  /** Final workflow result */
-  finalResult?: any;
-  /** Error information if failed */
-  error?: {
-    message: string;
-    step?: string;
-    code?: string;
-  };
-}
-
-/**
- * Workflow execution plan
- * @deprecated Phase 2: Use AdvancedChainExecutionContext.executionPlan instead
- */
-export interface WorkflowExecutionPlan {
-  /** Workflow ID */
-  workflowId: string;
-  /** Execution order of steps */
-  executionOrder: string[];
-  /** Parallel execution groups */
-  parallelGroups: string[][];
-  /** Estimated execution time */
-  estimatedDuration: number;
-  /** Validation results */
-  validationResults: ValidationResult;
-}
-
-/**
- * Workflow validation result
- */
-export interface WorkflowValidationResult {
-  /** Whether workflow is valid */
-  valid: boolean;
-  /** Validation errors */
-  errors: string[];
-  /** Validation warnings */
-  warnings: string[];
-  /** Dependency graph validation */
-  dependencyValidation: {
-    valid: boolean;
-    cycles: string[][];
-    unreachableNodes: string[];
-  };
-}
+// ===== End of Type Definitions =====
+// Phase 2: Workflow foundation types completely removed - chains handle all multi-step execution

@@ -17,12 +17,13 @@ export interface Logger {
 }
 
 /**
- * Logging configuration options
+ * Logging configuration options for EnhancedLogger
  */
-export interface LoggingConfig {
+export interface EnhancedLoggingConfig {
   logFile: string;
   transport: string;
   enableDebug?: boolean;
+  configuredLevel?: string; // NEW: Support config-based log level
 }
 
 /**
@@ -33,12 +34,53 @@ export class EnhancedLogger implements Logger {
   private transport: string;
   private enableDebug: boolean;
   private isCI: boolean;
+  private configuredLevel: LogLevel;
+  private static readonly LOG_LEVEL_PRIORITY = {
+    [LogLevel.ERROR]: 0,
+    [LogLevel.WARN]: 1,
+    [LogLevel.INFO]: 2,
+    [LogLevel.DEBUG]: 3,
+  };
 
-  constructor(config: LoggingConfig) {
+  constructor(config: EnhancedLoggingConfig) {
     this.logFile = config.logFile;
     this.transport = config.transport;
     this.enableDebug = config.enableDebug || false;
     this.isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
+    
+    // Map config level to LogLevel enum with fallback to INFO
+    this.configuredLevel = this.parseLogLevel(config.configuredLevel || 'info');
+  }
+
+  /**
+   * Parse string log level to LogLevel enum
+   */
+  private parseLogLevel(level: string): LogLevel {
+    const normalizedLevel = level.toUpperCase();
+    switch (normalizedLevel) {
+      case 'DEBUG': return LogLevel.DEBUG;
+      case 'INFO': return LogLevel.INFO;
+      case 'WARN': return LogLevel.WARN;
+      case 'ERROR': return LogLevel.ERROR;
+      default: 
+        console.warn(`Unknown log level "${level}", defaulting to INFO`);
+        return LogLevel.INFO;
+    }
+  }
+
+  /**
+   * Check if a log level should be output based on configuration
+   */
+  private shouldLog(level: LogLevel): boolean {
+    // Command-line flags override config
+    if (this.enableDebug) {
+      return true; // Show everything in debug mode
+    }
+    
+    const levelPriority = EnhancedLogger.LOG_LEVEL_PRIORITY[level];
+    const configPriority = EnhancedLogger.LOG_LEVEL_PRIORITY[this.configuredLevel];
+    
+    return levelPriority <= configPriority;
   }
 
   /**
@@ -65,6 +107,11 @@ export class EnhancedLogger implements Logger {
     message: string,
     ...args: any[]
   ): Promise<void> {
+    // Check if this log level should be output based on configuration
+    if (!this.shouldLog(level)) {
+      return;
+    }
+
     try {
       let logMessage = `[${new Date().toISOString()}] [${level}] ${message}`;
       if (args.length > 0) {
@@ -82,6 +129,11 @@ export class EnhancedLogger implements Logger {
    * Log to console based on transport and environment
    */
   private logToConsole(level: LogLevel, message: string, ...args: any[]): void {
+    // Check if this log level should be output based on configuration
+    if (!this.shouldLog(level)) {
+      return;
+    }
+
     // In CI environment, always log errors and warnings regardless of transport
     // This ensures critical issues are visible in CI output
     if (this.isCI) {
@@ -115,9 +167,7 @@ export class EnhancedLogger implements Logger {
           console.warn(`[WARN] ${message}`, ...args);
           break;
         case LogLevel.DEBUG:
-          if (this.enableDebug) {
-            console.log(`[DEBUG] ${message}`, ...args);
-          }
+          console.log(`[DEBUG] ${message}`, ...args);
           break;
       }
     }
@@ -194,7 +244,7 @@ export class EnhancedLogger implements Logger {
 /**
  * Create a logger instance
  */
-export function createLogger(config: LoggingConfig): EnhancedLogger {
+export function createLogger(config: EnhancedLoggingConfig): EnhancedLogger {
   return new EnhancedLogger(config);
 }
 

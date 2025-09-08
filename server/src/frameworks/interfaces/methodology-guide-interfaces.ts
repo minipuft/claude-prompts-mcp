@@ -5,7 +5,7 @@
  */
 
 import { ConvertedPrompt } from "../../types/index.js";
-import { SemanticAnalysis } from "../../analysis/semantic-analyzer.js";
+import { ConfigurableSemanticAnalysis } from "../../analysis/configurable-semantic-analyzer.js";
 
 /**
  * Guidance for creating new prompts based on methodology
@@ -182,7 +182,7 @@ export interface IMethodologyGuide {
    */
   guideExecutionSteps(
     prompt: ConvertedPrompt, 
-    semanticAnalysis: SemanticAnalysis
+    semanticAnalysis: ConfigurableSemanticAnalysis
   ): StepGuidance;
   
   /**
@@ -249,7 +249,7 @@ export abstract class BaseMethodologyGuide implements IMethodologyGuide {
   
   abstract guideExecutionSteps(
     prompt: ConvertedPrompt, 
-    semanticAnalysis: SemanticAnalysis
+    semanticAnalysis: ConfigurableSemanticAnalysis
   ): StepGuidance;
   
   abstract enhanceWithMethodology(

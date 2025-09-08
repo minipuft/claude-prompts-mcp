@@ -19,20 +19,20 @@ _Supercharge your AI workflows with battle-tested prompt engineering, intelligen
 
 </div>
 
-## 🌟 What Makes This Special? (v1.2.0 - "Three-Tier Execution Architecture")
+## 🌟 What Makes This Special? (v1.3.0 - "Consolidated Architecture with Systematic Framework Application")
 
-- **🎯 Smart Execution Model** → Automatically routes between prompts (basic), templates (framework-aware), chains, and workflows
-- **🧠 Semantic Analysis Engine** → Intelligent classification detects execution type and framework requirements
+- **🎯 Three-Tier Execution Model** → Routes between prompts (lightning-fast), templates (framework-enhanced), and chains (LLM-driven) based on file structure
+- **🧠 Structural Analysis Engine** → File structure analysis detects execution type (with optional W.I.P LLM-powered semantic enhancement)
 - **⚡ Three-Tier Performance** → From instant variable substitution to comprehensive methodology-guided processing
 - **🔧 Unified Creation Tools** → Create prompts or templates with type-specific optimization
-- **🛡️ Smart Quality Gates** → Auto-assigned validation based on execution type and complexity
-- **🔄 Migration & Analysis Tools** → Analyze existing prompts and migrate between execution types
+- **🛡️ Intelligent Quality Gates** → Framework-aware validation with conditional injection based on execution tier
+- **🔄 Configurable Analysis** → Structural analysis with optional semantic enhancement and manual methodology selection
 - **🔥 Intelligent Hot-Reload System** → Update prompts instantly without restarts
 - **🎨 Advanced Template Engine** → Nunjucks-powered with conditionals, loops, and dynamic data
 - **⚡ Multi-Phase Orchestration** → Robust startup sequence with comprehensive health monitoring
 - **🚀 Universal MCP Compatibility** → Works flawlessly with Claude Desktop, Cursor Windsurf, and any MCP client
 
-Transform your AI assistant experience with a **three-tier intelligent execution architecture** that automatically routes between basic prompts, framework-aware templates, and orchestrated workflows across any MCP-compatible platform.
+Transform your AI assistant experience with a **three-tier execution architecture** that routes between lightning-fast prompts, framework-enhanced templates, and LLM-driven chains based on file structure analysis across any MCP-compatible platform.
 
 ## 🚀 Revolutionary Interactive Prompt Management
 
@@ -41,36 +41,95 @@ Transform your AI assistant experience with a **three-tier intelligent execution
 This isn't just another prompt server – it's a **living, breathing prompt ecosystem** that evolves through natural conversation with your AI assistant. Imagine being able to:
 
 ```bash
-# 🎯 Create basic prompts for simple variable substitution
->>create_prompt code_formatter "Format {{language}} code with {{style}} conventions"
-→ Creates fast, lightweight prompt with basic variable replacement
+# 🎯 Universal prompt execution with intelligent type detection
+prompt_engine >>code_formatter language="Python" style="PEP8"
+→ System detects execution tier, applies appropriate processing automatically
 
-# 🧠 Create framework-aware templates for complex reasoning
->>create_template code_reviewer "Analyze code for security, performance, and maintainability issues"
-→ Creates CAGEERF/ReACT methodology-enhanced template with quality gates
+# 📋 Create and manage prompts with intelligent analysis
+prompt_manager create name="code_reviewer" type="template" \
+  content="Analyze {{code}} for security, performance, and maintainability"
+→ Creates framework-enhanced template with CAGEERF methodology integration
 
-# 🔍 Analyze existing prompts to understand their execution type
->>analyze_type my_prompt
-→ Shows: "Type: template, Framework: CAGEERF, Confidence: 85%"
+# 🔍 Analyze existing prompts for execution optimization
+prompt_manager analyze_type prompt_id="my_prompt"
+→ Shows: "Type: template, Framework: CAGEERF, Confidence: 85%, Gates: enabled"
 
-# 🔄 Migrate prompts between execution types
->>migrate_type my_basic_prompt template
-→ Upgrades basic prompt to framework-aware template with enhanced capabilities
+# ⚙️ System control and framework management
+system_control switch_framework framework="ReACT" reason="Problem-solving focus"
+→ Switches active methodology with performance monitoring
 
-# ⚡ Execute with automatic type detection and optimization
->>my_prompt input="analyze this code"
-→ System detects type, applies appropriate processing, executes optimally
+# 🔥 Execute with full three-tier intelligence
+prompt_engine >>analysis_chain input="complex research data" auto_execute_chain=true
+→ LLM-driven chain execution with step-by-step coordination
 ```
 
-**🌟 Why This Changes Everything:**
+**🌟 Why This Architecture Matters:**
 
-- **🧠 True Intelligence**: System understands prompts like a human - no configuration needed
-- **🔄 Self-Evolving System**: Your AI assistant literally builds and improves its own capabilities in real-time
-- **🎮 Zero Friction**: Never configure execution modes, quality gates, or headers - everything just works
-- **⚡ Instant Perfection**: Create → Auto-detect → Execute optimally in one seamless flow
-- **🌱 Learning System**: Detection accuracy improves through usage - gets smarter over time
+- **🧠 Structural Intelligence**: File structure analysis provides reliable execution routing with minimal configuration
+- **🔄 Dynamic Capability Building**: Build and extend your AI assistant's capabilities through conversational prompt management
+- **🎮 Reduced Friction**: Minimal configuration required - execution type detected from file structure
+- **⚡ Systematic Workflow**: Create → Structure-based routing → Framework application in a reliable flow
+- **📊 Tool Consolidation**: 87.5% reduction in complexity (24+ tools → 3 consolidated tools) with maintained functionality
+- **🧠 Sophisticated Methodology System**: Four proven thinking frameworks (CAGEERF, ReACT, 5W1H, SCAMPER) with manual selection and conditional application
 
-This is what **truly intelligent AI infrastructure** looks like – where the system understands intent as naturally as reading human language.
+This is what **well-architected AI infrastructure** looks like – where systematic analysis and proven methodologies enhance your AI interactions through structured approaches rather than magic.
+
+## 🧠 Advanced Framework System
+
+**🎯 Revolutionary Methodology Integration**
+
+The server features a sophisticated framework system that brings structured thinking methodologies to your AI interactions:
+
+### 🎨 **Four Intelligent Methodologies**
+
+- **🔍 CAGEERF**: Comprehensive structured approach (Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework)
+- **🧠 ReACT**: Reasoning and Acting pattern for systematic problem-solving
+- **❓ 5W1H**: Who, What, When, Where, Why, How systematic analysis
+- **🚀 SCAMPER**: Creative problem-solving (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)
+
+### ⚙️ **Intelligent Framework Features**
+
+- **🧠 Manual Selection**: Choose optimal methodology manually based on your needs, with sophisticated conditional application
+- **🔄 Runtime Switching**: Change active framework with performance monitoring and seamless transition
+- **⚡ Conditional Injection**: Framework enhancement applied only when beneficial (bypassed for simple prompts)
+- **📊 Switching Performance**: Monitor framework switching mechanics and performance
+
+```bash
+# 🔄 Switch methodology for different thinking approaches
+system_control switch_framework framework="ReACT" reason="Problem-solving focus"
+→ Switches to ReACT methodology with performance monitoring
+
+# 📊 Monitor framework performance and usage
+system_control analytics show_details=true
+→ View framework switching history and performance metrics
+
+# ⚙️ Get current framework status
+system_control status
+→ Shows active framework, available methodologies, and system health
+```
+
+**🎆 The Result**: Your AI conversations become more structured, thoughtful, and effective through proven thinking methodologies applied systematically based on your chosen framework.
+
+### ⚠️ **Analysis System Capabilities**
+
+**🗓️ What the System Actually Does:**
+
+- **📝 Structural Analysis**: Detects execution type by examining template variables (`{{variable}}`), chain steps, and file structure
+- **🔄 Framework Application**: Applies manually selected framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER) based on execution tier
+- **⚡ Routing Logic**: Routes to appropriate execution tier (prompt/template/chain) based on structural characteristics
+
+**🧠 Optional Semantic Enhancement:**
+
+- **LLM Integration**: When enabled, provides true semantic understanding of prompt content
+- **Advanced Analysis**: Intelligent methodology recommendations and complexity assessment
+- **Default Mode**: Structural analysis only - honest about limitations without LLM access
+
+**🎯 Manual Framework Control:**
+
+```bash
+# Framework selection is manual, not automatic
+system_control switch_framework framework="ReACT" reason="Problem-solving focus"
+```
 
 ## ⚡ Features & Reliability
 
@@ -105,20 +164,20 @@ This is what **truly intelligent AI infrastructure** looks like – where the sy
 <tr>
 <td colspan="2">
 
-**🛠️ Enhanced MCP Tools Suite (v1.1.0)**
+**🛠️ Consolidated MCP Tools Suite (87.5% Reduction: 24+ → 3 Tools)**
 
-- 🎯 **Universal Prompt Execution** → `execute_prompt` tool with automatic mode detection and gate validation
-- 🛡️ **Quality Assurance Gates** → Automatic content validation with intelligent retry mechanisms
-- 📊 **Execution Analytics** → `execution_analytics` tool for performance monitoring and insights
-- 🔄 **Step-by-Step Chain Execution** → Optional confirmation between chain steps for quality control
-- 📋 **List Prompts** → `listprompts` to discover all available commands with enhanced usage examples
-- ✏️ **Update Prompts** → Modify existing prompts through conversation with full validation and hot-reload
-- 🗑️ **Delete Prompts** → Remove prompts by asking your AI assistant - automatic file cleanup included
-- 🔧 **Modify Sections** → "Edit the description of my research prompt" → Done instantly
-- 🔄 **Reload System** → Force refresh through chat - no terminal access needed
-- ⚙️ **Smart Argument Parsing** → JSON objects, single arguments, or fallback to `{{previous_message}}`
-- 🔗 **Chain Execution** → Multi-step workflow management with conversational guidance
-- 🎨 **Conversational Creation** → "Create a new prompt that..." → AI builds it for you interactively
+- 🎯 **prompt_engine** → Universal execution with intelligent analysis, semantic detection, and LLM-driven chain coordination
+- 📋 **prompt_manager** → Complete lifecycle management with smart filtering, type analysis, and configurable semantic analysis
+- ⚙️ **system_control** → Framework management, analytics, health monitoring, and comprehensive system administration
+
+**🤖 Intelligent Features:**
+
+- 🧠 **Structural Type Detection** → System routes between prompt/template/chain execution based on file structure analysis
+- 🛡️ **Framework Integration** → CAGEERF, ReACT, 5W1H, SCAMPER methodologies with manual selection and conditional injection
+- 🔄 **LLM-Driven Chains** → Step-by-step workflow coordination with conversation state management
+- 📊 **Performance Analytics** → Three-tier execution monitoring with framework switching performance tracking
+- 🔥 **Hot-Reload Everything** → Update prompts, templates, and configurations without restart
+- ⚙️ **Smart Argument Parsing** → JSON objects, single arguments, or fallback to conversational context
 
 </td>
 </tr>
@@ -147,7 +206,7 @@ Drop this into your `claude_desktop_config.json`:
       "command": "node",
       "args": ["E:\\path\\to\\claude-prompts-mcp\\server\\dist\\index.js"],
       "env": {
-        "MCP_PROMPTS_CONFIG_PATH": "E:\\path\\to\\claude-prompts-mcp\\server\\promptsConfig.json"
+        "MCP_PROMPTS_CONFIG_PATH": "E:\\path\\to\\claude-prompts-mcp\\server\\prompts\\promptsConfig.json"
       }
     }
   }
@@ -160,50 +219,51 @@ Configure your MCP client to connect via STDIO transport:
 
 - **Command**: `node`
 - **Args**: `["path/to/claude-prompts-mcp/server/dist/index.js"]`
-- **Environment**: `MCP_PROMPTS_CONFIG_PATH=path/to/promptsConfig.json`
+- **Environment** (Optional): `MCP_PROMPTS_CONFIG_PATH=path/to/prompts/promptsConfig.json`
 
-> 💡 **Pro Tip**: Use absolute paths for bulletproof integration across all MCP clients!
+> 💡 **Pro Tip**: Environment variables are optional - the server auto-detects paths in 99% of cases. Use absolute paths for guaranteed compatibility across all MCP clients!
 
-### 🎮 **Start Building Immediately (v1.1.0 Enhanced)**
+### 🎮 **Start Building Immediately (v1.3.0 Consolidated Architecture)**
 
 Your AI command arsenal is ready with **enhanced reliability**:
 
 ```bash
 # 🧠 Discover your intelligent superpowers
->>listprompts
+prompt_manager list filter="category:analysis"
+→ Intelligent filtering shows relevant prompts with usage examples
 
-# 🎯 Zero-config intelligent execution - system auto-detects everything
->>friendly_greeting name="Developer"
-→ Auto-detected as template, returns personalized greeting
+# 🎯 Structural execution routing - system detects execution type from file structure
+prompt_engine >>friendly_greeting name="Developer"
+→ Detected as template (has {{variables}}), returns framework-enhanced greeting
 
->>content_analysis my research data
-→ Auto-detected as workflow, applies quality gates, executes analysis framework
+prompt_engine >>content_analysis input="my research data"
+→ Detected as template (structural analysis), applies framework injection, executes with quality gates
 
->>notes my content
-→ Auto-detected as chain, validates each step, executes sequence
+prompt_engine >>analysis_chain input="my content" auto_execute_chain=true
+→ Detected as chain (has chainSteps), provides LLM-driven step-by-step execution
 
 # 📊 Monitor intelligent detection performance
->>execution_analytics {"include_history": true}
+system_control analytics include_history=true
 → See how accurately the system detects prompt types and applies gates
 
 # 🚀 Create prompts that just work (zero configuration)
 "Create a prompt called 'bug_analyzer' that finds and explains code issues"
-→ AI creates prompt, system auto-detects workflow type, assigns quality gates
+→ Prompt created via conversation, system detects execution type from structure, applies active framework
 
 # 🔄 Refine prompts through conversation (intelligence improves)
 "Make the bug_analyzer prompt also suggest performance improvements"
 → Prompt updated, system re-analyzes, updates detection profile automatically
 
-# 🧠 Build intelligent AI workflows
+# 🧠 Build LLM-driven chain workflows
 "Create a prompt chain that reviews code, validates output, tests it, then documents it"
 → Chain created, each step auto-analyzed, appropriate gates assigned automatically
 
 # 🎛️ Manual override when needed (but rarely necessary)
->>execute_prompt {"command": ">>content_analysis data", "step_confirmation": true}
+prompt_engine >>content_analysis input="sensitive data" step_confirmation=true gate_validation=true
 → Force step confirmation for sensitive analysis
 ```
 
-**🌟 The Magic**: Your prompt library becomes a **living extension of your workflow**, growing and adapting as you work with your AI assistant.
+**🌟 The Architecture**: Your prompt library becomes a **structured extension of your workflow**, organized and enhanced through systematic methodology application.
 
 ## 🔥 Why Developers Choose This Server
 
@@ -276,18 +336,21 @@ Create sophisticated workflows where each step builds on the previous:
   "id": "content_analysis_chain",
   "name": "Content Analysis Chain",
   "isChain": true,
+  "executionMode": "chain",
   "chainSteps": [
     {
       "stepName": "Extract Key Points",
       "promptId": "extract_key_points",
       "inputMapping": { "content": "original_content" },
-      "outputMapping": { "key_points": "extracted_points" }
+      "outputMapping": { "key_points": "extracted_points" },
+      "executionType": "template"
     },
     {
       "stepName": "Analyze Sentiment",
       "promptId": "sentiment_analysis",
       "inputMapping": { "text": "extracted_points" },
-      "outputMapping": { "sentiment": "analysis_result" }
+      "outputMapping": { "sentiment": "analysis_result" },
+      "executionType": "template"
     }
   ]
 }
@@ -486,14 +549,17 @@ Building upon previous analysis: {{ previous_analysis | summary }}
 Manage your prompts dynamically while the server runs:
 
 ```bash
-# Update prompts on-the-fly
->>update_prompt id="analysis_prompt" content="new template"
+# Update prompts with intelligent re-analysis
+prompt_manager update id="analysis_prompt" content="new template"
+→ System re-analyzes execution type and framework requirements
 
-# Add new sections dynamically
->>modify_prompt_section id="research" section="examples" content="new examples"
+# Modify specific sections with validation
+prompt_manager modify id="research" section="examples" content="new examples"
+→ Section updated with automatic template validation
 
-# Hot-reload everything
->>reload_prompts reason="updated templates"
+# Hot-reload with comprehensive validation
+system_control reload reason="updated templates"
+→ Full system reload with health monitoring
 ```
 
 **Management Capabilities:**

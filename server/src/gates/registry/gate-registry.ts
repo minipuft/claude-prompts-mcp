@@ -11,7 +11,7 @@ import {
   GateEvaluationResult,
   GateStatus,
   GateType,
-  WorkflowExecutionContext,
+  // WorkflowExecutionContext removed in Phase 2 - workflow types eliminated
   ValidationResult,
 } from "../../types/index.js";
 
@@ -114,7 +114,7 @@ export interface ExtendedGateDefinition extends Omit<GateDefinition, 'requiremen
 export interface GateEvaluationContext {
   content: string;
   metadata?: Record<string, any>;
-  workflowContext?: WorkflowExecutionContext;
+  // workflowContext removed in Phase 2 - workflow types eliminated
   runtime?: string;
   stepId?: string;
   previousResults?: Record<string, any>;
@@ -489,20 +489,8 @@ export class GateRegistry {
     context: GateEvaluationContext,
     baseScore: number
   ): number {
-    // Enhanced scoring based on workflow context
+    // Contextual score calculation (workflow context removed)
     let contextualScore = baseScore;
-    
-    if (context.workflowContext) {
-      // Adjust score based on workflow progress
-      const progress = context.workflowContext.stepResults 
-        ? Object.keys(context.workflowContext.stepResults).length 
-        : 0;
-      
-      // Later steps in workflow might have different scoring criteria
-      if (progress > 2) {
-        contextualScore += 0.1; // Bonus for late-stage validation
-      }
-    }
     
     return Math.min(contextualScore, 1.0);
   }

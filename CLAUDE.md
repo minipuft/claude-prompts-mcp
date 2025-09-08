@@ -155,9 +155,9 @@ This is a **Model Context Protocol (MCP) server** that provides AI prompt manage
 - Server settings (name, version, port)
 - Transport configuration (STDIO/SSE)
 - Logging configuration (directory, level)
-- Prompts file reference pointing to `promptsConfig.json`
+- Prompts file reference pointing to `prompts/promptsConfig.json`
 
-#### Prompts Configuration (`server/promptsConfig.json`)
+#### Prompts Configuration (`server/prompts/promptsConfig.json`)
 - **Category organization** with logical grouping (18 categories including analysis, development, research, content_processing)
 - **Modular import system** using category-specific `prompts.json` files in `prompts/[category]/` directories
 - **Registration modes** (ID, NAME, or BOTH) with default NAME registration

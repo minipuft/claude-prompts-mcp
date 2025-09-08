@@ -58,7 +58,7 @@ fi
 
 # Method 3: Create Windows-like environment variables
 print_status "Method 3: Creating Windows environment simulation..."
-cat > .env.windows << 'EOF'
+cat > scripts/.env.windows << 'EOF'
 # Windows environment simulation
 RUNNER_OS=Windows
 PATH=/c/Windows/System32:/c/Windows:/c/Windows/System32/Wbem
@@ -243,7 +243,7 @@ scripts/windows-tests/test-windows-startup.sh
 ### Method 4: Environment Simulation
 ```bash
 # Load Windows-like environment variables
-source .env.windows
+source scripts/.env.windows
 ```
 
 ### Method 5: Comprehensive Testing
@@ -276,7 +276,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/server node:18-windowsserverc
 ## Configuration Files
 
 - `.actrc.windows-enhanced` - Enhanced Act configuration for Windows testing
-- `.env.windows` - Windows environment simulation
+- `scripts/.env.windows` - Windows environment simulation
 - `scripts/windows-tests/` - Windows-specific test scripts
 - `scripts/test-all-platforms.sh` - Comprehensive test runner
 

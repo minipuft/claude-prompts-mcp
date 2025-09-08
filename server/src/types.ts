@@ -20,22 +20,11 @@ export interface ServerConfig {
 }
 
 /**
- * Registration mode for prompts
- */
-export enum RegistrationMode {
-  ID = "id",
-  NAME = "name",
-  BOTH = "both",
-}
-
-/**
  * Configuration for prompts subsystem
  */
 export interface PromptsConfig {
   /** Path to the prompts definition file */
   file: string;
-  /** Mode for registering prompts (defaults to ID if not specified) */
-  registrationMode?: RegistrationMode;
 }
 
 /**
@@ -70,6 +59,64 @@ export interface TransportsConfig {
 }
 
 /**
+ * Analysis mode for semantic analysis
+ * Mode is automatically inferred based on LLM integration configuration
+ */
+export type AnalysisMode = "structural" | "semantic";
+
+/**
+ * LLM provider for semantic analysis
+ */
+export type LLMProvider = "openai" | "anthropic" | "custom";
+
+/**
+ * LLM integration configuration
+ */
+export interface LLMIntegrationConfig {
+  /** Whether LLM integration is enabled */
+  enabled: boolean;
+  /** API key for the LLM provider */
+  apiKey: string | null;
+  /** Custom endpoint URL for the LLM provider (provider auto-detected from URL) */
+  endpoint: string | null;
+  /** Model name to use */
+  model: string;
+  /** Maximum tokens for analysis requests */
+  maxTokens: number;
+  /** Temperature for analysis requests */
+  temperature: number;
+}
+
+
+/**
+ * Semantic analysis configuration
+ */
+export interface SemanticAnalysisConfig {
+  /** Analysis mode to use (automatically inferred if not specified) */
+  mode?: AnalysisMode;
+  /** LLM integration configuration */
+  llmIntegration: LLMIntegrationConfig;
+}
+
+/**
+ * Analysis system configuration
+ */
+export interface AnalysisConfig {
+  /** Semantic analysis configuration */
+  semanticAnalysis: SemanticAnalysisConfig;
+}
+
+/**
+ * Logging system configuration
+ */
+export interface LoggingConfig {
+  /** Directory to write log files to */
+  directory: string;
+  /** Log level: debug, info, warn, error */
+  level: string;
+}
+
+/**
  * Complete application configuration
  */
 export interface Config {
@@ -77,8 +124,12 @@ export interface Config {
   server: ServerConfig;
   /** Prompts subsystem configuration */
   prompts: PromptsConfig;
+  /** Analysis system configuration */
+  analysis?: AnalysisConfig;
   /** Transports configuration */
   transports: TransportsConfig;
+  /** Logging configuration */
+  logging?: LoggingConfig;
 }
 
 // ===== Prompt Types =====

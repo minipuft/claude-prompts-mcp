@@ -8,6 +8,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import path from "path";
+import { promises as fs } from "fs";
 import { fileURLToPath } from "url";
 
 // Import all module managers
@@ -17,7 +18,7 @@ import {
   createFrameworkStateManager,
   FrameworkStateManager,
 } from "../frameworks/framework-state-manager.js";
-import { createSimpleLogger, Logger } from "../logging/index.js";
+import { createSimpleLogger, createLogger, Logger, EnhancedLoggingConfig } from "../logging/index.js";
 import { createMcpToolsManager, McpToolsManager } from "../mcp-tools/index.js";
 import { PromptManager } from "../prompts/index.js";
 import { ServerManager, startMcpServer } from "../server/index.js";
@@ -227,10 +228,34 @@ export class Application {
     const isQuiet = args.includes("--quiet");
     console.error("DEBUG: Verbose:", isVerbose, "Quiet:", isQuiet);
 
-    // Initialize logger with verbosity awareness
-    console.error("DEBUG: About to create logger");
-    this.logger = createSimpleLogger(transport);
-    console.error("DEBUG: Logger created");
+    // Initialize enhanced logger with config-based settings
+    console.error("DEBUG: About to create enhanced logger");
+    const loggingConfig = this.configManager.getLoggingConfig();
+    const logDirectory = path.isAbsolute(loggingConfig.directory) 
+      ? loggingConfig.directory
+      : path.resolve(serverRoot, loggingConfig.directory);
+    const logFile = path.join(logDirectory, 'mcp-server.log');
+    
+    // Ensure log directory exists
+    try {
+      await fs.mkdir(logDirectory, { recursive: true });
+      console.error(`DEBUG: Log directory ensured: ${logDirectory}`);
+    } catch (error) {
+      console.error(`DEBUG: Failed to create log directory ${logDirectory}:`, error);
+    }
+    
+    const enhancedLoggerConfig: EnhancedLoggingConfig = {
+      logFile,
+      transport,
+      enableDebug: isVerbose,
+      configuredLevel: loggingConfig.level
+    };
+    
+    this.logger = createLogger(enhancedLoggerConfig);
+    
+    // Initialize log file
+    await (this.logger as any).initLogFile();
+    console.error("DEBUG: Enhanced logger created and initialized");
 
     // Only show startup messages if not in quiet mode
     if (!isQuiet) {
@@ -576,13 +601,11 @@ export class Application {
       this.logger.info(`🔗 Available chains: ${chainNames}`);
     }
 
-    // Register workflows from converted prompts
-    if (isVerbose) this.logger.info("🔄 Registering workflows...");
-    await this.registerWorkflows();
+    // Phase 2: Workflow registration removed - chains handle all multi-step execution
 
     // Initialize MCP tools manager
     if (isVerbose) this.logger.info("🔄 Initializing MCP tools manager...");
-    this.mcpToolsManager = createMcpToolsManager(
+    this.mcpToolsManager = await createMcpToolsManager(
       this.logger,
       this.mcpServer,
       this.promptManager,
@@ -641,33 +664,7 @@ export class Application {
     }
   }
 
-  /**
-   * Register workflows from converted prompts
-   */
-  private async registerWorkflows(): Promise<void> {
-    let workflowCount = 0;
-
-    for (const prompt of this._convertedPrompts) {
-      if (prompt.isWorkflow && prompt.workflowDefinition) {
-        try {
-          // Workflows are now handled directly by the coordinator - no separate registration needed
-          workflowCount++;
-          this.logger.debug(
-            `Registered workflow: ${prompt.workflowDefinition.id}`
-          );
-        } catch (error) {
-          this.logger.error(
-            `Failed to register workflow ${prompt.workflowDefinition.id}:`,
-            error
-          );
-        }
-      }
-    }
-
-    if (workflowCount > 0) {
-      this.logger.info(`Registered ${workflowCount} workflows`);
-    }
-  }
+  // Phase 2: Workflow registration completely removed - chains handle all multi-step execution
 
   /**
    * Phase 4: Setup and start the server
@@ -907,9 +904,7 @@ export class Application {
       await this.promptManager.registerAllPrompts(this._convertedPrompts);
       this.logger.info("✅ Prompts re-registered with MCP Server.");
 
-      // Step 5: Re-register workflows from updated prompts
-      await this.registerWorkflows();
-      this.logger.info("✅ Workflows re-registered with Workflow Engine.");
+      // Step 5: Phase 2 - Workflow registration removed
 
       this.logger.info("🚀 Full server refresh completed successfully.");
     } catch (error) {

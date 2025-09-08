@@ -5,7 +5,6 @@
  *
  * Key exports:
  * - ExecutionCoordinator: Thin orchestration layer that delegates to ConsolidatedPromptEngine
- * - UnifiedPromptProcessor: Basic template processing (streamlined for basic use cases)
  * - All complex execution handled through ConsolidatedPromptEngine
  */
 
@@ -17,11 +16,7 @@ export {
   type ExecutionStats,
 } from "./execution-coordinator.js";
 
-export {
-  UnifiedPromptProcessor,
-  createUnifiedPromptProcessor,
-  type PromptExecutionResult,
-} from "./unified-prompt-processor.js";
+// UnifiedPromptProcessor removed - functionality consolidated into ExecutionCoordinator
 
 // Phase 3: Chain strategies removed - all execution delegated to ConsolidatedPromptEngine
 // Legacy strategy patterns deprecated in favor of ConsolidatedPromptEngine
@@ -32,7 +27,7 @@ export type {
   ConvertedPrompt,
   // WorkflowExecutionResult removed in Phase 2 - use ChainExecutionResult
   // Workflow type removed in Phase 2 - use enhanced ChainStep configurations
-  RuntimeTarget,
+  // RuntimeTarget removed in Phase 2 - workflow foundation types eliminated
 } from "../types/index.js";
 
 import { FrameworkManager } from "../frameworks/framework-manager.js";

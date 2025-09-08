@@ -48,7 +48,7 @@ export interface FrameworkSelectionCriteria {
   complexity?: 'low' | 'medium' | 'high';
   domain?: string;
   userPreference?: FrameworkMethodology;
-  executionType?: 'template' | 'chain' | 'workflow';
+  executionType?: 'template' | 'chain';
 }
 
 /**
@@ -377,9 +377,9 @@ Apply this methodology systematically to ensure comprehensive and structured res
   private getApplicableTypes(guide: IMethodologyGuide): string[] {
     switch (guide.methodology) {
       case "CAGEERF":
-        return ["workflow", "chain", "template"];
+        return ["chain", "template"];
       case "ReACT":
-        return ["chain", "workflow"];
+        return ["chain"];
       case "5W1H":
         return ["template", "chain"];
       case "SCAMPER":

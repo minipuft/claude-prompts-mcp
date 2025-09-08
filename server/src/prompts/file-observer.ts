@@ -8,6 +8,7 @@ import { FSWatcher } from "fs";
 import path from "path";
 import { Logger } from "../logging/index.js";
 import { EventEmitter } from "events";
+import { ConfigManager } from "../config/index.js";
 
 /**
  * File change event types
@@ -120,11 +121,13 @@ export class FileObserver extends EventEmitter {
   private isStarted: boolean = false;
   private startTime: number = 0;
   private retryCount: number = 0;
+  private configManager?: ConfigManager;
 
-  constructor(logger: Logger, config?: Partial<FileObserverConfig>) {
+  constructor(logger: Logger, config?: Partial<FileObserverConfig>, configManager?: ConfigManager) {
     super();
     this.logger = logger;
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.configManager = configManager;
     this.stats = {
       watchersActive: 0,
       eventsDetected: 0,
@@ -295,7 +298,7 @@ export class FileObserver extends EventEmitter {
 
     // Determine file types
     const isPromptFile = this.isPromptFile(filename);
-    const isConfigFile = this.isConfigFile(filename);
+    const isConfigFile = this.isConfigFile(filename, filePath);
 
     // Skip if we're not watching this type
     if (!isPromptFile && !isConfigFile) {
@@ -434,8 +437,28 @@ export class FileObserver extends EventEmitter {
   /**
    * Check if file is a configuration file
    */
-  private isConfigFile(filename: string): boolean {
-    return filename === 'prompts.json' || filename === 'promptsConfig.json' || filename === 'config.json';
+  private isConfigFile(filename: string, fullPath?: string): boolean {
+    const basename = path.basename(filename);
+    
+    // Standard config files
+    if (basename === 'prompts.json' || basename === 'config.json') {
+      return true;
+    }
+    
+    // Main prompts config - get filename from ConfigManager if available
+    if (this.configManager && fullPath) {
+      try {
+        const mainConfigPath = this.configManager.getPromptsFilePath();
+        const mainConfigFilename = path.basename(mainConfigPath);
+        return basename === mainConfigFilename;
+      } catch (error) {
+        // Fallback to default behavior if ConfigManager fails
+        this.logger.debug(`Could not get prompts config path from ConfigManager: ${error}`);
+      }
+    }
+    
+    // Fallback for backward compatibility
+    return basename === 'promptsConfig.json';
   }
 
   /**
@@ -574,6 +597,6 @@ export class FileObserver extends EventEmitter {
 /**
  * Factory function to create a FileObserver instance
  */
-export function createFileObserver(logger: Logger, config?: Partial<FileObserverConfig>): FileObserver {
-  return new FileObserver(logger, config);
+export function createFileObserver(logger: Logger, config?: Partial<FileObserverConfig>, configManager?: ConfigManager): FileObserver {
+  return new FileObserver(logger, config, configManager);
 }

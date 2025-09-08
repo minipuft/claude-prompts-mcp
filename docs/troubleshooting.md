@@ -212,9 +212,8 @@ The server will show detailed information about:
 
 **Fix:**
 
-1. Set `MCP_PROMPTS_CONFIG_PATH` environment variable
-2. Verify file exists: `ls -la promptsConfig.json`
-3. Check file permissions
+1. Verify file exists: `ls -la promptsConfig.json`
+2. Check file permissions
 
 ### "Error loading prompt: [filename]"
 
@@ -322,7 +321,7 @@ npm run test:coverage
 npm test -- --grep "PromptManager"
 ```
 
-### Manual Testing Workflow
+### Manual Testing Process
 
 ```bash
 # 1. Clean build

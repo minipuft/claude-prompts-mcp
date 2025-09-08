@@ -20,14 +20,14 @@ import {
   FrameworkDefinition,
   FrameworkExecutionContext 
 } from "../../frameworks/framework-manager.js";
-import { SemanticAnalysis } from "../../analysis/semantic-analyzer.js";
+import { ConfigurableSemanticAnalysis } from "../../analysis/configurable-semantic-analyzer.js";
 
 /**
  * Framework-aware gate evaluation context
  */
 export interface FrameworkAwareGateContext extends GateEvaluationContext {
   // Semantic intelligence
-  semanticAnalysis: SemanticAnalysis;
+  semanticAnalysis: ConfigurableSemanticAnalysis;
   
   // Framework methodology context
   frameworkContext: FrameworkExecutionContext;
@@ -151,7 +151,7 @@ export class FrameworkAwareGateEvaluator {
    * Get gate recommendations based on framework and semantic analysis
    */
   getFrameworkAwareGateRecommendations(
-    semanticAnalysis: SemanticAnalysis,
+    semanticAnalysis: ConfigurableSemanticAnalysis,
     frameworkContext: FrameworkExecutionContext
   ): GateRecommendation[] {
     const recommendations: GateRecommendation[] = [];
@@ -301,9 +301,9 @@ export class FrameworkAwareGateEvaluator {
     switch (context.semanticAnalysis.executionType) {
       case "chain":
         selectedGates.add("chain_validation");
-        // Advanced chains get workflow-level validation
+        // Advanced chains get comprehensive validation
         if (context.semanticAnalysis.executionCharacteristics.advancedChainFeatures?.requiresAdvancedExecution) {
-          selectedGates.add("workflow_validation");
+          selectedGates.add("chain_validation");
           selectedGates.add("state_management_validation");
         }
         selectedGates.add("step_validation");
@@ -465,7 +465,7 @@ export class FrameworkAwareGateEvaluator {
   private calculateMethodologyCompliance(
     result: EnhancedGateEvaluationResult,
     framework: FrameworkDefinition,
-    semanticAnalysis: SemanticAnalysis
+    semanticAnalysis: ConfigurableSemanticAnalysis
   ): number {
     let compliance = result.score || 0.5;
     

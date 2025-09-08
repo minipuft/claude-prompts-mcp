@@ -5,6 +5,7 @@
 
 import { Logger } from "./logging/index.js";
 import { startApplication } from "./runtime/application.js";
+import { ConfigManager } from "./config/index.js";
 
 /**
  * Health check and validation state
@@ -446,9 +447,16 @@ async function main(): Promise<void> {
         debugLog(`DEBUG: Config path: ${configPath}`);
         debugLog(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
         
-        const promptsConfigPath = path.join(serverRoot, 'promptsConfig.json');
-        debugLog(`DEBUG: Prompts config path: ${promptsConfigPath}`);
-        debugLog(`DEBUG: Prompts config exists: ${fs.existsSync(promptsConfigPath)}`);
+        // Use ConfigManager for consistent path resolution
+        try {
+          const tempConfigManager = new ConfigManager(configPath);
+          await tempConfigManager.loadConfig();
+          const promptsConfigPath = tempConfigManager.getPromptsFilePath();
+          debugLog(`DEBUG: Prompts config path: ${promptsConfigPath}`);
+          debugLog(`DEBUG: Prompts config exists: ${fs.existsSync(promptsConfigPath)}`);
+        } catch (tempError) {
+          debugLog(`DEBUG: Could not load config for path debugging: ${tempError}`);
+        }
       }
       
       throw error;

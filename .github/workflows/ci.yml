@@ -104,7 +104,7 @@ jobs:
           retention-days: 7
 
   enhanced-tests:
-    name: Enhanced Framework Tests
+    name: Consolidated Architecture Tests
     runs-on: ubuntu-latest
     needs: validate
     
@@ -127,14 +127,19 @@ jobs:
         working-directory: server
         run: npm run build
       
-      - name: Run CAGEERF framework tests
+      - name: Run methodology guides tests
         working-directory: server
-        run: npm run test:cageerf-framework
+        run: npm run test:methodology-guides
         timeout-minutes: 10
       
-      - name: Run MCP tools tests
+      - name: Run consolidated MCP tools tests
         working-directory: server
-        run: npm run test:mcp-tools
+        run: npm run test:consolidated-tools
+        timeout-minutes: 10
+      
+      - name: Run runtime integration tests
+        working-directory: server
+        run: npm run test:runtime-integration
         timeout-minutes: 10
       
       - name: Run performance and memory tests

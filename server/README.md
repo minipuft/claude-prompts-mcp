@@ -4,52 +4,56 @@ A comprehensive Model Context Protocol (MCP) server that provides AI prompt mana
 
 ## Overview
 
-The MCP Prompts Server implements a simplified execution architecture that handles different types of prompt execution:
+The MCP Prompts Server implements a modernized execution architecture with three-tier processing that handles different types of prompt execution:
 
-- **Direct Prompt Processing**: Variable substitution and context-aware processing via UnifiedPromptProcessor
-- **Chain Execution**: Sequential multi-step workflows via ChainExecutionStrategy
-- **Framework Integration**: Methodology enhancement (CAGEERF/ReACT) applied contextually
+- **Direct Prompt Processing**: Lightning-fast variable substitution via UnifiedPromptProcessor (90% of cases)
+- **LLM-Driven Chain Execution**: Multi-step workflows orchestrated by ConsolidatedPromptEngine (10% of cases)
+- **Framework Integration**: Methodology enhancement (CAGEERF/ReACT/5W1H/SCAMPER) applied contextually
 
 ## Architecture
 
 ### ExecutionCoordinator System
 
-The server uses ExecutionCoordinator with simple decision logic that replaced the complex strategy pattern:
+The server uses ExecutionCoordinator as a thin orchestration layer that delegates all execution to ConsolidatedPromptEngine:
 
 ```typescript
-// Simplified execution routing with intelligent decision logic
+// Phase 3: Delegation-based execution routing
 const result = await executionCoordinator.executePrompt(promptId, args, options);
+// All execution delegated to ConsolidatedPromptEngine
 ```
 
 #### Core Components
 
-1. **ExecutionCoordinator**: Central orchestration with simple routing logic
-2. **UnifiedPromptProcessor**: Handles 90% of prompt processing cases with intelligent parsing
-3. **ChainExecutionStrategy**: Sequential execution for complex workflows
+1. **ExecutionCoordinator**: Thin orchestration layer with delegation pattern
+2. **UnifiedPromptProcessor**: Handles 90% of prompt processing with fast variable substitution
+3. **ConsolidatedPromptEngine**: Handles 10% of cases with LLM-driven chain execution and intelligent analysis
 
 ### Simplified Execution Architecture
 
-The system supports intelligent routing with two primary execution modes:
+The system supports intelligent routing with three primary execution tiers:
 
-| Execution Mode | Framework Integration | Processing | Speed | Best For |
+| Execution Tier | Framework Integration | Processing | Speed | Best For |
 |----------------|----------------------|------------|-------|----------|
-| **Direct Processing** | ✅ Context-aware | UnifiedPromptProcessor | Fast | Most prompt execution needs |
-| **Chain Execution** | ✅ Per-step enhancement | ChainExecutionStrategy | Variable | Multi-step workflows |
+| **Prompt** | ❌ Bypassed for speed | UnifiedPromptProcessor | Lightning Fast | Basic variable substitution |
+| **Template** | ✅ Methodology-aware | ConsolidatedPromptEngine | Smart | Framework-enhanced content generation |
+| **Chain** | ✅ Per-step enhancement | ConsolidatedPromptEngine | LLM-Driven | Multi-step workflows |
 
 #### Execution Flow
 
-- **Direct Processing**: Intelligent argument handling, context resolution, and framework enhancement via UnifiedPromptProcessor
-- **Chain Execution**: Sequential step processing with framework-aware enhancement and conversation state management
-- **Framework Integration**: CAGEERF, ReACT, and other methodologies applied contextually based on execution requirements
+- **Prompt Execution**: Fast path with direct variable substitution via UnifiedPromptProcessor, **bypasses framework injection** for maximum speed
+- **Template Execution**: Framework-enhanced processing with **automatic methodology injection** via ConsolidatedPromptEngine based on active framework
+- **Chain Execution**: LLM-driven iterative workflows with **per-step framework injection** and state management via ConsolidatedPromptEngine
+- **Framework Selection**: Rule-based framework selection using FrameworkManager based on execution type, complexity, and user preference
+- **Active Framework Management**: FrameworkStateManager maintains current active framework (default: CAGEERF) with runtime switching capabilities
 
 For detailed information about choosing the right execution type, see the [Execution Types Guide](../docs/execution-types-guide.md).
 
 ### Key Components
 
 - **Application Orchestrator**: Multi-phase startup with comprehensive health monitoring
-- **Execution Engine**: Unified execution system with performance optimizations
-- **Template System**: Nunjucks-powered template processing with advanced features
-- **Gate System**: Workflow validation with quality control
+- **ConsolidatedPromptEngine**: Three-tier execution system with intelligent analysis and LLM-driven chains
+- **Template System**: Nunjucks-powered template processing with framework injection
+- **Gate System**: Quality validation with framework-aware evaluation
 - **Hot-Reload System**: Dynamic prompt updates without server restart
 
 ### Three-Tier Quality Assurance System
@@ -62,24 +66,59 @@ The server implements an intelligent quality assurance model that adapts to exec
 - **Best For**: Simple formatting, variable replacement, basic templates
 
 #### Template Execution (Framework-Enhanced)
-- **Smart Processing**: Automatic framework detection and injection
-- **Methodology Integration**: CAGEERF or ReACT framework enhancement
+- **Smart Processing**: Rule-based framework selection with conditional injection
+- **Methodology Integration**: CAGEERF, ReACT, 5W1H, or SCAMPER framework enhancement based on active framework
 - **Quality Validation**: Content validation and framework compliance
 - **Best For**: Analysis, reasoning, complex content generation
 
-#### Chain Execution (Mixed-Type Support)
-- **Per-Step Intelligence**: Each step can be prompt or template type
-- **Adaptive Processing**: Routes each step to appropriate execution strategy
-- **Inter-Step Validation**: Quality checks between sequential steps
-- **Best For**: Multi-step processes with varying complexity
-
-#### Workflow Execution (Comprehensive Gates)
-- **Full Validation**: Deep content analysis, structure validation, security gates
-- **Framework Compliance**: Methodology adherence checking
-- **Dependency Management**: Complex orchestration with branching logic
-- **Best For**: Mission-critical processes requiring comprehensive validation
+#### Chain Execution (LLM-Driven Workflows)
+- **Iterative Processing**: LLM-guided step-by-step execution with intelligent coordination
+- **Context Management**: Conversation state and inter-step data flow management
+- **Quality Gate Integration**: Framework-aware validation and methodology compliance
+- **Best For**: Multi-step processes requiring sequential reasoning and state management
 
 For detailed gate configuration, see the [Enhanced Gate System Guide](../docs/enhanced-gate-system.md).
+
+### Framework System Architecture
+
+The server implements a sophisticated framework system with systematic methodology application:
+
+#### Framework Components
+
+1. **FrameworkManager** (Stateless): Loads methodology guides and generates framework definitions dynamically
+2. **FrameworkStateManager** (Stateful): Tracks active framework and handles runtime switching with performance monitoring
+3. **FrameworkInjector**: Conditionally injects framework-specific system prompts based on execution tier
+4. **Methodology Guides**: CAGEERF, ReACT, 5W1H, SCAMPER guides providing framework-specific behavior
+
+#### Framework Selection Process
+
+```typescript
+// Rule-based framework selection based on criteria
+const framework = frameworkManager.selectFramework({
+  executionType: 'template',
+  complexity: 'high',
+  userPreference: 'CAGEERF'  // User preference is primary selection factor
+});
+
+// Runtime framework switching
+await frameworkStateManager.switchFramework({
+  targetFramework: 'ReACT',
+  reason: 'User preference change'
+});
+```
+
+#### Conditional Framework Injection
+
+- **Prompt Tier**: Framework injection **bypassed** for maximum execution speed
+- **Template Tier**: **Automatic injection** of active framework's system prompt and methodology guidance
+- **Chain Tier**: **Per-step injection** allowing different frameworks per chain step
+
+#### Available Methodologies
+
+- **CAGEERF**: Comprehensive structured approach (Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework)
+- **ReACT**: Reasoning and Acting pattern for systematic problem-solving  
+- **5W1H**: Who, What, When, Where, Why, How systematic analysis
+- **SCAMPER**: Creative problem-solving (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)
 
 ## Quick Start
 
@@ -132,11 +171,11 @@ npm run start:sse
     "directory": "./logs",
     "level": "INFO"
   },
-  "prompts": "./promptsConfig.json"
+  "prompts": "./prompts/promptsConfig.json"
 }
 ```
 
-### Prompts Configuration (`promptsConfig.json`)
+### Prompts Configuration (`prompts/promptsConfig.json`)
 
 ```json
 {
@@ -224,32 +263,34 @@ Provide comprehensive analysis including:
 }
 ```
 
-### Workflow Definition
+### Enhanced Chain Configuration
 
 ```json
 {
-  "id": "complex-workflow",
-  "name": "Complex Analysis Workflow",
-  "steps": [
+  "id": "analysis-chain",
+  "name": "Enhanced Analysis Chain",
+  "isChain": true,
+  "executionMode": "chain",
+  "chainSteps": [
     {
-      "id": "validate",
-      "name": "Validate Input",
-      "type": "gate",
-      "config": { "gateId": "input-validation" },
-      "dependencies": []
+      "promptId": "data-validation",
+      "stepName": "Validate Input Data",
+      "inputMapping": { "source": "input" },
+      "outputMapping": { "validated_data": "output" }
     },
     {
-      "id": "process",
-      "name": "Process Data",
-      "type": "prompt",
-      "config": { "promptId": "data-processor" },
-      "dependencies": ["validate"]
+      "promptId": "advanced-analysis",
+      "stepName": "Perform Analysis",
+      "inputMapping": { "data": "validated_data" },
+      "outputMapping": { "analysis_result": "output" }
     }
   ],
-  "dependencies": {
-    "nodes": ["validate", "process"],
-    "edges": [["validate", "process"]]
-  }
+  "gates": [
+    {
+      "type": "validation",
+      "requirements": [{ "type": "content_length", "criteria": { "min": 50 } }]
+    }
+  ]
 }
 ```
 
@@ -257,22 +298,22 @@ Provide comprehensive analysis including:
 
 ### Caching and Optimization
 
-- **Strategy Selection Caching**: Optimized prompt-to-strategy mapping
+- **Three-Tier Execution Caching**: Optimized routing between prompt/template/chain execution
 - **Memory Management**: Automatic cleanup and size limits
 - **Performance Monitoring**: Real-time metrics and diagnostics
-- **Batch Processing**: Queue-based execution optimization
+- **Consolidated Tool Architecture**: 87.5% reduction in tool complexity
 
 ### Monitoring
 
 ```typescript
-// Get execution statistics
-const stats = executionEngine.getExecutionStats();
+// Get execution statistics from coordinator
+const stats = executionCoordinator.getExecutionStats();
 
-// Get performance metrics
-const metrics = executionEngine.getPerformanceMetrics();
+// Get framework state and analytics
+const analytics = frameworkStateManager.getAnalytics();
 
-// Memory optimization
-executionEngine.optimizeMemory();
+// System health monitoring
+const health = applicationOrchestrator.getHealthStatus();
 ```
 
 ## Development Commands
@@ -309,24 +350,31 @@ npm run start:sse
 npm run start:verbose
 ```
 
-### Environment Variables
+### Environment Variables (Optional)
 
 ```bash
-# Override server root detection
+# Optional: Optimize server root detection (streamlined detection system)
 export MCP_SERVER_ROOT=/path/to/server
 
-# Direct path to prompts config
-export MCP_PROMPTS_CONFIG_PATH=/path/to/promptsConfig.json
+# Optional: Direct path to prompts config (automatic detection available) 
+export MCP_PROMPTS_CONFIG_PATH=/path/to/prompts/promptsConfig.json
 ```
+
+**Detection Strategy:** The server uses streamlined detection with 3 core strategies:
+1. **Script path analysis** (most reliable - works in 99% of cases)
+2. **Module path detection** (reliable fallback for edge cases)  
+3. **Common directory patterns** (covers remaining scenarios)
+
+Environment variables provide **guaranteed detection** but are not required for normal operation.
 
 ## Testing
 
 ### Test Structure
 
 - **Unit Tests**: Individual component testing
-- **Integration Tests**: Full system testing
-- **Performance Tests**: Benchmarking and optimization validation
-- **Strategy Tests**: Execution strategy validation
+- **Integration Tests**: Full system testing with ConsolidatedPromptEngine
+- **Performance Tests**: Three-tier execution benchmarking
+- **Framework Tests**: CAGEERF, ReACT, 5W1H, SCAMPER validation
 
 ### Running Tests
 
@@ -335,10 +383,13 @@ export MCP_PROMPTS_CONFIG_PATH=/path/to/promptsConfig.json
 npm test
 
 # Run specific test suites
-npm test -- --testNamePattern="ExecutionEngine"
+npm test -- --testNamePattern="ConsolidatedPromptEngine"
 
-# Run performance tests
-npm test -- tests/orchestration/strategies/execution-engine-performance.test.ts
+# Run framework tests
+npm run test:cageerf-framework
+
+# Run MCP tools tests
+npm run test:mcp-tools
 ```
 
 ## Client Integration
@@ -391,34 +442,61 @@ eventSource.onmessage = function(event) {
 
 ## API Reference
 
-### Enhanced MCP Tools
+### Consolidated MCP Tools (87.5% Reduction: 24+ → 3 Tools)
 
-- **prompt_engine**: Universal execution tool with automatic type detection
-- **prompt_manager**: Comprehensive prompt and template management
-  - **create_prompt**: Create basic prompts for variable substitution
-  - **create_template**: Create framework-aware templates
-  - **analyze_type**: Analyze execution type and framework requirements
-  - **migrate_type**: Convert between execution types
-- **system_control**: Framework switching and system management
+- **prompt_engine**: Universal execution with intelligent analysis, semantic detection, and LLM-driven chain coordination
+- **prompt_manager**: Complete lifecycle management with smart filtering, type analysis, and configurable semantic analysis
+- **system_control**: Framework management, analytics, health monitoring, and comprehensive system administration
 
-### Enhanced ExecutionEngine Methods
+### ExecutionCoordinator Methods (Phase 3)
 
 ```typescript
-// Execute with automatic type detection
-await executionEngine.execute(promptId, args, options);
+// Execute with delegation to ConsolidatedPromptEngine
+await executionCoordinator.executePrompt(promptId, args, options);
 
-// Execute basic prompt (fast path)
-await executionEngine.executePrompt(promptId, args);
+// Get execution statistics (three-tier model)
+const stats = executionCoordinator.getExecutionStats();
+// Returns: { promptExecutions, templateExecutions, chainExecutions, failedExecutions }
 
-// Execute framework-enhanced template
-await executionEngine.executeTemplateWithFramework(promptId, args);
+// Set consolidated engine for delegation
+executionCoordinator.setConsolidatedEngine(consolidatedPromptEngine);
+```
 
-// Get execution statistics by type
-executionEngine.getExecutionStats(); // includes prompt/template/chain/workflow metrics
+### ConsolidatedPromptEngine Methods
 
-// Analyze execution type
+```typescript
+// Universal execution with intelligent type detection
+const result = await consolidatedPromptEngine.executePrompt(command, options);
+
+// Semantic analysis with configurable analyzer
 const analysis = semanticAnalyzer.analyze(promptData);
-// Returns: { executionType: 'prompt'|'template'|'chain'|'workflow', requiresFramework: boolean }
+// Returns: { executionType: 'prompt'|'template'|'chain', requiresFramework: boolean }
+```
+
+### Framework System Methods
+
+```typescript
+// Framework selection and management
+const framework = frameworkManager.selectFramework({
+  executionType: 'template',
+  complexity: 'high'
+});
+
+// Runtime framework switching
+await frameworkStateManager.switchFramework({
+  targetFramework: 'CAGEERF',
+  reason: 'Complexity requires structured approach'
+});
+
+// Framework injection (conditional based on execution tier)
+const injectionResult = await frameworkInjector.injectFrameworkContext(
+  prompt, 
+  semanticAnalysis
+);
+
+// Get current framework state and health
+const state = frameworkStateManager.getCurrentState();
+const health = frameworkStateManager.getSystemHealth();
 ```
 
 ## Contributing
@@ -431,11 +509,12 @@ const analysis = semanticAnalyzer.analyze(promptData);
 
 ### Architecture Guidelines
 
-- Use strategy pattern for extensible execution types
-- Implement comprehensive error boundaries
-- Follow dependency injection patterns
-- Maintain backward compatibility
-- Optimize for performance and memory usage
+- **Delegation Pattern**: ExecutionCoordinator delegates all execution to ConsolidatedPromptEngine for simplified coordination
+- **Three-Tier Architecture**: Optimized routing between prompt (fast), template (framework-enhanced), and chain (LLM-driven) execution
+- **Conditional Framework Integration**: Framework injection applied selectively based on execution tier requirements
+- **Tool Consolidation**: Follow consolidation over proliferation principle (87.5% reduction: 24+ → 3 tools achieved)
+- **Comprehensive Error Boundaries**: Implement error handling at all orchestration levels
+- **Backward Compatibility**: Maintain compatibility through ExecutionCoordinator interface while leveraging modern delegation architecture
 
 ## License
 

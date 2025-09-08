@@ -2,6 +2,7 @@
  * Stateful Framework State Manager
  * 
  * Manages the active framework methodology state and provides framework switching capabilities.
+ * This tracks switching mechanics (timing, success/failure, counts) and framework state.
  * This is separate from execution strategy analysis - it handles WHICH framework methodology 
  * to apply (CAGEERF, ReACT, 5W1H, SCAMPER) while semantic analysis handles execution strategies.
  */
@@ -19,7 +20,7 @@ export interface FrameworkState {
   switchedAt: Date;
   switchReason: string;
   isHealthy: boolean;
-  performanceMetrics: {
+  switchingMetrics: {
     switchCount: number;
     averageResponseTime: number;
     errorCount: number;
@@ -43,7 +44,7 @@ export interface FrameworkSystemHealth {
   activeFramework: string;
   availableFrameworks: string[];
   lastSwitchTime: Date | null;
-  performanceMetrics: {
+  switchingMetrics: {
     totalSwitches: number;
     successfulSwitches: number;
     failedSwitches: number;
@@ -71,7 +72,7 @@ export class FrameworkStateManager extends EventEmitter {
   private frameworkManager: FrameworkManager | null = null;
   private currentState: FrameworkState;
   private switchHistory: Array<{ from: string; to: string; timestamp: Date; reason: string }> = [];
-  private performanceMetrics = {
+  private switchingMetrics = {
     totalSwitches: 0,
     successfulSwitches: 0,
     failedSwitches: 0,
@@ -91,7 +92,7 @@ export class FrameworkStateManager extends EventEmitter {
       switchedAt: new Date(),
       switchReason: 'Initial framework selection',
       isHealthy: true,
-      performanceMetrics: {
+      switchingMetrics: {
         switchCount: 0,
         averageResponseTime: 0,
         errorCount: 0
@@ -167,7 +168,7 @@ export class FrameworkStateManager extends EventEmitter {
     this.ensureInitialized();
     
     const startTime = performance.now();
-    this.performanceMetrics.totalSwitches++;
+    this.switchingMetrics.totalSwitches++;
     
     try {
       this.logger.info(`Attempting to switch framework from '${this.currentState.activeFramework}' to '${request.targetFramework}'`);
@@ -206,10 +207,10 @@ export class FrameworkStateManager extends EventEmitter {
         switchedAt: new Date(),
         switchReason: switchReason,
         isHealthy: true,
-        performanceMetrics: {
-          switchCount: this.currentState.performanceMetrics.switchCount + 1,
-          averageResponseTime: this.currentState.performanceMetrics.averageResponseTime,
-          errorCount: this.currentState.performanceMetrics.errorCount
+        switchingMetrics: {
+          switchCount: this.currentState.switchingMetrics.switchCount + 1,
+          averageResponseTime: this.currentState.switchingMetrics.averageResponseTime,
+          errorCount: this.currentState.switchingMetrics.errorCount
         }
       };
 
@@ -221,9 +222,9 @@ export class FrameworkStateManager extends EventEmitter {
         reason: switchReason
       });
 
-      // Update performance metrics
+      // Update switching performance metrics
       const switchTime = performance.now() - startTime;
-      this.updatePerformanceMetrics(switchTime, true);
+      this.updateSwitchingMetrics(switchTime, true);
 
       this.logger.info(`✅ Framework switch successful: '${previousFramework}' -> '${request.targetFramework}' (${switchTime.toFixed(1)}ms)`);
       this.logger.info(`New active framework: ${targetFramework.name} - ${targetFramework.description}`);
@@ -236,9 +237,9 @@ export class FrameworkStateManager extends EventEmitter {
 
     } catch (error) {
       const switchTime = performance.now() - startTime;
-      this.updatePerformanceMetrics(switchTime, false);
-      this.performanceMetrics.errorCount++;
-      this.currentState.performanceMetrics.errorCount++;
+      this.updateSwitchingMetrics(switchTime, false);
+      this.switchingMetrics.errorCount++;
+      this.currentState.switchingMetrics.errorCount++;
       this.currentState.isHealthy = false;
 
       this.logger.error(`Failed to switch framework to '${request.targetFramework}':`, error);
@@ -273,9 +274,9 @@ export class FrameworkStateManager extends EventEmitter {
     let status: "healthy" | "degraded" | "error" = "healthy";
     
     // Check for health issues
-    if (this.currentState.performanceMetrics.errorCount > 0) {
-      issues.push(`${this.currentState.performanceMetrics.errorCount} framework errors detected`);
-      status = this.currentState.performanceMetrics.errorCount > 5 ? "error" : "degraded";
+    if (this.currentState.switchingMetrics.errorCount > 0) {
+      issues.push(`${this.currentState.switchingMetrics.errorCount} framework switching errors detected`);
+      status = this.currentState.switchingMetrics.errorCount > 5 ? "error" : "degraded";
     }
     
     if (!this.currentState.isHealthy) {
@@ -294,7 +295,7 @@ export class FrameworkStateManager extends EventEmitter {
       activeFramework: this.currentState.activeFramework,
       availableFrameworks: this.frameworkManager!.listFrameworks(true).map(f => f.id),
       lastSwitchTime: this.switchHistory.length > 0 ? this.switchHistory[this.switchHistory.length - 1].timestamp : null,
-      performanceMetrics: { ...this.performanceMetrics },
+      switchingMetrics: { ...this.switchingMetrics },
       issues
     };
   }
@@ -308,10 +309,10 @@ export class FrameworkStateManager extends EventEmitter {
   }
 
   /**
-   * Reset performance metrics
+   * Reset switching performance metrics
    */
   resetMetrics(): void {
-    this.performanceMetrics = {
+    this.switchingMetrics = {
       totalSwitches: 0,
       successfulSwitches: 0,
       failedSwitches: 0,
@@ -319,13 +320,13 @@ export class FrameworkStateManager extends EventEmitter {
       errorCount: 0
     };
     
-    this.currentState.performanceMetrics = {
+    this.currentState.switchingMetrics = {
       switchCount: 0,
       averageResponseTime: 0,
       errorCount: 0
     };
     
-    this.logger.info("Framework state manager metrics reset");
+    this.logger.info("Framework state manager switching metrics reset");
   }
 
   // Private helper methods
@@ -336,19 +337,19 @@ export class FrameworkStateManager extends EventEmitter {
     }
   }
 
-  private updatePerformanceMetrics(responseTime: number, success: boolean): void {
+  private updateSwitchingMetrics(responseTime: number, success: boolean): void {
     if (success) {
-      this.performanceMetrics.successfulSwitches++;
+      this.switchingMetrics.successfulSwitches++;
     } else {
-      this.performanceMetrics.failedSwitches++;
+      this.switchingMetrics.failedSwitches++;
     }
     
-    // Update average response time
-    const totalOperations = this.performanceMetrics.successfulSwitches + this.performanceMetrics.failedSwitches;
-    this.performanceMetrics.averageResponseTime = 
-      (this.performanceMetrics.averageResponseTime * (totalOperations - 1) + responseTime) / totalOperations;
+    // Update average response time for switching operations
+    const totalOperations = this.switchingMetrics.successfulSwitches + this.switchingMetrics.failedSwitches;
+    this.switchingMetrics.averageResponseTime = 
+      (this.switchingMetrics.averageResponseTime * (totalOperations - 1) + responseTime) / totalOperations;
     
-    this.currentState.performanceMetrics.averageResponseTime = this.performanceMetrics.averageResponseTime;
+    this.currentState.switchingMetrics.averageResponseTime = this.switchingMetrics.averageResponseTime;
   }
 }
 

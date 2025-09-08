@@ -48,7 +48,7 @@ fi
 
 # Test 4: Windows environment simulation
 print_test "Testing Windows environment simulation..."
-if source .env.windows && echo "Windows env loaded" >/dev/null 2>&1; then
+if source scripts/.env.windows && echo "Windows env loaded" >/dev/null 2>&1; then
     print_pass "Windows environment simulation works"
 else
     print_fail "Windows environment simulation failed"

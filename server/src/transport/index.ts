@@ -55,17 +55,6 @@ export class TransportManager {
   }
 
   /**
-   * Validate that the selected transport is enabled
-   */
-  validateTransport(): void {
-    if (!this.configManager.isTransportEnabled(this.transport)) {
-      throw new Error(
-        `Transport '${this.transport}' is not enabled in the configuration`
-      );
-    }
-  }
-
-  /**
    * Setup STDIO transport
    */
   async setupStdioTransport(): Promise<void> {
@@ -275,9 +264,6 @@ export function createTransportManager(
     mcpServer,
     transport
   );
-
-  // Validate transport configuration
-  transportManager.validateTransport();
 
   return transportManager;
 }

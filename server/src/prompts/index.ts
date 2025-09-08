@@ -94,7 +94,8 @@ export class PromptManager {
             preWarmAnalysis: true,
             invalidateFrameworkCaches: true
           }
-        }
+        },
+        this.configManager
       );
       
       this.logger.info('🔄 Hot reload manager initialized');

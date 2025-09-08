@@ -31,7 +31,8 @@ import {
   PromptData,
 } from "../types/index.js";
 // Gate evaluator removed - now using Framework methodology validation
-import { createSemanticAnalyzer } from "../analysis/semantic-analyzer.js";
+import { createConfigurableSemanticAnalyzer } from "../analysis/configurable-semantic-analyzer.js";
+import { createAnalysisIntegrationFactory } from "../analysis/integrations/index.js";
 import { FrameworkStateManager } from "../frameworks/framework-state-manager.js";
 import { FrameworkManager, createFrameworkManager } from "../frameworks/framework-manager.js";
 import { ConversationManager, createConversationManager } from "../text-references/conversation.js";
@@ -63,15 +64,15 @@ export class ConsolidatedMcpToolsManager {
   private configManager: ConfigManager;
 
   // Consolidated tools (3 instead of 24+)
-  private promptEngine: ConsolidatedPromptEngine;
-  private promptManagerTool: ConsolidatedPromptManager;
-  private systemControl: ConsolidatedSystemControl;
+  private promptEngine!: ConsolidatedPromptEngine;
+  private promptManagerTool!: ConsolidatedPromptManager;
+  private systemControl!: ConsolidatedSystemControl;
 
   // Shared components
-  private semanticAnalyzer: ReturnType<typeof createSemanticAnalyzer>;
+  private semanticAnalyzer!: ReturnType<typeof createConfigurableSemanticAnalyzer>;
   private frameworkStateManager?: FrameworkStateManager;
   private frameworkManager?: FrameworkManager;
-  private conversationManager: ConversationManager;
+  private conversationManager!: ConversationManager;
   // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution model
 
   // Data references
@@ -84,8 +85,6 @@ export class ConsolidatedMcpToolsManager {
     mcpServer: any,
     promptManager: PromptManager,
     configManager: ConfigManager,
-    onRefresh: () => Promise<void>,
-    onRestart: (reason: string) => Promise<void>,
     // Phase 3: Removed executionCoordinator parameter - using LLM-driven chain model
   ) {
     this.logger = logger;
@@ -93,35 +92,48 @@ export class ConsolidatedMcpToolsManager {
     this.promptManager = promptManager;
     this.configManager = configManager;
     // Phase 3: Removed executionCoordinator assignment - using LLM-driven chain model
+  }
 
-    // Initialize shared components
-    this.semanticAnalyzer = createSemanticAnalyzer(logger);
-    this.conversationManager = createConversationManager(logger);
+  /**
+   * Initialize the MCP tools with async configuration
+   */
+  async initialize(
+    onRefresh: () => Promise<void>,
+    onRestart: (reason: string) => Promise<void>
+  ): Promise<void> {
+    // Initialize shared components with configurable analysis
+    const analysisConfig = this.configManager.getSemanticAnalysisConfig();
+    const integrationFactory = createAnalysisIntegrationFactory(this.logger);
+    this.semanticAnalyzer = await integrationFactory.createFromEnvironment(analysisConfig);
+    this.conversationManager = createConversationManager(this.logger);
+
+    this.logger.info(`Configurable semantic analyzer initialized (mode: ${analysisConfig.mode})`);
 
     // Initialize consolidated tools
     this.promptEngine = createConsolidatedPromptEngine(
-      logger,
-      mcpServer,
-      promptManager,
+      this.logger,
+      this.mcpServer,
+      this.promptManager,
       this.semanticAnalyzer,
       this.conversationManager
       // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution
     );
 
     this.promptManagerTool = createConsolidatedPromptManager(
-      logger,
-      mcpServer,
-      configManager,
+      this.logger,
+      this.mcpServer,
+      this.configManager,
       this.semanticAnalyzer,
+      this.frameworkStateManager,
+      this.frameworkManager,
       onRefresh,
       onRestart
     );
 
     this.systemControl = createConsolidatedSystemControl(
-      logger,
-      mcpServer
+      this.logger,
+      this.mcpServer
     );
-
 
     this.logger.info("Consolidated MCP Tools Manager initialized with 3 intelligent tools");
   }
@@ -133,6 +145,7 @@ export class ConsolidatedMcpToolsManager {
     this.frameworkStateManager = frameworkStateManager;
     this.promptEngine.setFrameworkStateManager(frameworkStateManager);
     this.systemControl.setFrameworkStateManager(frameworkStateManager);
+    this.promptManagerTool.setFrameworkStateManager?.(frameworkStateManager);
   }
 
   /**
@@ -143,6 +156,7 @@ export class ConsolidatedMcpToolsManager {
       this.frameworkManager = await createFrameworkManager(this.logger);
       this.promptEngine.setFrameworkManager(this.frameworkManager);
       this.systemControl.setFrameworkManager(this.frameworkManager);
+      this.promptManagerTool.setFrameworkManager?.(this.frameworkManager);
       this.logger.info("Framework manager initialized and integrated with MCP tools");
     }
   }
@@ -208,7 +222,7 @@ export class ConsolidatedMcpToolsManager {
 /**
  * Create consolidated MCP tools manager
  */
-export function createConsolidatedMcpToolsManager(
+export async function createConsolidatedMcpToolsManager(
   logger: Logger,
   mcpServer: any,
   promptManager: PromptManager,
@@ -216,16 +230,17 @@ export function createConsolidatedMcpToolsManager(
   onRefresh: () => Promise<void>,
   onRestart: (reason: string) => Promise<void>
   // Phase 3: Removed executionCoordinator parameter - using LLM-driven chain model
-): ConsolidatedMcpToolsManager {
-  return new ConsolidatedMcpToolsManager(
+): Promise<ConsolidatedMcpToolsManager> {
+  const manager = new ConsolidatedMcpToolsManager(
     logger,
     mcpServer,
     promptManager,
-    configManager,
-    onRefresh,
-    onRestart
+    configManager
     // Phase 3: Removed executionCoordinator parameter
   );
+  
+  await manager.initialize(onRefresh, onRestart);
+  return manager;
 }
 
 // Legacy compatibility - export the consolidated manager as the old name

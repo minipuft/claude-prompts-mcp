@@ -84,3 +84,5 @@ heapdump-*
 context-memory/
 plans/
 CLAUDE.md
+.codex/
+AGENTS.md

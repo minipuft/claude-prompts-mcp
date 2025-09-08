@@ -18,7 +18,7 @@ Transform prompt management from file-based configuration to an intuitive web in
 - **Category Management**: Create, edit, and organize categories through the UI
 - **Template Editor**: Rich text editor with syntax highlighting for Nunjucks templates
 - **Argument Designer**: Visual form builder for defining prompt arguments with validation
-- **Chain Workflow Designer**: Visual flowchart interface for building prompt chains
+- **Chain Designer**: Visual flowchart interface for building prompt chains
 - **Import/Export**: Backup and share prompt collections
 - **Search & Discovery**: Full-text search across prompts with filtering
 - **Preview & Testing**: Test prompts directly in the UI before deployment
@@ -145,7 +145,7 @@ Provide detailed analytics on prompt usage and performance.
 
 - **Usage Statistics**: Track which prompts are used most frequently
 - **Performance Metrics**: Response times, error rates, success rates
-- **User Behavior**: Common usage patterns and workflow analysis
+- **User Behavior**: Common usage patterns and process analysis
 - **A/B Testing**: Compare different prompt versions
 - **Export Reports**: Generate usage reports for analysis
 
@@ -161,7 +161,7 @@ Expand integration capabilities with popular development tools.
 
 - **VS Code Extension**: Manage prompts directly from the editor
 - **Slack/Discord Bots**: Access prompts through team chat
-- **Zapier/n8n**: Workflow automation integration
+- **Zapier/n8n**: Process automation integration
 - **REST API Client Libraries**: SDKs for popular languages
 - **Claude Desktop Plugins**: Enhanced Claude Desktop integration
 
@@ -194,7 +194,7 @@ Implement cutting-edge prompt engineering techniques.
 
 - **Few-Shot Learning**: Dynamic example selection
 - **Chain-of-Thought**: Automated reasoning prompts
-- **Tree of Thoughts**: Complex decision-making workflows
+- **Tree of Thoughts**: Complex decision-making processes
 - **Meta-Prompting**: Prompts that generate other prompts
 - **Prompt Optimization**: Automated prompt improvement
 

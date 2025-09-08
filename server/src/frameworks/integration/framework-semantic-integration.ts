@@ -17,16 +17,16 @@ import {
   FrameworkSelectionCriteria 
 } from "../framework-manager.js";
 import { 
-  SemanticAnalyzer, 
-  SemanticAnalysis 
-} from "../../analysis/semantic-analyzer.js";
+  ConfigurableSemanticAnalyzer, 
+  ConfigurableSemanticAnalysis 
+} from "../../analysis/configurable-semantic-analyzer.js";
 
 /**
  * Integrated analysis result combining semantic intelligence and framework methodology
  */
 export interface IntegratedAnalysisResult {
   // Semantic analysis results - PROMPT INTELLIGENCE
-  semanticAnalysis: SemanticAnalysis;
+  semanticAnalysis: ConfigurableSemanticAnalysis;
   
   // Framework execution context - METHODOLOGY GUIDANCE
   frameworkContext: FrameworkExecutionContext;
@@ -70,21 +70,21 @@ export interface FrameworkSwitchingConfig {
 
 /**
  * Framework-Semantic Integration Engine
- * Coordinates intelligent framework selection based on semantic analysis
+ * Coordinates framework selection based on structural analysis and user preference
  */
 export class FrameworkSemanticIntegration {
   private frameworkManager: FrameworkManager;
-  private semanticAnalyzer: SemanticAnalyzer;
+  private semanticAnalyzer: ConfigurableSemanticAnalyzer;
   private logger: Logger;
   private config: FrameworkSwitchingConfig;
   
   // Framework switching state management
   private lastFrameworkSwitch = new Map<string, number>();
-  private frameworkPerformanceHistory = new Map<string, FrameworkPerformanceMetrics>();
+  private frameworkUsageHistory = new Map<string, FrameworkUsageMetrics>();
   
   constructor(
     frameworkManager: FrameworkManager,
-    semanticAnalyzer: SemanticAnalyzer,
+    semanticAnalyzer: ConfigurableSemanticAnalyzer,
     logger: Logger,
     config: Partial<FrameworkSwitchingConfig> = {}
   ) {
@@ -116,29 +116,34 @@ export class FrameworkSemanticIntegration {
       this.logger.debug(`Starting semantic analysis for prompt: ${prompt.id}`);
       const semanticAnalysis = await this.semanticAnalyzer.analyzePrompt(prompt);
       
-      // Step 2: Enhance framework criteria with user preference
-      const executionType = semanticAnalysis.executionType; // No more "auto" type in the new system
+      // Step 2: Check analysis capabilities and adapt accordingly
+      const analysisCapabilities = semanticAnalysis.capabilities;
+      this.logger.debug(`Analysis capabilities: semantic=${analysisCapabilities.hasSemanticUnderstanding}, framework=${analysisCapabilities.canRecommendFramework}`);
+      
+      // Step 3: Enhance framework criteria with user preference and analysis mode
+      const executionType = semanticAnalysis.executionType;
       const enhancedCriteria = this.enhanceFrameworkCriteria(
         {
-          executionType: executionType as "template" | "chain" | "workflow",
+          executionType: executionType as "template" | "chain",
           complexity: semanticAnalysis.complexity
         },
-        userFrameworkPreference
+        userFrameworkPreference,
+        semanticAnalysis
       );
       
-      // Step 3: Intelligent framework selection (HOW should we approach this?)
-      this.logger.debug(`Selecting framework based on semantic criteria`);
+      // Step 4: Framework selection adapted to analysis capabilities
+      this.logger.debug(`Selecting framework based on semantic criteria (mode: ${semanticAnalysis.analysisMetadata.mode})`);
       const frameworkContext = this.selectOptimalFramework(
         prompt,
         enhancedCriteria,
         semanticAnalysis
       );
       
-      // Step 4: Validate framework-semantic alignment
+      // Step 5: Validate framework-semantic alignment
       const alignment = this.validateFrameworkAlignment(semanticAnalysis, frameworkContext);
       
-      // Step 5: Generate alternative frameworks for consensus
-      const alternatives = this.generateAlternativeFrameworks(enhancedCriteria, frameworkContext);
+      // Step 6: Generate alternative frameworks (adapted for analysis mode)
+      const alternatives = this.generateAlternativeFrameworks(enhancedCriteria, frameworkContext, semanticAnalysis);
       
       // Step 6: Build integrated result
       const result: IntegratedAnalysisResult = {
@@ -158,7 +163,7 @@ export class FrameworkSemanticIntegration {
       };
       
       // Update performance tracking
-      this.updateFrameworkPerformance(
+      this.updateFrameworkUsage(
         frameworkContext.selectedFramework.id,
         performance.now() - startTime,
         alignment.overallAlignment
@@ -180,18 +185,18 @@ export class FrameworkSemanticIntegration {
   /**
    * Get framework performance insights for optimization
    */
-  getFrameworkPerformanceInsights(): FrameworkPerformanceInsights {
+  getFrameworkUsageInsights(): FrameworkUsageInsights {
     const frameworks = this.frameworkManager.listFrameworks(true);
-    const insights: FrameworkPerformanceInsights = {
+    const insights: FrameworkUsageInsights = {
       totalAnalyses: 0,
-      frameworkMetrics: {},
+      frameworkUsage: {},
       recommendations: []
     };
     
     frameworks.forEach(framework => {
-      const metrics = this.frameworkPerformanceHistory.get(framework.id);
+      const metrics = this.frameworkUsageHistory.get(framework.id);
       if (metrics) {
-        insights.frameworkMetrics[framework.id] = {
+        insights.frameworkUsage[framework.id] = {
           framework: framework,
           ...metrics
         };
@@ -200,7 +205,7 @@ export class FrameworkSemanticIntegration {
     });
     
     // Generate optimization recommendations
-    insights.recommendations = this.generatePerformanceRecommendations(insights);
+    insights.recommendations = this.generateUsageRecommendations(insights);
     
     return insights;
   }
@@ -258,17 +263,36 @@ export class FrameworkSemanticIntegration {
   // Private implementation methods
 
   /**
-   * Enhance framework criteria with user preferences and context
+   * Enhance framework criteria with user preferences, context, and analysis capabilities
    */
   private enhanceFrameworkCriteria(
     baseCriteria: FrameworkSelectionCriteria,
-    userPreference?: string
+    userPreference?: string,
+    semanticAnalysis?: ConfigurableSemanticAnalysis
   ): FrameworkSelectionCriteria {
     const enhanced = { ...baseCriteria };
     
     // Apply user preference if provided
     if (userPreference) {
       enhanced.userPreference = userPreference as any;
+    }
+    
+    // Handle analysis mode specific logic
+    if (semanticAnalysis) {
+      // In structural mode, user choice is more important
+      if (semanticAnalysis.analysisMetadata.mode === 'structural') {
+        if (!userPreference && semanticAnalysis.frameworkRecommendation.requiresUserChoice) {
+          // Log that user choice is needed
+          this.logger.info("Structural analysis mode - framework selection requires user choice or default");
+        }
+      }
+      
+      // In semantic mode, use intelligent recommendations
+      if (semanticAnalysis.analysisMetadata.mode === 'semantic' && 
+          semanticAnalysis.frameworkRecommendation.shouldUseFramework) {
+        // We can trust the semantic recommendation more
+        this.logger.debug("Semantic analysis provides framework recommendation");
+      }
     }
     
     // Apply global preferences
@@ -280,12 +304,12 @@ export class FrameworkSemanticIntegration {
   }
 
   /**
-   * Select optimal framework using intelligent selection logic
+   * Select framework using rule-based selection logic and user preference
    */
   private selectOptimalFramework(
     prompt: ConvertedPrompt,
     criteria: FrameworkSelectionCriteria,
-    semanticAnalysis: SemanticAnalysis
+    semanticAnalysis: ConfigurableSemanticAnalysis
   ): FrameworkExecutionContext {
     // Use framework manager's selection logic
     const frameworkContext = this.frameworkManager.generateExecutionContext(prompt, criteria);
@@ -303,7 +327,7 @@ export class FrameworkSemanticIntegration {
    * Validate alignment between semantic analysis and selected framework
    */
   private validateFrameworkAlignment(
-    semanticAnalysis: SemanticAnalysis,
+    semanticAnalysis: ConfigurableSemanticAnalysis,
     frameworkContext: FrameworkExecutionContext
   ): FrameworkAlignmentResult {
     const framework = frameworkContext.selectedFramework;
@@ -341,7 +365,8 @@ export class FrameworkSemanticIntegration {
    */
   private generateAlternativeFrameworks(
     criteria: FrameworkSelectionCriteria,
-    currentContext: FrameworkExecutionContext
+    currentContext: FrameworkExecutionContext,
+    semanticAnalysis?: ConfigurableSemanticAnalysis
   ): FrameworkDefinition[] {
     const allFrameworks = this.frameworkManager.listFrameworks(true);
     const currentFramework = currentContext.selectedFramework;
@@ -357,7 +382,7 @@ export class FrameworkSemanticIntegration {
    * Generate integrated recommendations combining semantic and framework insights
    */
   private generateIntegratedRecommendations(
-    semanticAnalysis: SemanticAnalysis,
+    semanticAnalysis: ConfigurableSemanticAnalysis,
     frameworkContext: FrameworkExecutionContext,
     alignment: FrameworkAlignmentResult
   ) {
@@ -431,10 +456,19 @@ export class FrameworkSemanticIntegration {
   // Additional helper methods
 
   private generateExecutionApproach(
-    semanticAnalysis: SemanticAnalysis,
+    semanticAnalysis: ConfigurableSemanticAnalysis,
     frameworkContext: FrameworkExecutionContext
   ): string {
-    return `Execute as ${semanticAnalysis.executionType} using ${frameworkContext.selectedFramework.name} methodology`;
+    const baseApproach = `Execute as ${semanticAnalysis.executionType} using ${frameworkContext.selectedFramework.name} methodology`;
+    
+    // Add mode-specific context
+    if (semanticAnalysis.analysisMetadata.mode === 'structural') {
+      return `${baseApproach} (structural analysis mode)`;
+    } else if (semanticAnalysis.analysisMetadata.mode === 'semantic') {
+      return `${baseApproach} (intelligent semantic analysis)`;
+    } else {
+      return `${baseApproach} (hybrid analysis mode)`;
+    }
   }
 
   private getFrameworkSpecificGates(framework: FrameworkDefinition): string[] {
@@ -459,7 +493,7 @@ export class FrameworkSemanticIntegration {
   }
 
   private generateOptimizationSuggestions(
-    semanticAnalysis: SemanticAnalysis,
+    semanticAnalysis: ConfigurableSemanticAnalysis,
     frameworkContext: FrameworkExecutionContext,
     alignment: FrameworkAlignmentResult
   ): string[] {
@@ -477,13 +511,26 @@ export class FrameworkSemanticIntegration {
       suggestions.push("Enable caching to improve repeat performance");
     }
     
+    // Mode-specific suggestions
+    if (semanticAnalysis.analysisMetadata.mode === 'structural') {
+      suggestions.push("Consider enabling semantic analysis for intelligent framework recommendations");
+      if (semanticAnalysis.limitations.length > 0) {
+        suggestions.push("Enable LLM integration or Claude hooks for better analysis capabilities");
+      }
+    }
+    
+    // Warning-based suggestions
+    if (semanticAnalysis.warnings.length > 0) {
+      suggestions.push("Review analysis warnings for potential configuration improvements");
+    }
+    
     return suggestions;
   }
 
   /**
    * Estimate processing time based on semantic analysis
    */
-  private estimateProcessingTime(semanticAnalysis: SemanticAnalysis): number {
+  private estimateProcessingTime(semanticAnalysis: ConfigurableSemanticAnalysis): number {
     let baseTime = 100; // Base processing time in ms
     
     // Adjust based on complexity
@@ -518,7 +565,7 @@ export class FrameworkSemanticIntegration {
   /**
    * Estimate memory usage based on semantic analysis
    */
-  private estimateMemoryUsage(semanticAnalysis: SemanticAnalysis): string {
+  private estimateMemoryUsage(semanticAnalysis: ConfigurableSemanticAnalysis): string {
     if (semanticAnalysis.complexity === "high") {
       return "high";
     } else if (semanticAnalysis.complexity === "medium") {
@@ -528,12 +575,12 @@ export class FrameworkSemanticIntegration {
     }
   }
 
-  private updateFrameworkPerformance(
+  private updateFrameworkUsage(
     frameworkId: string,
     processingTime: number,
     alignmentScore: number
   ): void {
-    let metrics = this.frameworkPerformanceHistory.get(frameworkId);
+    let metrics = this.frameworkUsageHistory.get(frameworkId);
     
     if (!metrics) {
       metrics = {
@@ -549,30 +596,30 @@ export class FrameworkSemanticIntegration {
     metrics.averageAlignmentScore = (metrics.averageAlignmentScore + alignmentScore) / 2;
     metrics.lastUsed = new Date();
     
-    this.frameworkPerformanceHistory.set(frameworkId, metrics);
+    this.frameworkUsageHistory.set(frameworkId, metrics);
   }
 
-  private generatePerformanceRecommendations(insights: FrameworkPerformanceInsights): string[] {
+  private generateUsageRecommendations(insights: FrameworkUsageInsights): string[] {
     const recommendations: string[] = [];
     
-    const frameworkMetrics = Object.values(insights.frameworkMetrics);
-    if (frameworkMetrics.length === 0) return recommendations;
+    const frameworkUsage = Object.values(insights.frameworkUsage);
+    if (frameworkUsage.length === 0) return recommendations;
     
     // Find best and worst performing frameworks
-    const bestFramework = frameworkMetrics.reduce((best, current) => 
-      current.averageAlignmentScore > best.averageAlignmentScore ? current : best
+    const mostUsedFramework = frameworkUsage.reduce((best, current) => 
+      current.usageCount > best.usageCount ? current : best
     );
     
-    const worstFramework = frameworkMetrics.reduce((worst, current) => 
-      current.averageAlignmentScore < worst.averageAlignmentScore ? current : worst
+    const leastUsedFramework = frameworkUsage.reduce((worst, current) => 
+      current.usageCount < worst.usageCount ? current : worst
     );
     
-    if (bestFramework.averageAlignmentScore > 0.8) {
-      recommendations.push(`Consider defaulting to ${bestFramework.framework.name} (${(bestFramework.averageAlignmentScore * 100).toFixed(1)}% avg alignment)`);
+    if (mostUsedFramework.usageCount > 10) {
+      recommendations.push(`Most used framework: ${mostUsedFramework.framework.name} (${mostUsedFramework.usageCount} uses)`);
     }
     
-    if (worstFramework.averageAlignmentScore < 0.5) {
-      recommendations.push(`Review configuration for ${worstFramework.framework.name} (${(worstFramework.averageAlignmentScore * 100).toFixed(1)}% avg alignment)`);
+    if (leastUsedFramework.usageCount === 0) {
+      recommendations.push(`Unused framework: ${leastUsedFramework.framework.name} - consider if it's needed`);
     }
     
     return recommendations;
@@ -581,7 +628,7 @@ export class FrameworkSemanticIntegration {
   private estimateImprovementPotential(
     currentFramework: FrameworkDefinition,
     alternativeFramework: FrameworkDefinition,
-    semanticAnalysis: SemanticAnalysis
+    semanticAnalysis: ConfigurableSemanticAnalysis
   ): number {
     // Estimate potential improvement based on framework characteristics
     let improvement = 0.1; // Base improvement assumption
@@ -608,6 +655,17 @@ export class FrameworkSemanticIntegration {
         requiresFramework: false,
         confidence: 0.3,
         reasoning: ["Fallback analysis"],
+        
+        capabilities: {
+          canDetectStructure: false,
+          canAnalyzeComplexity: false,
+          canRecommendFramework: false,
+          hasSemanticUnderstanding: false
+        },
+        
+        limitations: ["Fallback analysis with minimal capabilities"],
+        warnings: ["Analysis failed - using basic fallback"],
+        
         executionCharacteristics: {
           hasConditionals: false,
           hasLoops: false,
@@ -629,8 +687,9 @@ export class FrameworkSemanticIntegration {
         },
         analysisMetadata: {
           version: "2.0.0",
+          mode: "structural",
           analysisTime: performance.now() - startTime,
-          analyzer: "semantic",
+          analyzer: "configurable",
           cacheHit: false
         }
       },
@@ -664,7 +723,7 @@ export class FrameworkSemanticIntegration {
 
 // Supporting interfaces
 
-interface FrameworkPerformanceMetrics {
+interface FrameworkUsageMetrics {
   usageCount: number;
   averageProcessingTime: number;
   averageAlignmentScore: number;
@@ -680,9 +739,9 @@ interface FrameworkAlignmentResult {
   };
 }
 
-export interface FrameworkPerformanceInsights {
+export interface FrameworkUsageInsights {
   totalAnalyses: number;
-  frameworkMetrics: Record<string, FrameworkPerformanceMetrics & { framework: FrameworkDefinition }>;
+  frameworkUsage: Record<string, FrameworkUsageMetrics & { framework: FrameworkDefinition }>;
   recommendations: string[];
 }
 
@@ -694,13 +753,13 @@ export interface FrameworkSwitchRecommendation {
 }
 
 /**
- * Create and configure framework-semantic integration
+ * Create and configure framework-semantic integration with configurable analyzer
  */
 export async function createFrameworkSemanticIntegration(
   frameworkManager: FrameworkManager,
   logger: Logger,
+  semanticAnalyzer: ConfigurableSemanticAnalyzer,
   config?: Partial<FrameworkSwitchingConfig>
 ): Promise<FrameworkSemanticIntegration> {
-  const semanticAnalyzer = new SemanticAnalyzer(logger);
   return new FrameworkSemanticIntegration(frameworkManager, semanticAnalyzer, logger, config);
 }

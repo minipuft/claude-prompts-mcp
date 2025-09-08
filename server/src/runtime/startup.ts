@@ -61,6 +61,7 @@ export class ServerRootDetector {
     return await this.testStrategies(strategies, isVerbose, isQuiet);
   }
 
+
   /**
    * Build detection strategies in optimal order
    */
@@ -71,26 +72,13 @@ export class ServerRootDetector {
     if (process.argv[1]) {
       const scriptPath = process.argv[1];
 
-      // Primary strategy: Direct script location to server root
+      // Primary strategy: Direct script location to server root  
       strategies.push({
         name: "process.argv[1] script location",
         path: path.dirname(path.dirname(scriptPath)), // Go up from dist to server root
         source: `script: ${scriptPath}`,
         priority: "high",
       });
-
-      // Secondary strategy: If we're specifically in a dist directory
-      // Use path.normalize to ensure cross-platform compatibility
-      const normalizedScriptPath = path.normalize(scriptPath);
-      const distPattern = path.normalize(path.sep + "dist" + path.sep);
-      if (normalizedScriptPath.includes(distPattern) || scriptPath.includes('/dist/') || scriptPath.includes('\\dist\\')) {
-        strategies.push({
-          name: "process.argv[1] (dist-aware)",
-          path: path.dirname(path.dirname(scriptPath)), // Fixed: go up 2 levels, not 3
-          source: `script in dist: ${scriptPath}`,
-          priority: "high",
-        });
-      }
     }
 
     // Strategy 2: import.meta.url (current module location) - reliable fallback
@@ -211,7 +199,7 @@ export class ServerRootDetector {
               `⚠️  High-priority detection strategies failed. Trying fallback methods...`
             );
             console.error(
-              `💡 Tip: Set MCP_SERVER_ROOT environment variable for instant detection`
+              `💡 Tip: Set MCP_SERVER_ROOT environment variable for guaranteed detection`
             );
             console.error(`📝 Use --verbose to see detailed strategy testing`);
           }
@@ -232,8 +220,11 @@ export class ServerRootDetector {
     console.error(troubleshootingInfo);
 
     throw new Error(
-      `Unable to determine server root directory after testing ${strategies.length} strategies.\n\n` +
-        `QUICK FIX: Set MCP_SERVER_ROOT environment variable to your server directory path.\n\n` +
+      `Unable to auto-detect server root directory after testing ${strategies.length} strategies.\n\n` +
+        `SOLUTION OPTIONS:\n` +
+        `1. [RECOMMENDED] Set MCP_SERVER_ROOT environment variable for reliable detection\n` +
+        `2. Ensure config.json is present in your server directory\n` +
+        `3. Check file permissions and directory access\n\n` +
         `See detailed troubleshooting information above.`
     );
   }
@@ -245,10 +236,18 @@ export class ServerRootDetector {
     return `
 TROUBLESHOOTING CLAUDE DESKTOP ISSUES:
 
-🎯 RECOMMENDED SOLUTION (fastest):
-   Set MCP_SERVER_ROOT environment variable:
+🎯 SOLUTION OPTIONS:
+
+1. Set MCP_SERVER_ROOT environment variable (most reliable):
    Windows: set MCP_SERVER_ROOT=E:\\path\\to\\claude-prompts-mcp\\server
    macOS/Linux: export MCP_SERVER_ROOT=/path/to/claude-prompts-mcp/server
+
+2. Verify file structure - ensure these files exist:
+   • config.json (main server configuration)
+   • prompts/ directory (with promptsConfig.json)
+   • dist/ directory (compiled JavaScript)
+
+3. Check file permissions and directory access
 
 📁 Claude Desktop Configuration:
    Update your claude_desktop_config.json:

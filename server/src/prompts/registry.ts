@@ -9,7 +9,6 @@ import { Logger } from "../logging/index.js";
 import {
   ConversationHistoryItem,
   ConvertedPrompt,
-  RegistrationMode,
 } from "../types/index.js";
 // TemplateProcessor functionality consolidated into UnifiedPromptProcessor
 
@@ -123,18 +122,12 @@ export class PromptRegistry {
       // Register MCP resources for AI auto-discovery
       await this.registerPromptResources(prompts);
 
-      const config = this.configManager.getConfig();
-      const registrationMode = config.prompts.registrationMode || "both";
-
-      this.logger.info(`Using prompt registration mode: ${registrationMode}`);
+      this.logger.info("Registering prompts with both ID and name for maximum flexibility");
 
       let registeredCount = 0;
       for (const promptData of prompts) {
         try {
-          const success = await this.registerSinglePrompt(
-            promptData,
-            registrationMode as RegistrationMode
-          );
+          const success = await this.registerSinglePrompt(promptData);
           if (success) {
             registeredCount++;
           }
@@ -159,11 +152,9 @@ export class PromptRegistry {
 
   /**
    * Register a single prompt with the MCP server
+   * Always registers by both ID and name for maximum flexibility
    */
-  async registerSinglePrompt(
-    promptData: ConvertedPrompt,
-    registrationMode: RegistrationMode | "both" = "both"
-  ): Promise<boolean> {
+  async registerSinglePrompt(promptData: ConvertedPrompt): Promise<boolean> {
     try {
       // Create the argument schema for this prompt
       const argsSchema = this.createArgsSchema(promptData.arguments);
@@ -171,16 +162,12 @@ export class PromptRegistry {
       // Create the prompt handler
       const promptHandler = this.createPromptHandler(promptData);
 
-      // Register the prompt based on the configuration mode
-      if (registrationMode === "id" || registrationMode === "both") {
-        this.mcpServer.prompt(promptData.id, argsSchema, promptHandler);
-        this.logger.debug(`Registered prompt with ID: ${promptData.id}`);
-      }
+      // Always register with both ID and name for maximum flexibility
+      this.mcpServer.prompt(promptData.id, argsSchema, promptHandler);
+      this.logger.debug(`Registered prompt with ID: ${promptData.id}`);
 
-      if (registrationMode === "name" || registrationMode === "both") {
-        this.mcpServer.prompt(promptData.name, argsSchema, promptHandler);
-        this.logger.debug(`Registered prompt with name: ${promptData.name}`);
-      }
+      this.mcpServer.prompt(promptData.name, argsSchema, promptHandler);
+      this.logger.debug(`Registered prompt with name: ${promptData.name}`);
 
       return true;
     } catch (error) {

@@ -1,0 +1,67 @@
+{
+  "categories": [
+    {
+      "id": "code",
+      "name": "Code",
+      "description": "Prompts related to programming and software development"
+    },
+    {
+      "id": "analysis",
+      "name": "Analysis",
+      "description": "Prompts for analyzing content and data"
+    },
+    {
+      "id": "education",
+      "name": "Education",
+      "description": "Prompts for learning and teaching concepts"
+    },
+    {
+      "id": "development",
+      "name": "Development",
+      "description": "Prompts for software development and code quality"
+    },
+    {
+      "id": "research",
+      "name": "Research",
+      "description": "Prompts for conducting thorough investigations and analyses across various domains of knowledge."
+    },
+    {
+      "id": "research-tools",
+      "name": "Research Tools",
+      "description": "Advanced prompts and chains for conducting comprehensive research and analysis"
+    },
+    {
+      "id": "documentation",
+      "name": "Documentation",
+      "description": "Prompts related to Documentation"
+    },
+    {
+      "id": "debugging",
+      "name": "debugging",
+      "description": "Prompts related to debugging"
+    },
+    {
+      "id": "content_processing",
+      "name": "content_processing",
+      "description": "Prompts related to content_processing"
+    },
+    {
+      "id": "system",
+      "name": "System",
+      "description": "Prompts related to System"
+    }
+  ],
+  "prompts": [],
+  "imports": [
+    "code/prompts.json",
+    "analysis/prompts.json",
+    "education/prompts.json",
+    "development/prompts.json",
+    "research/prompts.json",
+    "research-tools/prompts.json",
+    "documentation/prompts.json",
+    "debugging/prompts.json",
+    "content_processing/prompts.json",
+    "system/prompts.json"
+  ]
+}

@@ -1,11 +1,10 @@
 /**
  * Consolidated Prompt Engine - Unified Execution Tool
  *
- * Consolidates all prompt execution functionality into a single intelligent tool:
+ * Consolidates all prompt execution functionality into a single systematic tool:
  * - execute_prompt (from index.ts)
- * - All workflow execution methods
  * - Chain execution with progress tracking
- * - Intelligent execution mode detection
+ * - Structural execution mode detection
  * - Gate validation and retry logic
  */
 
@@ -18,19 +17,26 @@ import {
   PromptData,
   ExecutionState,
   ChainExecutionProgress,
-  GateDefinition
+  GateDefinition,
 } from "../types/index.js";
 import {
   ValidationError,
   PromptError,
-  handleError as utilsHandleError
+  handleError as utilsHandleError,
 } from "../utils/index.js";
 // Gate evaluation removed - now using Framework methodology validation
-import { SemanticAnalyzer } from "../analysis/semantic-analyzer.js";
+import { ConfigurableSemanticAnalyzer } from "../analysis/configurable-semantic-analyzer.js";
 import { ConversationManager } from "../text-references/conversation.js";
 import { FrameworkStateManager } from "../frameworks/framework-state-manager.js";
-import { FrameworkManager, FrameworkExecutionContext, createFrameworkManager } from "../frameworks/framework-manager.js";
-import { GateEvaluationService, createGateEvaluator } from "../gates/evaluators/index.js";
+import {
+  FrameworkManager,
+  FrameworkExecutionContext,
+  createFrameworkManager,
+} from "../frameworks/framework-manager.js";
+import {
+  GateEvaluationService,
+  createGateEvaluator,
+} from "../gates/evaluators/index.js";
 // Phase 3: Removed ExecutionCoordinator import - no longer needed for server-side chain execution
 // New unified parsing system
 import {
@@ -38,14 +44,14 @@ import {
   type ParsingSystem,
   type CommandParseResult,
   type ArgumentParsingResult,
-  type ExecutionContext
+  type ExecutionContext,
 } from "../execution/parsers/index.js";
 
 /**
  * Prompt classification interface for execution strategy
  */
 export interface PromptClassification {
-  executionType: "prompt" | "template" | "chain" | "workflow";
+  executionType: "prompt" | "template" | "chain";
   requiresExecution: boolean;
   confidence: number;
   reasoning: string[];
@@ -60,7 +66,7 @@ export class ConsolidatedPromptEngine {
   private logger: Logger;
   private mcpServer: any;
   private promptManager: PromptManager;
-  private semanticAnalyzer: SemanticAnalyzer;
+  private semanticAnalyzer: ConfigurableSemanticAnalyzer;
   private conversationManager: ConversationManager;
   private frameworkStateManager?: FrameworkStateManager;
   private frameworkManager?: FrameworkManager;
@@ -79,17 +85,16 @@ export class ConsolidatedPromptEngine {
   private executionHistory: ExecutionState[] = [];
   private chainProgressState: ChainExecutionProgress | null = null;
 
-  // Analytics
+  // Analytics - 3-Tier Execution Model
   private executionAnalytics = {
     totalExecutions: 0,
     successfulExecutions: 0,
     failedExecutions: 0,
     averageExecutionTime: 0,
     executionsByMode: {
-      prompt: 0,
-      template: 0,
-      chain: 0,
-      workflow: 0,
+      prompt: 0, // Basic variable substitution
+      template: 0, // Framework-aware execution
+      chain: 0, // LLM-driven multi-step execution
     },
   };
 
@@ -97,9 +102,9 @@ export class ConsolidatedPromptEngine {
     logger: Logger,
     mcpServer: any,
     promptManager: PromptManager,
-    semanticAnalyzer: SemanticAnalyzer,
+    semanticAnalyzer: ConfigurableSemanticAnalyzer,
     conversationManager: ConversationManager,
-    gateEvaluationService: GateEvaluationService,
+    gateEvaluationService: GateEvaluationService
     // Phase 3: Removed executionCoordinator parameter - no longer needed
   ) {
     this.logger = logger;
@@ -112,13 +117,18 @@ export class ConsolidatedPromptEngine {
 
     // Initialize new parsing system
     this.parsingSystem = createParsingSystem(logger);
-    this.logger.info("ConsolidatedPromptEngine initialized with new unified parsing system");
+    this.logger.info(
+      "ConsolidatedPromptEngine initialized with new unified parsing system"
+    );
   }
 
   /**
    * Update data references
    */
-  updateData(promptsData: PromptData[], convertedPrompts: ConvertedPrompt[]): void {
+  updateData(
+    promptsData: PromptData[],
+    convertedPrompts: ConvertedPrompt[]
+  ): void {
     this.promptsData = promptsData;
     this.convertedPrompts = convertedPrompts;
   }
@@ -140,7 +150,9 @@ export class ConsolidatedPromptEngine {
   /**
    * Get framework-enhanced system prompt injection
    */
-  private async getFrameworkExecutionContext(prompt: ConvertedPrompt): Promise<FrameworkExecutionContext | null> {
+  private async getFrameworkExecutionContext(
+    prompt: ConvertedPrompt
+  ): Promise<FrameworkExecutionContext | null> {
     if (!this.frameworkManager || !this.frameworkStateManager) {
       return null;
     }
@@ -150,14 +162,16 @@ export class ConsolidatedPromptEngine {
       const activeFramework = this.frameworkStateManager.getActiveFramework();
 
       // Generate execution context using the framework manager
-      const context = this.frameworkManager.generateExecutionContext(
-        prompt,
-        { userPreference: activeFramework.methodology as any }
-      );
+      const context = this.frameworkManager.generateExecutionContext(prompt, {
+        userPreference: activeFramework.methodology as any,
+      });
 
       return context;
     } catch (error) {
-      this.logger.warn("Failed to generate framework execution context:", error);
+      this.logger.warn(
+        "Failed to generate framework execution context:",
+        error
+      );
       return null;
     }
   }
@@ -172,22 +186,26 @@ export class ConsolidatedPromptEngine {
       {
         command: z
           .string()
-          .describe("SIMPLE: >>prompt_name content | ADVANCED: JSON with execution options"),
+          .describe(
+            "SIMPLE: >>prompt_name content | ADVANCED: JSON with execution options"
+          ),
 
         execution_mode: z
-          .enum(["auto", "template", "chain", "workflow"])
+          .enum(["auto", "prompt", "template", "chain"])
           .optional()
           .describe("Override intelligent auto-detection (default: auto)"),
 
         gate_validation: z
           .boolean()
           .optional()
-          .describe("Quality gate validation (MANDATORY for chains, auto-detected by default, see metadata sections for gate details)"),
+          .describe(
+            "Quality gate validation (MANDATORY for chains, auto-detected by default, see metadata sections for gate details)"
+          ),
 
         step_confirmation: z
           .boolean()
           .optional()
-          .describe("Require confirmation between chain/workflow steps"),
+          .describe("Require confirmation between chain steps"),
 
         auto_execute_chain: z
           .boolean()
@@ -202,17 +220,20 @@ export class ConsolidatedPromptEngine {
         options: z
           .record(z.any())
           .optional()
-          .describe("Additional execution options")
+          .describe("Additional execution options"),
       },
-      async (args: {
-        command: string;
-        execution_mode?: "auto" | "template" | "chain" | "workflow";
-        gate_validation?: boolean;
-        step_confirmation?: boolean;
-        auto_execute_chain?: boolean;
-        timeout?: number;
-        options?: Record<string, any>;
-      }, extra: any) => {
+      async (
+        args: {
+          command: string;
+          execution_mode?: "auto" | "prompt" | "template" | "chain";
+          gate_validation?: boolean;
+          step_confirmation?: boolean;
+          auto_execute_chain?: boolean;
+          timeout?: number;
+          options?: Record<string, any>;
+        },
+        extra: any
+      ) => {
         try {
           return await this.executePromptCommand(args, extra);
         } catch (error) {
@@ -227,65 +248,72 @@ export class ConsolidatedPromptEngine {
   /**
    * Main prompt execution handler
    */
-  private async executePromptCommand(args: {
-    command: string;
-    execution_mode?: "auto" | "template" | "chain" | "workflow";
-    gate_validation?: boolean;
-    step_confirmation?: boolean;
-    auto_execute_chain?: boolean;
-    timeout?: number;
-    options?: Record<string, any>;
-  }, extra: any): Promise<ToolResponse> {
-
+  private async executePromptCommand(
+    args: {
+      command: string;
+      execution_mode?: "auto" | "prompt" | "template" | "chain";
+      gate_validation?: boolean;
+      step_confirmation?: boolean;
+      auto_execute_chain?: boolean;
+      timeout?: number;
+      options?: Record<string, any>;
+    },
+    extra: any
+  ): Promise<ToolResponse> {
     const {
       command,
       execution_mode = "auto",
       gate_validation,
       step_confirmation = false,
-      auto_execute_chain = true, // Phase 2 Fix: Default to auto-execute for LLM-optimized workflow
+      auto_execute_chain = true, // Default to auto-execute for LLM-driven chain execution
       timeout,
-      options = {}
+      options = {},
     } = args;
 
-    this.logger.info(`🚀 Prompt Engine: Executing "${command}" (mode: ${execution_mode})`);
+    this.logger.info(
+      `🚀 Prompt Engine: Executing "${command}" (mode: ${execution_mode})`
+    );
 
     // Parse command to extract prompt and arguments using new unified system
-    const { promptId, arguments: promptArgs, convertedPrompt } = await this.parseCommandUnified(command);
+    const {
+      promptId,
+      arguments: promptArgs,
+      convertedPrompt,
+    } = await this.parseCommandUnified(command);
 
     // Perform intelligent execution mode detection (Phase 2: 3-tier model)
     let effectiveExecutionMode: "prompt" | "template" | "chain";
     if (!execution_mode || execution_mode === "auto") {
       const detectedMode = await this.detectExecutionMode(convertedPrompt);
-      // Convert any detected workflow to chain (Phase 2 migration)
-      effectiveExecutionMode = detectedMode === "workflow" ? "chain" : detectedMode as "prompt" | "template" | "chain";
+      effectiveExecutionMode = detectedMode as "prompt" | "template" | "chain";
     } else {
-      // Map old execution modes to new system
-      if (execution_mode === "workflow") {
-        effectiveExecutionMode = "chain"; // Phase 2: workflow -> chain migration
-      } else {
-        effectiveExecutionMode = execution_mode as "prompt" | "template" | "chain";
-      }
+      effectiveExecutionMode = execution_mode as
+        | "prompt"
+        | "template"
+        | "chain";
     }
 
-    // Determine gate validation setting (Phase 2: workflow removed)
-    const effectiveGateValidation = gate_validation ??
-      (effectiveExecutionMode === "chain");
+    // Determine gate validation settings
+    const effectiveGateValidation =
+      gate_validation ?? effectiveExecutionMode === "chain";
 
-    this.logger.debug(`Effective settings: mode=${effectiveExecutionMode}, gates=${effectiveGateValidation}`);
+    this.logger.debug(
+      `Effective settings: mode=${effectiveExecutionMode}, gates=${effectiveGateValidation}`
+    );
 
     // Create execution state
     this.currentExecutionState = {
-      type: convertedPrompt.isChain ? 'chain' : 'single',
+      type: convertedPrompt.isChain ? "chain" : "single",
       promptId: convertedPrompt.id,
-      status: 'pending',
+      status: "pending",
       gates: [],
       results: {},
       metadata: {
         startTime: Date.now(),
         executionMode: effectiveExecutionMode,
         stepConfirmation: step_confirmation,
-        gateValidation: effectiveGateValidation
-      }
+        gateValidation: effectiveGateValidation,
+      },
     };
 
     // Route to appropriate execution strategy - THREE-TIER MODEL
@@ -296,7 +324,11 @@ export class ConsolidatedPromptEngine {
 
       case "template":
         // Framework-aware execution with methodology guidance
-        return await this.executeTemplateWithFramework(convertedPrompt, promptArgs, effectiveGateValidation);
+        return await this.executeTemplateWithFramework(
+          convertedPrompt,
+          promptArgs,
+          effectiveGateValidation
+        );
 
       case "chain":
         // Strategic Phase 3: Return chain instructions for LLM-driven execution
@@ -309,7 +341,9 @@ export class ConsolidatedPromptEngine {
         );
 
       default:
-        throw new ValidationError(`Unknown execution mode: ${effectiveExecutionMode}`);
+        throw new ValidationError(
+          `Unknown execution mode: ${effectiveExecutionMode}`
+        );
     }
   }
 
@@ -322,17 +356,28 @@ export class ConsolidatedPromptEngine {
     convertedPrompt: ConvertedPrompt;
   }> {
     // Use new unified command parser
-    const parseResult = await this.parsingSystem.commandParser.parseCommand(command, this.promptsData);
+    const parseResult = await this.parsingSystem.commandParser.parseCommand(
+      command,
+      this.promptsData
+    );
 
     // Find the matching prompt data and converted prompt
-    const promptData = this.promptsData.find(p => p.id === parseResult.promptId || p.name === parseResult.promptId);
+    const promptData = this.promptsData.find(
+      (p) => p.id === parseResult.promptId || p.name === parseResult.promptId
+    );
     if (!promptData) {
-      throw new PromptError(`Unknown prompt: ${parseResult.promptId}. Use >>listprompts to see available prompts.`);
+      throw new PromptError(
+        `Unknown prompt: ${parseResult.promptId}. Use >>listprompts to see available prompts.`
+      );
     }
 
-    const convertedPrompt = this.convertedPrompts.find(p => p.id === promptData.id);
+    const convertedPrompt = this.convertedPrompts.find(
+      (p) => p.id === promptData.id
+    );
     if (!convertedPrompt) {
-      throw new PromptError(`Converted prompt data not found for: ${parseResult.promptId}`);
+      throw new PromptError(
+        `Converted prompt data not found for: ${parseResult.promptId}`
+      );
     }
 
     // Process arguments using new argument processor
@@ -340,7 +385,7 @@ export class ConsolidatedPromptEngine {
       conversationHistory: [], // Would be injected from conversation manager
       environmentVars: process.env as Record<string, string>,
       promptDefaults: {},
-      systemContext: {}
+      systemContext: {},
     };
 
     const argResult = await this.parsingSystem.argumentParser.parseArguments(
@@ -355,13 +400,16 @@ export class ConsolidatedPromptEngine {
       confidence: parseResult.confidence,
       argumentsProcessed: Object.keys(argResult.processedArgs).length,
       appliedDefaults: argResult.metadata.appliedDefaults.length,
-      warnings: [...parseResult.metadata.warnings, ...argResult.metadata.warnings]
+      warnings: [
+        ...parseResult.metadata.warnings,
+        ...argResult.metadata.warnings,
+      ],
     });
 
     return {
       promptId: promptData.id,
       arguments: argResult.processedArgs, // Pass typed arguments directly
-      convertedPrompt
+      convertedPrompt,
     };
   }
 
@@ -371,7 +419,7 @@ export class ConsolidatedPromptEngine {
    */
   private async detectExecutionMode(
     convertedPrompt: ConvertedPrompt
-  ): Promise<"prompt" | "template" | "chain" | "workflow"> {
+  ): Promise<"prompt" | "template" | "chain"> {
     if (convertedPrompt.executionMode) {
       return convertedPrompt.executionMode;
     }
@@ -379,16 +427,99 @@ export class ConsolidatedPromptEngine {
     const classification = await this.analyzePrompt(convertedPrompt);
     this.autoAssignQualityGates(convertedPrompt, classification);
 
-    this.logger.debug(`Semantic analysis: ${classification.executionType} (${Math.round(classification.confidence * 100)}%)`);
+    this.logger.debug(
+      `Semantic analysis: ${classification.executionType} (${Math.round(
+        classification.confidence * 100
+      )}%)`
+    );
 
     // Return the semantic analysis result directly - it now handles the three-tier distinction
     return classification.executionType;
   }
 
   /**
-   * Analyze prompt for execution strategy
+   * Create fallback analysis when semantic analysis is disabled
    */
-  private async analyzePrompt(prompt: ConvertedPrompt): Promise<PromptClassification> {
+  private createDisabledAnalysisFallback(prompt: ConvertedPrompt): PromptClassification {
+    const hasChainSteps = Boolean(prompt.chainSteps?.length) || Boolean(prompt.isChain);
+    const argCount = prompt.arguments?.length || 0;
+    const hasTemplateVars = /\{\{.*?\}\}/g.test(prompt.userMessageTemplate || '');
+    
+    // Reliable structural detection: only use verifiable indicators
+    const hasComplexTemplateLogic = /\{\{.*?\|.*?\}\}|\{%-.*?-%\}|\{%.*?if.*?%\}|\{%.*?for.*?%\}/g.test(prompt.userMessageTemplate || '');
+    const hasMultipleArgs = argCount > 1; // More than one argument suggests complexity
+    
+    // Three-tier detection based on structural indicators only
+    let executionType: 'prompt' | 'template' | 'chain' = 'prompt';
+    
+    if (hasChainSteps) {
+      executionType = 'chain';
+    } else if (hasComplexTemplateLogic) {
+      // Complex Nunjucks logic always needs template mode
+      executionType = 'template';
+    } else if (hasTemplateVars && hasMultipleArgs) {
+      // Template variables with multiple args suggests framework benefit
+      executionType = 'template';
+    }
+    // Default to 'prompt' for simple cases (no vars, single arg, or static content)
+    
+    return {
+      executionType,
+      requiresExecution: true,
+      confidence: 0.9, // High confidence in structural detection
+      reasoning: [
+        "Structural auto detection (semantic analysis disabled)",
+        `Args: ${argCount}, Template vars: ${hasTemplateVars}, Complex logic: ${hasComplexTemplateLogic}`,
+        `Selected ${executionType} mode based on verifiable structural indicators`
+      ],
+      suggestedGates: ['basic_validation'],
+      framework: "disabled",
+    };
+  }
+
+  /**
+   * Detect analysis intent using LLM semantic understanding (FUTURE IMPLEMENTATION)
+   * 
+   * This method will be implemented when the LLM semantic layer is completed.
+   * It will provide intelligent analysis intent detection by examining:
+   * - Template content and complexity
+   * - Argument semantics and naming patterns  
+   * - Task complexity indicators
+   * - Context and domain-specific signals
+   * 
+   * @param prompt - The prompt to analyze for analysis intent
+   * @returns Promise<boolean> - True if prompt requires analytical framework processing
+   * 
+   * @todo Implement when ConfigurableSemanticAnalyzer LLM integration is enabled
+   * @todo Design proper interface for semantic intent classification
+   * @todo Add confidence scoring and reasoning for intent decisions
+   */
+  private async detectAnalysisIntentLLM(prompt: ConvertedPrompt): Promise<boolean> {
+    // STUB: Always return false until LLM semantic analysis is implemented
+    // When implemented, this will use the LLM to intelligently detect:
+    // - Analysis vs formatting tasks
+    // - Complex reasoning requirements  
+    // - Domain-specific analytical patterns
+    // - Context-dependent intent signals
+    
+    this.logger.debug(`LLM analysis intent detection not yet implemented for ${prompt.id}`);
+    return false;
+  }
+
+  /**
+   * Analyze prompt for execution strategy (configuration-aware)
+   */
+  private async analyzePrompt(
+    prompt: ConvertedPrompt
+  ): Promise<PromptClassification> {
+    // Check if semantic analysis is enabled via the analyzer's config
+    const analysisConfig = this.semanticAnalyzer.getConfig();
+    
+    if (!analysisConfig.llmIntegration.enabled) {
+      this.logger.debug(`Semantic analysis disabled for ${prompt.id} - using structural fallback`);
+      return this.createDisabledAnalysisFallback(prompt);
+    }
+
     try {
       const analysis = await this.semanticAnalyzer.analyzePrompt(prompt);
       return {
@@ -397,17 +528,17 @@ export class ConsolidatedPromptEngine {
         confidence: analysis.confidence,
         reasoning: analysis.reasoning,
         suggestedGates: analysis.suggestedGates,
-        framework: 'semantic'
+        framework: "semantic",
       };
     } catch (error) {
       this.logger.error(`Semantic analysis failed for ${prompt.id}:`, error);
       return {
-        executionType: prompt.isChain ? 'chain' : 'template',
+        executionType: prompt.isChain ? "chain" : "template",
         requiresExecution: true,
         confidence: 0.5,
         reasoning: [`Fallback analysis: ${error}`],
-        suggestedGates: ['execution_validation'],
-        framework: 'fallback'
+        suggestedGates: ["execution_validation"],
+        framework: "fallback",
       };
     }
   }
@@ -426,18 +557,22 @@ export class ConsolidatedPromptEngine {
         id: "content_length_validation",
         name: "Content Length Validation",
         type: "validation",
-        requirements: [{
-          type: "content_length",
-          criteria: { min: 50 },
-          required: true
-        }],
-        failureAction: "retry"
+        requirements: [
+          {
+            type: "content_length",
+            criteria: { min: 50 },
+            required: true,
+          },
+        ],
+        failureAction: "retry",
       });
     }
 
     if (autoGates.length > 0) {
       (prompt as any).autoAssignedGates = autoGates;
-      this.logger.debug(`Auto-assigned ${autoGates.length} gates for ${prompt.id}`);
+      this.logger.debug(
+        `Auto-assigned ${autoGates.length} gates for ${prompt.id}`
+      );
     }
   }
 
@@ -453,7 +588,7 @@ export class ConsolidatedPromptEngine {
       throw new PromptError("No execution state available");
     }
 
-    this.currentExecutionState.status = 'running';
+    this.currentExecutionState.status = "running";
 
     // Simple template processing without framework enhancement
     let content = prompt.userMessageTemplate;
@@ -470,17 +605,17 @@ export class ConsolidatedPromptEngine {
     );
 
     // Update state and analytics
-    this.currentExecutionState.status = 'completed';
+    this.currentExecutionState.status = "completed";
     this.currentExecutionState.metadata.endTime = Date.now();
     this.updateAnalytics();
 
     // Add execution type feedback for basic prompts
-    const executionTime = Date.now() - this.currentExecutionState.metadata.startTime;
+    const executionTime =
+      Date.now() - this.currentExecutionState.metadata.startTime;
     const feedbackFooter = `\n\n---\n⚡ **Basic Prompt Execution** | 🚀 Fast variable substitution | ⏱️ ${executionTime}ms`;
 
     return { content: [{ type: "text", text: content + feedbackFooter }] };
   }
-
 
   /**
    * Execute template with full framework processing and gates
@@ -494,7 +629,7 @@ export class ConsolidatedPromptEngine {
       throw new PromptError("No execution state available");
     }
 
-    this.currentExecutionState.status = 'running';
+    this.currentExecutionState.status = "running";
 
     // Process template with framework-enhanced system prompt injection
     let content = prompt.userMessageTemplate;
@@ -531,20 +666,23 @@ export class ConsolidatedPromptEngine {
     if (enableGates) {
       const gateResult = await this.validateWithGates(content, prompt);
       if (!gateResult.success) {
-        return gateResult.response || {
-          content: [{ type: "text", text: "Gate validation failed" }]
-        };
+        return (
+          gateResult.response || {
+            content: [{ type: "text", text: "Gate validation failed" }],
+          }
+        );
       }
     }
 
     // Update state and analytics
-    this.currentExecutionState.status = 'completed';
+    this.currentExecutionState.status = "completed";
     this.currentExecutionState.metadata.endTime = Date.now();
     this.updateAnalytics();
 
     // Add execution type feedback for framework-aware templates
-    const executionTime = Date.now() - this.currentExecutionState.metadata.startTime;
-    const gateInfo = enableGates ? ' | ✅ Quality gates applied' : '';
+    const executionTime =
+      Date.now() - this.currentExecutionState.metadata.startTime;
+    const gateInfo = enableGates ? " | ✅ Quality gates applied" : "";
     // Dynamic framework footer based on active framework
     const activeFrameworkName = this.frameworkStateManager
       ? this.frameworkStateManager.getActiveFramework().name
@@ -558,33 +696,46 @@ export class ConsolidatedPromptEngine {
   /**
    * Extract gate status information for LLM guidance
    */
-  private getGateInfo(enableGates: boolean): { status: string; gates: Array<{ name: string; file: string; criteria: string }> } {
+  private getGateInfo(enableGates: boolean): {
+    status: string;
+    gates: Array<{ name: string; file: string; criteria: string }>;
+  } {
     const gates = [
       {
         name: "Content Analysis",
         file: "@server/src/gates/evaluators/strategies/content-analysis-evaluators.ts",
-        criteria: enableGates ? "✅ Active - Minimum length, structure validation, quality checks" : "⚠️ Disabled"
+        criteria: enableGates
+          ? "✅ Active - Minimum length, structure validation, quality checks"
+          : "⚠️ Disabled",
       },
       {
         name: "Pattern Matching",
         file: "@server/src/gates/evaluators/strategies/pattern-matching-evaluators.ts",
-        criteria: enableGates ? "✅ Active - Template variables, argument validation, format compliance" : "⚠️ Disabled"
+        criteria: enableGates
+          ? "✅ Active - Template variables, argument validation, format compliance"
+          : "⚠️ Disabled",
       },
       {
         name: "Structure Validation",
         file: "@server/src/gates/evaluators/strategies/structure-validation-evaluators.ts",
-        criteria: enableGates ? "✅ Active - Markdown structure, section requirements" : "⚠️ Disabled"
+        criteria: enableGates
+          ? "✅ Active - Markdown structure, section requirements"
+          : "⚠️ Disabled",
       },
       {
         name: "Custom Logic",
         file: "@server/src/gates/evaluators/strategies/custom-logic-evaluators.ts",
-        criteria: enableGates ? "✅ Active - Framework-specific validation rules" : "⚠️ Disabled"
-      }
+        criteria: enableGates
+          ? "✅ Active - Framework-specific validation rules"
+          : "⚠️ Disabled",
+      },
     ];
 
     return {
-      status: enableGates ? "✅ Quality Gates ENABLED - Validation MANDATORY" : "⚠️ Quality Gates DISABLED",
-      gates
+      status: enableGates
+        ? "✅ Quality Gates ENABLED - Validation MANDATORY"
+        : "⚠️ Quality Gates DISABLED",
+      gates,
     };
   }
 
@@ -605,7 +756,7 @@ export class ConsolidatedPromptEngine {
     let metadata = `\n## 🛡️ Quality Gate Status\n`;
     metadata += `**${gateInfo.status}**\n\n`;
 
-    gateInfo.gates.forEach(gate => {
+    gateInfo.gates.forEach((gate) => {
       metadata += `- **${gate.name}**: ${gate.criteria}\n`;
       metadata += `  - Location: ${gate.file}\n`;
     });
@@ -614,15 +765,20 @@ export class ConsolidatedPromptEngine {
 
     metadata += `\n## 🔗 Chain Execution Metadata\n`;
     metadata += `- **Chain ID**: ${chainId}\n`;
-    metadata += `- **Progress**: Step ${currentStep + 1}/${totalSteps} (${progressPercent}% Complete)\n`;
+    metadata += `- **Progress**: Step ${
+      currentStep + 1
+    }/${totalSteps} (${progressPercent}% Complete)\n`;
     metadata += `- **Current Step**: ${stepData.stepName}\n`;
     metadata += `- **Next Action**: TOOL_CALL >>${stepData.promptId}\n`;
 
     if (Object.keys(contextData).length > 0) {
-      metadata += `- **Available Context**: ${Object.keys(contextData).length} previous step(s)\n`;
-      Object.keys(contextData).forEach(key => {
+      metadata += `- **Available Context**: ${
+        Object.keys(contextData).length
+      } previous step(s)\n`;
+      Object.keys(contextData).forEach((key) => {
         const value = contextData[key];
-        const preview = value.length > 50 ? value.substring(0, 50) + "..." : value;
+        const preview =
+          value.length > 50 ? value.substring(0, 50) + "..." : value;
         metadata += `  - ${key}: ${preview}\n`;
       });
     }
@@ -655,7 +811,9 @@ export class ConsolidatedPromptEngine {
       // Initialize chain execution
       this.conversationManager.setChainState(chainId, 0, totalSteps);
       chainState = { currentStep: 0, totalSteps };
-      this.logger.info(`🔗 Initializing chain execution: ${chainId} (${totalSteps} steps)`);
+      this.logger.info(
+        `🔗 Initializing chain execution: ${chainId} (${totalSteps} steps)`
+      );
     }
 
     const currentStep = chainState.currentStep;
@@ -665,15 +823,18 @@ export class ConsolidatedPromptEngine {
       this.logger.info(`🎉 Chain ${chainId} completed successfully`);
 
       // Get final result and clear chain context
-      const finalResult = this.conversationManager.getStepResult(chainId, totalSteps - 1) ||
-                         "Chain execution completed";
+      const finalResult =
+        this.conversationManager.getStepResult(chainId, totalSteps - 1) ||
+        "Chain execution completed";
       this.conversationManager.clearChainContext(chainId);
 
       return {
-        content: [{
-          type: "text",
-          text: `🎉 **Chain Complete**: ${prompt.name}\n\n${finalResult}`
-        }]
+        content: [
+          {
+            type: "text",
+            text: `🎉 **Chain Complete**: ${prompt.name}\n\n${finalResult}`,
+          },
+        ],
         // Removed ignored nextAction field - MCP protocol doesn't pass it to LLMs
       };
     }
@@ -689,7 +850,7 @@ export class ConsolidatedPromptEngine {
     const contextData: Record<string, any> = {};
 
     // Build context from previous steps
-    Object.keys(stepResults).forEach(stepNum => {
+    Object.keys(stepResults).forEach((stepNum) => {
       const stepIndex = parseInt(stepNum);
       if (stepIndex < currentStep) {
         contextData[`step${stepIndex + 1}_result`] = stepResults[stepIndex];
@@ -697,7 +858,9 @@ export class ConsolidatedPromptEngine {
     });
 
     // Generate primary instruction content
-    const progressInfo = `**Step ${currentStep + 1}/${totalSteps}**: ${stepData.stepName}`;
+    const progressInfo = `**Step ${currentStep + 1}/${totalSteps}**: ${
+      stepData.stepName
+    }`;
 
     let primaryInstructions = `🔗 **Chain Execution**: ${prompt.name}\n`;
     primaryInstructions += `${progressInfo}\n\n`;
@@ -711,15 +874,18 @@ export class ConsolidatedPromptEngine {
       primaryInstructions += `**Execute**: Call \`prompt_engine\` with step context:\n`;
       primaryInstructions += `\`\`\`\n>>${stepData.promptId}\n\`\`\`\n\n`;
       primaryInstructions += `**Context from previous steps**:\n`;
-      Object.keys(contextData).forEach(key => {
+      Object.keys(contextData).forEach((key) => {
         const value = contextData[key];
-        const truncated = value.length > 100 ? value.substring(0, 100) + "..." : value;
+        const truncated =
+          value.length > 100 ? value.substring(0, 100) + "..." : value;
         primaryInstructions += `- ${key}: ${truncated}\n`;
       });
       primaryInstructions += `\n`;
     }
 
-    primaryInstructions += `**Next**: After execution, call \`prompt_engine\` again to continue to step ${currentStep + 2}/${totalSteps}`;
+    primaryInstructions += `**Next**: After execution, call \`prompt_engine\` again to continue to step ${
+      currentStep + 2
+    }/${totalSteps}`;
 
     // Generate structured metadata section for LLM guidance
     const metadataSection = this.generateMetadataSection(
@@ -732,92 +898,26 @@ export class ConsolidatedPromptEngine {
     );
 
     // Advance to next step for next iteration
-    this.conversationManager.setChainState(chainId, currentStep + 1, totalSteps);
+    this.conversationManager.setChainState(
+      chainId,
+      currentStep + 1,
+      totalSteps
+    );
 
     // Return structured response with separate content sections
     return {
       content: [
         {
           type: "text",
-          text: primaryInstructions
+          text: primaryInstructions,
         },
         {
           type: "text",
-          text: metadataSection
-        }
-      ]
+          text: metadataSection,
+        },
+      ],
       // Removed ignored nextAction field - MCP protocol doesn't pass it to LLMs
     };
-  }
-
-
-  // Phase 3: Removed executeChainWithCoordinator() method - server-side chain execution incompatible with LLM workflow model
-
-  /**
-   * Execute workflow using execution engine (if available)
-   */
-  private async executeWorkflow(
-    prompt: ConvertedPrompt,
-    args: Record<string, string>,
-    options: Record<string, any>
-  ): Promise<ToolResponse> {
-    // Phase 3: Removed executionCoordinator dependency - using LLM-driven execution
-    if (false) { // Always execute fallback since coordinatorwas removed
-      return await this.executeWorkflowFallback(prompt, args, true);
-    }
-
-    try {
-      // Phase 3: Removed executionCoordinator.execute() - using LLM-driven execution
-      const result = await Promise.resolve({ // Fallback result
-        status: 'completed',
-        startTime: Date.now(),
-        endTime: Date.now(),
-        result: 'Workflow execution removed - use LLM-driven execution instead'
-      });
-      // Phase 3: Removed prompt.id, args, options parameters from old execute() call
-
-      const response = `🎯 **Workflow Completed**: ${prompt.name}\n\n`;
-      const status = `**Status**: ${result.status}\n`;
-      const duration = `**Duration**: ${result.endTime - result.startTime}ms\n\n`;
-      const resultText = typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2);
-
-      return {
-        content: [{
-          type: "text",
-          text: `${response}${status}${duration}**Result**:\n${resultText}`
-        }]
-      };
-
-    } catch (error) {
-      this.logger.error(`Workflow execution failed for ${prompt.id}:`, error);
-      return await this.executeWorkflowFallback(prompt, args, true);
-    }
-  }
-
-  /**
-   * Workflow execution fallback
-   */
-  private async executeWorkflowFallback(
-    prompt: ConvertedPrompt,
-    args: Record<string, string>,
-    enableGates: boolean
-  ): Promise<ToolResponse> {
-    // Execute as enhanced standard prompt with workflow context
-    let content = prompt.userMessageTemplate;
-    if (prompt.systemMessage) {
-      content = `[Workflow Context: ${prompt.systemMessage}]\n\n${content}`;
-    }
-
-    content = await this.promptManager.processTemplateAsync(
-      content,
-      args,
-      { previous_message: "{{previous_message}}" },
-      prompt.tools || false
-    );
-
-    const header = `🎯 **Workflow Execution**: ${prompt.name}\n\n`;
-
-    return { content: [{ type: "text", text: `${header}${content}` }] };
   }
 
   /**
@@ -833,23 +933,29 @@ export class ConsolidatedPromptEngine {
       return {
         success: false,
         response: {
-          content: [{
-            type: "text",
-            text: `❌ **Content Validation Failed**\n\nGenerated content is empty or invalid.`
-          }],
-          isError: true
-        }
+          content: [
+            {
+              type: "text",
+              text: `❌ **Content Validation Failed**\n\nGenerated content is empty or invalid.`,
+            },
+          ],
+          isError: true,
+        },
       };
     }
 
     // Check if prompt specifies gates for validation
-    const promptData = this.promptsData.find(p => p.id === prompt.id);
+    const promptData = this.promptsData.find((p) => p.id === prompt.id);
     if (!promptData?.gates || promptData.gates.length === 0) {
-      this.logger.debug(`No gates specified for prompt ${prompt.id}, skipping gate validation`);
+      this.logger.debug(
+        `No gates specified for prompt ${prompt.id}, skipping gate validation`
+      );
       return { success: true };
     }
 
-    this.logger.debug(`Evaluating ${promptData.gates.length} gates for prompt ${prompt.id}`);
+    this.logger.debug(
+      `Evaluating ${promptData.gates.length} gates for prompt ${prompt.id}`
+    );
 
     try {
       // Evaluate gates using the gate evaluation service
@@ -864,40 +970,55 @@ export class ConsolidatedPromptEngine {
       );
 
       // Check if all gates passed
-      const failedGates = gateResults.filter(result => !result.passed);
+      const failedGates = gateResults.filter((result) => !result.passed);
 
       if (failedGates.length > 0) {
-        const failureMessages = failedGates.map(gate =>
-          `- **${gate.gateId}**: ${gate.evaluationResults.map(r => r.message).join(', ')}`
-        ).join('\n');
+        const failureMessages = failedGates
+          .map(
+            (gate) =>
+              `- **${gate.gateId}**: ${gate.evaluationResults
+                .map((r) => r.message)
+                .join(", ")}`
+          )
+          .join("\n");
 
         return {
           success: false,
           response: {
-            content: [{
-              type: "text",
-              text: `❌ **Gate Validation Failed**\n\n${failedGates.length} gate(s) did not pass:\n${failureMessages}\n\n📝 **Generated Content**:\n${content}`
-            }],
-            isError: false
-          }
+            content: [
+              {
+                type: "text",
+                text: `❌ **Gate Validation Failed**\n\n${failedGates.length} gate(s) did not pass:\n${failureMessages}\n\n📝 **Generated Content**:\n${content}`,
+              },
+            ],
+            isError: false,
+          },
         };
       }
 
-      this.logger.debug(`All ${gateResults.length} gates passed for prompt ${prompt.id}`);
+      this.logger.debug(
+        `All ${gateResults.length} gates passed for prompt ${prompt.id}`
+      );
       return { success: true };
-
     } catch (error) {
-      this.logger.error(`Gate evaluation failed for prompt ${prompt.id}:`, error);
+      this.logger.error(
+        `Gate evaluation failed for prompt ${prompt.id}:`,
+        error
+      );
 
       return {
         success: false,
         response: {
-          content: [{
-            type: "text",
-            text: `⚠️ **Gate Evaluation Error**\n\nFailed to evaluate gates: ${error instanceof Error ? error.message : 'Unknown error'}\n\nProceeding without gate validation.\n\n📝 **Generated Content**:\n${content}`
-          }],
-          isError: false
-        }
+          content: [
+            {
+              type: "text",
+              text: `⚠️ **Gate Evaluation Error**\n\nFailed to evaluate gates: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }\n\nProceeding without gate validation.\n\n📝 **Generated Content**:\n${content}`,
+            },
+          ],
+          isError: false,
+        },
       };
     }
   }
@@ -910,17 +1031,20 @@ export class ConsolidatedPromptEngine {
 
     this.executionAnalytics.totalExecutions++;
 
-    if (this.currentExecutionState.status === 'completed') {
+    if (this.currentExecutionState.status === "completed") {
       this.executionAnalytics.successfulExecutions++;
-    } else if (this.currentExecutionState.status === 'failed') {
+    } else if (this.currentExecutionState.status === "failed") {
       this.executionAnalytics.failedExecutions++;
     }
 
     // Update execution time
-    const duration = (this.currentExecutionState.metadata.endTime || Date.now()) -
-                     this.currentExecutionState.metadata.startTime;
+    const duration =
+      (this.currentExecutionState.metadata.endTime || Date.now()) -
+      this.currentExecutionState.metadata.startTime;
     this.executionAnalytics.averageExecutionTime =
-      (this.executionAnalytics.averageExecutionTime * (this.executionAnalytics.totalExecutions - 1) + duration) /
+      (this.executionAnalytics.averageExecutionTime *
+        (this.executionAnalytics.totalExecutions - 1) +
+        duration) /
       this.executionAnalytics.totalExecutions;
 
     // Update mode statistics
@@ -950,7 +1074,7 @@ export class ConsolidatedPromptEngine {
     return {
       commandParser: this.parsingSystem.commandParser.getStats(),
       argumentParser: this.parsingSystem.argumentParser.getStats(),
-      contextResolver: this.parsingSystem.contextResolver.getStats()
+      contextResolver: this.parsingSystem.contextResolver.getStats(),
     };
   }
 
@@ -971,7 +1095,7 @@ export class ConsolidatedPromptEngine {
     const { message, isError } = utilsHandleError(error, context, this.logger);
     return {
       content: [{ type: "text", text: message }],
-      isError
+      isError,
     };
   }
 }
@@ -983,7 +1107,7 @@ export function createConsolidatedPromptEngine(
   logger: Logger,
   mcpServer: any,
   promptManager: PromptManager,
-  semanticAnalyzer: SemanticAnalyzer,
+  semanticAnalyzer: ConfigurableSemanticAnalyzer,
   conversationManager: ConversationManager
   // Phase 3: Removed executionCoordinator parameter - using LLM-driven chain model
 ): ConsolidatedPromptEngine {
@@ -1003,7 +1127,9 @@ export function createConsolidatedPromptEngine(
   logger.info("ConsolidatedPromptEngine created with enhanced features:");
   logger.info("- Unified multi-strategy command parsing");
   logger.info("- Advanced argument processing pipeline");
-  logger.info("- Optional gate evaluation service for template-driven verification");
+  logger.info(
+    "- Optional gate evaluation service for template-driven verification"
+  );
   logger.info("- Intelligent context resolution system");
   logger.info("- Backward compatibility with legacy parsing");
 

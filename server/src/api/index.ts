@@ -256,7 +256,7 @@ export class ApiManager {
       );
 
       // Create the category directory if it doesn't exist
-      const categoryDirPath = path.join(process.cwd(), "prompts", id);
+      const categoryDirPath = path.join(path.dirname(PROMPTS_FILE), id);
       try {
         await mkdir(categoryDirPath, { recursive: true });
       } catch (error) {

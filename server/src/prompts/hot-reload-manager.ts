@@ -6,6 +6,7 @@
 import { Logger } from "../logging/index.js";
 import { FileObserver, FileChangeEvent, FileObserverConfig, createFileObserver } from "./file-observer.js";
 import { CategoryManager } from "./category-manager.js";
+import { ConfigManager } from "../config/index.js";
 import path from "path";
 import * as fs from "fs/promises";
 
@@ -116,7 +117,8 @@ export class HotReloadManager {
   constructor(
     logger: Logger, 
     categoryManager?: CategoryManager,
-    config?: Partial<HotReloadConfig>
+    config?: Partial<HotReloadConfig>,
+    configManager?: ConfigManager
   ) {
     this.logger = logger;
     this.categoryManager = categoryManager;
@@ -134,7 +136,7 @@ export class HotReloadManager {
       retryDelayMs: this.config.retryDelayMs
     };
     
-    this.fileObserver = createFileObserver(logger, observerConfig);
+    this.fileObserver = createFileObserver(logger, observerConfig, configManager);
     
     this.stats = {
       reloadsTriggered: 0,
@@ -570,7 +572,8 @@ export class HotReloadManager {
 export function createHotReloadManager(
   logger: Logger, 
   categoryManager?: CategoryManager,
-  config?: Partial<HotReloadConfig>
+  config?: Partial<HotReloadConfig>,
+  configManager?: ConfigManager
 ): HotReloadManager {
-  return new HotReloadManager(logger, categoryManager, config);
+  return new HotReloadManager(logger, categoryManager, config, configManager);
 }

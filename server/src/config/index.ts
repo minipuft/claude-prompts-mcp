@@ -5,11 +5,42 @@
 
 import { readFile } from "fs/promises";
 import path from "path";
-import { Config } from "../types/index.js";
+import { Config, AnalysisConfig, SemanticAnalysisConfig, LLMIntegrationConfig, AnalysisMode, LoggingConfig } from "../types/index.js";
+
+/**
+ * Infer the optimal analysis mode based on LLM integration configuration
+ */
+function inferAnalysisMode(llmConfig: LLMIntegrationConfig): AnalysisMode {
+  // Use semantic mode if LLM integration is properly configured
+  if (llmConfig.enabled && llmConfig.endpoint) {
+    // For non-localhost endpoints, require API key
+    if (llmConfig.endpoint.includes('localhost') || llmConfig.endpoint.includes('127.0.0.1') || llmConfig.apiKey) {
+      return "semantic";
+    }
+  }
+  
+  // Default to structural mode
+  return "structural";
+}
 
 /**
  * Default configuration values
  */
+const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
+  semanticAnalysis: {
+    // mode will be inferred automatically based on LLM integration
+    llmIntegration: {
+      enabled: false,
+      apiKey: null,
+      endpoint: null,
+      model: "gpt-4",
+      maxTokens: 1000,
+      temperature: 0.1,
+    },
+  },
+};
+
+
 const DEFAULT_CONFIG: Config = {
   server: {
     name: "Claude Custom Prompts",
@@ -17,11 +48,12 @@ const DEFAULT_CONFIG: Config = {
     port: 3456,
   },
   prompts: {
-    file: "promptsConfig.json",
+    file: "prompts/promptsConfig.json",
   },
+  analysis: DEFAULT_ANALYSIS_CONFIG,
   transports: {
-    default: "sse",
-    sse: { enabled: true },
+    default: "stdio",
+    sse: { enabled: false },
     stdio: { enabled: true },
   },
 };
@@ -90,6 +122,30 @@ export class ConfigManager {
   }
 
   /**
+   * Get analysis configuration
+   */
+  getAnalysisConfig(): AnalysisConfig {
+    return this.config.analysis || DEFAULT_ANALYSIS_CONFIG;
+  }
+
+  /**
+   * Get semantic analysis configuration
+   */
+  getSemanticAnalysisConfig(): SemanticAnalysisConfig {
+    return this.getAnalysisConfig().semanticAnalysis;
+  }
+
+  /**
+   * Get logging configuration
+   */
+  getLoggingConfig(): LoggingConfig {
+    return this.config.logging || {
+      directory: "./logs",
+      level: "info"
+    };
+  }
+
+  /**
    * Get the port number, with environment variable override
    */
   getPort(): number {
@@ -108,22 +164,6 @@ export class ConfigManager {
     return transportArg
       ? transportArg.split("=")[1]
       : this.config.transports.default;
-  }
-
-  /**
-   * Check if a transport is enabled
-   */
-  isTransportEnabled(transport: string): boolean {
-    const transportConfig = this.config.transports[transport];
-    if (
-      transportConfig &&
-      typeof transportConfig === "object" &&
-      "enabled" in transportConfig
-    ) {
-      const config = transportConfig as { enabled: boolean };
-      return config.enabled === true;
-    }
-    return false;
   }
 
   /**
@@ -158,6 +198,13 @@ export class ConfigManager {
       };
     }
 
+    // Ensure analysis config exists
+    if (!this.config.analysis) {
+      this.config.analysis = DEFAULT_ANALYSIS_CONFIG;
+    } else {
+      this.config.analysis = this.validateAnalysisConfig(this.config.analysis);
+    }
+
     // Ensure transports config exists
     if (!this.config.transports) {
       this.config.transports = DEFAULT_CONFIG.transports;
@@ -167,6 +214,36 @@ export class ConfigManager {
         ...this.config.transports,
       };
     }
+  }
+
+  /**
+   * Validate and merge analysis configuration with defaults
+   */
+  private validateAnalysisConfig(analysisConfig: Partial<AnalysisConfig>): AnalysisConfig {
+    const semanticAnalysis = analysisConfig.semanticAnalysis || {} as any;
+    
+    // Build LLM integration config first
+    const llmIntegration = {
+      enabled: semanticAnalysis.llmIntegration?.enabled ?? DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.enabled,
+      apiKey: semanticAnalysis.llmIntegration?.apiKey ?? DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.apiKey,
+      endpoint: semanticAnalysis.llmIntegration?.endpoint ?? DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.endpoint,
+      model: semanticAnalysis.llmIntegration?.model ?? DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.model,
+      maxTokens: semanticAnalysis.llmIntegration?.maxTokens ?? DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.maxTokens,
+      temperature: semanticAnalysis.llmIntegration?.temperature ?? DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.temperature,
+    };
+
+    // Infer analysis mode based on LLM configuration if not explicitly set
+    const validModes: AnalysisMode[] = ["structural", "semantic"];
+    const mode = semanticAnalysis.mode && validModes.includes(semanticAnalysis.mode as AnalysisMode)
+      ? semanticAnalysis.mode as AnalysisMode
+      : inferAnalysisMode(llmIntegration);
+
+    return {
+      semanticAnalysis: {
+        mode,
+        llmIntegration,
+      },
+    };
   }
 }
 
@@ -181,16 +258,3 @@ export async function createConfigManager(
   return configManager;
 }
 
-/**
- * Validate that the selected transport is enabled
- */
-export function validateTransport(
-  configManager: ConfigManager,
-  transport: string
-): void {
-  if (!configManager.isTransportEnabled(transport)) {
-    throw new Error(
-      `Transport '${transport}' is not enabled in the configuration`
-    );
-  }
-}
