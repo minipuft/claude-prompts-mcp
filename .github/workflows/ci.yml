@@ -81,7 +81,7 @@ jobs:
       - name: Run server integration tests
         if: success()
         working-directory: server
-        run: npm run test:server-integration
+        run: npm run test:integration
         timeout-minutes: 5
       
       - name: Validate MCP server startup (Cross-Platform)

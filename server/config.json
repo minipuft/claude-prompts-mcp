@@ -1,6 +1,6 @@
 {
   "server": {
-    "name": "Claude Custom Prompts",
+    "name": "claude-prompts-mcp",
     "version": "1.3.0",
     "port": 9090
   },
@@ -20,11 +20,19 @@
       }
     }
   },
+  "gates": {
+    "enabled": true,
+    "definitionsDirectory": "src/gates/definitions",
+    "templatesDirectory": "src/gates/templates",
+    "defaultRetryLimit": 3,
+    "enableGuidanceInjection": true,
+    "enableValidation": true
+  },
   "transports": {
     "default": "stdio"
   },
   "logging": {
     "directory": "./logs",
-    "level": "info"
+    "level": "debug"
   }
 }

@@ -5,7 +5,7 @@
  */
 
 import { ConvertedPrompt } from "../../types/index.js";
-import { ConfigurableSemanticAnalysis } from "../../analysis/configurable-semantic-analyzer.js";
+import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
 import {
   IMethodologyGuide,
   BaseMethodologyGuide,
@@ -17,7 +17,8 @@ import {
   ProcessingStep,
   ExecutionStep,
   QualityGate,
-  TemplateEnhancement
+  TemplateEnhancement,
+  MethodologyToolDescriptions
 } from "../interfaces/methodology-guide-interfaces.js";
 
 /**
@@ -209,7 +210,7 @@ export class ReACTMethodologyGuide extends BaseMethodologyGuide {
   /**
    * Guide execution steps using ReACT methodology
    */
-  guideExecutionSteps(prompt: ConvertedPrompt, semanticAnalysis: ConfigurableSemanticAnalysis): StepGuidance {
+  guideExecutionSteps(prompt: ConvertedPrompt, semanticAnalysis: ContentAnalysisResult): StepGuidance {
     const executionSteps: ExecutionStep[] = [
       {
         id: "systematic_reasoning",
@@ -459,5 +460,31 @@ export class ReACTMethodologyGuide extends BaseMethodologyGuide {
 **Continue**: Repeat the cycle until the objective is achieved
 
 Focus on explicit reasoning, measurable actions, systematic observation, and continuous improvement through reasoning-action cycles. Each cycle should build upon learnings from previous cycles.`;
+  }
+
+  /**
+   * Get ReACT-specific tool descriptions
+   */
+  getToolDescriptions(): MethodologyToolDescriptions {
+    return {
+      prompt_engine: {
+        description: "🚀 PROMPT TEMPLATE ENGINE [REACT-ENHANCED]: Processes prompt templates with systematic ReACT (Reasoning-Acting) methodology for iterative problem-solving. Guides systematic Reason → Act → Observe → Adjust cycles for continuous improvement and adaptive execution. WARNING: You are responsible for interpreting and executing the returned content, which contains iterative analytical instructions.",
+        parameters: {
+          execution_mode: "Override intelligent auto-detection with ReACT-aware selection (default: auto, iterative reasoning-enhanced)"
+        }
+      },
+      prompt_manager: {
+        description: "📝 INTELLIGENT PROMPT MANAGER [REACT-ENHANCED]: Complete lifecycle management with systematic ReACT methodology integration. Creates iterative analysis templates that guide reasoning-action cycles through explicit Reasoning, purposeful Acting, systematic Observation, and continuous Adjustment. Optimized for adaptive problem-solving and iterative improvement tasks.",
+        parameters: {
+          action: "Management action with ReACT iterative approach: 'create_template' (reasoning-action cycle templates), 'analyze_type' (reasoning pattern analysis), 'migrate_type' (adaptive conversion), etc."
+        }
+      },
+      system_control: {
+        description: "⚙️ INTELLIGENT SYSTEM CONTROL [REACT-ENHANCED]: System administration with ReACT iterative improvement methodology. Guides systematic Reason-Act-Observe-Adjust cycles for framework management, performance monitoring, and adaptive system optimization. Supports continuous improvement through reasoning-based decision making.",
+        parameters: {
+          action: "System action with ReACT methodology: 'switch_framework' (reasoning-based framework selection), 'analytics' (observation-based metrics), 'health' (systematic health reasoning), etc."
+        }
+      }
+    };
   }
 }

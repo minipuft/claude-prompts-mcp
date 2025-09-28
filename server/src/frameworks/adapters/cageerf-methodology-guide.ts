@@ -5,7 +5,7 @@
  */
 
 import { ConvertedPrompt } from "../../types/index.js";
-import { ConfigurableSemanticAnalysis } from "../../analysis/configurable-semantic-analyzer.js";
+import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
 import {
   IMethodologyGuide,
   BaseMethodologyGuide,
@@ -14,6 +14,7 @@ import {
   StepGuidance,
   MethodologyEnhancement,
   MethodologyValidation,
+  MethodologyToolDescriptions,
   ProcessingStep,
   ExecutionStep,
   QualityGate,
@@ -213,7 +214,7 @@ export class CAGEERFMethodologyGuide extends BaseMethodologyGuide {
   /**
    * Guide execution steps using CAGEERF methodology
    */
-  guideExecutionSteps(prompt: ConvertedPrompt, semanticAnalysis: ConfigurableSemanticAnalysis): StepGuidance {
+  guideExecutionSteps(prompt: ConvertedPrompt, semanticAnalysis: ContentAnalysisResult): StepGuidance {
     const executionSteps: ExecutionStep[] = [
       {
         id: "context_analysis",
@@ -607,5 +608,31 @@ export class CAGEERFMethodologyGuide extends BaseMethodologyGuide {
 **Refinement**: Enable continuous improvement and iteration processes
 
 Ensure each phase builds logically on the previous phases while maintaining focus on practical, actionable outcomes. Consider stakeholder perspectives, resource constraints, and environmental factors throughout the methodology application.`;
+  }
+
+  /**
+   * Get CAGEERF-specific tool descriptions
+   */
+  getToolDescriptions(): MethodologyToolDescriptions {
+    return {
+      prompt_engine: {
+        description: "🚀 PROMPT TEMPLATE ENGINE [CAGEERF-ENHANCED]: Processes prompt templates with systematic C.A.G.E.E.R.F methodology injection for comprehensive structured analysis. Context → Analysis → Goals → Execution → Evaluation → Refinement → Framework approach ensures systematic problem-solving and decision-making. WARNING: You are responsible for interpreting and executing the returned content, which contains structured analytical instructions.",
+        parameters: {
+          execution_mode: "Override intelligent auto-detection with CAGEERF-aware selection (default: auto, systematic analysis-enhanced)"
+        }
+      },
+      prompt_manager: {
+        description: "📝 INTELLIGENT PROMPT MANAGER [CAGEERF-ENHANCED]: Complete lifecycle management with systematic C.A.G.E.E.R.F methodology integration. Creates comprehensive analysis templates that guide structured thinking through Context establishment, Analysis phases, Goal definition, Execution planning, Evaluation criteria, and Refinement processes. Optimized for complex analytical and strategic thinking tasks.",
+        parameters: {
+          action: "Management action: 'create_template' creates CAGEERF-enhanced templates for systematic analysis, strategic planning, and comprehensive problem-solving"
+        }
+      },
+      system_control: {
+        description: "⚙️ INTELLIGENT SYSTEM CONTROL [CAGEERF-ACTIVE]: Framework management with C.A.G.E.E.R.F methodology active for systematic, comprehensive analytical approach. Supports switching between methodologies, with CAGEERF optimized for complex analysis, strategic thinking, and multi-phase problem solving requiring structured evaluation.",
+        parameters: {
+          action: "System action: Active CAGEERF methodology provides systematic Context → Analysis → Goals → Execution → Evaluation → Refinement → Framework approach for comprehensive problem-solving"
+        }
+      }
+    };
   }
 }

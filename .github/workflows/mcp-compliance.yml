@@ -6,7 +6,7 @@ on:
     paths:
       - 'server/src/mcp-tools/**'
       - 'server/src/transport/**'
-      - 'server/src/orchestration/**'
+      - 'server/src/runtime/**'
       - 'server/package.json'
       - '.github/workflows/mcp-compliance.yml'
   pull_request:
@@ -14,7 +14,7 @@ on:
     paths:
       - 'server/src/mcp-tools/**'
       - 'server/src/transport/**'
-      - 'server/src/orchestration/**'
+      - 'server/src/runtime/**'
       - 'server/package.json'
 
 env:
@@ -90,27 +90,27 @@ jobs:
             // Test server initialization without starting transport
             async function testInitialization() {
               // Use dynamic imports for ES modules
-              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { ApplicationRuntime } = await import('./dist/runtime/index.js');
               const { MockLogger } = await import('./dist/utils/index.js');
               
               console.log('✅ MCP server modules imported successfully');
               try {
                 const logger = new MockLogger();
-                const orchestrator = new ApplicationOrchestrator(logger);
+                const app = new ApplicationRuntime(logger);
                 
-                console.log('✅ ApplicationOrchestrator instantiated');
+                console.log('✅ ApplicationRuntime instantiated');
                 
                 // Test configuration loading
-                await orchestrator.loadConfiguration();
+                await app.loadConfiguration();
                 console.log('✅ Configuration loaded successfully');
                 
                 // Test prompts loading
-                await orchestrator.loadPromptsData();
+                await app.loadPromptsData();
                 console.log('✅ Prompts data loaded successfully');
                 
                 // Test module initialization with timeout
                 console.log('🔍 Starting module initialization...');
-                const initializationPromise = orchestrator.initializeModules();
+                const initializationPromise = app.initializeModules();
                 const timeoutPromise = new Promise((_, reject) => 
                   setTimeout(() => reject(new Error('Module initialization timeout after 30 seconds')), 30000)
                 );
@@ -391,7 +391,7 @@ jobs:
           node -e "
             async function mcpProtocolIntegrationTest() {
               // Use dynamic imports for ES modules
-              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { ApplicationRuntime } = await import('./dist/runtime/index.js');
               const { MockLogger } = await import('./dist/utils/index.js');
               
               console.log('🔄 Starting MCP protocol integration test...');
@@ -414,34 +414,34 @@ jobs:
                   }
                 };
                 
-                // Initialize orchestrator with mock server
-                const orchestrator = new ApplicationOrchestrator(logger);
+                // Initialize application runtime with mock server
+                const app = new ApplicationRuntime(logger);
                 
-                console.log('✅ Step 1: Orchestrator created');
+                console.log('✅ Step 1: Application runtime created');
                 
                 // Load configuration
-                await orchestrator.loadConfiguration();
+                await app.loadConfiguration();
                 console.log('✅ Step 2: Configuration loaded');
                 
                 // Load prompts
-                await orchestrator.loadPromptsData();
+                await app.loadPromptsData();
                 console.log('✅ Step 3: Prompts data loaded');
                 
                 // Initialize modules (this will register MCP tools)
-                await orchestrator.initializeModules();
+                await app.initializeModules();
                 console.log('✅ Step 4: Modules initialized');
                 
                 console.log('📊 Integration test results:');
-                console.log('   Prompts loaded:', orchestrator.promptsData ? orchestrator.promptsData.length : 0);
-                console.log('   Converted prompts:', orchestrator.convertedPrompts ? orchestrator.convertedPrompts.length : 0);
-                console.log('   Categories:', orchestrator.categories ? orchestrator.categories.length : 0);
+                console.log('   Prompts loaded:', app.promptsData ? app.promptsData.length : 0);
+                console.log('   Converted prompts:', app.convertedPrompts ? app.convertedPrompts.length : 0);
+                console.log('   Categories:', app.categories ? app.categories.length : 0);
                 
                 // Validate minimum data loaded
-                if (!orchestrator.promptsData || orchestrator.promptsData.length === 0) {
+                if (!app.promptsData || app.promptsData.length === 0) {
                   console.log('⚠️  No prompts data loaded - this may be expected for test environment');
                 }
                 
-                if (!orchestrator.convertedPrompts || orchestrator.convertedPrompts.length === 0) {
+                if (!app.convertedPrompts || app.convertedPrompts.length === 0) {
                   console.log('⚠️  No converted prompts - this may be expected for test environment');
                 }
                 
@@ -473,7 +473,7 @@ jobs:
           node -e "
             async function performanceTest() {
               // Use dynamic imports for ES modules
-              const { ApplicationOrchestrator } = await import('./dist/orchestration/index.js');
+              const { ApplicationRuntime } = await import('./dist/runtime/index.js');
               const { MockLogger } = await import('./dist/utils/index.js');
               
               console.log('⏱️  Starting MCP performance validation...');
@@ -482,13 +482,13 @@ jobs:
               
               try {
                 const logger = new MockLogger();
-                const orchestrator = new ApplicationOrchestrator(logger);
+                const app = new ApplicationRuntime(logger);
                 
                 // Time the initialization process
                 const initStart = Date.now();
-                await orchestrator.loadConfiguration();
-                await orchestrator.loadPromptsData();
-                await orchestrator.initializeModules();
+                await app.loadConfiguration();
+                await app.loadPromptsData();
+                await app.initializeModules();
                 const initDuration = Date.now() - initStart;
                 
                 const endMemory = process.memoryUsage();

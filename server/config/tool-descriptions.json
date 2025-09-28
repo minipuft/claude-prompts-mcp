@@ -1,0 +1,82 @@
+{
+  "version": "1.0.2",
+  "lastUpdated": "2025-09-21T20:52:30Z",
+  "tools": {
+    "prompt_engine": {
+      "description": "🚀 PROMPT TEMPLATE ENGINE [HOT-RELOADED]: Processes prompt templates and returns instructions for YOU (the client LLM) to execute. WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
+      "shortDescription": "🔥 DYNAMICALLY UPDATED: Process prompt templates and return executable instructions",
+      "category": "execution",
+      "parameters": {
+        "command": "Prompt name and arguments to process. WARNING: Will return instructions for YOU to execute, not just information. SIMPLE: >>prompt_name content | ADVANCED: JSON with execution options",
+        "execution_mode": "Override intelligent auto-detection (default: auto)",
+        "gate_validation": "Quality gate validation (MANDATORY for chains, auto-detected by default, see metadata sections for gate details)",
+        "step_confirmation": "Require confirmation between chain steps",
+        "llm_driven_execution": "Enable LLM-driven chain step coordination (requires semantic LLM integration)",
+        "force_restart": "Force restart chain from beginning, clearing all existing state",
+        "session_id": "Specific session ID to use or resume",
+        "chain_uri": "Full chain URI for precise session control (e.g., chain://research_pipeline/session-abc123?force_restart=true)",
+        "timeout": "Execution timeout in milliseconds"
+      },
+      "frameworkAware": {
+        "enabled": "🚀 PROMPT TEMPLATE ENGINE [HOT-RELOADED + FRAMEWORK-ENHANCED]: Processes prompt templates with intelligent framework methodology injection and returns instructions for YOU (the client LLM) to execute. Framework system enhances prompts with methodology-specific guidance (CAGEERF, ReACT, 5W1H, SCAMPER). WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
+        "disabled": "🚀 PROMPT TEMPLATE ENGINE [HOT-RELOADED]: Processes prompt templates and returns instructions for YOU (the client LLM) to execute. Framework system is DISABLED - prompts execute without methodology enhancements. WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
+        "parametersEnabled": {
+          "execution_mode": "Override intelligent auto-detection with framework-aware selection (default: auto, framework-enhanced)"
+        },
+        "parametersDisabled": {
+          "execution_mode": "Override intelligent auto-detection (default: auto, no framework enhancement)"
+        }
+      }
+    },
+    "prompt_manager": {
+      "description": "📝 INTELLIGENT PROMPT MANAGER: Complete lifecycle management with configurable analysis, category organization, and comprehensive CRUD operations. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.\n\n🔬 ANALYSIS MODES:\n- 'structural': Honest analysis based on template structure (default)\n- 'semantic': LLM-powered intelligent analysis (requires future API integration)\n\n🎯 Type-specific creation commands:\n- 'create_prompt': Create basic prompt (fast variable substitution)\n- 'create_template': Create framework-aware template (intelligent analysis)\n- 'analyze_type': Analyze existing prompt and recommend type\n- 'migrate_type': Convert between prompt and template types",
+      "shortDescription": "Manage prompts lifecycle and organization",
+      "category": "management",
+      "parameters": {
+        "action": "Management action: 'create' (auto-detect type), 'create_prompt' (basic prompt), 'create_template' (framework-aware), 'analyze_type' (recommend type), 'migrate_type' (convert type), 'update', 'delete', 'modify', 'reload', 'list'",
+        "id": "Prompt ID (required for update, delete, modify operations)",
+        "name": "Display name for the prompt",
+        "description": "Prompt description",
+        "user_message_template": "Main prompt template",
+        "system_message": "Optional system message",
+        "arguments": "Prompt arguments definition",
+        "category": "Category for organization",
+        "filter": "Filter prompts by structured patterns (type:prompt/template, category:code, gates:yes) or fuzzy text search (name/description matching, multi-word support)"
+      },
+      "frameworkAware": {
+        "enabled": "📝 INTELLIGENT PROMPT MANAGER [FRAMEWORK-ENHANCED]: Complete lifecycle management with framework methodology integration, configurable analysis, category organization, and comprehensive CRUD operations. Framework system enables creation of methodology-aware templates with intelligent guidance. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.\n\n🔬 ANALYSIS MODES:\n- 'structural': Honest analysis based on template structure (default)\n- 'semantic': LLM-powered intelligent analysis (requires future API integration)\n\n🎯 Type-specific creation commands:\n- 'create_prompt': Create basic prompt (fast variable substitution)\n- 'create_template': Create framework-aware template with methodology injection (CAGEERF, ReACT, 5W1H, SCAMPER)\n- 'analyze_type': Analyze existing prompt and recommend type\n- 'migrate_type': Convert between prompt and template types",
+        "disabled": "📝 INTELLIGENT PROMPT MANAGER [BASIC MODE]: Complete lifecycle management with configurable analysis, category organization, and comprehensive CRUD operations. Framework system is DISABLED - templates created without methodology enhancement. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.\n\n🔬 ANALYSIS MODES:\n- 'structural': Honest analysis based on template structure (default)\n- 'semantic': LLM-powered intelligent analysis (requires future API integration)\n\n🎯 Type-specific creation commands:\n- 'create_prompt': Create basic prompt (fast variable substitution)\n- 'create_template': Create basic template (no framework enhancement)\n- 'analyze_type': Analyze existing prompt and recommend type\n- 'migrate_type': Convert between prompt and template types",
+        "parametersEnabled": {
+          "action": "Management action: 'create' (auto-detect type), 'create_prompt' (basic prompt), 'create_template' (framework-aware with methodology injection), 'analyze_type' (recommend type), 'migrate_type' (convert type), 'update', 'delete', 'modify', 'reload', 'list'"
+        },
+        "parametersDisabled": {
+          "action": "Management action: 'create' (auto-detect type), 'create_prompt' (basic prompt), 'create_template' (basic template, no framework enhancement), 'analyze_type' (recommend type), 'migrate_type' (convert type), 'update', 'delete', 'modify', 'reload', 'list'"
+        }
+      }
+    },
+    "system_control": {
+      "description": "⚙️ INTELLIGENT SYSTEM CONTROL: Unified framework management, analytics, diagnostics, and system administration. Handles framework switching, performance monitoring, health checks, and comprehensive system status reporting.",
+      "shortDescription": "Control system settings and frameworks",
+      "category": "system",
+      "parameters": {
+        "action": "System action: 'status' (comprehensive overview), 'switch_framework' (change methodology), 'list_frameworks' (available options), 'analytics' (execution metrics), 'health' (system health), 'diagnostics' (detailed analysis), 'reset_metrics' (clear switching metrics), 'switch_history' (framework changes), 'config' (system configuration), 'config_restore' (restore config from backup), 'restart' (full server restart)",
+        "framework": "Target framework for switch_framework action",
+        "reason": "Reason for framework switch or operation",
+        "confirm": "Confirmation for destructive operations",
+        "show_details": "Show detailed information",
+        "include_history": "Include historical data in reports",
+        "include_metrics": "Include detailed performance metrics"
+      },
+      "frameworkAware": {
+        "enabled": "⚙️ INTELLIGENT SYSTEM CONTROL [FRAMEWORK-ACTIVE]: Unified framework management, analytics, diagnostics, and system administration. Framework system is ACTIVE - supports switching between methodologies (CAGEERF, ReACT, 5W1H, SCAMPER), performance monitoring, health checks, and comprehensive system status reporting.",
+        "disabled": "⚙️ INTELLIGENT SYSTEM CONTROL [FRAMEWORK-DISABLED]: System administration, analytics, diagnostics, and basic system control. Framework system is DISABLED - framework switching is unavailable. Handles performance monitoring, health checks, and system status reporting.",
+        "parametersEnabled": {
+          "action": "System action: 'status' (comprehensive overview), 'switch_framework' (change methodology), 'enable_framework' (activate framework system), 'disable_framework' (deactivate framework system), 'list_frameworks' (available options), 'analytics' (execution metrics), 'health' (system health), 'diagnostics' (detailed analysis), 'reset_metrics' (clear switching metrics), 'switch_history' (framework changes), 'config' (system configuration), 'config_restore' (restore config from backup), 'restart' (full server restart)"
+        },
+        "parametersDisabled": {
+          "action": "System action: 'status' (comprehensive overview), 'enable_framework' (activate framework system), 'analytics' (execution metrics), 'health' (system health), 'diagnostics' (detailed analysis), 'config' (system configuration), 'config_restore' (restore config from backup), 'restart' (full server restart) - NOTE: Framework switching unavailable when disabled"
+        }
+      }
+    }
+  }
+}

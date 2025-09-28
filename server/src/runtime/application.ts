@@ -7,8 +7,8 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import path from "path";
 import { promises as fs } from "fs";
+import path from "path";
 import { fileURLToPath } from "url";
 
 // Import all module managers
@@ -18,7 +18,11 @@ import {
   createFrameworkStateManager,
   FrameworkStateManager,
 } from "../frameworks/framework-state-manager.js";
-import { createSimpleLogger, createLogger, Logger, EnhancedLoggingConfig } from "../logging/index.js";
+import {
+  createLogger,
+  EnhancedLoggingConfig,
+  Logger,
+} from "../logging/index.js";
 import { createMcpToolsManager, McpToolsManager } from "../mcp-tools/index.js";
 import { PromptManager } from "../prompts/index.js";
 import { ServerManager, startMcpServer } from "../server/index.js";
@@ -33,14 +37,7 @@ import {
   ConversationManager,
   createConversationManager,
 } from "../text-references/conversation.js";
-import {
-  createFullyConfiguredExecutionCoordinator,
-  ExecutionCoordinator,
-} from "../execution/index.js";
-import {
-  createGateEvaluator,
-  GateEvaluationService,
-} from "../gates/evaluators/index.js";
+// REMOVED: ExecutionCoordinator and GateEvaluator imports - modular chain and gate systems removed
 
 // Phase 1: Framework capabilities now integrated into base components
 // No separate framework observers needed - functionality moved to enhanced FileObserver and HotReloadManager
@@ -50,6 +47,8 @@ import { ServerRootDetector } from "./startup.js";
 
 // Import types
 import { Category, ConvertedPrompt, PromptData } from "../types/index.js";
+// Import chain utilities
+import { isChainPrompt } from "../utils/chainUtils.js";
 
 /**
  * Application Runtime class
@@ -61,8 +60,8 @@ export class Application {
   private textReferenceManager: TextReferenceManager;
   private conversationManager: ConversationManager;
   private promptManager: PromptManager;
-  private executionCoordinator: ExecutionCoordinator;
-  private gateEvaluator: GateEvaluationService;
+  // REMOVED: executionCoordinator - modular chain system removed
+  // REMOVED: gateEvaluator - gate evaluation system removed
   private mcpToolsManager: McpToolsManager;
   private frameworkStateManager: FrameworkStateManager;
   private transportManager: TransportManager;
@@ -92,8 +91,8 @@ export class Application {
     this.textReferenceManager = null as any;
     this.conversationManager = null as any;
     this.promptManager = null as any;
-    this.executionCoordinator = null as any;
-    this.gateEvaluator = null as any;
+    // REMOVED: executionCoordinator - modular chain system removed
+    // REMOVED: gateEvaluator - gate evaluation system removed
     this.mcpToolsManager = null as any;
     this.frameworkStateManager = null as any;
     this.transportManager = null as any;
@@ -231,28 +230,31 @@ export class Application {
     // Initialize enhanced logger with config-based settings
     console.error("DEBUG: About to create enhanced logger");
     const loggingConfig = this.configManager.getLoggingConfig();
-    const logDirectory = path.isAbsolute(loggingConfig.directory) 
+    const logDirectory = path.isAbsolute(loggingConfig.directory)
       ? loggingConfig.directory
       : path.resolve(serverRoot, loggingConfig.directory);
-    const logFile = path.join(logDirectory, 'mcp-server.log');
-    
+    const logFile = path.join(logDirectory, "mcp-server.log");
+
     // Ensure log directory exists
     try {
       await fs.mkdir(logDirectory, { recursive: true });
       console.error(`DEBUG: Log directory ensured: ${logDirectory}`);
     } catch (error) {
-      console.error(`DEBUG: Failed to create log directory ${logDirectory}:`, error);
+      console.error(
+        `DEBUG: Failed to create log directory ${logDirectory}:`,
+        error
+      );
     }
-    
+
     const enhancedLoggerConfig: EnhancedLoggingConfig = {
       logFile,
       transport,
       enableDebug: isVerbose,
-      configuredLevel: loggingConfig.level
+      configuredLevel: loggingConfig.level,
     };
-    
+
     this.logger = createLogger(enhancedLoggerConfig);
-    
+
     // Initialize log file
     await (this.logger as any).initLogFile();
     console.error("DEBUG: Enhanced logger created and initialized");
@@ -302,7 +304,7 @@ export class Application {
       version: config.server.version,
       capabilities: {
         prompts: { listChanged: true },
-        // TODO: Add other capabilities if supported, e.g., for tools
+        tools: { listChanged: true },
       },
     });
     console.error("DEBUG: McpServer created successfully");
@@ -493,9 +495,7 @@ export class Application {
           this.categories
         );
       }
-      if (this.executionCoordinator) {
-        this.executionCoordinator.updatePrompts(this._convertedPrompts);
-      }
+      // REMOVED: ExecutionCoordinator prompts update - modular chain system removed
       if (this.apiManager) {
         // apiManager might not exist for stdio
         this.apiManager.updateData(
@@ -541,16 +541,9 @@ export class Application {
     const isVerbose =
       args.includes("--verbose") || args.includes("--debug-startup");
 
-    // Initialize gate evaluator (legacy)
-    // Initialize unified gate evaluator
-    if (isVerbose)
-      this.logger.info("🔄 Initializing unified gate evaluator...");
-    this.gateEvaluator = createGateEvaluator(this.logger);
+    // REMOVED: Gate evaluator and ExecutionCoordinator initialization - modular systems removed
 
-    // Initialize gate management tools
-    if (isVerbose) this.logger.info("🔄 Initializing gate management tools...");
-
-    // Initialize Framework State Manager FIRST (required by ExecutionCoordinator)
+    // Initialize Framework State Manager (for framework switching)
     if (isVerbose)
       this.logger.info("🔄 Initializing Framework State Manager...");
     this.frameworkStateManager = await createFrameworkStateManager(this.logger);
@@ -558,44 +551,23 @@ export class Application {
     // Validation: Ensure FrameworkStateManager was created successfully
     if (!this.frameworkStateManager) {
       throw new Error(
-        "Failed to initialize FrameworkStateManager - required for ExecutionCoordinator"
+        "Failed to initialize FrameworkStateManager - required for framework switching"
       );
     }
     if (isVerbose)
       this.logger.info("✅ FrameworkStateManager initialized successfully");
 
-    // Initialize unified execution coordinator (simplified system)
-    if (isVerbose)
-      this.logger.info("🔄 Initializing unified execution coordinator...");
-    this.executionCoordinator = createFullyConfiguredExecutionCoordinator(
-      this.logger,
-      this.promptManager,
-      this.conversationManager,
-      this.gateEvaluator,
-      this.frameworkStateManager
-    );
-
-    // Validation: Ensure ExecutionCoordinator was created successfully
-    if (!this.executionCoordinator) {
-      throw new Error(
-        "Failed to initialize ExecutionCoordinator - required for chain execution"
-      );
-    }
-    if (isVerbose)
-      this.logger.info("✅ ExecutionCoordinator initialized successfully");
-
-    // Update execution coordinator with current prompts
-    this.executionCoordinator.updatePrompts(this._convertedPrompts);
-
     // Debug: Log chain prompt availability
-    const chainCount = this._convertedPrompts.filter((p) => p.isChain).length;
+    const chainCount = this._convertedPrompts.filter((p) =>
+      isChainPrompt(p)
+    ).length;
     if (isVerbose)
       this.logger.info(
         `🔗 Chain prompts available: ${chainCount}/${this._convertedPrompts.length} total prompts`
       );
     if (chainCount > 0 && isVerbose) {
       const chainNames = this._convertedPrompts
-        .filter((p) => p.isChain)
+        .filter((p) => isChainPrompt(p))
         .map((p) => p.id)
         .join(", ");
       this.logger.info(`🔗 Available chains: ${chainNames}`);
@@ -631,9 +603,7 @@ export class Application {
     if (isVerbose) this.logger.info("🔄 Initializing Framework Manager...");
     await this.mcpToolsManager.setFrameworkManager();
 
-    // Wire ConsolidatedPromptEngine to ExecutionCoordinator for delegation (Phase 3)
-    if (isVerbose) this.logger.info("🔄 Wiring ConsolidatedPromptEngine to ExecutionCoordinator...");
-    this.mcpToolsManager.wireExecutionCoordinator(this.executionCoordinator);
+    // REMOVED: ConsolidatedPromptEngine to ExecutionCoordinator wiring - ExecutionCoordinator removed
 
     // Register all MCP tools
     if (isVerbose) this.logger.info("🔄 Registering all MCP tools...");
@@ -645,23 +615,7 @@ export class Application {
 
     this.logger.info("All modules initialized successfully");
 
-    // Set up periodic stats collection (every 5 minutes) - no complex memory optimization needed
-    this.memoryOptimizationInterval = setInterval(() => {
-      if (this.executionCoordinator) {
-        try {
-          const stats = this.executionCoordinator.getExecutionStats();
-          this.logger.debug(
-            `Execution stats: ${stats.totalExecutions} total, ${stats.failedExecutions} failed`
-          );
-        } catch (error) {
-          this.logger.debug("Stats collection failed:", error);
-        }
-      }
-    }, 5 * 60 * 1000); // 5 minutes
-
-    if (isVerbose) {
-      this.logger.info("🔄 Memory optimization timer started");
-    }
+    // REMOVED: ExecutionCoordinator stats collection - modular chain system removed
   }
 
   // Phase 2: Workflow registration completely removed - chains handle all multi-step execution
@@ -877,8 +831,7 @@ export class Application {
 
       // Step 3: Propagate the new data to all dependent modules.
       // This ensures all parts of the application are synchronized with the new state.
-      this.executionCoordinator.updatePrompts(this._convertedPrompts);
-      this.logger.info("✅ ExecutionCoordinator updated with new prompts.");
+      // REMOVED: ExecutionCoordinator prompts update - modular chain system removed
 
       if (this.mcpToolsManager) {
         this.mcpToolsManager.updateData(
@@ -899,10 +852,12 @@ export class Application {
         this.logger.info("✅ ApiManager updated with new data.");
       }
 
-      // Step 4: Re-register the newly loaded prompts with the running MCP server instance.
-      // This makes the new/updated prompts available for execution immediately.
-      await this.promptManager.registerAllPrompts(this._convertedPrompts);
-      this.logger.info("✅ Prompts re-registered with MCP Server.");
+      // Step 4: Notify MCP clients that the prompt list has changed (proper hot-reload)
+      // This follows MCP protocol - clients will re-query the server for the updated list
+      await this.promptManager.notifyPromptsListChanged();
+      this.logger.info(
+        "✅ Prompts list_changed notification sent to MCP clients."
+      );
 
       // Step 5: Phase 2 - Workflow registration removed
 
@@ -951,25 +906,13 @@ export class Application {
       successRate: number;
     };
   } {
-    let executionCoordinatorStatus;
-    if (this.executionCoordinator) {
-      try {
-        const stats = this.executionCoordinator.getExecutionStats();
-        executionCoordinatorStatus = {
-          totalExecutions: stats.totalExecutions,
-          promptExecutions: stats.promptExecutions,
-          chainExecutions: stats.chainExecutions,
-          // workflowExecutions: stats.workflowExecutions, // Phase 2: removed
-          successRate:
-            stats.totalExecutions > 0
-              ? (stats.totalExecutions - stats.failedExecutions) /
-                stats.totalExecutions
-              : 1.0,
-        };
-      } catch (error) {
-        this.logger.debug("Failed to get execution coordinator status:", error);
-      }
-    }
+    // REMOVED: ExecutionCoordinator status - providing default execution status
+    const executionCoordinatorStatus = {
+      totalExecutions: 0,
+      promptExecutions: 0,
+      chainExecutions: 0,
+      successRate: 1.0,
+    };
 
     return {
       running: this.serverManager?.isRunning() || false,
@@ -991,8 +934,7 @@ export class Application {
       promptManager: this.promptManager,
       textReferenceManager: this.textReferenceManager,
       conversationManager: this.conversationManager,
-      executionCoordinator: this.executionCoordinator,
-      gateEvaluator: this.gateEvaluator,
+      // REMOVED: executionCoordinator and gateEvaluator - modular systems removed
       mcpToolsManager: this.mcpToolsManager,
       apiManager: this.apiManager,
       serverManager: this.serverManager,
@@ -1043,8 +985,7 @@ export class Application {
     // Check module initialization
     const modulesInitialized = !!(
       this.promptManager &&
-      this.executionCoordinator &&
-      this.gateEvaluator &&
+      // REMOVED: this.executionCoordinator && this.gateEvaluator - modular systems removed
       this.mcpToolsManager
     );
     moduleStatus.modulesInitialized = modulesInitialized;
@@ -1057,8 +998,7 @@ export class Application {
     moduleStatus.promptManager = !!this.promptManager;
     moduleStatus.textReferenceManager = !!this.textReferenceManager;
     moduleStatus.conversationManager = !!this.conversationManager;
-    moduleStatus.executionCoordinator = !!this.executionCoordinator;
-    moduleStatus.gateEvaluator = !!this.gateEvaluator;
+    // REMOVED: moduleStatus for executionCoordinator and gateEvaluator - modular systems removed
     moduleStatus.mcpToolsManager = !!this.mcpToolsManager;
     moduleStatus.transportManager = !!this.transportManager;
     moduleStatus.apiManager = !!this.apiManager;
@@ -1111,32 +1051,17 @@ export class Application {
       statistics: any;
     };
   } {
-    let executionCoordinatorMetrics;
-    if (this.executionCoordinator) {
-      try {
-        const statistics = this.executionCoordinator.getExecutionStats();
-        executionCoordinatorMetrics = {
-          statistics: {
-            totalExecutions: statistics.totalExecutions,
-            promptExecutions: statistics.promptExecutions,
-            chainExecutions: statistics.chainExecutions,
-            // workflowExecutions: statistics.workflowExecutions, // Phase 2: removed
-            successRate:
-              statistics.totalExecutions > 0
-                ? (statistics.totalExecutions - statistics.failedExecutions) /
-                  statistics.totalExecutions
-                : 1.0,
-            averageExecutionTime: statistics.averageExecutionTime,
-            failedExecutions: statistics.failedExecutions,
-          },
-        };
-      } catch (error) {
-        this.logger.debug(
-          "Failed to get execution coordinator metrics:",
-          error
-        );
-      }
-    }
+    // REMOVED: ExecutionCoordinator metrics - providing default metrics
+    const executionCoordinatorMetrics = {
+      statistics: {
+        totalExecutions: 0,
+        promptExecutions: 0,
+        chainExecutions: 0,
+        successRate: 1.0,
+        averageExecutionTime: 0,
+        failedExecutions: 0,
+      },
+    };
 
     return {
       uptime: process.uptime(),

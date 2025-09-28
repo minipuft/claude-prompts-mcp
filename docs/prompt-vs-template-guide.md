@@ -140,7 +140,7 @@ prompt_engine >>security_analysis code="{{codebase}}" execution_mode="template" 
 **Example**:
 ```bash
 # Execute complete chain with automatic progression
-prompt_engine >>research_pipeline topic="AI Ethics" auto_execute_chain=true
+prompt_engine >>research_pipeline topic="AI Ethics" llm_driven_execution=true
 
 # Manual step-by-step execution
 prompt_engine >>research_pipeline topic="AI Ethics" execution_mode="chain"
@@ -162,13 +162,13 @@ prompt_engine >>research_pipeline topic="AI Ethics" execution_mode="chain"
 When `execution_mode="auto"` (default):
 
 1. **Semantic Analysis**: Analyzes prompt structure and complexity
-2. **Chain Detection**: Checks for `isChain=true` or `chainSteps` configuration
+2. **Chain Detection**: Automatically detects chains based on presence of `chainSteps`
 3. **Template Detection**: Complex arguments, template variables, or analysis requirements
 4. **Prompt Fallback**: Simple variable substitution (default)
 
 **Detection Logic**:
 ```typescript
-if (prompt.isChain || prompt.chainSteps?.length) return "chain"
+if (prompt.chainSteps?.length) return "chain"
 if (hasComplexArguments || requiresFramework) return "template"  
 return "prompt"  // Default for simple cases
 ```
@@ -221,7 +221,7 @@ prompt_engine >>market_analysis data="{{research}}" execution_mode="template" ga
 
 ```bash
 # Chains handle iterative LLM-driven execution
-prompt_engine >>content_creation_workflow topic="{{subject}}" length="comprehensive" auto_execute_chain=true
+prompt_engine >>content_creation_workflow topic="{{subject}}" length="comprehensive" llm_driven_execution=true
 prompt_engine >>research_and_analysis_pipeline query="{{research_question}}" depth="thorough"
 ```
 
@@ -266,7 +266,7 @@ prompt_engine >>my_prompt input="data" execution_mode="template"
 
 **Complex Workflow Priority**:
 - Use `execution_mode="chain"` for multi-step processes
-- Enable `auto_execute_chain=true` for seamless execution
+- Enable `llm_driven_execution=true` for LLM-driven coordination
 - Let LLM control flow - don't force manual step control
 
 ### Chain Execution Issues
@@ -313,7 +313,7 @@ system_control switch_framework framework="ReACT" reason="Problem-solving task"
 
 **Production Phase**:
 6. Convert to **chain mode** for multi-step processes: `execution_mode="chain"`
-7. Enable automatic chain execution: `auto_execute_chain=true`
+7. Enable LLM-driven chain coordination: `llm_driven_execution=true`
 8. Monitor execution analytics and optimize based on usage patterns
 
 ### Framework Selection Guide
@@ -396,10 +396,10 @@ For creating sophisticated multi-step workflows:
 ```bash
 # Define chain with clear step progression
 prompt_manager create_template name="custom_analysis_chain" category="analysis" \
-  isChain=true \
-  chainSteps='[
+  content="Multi-step analysis workflow with data collection and synthesis" \
+  chain_steps='[
     {"promptId": "data_collection", "stepName": "Data Collection"},
-    {"promptId": "analysis_processing", "stepName": "Analysis"},  
+    {"promptId": "analysis_processing", "stepName": "Analysis"},
     {"promptId": "synthesis_generation", "stepName": "Synthesis"}
   ]'
 ```

@@ -160,7 +160,6 @@ describe('Semantic Analyzer Three-Tier Model', () => {
         name: 'Analysis Chain',
         description: 'Multi-step analysis process',
         category: 'chain',
-        isChain: true,
         userMessageTemplate: 'Execute analysis steps sequentially',
         chainSteps: [
           { promptId: 'step1', stepName: 'Initial Analysis', executionType: 'template' },

@@ -241,9 +241,8 @@ prompt_manager create_template name="Strategic Analysis" category="business" \
 # Create multi-step chain prompt
 prompt_manager create_template name="Research Workflow" category="research" \
   description="Multi-step research and analysis workflow" \
-  isChain=true \
   content="Research workflow for {{topic}} with comprehensive analysis" \
-  chainSteps='[
+  chain_steps='[
     {
       "promptId": "data_collection",
       "stepName": "Data Collection",
@@ -492,7 +491,7 @@ system_control diagnostics
 
 - **Basic Prompts**: Use `create_prompt` for simple variable substitution (fastest)
 - **Framework Templates**: Use `create_template` for analysis, reasoning, complex tasks
-- **Chains**: Use `isChain=true` for multi-step workflows requiring state management
+- **Chains**: Provide `chain_steps` array for multi-step workflows - chain status detected automatically
 
 ### Framework Integration
 
@@ -545,11 +544,10 @@ prompt_manager create_template name="generate_insights" category="research"
 
 # 2. Create chain prompt linking steps
 prompt_manager create_template name="research_pipeline" category="research" \
-  isChain=true \
-  chainSteps='[{"promptId":"collect_data","stepName":"Collection"}, ...]'
+  chain_steps='[{"promptId":"collect_data","stepName":"Collection"}, {"promptId":"analyze_data","stepName":"Analysis"}]'
 
-# 3. Execute complete chain
-prompt_engine >>research_pipeline topic="market analysis" auto_execute_chain=true
+# 3. Execute complete chain with LLM coordination (requires semantic LLM integration)
+prompt_engine >>research_pipeline topic="market analysis" llm_driven_execution=true
 
 # 4. Monitor chain execution
 system_control status  # Check execution state

@@ -39,7 +39,7 @@ prompt_engine >>analysis_template data="content" execution_mode="template" gate_
 
 ```bash
 # Chain execution with automatic gate validation
-prompt_engine >>research_chain topic="AI trends" auto_execute_chain=true
+prompt_engine >>research_chain topic="AI trends" llm_driven_execution=true
 # Gates are enabled by default for chains, can disable with gate_validation=false
 ```
 
@@ -124,7 +124,7 @@ prompt_engine >>analysis_prompt data="content" execution_mode="template" gate_va
 
 ```bash
 # Chains automatically use gate validation
-prompt_engine >>content_creation_chain topic="AI ethics" auto_execute_chain=true
+prompt_engine >>content_creation_chain topic="AI ethics" llm_driven_execution=true
 
 # Monitor chain execution and gate performance
 system_control analytics include_history=true

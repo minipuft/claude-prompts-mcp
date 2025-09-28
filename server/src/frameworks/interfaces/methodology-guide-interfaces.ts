@@ -5,7 +5,7 @@
  */
 
 import { ConvertedPrompt } from "../../types/index.js";
-import { ConfigurableSemanticAnalysis } from "../../analysis/configurable-semantic-analyzer.js";
+import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
 
 /**
  * Guidance for creating new prompts based on methodology
@@ -142,6 +142,23 @@ export interface TemplateEnhancement {
 }
 
 /**
+ * Tool-specific descriptions for a methodology
+ */
+export interface MethodologyToolDescription {
+  description?: string;
+  parameters?: Record<string, string>;
+}
+
+/**
+ * Complete tool descriptions provided by a methodology guide
+ */
+export interface MethodologyToolDescriptions {
+  prompt_engine?: MethodologyToolDescription;
+  prompt_manager?: MethodologyToolDescription;
+  system_control?: MethodologyToolDescription;
+}
+
+/**
  * Main interface for methodology guides
  * Framework adapters implement this to provide guidance rather than analysis
  */
@@ -182,7 +199,7 @@ export interface IMethodologyGuide {
    */
   guideExecutionSteps(
     prompt: ConvertedPrompt, 
-    semanticAnalysis: ConfigurableSemanticAnalysis
+    semanticAnalysis: ContentAnalysisResult
   ): StepGuidance;
   
   /**
@@ -213,6 +230,13 @@ export interface IMethodologyGuide {
   getSystemPromptGuidance(
     context: Record<string, any>
   ): string;
+
+  /**
+   * Get methodology-specific tool descriptions (optional)
+   * Provides custom descriptions for MCP tools when this methodology is active
+   * @returns Tool descriptions customized for this methodology
+   */
+  getToolDescriptions?(): MethodologyToolDescriptions;
 }
 
 /**
@@ -249,7 +273,7 @@ export abstract class BaseMethodologyGuide implements IMethodologyGuide {
   
   abstract guideExecutionSteps(
     prompt: ConvertedPrompt, 
-    semanticAnalysis: ConfigurableSemanticAnalysis
+    semanticAnalysis: ContentAnalysisResult
   ): StepGuidance;
   
   abstract enhanceWithMethodology(

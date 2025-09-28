@@ -7,15 +7,12 @@ module.exports = {
   testMatch: [
     '<rootDir>/tests/**/*.test.ts'
   ],
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
-  globals: {
-    'ts-jest': {
+  // setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'], // Disabled temporarily due to ES module issues
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
       useESM: true,
       tsconfig: 'tsconfig.test.json'
-    }
-  },
-  transform: {
-    '^.+\\.ts$': 'ts-jest'
+    }]
   },
   collectCoverageFrom: [
     'dist/**/*.js',

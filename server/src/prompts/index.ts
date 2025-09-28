@@ -121,30 +121,8 @@ export class PromptManager {
     return this.converter.convertMarkdownPromptsToJson(promptsData, basePath);
   }
 
-  /**
-   * Process template with text references and special context
-   * @deprecated Template processing consolidated into UnifiedPromptProcessor for direct processing
-   * This method is kept for backward compatibility but should not be used in new code
-   */
-  async processTemplateAsync(
-    template: string,
-    args: Record<string, any>,
-    specialContext: Record<string, string> = {},
-    toolsEnabled: boolean = false
-  ): Promise<string> {
-    this.logger.warn("DEPRECATED: processTemplateAsync called on PromptManager. Template processing has been consolidated into UnifiedPromptProcessor.");
-    
-    // Basic fallback processing using jsonUtils directly
-    const { processTemplate } = await import("../utils/jsonUtils.js");
-    const { getAvailableTools } = await import("../utils/index.js");
-    
-    const enhancedSpecialContext = { ...specialContext };
-    if (toolsEnabled) {
-      enhancedSpecialContext["tools_available"] = getAvailableTools();
-    }
-    
-    return processTemplate(template, args, enhancedSpecialContext);
-  }
+  // Removed: processTemplateAsync - deprecated method no longer needed
+  // Template processing now handled directly using processTemplate from utils/jsonUtils.js
 
   /**
    * Register prompts with MCP server
@@ -154,6 +132,16 @@ export class PromptManager {
       throw new Error("MCP server not provided - cannot register prompts");
     }
     return this.registry.registerAllPrompts(prompts);
+  }
+
+  /**
+   * Notify clients that prompt list has changed (for hot-reload)
+   */
+  async notifyPromptsListChanged(): Promise<void> {
+    if (!this.registry) {
+      throw new Error("MCP server not provided - cannot send notifications");
+    }
+    await this.registry.notifyPromptsListChanged();
   }
 
   /**
@@ -303,10 +291,8 @@ export class PromptManager {
   }> {
     this.logger.info("Reloading prompt system...");
 
-    // Unregister existing prompts if registry is available
-    if (this.registry) {
-      await this.registry.unregisterAllPrompts();
-    }
+    // Note: MCP protocol doesn't support unregistering prompts
+    // Hot-reload will be handled via list_changed notifications
 
     // Reinitialize the system
     return this.initializePromptSystem(configPath, basePath);

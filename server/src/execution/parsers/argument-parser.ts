@@ -20,8 +20,8 @@ import { ValidationError, safeJsonParse, validateJsonArguments } from "../../uti
  * Processing result with detailed metadata
  */
 export interface ArgumentParsingResult {
-  processedArgs: Record<string, any>;
-  resolvedPlaceholders: Record<string, any>;
+  processedArgs: Record<string, string | number | boolean | null>;
+  resolvedPlaceholders: Record<string, string | number | boolean | null>;
   validationResults: ValidationResult[];
   metadata: {
     parsingStrategy: string;
@@ -38,8 +38,8 @@ export interface ArgumentParsingResult {
 export interface ValidationResult {
   argumentName: string;
   isValid: boolean;
-  originalValue: any;
-  processedValue: any;
+  originalValue: unknown;
+  processedValue: string | number | boolean | null;
   appliedRules: string[];
   warnings: string[];
   errors: string[];
@@ -49,11 +49,11 @@ export interface ValidationResult {
  * Execution context for argument processing
  */
 export interface ExecutionContext {
-  conversationHistory?: any[];
+  conversationHistory?: Array<{role: string; content: string; timestamp?: string}>;
   environmentVars?: Record<string, string>;
-  promptDefaults?: Record<string, any>;
-  userSession?: Record<string, any>;
-  systemContext?: Record<string, any>;
+  promptDefaults?: Record<string, string | number | boolean | null>;
+  userSession?: Record<string, string | number | boolean | null>;
+  systemContext?: Record<string, string | number | boolean | null>;
 }
 
 /**
@@ -169,10 +169,21 @@ export class ArgumentParser {
         const validation = validateJsonArguments(jsonArgs, promptData);
         
         const processedArgs = validation.sanitizedArgs || {};
-        const validationResults = this.createValidationResults(processedArgs, promptData, validation);
-        
+        // Ensure processedArgs only contains allowed types for UnifiedExecutionContext
+        const compatibleArgs: Record<string, string | number | boolean | null> = {};
+        for (const [key, value] of Object.entries(processedArgs)) {
+          if (Array.isArray(value)) {
+            // Convert arrays to JSON strings for compatibility
+            compatibleArgs[key] = JSON.stringify(value);
+          } else {
+            compatibleArgs[key] = value as string | number | boolean | null;
+          }
+        }
+
+        const validationResults = this.createValidationResults(compatibleArgs, promptData, validation);
+
         return {
-          processedArgs,
+          processedArgs: compatibleArgs,
           resolvedPlaceholders: {},
           validationResults,
           metadata: {
@@ -197,7 +208,7 @@ export class ArgumentParser {
         return /\w+\s*=\s*/.test(rawArgs);
       },
       process: (rawArgs: string, promptData: PromptData, context: ExecutionContext): ArgumentParsingResult => {
-        const processedArgs: Record<string, any> = {};
+        const processedArgs: Record<string, string | number | boolean | null> = {};
         const typeCoercions: Array<{ arg: string; from: string; to: string }> = [];
         
         // Parse key=value pairs with proper quote handling
@@ -259,7 +270,7 @@ export class ArgumentParser {
         return rawArgs.trim().length > 0 && promptData.arguments.length > 0;
       },
       process: (rawArgs: string, promptData: PromptData, context: ExecutionContext): ArgumentParsingResult => {
-        const processedArgs: Record<string, any> = {};
+        const processedArgs: Record<string, string | number | boolean | null> = {};
         const appliedDefaults: string[] = [];
         const contextSources: Record<string, string> = {};
         
@@ -306,7 +317,7 @@ export class ArgumentParser {
       name: 'fallback',
       canHandle: () => true, // Always handles as last resort
       process: (rawArgs: string, promptData: PromptData, context: ExecutionContext): ArgumentParsingResult => {
-        const processedArgs: Record<string, any> = {};
+        const processedArgs: Record<string, string | number | boolean | null> = {};
         const appliedDefaults: string[] = [];
         const contextSources: Record<string, string> = {};
         const warnings: string[] = [];
@@ -359,7 +370,7 @@ export class ArgumentParser {
   private applyIntelligentDefaults(
     userContent: string,
     promptData: PromptData,
-    processedArgs: Record<string, any>,
+    processedArgs: Record<string, string | number | boolean | null>,
     appliedDefaults: string[],
     contextSources: Record<string, string>,
     context: ExecutionContext
@@ -613,7 +624,7 @@ export class ArgumentParser {
    */
   private getFromPromptDefaults(
     arg: PromptArgument, 
-    promptDefaults?: Record<string, any>
+    promptDefaults?: Record<string, string | number | boolean | null>
   ): { value: any; source: string } {
     if (promptDefaults && promptDefaults[arg.name] !== undefined) {
       return { value: promptDefaults[arg.name], source: 'prompt_defaults' };
@@ -662,7 +673,7 @@ export class ArgumentParser {
    */
   private getFromSystemContext(
     arg: PromptArgument,
-    systemContext?: Record<string, any>
+    systemContext?: Record<string, string | number | boolean | null>
   ): { value: any; source: string } {
     if (systemContext && systemContext[arg.name] !== undefined) {
       return { value: systemContext[arg.name], source: 'system_context' };
@@ -762,7 +773,7 @@ export class ArgumentParser {
    * Create validation results for processed arguments
    */
   private createValidationResults(
-    processedArgs: Record<string, any>,
+    processedArgs: Record<string, string | number | boolean | null>,
     promptData: PromptData,
     existingValidation?: any
   ): ValidationResult[] {

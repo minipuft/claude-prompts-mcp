@@ -11,6 +11,7 @@ import { PromptManager } from '../../src/prompts/index.js';
 import { ConsolidatedPromptEngine, createConsolidatedPromptEngine } from '../../src/mcp-tools/consolidated-prompt-engine.js';
 import { SemanticAnalyzer } from '../../src/analysis/semantic-analyzer.js';
 import { PromptData, ConvertedPrompt } from '../../src/types/index.js';
+import { isChainPrompt } from '../../src/utils/chainUtils.js';
 
 // Mock logger
 const mockLogger: Logger = {
@@ -101,7 +102,6 @@ const testPromptsData: PromptData[] = [
 
 const testConvertedPrompts: ConvertedPrompt[] = testPromptsData.map(prompt => ({
   ...prompt,
-  isChain: prompt.id === 'chain_test',
   chainSteps: prompt.id === 'chain_test' ? [
     { stepName: 'Step 1', promptId: 'simple_test' },
     { stepName: 'Step 2', promptId: 'multi_arg_test' }
@@ -332,7 +332,7 @@ describe('Unified Parsing Integration Tests', () => {
     });
 
     test('should detect chain mode for chain prompts', async () => {
-      const chainPrompt = testConvertedPrompts.find(p => p.isChain);
+      const chainPrompt = testConvertedPrompts.find(p => isChainPrompt(p));
       expect(chainPrompt).toBeDefined();
 
       const mockExecuteChain = jest.fn().mockResolvedValue({

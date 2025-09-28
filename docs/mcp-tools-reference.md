@@ -1,4 +1,4 @@
-# MCP Tools Reference (v1.3.0 - Consolidated Architecture)
+# MCP Tools Reference (v1.4.0 - Phase 2A Conditional Branching)
 
 This document provides a comprehensive reference for the 3 consolidated MCP (Model Context Protocol) tools that power the Claude Prompts Server. The server implements **87.5% tool consolidation** (24+ tools → 3 consolidated tools) while maintaining full functionality.
 
@@ -36,8 +36,10 @@ MCP clients execute server capabilities by sending tool requests. Each tool uses
   execution_mode?: "auto" | "template" | "chain";  // Optional: Override detection
   gate_validation?: boolean;          // Optional: Enable quality gates
   step_confirmation?: boolean;        // Optional: Confirm each chain step
-  auto_execute_chain?: boolean;       // Optional: Auto-execute all chain steps
-  timeout?: number;                   // Optional: Execution timeout (ms)
+  llm_driven_execution?: boolean;     // Optional: Enable LLM-driven chain coordination (requires semantic LLM integration)
+  force_restart?: boolean;            // Optional: Force restart chain from beginning, clearing all state
+  session_id?: string;                // Optional: Specific session ID to use or resume
+  chain_uri?: string;                 // Optional: Full chain URI for precise session control
 }
 ```
 
@@ -54,8 +56,183 @@ prompt_engine >>content_analysis text="my data"
 # Force template execution with framework enhancement
 prompt_engine >>analysis_prompt input="data" execution_mode="template"
 
-# Chain execution with step confirmation
-prompt_engine >>research_chain topic="AI" auto_execute_chain=true step_confirmation=true
+# Chain execution with LLM coordination (requires semantic LLM integration enabled)
+prompt_engine >>research_chain topic="AI" llm_driven_execution=true step_confirmation=true
+```
+
+#### Chain Execution Parameters
+
+For chain execution, the prompt engine supports advanced session management and URI-based control:
+
+**Session Control Parameters**:
+- `force_restart` - Clear all existing state and restart from beginning
+- `session_id` - Resume specific session ID
+- `chain_uri` - Use URI-based control for precise session management
+
+**Example Session Control Usage**:
+```bash
+# Auto-resume existing session (default behavior)
+prompt_engine >>research_chain topic="AI"
+
+# Force restart from beginning
+prompt_engine >>research_chain topic="AI" force_restart=true
+
+# Resume specific session
+prompt_engine >>research_chain topic="AI" session_id="chain-session-1234"
+
+# URI-based control
+prompt_engine >>research_chain chain_uri="chain://research_chain?force_restart=true"
+```
+
+#### Chain URI Syntax
+
+Chain URIs provide precise control over chain execution with the following syntax:
+
+**URI Format**:
+```
+chain://chainId[/sessionId[/stepId]][?queryParams]
+```
+
+**Components**:
+- `chainId` - Chain identifier (required)
+- `sessionId` - Specific session ID (optional)
+- `stepId` - Specific step ID (optional, for future use)
+- `queryParams` - Execution options as query parameters
+
+**Query Parameters**:
+- `force_restart=true` - Force restart clearing all state
+- `framework=CAGEERF` - Specify framework methodology
+- `step_confirmation=true` - Enable step-by-step confirmation
+- `error_handling=continue` - Error handling strategy
+- `max_retries=5` - Maximum retry attempts per step
+- `conditional_mode=true` - Enable conditional branching execution (Phase 2A)
+- `conditional_debug=true` - Enable conditional execution debugging
+
+**URI Examples**:
+```bash
+# Basic execution with auto-session resolution
+prompt_engine chain_uri="chain://research_pipeline"
+
+# Force restart with query parameters
+prompt_engine chain_uri="chain://research_pipeline?force_restart=true"
+
+# Specific session resumption
+prompt_engine chain_uri="chain://research_pipeline/session-abc123"
+
+# Custom framework and options
+prompt_engine chain_uri="chain://research_pipeline?framework=CAGEERF&step_confirmation=true"
+
+# Complex configuration
+prompt_engine chain_uri="chain://research_pipeline?force_restart=true&framework=ReACT&error_handling=continue"
+
+# Conditional branching mode (NEW in Phase 2A)
+prompt_engine chain_uri="chain://research_pipeline?conditional_mode=true"
+
+# Conditional debugging and enhanced workflow
+prompt_engine chain_uri="chain://research_pipeline?conditional_mode=true&conditional_debug=true&step_confirmation=true"
+```
+
+**Smart Error Recovery**:
+When chains get stuck in failed state, the system provides actionable guidance with specific recovery options including restart URIs, session resume URIs, and troubleshooting recommendations.
+
+#### Advanced Conditional Branching (Phase 2A)
+
+The system now supports sophisticated conditional execution with safe JavaScript expression evaluation for dynamic workflow control.
+
+**Conditional Chain Definition Example**:
+```json
+{
+  "id": "analysis_workflow",
+  "name": "Conditional Analysis Workflow",
+  "steps": [
+    {
+      "id": "data_validation",
+      "promptId": "validate_data",
+      "name": "Data Validation",
+      "order": 0,
+      "dependencies": [],
+      "conditionalExecution": {
+        "type": "always",
+        "description": "Always validate input data"
+      }
+    },
+    {
+      "id": "simple_analysis",
+      "promptId": "basic_analysis",
+      "name": "Simple Analysis",
+      "order": 1,
+      "dependencies": ["data_validation"],
+      "conditionalExecution": {
+        "type": "conditional",
+        "expression": "utils.length(steps.data_validation.result) < 1000",
+        "description": "Use simple analysis for small datasets"
+      }
+    },
+    {
+      "id": "complex_analysis",
+      "promptId": "advanced_analysis",
+      "name": "Complex Analysis",
+      "order": 2,
+      "dependencies": ["data_validation"],
+      "conditionalExecution": {
+        "type": "conditional",
+        "expression": "utils.length(steps.data_validation.result) >= 1000",
+        "description": "Use advanced analysis for large datasets"
+      }
+    },
+    {
+      "id": "error_recovery",
+      "promptId": "handle_errors",
+      "name": "Error Recovery",
+      "order": 3,
+      "dependencies": ["simple_analysis", "complex_analysis"],
+      "conditionalExecution": {
+        "type": "skip_if_success",
+        "description": "Only run if previous steps had errors"
+      }
+    }
+  ]
+}
+```
+
+**Conditional Execution Types**:
+- `always` - Always execute this step
+- `conditional` - Execute based on JavaScript expression evaluation
+- `skip_if_error` - Skip if current step has errors
+- `skip_if_success` - Skip if current step succeeded (run only on failure)
+- `branch_to` - Branch to specific step based on condition
+- `skip_to` - Skip to specific step (future use)
+
+**Expression Evaluation Context**:
+Conditional expressions have access to:
+- `steps` - Results from previous steps (e.g., `steps.data_validation.result`)
+- `vars` - Chain variables (e.g., `vars.userInput`)
+- `utils` - Utility functions for safe operations
+
+**Available Utility Functions**:
+- `utils.exists(value)` - Check if value exists (not null/undefined)
+- `utils.contains(string, substring)` - Check if string contains substring
+- `utils.length(value)` - Get length of string, array, or object
+- `utils.toNumber(value)` - Convert to number safely
+- `utils.toString(value)` - Convert to string safely
+- `utils.matches(string, regex)` - Test regex pattern
+
+**Security Features**:
+- **Expression Validation**: Dangerous patterns (eval, require, process) are blocked
+- **Timeout Protection**: Expressions timeout after 5 seconds
+- **Sandboxed Execution**: No access to global objects or Node.js APIs
+- **Safe Evaluation**: Uses isolated execution context
+
+**Conditional Execution Examples**:
+```bash
+# Enable conditional mode for advanced workflow control
+prompt_engine >>analysis_workflow data="large_dataset" conditional_mode=true
+
+# Enable debugging to see conditional evaluation details
+prompt_engine >>analysis_workflow data="test" conditional_mode=true conditional_debug=true
+
+# Combine with URI syntax for precise control
+prompt_engine chain_uri="chain://analysis_workflow?conditional_mode=true&conditional_debug=true&framework=CAGEERF"
 ```
 
 ### `prompt_manager` 📋
@@ -102,6 +279,33 @@ prompt_manager list
 # Create framework-enhanced template
 prompt_manager create_template name="code_analyzer" category="development" \
   content="Analyze {{code}} for security and performance issues"
+
+# Create conditional chain with branching logic (Phase 2A)
+prompt_manager create_template name="conditional_analysis" category="analysis" \
+  content="Dynamic analysis workflow with conditional branching" \
+  chain_steps='[
+    {
+      "promptId": "data_check",
+      "stepName": "Data Validation",
+      "conditionalExecution": {"type": "always"}
+    },
+    {
+      "promptId": "simple_analysis",
+      "stepName": "Simple Analysis",
+      "conditionalExecution": {
+        "type": "conditional",
+        "expression": "utils.length(steps.data_check.result) < 1000"
+      }
+    },
+    {
+      "promptId": "complex_analysis",
+      "stepName": "Complex Analysis",
+      "conditionalExecution": {
+        "type": "conditional",
+        "expression": "utils.length(steps.data_check.result) >= 1000"
+      }
+    }
+  ]'
 
 # Analyze existing prompt type
 prompt_manager analyze_type prompt_id="my_prompt"
@@ -240,12 +444,59 @@ system_control analytics
 ```bash
 # 1. Create analysis chain
 prompt_manager create_template name="research_chain" category="research" \
-  isChain=true content="Multi-step research analysis workflow"
+  content="Multi-step research analysis workflow" \
+  chain_steps='[{"promptId":"data_collection","stepName":"Data Collection"},{"promptId":"analysis_step","stepName":"Analysis"},{"promptId":"summary_step","stepName":"Summary"}]'
 
-# 2. Execute chain with step validation
-prompt_engine >>research_chain topic="AI trends" auto_execute_chain=true gate_validation=true
+# 2. Execute chain with step validation and LLM coordination
+prompt_engine >>research_chain topic="AI trends" llm_driven_execution=true gate_validation=true
 
 # 3. Monitor chain execution through system status
+system_control status
+```
+
+### Conditional Branching Workflow Example (Phase 2A)
+
+```bash
+# 1. Create conditional analysis chain with branching logic
+prompt_manager create_template name="adaptive_analysis" category="analysis" \
+  content="Adaptive analysis with conditional execution paths" \
+  chain_steps='[
+    {
+      "promptId": "input_assessment",
+      "stepName": "Input Assessment",
+      "conditionalExecution": {"type": "always"}
+    },
+    {
+      "promptId": "quick_analysis",
+      "stepName": "Quick Analysis",
+      "conditionalExecution": {
+        "type": "conditional",
+        "expression": "utils.contains(steps.input_assessment.result, \"simple\")"
+      }
+    },
+    {
+      "promptId": "deep_analysis",
+      "stepName": "Deep Analysis",
+      "conditionalExecution": {
+        "type": "conditional",
+        "expression": "utils.contains(steps.input_assessment.result, \"complex\")"
+      }
+    },
+    {
+      "promptId": "error_handler",
+      "stepName": "Error Recovery",
+      "conditionalExecution": {"type": "skip_if_success"}
+    }
+  ]'
+
+# 2. Execute conditional chain with debugging enabled
+prompt_engine >>adaptive_analysis input="complex data analysis task" \
+  conditional_mode=true conditional_debug=true step_confirmation=true
+
+# 3. Alternative execution with URI syntax for precise control
+prompt_engine chain_uri="chain://adaptive_analysis?conditional_mode=true&conditional_debug=true&framework=CAGEERF&step_confirmation=true"
+
+# 4. Monitor conditional execution and branching decisions
 system_control status
 ```
 
@@ -296,6 +547,24 @@ If you have references to old tool names, here's the mapping:
 | `reload_prompts` | `system_control` | `reload` action |
 | `execution_analytics` | `system_control` | `analytics` action |
 
+### API Parameter Changes
+
+**Chain Creation Simplified** (v1.2.0+):
+
+| Old API (Deprecated) | New API |
+|---------------------|---------|
+| `isChain=true` | ❌ **Removed** - redundant parameter |
+| `chain_steps='[...]'` | ✅ **Chain detection automatic** |
+
+**Migration Example**:
+```bash
+# ❌ OLD - Don't use isChain anymore
+prompt_manager create name="chain" isChain=true chain_steps='[...]'
+
+# ✅ NEW - Chain detected automatically from steps
+prompt_manager create name="chain" chain_steps='[{"promptId":"step1","stepName":"Step 1"}]'
+```
+
 ---
 
 ## System Requirements
@@ -307,6 +576,6 @@ If you have references to old tool names, here's the mapping:
 
 ---
 
-**Documentation Version**: 1.3.0 (Consolidated Architecture)  
-**Last Updated**: 2025-01-30  
-**Compatibility**: Universal MCP client support
+**Documentation Version**: 1.4.0 (Phase 2A Conditional Branching)
+**Last Updated**: 2025-01-30
+**Compatibility**: Universal MCP client support with advanced conditional workflow capabilities

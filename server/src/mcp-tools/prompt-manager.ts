@@ -31,7 +31,7 @@ import {
   validateJsonArguments
 } from "../utils/index.js";
 import { modifyPromptSection, safeWriteFile } from "../prompts/promptUtils.js";
-import { ConfigurableSemanticAnalyzer, ConfigurableSemanticAnalysis } from "../analysis/configurable-semantic-analyzer.js";
+import { ContentAnalyzer, ContentAnalysisResult } from "../semantic/configurable-semantic-analyzer.js";
 import { FrameworkStateManager } from "../frameworks/framework-state-manager.js";
 import { FrameworkManager } from "../frameworks/framework-manager.js";
 
@@ -65,7 +65,7 @@ export class ConsolidatedPromptManager {
   private logger: Logger;
   private mcpServer: any;
   private configManager: ConfigManager;
-  private semanticAnalyzer: ConfigurableSemanticAnalyzer;
+  private semanticAnalyzer: ContentAnalyzer;
   private frameworkStateManager?: FrameworkStateManager;
   private frameworkManager?: FrameworkManager;
   private onRefresh: () => Promise<void>;
@@ -80,7 +80,7 @@ export class ConsolidatedPromptManager {
     logger: Logger,
     mcpServer: any,
     configManager: ConfigManager,
-    semanticAnalyzer: ConfigurableSemanticAnalyzer,
+    semanticAnalyzer: ContentAnalyzer,
     frameworkStateManager: FrameworkStateManager | undefined,
     frameworkManager: FrameworkManager | undefined,
     onRefresh: () => Promise<void>,
@@ -125,147 +125,11 @@ export class ConsolidatedPromptManager {
     this.logger.debug("Framework manager set in PromptManager");
   }
 
-  /**
-   * Register the consolidated prompt manager tool
-   */
-  registerTool(): void {
-    this.mcpServer.tool(
-      "prompt_manager",
-      "📝 INTELLIGENT PROMPT MANAGER: Complete lifecycle management with configurable analysis, category organization, and comprehensive CRUD operations. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.\n\n🔬 ANALYSIS MODES:\n- 'structural': Honest analysis based on template structure (default)\n- 'semantic': LLM-powered intelligent analysis (requires integration)\n- 'hybrid': Enhanced structural analysis with pattern matching\n\n🎯 Type-specific creation commands:\n- 'create_prompt': Create basic prompt (fast variable substitution)\n- 'create_template': Create framework-aware template (intelligent analysis)\n- 'analyze_type': Analyze existing prompt and recommend type\n- 'migrate_type': Convert between prompt and template types",
-      {
-        action: z
-          .enum(["create", "create_prompt", "create_template", "analyze_type", "migrate_type", "update", "delete", "modify", "reload", "list"])
-          .describe("Management action: 'create' (auto-detect type), 'create_prompt' (basic prompt), 'create_template' (framework-aware), 'analyze_type' (recommend type), 'migrate_type' (convert type), 'update', 'delete', 'modify', 'reload', 'list'"),
-
-        // Common parameters
-        id: z
-          .string()
-          .optional()
-          .describe("Prompt ID (required for update, delete, modify operations)"),
-
-        // Creation/Update parameters
-        name: z
-          .string()
-          .optional()
-          .describe("Display name for the prompt"),
-
-        category: z
-          .string()
-          .optional()
-          .describe("Category for organization"),
-
-        description: z
-          .string()
-          .optional()
-          .describe("Prompt description"),
-
-        system_message: z
-          .string()
-          .optional()
-          .describe("Optional system message"),
-
-        user_message_template: z
-          .string()
-          .optional()
-          .describe("Main prompt template"),
-
-        arguments: z
-          .array(z.object({
-            name: z.string(),
-            description: z.string().optional(),
-            required: z.boolean()
-          }))
-          .optional()
-          .describe("Prompt arguments definition"),
-
-        is_chain: z
-          .boolean()
-          .optional()
-          .describe("Whether this is a chain prompt"),
-
-        chain_steps: z
-          .array(z.object({
-            promptId: z.string(),
-            stepName: z.string(),
-            inputMapping: z.record(z.string()).optional(),
-            outputMapping: z.record(z.string()).optional()
-          }))
-          .optional()
-          .describe("Chain steps definition"),
-
-        // Modification parameters
-        section_name: z
-          .string()
-          .optional()
-          .describe("Section to modify (for modify action)"),
-
-        new_content: z
-          .string()
-          .optional()
-          .describe("New content for section (for modify action)"),
-
-        // System parameters
-        full_restart: z
-          .boolean()
-          .optional()
-          .describe("Perform full server restart instead of hot-reload"),
-
-        reason: z
-          .string()
-          .optional()
-          .describe("Reason for reload/restart operation"),
-
-        // NEW: Type-specific parameters
-        target_type: z
-          .enum(["prompt", "template"])
-          .optional()
-          .describe("Target execution type for migration (migrate_type action)"),
-
-        // List parameters
-        filter: z
-          .string()
-          .optional()
-          .describe("Intelligent filter for list operation. Examples: 'type:prompt', 'type:template', 'category:code', 'framework:needed', or text search"),
-
-        // Options
-        options: z
-          .record(z.any())
-          .optional()
-          .describe("Additional operation options")
-      },
-      async (args: {
-        action: "create" | "update" | "delete" | "modify" | "reload" | "list";
-        id?: string;
-        name?: string;
-        category?: string;
-        description?: string;
-        system_message?: string;
-        user_message_template?: string;
-        arguments?: Array<{name: string; description?: string; required: boolean}>;
-        is_chain?: boolean;
-        chain_steps?: Array<{promptId: string; stepName: string; inputMapping?: Record<string, string>; outputMapping?: Record<string, string>}>;
-        section_name?: string;
-        new_content?: string;
-        full_restart?: boolean;
-        reason?: string;
-        filter?: string;
-        options?: Record<string, any>;
-      }, extra: any) => {
-        try {
-          return await this.handleAction(args, extra);
-        } catch (error) {
-          return this.handleError(error, `prompt_manager_${args.action}`);
-        }
-      }
-    );
-
-    this.logger.info("Consolidated Prompt Manager registered successfully");
-  }
 
   /**
    * Main action handler
    */
-  private async handleAction(args: {
+  public async handleAction(args: {
     action: "create" | "create_prompt" | "create_template" | "analyze_type" | "migrate_type" | "update" | "delete" | "modify" | "reload" | "list";
     [key: string]: any;
   }, extra: any): Promise<ToolResponse> {
@@ -369,7 +233,6 @@ export class ConsolidatedPromptManager {
       systemMessage: args.system_message || currentPrompt?.systemMessage,
       userMessageTemplate: args.user_message_template || currentPrompt?.userMessageTemplate || '',
       arguments: args.arguments || currentPrompt?.arguments || [],
-      isChain: args.is_chain || currentPrompt?.isChain || false,
       chainSteps: args.chain_steps || currentPrompt?.chainSteps || []
     };
 
@@ -727,7 +590,7 @@ export class ConsolidatedPromptManager {
 
     content += `## User Message Template\n${promptData.userMessageTemplate}\n`;
 
-    if (promptData.isChain && promptData.chainSteps?.length > 0) {
+    if ((promptData.chainSteps?.length ?? 0) > 0) {
       content += `\n## Chain Steps\n\n`;
       promptData.chainSteps.forEach((step: any, index: number) => {
         content += `${index + 1}. **${step.stepName}** (${step.promptId})\n`;
@@ -794,7 +657,7 @@ export class ConsolidatedPromptManager {
       systemMessage: promptData.systemMessage,
       userMessageTemplate: promptData.userMessageTemplate,
       arguments: promptData.arguments || [],
-      isChain: promptData.isChain || false,
+      // isChain property removed - derived from chainSteps presence
       chainSteps: promptData.chainSteps || []
     };
 
@@ -868,7 +731,7 @@ export class ConsolidatedPromptManager {
    * Create fallback analysis when semantic analysis is disabled
    */
   private createDisabledAnalysisFallback(prompt: ConvertedPrompt): PromptClassification {
-    const hasChainSteps = Boolean(prompt.chainSteps?.length) || Boolean(prompt.isChain);
+    const hasChainSteps = Boolean(prompt.chainSteps?.length);
     const hasComplexArgs = (prompt.arguments?.length || 0) > 2;
     const hasTemplateVars = /\{\{.*?\}\}/g.test(prompt.userMessageTemplate || '');
     
@@ -936,7 +799,7 @@ export class ConsolidatedPromptManager {
     } catch (error) {
       this.logger.error(`Configurable semantic analysis failed for ${prompt.id}:`, error);
       return {
-        executionType: prompt.isChain ? 'chain' : 'template',
+        executionType: (prompt.chainSteps?.length ?? 0) > 0 ? 'chain' : 'template',
         requiresExecution: true,
         requiresFramework: true, // Default to requiring framework for fallback
         confidence: 0.5,
@@ -997,7 +860,7 @@ export class ConsolidatedPromptManager {
    */
   private findPromptDependencies(promptId: string): ConvertedPrompt[] {
     return this.convertedPrompts.filter(prompt => {
-      if (!prompt.isChain || !prompt.chainSteps) return false;
+      if (!prompt.chainSteps || prompt.chainSteps.length === 0) return false;
       return prompt.chainSteps.some((step: any) => step.promptId === promptId);
     });
   }
@@ -1554,7 +1417,7 @@ export function createConsolidatedPromptManager(
   logger: Logger,
   mcpServer: any,
   configManager: ConfigManager,
-  semanticAnalyzer: ConfigurableSemanticAnalyzer,
+  semanticAnalyzer: ContentAnalyzer,
   frameworkStateManager: FrameworkStateManager | undefined,
   frameworkManager: FrameworkManager | undefined,
   onRefresh: () => Promise<void>,

@@ -6,15 +6,16 @@
 
 import { Logger } from "../../logging/index.js";
 import { ConvertedPrompt } from "../../types/index.js";
-import { 
-  FrameworkManager, 
+import {
+  FrameworkManager,
   FrameworkExecutionContext,
-  FrameworkSelectionCriteria 
+  FrameworkSelectionCriteria
 } from "../../frameworks/framework-manager.js";
-import { ConfigurableSemanticAnalysis } from "../../analysis/configurable-semantic-analyzer.js";
-import { 
+import { FrameworkStateManager } from "../../frameworks/framework-state-manager.js";
+import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
+import {
   IMethodologyGuide,
-  MethodologyEnhancement 
+  MethodologyEnhancement
 } from "../../frameworks/interfaces/methodology-guide-interfaces.js";
 
 /**
@@ -66,17 +67,20 @@ export interface FrameworkInjectionConfig {
  */
 export class FrameworkInjector {
   private frameworkManager: FrameworkManager;
+  private frameworkStateManager?: FrameworkStateManager; // NEW: For checking if framework system is enabled
   private logger: Logger;
   private config: FrameworkInjectionConfig;
 
   constructor(
     frameworkManager: FrameworkManager,
     logger: Logger,
-    config: Partial<FrameworkInjectionConfig> = {}
+    config: Partial<FrameworkInjectionConfig> = {},
+    frameworkStateManager?: FrameworkStateManager // NEW: Optional state manager
   ) {
     this.frameworkManager = frameworkManager;
+    this.frameworkStateManager = frameworkStateManager;
     this.logger = logger;
-    
+
     this.config = {
       enableInjection: config.enableInjection ?? true,
       injectionMethod: config.injectionMethod ?? 'system_prompt',
@@ -93,7 +97,7 @@ export class FrameworkInjector {
    */
   async injectFrameworkContext(
     prompt: ConvertedPrompt,
-    semanticAnalysis: ConfigurableSemanticAnalysis,
+    semanticAnalysis: ContentAnalysisResult,
     userFrameworkPreference?: string
   ): Promise<FrameworkInjectionResult> {
     const startTime = Date.now();
@@ -103,8 +107,14 @@ export class FrameworkInjector {
       if (!this.config.enableInjection) {
         return this.createPassthroughResult(prompt);
       }
-      
-      // NEW: Skip framework injection for basic "prompt" execution type
+
+      // NEW: Skip injection if framework system is disabled
+      if (this.frameworkStateManager && !this.frameworkStateManager.isFrameworkSystemEnabled()) {
+        this.logger.debug(`Skipping framework injection - framework system is disabled: ${prompt.id}`);
+        return this.createPassthroughResult(prompt);
+      }
+
+      // Skip framework injection for basic "prompt" execution type
       if (semanticAnalysis.executionType === "prompt") {
         this.logger.debug(`Skipping framework injection for prompt execution: ${prompt.id}`);
         return this.createPassthroughResult(prompt);
@@ -162,7 +172,7 @@ export class FrameworkInjector {
    */
   async injectSystemPrompt(
     prompt: ConvertedPrompt,
-    semanticAnalysis: ConfigurableSemanticAnalysis
+    semanticAnalysis: ContentAnalysisResult
   ): Promise<string> {
     const result = await this.injectFrameworkContext(prompt, semanticAnalysis);
     return result.enhancedPrompt.frameworkSystemPrompt || "";
@@ -173,7 +183,7 @@ export class FrameworkInjector {
    */
   async getFrameworkGuidelines(
     prompt: ConvertedPrompt,
-    semanticAnalysis: ConfigurableSemanticAnalysis
+    semanticAnalysis: ContentAnalysisResult
   ): Promise<string[]> {
     const result = await this.injectFrameworkContext(prompt, semanticAnalysis);
     return result.frameworkContext.executionGuidelines;
@@ -187,7 +197,7 @@ export class FrameworkInjector {
   private performFrameworkInjection(
     prompt: ConvertedPrompt,
     frameworkContext: FrameworkExecutionContext,
-    semanticAnalysis: ConfigurableSemanticAnalysis
+    semanticAnalysis: ContentAnalysisResult
   ): FrameworkInjectionResult['enhancedPrompt'] {
     const framework = frameworkContext.selectedFramework;
     const systemPrompt = frameworkContext.systemPrompt;
@@ -319,7 +329,8 @@ export class FrameworkInjector {
 export async function createFrameworkInjector(
   frameworkManager: FrameworkManager,
   logger: Logger,
-  config?: Partial<FrameworkInjectionConfig>
+  config?: Partial<FrameworkInjectionConfig>,
+  frameworkStateManager?: FrameworkStateManager // NEW: Optional state manager
 ): Promise<FrameworkInjector> {
-  return new FrameworkInjector(frameworkManager, logger, config);
+  return new FrameworkInjector(frameworkManager, logger, config, frameworkStateManager);
 }

@@ -2,8 +2,18 @@
  * Type definitions for the prompt management system
  */
 
-// Import gate types from the main types module
-import type { GateDefinition } from "./types/index.js";
+// Gate definition interface (duplicated here to avoid circular dependency)
+interface GateDefinition {
+  id: string;
+  name: string;
+  type: 'validation' | 'approval' | 'condition' | 'quality';
+  requirements: any[];
+  failureAction: 'stop' | 'retry' | 'skip' | 'rollback';
+  retryPolicy?: {
+    maxRetries: number;
+    retryDelay: number;
+  };
+}
 
 // ===== Configuration Types =====
 
@@ -47,15 +57,7 @@ export interface TransportsConfig {
   stdio: TransportConfig;
   /** Custom transports map */
   customTransports?: Record<string, TransportConfig>;
-  /**
-   * Index signature for backwards compatibility
-   * @deprecated Use customTransports instead
-   */
-  [key: string]:
-    | TransportConfig
-    | string
-    | Record<string, TransportConfig>
-    | undefined;
+  // Removed: Index signature for backwards compatibility - use customTransports instead
 }
 
 /**
@@ -116,9 +118,37 @@ export interface LoggingConfig {
   level: string;
 }
 
+// Removed: FrameworkConfig - deprecated interface, framework state now managed at runtime
+
+/**
+ * Tool descriptions configuration options
+ */
+export interface ToolDescriptionsOptions {
+  /** Whether to restart server when tool descriptions change */
+  restartOnChange?: boolean;
+}
+
 /**
  * Complete application configuration
  */
+/**
+ * Configuration for gates subsystem
+ */
+export interface GatesConfig {
+  /** Whether gates are enabled */
+  enabled: boolean;
+  /** Directory containing gate definitions */
+  definitionsDirectory: string;
+  /** Directory containing LLM validation templates */
+  templatesDirectory: string;
+  /** Default retry limit for failed validations */
+  defaultRetryLimit: number;
+  /** Whether to inject gate guidance into prompts */
+  enableGuidanceInjection: boolean;
+  /** Whether to perform gate validation */
+  enableValidation: boolean;
+}
+
 export interface Config {
   /** Server configuration */
   server: ServerConfig;
@@ -126,10 +156,14 @@ export interface Config {
   prompts: PromptsConfig;
   /** Analysis system configuration */
   analysis?: AnalysisConfig;
+  /** Gates system configuration */
+  gates?: GatesConfig;
   /** Transports configuration */
   transports: TransportsConfig;
   /** Logging configuration */
   logging?: LoggingConfig;
+  /** Tool descriptions configuration */
+  toolDescriptions?: ToolDescriptionsOptions;
 }
 
 // ===== Prompt Types =====

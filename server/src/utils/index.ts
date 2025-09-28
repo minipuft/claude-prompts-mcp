@@ -6,6 +6,7 @@
 // Re-export existing utilities
 export * from "./errorHandling.js";
 export * from "./jsonUtils.js";
+export * from "./chainUtils.js";
 
 // Re-export framework system from new locations (maintaining backward compatibility)
 export * from "../frameworks/index.js";

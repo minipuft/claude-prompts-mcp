@@ -18,7 +18,11 @@ The server uses ExecutionCoordinator as a thin orchestration layer that delegate
 
 ```typescript
 // Phase 3: Delegation-based execution routing
-const result = await executionCoordinator.executePrompt(promptId, args, options);
+const result = await executionCoordinator.executePrompt(
+  promptId,
+  args,
+  options
+);
 // All execution delegated to ConsolidatedPromptEngine
 ```
 
@@ -32,11 +36,11 @@ const result = await executionCoordinator.executePrompt(promptId, args, options)
 
 The system supports intelligent routing with three primary execution tiers:
 
-| Execution Tier | Framework Integration | Processing | Speed | Best For |
-|----------------|----------------------|------------|-------|----------|
-| **Prompt** | ❌ Bypassed for speed | UnifiedPromptProcessor | Lightning Fast | Basic variable substitution |
-| **Template** | ✅ Methodology-aware | ConsolidatedPromptEngine | Smart | Framework-enhanced content generation |
-| **Chain** | ✅ Per-step enhancement | ConsolidatedPromptEngine | LLM-Driven | Multi-step workflows |
+| Execution Tier | Framework Integration   | Processing               | Speed          | Best For                              |
+| -------------- | ----------------------- | ------------------------ | -------------- | ------------------------------------- |
+| **Prompt**     | ❌ Bypassed for speed   | UnifiedPromptProcessor   | Lightning Fast | Basic variable substitution           |
+| **Template**   | ✅ Methodology-aware    | ConsolidatedPromptEngine | Smart          | Framework-enhanced content generation |
+| **Chain**      | ✅ Per-step enhancement | ConsolidatedPromptEngine | LLM-Driven     | Multi-step workflows                  |
 
 #### Execution Flow
 
@@ -61,17 +65,20 @@ For detailed information about choosing the right execution type, see the [Execu
 The server implements an intelligent quality assurance model that adapts to execution type:
 
 #### Prompt Execution (No Framework, No Gates)
+
 - **Lightning Fast**: Direct Nunjucks variable substitution
 - **Zero Overhead**: Bypasses framework injection and quality gates
 - **Best For**: Simple formatting, variable replacement, basic templates
 
 #### Template Execution (Framework-Enhanced)
+
 - **Smart Processing**: Rule-based framework selection with conditional injection
 - **Methodology Integration**: CAGEERF, ReACT, 5W1H, or SCAMPER framework enhancement based on active framework
 - **Quality Validation**: Content validation and framework compliance
 - **Best For**: Analysis, reasoning, complex content generation
 
 #### Chain Execution (LLM-Driven Workflows)
+
 - **Iterative Processing**: LLM-guided step-by-step execution with intelligent coordination
 - **Context Management**: Conversation state and inter-step data flow management
 - **Quality Gate Integration**: Framework-aware validation and methodology compliance
@@ -95,15 +102,15 @@ The server implements a sophisticated framework system with systematic methodolo
 ```typescript
 // Rule-based framework selection based on criteria
 const framework = frameworkManager.selectFramework({
-  executionType: 'template',
-  complexity: 'high',
-  userPreference: 'CAGEERF'  // User preference is primary selection factor
+  executionType: "template",
+  complexity: "high",
+  userPreference: "CAGEERF", // User preference is primary selection factor
 });
 
 // Runtime framework switching
 await frameworkStateManager.switchFramework({
-  targetFramework: 'ReACT',
-  reason: 'User preference change'
+  targetFramework: "ReACT",
+  reason: "User preference change",
 });
 ```
 
@@ -116,7 +123,7 @@ await frameworkStateManager.switchFramework({
 #### Available Methodologies
 
 - **CAGEERF**: Comprehensive structured approach (Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework)
-- **ReACT**: Reasoning and Acting pattern for systematic problem-solving  
+- **ReACT**: Reasoning and Acting pattern for systematic problem-solving
 - **5W1H**: Who, What, When, Where, Why, How systematic analysis
 - **SCAMPER**: Creative problem-solving (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)
 
@@ -125,12 +132,34 @@ await frameworkStateManager.switchFramework({
 ### Installation
 
 ```bash
-cd server
+# Clone or navigate to the project
+cd /path/to/claude-prompts-mcp/server
+
+# Install dependencies
 npm install
+
+# Build TypeScript
 npm run build
 ```
 
-### Development
+### Claude Desktop Integration (Recommended)
+
+1. **Add to Claude Desktop configuration** (typically `~/.claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "claude-prompts-mcp": {
+      "command": "node",
+      "args": ["/absolute/path/to/claude-prompts-mcp/server/dist/index.js"]
+    }
+  }
+}
+```
+
+2. **Restart Claude Desktop** - The server will start automatically when Claude Desktop connects.
+
+### Manual Testing & Development
 
 ```bash
 # Development mode with hot-reloading
@@ -141,15 +170,11 @@ npm run typecheck
 
 # Run tests
 npm test
-```
 
-### Production
-
-```bash
-# STDIO transport (Claude Desktop)
+# Manual STDIO mode (for testing without Claude Desktop)
 npm run start:stdio
 
-# SSE transport (web clients)
+# Web/SSE mode (for web clients)
 npm run start:sse
 ```
 
@@ -195,24 +220,29 @@ npm run start:sse
 
 ### Basic Prompt Structure (Fast Variable Substitution)
 
-```markdown
+````markdown
 # Quick Code Formatter
 
 ## System Message
+
 Format code cleanly and consistently.
 
 ## User Message Template
+
 Please format this {{language}} code using {{style}} style:
 
 ```{{language}}
 {{code}}
 ```
+````
 
 ## Arguments
+
 - language: Programming language (required)
 - style: Formatting style (required)
 - code: Code to format (required)
-```
+
+````
 
 ### Framework-Aware Template Structure (Methodology Enhanced)
 
@@ -227,17 +257,20 @@ Analyze this {{language}} code for security vulnerabilities:
 
 ```{{language}}
 {{code}}
-```
+````
 
 Provide comprehensive analysis including:
+
 - Vulnerability assessment
 - Risk prioritization
 - Remediation recommendations
 
 ## Arguments
+
 - language: Programming language (required)
 - code: Code to analyze (required)
-```
+
+````
 
 ### Chain Execution
 
@@ -245,7 +278,6 @@ Provide comprehensive analysis including:
 {
   "id": "analysis-chain",
   "name": "Analysis Chain",
-  "isChain": true,
   "chainSteps": [
     {
       "promptId": "data-extraction",
@@ -261,7 +293,7 @@ Provide comprehensive analysis including:
     }
   ]
 }
-```
+````
 
 ### Enhanced Chain Configuration
 
@@ -269,7 +301,6 @@ Provide comprehensive analysis including:
 {
   "id": "analysis-chain",
   "name": "Enhanced Analysis Chain",
-  "isChain": true,
   "executionMode": "chain",
   "chainSteps": [
     {
@@ -354,18 +385,72 @@ npm run start:verbose
 
 ```bash
 # Optional: Optimize server root detection (streamlined detection system)
-export MCP_SERVER_ROOT=/path/to/server
+export MCP_SERVER_ROOT=/path/to/claude-prompts-mcp/server
 
-# Optional: Direct path to prompts config (automatic detection available) 
-export MCP_PROMPTS_CONFIG_PATH=/path/to/prompts/promptsConfig.json
+# Optional: Direct path to prompts config (automatic detection available)
+export MCP_PROMPTS_CONFIG_PATH=/path/to/claude-prompts-mcp/server/prompts/promptsConfig.json
 ```
 
 **Detection Strategy:** The server uses streamlined detection with 3 core strategies:
+
 1. **Script path analysis** (most reliable - works in 99% of cases)
-2. **Module path detection** (reliable fallback for edge cases)  
+2. **Module path detection** (reliable fallback for edge cases)
 3. **Common directory patterns** (covers remaining scenarios)
 
 Environment variables provide **guaranteed detection** but are not required for normal operation.
+
+## Troubleshooting
+
+### Common Installation Issues
+
+1. **"Cannot find module" errors**
+
+   ```bash
+   # Ensure you're in the server directory
+   cd /path/to/claude-prompts-mcp/server
+
+   # Clean install
+   rm -rf node_modules package-lock.json
+   npm install
+   npm run build
+   ```
+
+2. **Claude Desktop not connecting**
+
+   - Verify absolute paths in configuration (no relative paths like `./` or `~/`)
+   - Ensure the `dist/index.js` file exists after running `npm run build`
+   - Check Claude Desktop logs for connection errors
+   - Restart Claude Desktop after configuration changes
+
+3. **Permission errors**
+
+   ```bash
+   # Fix file permissions
+   chmod +x dist/index.js
+   ```
+
+4. **TypeScript compilation errors**
+
+   ```bash
+   # Check for syntax errors
+   npm run typecheck
+
+   # Clean build
+   npm run build
+   ```
+
+### Verifying Installation
+
+```bash
+# Test the server manually
+node dist/index.js --help
+
+# Run the test suite
+npm test
+
+# Check if MCP tools are working
+# After connecting to Claude Desktop, try: /mcp
+```
 
 ## Testing
 
@@ -392,37 +477,29 @@ npm run test:cageerf-framework
 npm run test:mcp-tools
 ```
 
-## Client Integration
+## Advanced Integration
 
-### Claude Desktop
+### Web Clients (Alternative to Claude Desktop)
 
-Add to Claude Desktop configuration:
+For web-based integrations, use SSE transport:
 
-```json
-{
-  "mcpServers": {
-    "claude-prompts-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/server/dist/index.js"],
-      "env": {
-        "MCP_SERVER_ROOT": "/absolute/path/to/server"
-      }
-    }
-  }
-}
+```bash
+# Start SSE server
+npm run start:sse
 ```
 
-### Web Clients
-
-Use SSE transport:
-
 ```javascript
-const eventSource = new EventSource('http://localhost:3000/events');
-eventSource.onmessage = function(event) {
+// Connect to SSE endpoint
+const eventSource = new EventSource("http://localhost:3000/events");
+eventSource.onmessage = function (event) {
   const data = JSON.parse(event.data);
   // Handle MCP messages
 };
 ```
+
+### Custom MCP Clients
+
+For custom integrations, the server supports both STDIO and SSE transports. See the [MCP Protocol Documentation](https://modelcontextprotocol.io) for implementation details.
 
 ## Error Handling
 
@@ -478,19 +555,19 @@ const analysis = semanticAnalyzer.analyze(promptData);
 ```typescript
 // Framework selection and management
 const framework = frameworkManager.selectFramework({
-  executionType: 'template',
-  complexity: 'high'
+  executionType: "template",
+  complexity: "high",
 });
 
 // Runtime framework switching
 await frameworkStateManager.switchFramework({
-  targetFramework: 'CAGEERF',
-  reason: 'Complexity requires structured approach'
+  targetFramework: "CAGEERF",
+  reason: "Complexity requires structured approach",
 });
 
 // Framework injection (conditional based on execution tier)
 const injectionResult = await frameworkInjector.injectFrameworkContext(
-  prompt, 
+  prompt,
   semanticAnalysis
 );
 
@@ -523,6 +600,7 @@ MIT License - see LICENSE file for details.
 ## Support
 
 For issues and questions:
+
 - GitHub Issues: Report bugs and feature requests
 - Documentation: See `/docs` for detailed guides
 - Examples: Check `/examples` for usage patterns

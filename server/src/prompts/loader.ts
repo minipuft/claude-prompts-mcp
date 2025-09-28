@@ -339,6 +339,7 @@ export class PromptLoader {
     chainSteps?: Array<{
       promptId: string;
       stepName: string;
+      gates?: string[];
       inputMapping?: Record<string, string>;
       outputMapping?: Record<string, string>;
     }>;
@@ -366,20 +367,19 @@ export class PromptLoader {
       const chainMatch = content.match(
         /## Chain Steps\s*\n([\s\S]*?)(?=\n##|$)/
       );
-      let isChain = false;
       let chainSteps: Array<{
         promptId: string;
         stepName: string;
+        gates?: string[];
         inputMapping?: Record<string, string>;
         outputMapping?: Record<string, string>;
       }> = [];
 
       if (chainMatch) {
-        isChain = true;
         const chainContent = chainMatch[1].trim();
-        // Updated regex to match the current markdown format
+        // Enhanced regex to match markdown format with optional gates
         const stepMatches = chainContent.matchAll(
-          /(\d+)\.\s*promptId:\s*([^\n]+)\s*\n\s*stepName:\s*([^\n]+)(?:\s*\n\s*inputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:outputMapping|promptId|\d+\.|$)))?\s*(?:\n\s*outputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:promptId|\d+\.|$)))?\s*/g
+          /(\d+)\.\s*promptId:\s*([^\n]+)\s*\n\s*stepName:\s*([^\n]+)(?:\s*\n\s*gates:\s*([^\n]+))?(?:\s*\n\s*inputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:outputMapping|promptId|\d+\.|$)))?\s*(?:\n\s*outputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:promptId|\d+\.|$)))?\s*/g
         );
 
         for (const match of stepMatches) {
@@ -388,6 +388,7 @@ export class PromptLoader {
             stepNumber,
             promptId,
             stepName,
+            gatesStr,
             inputMappingStr,
             outputMappingStr,
           ] = match;
@@ -395,12 +396,33 @@ export class PromptLoader {
           const step: {
             promptId: string;
             stepName: string;
+            gates?: string[];
             inputMapping?: Record<string, string>;
             outputMapping?: Record<string, string>;
           } = {
             promptId: promptId.trim(),
             stepName: stepName.trim(),
           };
+
+          // Parse gates if present
+          if (gatesStr) {
+            try {
+              // Handle both JSON array format ["gate1", "gate2"] and simple list format
+              const gatesStrTrimmed = gatesStr.trim();
+              if (gatesStrTrimmed.startsWith('[') && gatesStrTrimmed.endsWith(']')) {
+                // JSON array format
+                step.gates = JSON.parse(gatesStrTrimmed);
+              } else {
+                // Simple comma-separated format: "gate1, gate2"
+                step.gates = gatesStrTrimmed.split(',').map(g => g.trim()).filter(g => g.length > 0);
+              }
+              this.logger.debug(`Loaded ${step.gates?.length || 0} gate(s) for step ${stepNumber}: ${step.gates?.join(', ') || ''}`);
+            } catch (e) {
+              this.logger.warn(
+                `Invalid gates format in chain step ${stepNumber} of ${filePath}: ${e}`
+              );
+            }
+          }
 
           if (inputMappingStr) {
             try {
@@ -454,11 +476,11 @@ export class PromptLoader {
         );
       }
 
-      if (!userMessageTemplate && !isChain) {
+      if (!userMessageTemplate && !(chainSteps.length > 0)) {
         throw new Error(`No user message template found in ${filePath}`);
       }
 
-      return { systemMessage, userMessageTemplate, isChain, chainSteps };
+      return { systemMessage, userMessageTemplate, chainSteps };
     } catch (error) {
       this.logger.error(`Error loading prompt file ${filePath}:`, error);
       throw error;

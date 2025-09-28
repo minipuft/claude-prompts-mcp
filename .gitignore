@@ -20,7 +20,7 @@ server/.env*
 .env*
 
 # Logs and Debug Files
-server/logs/
+#server/logs/
 logs/
 *.log
 npm-debug.log*
@@ -73,6 +73,10 @@ server/test-listprompts.mjs
 mcp-debug-*
 startup*.log
 
+# Runtime State Files
+# server/.framework-state.json
+# .framework-state.json
+
 # Crash Dumps and Diagnostics
 *.dmp
 core
@@ -82,7 +86,7 @@ heapdump-*
 
 # Claude-Code setup
 context-memory/
-plans/
+plans/archive/
 CLAUDE.md
 .codex/
 AGENTS.md

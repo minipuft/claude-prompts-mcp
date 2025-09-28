@@ -1,27 +1,28 @@
 /**
  * MCP Tools Module - Fully Consolidated Architecture
  *
- * This module provides 3 intelligent consolidated tools that completely replace
- * the previous 24+ scattered legacy tools that have been removed from the codebase:
+ * This module provides 3 core MCP tools that have been validated and work correctly:
  *
- * ACTIVE CONSOLIDATED TOOLS:
- * - prompt_engine: Unified execution with intelligent analysis and semantic detection
- * - prompt_manager: Complete lifecycle management with smart filtering and analysis
- * - system_control: Framework management, analytics, and comprehensive system control
+ * ACTIVE CORE TOOLS:
+ * - prompt_engine: Proven execution engine with framework integration
+ * - prompt_manager: Complete prompt lifecycle management with filtering
+ * - system_control: Framework and system management with analytics
  *
- * REMOVED LEGACY TOOLS:
- * - prompt-management-tools.ts (1,123 lines) - Replaced by consolidated-prompt-manager.ts
- * - gate-management-tools.ts (635+ lines) - Gate functionality moved to evaluation service
- * - system-status-tools.ts (50+ lines) - Replaced by consolidated-system-control.ts
- * - workflow-management-tools.ts (302+ lines) - Replaced by consolidated-prompt-engine.ts
+ * REMOVED ENHANCED TOOLS (Phase 1 - 2025-09-26):
+ * - prompt-control.ts (663 lines) - Enhanced wrapper removed
+ * - prompt-execution.ts (428 lines) - Enhanced wrapper removed
+ * - system-management.ts (16,403 lines) - Enhanced wrapper removed
+ * - schemas/ directory (1,475 lines) - Over-engineering removed
+ * - formatters/ directory (427 lines) - Unnecessary complexity removed
  *
  * ARCHITECTURE BENEFITS:
- * - 87.5% reduction in MCP tools (24+ → 3)
- * - ~2,100+ lines of legacy code removed
+ * - 2,993 lines of enhanced tool complexity removed
+ * - 3 core tools that actually work and register properly
  * - Single source of truth for each functional area
  * - Improved maintainability and reduced complexity
  */
 
+import { z } from "zod";
 import { Logger } from "../logging/index.js";
 import { PromptManager } from "../prompts/index.js";
 import { ConfigManager } from "../config/index.js";
@@ -31,12 +32,13 @@ import {
   PromptData,
 } from "../types/index.js";
 // Gate evaluator removed - now using Framework methodology validation
-import { createConfigurableSemanticAnalyzer } from "../analysis/configurable-semantic-analyzer.js";
-import { createAnalysisIntegrationFactory } from "../analysis/integrations/index.js";
+import { createContentAnalyzer } from "../semantic/configurable-semantic-analyzer.js";
+import { createSemanticIntegrationFactory } from "../semantic/integrations/index.js";
 import { FrameworkStateManager } from "../frameworks/framework-state-manager.js";
 import { FrameworkManager, createFrameworkManager } from "../frameworks/framework-manager.js";
 import { ConversationManager, createConversationManager } from "../text-references/conversation.js";
-import { ExecutionCoordinator } from "../execution/execution-coordinator.js";
+// REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
+import { MetricsCollector, createMetricsCollector } from "../metrics/index.js";
 
 // Consolidated tools
 import {
@@ -51,6 +53,9 @@ import {
   ConsolidatedSystemControl,
   createConsolidatedSystemControl
 } from "./system-control.js";
+// Enhanced tools removed - using 3 core tools only (Phase 1.2 completed)
+import { ToolDescriptionManager } from "./tool-description-manager.js";
+// ChainScaffolderTool removed - functionality consolidated into ConsolidatedPromptEngine
 
 /**
  * Consolidated MCP Tools Manager
@@ -67,18 +72,29 @@ export class ConsolidatedMcpToolsManager {
   private promptEngine!: ConsolidatedPromptEngine;
   private promptManagerTool!: ConsolidatedPromptManager;
   private systemControl!: ConsolidatedSystemControl;
+  // Enhanced tools removed (Phase 1.2) - using 3 core tools only
+  // chainScaffolder removed - functionality consolidated into promptEngine
 
   // Shared components
-  private semanticAnalyzer!: ReturnType<typeof createConfigurableSemanticAnalyzer>;
+  private semanticAnalyzer!: ReturnType<typeof createContentAnalyzer>;
   private frameworkStateManager?: FrameworkStateManager;
   private frameworkManager?: FrameworkManager;
+  // REMOVED: chainOrchestrator - modular chain system removed
   private conversationManager!: ConversationManager;
+  private toolDescriptionManager?: ToolDescriptionManager;
+  private analyticsService!: MetricsCollector;
   // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution model
+
+  // Callback references
+  private onRestart?: (reason: string) => Promise<void>;
 
   // Data references
   private promptsData: PromptData[] = [];
   private convertedPrompts: ConvertedPrompt[] = [];
   private categories: Category[] = [];
+
+  // Pending analytics queue for initialization race condition
+  private pendingAnalytics: any[] = [];
 
   constructor(
     logger: Logger,
@@ -101,11 +117,15 @@ export class ConsolidatedMcpToolsManager {
     onRefresh: () => Promise<void>,
     onRestart: (reason: string) => Promise<void>
   ): Promise<void> {
+    // Store callback references
+    this.onRestart = onRestart;
+
     // Initialize shared components with configurable analysis
     const analysisConfig = this.configManager.getSemanticAnalysisConfig();
-    const integrationFactory = createAnalysisIntegrationFactory(this.logger);
+    const integrationFactory = createSemanticIntegrationFactory(this.logger);
     this.semanticAnalyzer = await integrationFactory.createFromEnvironment(analysisConfig);
     this.conversationManager = createConversationManager(this.logger);
+    this.analyticsService = createMetricsCollector(this.logger);
 
     this.logger.info(`Configurable semantic analyzer initialized (mode: ${analysisConfig.mode})`);
 
@@ -114,8 +134,10 @@ export class ConsolidatedMcpToolsManager {
       this.logger,
       this.mcpServer,
       this.promptManager,
+      this.configManager,
       this.semanticAnalyzer,
-      this.conversationManager
+      this.conversationManager,
+      this // Pass manager reference for analytics data flow
       // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution
     );
 
@@ -130,12 +152,21 @@ export class ConsolidatedMcpToolsManager {
       onRestart
     );
 
+    // Enhanced tools initialization removed (Phase 1.2)
+    // Using 3 core tools: promptEngine, promptManagerTool, systemControl
+
     this.systemControl = createConsolidatedSystemControl(
       this.logger,
-      this.mcpServer
+      this.mcpServer,
+      onRestart
     );
 
-    this.logger.info("Consolidated MCP Tools Manager initialized with 3 intelligent tools");
+    // chainScaffolder removed - functionality consolidated into promptEngine
+
+    // Flush any pending analytics data that was queued during initialization
+    this.flushPendingAnalytics();
+
+    this.logger.info("Consolidated MCP Tools Manager initialized with 3 intelligent tools (chain management in prompt_engine)");
   }
 
   /**
@@ -146,52 +177,367 @@ export class ConsolidatedMcpToolsManager {
     this.promptEngine.setFrameworkStateManager(frameworkStateManager);
     this.systemControl.setFrameworkStateManager(frameworkStateManager);
     this.promptManagerTool.setFrameworkStateManager?.(frameworkStateManager);
+    // Enhanced tool framework state management removed (Phase 1.2)
+    // Core tools handle framework state directly
+  }
+
+  /**
+   * Set tool description manager (called after initialization)
+   */
+  setToolDescriptionManager(manager: ToolDescriptionManager): void {
+    this.toolDescriptionManager = manager;
+
+    this.promptEngine.setToolDescriptionManager(manager);
+    this.promptEngine.setAnalyticsService(this.analyticsService);
+    // promptManagerTool doesn't have setToolDescriptionManager method
+    this.systemControl.setToolDescriptionManager?.(manager);
+    this.systemControl.setAnalyticsService(this.analyticsService);
+    // Enhanced tool description management removed (Phase 1.2)
+    // Core tools handle tool descriptions directly
+
+    // Set up hot-reload event listeners
+    this.setupToolDescriptionHotReload(manager);
+
+    this.logger.info("Tool description manager set for all MCP tools with hot-reload support");
+  }
+
+  /**
+   * Setup hot-reload event listeners for tool descriptions
+   */
+  private setupToolDescriptionHotReload(manager: ToolDescriptionManager): void {
+    // Listen for description changes
+    manager.on('descriptions-changed', (stats) => {
+      this.logger.info(`🔥 Tool descriptions hot-reloaded: ${stats.totalDescriptions} descriptions loaded`);
+      this.handleToolDescriptionChange(stats);
+    });
+
+    // Listen for reload errors
+    manager.on('descriptions-error', (error) => {
+      this.logger.error(`❌ Tool description reload failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+
+    // Start file watching if not already watching
+    if (!manager.isWatchingFile()) {
+      manager.startWatching();
+    }
+  }
+
+  /**
+   * Handle tool description changes
+   */
+  private async handleToolDescriptionChange(stats: any): Promise<void> {
+    try {
+      this.logger.info("🔄 Processing tool description changes...");
+
+      // Emit analytics update
+      this.updateAnalytics({
+        toolDescriptions: {
+          lastReload: new Date().toISOString(),
+          totalDescriptions: stats.totalDescriptions,
+          loadedFromFile: stats.loadedFromFile,
+          usingDefaults: stats.usingDefaults
+        }
+      });
+
+      // Note: MCP SDK doesn't support dynamic tool updates
+      // The new descriptions will be loaded on next tool registration or server restart
+      this.logger.info("✅ Tool descriptions reloaded from file");
+      this.logger.info(`📊 Stats: ${stats.totalDescriptions} total, using ${stats.usingDefaults > 0 ? 'defaults' : 'external config'}`);
+
+      // Check if restart is configured for tool description changes
+      const restartOnChange = this.configManager.getConfig().toolDescriptions?.restartOnChange ?? false;
+
+      if (restartOnChange) {
+        this.logger.info("🚨 Restart on tool description change is enabled - initiating server restart...");
+        // Use the existing restart mechanism
+        await this.onRestart?.("Tool descriptions updated - restart required for clients to see new descriptions");
+      } else {
+        this.logger.info("💡 Tip: New tool descriptions will be used for new client connections. For immediate effect, restart the server manually or enable 'restartOnChange' in config.");
+      }
+
+    } catch (error) {
+      this.logger.error(`Failed to handle tool description change: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
    * Initialize and set framework manager (called after framework state manager)
    */
-  async setFrameworkManager(): Promise<void> {
+  async setFrameworkManager(existingFrameworkManager?: FrameworkManager): Promise<void> {
     if (!this.frameworkManager) {
-      this.frameworkManager = await createFrameworkManager(this.logger);
+      // Use provided framework manager or create a new one
+      this.frameworkManager = existingFrameworkManager || await createFrameworkManager(this.logger);
       this.promptEngine.setFrameworkManager(this.frameworkManager);
       this.systemControl.setFrameworkManager(this.frameworkManager);
       this.promptManagerTool.setFrameworkManager?.(this.frameworkManager);
-      this.logger.info("Framework manager initialized and integrated with MCP tools");
+      // Enhanced tool framework management removed (Phase 1.2)
+      // Core tools handle framework management directly
+
+      // Set ConfigManager for system control config operations
+      this.systemControl.setConfigManager(this.configManager);
+
+      // Set MCPToolsManager reference for dynamic tool updates
+      this.systemControl.setMCPToolsManager(this);
+
+      // Enhanced tool delegation removed (Phase 1.2)
+      // Using core tools directly without delegation patterns
+
+      // REMOVED: ChainOrchestrator initialization - modular chain system removed
+
+      if (existingFrameworkManager) {
+        this.logger.info("Framework manager integrated with MCP tools (shared instance)");
+      } else {
+        this.logger.info("Framework manager initialized and integrated with MCP tools");
+      }
     }
   }
 
-  /**
-   * Wire ConsolidatedPromptEngine to ExecutionCoordinator for delegation (Phase 3)
-   */
-  wireExecutionCoordinator(executionCoordinator: ExecutionCoordinator): void {
-    executionCoordinator.setConsolidatedEngine(this.promptEngine);
-    this.logger.info("ConsolidatedPromptEngine wired to ExecutionCoordinator for delegation");
-  }
+  // REMOVED: wireExecutionCoordinator - ExecutionCoordinator removed
 
   /**
-   * Register all consolidated MCP tools with the server
+   * Register all consolidated MCP tools with the server (centralized registration)
    */
   async registerAllTools(): Promise<void> {
-    this.logger.info("Registering consolidated MCP tools with server...");
+    this.logger.info("Registering consolidated MCP tools with server (centralized)...");
 
-    // Register the 3 consolidated tools
-    this.promptEngine.registerTool();
-    this.promptManagerTool.registerTool();
-    this.systemControl.registerTool();
+    // Register prompt_engine tool
+    try {
+      this.mcpServer.registerTool(
+      "prompt_engine",
+      {
+        title: "Prompt Engine",
+        description: "🚀 PROMPT TEMPLATE ENGINE: Processes prompt templates and returns instructions for YOU (the client LLM) to execute. WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
+        inputSchema: {
+          command: z
+            .string()
+            .min(1, "Command cannot be empty")
+            .describe("Prompt name and arguments to process. WARNING: Will return instructions for YOU to execute, not just information. SIMPLE: >>prompt_name content | ADVANCED: JSON with execution options"),
+          execution_mode: z
+            .enum(["auto", "prompt", "template", "chain"])
+            .optional()
+            .describe("Override intelligent auto-detection (default: auto). 'auto' intelligently detects execution type, 'prompt' for single execution, 'template' for variable substitution, 'chain' for multi-step workflows."),
+          force_restart: z
+            .boolean()
+            .optional()
+            .describe("Force restart chain from beginning, clearing all existing state. Only applies to chain execution modes."),
+          session_id: z
+            .string()
+            .min(1, "Session ID cannot be empty if provided")
+            .regex(/^[a-zA-Z0-9_-]+$/, "Session ID must contain only alphanumeric characters, underscores, and hyphens")
+            .optional()
+            .describe("Specific session ID to use or resume. Must be alphanumeric with underscores/hyphens only."),
+          options: z
+            .record(z.any())
+            .optional()
+            .describe("Additional execution options (key-value pairs). Supports framework-specific options, debugging flags, and custom parameters."),
+        },
+        outputSchema: {
+          content: z.array(z.object({
+            type: z.literal("text"),
+            text: z.string()
+          })),
+          isError: z.boolean().optional()
+        },
+      },
+      async (args: {
+        command: string;
+        execution_mode?: "auto" | "prompt" | "template" | "chain";
+        force_restart?: boolean;
+        session_id?: string;
+        options?: Record<string, any>;
+      }) => {
+        try {
+          const toolResponse = await this.promptEngine.executePromptCommand(args, {});
+          return {
+            content: toolResponse.content,
+            isError: toolResponse.isError
+          };
+        } catch (error) {
+          this.logger.error(`prompt_engine error: ${error instanceof Error ? error.message : String(error)}`);
+          return {
+            content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+            isError: true
+          };
+        }
+      }
+    );
+      this.logger.debug("✅ prompt_engine tool registered successfully");
+    } catch (error) {
+      this.logger.error(`❌ Failed to register prompt_engine tool: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
 
-    this.logger.info("🎉 All 3 consolidated MCP tools registered successfully!");
-    this.logger.info("📊 Tool consolidation: 24+ scattered tools → 3 intelligent tools (87.5% reduction)");
+    // Register prompt_manager tool
+    try {
+      this.mcpServer.registerTool(
+      "prompt_manager",
+      {
+        title: "Prompt Manager",
+        description: "🎯 PROMPT MANAGER: Complete prompt lifecycle management with advanced filtering and smart discovery capabilities. Handles creation, updating, deletion, analysis, and search of prompts with intelligent categorization and context-aware recommendations.",
+        inputSchema: {
+          action: z
+            .enum(["create", "create_prompt", "create_template", "analyze_type", "migrate_type", "update", "delete", "modify", "reload", "list"])
+            .describe("Action to perform: create (prompts/templates), analyze_type (detect prompt type), migrate_type (change type), update/modify (edit), delete (remove), reload (refresh), list (search/filter)"),
+          id: z
+            .string()
+            .optional()
+            .describe("Prompt ID for update/delete/modify operations"),
+          content: z
+            .string()
+            .optional()
+            .describe("Prompt content for create/update operations"),
+          category: z
+            .string()
+            .optional()
+            .describe("Category for organization"),
+          arguments: z
+            .array(z.object({
+              name: z.string(),
+              type: z.string(),
+              description: z.string()
+            }))
+            .optional()
+            .describe("Argument definitions for prompt parameters"),
+          search_query: z
+            .string()
+            .optional()
+            .describe("Search query for list operations. Supports filters like 'category:code', 'type:chain', 'confidence:>80', etc."),
+          force: z
+            .boolean()
+            .optional()
+            .describe("Force operation without confirmation prompts")
+        },
+        outputSchema: {
+          content: z.array(z.object({
+            type: z.literal("text"),
+            text: z.string()
+          })),
+          isError: z.boolean().optional()
+        },
+      },
+      async (args: {
+        action: "create" | "create_prompt" | "create_template" | "analyze_type" | "migrate_type" | "update" | "delete" | "modify" | "reload" | "list";
+        [key: string]: any;
+      }) => {
+        try {
+          const toolResponse = await this.promptManagerTool.handleAction(args, {});
+          return {
+            content: toolResponse.content,
+            isError: toolResponse.isError
+          };
+        } catch (error) {
+          this.logger.error(`prompt_manager error: ${error instanceof Error ? error.message : String(error)}`);
+          return {
+            content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+            isError: true
+          };
+        }
+      }
+    );
+      this.logger.debug("✅ prompt_manager tool registered successfully");
+    } catch (error) {
+      this.logger.error(`❌ Failed to register prompt_manager tool: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+
+    // Register system_control tool
+    try {
+      this.mcpServer.registerTool(
+      "system_control",
+      {
+        title: "System Control",
+        description: "⚙️ SYSTEM CONTROL: Framework and system management with comprehensive analytics, health monitoring, and configuration control. Handles framework switching, system diagnostics, performance metrics, and server management operations.",
+        inputSchema: {
+          action: z
+            .string()
+            .describe("Action to perform: switch_framework, get_analytics, health_check, restart_server, get_config, update_config, etc."),
+          framework: z
+            .string()
+            .optional()
+            .describe("Framework name for switch_framework action (CAGEERF, ReACT, 5W1H, SCAMPER)"),
+          config_path: z
+            .string()
+            .optional()
+            .describe("Configuration path for config operations"),
+          config_value: z
+            .any()
+            .optional()
+            .describe("Configuration value for update operations"),
+          restart_reason: z
+            .string()
+            .optional()
+            .describe("Reason for server restart (for logging and user notification)")
+        },
+        outputSchema: {
+          content: z.array(z.object({
+            type: z.literal("text"),
+            text: z.string()
+          })),
+          isError: z.boolean().optional()
+        },
+      },
+      async (args: {
+        action: string;
+        [key: string]: any;
+      }) => {
+        try {
+          const toolResponse = await this.systemControl.handleAction(args, {});
+          return {
+            content: toolResponse.content,
+            isError: toolResponse.isError
+          };
+        } catch (error) {
+          this.logger.error(`system_control error: ${error instanceof Error ? error.message : String(error)}`);
+          return {
+            content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+            isError: true
+          };
+        }
+      }
+    );
+      this.logger.debug("✅ system_control tool registered successfully");
+    } catch (error) {
+      this.logger.error(`❌ Failed to register system_control tool: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+    this.logger.info("🎉 Centralized MCP tools registered successfully!");
+    this.logger.info("📊 Core Tools: 3 centrally managed tools");
+    this.logger.info("🚀 Active Tools: prompt_engine, prompt_manager, system_control");
 
     // Log available tools for user reference
     const toolSummary = [
-      "Available Consolidated Tools:",
-      "🚀 prompt_engine - Unified execution with intelligent analysis",
-      "📝 prompt_manager - Complete lifecycle management",
-      "⚙️ system_control - Framework and analytics management with integrated quality validation"
+      "Available Core Tools (centralized registration):",
+      "🎯 prompt_engine - Centralized prompt execution engine",
+      "🎯 prompt_manager - Centralized prompt lifecycle management",
+      "⚙️ system_control - Centralized framework and system management"
     ].join("\n   ");
 
     this.logger.info(toolSummary);
+  }
+
+  /**
+   * Re-register all tools with updated descriptions (for framework switching) - centralized version
+   */
+  async reregisterToolsWithUpdatedDescriptions(): Promise<void> {
+    this.logger.info("Re-registering tools with updated descriptions (centralized)...");
+
+    try {
+      // Simply call the centralized registration method
+      await this.registerAllTools();
+
+      // Notify MCP clients that tool list has changed
+      if (this.mcpServer?.server?.sendToolListChanged) {
+        await this.mcpServer.server.sendToolListChanged();
+        this.logger.info("✅ Sent tool list changed notification to MCP clients");
+      } else {
+        this.logger.warn("⚠️ MCP server does not support sendToolListChanged notification");
+      }
+
+      this.logger.info("🎉 Tools re-registered successfully with updated descriptions (centralized)!");
+    } catch (error) {
+      this.logger.error(`Failed to re-register tools: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
   }
 
   /**
@@ -209,13 +555,53 @@ export class ConsolidatedMcpToolsManager {
     // Update all consolidated tools with new data
     this.promptEngine.updateData(promptsData, convertedPrompts);
     this.promptManagerTool.updateData(promptsData, convertedPrompts, categories);
+    // Enhanced tool updateData calls removed (Phase 1.2)
+    // Core tools handle data updates directly
+    // chainScaffolder removed - functionality consolidated into promptEngine
   }
 
   /**
    * Update system analytics (from consolidated tools)
    */
   updateAnalytics(analytics: any): void {
-    this.systemControl.updateAnalytics(analytics);
+    if (this.systemControl) {
+      this.systemControl.updateAnalytics(analytics);
+    } else {
+      // Queue analytics data until systemControl is initialized
+      this.pendingAnalytics.push(analytics);
+      this.logger.debug(`SystemControl not yet initialized, queued analytics data (${this.pendingAnalytics.length} pending)`);
+    }
+  }
+
+  /**
+   * Flush pending analytics data to systemControl after initialization
+   */
+  private flushPendingAnalytics(): void {
+    if (this.systemControl && this.pendingAnalytics.length > 0) {
+      this.logger.debug(`Flushing ${this.pendingAnalytics.length} pending analytics updates`);
+      this.pendingAnalytics.forEach(analytics => {
+        this.systemControl.updateAnalytics(analytics);
+      });
+      this.pendingAnalytics = [];
+    }
+  }
+
+  /**
+   * Shutdown all components and cleanup resources
+   */
+  shutdown(): void {
+    this.logger.info("🛑 Shutting down MCP tools manager...");
+
+    // Shutdown tool description manager and stop file watching
+    if (this.toolDescriptionManager) {
+      this.toolDescriptionManager.shutdown();
+      this.logger.info("✅ Tool description manager shut down");
+    }
+
+    // Clear pending analytics
+    this.pendingAnalytics = [];
+
+    this.logger.info("✅ MCP tools manager shutdown completed");
   }
 }
 

@@ -4,6 +4,13 @@
 
 This document provides a comprehensive analysis of the current chain functionality in the Claude Prompts MCP server, detailing how chains operate in the MCP → LLM environment, current limitations, and our roadmap for future enhancements.
 
+## Related Documentation
+
+- **[Three-Tier Execution System](execution-architecture-guide.md)** - Understanding how chains fit in the overall execution model
+- **[Template Development Guide](template-development-guide.md)** - Creating templates that work well with chain steps
+- **[MCP Tools Reference](mcp-tools-reference.md)** - Using `prompt_engine` tool for chain execution
+- **[System Architecture](architecture.md)** - Technical implementation details
+
 ## Current Chain System Architecture
 
 ### Architecture Philosophy: LLM-Driven Execution
@@ -37,7 +44,7 @@ Chains are defined in markdown files with structured metadata:
 
 #### 2. Execution Flow
 
-1. **Chain Detection**: `ConsolidatedPromptEngine` identifies chains via `isChain` flag and `chainSteps` array
+1. **Chain Detection**: `ConsolidatedPromptEngine` identifies chains via `chainSteps` array presence
 2. **Instruction Generation**: System generates structured instructions for the LLM including:
    - Current step information
    - Available context from previous steps
@@ -171,8 +178,9 @@ Chains are defined in markdown files with structured metadata:
 
 **Goal**: Optional automatic step progression without manual LLM calls
 
-- Add `auto_execute_chain` parameter (already partially implemented)
-- Automatic transition between steps on successful completion
+- Add `llm_driven_execution` parameter (enables LLM-driven chain coordination when semantic LLM integration is available)
+- **Current Status**: Parameter validates LLM integration availability before enabling LLM coordination
+- **Fallback Behavior**: When LLM integration unavailable, falls back to step-by-step confirmation mode
 - Maintain manual mode for complex workflows requiring human intervention
 
 #### Enhanced Error Recovery

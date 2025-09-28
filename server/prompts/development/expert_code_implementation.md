@@ -16,6 +16,11 @@ Please implement the following coding request:
 **Constraints:**
 {{constraints}}
 
+{% if gate_guidance %}
+## Quality Guidelines
+{{gate_guidance}}
+{% endif %}
+
 For your implementation:
 1. Design a robust solution that addresses all requirements
 2. Write clean, efficient, well-structured code

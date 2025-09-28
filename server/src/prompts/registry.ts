@@ -1,6 +1,6 @@
 /**
  * Prompt Registry Module
- * Handles registering prompts with MCP server and managing conversation history
+ * Handles registering prompts with MCP server using proper MCP protocol and managing conversation history
  */
 
 import { z } from "zod";
@@ -10,6 +10,7 @@ import {
   ConversationHistoryItem,
   ConvertedPrompt,
 } from "../types/index.js";
+import { isChainPrompt } from "../utils/chainUtils.js";
 // TemplateProcessor functionality consolidated into UnifiedPromptProcessor
 
 /**
@@ -22,6 +23,7 @@ export class PromptRegistry {
   // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
   private conversationHistory: ConversationHistoryItem[] = [];
   private readonly MAX_HISTORY_SIZE = 100;
+  private registeredPromptNames = new Set<string>(); // Track registered prompts to prevent duplicates
 
   /**
    * Direct template processing method (minimal implementation)
@@ -57,144 +59,231 @@ export class PromptRegistry {
   }
 
   /**
-   * Register MCP resources for prompt schemas (enables AI auto-discovery)
+   * Register individual prompts using MCP SDK registerPrompt API
+   * This implements the standard MCP prompts protocol using the high-level API
    */
-  async registerPromptResources(prompts: ConvertedPrompt[]): Promise<void> {
+  private registerIndividualPrompts(prompts: ConvertedPrompt[]): void {
     try {
-      this.logger.info(`Registering MCP resources for ${prompts.length} prompts...`);
-      
+      this.logger.info('Registering individual prompts with MCP SDK...');
+      let registeredCount = 0;
+
       for (const prompt of prompts) {
-        const resourceUri = `prompt://${prompt.id}/schema`;
-        const schema = {
-          name: prompt.name,
-          id: prompt.id,
-          description: prompt.description,
-          category: prompt.category,
-          arguments: prompt.arguments.map(arg => ({
-            name: arg.name,
-            description: arg.description || `Argument: ${arg.name}`,
-            required: arg.required,
-            type: 'string'
-          })),
-          usage: `>>${prompt.id} ${prompt.arguments.map(arg => `${arg.name}="value"`).join(' ')}`,
-          examples: [
+        // Skip if already registered (deduplication guard)
+        if (this.registeredPromptNames.has(prompt.name)) {
+          this.logger.debug(`Skipping already registered prompt: ${prompt.name}`);
+          continue;
+        }
+
+        // Create argument schema
+        const argsSchema: Record<string, any> = {};
+        for (const arg of prompt.arguments) {
+          argsSchema[arg.name] = z
+            .string()
+            .optional()
+            .describe(arg.description || `Argument: ${arg.name}`);
+        }
+
+        // Register the prompt using the correct MCP SDK API with error recovery
+        try {
+          this.mcpServer.registerPrompt(
+            prompt.name,
             {
-              description: 'Basic usage',
-              command: `>>${prompt.id} ${prompt.arguments.slice(0, 1).map(arg => `${arg.name}="example value"`).join(' ')}`
+              title: prompt.name,
+              description: prompt.description || `Prompt: ${prompt.name}`,
+              argsSchema
+            },
+            async (args: any) => {
+              this.logger.debug(`Executing prompt '${prompt.name}' with args:`, args);
+              return await this.executePromptLogic(prompt, args || {});
             }
-          ]
-        };
-        
-        // Register resource with MCP server
-        this.mcpServer.resource(
-          resourceUri,
-          `Prompt schema for ${prompt.name}`,
-          'application/json',
-          () => ({
-            contents: [{
-              type: 'text',
-              text: JSON.stringify(schema, null, 2)
-            }]
-          })
-        );
-        
-        this.logger.debug(`Registered resource: ${resourceUri}`);
+          );
+
+          // Track the registered prompt
+          this.registeredPromptNames.add(prompt.name);
+          registeredCount++;
+          this.logger.debug(`Registered prompt: ${prompt.name}`);
+        } catch (error: any) {
+          if (error.message && error.message.includes('already registered')) {
+            // Handle MCP SDK's "already registered" error gracefully
+            this.logger.warn(`Prompt '${prompt.name}' already registered in MCP SDK, skipping re-registration`);
+            this.registeredPromptNames.add(prompt.name); // Track it anyway
+            continue;
+          } else {
+            // Re-throw other errors
+            this.logger.error(`Failed to register prompt '${prompt.name}':`, error.message || error);
+            throw error;
+          }
+        }
       }
-      
-      this.logger.info(`Successfully registered ${prompts.length} prompt resources`);
+
+      this.logger.info(`Successfully registered ${registeredCount} of ${prompts.length} prompts with MCP SDK`);
     } catch (error) {
-      this.logger.error('Error registering prompt resources:', error);
+      this.logger.error('Error registering individual prompts:', error instanceof Error ? error.message : String(error));
+      throw error;
     }
   }
 
   /**
-   * Register all prompts with the MCP server
+   * Execute prompt logic (extracted from createPromptHandler for MCP protocol)
+   */
+  private async executePromptLogic(promptData: ConvertedPrompt, args: any): Promise<any> {
+    try {
+      this.logger.info(`Executing prompt '${promptData.name}'...`);
+
+      // Check if arguments are effectively empty
+      const effectivelyEmptyArgs = this.areArgumentsEffectivelyEmpty(
+        promptData.arguments,
+        args
+      );
+
+      if (
+        effectivelyEmptyArgs &&
+        promptData.onEmptyInvocation === "return_template"
+      ) {
+        this.logger.info(
+          `Prompt '${promptData.name}' invoked without arguments and onEmptyInvocation is 'return_template'. Returning template info.`
+        );
+
+        let responseText = `Prompt: '${promptData.name}'\n`;
+        responseText += `Description: ${promptData.description}\n`;
+
+        if (promptData.arguments && promptData.arguments.length > 0) {
+          responseText += `This prompt requires the following arguments:\n`;
+          promptData.arguments.forEach((arg) => {
+            responseText += `  - ${arg.name}${
+              arg.required ? " (required)" : " (optional)"
+            }: ${arg.description || "No description"}\n`;
+          });
+          responseText += `\nExample usage: >>${
+            promptData.id || promptData.name
+          } ${promptData.arguments
+            .map((arg) => `${arg.name}=\"value\"`)
+            .join(" ")}`;
+        } else {
+          responseText += "This prompt does not require any arguments.\n";
+        }
+
+        return {
+          messages: [
+            {
+              role: "assistant" as const,
+              content: { type: "text" as const, text: responseText },
+            },
+          ],
+        };
+      }
+
+      // Check if this is a chain prompt
+      if (
+        isChainPrompt(promptData) &&
+        promptData.chainSteps &&
+        promptData.chainSteps.length > 0
+      ) {
+        this.logger.info(
+          `Prompt '${promptData.name}' is a chain with ${promptData.chainSteps.length} steps. NOT automatically executing the chain.`
+        );
+        // Note: Chain execution is handled elsewhere
+      }
+
+      // Create messages array with only user and assistant roles
+      const messages: {
+        role: "user" | "assistant";
+        content: { type: "text"; text: string };
+      }[] = [];
+
+      // Create user message with placeholders replaced
+      let userMessageText = promptData.userMessageTemplate;
+
+      // If there's a system message, prepend it to the user message
+      if (promptData.systemMessage) {
+        userMessageText = `[System Info: ${promptData.systemMessage}]\n\n${userMessageText}`;
+      }
+
+      // Process the template with special context
+      // Using direct processing since TemplateProcessor was consolidated
+      userMessageText = await this.processTemplateDirect(
+        userMessageText,
+        args,
+        { previous_message: this.getPreviousMessage() },
+        promptData.tools || false
+      );
+
+      // Store in conversation history for future reference
+      this.addToConversationHistory({
+        role: "user",
+        content: userMessageText,
+        timestamp: Date.now(),
+        isProcessedTemplate: true, // Mark as a processed template
+      });
+
+      // Push the user message to the messages array
+      messages.push({
+        role: "user",
+        content: {
+          type: "text",
+          text: userMessageText,
+        },
+      });
+
+      this.logger.debug(
+        `Processed messages for prompt '${promptData.name}':`,
+        messages
+      );
+      return { messages };
+    } catch (error) {
+      this.logger.error(
+        `Error executing prompt '${promptData.name}':`,
+        error
+      );
+      throw error; // Re-throw to let the MCP framework handle it
+    }
+  }
+
+  /**
+   * Register all prompts with the MCP server using proper MCP protocol
    */
   async registerAllPrompts(prompts: ConvertedPrompt[]): Promise<number> {
     try {
       this.logger.info(
-        `Registering ${prompts.length} prompts with the server...`
+        `Registering ${prompts.length} prompts with MCP SDK registerPrompt API...`
       );
 
-      // Unregister existing prompts if possible
-      await this.unregisterAllPrompts();
-
-      // Register MCP resources for AI auto-discovery
-      await this.registerPromptResources(prompts);
-
-      this.logger.info("Registering prompts with both ID and name for maximum flexibility");
-
-      let registeredCount = 0;
-      for (const promptData of prompts) {
-        try {
-          const success = await this.registerSinglePrompt(promptData);
-          if (success) {
-            registeredCount++;
-          }
-        } catch (error) {
-          this.logger.error(
-            `Error registering prompt '${promptData.name}':`,
-            error
-          );
-          // Continue with other prompts even if one fails
-        }
-      }
+      // Register individual prompts using the correct MCP SDK API
+      this.registerIndividualPrompts(prompts);
 
       this.logger.info(
-        `Successfully registered ${registeredCount} prompts with the server`
+        `Successfully registered ${prompts.length} prompts with MCP SDK`
       );
-      return registeredCount;
+      return prompts.length;
     } catch (error) {
       this.logger.error(`Error registering prompts:`, error);
       throw error;
     }
   }
 
+
   /**
-   * Register a single prompt with the MCP server
-   * Always registers by both ID and name for maximum flexibility
+   * Send list_changed notification to clients (for hot-reload)
+   * This is the proper MCP way to notify clients about prompt updates
    */
-  async registerSinglePrompt(promptData: ConvertedPrompt): Promise<boolean> {
+  async notifyPromptsListChanged(): Promise<void> {
     try {
-      // Create the argument schema for this prompt
-      const argsSchema = this.createArgsSchema(promptData.arguments);
-
-      // Create the prompt handler
-      const promptHandler = this.createPromptHandler(promptData);
-
-      // Always register with both ID and name for maximum flexibility
-      this.mcpServer.prompt(promptData.id, argsSchema, promptHandler);
-      this.logger.debug(`Registered prompt with ID: ${promptData.id}`);
-
-      this.mcpServer.prompt(promptData.name, argsSchema, promptHandler);
-      this.logger.debug(`Registered prompt with name: ${promptData.name}`);
-
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Error registering single prompt '${promptData.name}':`,
-        error
-      );
-      return false;
-    }
-  }
-
-  /**
-   * Unregister all prompts if possible
-   */
-  async unregisterAllPrompts(): Promise<void> {
-    if (typeof (this.mcpServer as any).unregisterAllPrompts === "function") {
-      try {
-        (this.mcpServer as any).unregisterAllPrompts();
-        this.logger.info("Unregistered all existing prompts");
-      } catch (unregisterError) {
-        this.logger.warn(
-          "Could not unregister existing prompts:",
-          unregisterError
-        );
+      // Send MCP notification that prompt list has changed
+      if (this.mcpServer && typeof this.mcpServer.notification === 'function') {
+        this.mcpServer.notification({
+          method: "notifications/prompts/list_changed"
+        });
+        this.logger.info("✅ Sent prompts/list_changed notification to clients");
+      } else {
+        this.logger.debug("MCP server doesn't support notifications");
       }
+    } catch (error) {
+      this.logger.warn("Could not send prompts/list_changed notification:", error);
     }
   }
+
+  // Note: MCP SDK doesn't provide prompt unregistration
+  // Hot-reload is handled through list_changed notifications to clients
 
   /**
    * Helper function to determine if provided arguments are effectively empty
@@ -225,146 +314,7 @@ export class PromptRegistry {
     return true; // All defined arguments are missing or have empty values
   }
 
-  /**
-   * Create prompt handler function
-   */
-  private createPromptHandler(promptData: ConvertedPrompt) {
-    return async (args: any, extra: any) => {
-      try {
-        this.logger.info(`Executing prompt '${promptData.name}'...`);
 
-        // Check if arguments are effectively empty
-        const effectivelyEmptyArgs = this.areArgumentsEffectivelyEmpty(
-          promptData.arguments,
-          args
-        );
-
-        if (
-          effectivelyEmptyArgs &&
-          promptData.onEmptyInvocation === "return_template"
-        ) {
-          this.logger.info(
-            `Prompt '${promptData.name}' invoked without arguments and onEmptyInvocation is 'return_template'. Returning template info.`
-          );
-
-          let responseText = `Prompt: '${promptData.name}'\n`;
-          responseText += `Description: ${promptData.description}\n`;
-
-          if (promptData.arguments && promptData.arguments.length > 0) {
-            responseText += `This prompt requires the following arguments:\n`;
-            promptData.arguments.forEach((arg) => {
-              responseText += `  - ${arg.name}${
-                arg.required ? " (required)" : " (optional)"
-              }: ${arg.description || "No description"}\n`;
-            });
-            responseText += `\nExample usage: >>${
-              promptData.id || promptData.name
-            } ${promptData.arguments
-              .map((arg) => `${arg.name}=\"value\"`)
-              .join(" ")}`;
-          } else {
-            responseText += "This prompt does not require any arguments.\n";
-          }
-
-          return {
-            messages: [
-              {
-                role: "assistant" as const,
-                content: { type: "text" as const, text: responseText },
-              },
-            ],
-          };
-        }
-
-        // Check if this is a chain prompt
-        if (
-          promptData.isChain &&
-          promptData.chainSteps &&
-          promptData.chainSteps.length > 0
-        ) {
-          this.logger.info(
-            `Prompt '${promptData.name}' is a chain with ${promptData.chainSteps.length} steps. NOT automatically executing the chain.`
-          );
-          // Note: Chain execution is handled elsewhere
-        }
-
-        // Create messages array with only user and assistant roles
-        const messages: {
-          role: "user" | "assistant";
-          content: { type: "text"; text: string };
-        }[] = [];
-
-        // Create user message with placeholders replaced
-        let userMessageText = promptData.userMessageTemplate;
-
-        // If there's a system message, prepend it to the user message
-        if (promptData.systemMessage) {
-          userMessageText = `[System Info: ${promptData.systemMessage}]\n\n${userMessageText}`;
-        }
-
-        // Process the template with special context
-        // Using direct processing since TemplateProcessor was consolidated
-        userMessageText = await this.processTemplateDirect(
-          userMessageText,
-          args,
-          { previous_message: this.getPreviousMessage() },
-          promptData.tools || false
-        );
-
-        // Store in conversation history for future reference
-        this.addToConversationHistory({
-          role: "user",
-          content: userMessageText,
-          timestamp: Date.now(),
-          isProcessedTemplate: true, // Mark as a processed template
-        });
-
-        // Push the user message to the messages array
-        messages.push({
-          role: "user",
-          content: {
-            type: "text",
-            text: userMessageText,
-          },
-        });
-
-        this.logger.debug(
-          `Processed messages for prompt '${promptData.name}':`,
-          messages
-        );
-        return { messages };
-      } catch (error) {
-        this.logger.error(
-          `Error executing prompt '${promptData.name}':`,
-          error
-        );
-        throw error; // Re-throw to let the MCP framework handle it
-      }
-    };
-  }
-
-  /**
-   * Create argument schema for a prompt
-   */
-  private createArgsSchema(
-    promptArgs: Array<{
-      name: string;
-      description?: string;
-      required: boolean;
-    }>
-  ): Record<string, z.ZodType> {
-    const schema: Record<string, z.ZodType> = {};
-
-    for (const arg of promptArgs) {
-      // All arguments are treated as optional strings regardless of required flag
-      schema[arg.name] = z
-        .string()
-        .optional()
-        .describe(arg.description || `Argument: ${arg.name}`);
-    }
-
-    return schema;
-  }
 
   /**
    * Add item to conversation history with size management
@@ -545,7 +495,7 @@ export class PromptRegistry {
     categoriesCount: number;
     averageArgumentsPerPrompt: number;
   } {
-    const chainPrompts = prompts.filter((p) => p.isChain).length;
+    const chainPrompts = prompts.filter((p) => isChainPrompt(p)).length;
     const toolEnabledPrompts = prompts.filter((p) => p.tools).length;
     const categoriesSet = new Set(prompts.map((p) => p.category));
     const totalArguments = prompts.reduce(

@@ -111,3 +111,29 @@ Execute the chain workflow to transform the provided content into an enhanced, i
    outputMapping:
      final_note: enhanced_note
 
+## Chain Steps
+
+1. **Initial Content Analysis** (content_analysis)
+   - Input Mapping: {"content":"content"}
+   - Output Mapping: {"analysis_output":"step_0_output"}
+
+2. **Find Related Vault Notes** (vault_related_notes_finder)
+   - Input Mapping: {"note_topic":"content","content_areas":"analysis_output"}
+   - Output Mapping: {"related_notes":"step_1_output"}
+
+3. **Integrate Content with Existing Notes** (note_integration)
+   - Input Mapping: {"notes":"existing_notes","new_information":"analysis_output"}
+   - Output Mapping: {"integrated_content":"step_2_output"}
+
+4. **Optimize Metadata** (obsidian_metadata_optimizer)
+   - Input Mapping: {"note_content":"integrated_content","vault_structure":"vault_context"}
+   - Output Mapping: {"metadata_optimized":"step_3_output"}
+
+5. **Enhance Formatting** (format_enhancement)
+   - Input Mapping: {"existing_content":"metadata_optimized","domain":"domain"}
+   - Output Mapping: {"enhanced_content":"step_4_output"}
+
+6. **Final Refinement** (note_refinement)
+   - Input Mapping: {"notes":"enhanced_content"}
+   - Output Mapping: {"final_output":"step_5_output"}
+

@@ -23,6 +23,9 @@ export class ServerRootDetector {
       args.includes("--verbose") || args.includes("--debug-startup");
     const isQuiet = args.includes("--quiet");
 
+    // Default to quiet mode (no output) unless verbose is specified
+    const shouldShowOutput = isVerbose;
+
     // Early termination: If environment variable is set, use it immediately
     if (process.env.MCP_SERVER_ROOT) {
       const envPath = path.resolve(process.env.MCP_SERVER_ROOT);
@@ -31,7 +34,7 @@ export class ServerRootDetector {
         const fs = await import("fs/promises");
         await fs.access(configPath);
 
-        if (!isQuiet) {
+        if (shouldShowOutput) {
           console.error(`✓ SUCCESS: MCP_SERVER_ROOT environment variable`);
           console.error(`  Path: ${envPath}`);
           console.error(`  Config found: ${configPath}`);
@@ -58,7 +61,7 @@ export class ServerRootDetector {
     }
 
     // Test strategies with optimized flow
-    return await this.testStrategies(strategies, isVerbose, isQuiet);
+    return await this.testStrategies(strategies, isVerbose, shouldShowOutput);
   }
 
 
@@ -136,7 +139,7 @@ export class ServerRootDetector {
   /**
    * Test strategies with optimized flow
    */
-  private async testStrategies(strategies: any[], isVerbose: boolean, isQuiet: boolean): Promise<string> {
+  private async testStrategies(strategies: any[], isVerbose: boolean, shouldShowOutput: boolean): Promise<string> {
     let lastHighPriorityIndex = -1;
     for (let i = 0; i < strategies.length; i++) {
       const strategy = strategies[i];
@@ -154,8 +157,8 @@ export class ServerRootDetector {
         const fs = await import("fs/promises");
         await fs.access(configPath);
 
-        // Success! Only log if not in quiet mode
-        if (!isQuiet) {
+        // Success! Only log in verbose mode
+        if (shouldShowOutput) {
           console.error(`✓ SUCCESS: ${strategy.name}`);
           console.error(`  Path: ${resolvedPath}`);
           console.error(`  Source: ${strategy.source}`);
@@ -194,7 +197,7 @@ export class ServerRootDetector {
           !isVerbose &&
           lastHighPriorityIndex >= 0
         ) {
-          if (!isQuiet) {
+          if (shouldShowOutput) {
             console.error(
               `⚠️  High-priority detection strategies failed. Trying fallback methods...`
             );

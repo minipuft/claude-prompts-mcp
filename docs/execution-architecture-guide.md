@@ -4,6 +4,14 @@
 
 The Claude Prompts MCP Server implements a sophisticated **three-tier execution model** designed to handle different levels of complexity and user requirements. This guide explains how the system automatically selects the appropriate execution tier and what each tier provides.
 
+## Related Documentation
+
+- **[Quick Start: Execution Modes](prompt-vs-template-guide.md)** - Quick decision guide for choosing execution modes
+- **[Template Development Guide](template-development-guide.md)** - Creating framework-aware templates (Tier 2)
+- **[Chain System Analysis](chain-system-analysis.md)** - Detailed analysis of chain execution (Tier 3)
+- **[System Architecture](architecture.md)** - Technical implementation details
+- **[MCP Tools Reference](mcp-tools-reference.md)** - Using the `prompt_engine` tool across all tiers
+
 ## The Three Execution Tiers
 
 ### Tier 1: Prompt Execution (Basic)
@@ -88,7 +96,7 @@ You can explicitly specify execution mode using the `execution_mode` parameter:
 prompt_engine >>my_prompt execution_mode=template
 
 # Force chain execution  
-prompt_engine >>my_chain execution_mode=chain auto_execute_chain=true
+prompt_engine >>my_chain execution_mode=chain llm_driven_execution=true
 ```
 
 ## Architecture Components

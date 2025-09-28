@@ -10,6 +10,19 @@
 import { EventEmitter } from "events";
 import { Logger } from "../logging/index.js";
 import { FrameworkManager, FrameworkDefinition, FrameworkExecutionContext, FrameworkSelectionCriteria, createFrameworkManager } from "./framework-manager.js";
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+/**
+ * Persisted framework state (saved to file)
+ */
+export interface PersistedFrameworkState {
+  version: string;
+  frameworkSystemEnabled: boolean;
+  activeFramework: string;
+  lastSwitchedAt: string;
+  switchReason: string;
+}
 
 /**
  * Framework state information
@@ -20,6 +33,7 @@ export interface FrameworkState {
   switchedAt: Date;
   switchReason: string;
   isHealthy: boolean;
+  frameworkSystemEnabled: boolean; // NEW: Controls whether framework system is enabled/disabled
   switchingMetrics: {
     switchCount: number;
     averageResponseTime: number;
@@ -42,6 +56,7 @@ export interface FrameworkSwitchRequest {
 export interface FrameworkSystemHealth {
   status: "healthy" | "degraded" | "error";
   activeFramework: string;
+  frameworkSystemEnabled: boolean; // NEW: Whether framework system is enabled
   availableFrameworks: string[];
   lastSwitchTime: Date | null;
   switchingMetrics: {
@@ -60,6 +75,7 @@ export interface FrameworkStateManagerEvents {
   'framework-switched': (previousFramework: string, newFramework: string, reason: string) => void;
   'framework-error': (framework: string, error: Error) => void;
   'health-changed': (health: FrameworkSystemHealth) => void;
+  'framework-system-toggled': (enabled: boolean, reason: string) => void; // NEW: Framework system enabled/disabled
 }
 
 /**
@@ -80,18 +96,24 @@ export class FrameworkStateManager extends EventEmitter {
     errorCount: 0
   };
   private isInitialized: boolean = false;
+  private stateFilePath: string;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, serverRoot?: string) {
     super();
     this.logger = logger;
-    
-    // Initialize with default framework state
+
+    // Set state file path - default to current working directory if no server root provided
+    const rootPath = serverRoot || process.cwd();
+    this.stateFilePath = path.join(rootPath, '.framework-state.json');
+
+    // Initialize with default framework state (will be overridden by loadPersistedState)
     this.currentState = {
       activeFramework: 'CAGEERF', // Default to CAGEERF
       previousFramework: null,
       switchedAt: new Date(),
       switchReason: 'Initial framework selection',
       isHealthy: true,
+      frameworkSystemEnabled: false, // NEW: Framework system disabled by default (changed from true)
       switchingMetrics: {
         switchCount: 0,
         averageResponseTime: 0,
@@ -108,6 +130,9 @@ export class FrameworkStateManager extends EventEmitter {
       this.logger.debug("FrameworkStateManager already initialized");
       return;
     }
+
+    // Load persisted state before setting up framework manager
+    await this.loadPersistedState();
 
     this.logger.info("Initializing Framework State Manager...");
     
@@ -139,6 +164,72 @@ export class FrameworkStateManager extends EventEmitter {
   getCurrentState(): FrameworkState {
     this.ensureInitialized();
     return { ...this.currentState };
+  }
+
+  /**
+   * Load persisted state from file
+   */
+  private async loadPersistedState(): Promise<void> {
+    try {
+      const stateContent = await fs.readFile(this.stateFilePath, 'utf-8');
+      const persistedState: PersistedFrameworkState = JSON.parse(stateContent);
+
+      // Validate and apply persisted state
+      if (this.isValidPersistedState(persistedState)) {
+        this.currentState.frameworkSystemEnabled = persistedState.frameworkSystemEnabled;
+        this.currentState.activeFramework = persistedState.activeFramework;
+        this.currentState.switchedAt = new Date(persistedState.lastSwitchedAt);
+        this.currentState.switchReason = persistedState.switchReason;
+
+        this.logger.info(`✅ Loaded persisted framework state: ${persistedState.frameworkSystemEnabled ? 'enabled' : 'disabled'}, active: ${persistedState.activeFramework}`);
+      } else {
+        this.logger.warn('⚠️ Invalid persisted state format, using defaults');
+        await this.saveStateToFile(); // Save valid defaults
+      }
+    } catch (error) {
+      if ((error as any)?.code === 'ENOENT') {
+        this.logger.info('📁 No persisted framework state found, using defaults');
+        await this.saveStateToFile(); // Create initial state file
+      } else {
+        this.logger.warn(`⚠️ Failed to load persisted state: ${error instanceof Error ? error.message : String(error)}, using defaults`);
+        await this.saveStateToFile(); // Save valid defaults
+      }
+    }
+  }
+
+  /**
+   * Save current state to file
+   */
+  private async saveStateToFile(): Promise<void> {
+    try {
+      const persistedState: PersistedFrameworkState = {
+        version: '1.0.0',
+        frameworkSystemEnabled: this.currentState.frameworkSystemEnabled,
+        activeFramework: this.currentState.activeFramework,
+        lastSwitchedAt: this.currentState.switchedAt.toISOString(),
+        switchReason: this.currentState.switchReason
+      };
+
+      await fs.writeFile(this.stateFilePath, JSON.stringify(persistedState, null, 2));
+      this.logger.debug(`💾 Framework state saved to ${this.stateFilePath}`);
+    } catch (error) {
+      this.logger.error(`❌ Failed to save framework state: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Validate persisted state structure
+   */
+  private isValidPersistedState(state: any): state is PersistedFrameworkState {
+    return (
+      state &&
+      typeof state.version === 'string' &&
+      typeof state.frameworkSystemEnabled === 'boolean' &&
+      typeof state.activeFramework === 'string' &&
+      typeof state.lastSwitchedAt === 'string' &&
+      typeof state.switchReason === 'string' &&
+      ['CAGEERF', 'ReACT', '5W1H', 'SCAMPER'].includes(state.activeFramework)
+    );
   }
 
   /**
@@ -207,6 +298,7 @@ export class FrameworkStateManager extends EventEmitter {
         switchedAt: new Date(),
         switchReason: switchReason,
         isHealthy: true,
+        frameworkSystemEnabled: this.currentState.frameworkSystemEnabled,
         switchingMetrics: {
           switchCount: this.currentState.switchingMetrics.switchCount + 1,
           averageResponseTime: this.currentState.switchingMetrics.averageResponseTime,
@@ -225,6 +317,11 @@ export class FrameworkStateManager extends EventEmitter {
       // Update switching performance metrics
       const switchTime = performance.now() - startTime;
       this.updateSwitchingMetrics(switchTime, true);
+
+      // Save state to file
+      this.saveStateToFile().catch(error => {
+        this.logger.error(`Failed to persist framework switch state: ${error instanceof Error ? error.message : String(error)}`);
+      });
 
       this.logger.info(`✅ Framework switch successful: '${previousFramework}' -> '${request.targetFramework}' (${switchTime.toFixed(1)}ms)`);
       this.logger.info(`New active framework: ${targetFramework.name} - ${targetFramework.description}`);
@@ -252,15 +349,20 @@ export class FrameworkStateManager extends EventEmitter {
   /**
    * Generate execution context using active framework
    */
-  generateExecutionContext(prompt: any, criteria?: FrameworkSelectionCriteria): FrameworkExecutionContext {
+  generateExecutionContext(prompt: any, criteria?: FrameworkSelectionCriteria): FrameworkExecutionContext | null {
     this.ensureInitialized();
-    
+
+    // NEW: Return null if framework system is disabled
+    if (!this.currentState.frameworkSystemEnabled) {
+      return null;
+    }
+
     // Use framework manager to generate context with active framework
     const mergedCriteria: FrameworkSelectionCriteria = {
       userPreference: this.currentState.activeFramework as any,
       ...criteria
     };
-    
+
     return this.frameworkManager!.generateExecutionContext(prompt, mergedCriteria);
   }
 
@@ -293,6 +395,7 @@ export class FrameworkStateManager extends EventEmitter {
     return {
       status,
       activeFramework: this.currentState.activeFramework,
+      frameworkSystemEnabled: this.currentState.frameworkSystemEnabled, // NEW: Include enabled state
       availableFrameworks: this.frameworkManager!.listFrameworks(true).map(f => f.id),
       lastSwitchTime: this.switchHistory.length > 0 ? this.switchHistory[this.switchHistory.length - 1].timestamp : null,
       switchingMetrics: { ...this.switchingMetrics },
@@ -319,14 +422,91 @@ export class FrameworkStateManager extends EventEmitter {
       averageResponseTime: 0,
       errorCount: 0
     };
-    
+
     this.currentState.switchingMetrics = {
       switchCount: 0,
       averageResponseTime: 0,
       errorCount: 0
     };
-    
+
     this.logger.info("Framework state manager switching metrics reset");
+  }
+
+  /**
+   * Enable the framework system
+   */
+  enableFrameworkSystem(reason?: string): void {
+    this.ensureInitialized();
+
+    if (this.currentState.frameworkSystemEnabled) {
+      this.logger.info("Framework system is already enabled");
+      return;
+    }
+
+    const enableReason = reason || "Framework system enabled";
+
+    this.currentState.frameworkSystemEnabled = true;
+    this.currentState.switchReason = enableReason;
+    this.currentState.switchedAt = new Date();
+
+    this.logger.info(`✅ Framework system enabled: ${enableReason}`);
+
+    // Save state to file
+    this.saveStateToFile().catch(error => {
+      this.logger.error(`Failed to persist framework enable state: ${error instanceof Error ? error.message : String(error)}`);
+    });
+
+    // Emit events
+    this.emit('framework-system-toggled', true, enableReason);
+    this.emit('health-changed', this.getSystemHealth());
+  }
+
+  /**
+   * Disable the framework system
+   */
+  disableFrameworkSystem(reason?: string): void {
+    this.ensureInitialized();
+
+    if (!this.currentState.frameworkSystemEnabled) {
+      this.logger.info("Framework system is already disabled");
+      return;
+    }
+
+    const disableReason = reason || "Framework system disabled";
+
+    this.currentState.frameworkSystemEnabled = false;
+    this.currentState.switchReason = disableReason;
+    this.currentState.switchedAt = new Date();
+
+    this.logger.info(`🚫 Framework system disabled: ${disableReason}`);
+
+    // Save state to file
+    this.saveStateToFile().catch(error => {
+      this.logger.error(`Failed to persist framework disable state: ${error instanceof Error ? error.message : String(error)}`);
+    });
+
+    // Emit events
+    this.emit('framework-system-toggled', false, disableReason);
+    this.emit('health-changed', this.getSystemHealth());
+  }
+
+  /**
+   * Check if framework system is enabled
+   */
+  isFrameworkSystemEnabled(): boolean {
+    this.ensureInitialized();
+    return this.currentState.frameworkSystemEnabled;
+  }
+
+  /**
+   * Set framework system enabled state (for config loading)
+   */
+  setFrameworkSystemEnabled(enabled: boolean, reason?: string): void {
+    if (enabled) {
+      this.enableFrameworkSystem(reason || "Loaded from configuration");
+    } else {
+      this.disableFrameworkSystem(reason || "Loaded from configuration");
+    }
   }
 
   // Private helper methods
@@ -356,8 +536,8 @@ export class FrameworkStateManager extends EventEmitter {
 /**
  * Create and initialize framework state manager
  */
-export async function createFrameworkStateManager(logger: Logger): Promise<FrameworkStateManager> {
-  const manager = new FrameworkStateManager(logger);
+export async function createFrameworkStateManager(logger: Logger, serverRoot?: string): Promise<FrameworkStateManager> {
+  const manager = new FrameworkStateManager(logger, serverRoot);
   await manager.initialize();
   return manager;
 }

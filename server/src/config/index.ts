@@ -6,6 +6,8 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { Config, AnalysisConfig, SemanticAnalysisConfig, LLMIntegrationConfig, AnalysisMode, LoggingConfig } from "../types/index.js";
+// Removed: ToolDescriptionManager import to break circular dependency
+// Now injected via dependency injection pattern
 
 /**
  * Infer the optimal analysis mode based on LLM integration configuration
@@ -40,6 +42,9 @@ const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   },
 };
 
+// DEFAULT_FRAMEWORK_CONFIG removed - framework state managed at runtime
+// Use system_control MCP tool to enable/disable and switch frameworks
+
 
 const DEFAULT_CONFIG: Config = {
   server: {
@@ -64,6 +69,7 @@ const DEFAULT_CONFIG: Config = {
 export class ConfigManager {
   private config: Config;
   private configPath: string;
+  // Removed: private toolDescriptionManager - now injected via dependency injection
 
   constructor(configPath: string) {
     this.configPath = configPath;
@@ -167,12 +173,28 @@ export class ConfigManager {
   }
 
   /**
+   * Get config file path
+   */
+  getConfigPath(): string {
+    return this.configPath;
+  }
+
+  /**
    * Get prompts file path relative to config directory
    */
   getPromptsFilePath(): string {
     const configDir = path.dirname(this.configPath);
     return path.join(configDir, this.config.prompts.file);
   }
+
+  /**
+   * Get server root directory path
+   */
+  getServerRoot(): string {
+    return path.dirname(this.configPath);
+  }
+
+  // Removed: ToolDescriptionManager methods - now handled via dependency injection in runtime/application.ts
 
   /**
    * Validate configuration and set defaults for missing properties

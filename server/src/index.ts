@@ -399,8 +399,9 @@ async function main(): Promise<void> {
     const args = process.argv.slice(2);
     const isStartupTest = args.includes('--startup-test');
     const isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
-    
-    if (isStartupTest) {
+    const isVerbose = args.includes('--verbose') || args.includes('--debug-startup');
+
+    if (isStartupTest && isVerbose) {
       // In CI mode, use console.log for debug to avoid stderr issues
       const debugLog = isCI ? console.log : console.error;
       debugLog("DEBUG: Running in startup validation mode");
@@ -414,39 +415,47 @@ async function main(): Promise<void> {
     // Setup error handlers first
     setupErrorHandlers();
 
-    // Use appropriate output stream based on environment
-    const statusLog = isCI ? console.log : console.error;
-    statusLog("Starting MCP Claude Prompts Server...");
+    // Use appropriate output stream based on environment - only if verbose
+    if (isVerbose) {
+      const statusLog = isCI ? console.log : console.error;
+      statusLog("Starting MCP Claude Prompts Server...");
+    }
 
     // Initialize the application using the orchestrator
     const debugLog = isCI ? console.log : console.error;
-    debugLog("DEBUG: About to call startApplication()...");
+    if (isVerbose) {
+      debugLog("DEBUG: About to call startApplication()...");
+    }
     try {
       orchestrator = await startApplication();
-      debugLog("DEBUG: startApplication() completed successfully");
+      if (isVerbose) {
+        debugLog("DEBUG: startApplication() completed successfully");
+      }
     } catch (startupError) {
       const error = startupError instanceof Error ? startupError : new Error(String(startupError));
-      debugLog("DEBUG: startApplication() failed with error:", error.message);
-      debugLog("DEBUG: Error stack:", error.stack);
+      if (isVerbose) {
+        debugLog("DEBUG: startApplication() failed with error:", error.message);
+        debugLog("DEBUG: Error stack:", error.stack);
+      }
       
       // Additional diagnostics for Windows
-      if (process.platform === 'win32') {
+      if (isVerbose && process.platform === 'win32') {
         debugLog("DEBUG: Windows-specific diagnostics:");
         debugLog(`DEBUG: Process argv: ${JSON.stringify(process.argv)}`);
         debugLog(`DEBUG: Environment keys: ${Object.keys(process.env).filter(k => k.startsWith('MCP_')).join(', ')}`);
-        
+
         // Check if paths exist
         const fs = await import('fs');
         const path = await import('path');
-        
+
         const serverRoot = process.env.MCP_SERVER_ROOT || process.cwd();
         debugLog(`DEBUG: Checking server root: ${serverRoot}`);
         debugLog(`DEBUG: Server root exists: ${fs.existsSync(serverRoot)}`);
-        
+
         const configPath = path.join(serverRoot, 'config.json');
         debugLog(`DEBUG: Config path: ${configPath}`);
         debugLog(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
-        
+
         // Use ConfigManager for consistent path resolution
         try {
           const tempConfigManager = new ConfigManager(configPath);
@@ -463,20 +472,30 @@ async function main(): Promise<void> {
     }
 
     // Get logger reference for global error handling
-    debugLog("DEBUG: Getting logger reference...");
+    if (isVerbose) {
+      debugLog("DEBUG: Getting logger reference...");
+    }
     const modules = orchestrator.getModules();
     logger = modules.logger;
-    debugLog("DEBUG: Logger reference obtained");
+    if (isVerbose) {
+      debugLog("DEBUG: Logger reference obtained");
+    }
 
     // Validate initial startup with detailed diagnostics
-    debugLog("DEBUG: About to validate application health...");
+    if (isVerbose) {
+      debugLog("DEBUG: About to validate application health...");
+    }
     const initialHealth = await validateApplicationHealth();
-    debugLog("DEBUG: Health validation result:", initialHealth);
+    if (isVerbose) {
+      debugLog("DEBUG: Health validation result:", initialHealth);
+    }
     
     if (!initialHealth) {
       // Get detailed health info for debugging
       const healthDetails = orchestrator.validateHealth();
-      debugLog("DEBUG: Detailed health check results:", JSON.stringify(healthDetails, null, 2));
+      if (isVerbose) {
+        debugLog("DEBUG: Detailed health check results:", JSON.stringify(healthDetails, null, 2));
+      }
       
       throw new Error(
         "Initial health validation failed - application may not be properly initialized. " +
@@ -486,10 +505,12 @@ async function main(): Promise<void> {
 
     // If this is a startup test, exit successfully after validation
     if (isStartupTest) {
-      const successLog = isCI ? console.log : console.error;
-      successLog("✅ MCP Claude Prompts Server startup validation completed successfully");
-      successLog("✅ All phases completed: Foundation → Data Loading → Module Initialization → Server Setup");
-      successLog("✅ Health validation passed - server is ready for operation");
+      if (isVerbose) {
+        const successLog = isCI ? console.log : console.error;
+        successLog("✅ MCP Claude Prompts Server startup validation completed successfully");
+        successLog("✅ All phases completed: Foundation → Data Loading → Module Initialization → Server Setup");
+        successLog("✅ Health validation passed - server is ready for operation");
+      }
       await orchestrator.shutdown();
       process.exit(0);
     }

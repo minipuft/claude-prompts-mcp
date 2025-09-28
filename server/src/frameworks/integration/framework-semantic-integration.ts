@@ -10,23 +10,24 @@
 
 import { Logger } from "../../logging/index.js";
 import { ConvertedPrompt } from "../../types/index.js";
-import { 
-  FrameworkManager, 
-  FrameworkDefinition, 
+import {
+  FrameworkManager,
+  FrameworkDefinition,
   FrameworkExecutionContext,
-  FrameworkSelectionCriteria 
+  FrameworkSelectionCriteria
 } from "../framework-manager.js";
-import { 
-  ConfigurableSemanticAnalyzer, 
-  ConfigurableSemanticAnalysis 
-} from "../../analysis/configurable-semantic-analyzer.js";
+import {
+  ContentAnalyzer,
+  ContentAnalysisResult
+} from "../../semantic/configurable-semantic-analyzer.js";
+import { FrameworkStateManager } from "../framework-state-manager.js";
 
 /**
  * Integrated analysis result combining semantic intelligence and framework methodology
  */
 export interface IntegratedAnalysisResult {
   // Semantic analysis results - PROMPT INTELLIGENCE
-  semanticAnalysis: ConfigurableSemanticAnalysis;
+  semanticAnalysis: ContentAnalysisResult;
   
   // Framework execution context - METHODOLOGY GUIDANCE
   frameworkContext: FrameworkExecutionContext;
@@ -74,21 +75,24 @@ export interface FrameworkSwitchingConfig {
  */
 export class FrameworkSemanticIntegration {
   private frameworkManager: FrameworkManager;
-  private semanticAnalyzer: ConfigurableSemanticAnalyzer;
+  private frameworkStateManager: FrameworkStateManager;
+  private semanticAnalyzer: ContentAnalyzer;
   private logger: Logger;
   private config: FrameworkSwitchingConfig;
-  
+
   // Framework switching state management
   private lastFrameworkSwitch = new Map<string, number>();
   private frameworkUsageHistory = new Map<string, FrameworkUsageMetrics>();
-  
+
   constructor(
     frameworkManager: FrameworkManager,
-    semanticAnalyzer: ConfigurableSemanticAnalyzer,
+    frameworkStateManager: FrameworkStateManager,
+    semanticAnalyzer: ContentAnalyzer,
     logger: Logger,
     config: Partial<FrameworkSwitchingConfig> = {}
   ) {
     this.frameworkManager = frameworkManager;
+    this.frameworkStateManager = frameworkStateManager;
     this.semanticAnalyzer = semanticAnalyzer;
     this.logger = logger;
     
@@ -110,7 +114,13 @@ export class FrameworkSemanticIntegration {
     userFrameworkPreference?: string
   ): Promise<IntegratedAnalysisResult> {
     const startTime = performance.now();
-    
+
+    // NEW: Check if framework system is enabled before proceeding
+    if (!this.frameworkStateManager.isFrameworkSystemEnabled()) {
+      this.logger.debug(`Framework system disabled - returning semantic analysis only for prompt: ${prompt.id}`);
+      return this.createNonFrameworkIntegratedResult(prompt, startTime);
+    }
+
     try {
       // Step 1: Perform semantic analysis (WHAT does the prompt need?)
       this.logger.debug(`Starting semantic analysis for prompt: ${prompt.id}`);
@@ -268,7 +278,7 @@ export class FrameworkSemanticIntegration {
   private enhanceFrameworkCriteria(
     baseCriteria: FrameworkSelectionCriteria,
     userPreference?: string,
-    semanticAnalysis?: ConfigurableSemanticAnalysis
+    semanticAnalysis?: ContentAnalysisResult
   ): FrameworkSelectionCriteria {
     const enhanced = { ...baseCriteria };
     
@@ -309,7 +319,7 @@ export class FrameworkSemanticIntegration {
   private selectOptimalFramework(
     prompt: ConvertedPrompt,
     criteria: FrameworkSelectionCriteria,
-    semanticAnalysis: ConfigurableSemanticAnalysis
+    semanticAnalysis: ContentAnalysisResult
   ): FrameworkExecutionContext {
     // Use framework manager's selection logic
     const frameworkContext = this.frameworkManager.generateExecutionContext(prompt, criteria);
@@ -327,7 +337,7 @@ export class FrameworkSemanticIntegration {
    * Validate alignment between semantic analysis and selected framework
    */
   private validateFrameworkAlignment(
-    semanticAnalysis: ConfigurableSemanticAnalysis,
+    semanticAnalysis: ContentAnalysisResult,
     frameworkContext: FrameworkExecutionContext
   ): FrameworkAlignmentResult {
     const framework = frameworkContext.selectedFramework;
@@ -366,7 +376,7 @@ export class FrameworkSemanticIntegration {
   private generateAlternativeFrameworks(
     criteria: FrameworkSelectionCriteria,
     currentContext: FrameworkExecutionContext,
-    semanticAnalysis?: ConfigurableSemanticAnalysis
+    semanticAnalysis?: ContentAnalysisResult
   ): FrameworkDefinition[] {
     const allFrameworks = this.frameworkManager.listFrameworks(true);
     const currentFramework = currentContext.selectedFramework;
@@ -382,7 +392,7 @@ export class FrameworkSemanticIntegration {
    * Generate integrated recommendations combining semantic and framework insights
    */
   private generateIntegratedRecommendations(
-    semanticAnalysis: ConfigurableSemanticAnalysis,
+    semanticAnalysis: ContentAnalysisResult,
     frameworkContext: FrameworkExecutionContext,
     alignment: FrameworkAlignmentResult
   ) {
@@ -456,7 +466,7 @@ export class FrameworkSemanticIntegration {
   // Additional helper methods
 
   private generateExecutionApproach(
-    semanticAnalysis: ConfigurableSemanticAnalysis,
+    semanticAnalysis: ContentAnalysisResult,
     frameworkContext: FrameworkExecutionContext
   ): string {
     const baseApproach = `Execute as ${semanticAnalysis.executionType} using ${frameworkContext.selectedFramework.name} methodology`;
@@ -467,7 +477,7 @@ export class FrameworkSemanticIntegration {
     } else if (semanticAnalysis.analysisMetadata.mode === 'semantic') {
       return `${baseApproach} (intelligent semantic analysis)`;
     } else {
-      return `${baseApproach} (hybrid analysis mode)`;
+      return `${baseApproach} (fallback analysis mode)`;
     }
   }
 
@@ -493,7 +503,7 @@ export class FrameworkSemanticIntegration {
   }
 
   private generateOptimizationSuggestions(
-    semanticAnalysis: ConfigurableSemanticAnalysis,
+    semanticAnalysis: ContentAnalysisResult,
     frameworkContext: FrameworkExecutionContext,
     alignment: FrameworkAlignmentResult
   ): string[] {
@@ -530,7 +540,7 @@ export class FrameworkSemanticIntegration {
   /**
    * Estimate processing time based on semantic analysis
    */
-  private estimateProcessingTime(semanticAnalysis: ConfigurableSemanticAnalysis): number {
+  private estimateProcessingTime(semanticAnalysis: ContentAnalysisResult): number {
     let baseTime = 100; // Base processing time in ms
     
     // Adjust based on complexity
@@ -565,7 +575,7 @@ export class FrameworkSemanticIntegration {
   /**
    * Estimate memory usage based on semantic analysis
    */
-  private estimateMemoryUsage(semanticAnalysis: ConfigurableSemanticAnalysis): string {
+  private estimateMemoryUsage(semanticAnalysis: ContentAnalysisResult): string {
     if (semanticAnalysis.complexity === "high") {
       return "high";
     } else if (semanticAnalysis.complexity === "medium") {
@@ -628,7 +638,7 @@ export class FrameworkSemanticIntegration {
   private estimateImprovementPotential(
     currentFramework: FrameworkDefinition,
     alternativeFramework: FrameworkDefinition,
-    semanticAnalysis: ConfigurableSemanticAnalysis
+    semanticAnalysis: ContentAnalysisResult
   ): number {
     // Estimate potential improvement based on framework characteristics
     let improvement = 0.1; // Base improvement assumption
@@ -643,6 +653,36 @@ export class FrameworkSemanticIntegration {
     }
     
     return Math.min(improvement, 0.4); // Cap at 40% improvement
+  }
+
+  private async createNonFrameworkIntegratedResult(prompt: ConvertedPrompt, startTime: number): Promise<IntegratedAnalysisResult> {
+    // When framework system is disabled, provide semantic analysis without framework integration
+    const semanticAnalysis = await this.semanticAnalyzer.analyzePrompt(prompt);
+
+    return {
+      semanticAnalysis,
+      frameworkContext: null as any, // No framework context when disabled
+      integration: {
+        frameworkSelectionReason: "Framework system disabled",
+        semanticFrameworkAlignment: 0,
+        alternativeFrameworks: [],
+        consensusMetrics: {
+          confidenceAlignment: 0,
+          complexityMatch: 0,
+          executionTypeCompatibility: 0
+        }
+      },
+      recommendations: {
+        executionApproach: `Execute as ${semanticAnalysis.executionType} without framework methodology`,
+        expectedPerformance: {
+          processingTime: this.estimateProcessingTime(semanticAnalysis),
+          memoryUsage: this.estimateMemoryUsage(semanticAnalysis),
+          cacheable: semanticAnalysis.complexity !== "high"
+        },
+        qualityAssurance: semanticAnalysis.suggestedGates,
+        optimizations: ["Framework system disabled - using standard execution"]
+      }
+    };
   }
 
   private createFallbackIntegratedResult(prompt: ConvertedPrompt, startTime: number): IntegratedAnalysisResult {
@@ -689,7 +729,7 @@ export class FrameworkSemanticIntegration {
           version: "2.0.0",
           mode: "structural",
           analysisTime: performance.now() - startTime,
-          analyzer: "configurable",
+          analyzer: "content",
           cacheHit: false
         }
       },
@@ -757,9 +797,10 @@ export interface FrameworkSwitchRecommendation {
  */
 export async function createFrameworkSemanticIntegration(
   frameworkManager: FrameworkManager,
+  frameworkStateManager: FrameworkStateManager,
   logger: Logger,
-  semanticAnalyzer: ConfigurableSemanticAnalyzer,
+  semanticAnalyzer: ContentAnalyzer,
   config?: Partial<FrameworkSwitchingConfig>
 ): Promise<FrameworkSemanticIntegration> {
-  return new FrameworkSemanticIntegration(frameworkManager, semanticAnalyzer, logger, config);
+  return new FrameworkSemanticIntegration(frameworkManager, frameworkStateManager, semanticAnalyzer, logger, config);
 }

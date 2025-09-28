@@ -59,8 +59,8 @@ system_control switch_framework framework="ReACT" reason="Problem-solving focus"
 → Switches active methodology with performance monitoring
 
 # 🔥 Execute with full three-tier intelligence
-prompt_engine >>analysis_chain input="complex research data" auto_execute_chain=true
-→ LLM-driven chain execution with step-by-step coordination
+prompt_engine >>analysis_chain input="complex research data" llm_driven_execution=true
+→ LLM-driven chain execution with step-by-step coordination (requires semantic LLM integration)
 ```
 
 **🌟 Why This Architecture Matters:**
@@ -221,6 +221,14 @@ Configure your MCP client to connect via STDIO transport:
 - **Args**: `["path/to/claude-prompts-mcp/server/dist/index.js"]`
 - **Environment** (Optional): `MCP_PROMPTS_CONFIG_PATH=path/to/prompts/promptsConfig.json`
 
+#### **Claude Code CLI Installation**
+
+For Claude Code CLI users, use the one-command installation:
+
+```bash
+claude mcp add-json claude-prompts-mcp '{"type":"stdio","command":"node","args":["path/to/claude-prompts-mcp/server/dist/index.js"],"env":{}}'
+```
+
 > 💡 **Pro Tip**: Environment variables are optional - the server auto-detects paths in 99% of cases. Use absolute paths for guaranteed compatibility across all MCP clients!
 
 ### 🎮 **Start Building Immediately (v1.3.0 Consolidated Architecture)**
@@ -239,8 +247,8 @@ prompt_engine >>friendly_greeting name="Developer"
 prompt_engine >>content_analysis input="my research data"
 → Detected as template (structural analysis), applies framework injection, executes with quality gates
 
-prompt_engine >>analysis_chain input="my content" auto_execute_chain=true
-→ Detected as chain (has chainSteps), provides LLM-driven step-by-step execution
+prompt_engine >>analysis_chain input="my content" llm_driven_execution=true
+→ Detected as chain (has chainSteps), provides LLM-driven step-by-step execution (requires semantic LLM integration)
 
 # 📊 Monitor intelligent detection performance
 system_control analytics include_history=true

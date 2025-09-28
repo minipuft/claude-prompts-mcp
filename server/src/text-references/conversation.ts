@@ -23,9 +23,20 @@ export class ConversationManager {
   private conversationHistory: ConversationHistoryItem[] = [];
   private maxHistorySize: number;
 
+  // NEW: Session manager integration for coordinated state management
+  private chainSessionManager?: any; // ChainSessionManager (injected to avoid circular dependency)
+
   constructor(logger: Logger, maxHistorySize: number = 100) {
     this.logger = logger;
     this.maxHistorySize = maxHistorySize;
+  }
+
+  /**
+   * NEW: Set chain session manager for coordinated state management
+   */
+  setChainSessionManager(sessionManager: any): void {
+    this.chainSessionManager = sessionManager;
+    this.logger.debug("Chain session manager integrated with conversation manager");
   }
 
   /**
@@ -134,19 +145,51 @@ export class ConversationManager {
     return this.conversationHistory.slice(-count);
   }
 
-  // NEW: Chain context storage for LLM-driven iterative workflow
+  // Enhanced: Chain context storage for LLM-driven iterative workflow with proper result capture
   private chainContext: Record<string, Record<number, string>> = {};
-  private chainStates: Record<string, { currentStep: number; totalSteps: number }> = {};
+  private chainStates: Record<string, { currentStep: number; totalSteps: number; lastUpdated: number }> = {};
+  
+  // NEW: Track actual execution results vs placeholders
+  private chainExecutionResults: Record<string, Record<number, { 
+    result: string; 
+    timestamp: number; 
+    isPlaceholder: boolean;
+    executionMetadata?: any;
+  }>> = {};
 
   /**
-   * Save step result for a chain execution
+   * Save step result for a chain execution with enhanced metadata
    */
-  saveStepResult(chainId: string, step: number, result: string): void {
+  saveStepResult(chainId: string, step: number, result: string, isPlaceholder: boolean = false, metadata?: any): void {
     if (!this.chainContext[chainId]) {
       this.chainContext[chainId] = {};
     }
+    if (!this.chainExecutionResults[chainId]) {
+      this.chainExecutionResults[chainId] = {};
+    }
+    
+    // Store both simple and enhanced result
     this.chainContext[chainId][step] = result;
-    this.logger.debug(`Saved step ${step} result for chain ${chainId}`);
+    this.chainExecutionResults[chainId][step] = {
+      result,
+      timestamp: Date.now(),
+      isPlaceholder,
+      executionMetadata: metadata
+    };
+    
+    this.logger.debug(`Saved step ${step} result for chain ${chainId} (placeholder: ${isPlaceholder})`);
+  }
+
+  /**
+   * Get step result with metadata indicating if it's a placeholder
+   */
+  getStepResultWithMetadata(chainId: string, step: number): { 
+    result: string; 
+    isPlaceholder: boolean; 
+    timestamp: number;
+    metadata?: any;
+  } | undefined {
+    return this.chainExecutionResults[chainId]?.[step];
   }
 
   /**
@@ -164,27 +207,86 @@ export class ConversationManager {
   }
 
   /**
-   * Set chain state (current step and total steps)
+   * Set chain state (current step and total steps) with timestamp
    */
   setChainState(chainId: string, currentStep: number, totalSteps: number): void {
-    this.chainStates[chainId] = { currentStep, totalSteps };
+    this.chainStates[chainId] = { currentStep, totalSteps, lastUpdated: Date.now() };
     this.logger.debug(`Chain ${chainId}: step ${currentStep}/${totalSteps}`);
+  }
+  
+  /**
+   * Validate chain state integrity and recover if needed
+   */
+  validateChainState(chainId: string): { valid: boolean; issues?: string[]; recovered?: boolean } {
+    const state = this.chainStates[chainId];
+    const context = this.chainContext[chainId];
+    const results = this.chainExecutionResults[chainId];
+    
+    const issues: string[] = [];
+    let recovered = false;
+    
+    if (!state) {
+      issues.push("No chain state found");
+      return { valid: false, issues };
+    }
+    
+    // Check for stale state (older than 1 hour)
+    if (Date.now() - state.lastUpdated > 3600000) {
+      issues.push("Chain state is stale (>1 hour old)");
+    }
+    
+    // Validate step consistency
+    if (state.currentStep > state.totalSteps) {
+      issues.push(`Current step ${state.currentStep} exceeds total steps ${state.totalSteps}`);
+      // Auto-recover by resetting to final step
+      this.setChainState(chainId, state.totalSteps, state.totalSteps);
+      recovered = true;
+    }
+    
+    // Check for missing results in expected steps
+    if (context && results) {
+      for (let i = 0; i < Math.min(state.currentStep, state.totalSteps); i++) {
+        const hasResult = context[i] || results[i];
+        if (!hasResult) {
+          issues.push(`Missing result for completed step ${i}`);
+        }
+      }
+    }
+    
+    this.logger.debug(`Chain ${chainId} validation: ${issues.length} issues found${recovered ? ' (auto-recovered)' : ''}`);
+    
+    return {
+      valid: issues.length === 0,
+      issues: issues.length > 0 ? issues : undefined,
+      recovered
+    };
   }
 
   /**
    * Get chain state
    */
-  getChainState(chainId: string): { currentStep: number; totalSteps: number } | undefined {
+  getChainState(chainId: string): { currentStep: number; totalSteps: number; lastUpdated: number } | undefined {
     return this.chainStates[chainId];
   }
 
   /**
-   * Clear chain context and state
+   * Clear chain context and state with session manager coordination
    */
   clearChainContext(chainId: string): void {
     delete this.chainContext[chainId];
     delete this.chainStates[chainId];
-    this.logger.info(`Cleared chain context for ${chainId}`);
+    delete this.chainExecutionResults[chainId];
+
+    // NEW: Also clear session manager state if available
+    if (this.chainSessionManager) {
+      try {
+        this.chainSessionManager.clearSessionsForChain(chainId);
+      } catch (error) {
+        this.logger.warn(`Failed to clear session manager state for ${chainId}:`, error);
+      }
+    }
+
+    this.logger.info(`Cleared all chain state for ${chainId}`);
   }
 
   /**
@@ -193,7 +295,101 @@ export class ConversationManager {
   clearAllChainContexts(): void {
     this.chainContext = {};
     this.chainStates = {};
+    this.chainExecutionResults = {};
     this.logger.info("Cleared all chain contexts");
+  }
+  
+  /**
+   * Get chain execution summary with metadata
+   */
+  getChainSummary(chainId: string): {
+    state?: { currentStep: number; totalSteps: number; lastUpdated: number };
+    completedSteps: number;
+    placeholderSteps: number;
+    realSteps: number;
+    totalResults: number;
+  } {
+    const state = this.chainStates[chainId];
+    const results = this.chainExecutionResults[chainId] || {};
+    
+    let placeholderSteps = 0;
+    let realSteps = 0;
+    
+    Object.values(results).forEach(result => {
+      if (result.isPlaceholder) {
+        placeholderSteps++;
+      } else {
+        realSteps++;
+      }
+    });
+    
+    return {
+      state,
+      completedSteps: Object.keys(results).length,
+      placeholderSteps,
+      realSteps,
+      totalResults: Object.keys(results).length
+    };
+  }
+
+  /**
+   * NEW: Comprehensive state validation with session manager coordination
+   */
+  validateChainStateIntegrity(chainId: string): {
+    conversationState: boolean;
+    sessionState: boolean;
+    synchronized: boolean;
+    recommendations: string[];
+    sessionInfo?: any;
+  } {
+    const hasConversationState = !!this.chainStates[chainId];
+    let hasSessionState = false;
+    let sessionInfo: any = undefined;
+
+    // Check session manager state if available
+    if (this.chainSessionManager) {
+      try {
+        hasSessionState = this.chainSessionManager.hasActiveSessionForChain(chainId);
+        if (hasSessionState) {
+          const session = this.chainSessionManager.getActiveSessionForChain(chainId);
+          sessionInfo = {
+            sessionId: session?.sessionId,
+            state: session?.state,
+            currentStepId: session?.currentStepId,
+            executionOrder: session?.executionOrder
+          };
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to check session state for ${chainId}:`, error);
+      }
+    }
+
+    const recommendations: string[] = [];
+
+    if (hasConversationState && !hasSessionState) {
+      recommendations.push("Orphaned conversation state - consider force restart to clear stale LLM context");
+    }
+    if (!hasConversationState && hasSessionState) {
+      recommendations.push("Missing conversation state - session may be from different execution type");
+    }
+    if (hasConversationState && hasSessionState) {
+      // Both exist - check for consistency
+      const conversationState = this.chainStates[chainId];
+      if (conversationState && sessionInfo) {
+        recommendations.push("States synchronized - both conversation and session managers have active state");
+      }
+    }
+    if (!hasConversationState && !hasSessionState) {
+      recommendations.push("Clean state - no active chain execution detected");
+    }
+
+    return {
+      conversationState: hasConversationState,
+      sessionState: hasSessionState,
+      synchronized: hasConversationState === hasSessionState,
+      recommendations,
+      sessionInfo
+    };
   }
 }
 

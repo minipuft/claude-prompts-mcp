@@ -60,19 +60,19 @@ export class TransportManager {
   async setupStdioTransport(): Promise<void> {
     this.logger.info("Starting server with STDIO transport");
 
-    // Create and configure the STDIO transport
+    // Create the STDIO transport - aligned with MCP SDK pattern
     const stdioTransport = new StdioServerTransport();
-
-    // Setup console redirection for STDIO mode
-    this.setupStdioConsoleRedirection();
 
     // Setup STDIO event handlers
     this.setupStdioEventHandlers();
 
-    // Connect the server to the transport
+    // Connect the server to the transport - standard MCP SDK pattern
     try {
       await this.mcpServer.connect(stdioTransport);
-      this.logger.info("STDIO transport connected successfully");
+      this.logger.info("STDIO transport connected successfully - server ready for MCP client connections");
+
+      // Setup console redirection AFTER successful connection to avoid deadlock
+      this.setupStdioConsoleRedirection();
     } catch (error) {
       this.logger.error("Error connecting to STDIO transport:", error);
       process.exit(1);

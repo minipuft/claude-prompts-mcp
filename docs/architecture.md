@@ -459,9 +459,78 @@ npm run validate:architecture  # System architecture validation
 - **Load Balancing**: Client connection distribution
 - **Resource Optimization**: Memory and CPU usage optimization
 
+## Architecture Decision Records
+
+### ADR-006: Framework System Enable/Disable Implementation
+**Date**: 2025-01-31
+**Status**: Accepted
+**Decision Maker**: Claude Code
+
+#### Context
+User feedback indicated that framework system could not be completely disabled - framework processing still appeared in execution pipeline when disabled. Need comprehensive framework bypass capability to allow complete non-framework operation.
+
+#### Decision
+Implement comprehensive framework enable/disable functionality:
+- Add `frameworkSystemEnabled` state to FrameworkStateManager
+- Update all framework integration points to check enabled state
+- Provide alternative processing paths when framework disabled
+- Add MCP tool commands for runtime enable/disable control
+
+#### Rationale
+- **User Control**: Users need ability to completely disable framework processing
+- **Performance**: Faster execution when framework overhead not needed
+- **Debugging**: Easier to isolate issues with framework processing disabled
+- **Flexibility**: Support both framework-enhanced and standard execution modes
+
+#### Consequences
+- **Positive**: Complete framework bypass, improved performance when disabled, better user control
+- **Negative**: Additional complexity in all framework integration points
+- **Migration Impact**: Updated 10 files with framework enable/disable checks
+
+#### Components Updated
+1. **Core Framework State**: framework-state-manager.ts with enable/disable methods
+2. **MCP Tools**: prompt-engine.ts, system-control.ts with enabled checks
+3. **Framework Injection**: framework-injector.ts with bypass logic
+4. **Integration Points**: framework-semantic-integration.ts, framework-aware-gates.ts
+5. **Execution Components**: chain-orchestrator.ts, execution-coordinator.ts
+6. **Configuration**: config.json, types.ts, application.ts
+
+### ADR-007: Framework Integration Facade Pattern
+**Date**: 2025-01-31
+**Status**: Accepted
+**Decision Maker**: Claude Code
+
+#### Context
+Framework enable/disable functionality required scattered checks across many files. Direct access to FrameworkStateManager leads to repetitive null checks and enable/disable validation throughout the codebase. Need centralized pattern for easier maintenance.
+
+#### Decision
+Implement Framework Integration Facade pattern:
+- Create centralized interface for all framework operations
+- Provide built-in enable/disable checks for all methods
+- Return safe defaults when framework system disabled
+- Offer helper methods for common framework-dependent operations
+
+#### Rationale
+- **Single Responsibility**: One place to manage framework state checks
+- **DRY Principle**: Eliminate repetitive enable/disable checks
+- **Maintainability**: Easy to add/remove framework parameters
+- **Safety**: Impossible to accidentally use framework when disabled
+- **Testing**: Easier to mock and test framework integrations
+
+#### Consequences
+- **Positive**: Cleaner code, fewer bugs, easier maintenance, better developer experience
+- **Negative**: Additional abstraction layer, slight indirection
+- **Migration Impact**: Gradual - can migrate components incrementally
+
+#### Implementation
+- **Location**: `/server/src/frameworks/integration/framework-integration-facade.ts`
+- **Interface**: Comprehensive facade with state checks, context generation, metadata building
+- **Usage Pattern**: Replace direct FrameworkStateManager access with facade methods
+- **Migration Strategy**: Update high-impact files first, gradual adoption
+
 ---
 
-**Version**: 1.3.0  
-**Last Updated**: January 2025  
-**Architecture Revision**: Post-Consolidation (87.5% tool reduction)  
+**Version**: 1.3.0
+**Last Updated**: January 2025
+**Architecture Revision**: Post-Consolidation (87.5% tool reduction)
 **Key Features**: 4-Phase Orchestration, 3-Tier Execution, Framework System, Tool Consolidation

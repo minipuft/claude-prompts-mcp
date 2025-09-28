@@ -46,8 +46,8 @@ jobs:
 
       - name: Test execution
         working-directory: server
-        run: npm test
-        timeout-minutes: 3
+        run: npm run test:integration
+        timeout-minutes: 5
 
       - name: Architecture Validation
         working-directory: server
@@ -255,7 +255,7 @@ jobs:
         working-directory: server
         run: |
           npm run build
-          npm test
+          npm run test:integration
 
       - name: Check for breaking changes
         run: |

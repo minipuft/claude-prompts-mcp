@@ -4,7 +4,26 @@ import nunjucks from "nunjucks";
 import path from "path"; // Import path module
 import { fileURLToPath } from "url"; // For ES module __dirname equivalent
 import { PromptData } from "../types.js";
-import { escapeJsonForNunjucks, unescapeJsonFromNunjucks } from "./index.js";
+// JSON escaping utilities (moved here to avoid circular dependency)
+function escapeJsonForNunjucks(jsonStr: string): string {
+  return jsonStr
+    .replace(/\{\{/g, '\\{\\{')  // Escape Nunjucks variable syntax
+    .replace(/\}\}/g, '\\}\\}')  // Escape Nunjucks variable syntax  
+    .replace(/\{%/g, '\\{\\%')   // Escape Nunjucks tag syntax
+    .replace(/%\}/g, '\\%\\}')   // Escape Nunjucks tag syntax
+    .replace(/\{#/g, '\\{\\#')   // Escape Nunjucks comment syntax
+    .replace(/#\}/g, '\\#\\}');  // Escape Nunjucks comment syntax
+}
+
+function unescapeJsonFromNunjucks(escapedStr: string): string {
+  return escapedStr
+    .replace(/\\{\\{/g, '{{')   // Unescape Nunjucks variable syntax
+    .replace(/\\}\\}/g, '}}')   // Unescape Nunjucks variable syntax
+    .replace(/\\{\\%/g, '{%')   // Unescape Nunjucks tag syntax  
+    .replace(/\\%\\}/g, '%}')   // Unescape Nunjucks tag syntax
+    .replace(/\\{\\#/g, '{#')   // Unescape Nunjucks comment syntax
+    .replace(/\\#\\}/g, '#}');  // Unescape Nunjucks comment syntax
+}
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -42,10 +61,10 @@ export function validateJsonArguments(
 ): {
   valid: boolean;
   errors?: string[];
-  sanitizedArgs?: Record<string, any>;
+  sanitizedArgs?: Record<string, string | number | boolean | null | any[]>;
 } {
   const errors: string[] = [];
-  const sanitizedArgs: Record<string, any> = {};
+  const sanitizedArgs: Record<string, string | number | boolean | null | any[]> = {};
 
   // Check for unexpected properties
   const expectedArgNames = prompt.arguments.map((arg) => arg.name);

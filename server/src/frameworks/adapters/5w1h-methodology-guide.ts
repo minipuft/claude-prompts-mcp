@@ -5,7 +5,7 @@
  */
 
 import { ConvertedPrompt } from "../../types/index.js";
-import { ConfigurableSemanticAnalysis } from "../../analysis/configurable-semantic-analyzer.js";
+import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
 import {
   IMethodologyGuide,
   BaseMethodologyGuide,
@@ -17,7 +17,8 @@ import {
   ProcessingStep,
   ExecutionStep,
   QualityGate,
-  TemplateEnhancement
+  TemplateEnhancement,
+  MethodologyToolDescriptions
 } from "../interfaces/methodology-guide-interfaces.js";
 
 /**
@@ -229,7 +230,7 @@ export class FiveW1HMethodologyGuide extends BaseMethodologyGuide {
   /**
    * Guide execution steps using 5W1H methodology
    */
-  guideExecutionSteps(prompt: ConvertedPrompt, semanticAnalysis: ConfigurableSemanticAnalysis): StepGuidance {
+  guideExecutionSteps(prompt: ConvertedPrompt, semanticAnalysis: ContentAnalysisResult): StepGuidance {
     const executionSteps: ExecutionStep[] = [
       {
         id: "comprehensive_who_analysis",
@@ -515,5 +516,31 @@ export class FiveW1HMethodologyGuide extends BaseMethodologyGuide {
 **How**: Plan specific methods, approaches, and implementation strategies
 
 Use systematic questioning to ensure comprehensive coverage and uncover hidden requirements. Address each question thoroughly to build complete understanding and effective solutions.`;
+  }
+
+  /**
+   * Get 5W1H-specific tool descriptions
+   */
+  getToolDescriptions(): MethodologyToolDescriptions {
+    return {
+      prompt_engine: {
+        description: "🚀 PROMPT TEMPLATE ENGINE [5W1H-ENHANCED]: Processes prompt templates with systematic 5W1H questioning methodology for comprehensive analysis. Guides thorough exploration through Who (stakeholders), What (objectives), When (timing), Where (context), Why (motivation), and How (methods). WARNING: You are responsible for interpreting and executing the returned content, which contains systematic questioning instructions.",
+        parameters: {
+          execution_mode: "Override intelligent auto-detection with 5W1H-aware selection (default: auto, systematic questioning-enhanced)"
+        }
+      },
+      prompt_manager: {
+        description: "📝 INTELLIGENT PROMPT MANAGER [5W1H-ENHANCED]: Complete lifecycle management with systematic 5W1H questioning methodology integration. Creates comprehensive analysis templates that guide systematic exploration through Who, What, When, Where, Why, and How dimensions. Optimized for thorough requirement analysis and complete solution development.",
+        parameters: {
+          action: "Management action with 5W1H systematic approach: 'create_template' (comprehensive questioning templates), 'analyze_type' (stakeholder analysis), 'migrate_type' (systematic conversion), etc."
+        }
+      },
+      system_control: {
+        description: "⚙️ INTELLIGENT SYSTEM CONTROL [5W1H-ENHANCED]: System administration with 5W1H systematic questioning methodology. Guides comprehensive exploration through Who (users), What (objectives), When (timing), Where (environments), Why (purposes), and How (methods) for thorough system management and decision-making.",
+        parameters: {
+          action: "System action with 5W1H methodology: 'switch_framework' (systematic framework selection), 'analytics' (comprehensive questioning-based metrics), 'health' (thorough system analysis), etc."
+        }
+      }
+    };
   }
 }

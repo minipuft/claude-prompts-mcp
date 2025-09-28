@@ -1,0 +1,46 @@
+{
+  "id": "educational-clarity",
+  "name": "Educational Content Clarity",
+  "type": "validation",
+  "description": "Ensures educational content is clear, well-structured, and pedagogically sound",
+  "guidance": "**Educational Clarity Guidelines:**\n- Start with clear learning objectives or goals\n- Use progressive complexity (simple to advanced)\n- Include concrete examples for abstract concepts\n- Provide step-by-step explanations for processes\n- Use analogies and metaphors to aid understanding\n- Include practice exercises or applications when appropriate\n- Anticipate and address common misconceptions\n- Use clear, jargon-free language with definitions for technical terms\n- Organize content with logical flow and transitions\n- Include summary or key takeaways",
+  "pass_criteria": [
+    {
+      "type": "content_check",
+      "min_length": 400,
+      "required_patterns": [
+        "example",
+        "step",
+        "understand",
+        "learn"
+      ]
+    },
+    {
+      "type": "pattern_check",
+      "keyword_count": {
+        "example": 2,
+        "for example": 1
+      },
+      "regex_patterns": [
+        "^##\\s+.*$",
+        "^\\d+\\.\\s+.*$",
+        "^\\s*[-*]\\s+.*$"
+      ]
+    },
+    {
+      "type": "llm_self_check",
+      "prompt_template": "educational_clarity_validation",
+      "pass_threshold": 0.8
+    }
+  ],
+  "retry_config": {
+    "max_attempts": 2,
+    "improvement_hints": true,
+    "preserve_context": true
+  },
+  "activation": {
+    "prompt_categories": ["education", "documentation", "content_processing"],
+    "explicit_request": false,
+    "framework_context": ["CAGEERF", "5W1H"]
+  }
+}
