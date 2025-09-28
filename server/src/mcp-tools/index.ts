@@ -44,7 +44,7 @@ import { MetricsCollector, createMetricsCollector } from "../metrics/index.js";
 import {
   ConsolidatedPromptEngine,
   createConsolidatedPromptEngine
-} from "./prompt-engine.js";
+} from "./prompt-engine/index.js";
 import {
   ConsolidatedPromptManager,
   createConsolidatedPromptManager
@@ -331,13 +331,6 @@ export class ConsolidatedMcpToolsManager {
             .optional()
             .describe("Additional execution options (key-value pairs). Supports framework-specific options, debugging flags, and custom parameters."),
         },
-        outputSchema: {
-          content: z.array(z.object({
-            type: z.literal("text"),
-            text: z.string()
-          })),
-          isError: z.boolean().optional()
-        },
       },
       async (args: {
         command: string;
@@ -350,7 +343,8 @@ export class ConsolidatedMcpToolsManager {
           const toolResponse = await this.promptEngine.executePromptCommand(args, {});
           return {
             content: toolResponse.content,
-            isError: toolResponse.isError
+            isError: toolResponse.isError,
+            ...(toolResponse.structuredContent && { structuredContent: toolResponse.structuredContent })
           };
         } catch (error) {
           this.logger.error(`prompt_engine error: ${error instanceof Error ? error.message : String(error)}`);
@@ -407,23 +401,48 @@ export class ConsolidatedMcpToolsManager {
             .optional()
             .describe("Force operation without confirmation prompts")
         },
-        outputSchema: {
-          content: z.array(z.object({
-            type: z.literal("text"),
-            text: z.string()
-          })),
-          isError: z.boolean().optional()
-        },
       },
       async (args: {
         action: "create" | "create_prompt" | "create_template" | "analyze_type" | "migrate_type" | "update" | "delete" | "modify" | "reload" | "list";
         [key: string]: any;
       }) => {
         try {
+          this.logger.error(`DEBUG: MCP handler called for prompt_manager with action: ${args.action}`);
+
+          // Check if promptManagerTool exists
+          if (!this.promptManagerTool) {
+            this.logger.error(`ERROR: promptManagerTool is undefined!`);
+            return {
+              content: [{ type: "text", text: `Error: promptManagerTool is not initialized` }],
+              isError: true
+            };
+          }
+
+          this.logger.error(`DEBUG: promptManagerTool exists, calling handleAction`);
+
           const toolResponse = await this.promptManagerTool.handleAction(args, {});
+
+          // Debug logging and validation
+          if (!toolResponse) {
+            this.logger.error(`prompt_manager returned undefined response for action: ${args.action}`);
+            return {
+              content: [{ type: "text", text: `Error: Tool returned undefined response` }],
+              isError: true
+            };
+          }
+
+          if (!toolResponse.content) {
+            this.logger.error(`prompt_manager returned response with undefined content for action: ${args.action}`, toolResponse);
+            return {
+              content: [{ type: "text", text: `Error: Tool returned response with undefined content` }],
+              isError: true
+            };
+          }
+
           return {
             content: toolResponse.content,
-            isError: toolResponse.isError
+            isError: toolResponse.isError,
+            ...(toolResponse.structuredContent && { structuredContent: toolResponse.structuredContent })
           };
         } catch (error) {
           this.logger.error(`prompt_manager error: ${error instanceof Error ? error.message : String(error)}`);
@@ -450,11 +469,15 @@ export class ConsolidatedMcpToolsManager {
         inputSchema: {
           action: z
             .string()
-            .describe("Action to perform: switch_framework, get_analytics, health_check, restart_server, get_config, update_config, etc."),
+            .describe("Action to perform: status, framework, analytics, config, maintenance"),
+          operation: z
+            .string()
+            .optional()
+            .describe("Sub-operation to perform (required for framework action): switch, list, enable, disable"),
           framework: z
             .string()
             .optional()
-            .describe("Framework name for switch_framework action (CAGEERF, ReACT, 5W1H, SCAMPER)"),
+            .describe("Framework name for framework switch operation (CAGEERF, ReACT, 5W1H, SCAMPER)"),
           config_path: z
             .string()
             .optional()
@@ -466,14 +489,23 @@ export class ConsolidatedMcpToolsManager {
           restart_reason: z
             .string()
             .optional()
-            .describe("Reason for server restart (for logging and user notification)")
-        },
-        outputSchema: {
-          content: z.array(z.object({
-            type: z.literal("text"),
-            text: z.string()
-          })),
-          isError: z.boolean().optional()
+            .describe("Reason for server restart (for logging and user notification)"),
+          reason: z
+            .string()
+            .optional()
+            .describe("Reason for the operation (framework switching, maintenance, etc.)"),
+          include_history: z
+            .boolean()
+            .optional()
+            .describe("Include historical data in response"),
+          include_metrics: z
+            .boolean()
+            .optional()
+            .describe("Include performance metrics in response"),
+          show_details: z
+            .boolean()
+            .optional()
+            .describe("Show detailed information in response")
         },
       },
       async (args: {
@@ -484,7 +516,8 @@ export class ConsolidatedMcpToolsManager {
           const toolResponse = await this.systemControl.handleAction(args, {});
           return {
             content: toolResponse.content,
-            isError: toolResponse.isError
+            isError: toolResponse.isError,
+            ...(toolResponse.structuredContent && { structuredContent: toolResponse.structuredContent })
           };
         } catch (error) {
           this.logger.error(`system_control error: ${error instanceof Error ? error.message : String(error)}`);

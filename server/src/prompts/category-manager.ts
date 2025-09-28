@@ -6,38 +6,12 @@
 import { Logger } from "../logging/index.js";
 import { Category, PromptData } from "../types/index.js";
 
-/**
- * Interface for category validation results
- */
-export interface CategoryValidationResult {
-  isValid: boolean;
-  issues: string[];
-  warnings: string[];
-}
-
-/**
- * Interface for category statistics
- */
-export interface CategoryStatistics {
-  totalCategories: number;
-  categoriesWithPrompts: number;
-  emptyCategoriesCount: number;
-  averagePromptsPerCategory: number;
-  categoryBreakdown: Array<{
-    category: Category;
-    promptCount: number;
-  }>;
-}
-
-/**
- * Interface for category-prompt relationships
- */
-export interface CategoryPromptRelationship {
-  categoryId: string;
-  categoryName: string;
-  promptIds: string[];
-  promptCount: number;
-}
+// Import category interfaces from prompts/types.ts instead of redefining
+import type {
+  CategoryValidationResult,
+  CategoryStatistics,
+  CategoryPromptRelationship
+} from './types.js';
 
 /**
  * CategoryManager class
@@ -234,12 +208,14 @@ export class CategoryManager {
   getCategoryPromptRelationships(prompts: PromptData[]): CategoryPromptRelationship[] {
     return this.categories.map(category => {
       const categoryPrompts = this.getPromptsByCategory(prompts, category.id);
-      
+
       return {
         categoryId: category.id,
         categoryName: category.name,
         promptIds: categoryPrompts.map(p => p.id),
-        promptCount: categoryPrompts.length
+        promptCount: categoryPrompts.length,
+        hasChains: categoryPrompts.some(p => p.file && p.file.includes('chain')),
+        hasTemplates: categoryPrompts.some(p => p.file && p.file.includes('template'))
       };
     });
   }

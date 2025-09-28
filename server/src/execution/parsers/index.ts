@@ -18,7 +18,6 @@ export {
   ArgumentParser,
   createArgumentParser,
   type ArgumentParsingResult,
-  type ValidationResult,
   type ExecutionContext
 } from './argument-parser.js';
 
@@ -41,6 +40,12 @@ export type {
   PromptArgument,
   ConvertedPrompt
 } from '../../types/index.js';
+
+export type {
+  ValidationResult,
+  ValidationError,
+  ValidationWarning
+} from '../types.js';
 
 import { Logger } from "../../logging/index.js";
 import { UnifiedCommandParser, createUnifiedCommandParser } from "./unified-command-parser.js";

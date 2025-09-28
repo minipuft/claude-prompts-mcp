@@ -34,6 +34,7 @@ import { modifyPromptSection, safeWriteFile } from "../prompts/promptUtils.js";
 import { ContentAnalyzer, ContentAnalysisResult } from "../semantic/configurable-semantic-analyzer.js";
 import { FrameworkStateManager } from "../frameworks/framework-state-manager.js";
 import { FrameworkManager } from "../frameworks/framework-manager.js";
+import { createPromptResponse, createErrorResponse } from "./shared/structured-response-builder.js";
 
 /**
  * Prompt classification interface for management operations
@@ -137,6 +138,9 @@ export class ConsolidatedPromptManager {
     const { action } = args;
     this.logger.info(`📝 Prompt Manager: Executing action "${action}"`);
 
+    // Debug: Log that we're starting handleAction
+    this.logger.error(`DEBUG: handleAction called with action: ${action}`);
+
     switch (action) {
       case "create":
         return await this.createPrompt(args); // Auto-detect type
@@ -207,7 +211,12 @@ export class ConsolidatedPromptManager {
 
     await this.handleSystemRefresh(args.full_restart, `Prompt created: ${args.id}`);
 
-    return { content: [{ type: "text", text: response }] };
+    return createPromptResponse(response, "create", {
+      promptId: args.id,
+      category: args.category,
+      analysisResult: analysis,
+      affectedFiles: [`${args.id}.md`]
+    });
   }
 
   /**
@@ -262,7 +271,12 @@ export class ConsolidatedPromptManager {
 
     await this.handleSystemRefresh(args.full_restart, `Prompt updated: ${args.id}`);
 
-    return { content: [{ type: "text", text: response }] };
+    return createPromptResponse(response, "update", {
+      promptId: args.id,
+      category: promptData.category,
+      analysisResult: afterAnalysis,
+      affectedFiles: [`${args.id}.md`]
+    });
   }
 
   /**
@@ -295,7 +309,11 @@ export class ConsolidatedPromptManager {
 
     await this.handleSystemRefresh(args.full_restart, `Prompt deleted: ${args.id}`);
 
-    return { content: [{ type: "text", text: response }] };
+    return createPromptResponse(response, "delete", {
+      promptId: args.id,
+      category: promptToDelete.category,
+      affectedFiles: [`${args.id}.md`]
+    });
   }
 
   /**
@@ -341,7 +359,10 @@ export class ConsolidatedPromptManager {
 
     await this.handleSystemRefresh(args.full_restart, `Section modified in ${args.id}: ${args.section_name}`);
 
-    return { content: [{ type: "text", text: response }] };
+    return createPromptResponse(response, "modify", {
+      promptId: args.id,
+      affectedFiles: [`${args.id}.md`]
+    });
   }
 
   /**
@@ -362,7 +383,10 @@ export class ConsolidatedPromptManager {
       response += `✅ **Hot reload completed** - All prompts refreshed from disk.\n`;
     }
 
-    return { content: [{ type: "text", text: response }] };
+    return createPromptResponse(response, "reload", {
+      promptId: "system",
+      affectedFiles: args.full_restart ? ["server"] : ["prompts"]
+    });
   }
 
 
@@ -1004,7 +1028,18 @@ export class ConsolidatedPromptManager {
       }
     }
 
-    return { content: [{ type: "text", text: response }] };
+    // Debug: Log that we're about to return
+    this.logger.error(`DEBUG: About to return from listPrompts, response length: ${response.length}`);
+
+    // Temporary simple response for debugging
+    const finalResponse: ToolResponse = {
+      content: [{ type: "text" as const, text: response }],
+      isError: false
+    };
+
+    this.logger.error(`DEBUG: Final response object: ${JSON.stringify(finalResponse)}`);
+
+    return finalResponse;
   }
 
   /**
@@ -1085,6 +1120,9 @@ export class ConsolidatedPromptManager {
    * Enhanced list prompts with execution type visibility
    */
   private async listPrompts(args: any): Promise<ToolResponse> {
+    // Debug: Log that we're starting listPrompts
+    this.logger.error(`DEBUG: listPrompts called with args: ${JSON.stringify(args)}`);
+
     const filters = this.parseIntelligentFilters(args.filter || '');
     const matchingPrompts: Array<{
       prompt: any;
@@ -1116,12 +1154,15 @@ export class ConsolidatedPromptManager {
     });
 
     if (matchingPrompts.length === 0) {
-      return {
-        content: [{
-          type: "text",
-          text: `📭 No prompts found matching filter: "${args.filter || 'all'}"\n\n💡 Try broader search terms or use filters like 'type:template', 'category:analysis'`
-        }]
-      };
+      return createPromptResponse(
+        `📭 No prompts found matching filter: "${args.filter || 'all'}"\n\n💡 Try broader search terms or use filters like 'type:template', 'category:analysis'`,
+        "list",
+        {
+          promptId: "none",
+          category: "all",
+          affectedFiles: []
+        }
+      );
     }
 
     // Enhanced listing with execution type visibility
@@ -1172,7 +1213,10 @@ export class ConsolidatedPromptManager {
     result += `• Use \`analyze_type\` to get type recommendations\n`;
     result += `• Use \`migrate_type\` to convert between prompt/template\n`;
 
-    return { content: [{ type: "text", text: result }] };
+    return createPromptResponse(result, "list_intelligent", {
+      promptId: "multiple",
+      category: "all"
+    });
   }
 
   /**
@@ -1285,10 +1329,12 @@ export class ConsolidatedPromptManager {
 
     const prompt = this.convertedPrompts.find(p => p.id === args.id);
     if (!prompt) {
-      return {
-        content: [{ type: "text", text: `❌ Prompt not found: ${args.id}` }],
-        isError: true
-      };
+      return createErrorResponse(`Prompt not found: ${args.id}`, {
+        tool: "prompt_manager",
+        operation: "analyze_type",
+        errorType: "validation",
+        severity: "medium"
+      });
     }
 
     // Use semantic analyzer to classify the prompt
@@ -1319,7 +1365,10 @@ export class ConsolidatedPromptManager {
       recommendation += `\n🔒 **Suggested Quality Gates**: ${analysis.suggestedGates.join(', ')}\n`;
     }
 
-    return { content: [{ type: "text", text: recommendation }] };
+    return createPromptResponse(recommendation, "analyze_type", {
+      promptId: args.id,
+      analysisResult: analysis
+    });
   }
 
   /**
@@ -1330,10 +1379,12 @@ export class ConsolidatedPromptManager {
 
     const prompt = this.convertedPrompts.find(p => p.id === args.id);
     if (!prompt) {
-      return {
-        content: [{ type: "text", text: `❌ Prompt not found: ${args.id}` }],
-        isError: true
-      };
+      return createErrorResponse(`Prompt not found: ${args.id}`, {
+        tool: "prompt_manager",
+        operation: "migrate_type",
+        errorType: "validation",
+        severity: "medium"
+      });
     }
 
     const currentAnalysis = await this.analyzePrompt(prompt);
@@ -1341,9 +1392,15 @@ export class ConsolidatedPromptManager {
     const targetType = args.target_type;
 
     if (currentType === targetType) {
-      return {
-        content: [{ type: "text", text: `ℹ️ Prompt "${prompt.name}" is already optimized for ${targetType} execution` }]
-      };
+      return createPromptResponse(
+        `ℹ️ Prompt "${prompt.name}" is already optimized for ${targetType} execution`,
+        "migrate_type",
+        {
+          promptId: args.id,
+          category: prompt.category,
+          analysisResult: currentAnalysis
+        }
+      );
     }
 
     let migrationResult = `🔄 **Type Migration**: ${prompt.name}\n`;
@@ -1384,7 +1441,11 @@ export class ConsolidatedPromptManager {
     migrationResult += `✅ **New execution type**: ${newAnalysis.executionType}\n`;
     migrationResult += `🎯 **Framework alignment**: ${newAnalysis.requiresFramework ? 'Optimized' : 'Simplified'}\n`;
 
-    return { content: [{ type: "text", text: migrationResult }] };
+    return createPromptResponse(migrationResult, "migrate_type", {
+      promptId: args.id,
+      analysisResult: newAnalysis,
+      affectedFiles: [`${args.id}.md`]
+    });
   }
 
   /**
@@ -1403,10 +1464,12 @@ export class ConsolidatedPromptManager {
    */
   private handleError(error: unknown, context: string): ToolResponse {
     const { message, isError } = utilsHandleError(error, context, this.logger);
-    return {
-      content: [{ type: "text", text: message }],
-      isError
-    };
+    return createErrorResponse(message, {
+      tool: "prompt_manager",
+      operation: context,
+      errorType: "system",
+      severity: "medium"
+    });
   }
 }
 

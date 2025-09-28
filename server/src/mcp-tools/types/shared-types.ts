@@ -109,11 +109,13 @@ export interface TypedError {
 }
 
 /**
- * Error context information
+ * Error context information (unified from structured-response-builder and shared-types)
  */
 export interface ErrorContext {
-  tool?: string;
+  /** Tool name where error occurred (required for MCP protocol) */
+  tool: string;
   action?: string;
+  /** Operation that failed */
   operation?: string;
   userInput?: unknown;
   systemState?: {
@@ -123,6 +125,18 @@ export interface ErrorContext {
   };
   suggestions?: string[];
   recoveryOptions?: string[];
+
+  // Additional properties from structured-response-builder
+  /** Error type classification */
+  errorType?: "validation" | "execution" | "system" | "client" | "configuration";
+  /** Error severity */
+  severity?: "low" | "medium" | "high" | "critical";
+  /** Suggested actions for recovery (alias for recoveryOptions) */
+  suggestedActions?: string[];
+  /** Components related to the error */
+  relatedComponents?: string[];
+  /** Additional error details */
+  details?: any;
 }
 
 /**
@@ -540,24 +554,8 @@ export interface FilterParseResult {
 }
 
 
-/**
- * Validation result with enhanced information
- */
-export interface ValidationResult {
-  valid: boolean;
-  errors?: Array<{
-    field: string;
-    message: string;
-    code: string;
-    suggestion?: string;
-    example?: string;
-  }>;
-  warnings?: Array<{
-    field: string;
-    message: string;
-    suggestion?: string;
-  }>;
-}
+// ValidationResult now imported from execution/types.js - provides unified validation interface
+// Import at top of file if needed for MCP tool usage
 
 /**
  * Output formatting options

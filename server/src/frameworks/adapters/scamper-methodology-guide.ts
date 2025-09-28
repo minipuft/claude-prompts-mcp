@@ -4,7 +4,7 @@
  * methodology to prompt creation, processing, and execution without hijacking semantic analysis functionality
  */
 
-import { ConvertedPrompt } from "../../types/index.js";
+import type { ConvertedPrompt } from "../../execution/types.js";
 import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
 import {
   IMethodologyGuide,

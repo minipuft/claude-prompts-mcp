@@ -162,11 +162,9 @@ export interface ChainStep {
  * Category validation result
  */
 export interface CategoryValidationResult {
-  valid: boolean;
-  errors: string[];
+  isValid: boolean;
+  issues: string[];
   warnings: string[];
-  categoryCount: number;
-  promptCount: number;
 }
 
 /**
@@ -174,12 +172,13 @@ export interface CategoryValidationResult {
  */
 export interface CategoryStatistics {
   totalCategories: number;
-  totalPrompts: number;
-  promptsByCategory: Record<string, number>;
+  categoriesWithPrompts: number;
+  emptyCategoriesCount: number;
   averagePromptsPerCategory: number;
-  categoriesWithoutPrompts: string[];
-  mostPopularCategory: string;
-  leastPopularCategory: string;
+  categoryBreakdown: Array<{
+    category: Category;
+    promptCount: number;
+  }>;
 }
 
 /**

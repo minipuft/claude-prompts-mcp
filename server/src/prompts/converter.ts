@@ -5,7 +5,8 @@
 
 import path from "path";
 import { Logger } from "../logging/index.js";
-import { ConvertedPrompt, PromptData } from "../types/index.js";
+import type { ConvertedPrompt } from "../execution/types.js";
+import type { PromptData } from "./types.js";
 import { isChainPrompt } from "../utils/chainUtils.js";
 import { PromptLoader } from "./loader.js";
 
@@ -48,12 +49,6 @@ export class PromptConverter {
         // Load chain steps from markdown-embedded format
         let chainSteps = promptFile.chainSteps || [];
 
-        // NOTE: All chains now use markdown-embedded format
-        // Modular chain system has been removed - chains are defined inline within markdown files
-        if (isChainPrompt(promptData) && chainSteps.length === 0) {
-          this.logger.debug(`Chain prompt '${promptData.id}' has no embedded chain steps - will be treated as single prompt`);
-        }
-
         // Create converted prompt structure
         const convertedPrompt: ConvertedPrompt = {
           id: promptData.id,
@@ -73,6 +68,12 @@ export class PromptConverter {
           onEmptyInvocation:
             promptData.onEmptyInvocation || "execute_if_possible",
         };
+
+        // NOTE: All chains now use markdown-embedded format
+        // Modular chain system has been removed - chains are defined inline within markdown files
+        if (isChainPrompt(convertedPrompt) && chainSteps.length === 0) {
+          this.logger.debug(`Chain prompt '${convertedPrompt.id}' has no embedded chain steps - will be treated as single prompt`);
+        }
 
         // Validate the onEmptyInvocation field
         if (

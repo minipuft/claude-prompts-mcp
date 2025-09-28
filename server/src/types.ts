@@ -2,18 +2,9 @@
  * Type definitions for the prompt management system
  */
 
-// Gate definition interface (duplicated here to avoid circular dependency)
-interface GateDefinition {
-  id: string;
-  name: string;
-  type: 'validation' | 'approval' | 'condition' | 'quality';
-  requirements: any[];
-  failureAction: 'stop' | 'retry' | 'skip' | 'rollback';
-  retryPolicy?: {
-    maxRetries: number;
-    retryDelay: number;
-  };
-}
+// Import domain-specific types
+import type { GateDefinition } from './gates/types.js';
+import type { PromptArgument, Category, PromptData, PromptsFile, PromptFile, PromptsConfigFile, PromptsConfig } from './prompts/types.js';
 
 // ===== Configuration Types =====
 
@@ -29,13 +20,8 @@ export interface ServerConfig {
   port: number;
 }
 
-/**
- * Configuration for prompts subsystem
- */
-export interface PromptsConfig {
-  /** Path to the prompts definition file */
-  file: string;
-}
+// PromptsConfig interface moved to ./prompts/types.ts
+// (imported directly above)
 
 /**
  * Configuration for a transport
@@ -167,18 +153,9 @@ export interface Config {
 }
 
 // ===== Prompt Types =====
-
-/**
- * Definition of an argument for a prompt
- */
-export interface PromptArgument {
-  /** Name of the argument */
-  name: string;
-  /** Optional description of the argument */
-  description?: string;
-  /** Whether this argument is required */
-  required: boolean;
-}
+// Moved to ./prompts/types.ts for domain organization
+// Re-export for backward compatibility
+export type { PromptArgument } from './prompts/types.js';
 
 /**
  * Base interface for message content
@@ -219,74 +196,17 @@ export interface Message {
   content: MessageContent;
 }
 
-/**
- * A category for organizing prompts
- */
-export interface Category {
-  /** Unique identifier for the category */
-  id: string;
-  /** Display name for the category */
-  name: string;
-  /** Description of the category */
-  description: string;
-}
+// Category interface moved to ./prompts/types.ts
+export type { Category } from './prompts/types.js';
 
-/**
- * Metadata for a prompt
- */
-export interface PromptData {
-  /** Unique identifier for the prompt */
-  id: string;
-  /** Display name for the prompt */
-  name: string;
-  /** Category this prompt belongs to */
-  category: string;
-  /** Description of the prompt */
-  description: string;
-  /** Path to the prompt file */
-  file: string;
-  /** Arguments accepted by this prompt */
-  arguments: PromptArgument[];
-  /** Whether this prompt should use available tools */
-  tools?: boolean;
-  /** Defines behavior when prompt is invoked without its defined arguments */
-  onEmptyInvocation?: "execute_if_possible" | "return_template";
-  /** Optional gates for validation */
-  gates?: GateDefinition[];
-}
+// PromptData interface moved to ./prompts/types.ts
+export type { PromptData } from './prompts/types.js';
 
-/**
- * Structure of the prompts registry file
- */
-export interface PromptsFile {
-  /** Available categories for organizing prompts */
-  categories: Category[];
-  /** Available prompts */
-  prompts: PromptData[];
-}
+// PromptsFile interface moved to ./prompts/types.ts
+export type { PromptsFile } from './prompts/types.js';
 
-/**
- * Structure of an individual prompt file
- */
-export interface PromptFile {
-  /** Title of the prompt */
-  title: string;
-  /** Description of the prompt */
-  description: string;
-  /** Optional system message for the prompt */
-  systemMessage?: string;
-  /** Template for generating the user message */
-  userMessageTemplate: string;
-  /** Whether this prompt should use available tools */
-  tools?: boolean;
-}
+// PromptFile interface moved to ./prompts/types.ts
+export type { PromptFile } from './prompts/types.js';
 
-/**
- * Configuration for the prompts subsystem with category imports
- */
-export interface PromptsConfigFile {
-  /** Available categories for organizing prompts */
-  categories: Category[];
-  /** Paths to prompts.json files to import from category folders */
-  imports: string[];
-}
+// PromptsConfigFile interface moved to ./prompts/types.js
+export type { PromptsConfigFile } from './prompts/types.js';

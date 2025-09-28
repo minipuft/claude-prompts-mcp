@@ -5,7 +5,8 @@
  * with actionable suggestions for better user experience.
  */
 
-import { ErrorContext, StructuredToolResponse, ValidationResult } from './types/shared-types.js';
+import { ErrorContext, StructuredToolResponse } from './types/shared-types.js';
+import type { ValidationResult, ValidationError, ValidationWarning } from '../execution/types.js';
 
 /**
  * Base class for all MCP tool errors

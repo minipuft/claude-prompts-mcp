@@ -7,7 +7,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { Logger } from '../../logging/index.js';
-import type { LightweightGateDefinition, GateActivationResult } from './types.js';
+import type { LightweightGateDefinition, GateActivationResult } from '../types.js';
 
 /**
  * Gate loader with caching and hot-reload support

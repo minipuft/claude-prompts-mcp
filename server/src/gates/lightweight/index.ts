@@ -12,7 +12,7 @@ import type {
   ValidationCheck,
   ValidationContext,
   GateActivationResult
-} from './types.js';
+} from '../types.js';
 
 export { GateLoader, createGateLoader } from './gate-loader.js';
 export { GateValidator, createGateValidator } from './gate-validator.js';
@@ -24,7 +24,7 @@ export type {
   ValidationCheck,
   ValidationContext,
   GateActivationResult
-} from './types.js';
+} from '../types.js';
 
 /**
  * Lightweight gate system manager
@@ -103,7 +103,9 @@ export class LightweightGateSystem {
     for (const result of validationResults) {
       if (!result.passed) {
         allHints.push(`**${result.gateId}:**`);
-        allHints.push(...result.retryHints);
+        if (result.retryHints) {
+          allHints.push(...result.retryHints);
+        }
         allHints.push(''); // Empty line for separation
       }
     }

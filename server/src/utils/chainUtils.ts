@@ -57,16 +57,8 @@ export interface ChainStep {
   dependencies?: string[];
 }
 
-/**
- * ConvertedPrompt interface for utility functions
- */
-export interface ConvertedPrompt {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  chainSteps?: ChainStep[];
-}
+// Import ConvertedPrompt from execution domain instead of redefining
+import type { ConvertedPrompt } from '../execution/types.js';
 
 
 /**

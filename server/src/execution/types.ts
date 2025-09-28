@@ -253,10 +253,78 @@ export interface TemplateContext {
 }
 
 /**
- * Validation result structure
+ * Validation error detail structure
+ */
+export interface ValidationError {
+  field: string;
+  message: string;
+  code: string;
+  suggestion?: string;
+  example?: string;
+}
+
+/**
+ * Validation warning structure
+ */
+export interface ValidationWarning {
+  field: string;
+  message: string;
+  suggestion?: string;
+}
+
+/**
+ * Unified validation result structure
+ * Supports both simple validation and comprehensive gate validation
  */
 export interface ValidationResult {
+  /** Whether validation passed (supports both 'valid' and 'passed' patterns) */
   valid: boolean;
-  errors?: string[];
+  /** Alternative field name for gate validation compatibility */
+  passed?: boolean;
+  /** Detailed validation errors */
+  errors?: ValidationError[];
+  /** Validation warnings */
+  warnings?: ValidationWarning[];
+  /** Sanitized arguments for simple validation */
   sanitizedArgs?: Record<string, string | number | boolean | null>;
+
+  // Extended fields for gate validation (optional)
+  /** Gate that was validated (for gate validation) */
+  gateId?: string;
+  /** Individual check results (for comprehensive validation) */
+  checks?: ValidationCheck[];
+  /** Hints for improvement on failure (for gate validation) */
+  retryHints?: string[];
+  /** Validation metadata (for comprehensive validation) */
+  metadata?: {
+    validationTime: number;
+    checksPerformed: number;
+    llmValidationUsed: boolean;
+  };
+
+  // Argument-specific validation (optional)
+  /** Argument name (for argument validation) */
+  argumentName?: string;
+  /** Original value before processing */
+  originalValue?: unknown;
+  /** Processed value after validation */
+  processedValue?: string | number | boolean | null;
+  /** Applied validation rules */
+  appliedRules?: string[];
+}
+
+/**
+ * Individual validation check result (used in comprehensive validation)
+ */
+export interface ValidationCheck {
+  /** Type of check performed */
+  type: string;
+  /** Did this check pass */
+  passed: boolean;
+  /** Score if applicable (0.0-1.0) */
+  score?: number;
+  /** Details about the check */
+  message: string;
+  /** Additional context */
+  details?: Record<string, any>;
 }

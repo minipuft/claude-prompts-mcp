@@ -13,8 +13,9 @@
  */
 
 import { Logger } from "../../logging/index.js";
-import { PromptData, PromptArgument } from "../../types/index.js";
-import { ValidationError, safeJsonParse, validateJsonArguments } from "../../utils/index.js";
+import type { PromptData, PromptArgument } from "../../prompts/types.js";
+import { safeJsonParse, validateJsonArguments } from "../../utils/index.js";
+import type { ValidationResult, ValidationError, ValidationWarning } from "../types.js";
 
 /**
  * Processing result with detailed metadata
@@ -32,18 +33,6 @@ export interface ArgumentParsingResult {
   };
 }
 
-/**
- * Validation result for individual arguments
- */
-export interface ValidationResult {
-  argumentName: string;
-  isValid: boolean;
-  originalValue: unknown;
-  processedValue: string | number | boolean | null;
-  appliedRules: string[];
-  warnings: string[];
-  errors: string[];
-}
 
 /**
  * Execution context for argument processing
@@ -162,7 +151,7 @@ export class ArgumentParser {
       process: (rawArgs: string, promptData: PromptData, context: ExecutionContext): ArgumentParsingResult => {
         const parseResult = safeJsonParse(rawArgs);
         if (!parseResult.success || !parseResult.data) {
-          throw new ValidationError(`Invalid JSON arguments: ${parseResult.error || 'Unknown parsing error'}`);
+          throw new Error(`Invalid JSON arguments: ${parseResult.error || 'Unknown parsing error'}`);
         }
 
         const jsonArgs = parseResult.data;
@@ -783,7 +772,7 @@ export class ArgumentParser {
       const value = processedArgs[arg.name];
       const result: ValidationResult = {
         argumentName: arg.name,
-        isValid: true,
+        valid: true,
         originalValue: value,
         processedValue: value,
         appliedRules: [],
@@ -793,12 +782,20 @@ export class ArgumentParser {
       
       // Check if argument is required but missing
       if (arg.required && (value === undefined || value === null || value === '')) {
-        result.isValid = false;
-        result.errors.push(`Required argument '${arg.name}' is missing`);
+        result.valid = false;
+        result.errors = result.errors || [];
+        result.errors.push({
+          field: arg.name,
+          message: `Required argument '${arg.name}' is missing`,
+          code: 'REQUIRED_ARGUMENT_MISSING',
+          suggestion: `Please provide a value for argument '${arg.name}'`,
+          example: `"${arg.name}": "example_value"`
+        });
       }
-      
+
       // Add existing validation errors if any
       if (existingValidation && existingValidation.errors) {
+        result.warnings = result.warnings || [];
         result.warnings.push(...existingValidation.errors);
       }
       

@@ -11,7 +11,7 @@ import type {
   ValidationCheck,
   ValidationContext,
   GatePassCriteria
-} from './types.js';
+} from '../types.js';
 
 /**
  * Lightweight gate validator with simple pass/fail logic
@@ -44,8 +44,9 @@ export class GateValidator {
       if (gate.type !== 'validation') {
         this.logger.debug(`Gate ${gateId} is guidance-only, skipping validation`);
         return {
-          gateId,
+          valid: true,
           passed: true,
+          gateId,
           checks: [],
           retryHints: [],
           metadata: {
@@ -80,8 +81,9 @@ export class GateValidator {
       const retryHints = passed ? [] : this.generateRetryHints(gate, checks);
 
       const result: ValidationResult = {
-        gateId,
+        valid: passed,
         passed,
+        gateId,
         checks,
         retryHints,
         metadata: {
@@ -99,8 +101,9 @@ export class GateValidator {
     } catch (error) {
       this.logger.error(`Gate validation failed for ${gateId}:`, error);
       return {
-        gateId,
+        valid: false,
         passed: false,
+        gateId,
         checks: [{
           type: 'system_error',
           passed: false,
