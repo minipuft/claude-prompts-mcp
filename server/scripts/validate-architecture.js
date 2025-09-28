@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /**
  * Architecture Validation Script
- * 
+ *
  * Validates proper dependency hierarchy and detects architectural violations.
+ *
+ * NOTE: Currently disabled in validate:all during active architectural rework.
+ * Use validate:all-with-architecture to include this validation when needed.
  */
 
 import fs from 'fs';

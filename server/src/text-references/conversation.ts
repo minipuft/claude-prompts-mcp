@@ -26,6 +26,9 @@ export class ConversationManager {
   // NEW: Session manager integration for coordinated state management
   private chainSessionManager?: any; // ChainSessionManager (injected to avoid circular dependency)
 
+  // NEW: Text reference manager for step storage delegation
+  private textReferenceManager?: any; // TextReferenceManager (injected to avoid circular dependency)
+
   constructor(logger: Logger, maxHistorySize: number = 100) {
     this.logger = logger;
     this.maxHistorySize = maxHistorySize;
@@ -37,6 +40,14 @@ export class ConversationManager {
   setChainSessionManager(sessionManager: any): void {
     this.chainSessionManager = sessionManager;
     this.logger.debug("Chain session manager integrated with conversation manager");
+  }
+
+  /**
+   * NEW: Set text reference manager for step storage delegation
+   */
+  setTextReferenceManager(textReferenceManager: any): void {
+    this.textReferenceManager = textReferenceManager;
+    this.logger.debug("Text reference manager integrated with conversation manager");
   }
 
   /**
@@ -159,24 +170,34 @@ export class ConversationManager {
 
   /**
    * Save step result for a chain execution with enhanced metadata
+   * REFACTORED: Now delegates to TextReferenceManager for storage
    */
   saveStepResult(chainId: string, step: number, result: string, isPlaceholder: boolean = false, metadata?: any): void {
-    if (!this.chainContext[chainId]) {
-      this.chainContext[chainId] = {};
+    // Delegate to TextReferenceManager for actual storage (single source of truth)
+    if (this.textReferenceManager) {
+      this.textReferenceManager.storeChainStepResult(chainId, step, result, {
+        ...metadata,
+        isPlaceholder,
+        executionMetadata: metadata
+      });
+    } else {
+      // Fallback to local storage if TextReferenceManager not available
+      if (!this.chainContext[chainId]) {
+        this.chainContext[chainId] = {};
+      }
+      if (!this.chainExecutionResults[chainId]) {
+        this.chainExecutionResults[chainId] = {};
+      }
+
+      this.chainContext[chainId][step] = result;
+      this.chainExecutionResults[chainId][step] = {
+        result,
+        timestamp: Date.now(),
+        isPlaceholder,
+        executionMetadata: metadata
+      };
     }
-    if (!this.chainExecutionResults[chainId]) {
-      this.chainExecutionResults[chainId] = {};
-    }
-    
-    // Store both simple and enhanced result
-    this.chainContext[chainId][step] = result;
-    this.chainExecutionResults[chainId][step] = {
-      result,
-      timestamp: Date.now(),
-      isPlaceholder,
-      executionMetadata: metadata
-    };
-    
+
     this.logger.debug(`Saved step ${step} result for chain ${chainId} (placeholder: ${isPlaceholder})`);
   }
 
@@ -194,15 +215,27 @@ export class ConversationManager {
 
   /**
    * Get all step results for a chain
+   * REFACTORED: Now delegates to TextReferenceManager for retrieval
    */
   getStepResults(chainId: string): Record<number, string> {
+    if (this.textReferenceManager) {
+      return this.textReferenceManager.getChainStepResults(chainId);
+    }
+
+    // Fallback to local storage if TextReferenceManager not available
     return this.chainContext[chainId] || {};
   }
 
   /**
    * Get specific step result for a chain
+   * REFACTORED: Now delegates to TextReferenceManager for retrieval
    */
   getStepResult(chainId: string, step: number): string | undefined {
+    if (this.textReferenceManager) {
+      return this.textReferenceManager.getChainStepResult(chainId, step) || undefined;
+    }
+
+    // Fallback to local storage if TextReferenceManager not available
     return this.chainContext[chainId]?.[step];
   }
 
@@ -271,13 +304,20 @@ export class ConversationManager {
 
   /**
    * Clear chain context and state with session manager coordination
+   * REFACTORED: Now delegates step result clearing to TextReferenceManager
    */
   clearChainContext(chainId: string): void {
+    // Clear local state
     delete this.chainContext[chainId];
     delete this.chainStates[chainId];
     delete this.chainExecutionResults[chainId];
 
-    // NEW: Also clear session manager state if available
+    // Clear step results from TextReferenceManager
+    if (this.textReferenceManager) {
+      this.textReferenceManager.clearChainStepResults(chainId);
+    }
+
+    // Also clear session manager state if available
     if (this.chainSessionManager) {
       try {
         this.chainSessionManager.clearSessionsForChain(chainId);

@@ -4,8 +4,11 @@
  * This file contains proper TypeScript interfaces to replace 'any' types
  * throughout the MCP tools system, improving type safety and development experience.
  *
- * Updated: 2025-09-26 - Enhanced with specific argument types and proper error handling
+ * Updated: 2025-09-28 - Consolidated with unified error handling system
  */
+
+// Import consolidated error handling types
+import { ErrorContext, ValidationResult } from '../../utils/errorHandling.js';
 
 /**
  * MCP Tool callback extra parameter
@@ -108,36 +111,8 @@ export interface TypedError {
   cause?: TypedError;
 }
 
-/**
- * Error context information (unified from structured-response-builder and shared-types)
- */
-export interface ErrorContext {
-  /** Tool name where error occurred (required for MCP protocol) */
-  tool: string;
-  action?: string;
-  /** Operation that failed */
-  operation?: string;
-  userInput?: unknown;
-  systemState?: {
-    framework?: string;
-    memoryUsage?: number;
-    uptime?: number;
-  };
-  suggestions?: string[];
-  recoveryOptions?: string[];
-
-  // Additional properties from structured-response-builder
-  /** Error type classification */
-  errorType?: "validation" | "execution" | "system" | "client" | "configuration";
-  /** Error severity */
-  severity?: "low" | "medium" | "high" | "critical";
-  /** Suggested actions for recovery (alias for recoveryOptions) */
-  suggestedActions?: string[];
-  /** Components related to the error */
-  relatedComponents?: string[];
-  /** Additional error details */
-  details?: any;
-}
+// Re-export ErrorContext from consolidated error handling
+export type { ErrorContext, ValidationResult };
 
 /**
  * Validation error with detailed information

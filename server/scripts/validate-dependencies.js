@@ -89,8 +89,8 @@ function validateSystemConsolidation() {
     {
       name: "Consolidated MCP Tools",
       files: [
-        "mcp-tools/prompt-engine.ts",
-        "mcp-tools/prompt-manager.ts", 
+        "mcp-tools/prompt-engine/core/engine.ts",
+        "mcp-tools/prompt-manager.ts",
         "mcp-tools/system-control.ts"
       ],
       required: 3

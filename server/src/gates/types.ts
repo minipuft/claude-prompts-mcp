@@ -6,9 +6,9 @@
  * system implementations into a unified type system.
  */
 
-// Import and re-export unified validation types from execution domain
+// Import unified validation types from execution domain (not re-exported to avoid conflicts)
 import type { ValidationResult, ValidationCheck } from '../execution/types.js';
-export type { ValidationResult, ValidationCheck } from '../execution/types.js';
+export type { ValidationCheck } from '../execution/types.js';
 
 /**
  * Gate requirement types - comprehensive enumeration

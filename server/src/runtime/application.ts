@@ -25,12 +25,13 @@ import {
 } from "../logging/index.js";
 import { createMcpToolsManager, McpToolsManager } from "../mcp-tools/index.js";
 import { PromptManager } from "../prompts/index.js";
-import { ServerManager, startMcpServer } from "../server/index.js";
-import { TextReferenceManager } from "../text-references/index.js";
 import {
+  ServerManager,
+  startMcpServer,
   createTransportManager,
   TransportManager,
-} from "../transport/index.js";
+} from "../server/index.js";
+import { TextReferenceManager } from "../text-references/index.js";
 
 // Import execution modules
 import {

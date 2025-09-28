@@ -12,7 +12,22 @@ export * from "./chainUtils.js";
 export * from "../frameworks/index.js";
 
 // Re-export gate system from new locations (maintaining backward compatibility)
-export * from "../gates/index.js";
+// Note: Selective export to avoid ValidationResult conflicts
+export {
+  GateLoader,
+  createGateLoader,
+  GateValidator,
+  createGateValidator,
+  LightweightGateSystem,
+  createLightweightGateSystem
+} from "../gates/index.js";
+export type {
+  LightweightGateDefinition,
+  GatePassCriteria,
+  ValidationCheck,
+  ValidationContext,
+  GateActivationResult
+} from "../gates/index.js";
 
 // Template system removed - functionality moved to methodology guides
 

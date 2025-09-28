@@ -102,9 +102,9 @@ export class FrameworkStateManager extends EventEmitter {
     super();
     this.logger = logger;
 
-    // Set state file path - default to current working directory if no server root provided
+    // Set state file path - place in config directory for better organization
     const rootPath = serverRoot || process.cwd();
-    this.stateFilePath = path.join(rootPath, '.framework-state.json');
+    this.stateFilePath = path.join(rootPath, 'config', 'framework-state.json');
 
     // Initialize with default framework state (will be overridden by loadPersistedState)
     this.currentState = {
@@ -209,6 +209,10 @@ export class FrameworkStateManager extends EventEmitter {
         lastSwitchedAt: this.currentState.switchedAt.toISOString(),
         switchReason: this.currentState.switchReason
       };
+
+      // Ensure config directory exists
+      const configDir = path.dirname(this.stateFilePath);
+      await fs.mkdir(configDir, { recursive: true });
 
       await fs.writeFile(this.stateFilePath, JSON.stringify(persistedState, null, 2));
       this.logger.debug(`💾 Framework state saved to ${this.stateFilePath}`);

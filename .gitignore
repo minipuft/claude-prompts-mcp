@@ -74,7 +74,7 @@ mcp-debug-*
 startup*.log
 
 # Runtime State Files
-# server/.framework-state.json
+# server/config/framework-state.json
 # .framework-state.json
 
 # Crash Dumps and Diagnostics

@@ -50,16 +50,16 @@ async function consolidatedToolsTests() {
     console.log('🔍 Test 3: Tool class methods validation');
     
     const toolClasses = [
-      { name: 'ConsolidatedPromptEngine', cls: ConsolidatedPromptEngine },
-      { name: 'ConsolidatedPromptManager', cls: ConsolidatedPromptManager },
-      { name: 'ConsolidatedSystemControl', cls: ConsolidatedSystemControl }
+      { name: 'ConsolidatedPromptEngine', cls: ConsolidatedPromptEngine, method: 'executePromptCommand' },
+      { name: 'ConsolidatedPromptManager', cls: ConsolidatedPromptManager, method: 'handleAction' },
+      { name: 'ConsolidatedSystemControl', cls: ConsolidatedSystemControl, method: 'handleAction' }
     ];
-    
-    for (const { name, cls } of toolClasses) {
-      if (!cls.prototype.registerTool || typeof cls.prototype.registerTool !== 'function') {
-        throw new Error(`${name} missing registerTool method`);
+
+    for (const { name, cls, method } of toolClasses) {
+      if (!cls.prototype[method] || typeof cls.prototype[method] !== 'function') {
+        throw new Error(`${name} missing ${method} method`);
       }
-      console.log(`✅ ${name} has registerTool method`);
+      console.log(`✅ ${name} has ${method} method`);
     }
     
     console.log('✅ All consolidated MCP tool classes have required methods');

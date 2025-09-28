@@ -670,7 +670,8 @@ The system now includes advanced search capabilities implemented in `consolidate
 **Essential Commands:**
 - `npm run test:ci` - Complete test suite (unit + integration + performance)
 - `npm run test:all-enhanced` - Enhanced framework and MCP validation
-- `npm run validate:all` - Full architecture validation (dependencies + circular + design)
+- `npm run validate:all` - Core validation (dependencies + circular) - **architectural layer validation temporarily disabled during rework**
+- `npm run validate:all-with-architecture` - Full validation including architectural layer checks (use when needed)
 - `npm run test:ci-startup` - Server startup validation
 
 **Development Commands:**

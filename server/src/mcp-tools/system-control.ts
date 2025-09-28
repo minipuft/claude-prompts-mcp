@@ -382,10 +382,24 @@ export class ConsolidatedSystemControl {
     const health = this.frameworkStateManager.getSystemHealth();
     const statusIcon = health.status === 'healthy' ? '✅' : '⚠️';
 
+    // Check if framework system is enabled for injection
+    const isFrameworkEnabled = health.frameworkSystemEnabled;
+    const frameworkStatusIcon = isFrameworkEnabled ? '✅' : '🚫';
+    const frameworkStatusText = isFrameworkEnabled
+      ? `${frameworkStatusIcon} Enabled (${health.activeFramework})`
+      : `${frameworkStatusIcon} Disabled (${health.activeFramework} selected)`;
+
     let response = `${statusIcon} **System Status Overview**\n\n`;
-    response += `**Active Framework**: ${health.activeFramework}\n`;
+    response += `**Framework System**: ${frameworkStatusText}\n`;
     response += `**Status**: ${health.status}\n`;
     response += `**Uptime**: ${Math.floor((Date.now() - this.startTime) / 1000 / 60)} minutes\n\n`;
+
+    // Add warning message when framework is selected but system disabled
+    if (!isFrameworkEnabled && health.activeFramework) {
+      response += `⚠️ **Notice**: ${health.activeFramework} is selected but framework injection is disabled.\n`;
+      response += `Prompts will execute without methodology guidance.\n`;
+      response += `Use \`system_control framework enable\` to activate framework injection.\n\n`;
+    }
 
     if (include_metrics) {
       response += `📊 **Performance Metrics**:\n`;
@@ -713,8 +727,16 @@ class StatusActionHandler extends ActionHandler {
 
     let response = `${statusIcon} **System Health Status**: ${health.status}\n\n`;
     response += `📊 **Metrics**:\n`;
-    response += `- Active Framework: ${health.activeFramework}\n`;
-    response += `- Framework System Enabled: ${health.frameworkSystemEnabled ? 'Yes' : 'No'}\n`;
+
+    // Improved framework status display
+    const isFrameworkEnabled = health.frameworkSystemEnabled;
+    const injectionStatus = isFrameworkEnabled ? 'Working' : 'Inactive';
+    const frameworkStatusText = isFrameworkEnabled
+      ? `✅ Enabled - ${health.activeFramework} methodology active`
+      : `🚫 Disabled - ${health.activeFramework} selected but not injecting`;
+
+    response += `- Framework System: ${frameworkStatusText}\n`;
+    response += `- Framework Injection: ${injectionStatus}\n`;
     response += `- Available Frameworks: ${health.availableFrameworks.join(', ')}\n`;
     response += `- Total Framework Switches: ${health.switchingMetrics.totalSwitches}\n`;
 
@@ -748,10 +770,26 @@ class StatusActionHandler extends ActionHandler {
     const health = this.systemControl.frameworkStateManager.getSystemHealth();
 
     let response = `🎯 **Framework System Status**\n\n`;
-    response += `**Active Framework**: ${health.activeFramework}\n`;
-    response += `**Status**: ${health.status}\n`;
-    response += `**Framework System Enabled**: ${health.frameworkSystemEnabled ? 'Yes' : 'No'}\n`;
+
+    // Enhanced status display
+    const isFrameworkEnabled = health.frameworkSystemEnabled;
+    const injectionStatusIcon = isFrameworkEnabled ? '✅' : '🚫';
+    const injectionStatusText = isFrameworkEnabled
+      ? 'Active - Framework guidance being applied'
+      : 'Inactive - Framework guidance disabled';
+
+    response += `**Selected Framework**: ${health.activeFramework}\n`;
+    response += `**Injection Status**: ${injectionStatusIcon} ${injectionStatusText}\n`;
+    response += `**System State**: ${health.frameworkSystemEnabled ? 'Enabled' : 'Disabled'}\n`;
+    response += `**Health Status**: ${health.status}\n`;
     response += `**Available Frameworks**: ${health.availableFrameworks.join(', ')}\n`;
+
+    // Add warning for confused state
+    if (!isFrameworkEnabled && health.activeFramework) {
+      response += `\n⚠️ **Warning**: Framework system is disabled while ${health.activeFramework} is selected.\n`;
+      response += `This means prompts will NOT receive framework methodology guidance.\n`;
+      response += `To enable framework injection, use: \`system_control framework enable\`\n`;
+    }
 
     return this.createMinimalSystemResponse(response, "framework_status");
   }
@@ -2108,9 +2146,13 @@ class MaintenanceActionHandler extends ActionHandler {
 
       let response = "📊 **Framework System Status**\n\n";
 
-      // Main status
-      response += `**System Enabled**: ${state.frameworkSystemEnabled ? "✅ Yes" : "🚫 No"}\n`;
-      response += `**Active Framework**: ${state.activeFramework}\n`;
+      // Main status with enhanced clarity
+      const isEnabled = state.frameworkSystemEnabled;
+      const injectionStatus = isEnabled ? "✅ Active" : "🚫 Inactive";
+
+      response += `**System Status**: ${state.frameworkSystemEnabled ? "✅ Enabled" : "🚫 Disabled"}\n`;
+      response += `**Selected Framework**: ${state.activeFramework}\n`;
+      response += `**Framework Injection**: ${injectionStatus}\n`;
       response += `**Health Status**: ${this.getHealthEmoji(health.status)} ${health.status.toUpperCase()}\n`;
       response += `**Last Updated**: ${state.switchedAt.toISOString()}\n`;
       response += `**Last Reason**: ${state.switchReason}\n\n`;

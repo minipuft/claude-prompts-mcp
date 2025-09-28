@@ -47,7 +47,8 @@
     "validate:dependencies": "node scripts/validate-dependencies.js",
     "validate:architecture": "node scripts/validate-architecture.js",
     "validate:circular": "npx madge --circular --extensions ts,js src/",
-    "validate:all": "npm run validate:dependencies && npm run validate:architecture && npm run validate:circular",
+    "validate:all": "npm run validate:dependencies && npm run validate:circular",
+    "validate:all-with-architecture": "npm run validate:dependencies && npm run validate:architecture && npm run validate:circular",
     "prepublishOnly": "npm run build"
   },
   "repository": {

@@ -37,6 +37,7 @@ import { createSemanticIntegrationFactory } from "../semantic/integrations/index
 import { FrameworkStateManager } from "../frameworks/framework-state-manager.js";
 import { FrameworkManager, createFrameworkManager } from "../frameworks/framework-manager.js";
 import { ConversationManager, createConversationManager } from "../text-references/conversation.js";
+import { TextReferenceManager, createTextReferenceManager } from "../text-references/index.js";
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
 import { MetricsCollector, createMetricsCollector } from "../metrics/index.js";
 
@@ -81,6 +82,7 @@ export class ConsolidatedMcpToolsManager {
   private frameworkManager?: FrameworkManager;
   // REMOVED: chainOrchestrator - modular chain system removed
   private conversationManager!: ConversationManager;
+  private textReferenceManager!: TextReferenceManager;
   private toolDescriptionManager?: ToolDescriptionManager;
   private analyticsService!: MetricsCollector;
   // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution model
@@ -125,7 +127,11 @@ export class ConsolidatedMcpToolsManager {
     const integrationFactory = createSemanticIntegrationFactory(this.logger);
     this.semanticAnalyzer = await integrationFactory.createFromEnvironment(analysisConfig);
     this.conversationManager = createConversationManager(this.logger);
+    this.textReferenceManager = createTextReferenceManager(this.logger);
     this.analyticsService = createMetricsCollector(this.logger);
+
+    // Integrate text reference manager with conversation manager
+    this.conversationManager.setTextReferenceManager(this.textReferenceManager);
 
     this.logger.info(`Configurable semantic analyzer initialized (mode: ${analysisConfig.mode})`);
 
@@ -137,6 +143,7 @@ export class ConsolidatedMcpToolsManager {
       this.configManager,
       this.semanticAnalyzer,
       this.conversationManager,
+      this.textReferenceManager,
       this // Pass manager reference for analytics data flow
       // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution
     );

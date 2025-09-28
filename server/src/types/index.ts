@@ -83,7 +83,6 @@ export type {
   GateRequirementType,
   GateStatus,
   GateEvaluationResult,
-  ValidationResult as GateValidationResult,
   ValidationContext,
   GateActivationResult,
   LightweightGateDefinition,
@@ -362,6 +361,7 @@ export interface ExecutionState {
     executionMode?: 'prompt' | 'template' | 'chain';
     stepConfirmation?: boolean;
     gateValidation?: boolean;
+    sessionId?: string; // For chain session management
   };
 }
 

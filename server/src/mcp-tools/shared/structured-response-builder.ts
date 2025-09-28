@@ -127,7 +127,8 @@ export class StructuredResponseBuilder {
    */
   static createErrorResponse(error: Error | string, context: ErrorContext): ToolResponse {
     const timestamp = Date.now();
-    const executionId = `${context.tool.toLowerCase()}-error-${timestamp}`;
+    const toolName = context.tool || 'unknown';
+    const executionId = `${toolName.toLowerCase()}-error-${timestamp}`;
     const errorMessage = error instanceof Error ? error.message : error;
 
     return {
@@ -143,7 +144,7 @@ export class StructuredResponseBuilder {
           frameworkEnabled: false
         },
         errorInfo: {
-          errorCode: context.tool.toUpperCase() + "_ERROR",
+          errorCode: toolName.toUpperCase() + "_ERROR",
           errorType: context.errorType || "system",
           message: errorMessage,
           details: context.details,

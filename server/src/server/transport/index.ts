@@ -6,8 +6,8 @@
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import express, { Request, Response } from "express";
-import { ConfigManager } from "../config/index.js";
-import { Logger } from "../logging/index.js";
+import { ConfigManager } from "../../config/index.js";
+import { Logger } from "../../logging/index.js";
 
 /**
  * Transport types supported by the server

@@ -42,7 +42,7 @@ Following the project's **Single Source of Truth Principle** and **Anti-Prolifer
 - ../frameworks/framework-state-manager.js
 - ../semantic/configurable-semantic-analyzer.js
 - ../text-references/conversation.js
-- ../gates/lightweight/index.js
+- ../gates/core/index.js
 - ./shared/structured-response-builder.js
 - ./prompt-engine-types.js
 
@@ -50,7 +50,7 @@ Following the project's **Single Source of Truth Principle** and **Anti-Prolifer
 - ../types/index.js
 - ./prompt-engine-types.js
 - ../text-references/conversation.js
-- ../gates/lightweight/index.js
+- ../gates/core/index.js
 - ../frameworks/framework-manager.js
 - ../frameworks/framework-state-manager.js
 - ../logging/index.js

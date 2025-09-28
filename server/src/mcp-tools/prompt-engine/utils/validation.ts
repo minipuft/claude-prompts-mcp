@@ -7,7 +7,7 @@
 
 import { createLogger } from "../../../logging/index.js";
 import { ConvertedPrompt } from "../../../types/index.js";
-import { LightweightGateSystem } from "../../../gates/lightweight/index.js";
+import { LightweightGateSystem } from "../../../gates/core/index.js";
 
 const logger = createLogger({
   logFile: '/tmp/engine-validator.log',
