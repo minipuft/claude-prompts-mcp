@@ -24,6 +24,12 @@ import { SafeConfigWriter, createSafeConfigWriter } from "./config-utils.js";
 import { handleError as utilsHandleError } from "../utils/index.js";
 import { ToolDescriptionManager } from "./tool-description-manager.js";
 import { createSystemResponse } from "./shared/structured-response-builder.js";
+// Phase 3: Prompt guidance system integration
+import {
+  PromptGuidanceService,
+  MethodologyState,
+  MethodologySwitchRequest
+} from "../frameworks/prompt-guidance/index.js";
 // Enhanced tool dependencies removed (Phase 1.3) - Core implementations
 // Simple core response handling without enhanced complexity
 interface SimpleResponseFormatter {
@@ -137,6 +143,8 @@ export class ConsolidatedSystemControl {
   private mcpToolsManager?: any; // Reference to MCPToolsManager for tool updates
   private analyticsService?: MetricsCollector;
   private responseFormatter: ResponseFormatter;
+  // Phase 3: Prompt guidance service
+  private promptGuidanceService?: PromptGuidanceService;
   public startTime: number = Date.now();
   
   // Analytics data

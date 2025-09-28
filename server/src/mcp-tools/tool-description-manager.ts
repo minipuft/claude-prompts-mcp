@@ -17,8 +17,8 @@ import {
   ReACTMethodologyGuide,
   FiveW1HMethodologyGuide,
   SCAMPERMethodologyGuide
-} from '../frameworks/adapters/index.js';
-import { MethodologyToolDescriptions } from '../frameworks/interfaces/methodology-guide-interfaces.js';
+} from '../frameworks/methodology/index.js';
+import { MethodologyToolDescriptions } from '../frameworks/types/index.js';
 
 /**
  * Manages tool descriptions loaded from external configuration with hot-reload support

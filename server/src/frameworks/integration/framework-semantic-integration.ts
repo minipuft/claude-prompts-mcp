@@ -10,64 +10,30 @@
 
 import { Logger } from "../../logging/index.js";
 import { ConvertedPrompt } from "../../types/index.js";
+import { FrameworkManager } from "../framework-manager.js";
 import {
-  FrameworkManager,
   FrameworkDefinition,
   FrameworkExecutionContext,
-  FrameworkSelectionCriteria
-} from "../framework-manager.js";
+  FrameworkSelectionCriteria,
+  FrameworkSwitchingConfig,
+  FrameworkUsageInsights,
+  FrameworkSwitchRecommendation,
+  IntegratedAnalysisResult
+} from "../types/index.js";
 import {
   ContentAnalyzer,
   ContentAnalysisResult
 } from "../../semantic/configurable-semantic-analyzer.js";
 import { FrameworkStateManager } from "../framework-state-manager.js";
+import { PromptGuidanceService } from "../prompt-guidance/service.js";
 
 /**
- * Integrated analysis result combining semantic intelligence and framework methodology
+ * Integrated analysis result (imported from types/integration-types.js)
  */
-export interface IntegratedAnalysisResult {
-  // Semantic analysis results - PROMPT INTELLIGENCE
-  semanticAnalysis: ContentAnalysisResult;
-  
-  // Framework execution context - METHODOLOGY GUIDANCE
-  frameworkContext: FrameworkExecutionContext;
-  
-  // Integration metadata
-  integration: {
-    frameworkSelectionReason: string;
-    semanticFrameworkAlignment: number; // How well semantic criteria match selected framework
-    alternativeFrameworks: FrameworkDefinition[];
-    consensusMetrics: {
-      confidenceAlignment: number;
-      complexityMatch: number;
-      executionTypeCompatibility: number;
-    };
-  };
-  
-  // Combined execution recommendations
-  recommendations: {
-    executionApproach: string;
-    expectedPerformance: {
-      processingTime: number;
-      memoryUsage: string;
-      cacheable: boolean;
-    };
-    qualityAssurance: string[];
-    optimizations: string[];
-  };
-}
 
 /**
- * Framework switching configuration
+ * Framework switching configuration (imported from types)
  */
-export interface FrameworkSwitchingConfig {
-  enableAutomaticSwitching: boolean;
-  switchingThreshold: number; // Confidence threshold for switching
-  preventThrashing: boolean; // Prevent rapid framework switches
-  switchingCooldownMs: number;
-  blacklistedFrameworks: string[];
-  preferredFrameworks: string[];
-}
 
 /**
  * Framework-Semantic Integration Engine
@@ -79,6 +45,8 @@ export class FrameworkSemanticIntegration {
   private semanticAnalyzer: ContentAnalyzer;
   private logger: Logger;
   private config: FrameworkSwitchingConfig;
+  // Phase 4: Prompt guidance coordination
+  private promptGuidanceService?: PromptGuidanceService;
 
   // Framework switching state management
   private lastFrameworkSwitch = new Map<string, number>();
@@ -108,10 +76,12 @@ export class FrameworkSemanticIntegration {
 
   /**
    * Main integration method - combines semantic analysis with framework selection
+   * Phase 4: Enhanced with prompt guidance coordination
    */
   async analyzeWithFrameworkIntegration(
     prompt: ConvertedPrompt,
-    userFrameworkPreference?: string
+    userFrameworkPreference?: string,
+    includePromptGuidance?: boolean
   ): Promise<IntegratedAnalysisResult> {
     const startTime = performance.now();
 
@@ -155,7 +125,7 @@ export class FrameworkSemanticIntegration {
       // Step 6: Generate alternative frameworks (adapted for analysis mode)
       const alternatives = this.generateAlternativeFrameworks(enhancedCriteria, frameworkContext, semanticAnalysis);
       
-      // Step 6: Build integrated result
+      // Step 6: Build integrated result with optional prompt guidance
       const result: IntegratedAnalysisResult = {
         semanticAnalysis,
         frameworkContext,
@@ -171,6 +141,33 @@ export class FrameworkSemanticIntegration {
           alignment
         )
       };
+
+      // Phase 4: Apply prompt guidance if requested and available
+      if (includePromptGuidance && this.promptGuidanceService?.isInitialized()) {
+        try {
+          const guidanceResult = await this.promptGuidanceService.applyGuidance(prompt, {
+            includeSystemPromptInjection: true,
+            includeTemplateEnhancement: true,
+            frameworkOverride: frameworkContext.selectedFramework.methodology,
+            semanticAnalysis: semanticAnalysis
+          });
+
+          // Enhance the result with prompt guidance information
+          result.promptGuidance = {
+            guidanceApplied: guidanceResult.guidanceApplied,
+            enhancedPrompt: guidanceResult.enhancedPrompt,
+            systemPromptInjection: guidanceResult.systemPromptInjection,
+            templateEnhancement: guidanceResult.templateEnhancement,
+            processingTimeMs: guidanceResult.processingTimeMs,
+            confidenceScore: guidanceResult.metadata.confidenceScore
+          };
+
+          this.logger.debug(`Prompt guidance applied with confidence: ${guidanceResult.metadata.confidenceScore}`);
+
+        } catch (error) {
+          this.logger.warn("Failed to apply prompt guidance:", error);
+        }
+      }
       
       // Update performance tracking
       this.updateFrameworkUsage(
@@ -231,6 +228,11 @@ export class FrameworkSemanticIntegration {
       return null;
     }
     
+    // Check if framework context is available (framework system enabled)
+    if (!currentResult.frameworkContext) {
+      return null; // Cannot switch if framework system is disabled
+    }
+
     const currentFramework = currentResult.frameworkContext.selectedFramework;
     const alignment = currentResult.integration.semanticFrameworkAlignment;
     
@@ -685,6 +687,59 @@ export class FrameworkSemanticIntegration {
     };
   }
 
+  /**
+   * Phase 4: Set prompt guidance service for intelligent coordination
+   */
+  setPromptGuidanceService(promptGuidanceService: PromptGuidanceService): void {
+    this.promptGuidanceService = promptGuidanceService;
+    this.logger.info("PromptGuidanceService integrated with FrameworkSemanticIntegration");
+  }
+
+  /**
+   * Phase 4: Check if prompt guidance is available and ready
+   */
+  hasPromptGuidance(): boolean {
+    return this.promptGuidanceService?.isInitialized() ?? false;
+  }
+
+  /**
+   * Phase 4: Apply semantic-guided prompt enhancement
+   */
+  async applySemanticGuidedEnhancement(
+    prompt: ConvertedPrompt,
+    semanticAnalysis: ContentAnalysisResult,
+    frameworkContext: FrameworkExecutionContext
+  ): Promise<any> {
+    if (!this.promptGuidanceService?.isInitialized()) {
+      this.logger.debug("Prompt guidance service not available for semantic-guided enhancement");
+      return null;
+    }
+
+    try {
+      const guidanceResult = await this.promptGuidanceService.applyGuidance(prompt, {
+        includeSystemPromptInjection: true,
+        includeTemplateEnhancement: true,
+        frameworkOverride: frameworkContext.selectedFramework.methodology,
+        semanticAnalysis: semanticAnalysis
+      });
+
+      return {
+        enhancedPrompt: guidanceResult.enhancedPrompt,
+        systemPromptInjection: guidanceResult.systemPromptInjection,
+        templateEnhancement: guidanceResult.templateEnhancement,
+        guidanceMetadata: {
+          semanticAware: guidanceResult.metadata.semanticAware,
+          semanticComplexity: guidanceResult.metadata.semanticComplexity,
+          confidenceScore: guidanceResult.metadata.confidenceScore,
+          enhancementsApplied: guidanceResult.metadata.enhancementsApplied
+        }
+      };
+    } catch (error) {
+      this.logger.error("Failed to apply semantic-guided enhancement:", error);
+      return null;
+    }
+  }
+
   private createFallbackIntegratedResult(prompt: ConvertedPrompt, startTime: number): IntegratedAnalysisResult {
     const fallbackFramework = this.frameworkManager.listFrameworks(true)[0];
     
@@ -779,18 +834,7 @@ interface FrameworkAlignmentResult {
   };
 }
 
-export interface FrameworkUsageInsights {
-  totalAnalyses: number;
-  frameworkUsage: Record<string, FrameworkUsageMetrics & { framework: FrameworkDefinition }>;
-  recommendations: string[];
-}
-
-export interface FrameworkSwitchRecommendation {
-  currentFramework: FrameworkDefinition;
-  recommendedFramework: FrameworkDefinition;
-  reason: string;
-  expectedImprovement: number;
-}
+// Interfaces imported from types/index.js
 
 /**
  * Create and configure framework-semantic integration with configurable analyzer

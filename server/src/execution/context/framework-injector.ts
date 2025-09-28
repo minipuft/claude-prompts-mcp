@@ -6,17 +6,17 @@
 
 import { Logger } from "../../logging/index.js";
 import { ConvertedPrompt } from "../../types/index.js";
+import { FrameworkManager } from "../../frameworks/framework-manager.js";
 import {
-  FrameworkManager,
   FrameworkExecutionContext,
   FrameworkSelectionCriteria
-} from "../../frameworks/framework-manager.js";
+} from "../../frameworks/types/index.js";
 import { FrameworkStateManager } from "../../frameworks/framework-state-manager.js";
 import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
 import {
   IMethodologyGuide,
   MethodologyEnhancement
-} from "../../frameworks/interfaces/methodology-guide-interfaces.js";
+} from "../../frameworks/types/index.js";
 
 /**
  * Framework injection result

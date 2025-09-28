@@ -6,7 +6,8 @@
  */
 
 import { createLogger } from "../../../logging/index.js";
-import { FrameworkManager, FrameworkExecutionContext } from "../../../frameworks/framework-manager.js";
+import { FrameworkManager } from "../../../frameworks/framework-manager.js";
+import { FrameworkExecutionContext } from "../../../frameworks/types/index.js";
 import { FrameworkStateManager } from "../../../frameworks/framework-state-manager.js";
 import { ConvertedPrompt } from "../../../types/index.js";
 import { ExecutionContext } from "../../../execution/parsers/index.js";

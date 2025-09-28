@@ -9,7 +9,12 @@
 
 import { EventEmitter } from "events";
 import { Logger } from "../logging/index.js";
-import { FrameworkManager, FrameworkDefinition, FrameworkExecutionContext, FrameworkSelectionCriteria, createFrameworkManager } from "./framework-manager.js";
+import { FrameworkManager, createFrameworkManager } from "./framework-manager.js";
+import {
+  FrameworkDefinition,
+  FrameworkExecutionContext,
+  FrameworkSelectionCriteria
+} from "./types/index.js";
 import * as fs from 'fs/promises';
 import * as path from 'path';
 

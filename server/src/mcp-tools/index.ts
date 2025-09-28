@@ -49,7 +49,7 @@ import {
 import {
   ConsolidatedPromptManager,
   createConsolidatedPromptManager
-} from "./prompt-manager.js";
+} from "./prompt-manager/index.js";
 import {
   ConsolidatedSystemControl,
   createConsolidatedSystemControl
@@ -383,6 +383,22 @@ export class ConsolidatedMcpToolsManager {
             .string()
             .optional()
             .describe("Prompt ID for update/delete/modify operations"),
+          name: z
+            .string()
+            .optional()
+            .describe("Prompt name (required for create operations)"),
+          description: z
+            .string()
+            .optional()
+            .describe("Prompt description (required for create operations)"),
+          user_message_template: z
+            .string()
+            .optional()
+            .describe("User message template (required for create operations)"),
+          system_message: z
+            .string()
+            .optional()
+            .describe("System message for prompt context"),
           content: z
             .string()
             .optional()

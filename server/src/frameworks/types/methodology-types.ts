@@ -1,11 +1,59 @@
 /**
- * Methodology Guide Interfaces
- * Defines contracts for framework adapters that provide methodology guidance
- * rather than analysis - enhances execution without hijacking functionality
+ * Methodology Guide Type Definitions
+ *
+ * Contains all types related to methodology guides, framework definitions,
+ * and methodology-specific interfaces. This consolidates types from multiple
+ * sources to eliminate duplication.
  */
 
-import { ConvertedPrompt } from "../../types/index.js";
-import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
+import type { ConvertedPrompt } from '../../types/index.js';
+import type { ContentAnalysisResult } from '../../semantic/configurable-semantic-analyzer.js';
+
+/**
+ * Framework methodology definitions
+ * Each framework provides system prompt templates and execution guidelines
+ */
+export type FrameworkMethodology = "CAGEERF" | "ReACT" | "5W1H" | "SCAMPER" | "AUTO";
+
+/**
+ * Framework definition structure
+ */
+export interface FrameworkDefinition {
+  id: string;
+  name: string;
+  description: string;
+  methodology: FrameworkMethodology;
+  systemPromptTemplate: string;
+  executionGuidelines: string[];
+  applicableTypes: string[];
+  priority: number;
+  enabled: boolean;
+}
+
+/**
+ * Framework execution context
+ */
+export interface FrameworkExecutionContext {
+  selectedFramework: FrameworkDefinition;
+  systemPrompt: string;
+  executionGuidelines: string[];
+  metadata: {
+    selectionReason: string;
+    confidence: number;
+    appliedAt: Date;
+  };
+}
+
+/**
+ * Framework selection criteria
+ */
+export interface FrameworkSelectionCriteria {
+  promptType?: string;
+  complexity?: 'low' | 'medium' | 'high';
+  domain?: string;
+  userPreference?: FrameworkMethodology;
+  executionType?: 'template' | 'chain';
+}
 
 /**
  * Guidance for creating new prompts based on methodology
@@ -17,14 +65,14 @@ export interface PromptCreationGuidance {
     userTemplateSuggestions: string[];
     argumentSuggestions: ArgumentGuidance[];
   };
-  
+
   // Methodology-specific prompt elements
   methodologyElements: {
     requiredSections: string[];
     optionalSections: string[];
     sectionDescriptions: Record<string, string>;
   };
-  
+
   // Quality improvement suggestions
   qualityGuidance: {
     clarityEnhancements: string[];
@@ -39,14 +87,14 @@ export interface PromptCreationGuidance {
 export interface ProcessingGuidance {
   // Methodology-specific processing steps
   processingSteps: ProcessingStep[];
-  
+
   // Template enhancement suggestions
   templateEnhancements: {
     systemPromptAdditions: string[];
     userPromptModifications: string[];
     contextualHints: string[];
   };
-  
+
   // Execution flow guidance
   executionFlow: {
     preProcessingSteps: string[];
@@ -61,10 +109,10 @@ export interface ProcessingGuidance {
 export interface StepGuidance {
   // Methodology-specific step sequence
   stepSequence: ExecutionStep[];
-  
+
   // Step-specific enhancements
   stepEnhancements: Record<string, string[]>;
-  
+
   // Quality gates for each step
   stepValidation: Record<string, string[]>;
 }
@@ -75,16 +123,16 @@ export interface StepGuidance {
 export interface MethodologyEnhancement {
   // System prompt enhancements
   systemPromptGuidance: string;
-  
+
   // Processing enhancements
   processingEnhancements: ProcessingStep[];
-  
+
   // Quality gates specific to methodology
   methodologyGates: QualityGate[];
-  
+
   // Template structure suggestions
   templateSuggestions: TemplateEnhancement[];
-  
+
   // Execution metadata
   enhancementMetadata: {
     methodology: string;
@@ -159,6 +207,18 @@ export interface MethodologyToolDescriptions {
 }
 
 /**
+ * Methodology validation results
+ */
+export interface MethodologyValidation {
+  compliant: boolean;
+  compliance_score: number; // 0.0 to 1.0
+  strengths: string[];
+  improvement_areas: string[];
+  specific_suggestions: TemplateEnhancement[];
+  methodology_gaps: string[];
+}
+
+/**
  * Main interface for methodology guides
  * Framework adapters implement this to provide guidance rather than analysis
  */
@@ -168,7 +228,7 @@ export interface IMethodologyGuide {
   readonly frameworkName: string;
   readonly methodology: string;
   readonly version: string;
-  
+
   /**
    * Guide the creation of new prompts using this methodology
    * @param intent The user's intent or goal for the prompt
@@ -176,10 +236,10 @@ export interface IMethodologyGuide {
    * @returns Guidance for structuring the prompt according to methodology
    */
   guidePromptCreation(
-    intent: string, 
+    intent: string,
     context?: Record<string, any>
   ): PromptCreationGuidance;
-  
+
   /**
    * Guide template processing during execution
    * @param template The template being processed
@@ -187,10 +247,10 @@ export interface IMethodologyGuide {
    * @returns Processing guidance based on methodology
    */
   guideTemplateProcessing(
-    template: string, 
+    template: string,
     executionType: string
   ): ProcessingGuidance;
-  
+
   /**
    * Guide execution step sequencing
    * @param prompt The prompt being executed
@@ -198,10 +258,10 @@ export interface IMethodologyGuide {
    * @returns Step-by-step guidance based on methodology
    */
   guideExecutionSteps(
-    prompt: ConvertedPrompt, 
+    prompt: ConvertedPrompt,
     semanticAnalysis: ContentAnalysisResult
   ): StepGuidance;
-  
+
   /**
    * Enhance execution with methodology-specific improvements
    * @param prompt The prompt to enhance
@@ -212,7 +272,7 @@ export interface IMethodologyGuide {
     prompt: ConvertedPrompt,
     context: Record<string, any>
   ): MethodologyEnhancement;
-  
+
   /**
    * Validate that a prompt follows methodology principles
    * @param prompt The prompt to validate
@@ -221,7 +281,7 @@ export interface IMethodologyGuide {
   validateMethodologyCompliance(
     prompt: ConvertedPrompt
   ): MethodologyValidation;
-  
+
   /**
    * Get methodology-specific system prompt guidance
    * @param context Execution context
@@ -240,18 +300,6 @@ export interface IMethodologyGuide {
 }
 
 /**
- * Methodology validation results
- */
-export interface MethodologyValidation {
-  compliant: boolean;
-  compliance_score: number; // 0.0 to 1.0
-  strengths: string[];
-  improvement_areas: string[];
-  specific_suggestions: TemplateEnhancement[];
-  methodology_gaps: string[];
-}
-
-/**
  * Base class for methodology guides
  * Provides common functionality for all methodology implementations
  */
@@ -260,35 +308,35 @@ export abstract class BaseMethodologyGuide implements IMethodologyGuide {
   abstract readonly frameworkName: string;
   abstract readonly methodology: string;
   abstract readonly version: string;
-  
+
   abstract guidePromptCreation(
-    intent: string, 
+    intent: string,
     context?: Record<string, any>
   ): PromptCreationGuidance;
-  
+
   abstract guideTemplateProcessing(
-    template: string, 
+    template: string,
     executionType: string
   ): ProcessingGuidance;
-  
+
   abstract guideExecutionSteps(
-    prompt: ConvertedPrompt, 
+    prompt: ConvertedPrompt,
     semanticAnalysis: ContentAnalysisResult
   ): StepGuidance;
-  
+
   abstract enhanceWithMethodology(
     prompt: ConvertedPrompt,
     context: Record<string, any>
   ): MethodologyEnhancement;
-  
+
   abstract validateMethodologyCompliance(
     prompt: ConvertedPrompt
   ): MethodologyValidation;
-  
+
   abstract getSystemPromptGuidance(
     context: Record<string, any>
   ): string;
-  
+
   /**
    * Helper method to extract combined text from prompt
    */
@@ -299,7 +347,7 @@ export abstract class BaseMethodologyGuide implements IMethodologyGuide {
       prompt.description || ''
     ].filter(text => text.trim()).join(' ');
   }
-  
+
   /**
    * Helper method to create enhancement metadata
    */

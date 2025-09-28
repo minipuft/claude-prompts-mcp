@@ -6,50 +6,14 @@
 
 import { Logger } from "../logging/index.js";
 import { ConvertedPrompt } from "../types/index.js";
-import { 
-  CAGEERFMethodologyGuide,
-  ReACTMethodologyGuide,
-  FiveW1HMethodologyGuide,
-  SCAMPERMethodologyGuide
-} from "./adapters/index.js";
-import { IMethodologyGuide } from "./interfaces/methodology-guide-interfaces.js";
-
-/**
- * Framework methodology definitions
- * Each framework provides system prompt templates and execution guidelines
- */
-export type FrameworkMethodology = "CAGEERF" | "ReACT" | "5W1H" | "SCAMPER" | "AUTO";
-
-export interface FrameworkDefinition {
-  id: string;
-  name: string;
-  description: string;
-  methodology: FrameworkMethodology;
-  systemPromptTemplate: string;
-  executionGuidelines: string[];
-  applicableTypes: string[];
-  priority: number;
-  enabled: boolean;
-}
-
-export interface FrameworkExecutionContext {
-  selectedFramework: FrameworkDefinition;
-  systemPrompt: string;
-  executionGuidelines: string[];
-  metadata: {
-    selectionReason: string;
-    confidence: number;
-    appliedAt: Date;
-  };
-}
-
-export interface FrameworkSelectionCriteria {
-  promptType?: string;
-  complexity?: 'low' | 'medium' | 'high';
-  domain?: string;
-  userPreference?: FrameworkMethodology;
-  executionType?: 'template' | 'chain';
-}
+import {
+  IMethodologyGuide,
+  FrameworkMethodology,
+  FrameworkDefinition,
+  FrameworkExecutionContext,
+  FrameworkSelectionCriteria
+} from "./types/index.js";
+import { MethodologyRegistry, createMethodologyRegistry } from "./methodology/index.js";
 
 /**
  * Framework Manager Implementation
@@ -57,7 +21,7 @@ export interface FrameworkSelectionCriteria {
  */
 export class FrameworkManager {
   private frameworks: Map<string, FrameworkDefinition> = new Map();
-  private methodologyGuides: Map<string, IMethodologyGuide> = new Map();
+  private methodologyRegistry: MethodologyRegistry | null = null;
   private defaultFramework: string = "CAGEERF";
   private logger: Logger;
   private initialized: boolean = false;
@@ -75,14 +39,14 @@ export class FrameworkManager {
       return;
     }
 
-    this.logger.info("Initializing FrameworkManager with methodology guides...");
-    
-    // Initialize methodology guides first
-    await this.initializeMethodologyGuides();
-    
+    this.logger.info("Initializing FrameworkManager with methodology registry...");
+
+    // Initialize methodology registry (Phase 2: NEW)
+    this.methodologyRegistry = await createMethodologyRegistry(this.logger);
+
     // Generate framework definitions from methodology guides
     await this.generateFrameworkDefinitions();
-    
+
     this.initialized = true;
     this.logger.info(`FrameworkManager initialized with ${this.frameworks.size} frameworks`);
   }
@@ -194,7 +158,7 @@ export class FrameworkManager {
    */
   getMethodologyGuide(frameworkId: string): IMethodologyGuide | undefined {
     this.ensureInitialized();
-    return this.methodologyGuides.get(frameworkId.toLowerCase());
+    return this.methodologyRegistry!.getGuide(frameworkId.toLowerCase());
   }
 
   /**
@@ -202,7 +166,7 @@ export class FrameworkManager {
    */
   listMethodologyGuides(): IMethodologyGuide[] {
     this.ensureInitialized();
-    return Array.from(this.methodologyGuides.values());
+    return this.methodologyRegistry!.getAllGuides(true);
   }
 
   /**
@@ -275,38 +239,21 @@ export class FrameworkManager {
   }
 
   /**
-   * Initialize methodology guides registry
+   * Initialize methodology guides registry (REMOVED - Phase 2)
+   * Functionality moved to MethodologyRegistry for better separation of concerns
    */
-  private async initializeMethodologyGuides(): Promise<void> {
-    try {
-      // Initialize built-in methodology guides
-      const cageerfGuide = new CAGEERFMethodologyGuide();
-      const reactGuide = new ReACTMethodologyGuide();
-      const fiveW1HGuide = new FiveW1HMethodologyGuide();
-      const scamperGuide = new SCAMPERMethodologyGuide();
-
-      // Register methodology guides
-      this.methodologyGuides.set(cageerfGuide.frameworkId, cageerfGuide);
-      this.methodologyGuides.set(reactGuide.frameworkId, reactGuide);
-      this.methodologyGuides.set(fiveW1HGuide.frameworkId, fiveW1HGuide);
-      this.methodologyGuides.set(scamperGuide.frameworkId, scamperGuide);
-
-      this.logger.info(`Initialized ${this.methodologyGuides.size} methodology guides`);
-    } catch (error) {
-      this.logger.error("Failed to initialize methodology guides:", error);
-      throw error;
-    }
-  }
 
   /**
    * Generate framework definitions from methodology guides
    */
   private async generateFrameworkDefinitions(): Promise<void> {
     try {
-      for (const [guideId, guide] of this.methodologyGuides) {
+      const guides = this.methodologyRegistry!.getAllGuides(true);
+
+      for (const guide of guides) {
         // Generate system prompt template from methodology guide
         const systemPromptTemplate = this.generateSystemPromptTemplate(guide);
-        
+
         // Create framework definition from methodology guide
         const frameworkDefinition: FrameworkDefinition = {
           id: guide.frameworkId.toUpperCase(),
@@ -455,3 +402,6 @@ export async function createFrameworkManager(logger: Logger): Promise<FrameworkM
   await manager.initialize();
   return manager;
 }
+
+// Export types that are used by other modules
+export type { FrameworkDefinition, FrameworkExecutionContext, FrameworkSelectionCriteria };

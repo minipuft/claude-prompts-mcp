@@ -4,8 +4,8 @@
  * processing, and execution without hijacking semantic analysis functionality
  */
 
-import type { ConvertedPrompt } from "../../execution/types.js";
-import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
+import type { ConvertedPrompt } from "../../../types/index.js";
+import { ContentAnalysisResult } from "../../../semantic/configurable-semantic-analyzer.js";
 import {
   IMethodologyGuide,
   BaseMethodologyGuide,
@@ -19,7 +19,7 @@ import {
   ExecutionStep,
   QualityGate,
   TemplateEnhancement
-} from "../interfaces/methodology-guide-interfaces.js";
+} from "../interfaces.js";
 
 /**
  * CAGEERF Methodology Guide Implementation

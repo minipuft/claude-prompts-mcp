@@ -93,23 +93,17 @@ export type {
   GateType
 } from '../gates/types.js';
 
-// Framework system types
+// Framework system types (consolidated in Phase 2)
 export type {
   FrameworkDefinition,
-  FrameworkState,
-  FrameworkSwitchRecord,
-  FrameworkPerformanceMetrics,
-  FrameworkConfig,
-  FrameworkEnhancement,
-  FrameworkMetadata,
-  FrameworkRegistryEntry,
-  IFrameworkAnalyzer,
-  SemanticAnalysisResult,
-  EnhancedSemanticResult,
-  ISemanticFrameworkAnalyzer,
-  FrameworkSwitchResult,
-  FrameworkValidationResult
-} from '../frameworks/types.js';
+  FrameworkExecutionContext,
+  FrameworkSelectionCriteria,
+  FrameworkMethodology,
+  IMethodologyGuide,
+  FrameworkStateInfo,
+  IntegratedAnalysisResult,
+  FrameworkSwitchingConfig
+} from '../frameworks/types/index.js';
 
 // ===== Additional System Types =====
 
@@ -452,4 +446,4 @@ export enum StepStatus {
 // - Prompt types: ../prompts/types.js
 // - Execution types: ../execution/types.js
 // - Gate types: ../gates/types.js
-// - Framework types: ../frameworks/types.js
+// - Framework types: ../frameworks/types/index.js
