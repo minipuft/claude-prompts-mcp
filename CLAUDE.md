@@ -148,7 +148,7 @@ This is a **Model Context Protocol (MCP) server** that provides AI prompt manage
 #### `/server/src/gates/`
 
 - **Gate Definitions** (`definitions/`) - Gate definition templates and configurations
-- **Lightweight Gates** (`lightweight/`) - Simplified gate validation implementations
+- **Core Gates** (`core/`) - Core gate validation implementations and processors
 - **Gate Templates** (`templates/`) - Reusable gate template structures
 - **Main Index** (`index.ts`) - Gate system entry point and orchestration
 
@@ -191,17 +191,13 @@ This is a **Model Context Protocol (MCP) server** that provides AI prompt manage
 - **Performance Metrics** - System performance indicators and benchmarks
 - **Health Monitoring** - Server health status and diagnostic collection
 
-#### `/server/src/handlers/`
-
-- **Request Handlers** - HTTP request processing and routing
-- **WebSocket Handlers** - Real-time communication management
-- **Transport Handlers** - STDIO and SSE transport layer management
-
-#### `/server/src/transport/`
+#### `/server/src/server/transport/`
 
 - **STDIO transport** for Claude Desktop integration
 - **SSE transport** for web-based clients
 - **Transport-aware logging** to avoid interference with STDIO protocol
+- **HTTP request processing and routing** for web-based clients
+- **WebSocket handlers** for real-time communication management
 
 ### Configuration System
 
