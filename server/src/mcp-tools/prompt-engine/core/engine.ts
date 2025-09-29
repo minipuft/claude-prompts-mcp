@@ -64,6 +64,12 @@ import {
 import {
   GateSelectionResult,
 } from "../../../gates/core/gate-definitions.js";
+// Phase 1: Intelligent category detection
+import {
+  CategoryExtractor,
+  extractPromptCategory,
+  CategoryExtractionResult
+} from "../utils/category-extractor.js";
 // Phase 3: Prompt guidance system integration
 import {
   PromptGuidanceService,
@@ -1194,7 +1200,8 @@ export class ConsolidatedPromptEngine {
       if (selectedGates.length > 0) {
         const supplementalGuidance = await this.getSupplementalGateGuidance(
           selectedGates,
-          frameworkContext
+          frameworkContext,
+          prompt
         );
         if (supplementalGuidance) {
           enhancedContent = content + supplementalGuidance;
@@ -1208,7 +1215,8 @@ export class ConsolidatedPromptEngine {
 
       const supplementalGuidance = await this.getSupplementalGateGuidance(
         testGates,
-        frameworkContext
+        frameworkContext,
+        prompt
       );
       if (supplementalGuidance) {
         enhancedContent = content + supplementalGuidance;
@@ -1520,7 +1528,8 @@ export class ConsolidatedPromptEngine {
     if (gateResults && selectedGates.length > 0) {
       const supplementalGuidance = await this.getSupplementalGateGuidance(
         selectedGates,
-        frameworkContext
+        frameworkContext,
+        prompt
       );
       if (supplementalGuidance) {
         enhancedContent = content + supplementalGuidance;
@@ -1530,7 +1539,8 @@ export class ConsolidatedPromptEngine {
       const testGates = ['framework-compliance', 'educational-clarity'];
       const supplementalGuidance = await this.getSupplementalGateGuidance(
         testGates,
-        frameworkContext
+        frameworkContext,
+        prompt
       );
       if (supplementalGuidance) {
         enhancedContent = enhancedContent + supplementalGuidance;
@@ -1558,23 +1568,50 @@ export class ConsolidatedPromptEngine {
   // REMOVED: generateMetadataSection - migrated to ChainExecutor
 
   /**
-   * Get supplemental gate guidance to append to responses (Phase 1 - Framework-style implementation)
+   * Get supplemental gate guidance to append to responses (Phase 1 - Enhanced with intelligent category detection)
    */
   private async getSupplementalGateGuidance(
     selectedGates: string[],
-    frameworkContext?: any
+    frameworkContext?: any,
+    prompt?: any
   ): Promise<string> {
+    // Phase 1: Enhanced category detection
+    let categoryExtractionResult: CategoryExtractionResult;
+    if (prompt) {
+      categoryExtractionResult = extractPromptCategory(prompt, this.logger);
+      this.logger.info(`🏷️ [CATEGORY EXTRACTOR] Category detected:`, {
+        category: categoryExtractionResult.category,
+        source: categoryExtractionResult.source,
+        confidence: categoryExtractionResult.confidence,
+        promptId: prompt.id
+      });
+    } else {
+      // Fallback when prompt not available
+      categoryExtractionResult = {
+        category: 'general',
+        source: 'fallback',
+        confidence: 20,
+        sourceData: {}
+      };
+      this.logger.warn(`🏷️ [CATEGORY EXTRACTOR] No prompt provided, using fallback category`);
+    }
+
     console.log(`🎯 [CONSOLE DEBUG] getSupplementalGateGuidance called:`, {
       selectedGatesCount: selectedGates.length,
       selectedGates,
       hasFrameworkContext: !!frameworkContext,
-      frameworkMethodology: frameworkContext?.selectedFramework?.methodology
+      frameworkMethodology: frameworkContext?.selectedFramework?.methodology,
+      detectedCategory: categoryExtractionResult.category,
+      categorySource: categoryExtractionResult.source,
+      categoryConfidence: categoryExtractionResult.confidence
     });
     this.logger.info(`🎯 [GATE MANAGER] getSupplementalGateGuidance called:`, {
       selectedGatesCount: selectedGates.length,
       selectedGates,
       hasFrameworkContext: !!frameworkContext,
-      frameworkMethodology: frameworkContext?.selectedFramework?.methodology
+      frameworkMethodology: frameworkContext?.selectedFramework?.methodology,
+      detectedCategory: categoryExtractionResult.category,
+      categorySource: categoryExtractionResult.source
     });
 
     if (selectedGates.length === 0) {
@@ -1584,12 +1621,12 @@ export class ConsolidatedPromptEngine {
 
     try {
 
-      // NEW: Use role-based gate guidance renderer (Phase 3)
+      // NEW: Use role-based gate guidance renderer with intelligent category detection (Phase 1 & 3)
       const supplementalGuidance = await this.gateGuidanceRenderer.renderGuidance(
         selectedGates,
         {
           framework: frameworkContext?.selectedFramework?.methodology || 'CAGEERF',
-          category: 'development', // Could be dynamic based on prompt category
+          category: categoryExtractionResult.category, // Dynamic category based on intelligent detection
           promptId: frameworkContext?.promptId
         }
       );
