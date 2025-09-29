@@ -8,7 +8,7 @@ The server is built around key architectural principles that ensure scalability,
 
 ### Core Principles
 
-- **Consolidation Over Proliferation**: Aggressive tool consolidation achieved 87.5% reduction (24+ → 3 intelligent tools)
+- **Intelligent Command Routing**: Enhanced parser with multi-strategy command detection and automatic tool routing
 - **Methodology-Driven Architecture**: Framework behavior driven by methodology guides, not hard-coded logic
 - **3-Tier Execution Model**: Optimized execution strategies (prompt/template/chain) for different complexity levels
 - **LLM-Driven Orchestration**: Chain execution provides instructions to LLMs rather than server-side orchestration
@@ -115,7 +115,7 @@ Each methodology guide implements `IMethodologyGuide` interface providing:
 
 ### Consolidated MCP Tools (`/server/src/mcp-tools/`)
 
-Revolutionary tool consolidation achieving 87.5% reduction (24+ tools → 3 intelligent tools):
+Intelligent MCP tools with enhanced routing and command detection capabilities:
 
 #### Consolidation Benefits
 - **~2,100+ lines** of legacy code removed
@@ -532,5 +532,5 @@ Implement Framework Integration Facade pattern:
 
 **Version**: 1.3.0
 **Last Updated**: January 2025
-**Architecture Revision**: Post-Consolidation (87.5% tool reduction)
-**Key Features**: 4-Phase Orchestration, 3-Tier Execution, Framework System, Tool Consolidation
+**Architecture Revision**: Enhanced Command Routing Implementation
+**Key Features**: 4-Phase Orchestration, 3-Tier Execution, Framework System, Intelligent Routing

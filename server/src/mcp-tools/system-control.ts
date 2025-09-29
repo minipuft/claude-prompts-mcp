@@ -30,6 +30,8 @@ import {
   MethodologyState,
   MethodologySwitchRequest
 } from "../frameworks/prompt-guidance/index.js";
+// Phase 4: Clean architecture gate performance analytics
+import type { GatePerformanceAnalyzer } from "../gates/intelligence/GatePerformanceAnalyzer.js";
 // Enhanced tool dependencies removed (Phase 1.3) - Core implementations
 // Simple core response handling without enhanced complexity
 interface SimpleResponseFormatter {
@@ -145,6 +147,8 @@ export class ConsolidatedSystemControl {
   private responseFormatter: ResponseFormatter;
   // Phase 3: Prompt guidance service
   private promptGuidanceService?: PromptGuidanceService;
+  // Phase 4: Clean architecture gate performance analytics
+  public gatePerformanceAnalyzer?: GatePerformanceAnalyzer;
   public startTime: number = Date.now();
   
   // Analytics data
@@ -226,6 +230,14 @@ export class ConsolidatedSystemControl {
   setMCPToolsManager(mcpToolsManager: any): void {
     this.mcpToolsManager = mcpToolsManager;
     this.logger.debug("MCPToolsManager reference configured for dynamic tool updates");
+  }
+
+  /**
+   * Set gate performance analyzer (Phase 4 - Clean Architecture)
+   */
+  setGatePerformanceAnalyzer(analyzer: GatePerformanceAnalyzer): void {
+    this.gatePerformanceAnalyzer = analyzer;
+    this.logger.debug("Gate performance analyzer configured for analytics");
   }
 
   /**
@@ -1181,12 +1193,44 @@ class MaintenanceActionHandler extends ActionHandler {
     });
     response += "\n";
     
-    // Quality Gates
-    response += "## 🛡️ Quality Gate Usage\n\n";
+    // Quality Gates (Phase 4: Enhanced with advanced analytics)
+    response += "## 🛡️ Quality Gate Analytics\n\n";
     response += `**Gate Validations**: ${this.systemControl.systemAnalytics.gateValidationCount}\n`;
-    response += `**Gate Adoption Rate**: ${this.systemControl.systemAnalytics.totalExecutions > 0 
+    response += `**Gate Adoption Rate**: ${this.systemControl.systemAnalytics.totalExecutions > 0
       ? Math.round((this.systemControl.systemAnalytics.gateValidationCount / this.systemControl.systemAnalytics.totalExecutions) * 100)
-      : 0}%\n\n`;
+      : 0}%\n`;
+
+    // Phase 4: Clean architecture gate performance analytics
+    if (this.systemControl.gatePerformanceAnalyzer) {
+      try {
+        const gateAnalytics = this.systemControl.gatePerformanceAnalyzer.getPerformanceAnalytics();
+        response += `**Advanced Gate System**: Enabled\n`;
+        response += `**Total Gates Tracked**: ${gateAnalytics.totalGates}\n`;
+        response += `**Average Gate Execution Time**: ${Math.round(gateAnalytics.avgExecutionTime)}ms\n`;
+        response += `**Overall Gate Success Rate**: ${Math.round(gateAnalytics.overallSuccessRate * 100)}%\n`;
+
+        if (gateAnalytics.topPerformingGates.length > 0) {
+          response += `**Top Performing Gates**: ${gateAnalytics.topPerformingGates.join(', ')}\n`;
+        }
+
+        if (gateAnalytics.underperformingGates.length > 0) {
+          response += `**Needs Optimization**: ${gateAnalytics.underperformingGates.join(', ')}\n`;
+        }
+
+        if (gateAnalytics.recommendations.length > 0) {
+          response += `\n**Optimization Recommendations**:\n`;
+          gateAnalytics.recommendations.forEach((rec: string, index: number) => {
+            response += `${index + 1}. ${rec}\n`;
+          });
+        }
+      } catch (error) {
+        response += `**Advanced Gate System**: Error retrieving analytics\n`;
+      }
+    } else {
+      response += `**Advanced Gate System**: Not available\n`;
+    }
+
+    response += "\n";
     
     // System Resources
     if (this.systemControl.systemAnalytics.memoryUsage) {

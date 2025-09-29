@@ -11,10 +11,10 @@ async function methodologyGuidesTests() {
     console.log('📋 Testing all 4 methodologies: CAGEERF, ReACT, 5W1H, SCAMPER');
     
     // Import methodology guides from the new architecture
-    const { CAGEERFMethodologyGuide } = await import('../../dist/frameworks/adapters/cageerf-methodology-guide.js');
-    const { ReACTMethodologyGuide } = await import('../../dist/frameworks/adapters/react-methodology-guide.js');
-    const { FiveW1HMethodologyGuide } = await import('../../dist/frameworks/adapters/5w1h-methodology-guide.js');
-    const { SCAMPERMethodologyGuide } = await import('../../dist/frameworks/adapters/scamper-methodology-guide.js');
+    const { CAGEERFMethodologyGuide } = await import('../../dist/frameworks/methodology/guides/cageerf-guide.js');
+    const { ReACTMethodologyGuide } = await import('../../dist/frameworks/methodology/guides/react-guide.js');
+    const { FiveW1HMethodologyGuide } = await import('../../dist/frameworks/methodology/guides/5w1h-guide.js');
+    const { SCAMPERMethodologyGuide } = await import('../../dist/frameworks/methodology/guides/scamper-guide.js');
     const { MockLogger } = await import('../../dist/utils/index.js');
     
     const logger = new MockLogger();

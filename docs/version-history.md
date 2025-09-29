@@ -402,7 +402,7 @@ else return "prompt"; // Performance-first default
 ### Deprecation Timeline
 
 - **v1.1.0**: Framework system established, pre-consolidation tool architecture maintained
-- **v1.2.0**: Major tool consolidation (24+ → 3 intelligent tools), UnifiedPromptProcessor deprecated and removed
+- **v1.2.0**: Intelligent command routing implementation, enhanced parser with multi-strategy parsing
 
 ---
 

@@ -618,7 +618,7 @@ This architecture provides a robust, scalable system for AI prompt management wi
 - **Framework System**: Changes must work with all 4 methodology guides (CAGEERF, ReACT, 5W1H, SCAMPER)
 - **Hot-Reload Compatibility**: File watching and registry updates for prompt management
 - **Multi-Transport Support**: Validate STDIO and SSE transport compatibility
-- **Tool Consolidation**: Maintain 87.5% reduction (24+ → 3 intelligent tools)
+- **Intelligent Command Routing**: Maintain enhanced parser with built-in command detection
 
 ## Coding Guidelines and Development Rules
 
@@ -805,7 +805,7 @@ When modifying framework components:
 - **Project Detection**: Node.js TypeScript MCP Server → Auto-loads JAVASCRIPT.md domain rules
 - **Framework Context**: MCP SDK integration → Applies protocol-specific patterns from domain rules
 - **Critical Dependencies**: Framework system, semantic analysis, transport layer → Extra validation
-- **Performance Baselines**: MCP protocol response times, framework switching speed → Benchmark tracking
+- **Performance Baselines**: Command routing detection (<1ms), parser strategy selection (<500ms), built-in command recognition (<100ms)
 
 ### Context Engineering Architecture (MCP)
 

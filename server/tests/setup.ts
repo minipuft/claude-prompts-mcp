@@ -57,7 +57,7 @@ declare global {
       // Add custom matchers here if needed
     }
   }
-  
+
   var testUtils: {
     suppressConsole: () => void;
     restoreConsole: () => void;
@@ -65,4 +65,7 @@ declare global {
     createMockLogger: () => any;
   };
 }
+
+// Export statement required for ES modules, but empty to avoid issues
+export {};
 

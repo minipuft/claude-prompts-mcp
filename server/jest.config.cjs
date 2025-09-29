@@ -7,11 +7,17 @@ module.exports = {
   testMatch: [
     '<rootDir>/tests/**/*.test.ts'
   ],
-  // setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'], // Disabled temporarily due to ES module issues
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'], // Re-enabled with working ES module support
   transform: {
     '^.+\\.ts$': ['ts-jest', {
       useESM: true,
-      tsconfig: 'tsconfig.test.json'
+      tsconfig: {
+        module: 'esnext',
+        target: 'es2020',
+        moduleResolution: 'node',
+        allowSyntheticDefaultImports: true,
+        esModuleInterop: true
+      }
     }]
   },
   collectCoverageFrom: [
@@ -24,10 +30,18 @@ module.exports = {
   testTimeout: 30000,
   verbose: true,
   maxWorkers: 1,
-  // Module resolution for ES modules
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  // Allow importing .js files from TypeScript and handle ES modules
+  // Essential for ES modules with Jest
+  moduleFileExtensions: ['ts', 'js', 'mjs'],
+  // Handle ES module imports properly - map .js imports to TypeScript files and preserve ES modules
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1'
-  }
+  },
+  // Transform ES modules from node_modules if needed
+  transformIgnorePatterns: [
+    'node_modules/(?!(@modelcontextprotocol)/)'
+  ],
+  // Support for dynamic imports and ES modules
+  testPathIgnorePatterns: [
+    '/node_modules/'
+  ]
 };

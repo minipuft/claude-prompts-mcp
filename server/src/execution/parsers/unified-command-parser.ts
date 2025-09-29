@@ -315,13 +315,52 @@ export class UnifiedCommandParser {
    * Validate that the prompt ID exists in available prompts
    */
   private async validatePromptExists(promptId: string, availablePrompts: PromptData[]): Promise<void> {
+    // Check if this is a built-in command that should be routed (handled by prompt engine)
+    if (this.isBuiltinCommand(promptId)) {
+      return; // Built-in commands are valid and will be routed by the prompt engine
+    }
+
     const found = availablePrompts.find(p => p.id === promptId || p.name === promptId);
     if (!found) {
       const suggestions = this.generatePromptSuggestions(promptId, availablePrompts);
+      const builtinHint = this.getBuiltinCommandHint(promptId);
       throw new PromptError(
-        `Unknown prompt: "${promptId}". ${suggestions}\n\nUse >>listprompts to see all available prompts.`
+        `Unknown prompt: "${promptId}". ${suggestions}${builtinHint}\n\nTry: >>listprompts, >>help, >>status`
       );
     }
+  }
+
+  /**
+   * Check if command is a built-in system command
+   */
+  private isBuiltinCommand(promptId: string): boolean {
+    const builtinCommands = [
+      'listprompts', 'listprompt', 'list_prompts',
+      'help', 'commands',
+      'status', 'health',
+      'analytics', 'metrics'
+    ];
+    return builtinCommands.includes(promptId.toLowerCase());
+  }
+
+  /**
+   * Generate hint for built-in commands that might have been mistyped
+   */
+  private getBuiltinCommandHint(promptId: string): string {
+    const lower = promptId.toLowerCase();
+
+    // Check for common variations/typos of built-in commands
+    if (lower.includes('list') && lower.includes('prompt')) {
+      return '\n\nDid you mean >>listprompts?';
+    }
+    if (lower === 'commands' || lower === 'help') {
+      return '\n\nTry >>help for available commands.';
+    }
+    if (lower === 'stat' || lower === 'status') {
+      return '\n\nTry >>status for system status.';
+    }
+
+    return '';
   }
 
   /**

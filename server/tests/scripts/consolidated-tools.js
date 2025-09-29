@@ -2,7 +2,7 @@
 /**
  * Consolidated MCP Tools Comprehensive Tests
  * Tests the 3 consolidated MCP tools: prompt-engine, prompt-manager, system-control
- * Validates 87.5% tool consolidation (24+ tools → 3 intelligent tools)
+ * Validates intelligent command routing with enhanced parser functionality
  */
 
 async function consolidatedToolsTests() {
@@ -14,8 +14,8 @@ async function consolidatedToolsTests() {
     console.log('🔍 Test 1: Tool classes and manager import validation');
     
     const { ConsolidatedMcpToolsManager, createConsolidatedMcpToolsManager } = await import('../../dist/mcp-tools/index.js');
-    const { ConsolidatedPromptEngine } = await import('../../dist/mcp-tools/prompt-engine.js');
-    const { ConsolidatedPromptManager } = await import('../../dist/mcp-tools/prompt-manager.js');
+    const { ConsolidatedPromptEngine } = await import('../../dist/mcp-tools/prompt-engine/index.js');
+    const { ConsolidatedPromptManager } = await import('../../dist/mcp-tools/prompt-manager/index.js');
     const { ConsolidatedSystemControl } = await import('../../dist/mcp-tools/system-control.js');
     const { MockLogger } = await import('../../dist/utils/index.js');
     
@@ -198,7 +198,7 @@ async function consolidatedToolsTests() {
     console.log('  ✅ 3 consolidated tool classes validated');
     console.log('  ✅ ConsolidatedMcpToolsManager architecture validated');  
     console.log('  ✅ Legacy tool cleanup validated');
-    console.log('  📊 87.5% tool consolidation achieved (24+ → 3 intelligent tools)');
+    console.log('  🧠 Intelligent command routing system validated with enhanced parser functionality');
     process.exit(0);
     
   } catch (error) {

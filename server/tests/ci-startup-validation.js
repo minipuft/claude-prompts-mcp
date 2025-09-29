@@ -55,8 +55,8 @@ async function validateBuildArtifacts() {
     'utils/index.js',
     'config/index.js',
     'logging/index.js',
-    'mcp-tools/prompt-engine.js',
-    'mcp-tools/prompt-manager.js',
+    'mcp-tools/prompt-engine/index.js',
+    'mcp-tools/prompt-manager/index.js',
     'mcp-tools/system-control.js'
   ];
   

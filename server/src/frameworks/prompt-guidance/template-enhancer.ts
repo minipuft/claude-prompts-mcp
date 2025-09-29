@@ -15,6 +15,7 @@ import {
   TemplateEnhancementConfig
 } from "../types/index.js";
 import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
+import { LightweightGateSystem } from "../../gates/core/index.js";
 
 /**
  * Template enhancement configuration
@@ -54,9 +55,11 @@ export interface TemplateEnhancementContext {
 export class TemplateEnhancer {
   private logger: Logger;
   private config: TemplateEnhancerConfig;
+  private gateSystem?: LightweightGateSystem;
 
-  constructor(logger: Logger, config?: Partial<TemplateEnhancerConfig>) {
+  constructor(logger: Logger, config?: Partial<TemplateEnhancerConfig>, gateSystem?: LightweightGateSystem) {
     this.logger = logger;
+    this.gateSystem = gateSystem;
     this.config = {
       enableArgumentSuggestions: true,
       enableStructureOptimization: true,
@@ -78,14 +81,14 @@ export class TemplateEnhancer {
    * Extracted from methodology guide.guideTemplateProcessing()
    * Phase 4: Enhanced with semantic analysis awareness
    */
-  enhanceTemplate(
+  async enhanceTemplate(
     template: string,
     prompt: ConvertedPrompt,
     methodologyGuide: IMethodologyGuide,
     framework: FrameworkDefinition,
     context?: TemplateEnhancementContext,
     semanticAnalysis?: ContentAnalysisResult
-  ): TemplateEnhancementResult {
+  ): Promise<TemplateEnhancementResult> {
     const startTime = Date.now();
     this.logger.debug(`Enhancing template with ${framework.methodology} methodology for ${prompt.name}`);
 
@@ -100,7 +103,7 @@ export class TemplateEnhancer {
       const enhancementContext = this.buildEnhancementContext(prompt, context, semanticAnalysis);
 
       // Apply enhancements based on configuration and semantic insights
-      const enhancedTemplate = this.applyEnhancements(
+      const enhancedTemplate = await this.applyEnhancements(
         template,
         processingGuidance,
         methodologyGuide,
@@ -196,13 +199,13 @@ export class TemplateEnhancer {
    * Apply methodology-specific enhancements to template
    * Phase 4: Enhanced with semantic analysis awareness
    */
-  private applyEnhancements(
+  private async applyEnhancements(
     template: string,
     guidance: ProcessingGuidance,
     methodologyGuide: IMethodologyGuide,
     context: TemplateEnhancementContext,
     semanticAnalysis?: ContentAnalysisResult
-  ): string {
+  ): Promise<string> {
     let enhancedTemplate = template;
 
     // Phase 4: Apply semantic-aware enhancements first
@@ -225,19 +228,13 @@ export class TemplateEnhancer {
       );
     }
 
-    // Add methodology-specific sections (with semantic adaptation)
-    if (this.config.enhancementLevel !== 'minimal') {
-      enhancedTemplate = this.addMethodologyStructure(
-        enhancedTemplate,
-        methodologyGuide,
-        context,
-        semanticAnalysis
-      );
-    }
+    // FIXED: Remove duplicate methodology structure addition
+    // The framework system prompt already provides methodology guidance
+    // Template enhancer should focus on structure optimization, not methodology duplication
 
     // Integrate quality gates if enabled (with semantic complexity awareness)
     if (this.config.enableQualityGates && this.shouldApplyQualityGates(semanticAnalysis)) {
-      enhancedTemplate = this.integrateQualityGates(
+      enhancedTemplate = await this.integrateQualityGates(
         enhancedTemplate,
         guidance.executionFlow.validationSteps,
         context,
@@ -595,23 +592,45 @@ What can be reversed, rearranged, or approached differently?
   }
 
   /**
-   * Integrate quality gates into template
+   * Integrate quality gates into template (Phase 2 enhancement)
    */
-  private integrateQualityGates(
+  private async integrateQualityGates(
     template: string,
     qualityGates: string[],
     context: TemplateEnhancementContext,
     semanticAnalysis?: ContentAnalysisResult
-  ): string {
+  ): Promise<string> {
     if (qualityGates.length === 0) {
       return template;
+    }
+
+    // Load actual gate guidance if gate system is available
+    let gateGuidance: string[] = [];
+    if (this.gateSystem) {
+      try {
+        gateGuidance = await this.gateSystem.getGuidanceText(
+          qualityGates,
+          {
+            promptCategory: context.promptCategory,
+            framework: "CAGEERF", // Default framework for gate context
+            explicitRequest: true
+          }
+        );
+      } catch (error) {
+        this.logger.warn("Failed to load gate guidance:", error);
+        // Fallback to gate IDs if guidance loading fails
+        gateGuidance = qualityGates.map(gateId => `Gate: ${gateId}`);
+      }
+    } else {
+      // Fallback: use gate IDs when no gate system available
+      gateGuidance = qualityGates.map(gateId => `Quality criterion: ${gateId}`);
     }
 
     const qualitySection = `
 ## Quality Validation
 Please ensure the following quality criteria are met:
 
-${qualityGates.map(gate => `- ${gate}`).join('\n')}
+${gateGuidance.map(guidance => `- ${guidance}`).join('\n')}
 `;
 
     return template + qualitySection;
@@ -1092,7 +1111,8 @@ Provide innovative solutions with creative reasoning.
  */
 export function createTemplateEnhancer(
   logger: Logger,
-  config?: Partial<TemplateEnhancerConfig>
+  config?: Partial<TemplateEnhancerConfig>,
+  gateSystem?: LightweightGateSystem
 ): TemplateEnhancer {
-  return new TemplateEnhancer(logger, config);
+  return new TemplateEnhancer(logger, config, gateSystem);
 }

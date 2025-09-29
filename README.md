@@ -69,7 +69,7 @@ prompt_engine >>analysis_chain input="complex research data" llm_driven_executio
 - **🔄 Dynamic Capability Building**: Build and extend your AI assistant's capabilities through conversational prompt management
 - **🎮 Reduced Friction**: Minimal configuration required - execution type detected from file structure
 - **⚡ Systematic Workflow**: Create → Structure-based routing → Framework application in a reliable flow
-- **📊 Tool Consolidation**: 87.5% reduction in complexity (24+ tools → 3 consolidated tools) with maintained functionality
+- **🧠 Intelligent Command Routing**: Built-in command detection with multi-strategy parsing and automatic tool routing
 - **🧠 Sophisticated Methodology System**: Four proven thinking frameworks (CAGEERF, ReACT, 5W1H, SCAMPER) with manual selection and conditional application
 
 This is what **well-architected AI infrastructure** looks like – where systematic analysis and proven methodologies enhance your AI interactions through structured approaches rather than magic.

@@ -233,7 +233,7 @@ export class PromptGuidanceService {
           (options.includeTemplateEnhancement !== false)) {
 
         try {
-          const enhancementResult = this.templateEnhancer.enhanceTemplate(
+          const enhancementResult = await this.templateEnhancer.enhanceTemplate(
             enhancedPrompt.userMessageTemplate,
             enhancedPrompt,
             methodologyGuide,

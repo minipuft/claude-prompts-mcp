@@ -56,19 +56,22 @@ else
     NODE_SIMULATION=false
 fi
 
-# Method 3: Create Windows-like environment variables
-print_status "Method 3: Creating Windows environment simulation..."
-cat > scripts/.env.windows << 'EOF'
-# Windows environment simulation
-RUNNER_OS=Windows
-PATH=/c/Windows/System32:/c/Windows:/c/Windows/System32/Wbem
-USERPROFILE=/c/Users/runneradmin
-TEMP=/c/Users/runneradmin/AppData/Local/Temp
-TMP=/c/Users/runneradmin/AppData/Local/Temp
-HOMEDRIVE=C:
-HOMEPATH=/Users/runneradmin
-PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC
+# Method 3: Create Windows environment simulation (inline)
+print_status "Method 3: Windows environment simulation (using inline variables)..."
+cat > scripts/windows-tests/windows-env.sh << 'EOF'
+#!/bin/bash
+# Windows environment simulation - no sensitive files
+export RUNNER_OS=Windows
+export PATH="/c/Windows/System32:/c/Windows:/c/Windows/System32/Wbem:$PATH"
+export USERPROFILE=/c/Users/runneradmin
+export TEMP=/c/Users/runneradmin/AppData/Local/Temp
+export TMP=/c/Users/runneradmin/AppData/Local/Temp
+export HOMEDRIVE=C:
+export HOMEPATH=/Users/runneradmin
+export PATHEXT=.COM:.EXE:.BAT:.CMD:.VBS:.VBE:.JS:.JSE:.WSF:.WSH:.MSC
+echo "Windows environment variables set"
 EOF
+chmod +x scripts/windows-tests/windows-env.sh
 
 # Method 4: Enhanced Act configuration for Windows testing
 print_status "Method 4: Creating enhanced Act configuration..."
@@ -243,7 +246,7 @@ scripts/windows-tests/test-windows-startup.sh
 ### Method 4: Environment Simulation
 ```bash
 # Load Windows-like environment variables
-source scripts/.env.windows
+source scripts/windows-tests/windows-env.sh
 ```
 
 ### Method 5: Comprehensive Testing
@@ -276,7 +279,7 @@ docker run --rm -v "$PWD":/workspace -w /workspace/server node:18-windowsserverc
 ## Configuration Files
 
 - `.actrc.windows-enhanced` - Enhanced Act configuration for Windows testing
-- `scripts/.env.windows` - Windows environment simulation
+- `scripts/windows-tests/windows-env.sh` - Windows environment simulation script
 - `scripts/windows-tests/` - Windows-specific test scripts
 - `scripts/test-all-platforms.sh` - Comprehensive test runner
 

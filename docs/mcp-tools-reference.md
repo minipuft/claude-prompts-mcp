@@ -1,6 +1,6 @@
 # MCP Tools Reference (v1.4.0 - Phase 2A Conditional Branching)
 
-This document provides a comprehensive reference for the 3 consolidated MCP (Model Context Protocol) tools that power the Claude Prompts Server. The server implements **87.5% tool consolidation** (24+ tools → 3 consolidated tools) while maintaining full functionality.
+This document provides a comprehensive reference for the 3 intelligent MCP (Model Context Protocol) tools that power the Claude Prompts Server. The server implements **intelligent command routing** with built-in command detection and multi-strategy parsing while maintaining full functionality.
 
 ## Architecture Overview
 
@@ -525,7 +525,7 @@ Chain Execution:     Variable    (depends on step count and LLM response time)
 
 ### Tool Consolidation Benefits
 
-**87.5% Reduction**: 24+ legacy tools → 3 consolidated tools
+**Intelligent Routing**: Enhanced command detection with automatic tool routing
 - **Simplified Interface**: Single tools handle multiple related functions
 - **Consistent Experience**: Standardized response format and error handling
 - **Reduced Complexity**: Easier to learn and use

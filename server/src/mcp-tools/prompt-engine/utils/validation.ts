@@ -306,12 +306,14 @@ export class EngineValidator {
   public async validateWithGates(
     convertedPrompt: ConvertedPrompt,
     promptArgs: Record<string, any>,
-    suggestedGates: string[] = []
+    suggestedGates: string[] = [],
+    processedContent?: string
   ): Promise<GateValidationResult> {
     try {
       logger.debug('🚪 [EngineValidator] Validating with gates', {
         promptId: convertedPrompt.id,
-        gatesCount: suggestedGates.length
+        gatesCount: suggestedGates.length,
+        hasProcessedContent: !!processedContent
       });
 
       if (!this.gateSystem || suggestedGates.length === 0) {
@@ -321,11 +323,14 @@ export class EngineValidator {
       const results: Array<{ gate: string; passed: boolean; message: string; score?: number }> = [];
       let allPassed = true;
 
+      // FIXED: Use processed content for validation, not raw template
+      const contentToValidate = processedContent || convertedPrompt.userMessageTemplate || '';
+
       for (const gateName of suggestedGates) {
         try {
           const gateResults = await this.gateSystem.validateContent(
             [gateName],
-            convertedPrompt.userMessageTemplate || '',
+            contentToValidate,
             {
               promptId: convertedPrompt.id,
               stepId: gateName,

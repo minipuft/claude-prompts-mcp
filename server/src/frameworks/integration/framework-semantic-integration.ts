@@ -485,22 +485,23 @@ export class FrameworkSemanticIntegration {
 
   private getFrameworkSpecificGates(framework: FrameworkDefinition): string[] {
     const gates: string[] = [];
-    
+
+    // Use actual gate IDs from definitions directory
     switch (framework.methodology) {
       case 'CAGEERF':
-        gates.push('cageerf_compliance', 'structured_analysis_validation');
+        gates.push('framework-compliance', 'technical-accuracy', 'content-structure');
         break;
       case 'ReACT':
-        gates.push('reasoning_validation', 'action_coherence');
+        gates.push('framework-compliance', 'educational-clarity');
         break;
       case '5W1H':
-        gates.push('completeness_validation', 'question_coverage');
+        gates.push('framework-compliance', 'research-quality');
         break;
       case 'SCAMPER':
-        gates.push('creativity_validation', 'innovation_assessment');
+        gates.push('framework-compliance', 'content-structure');
         break;
     }
-    
+
     return gates;
   }
 

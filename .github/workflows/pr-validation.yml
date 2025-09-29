@@ -36,94 +36,25 @@ jobs:
         working-directory: server
         run: npm ci --prefer-offline --no-audit
 
-      - name: TypeScript type checking
-        working-directory: server
-        run: npm run typecheck
-
-      - name: Build validation
-        working-directory: server
-        run: npm run build
-
-      - name: Test execution
-        working-directory: server
-        run: npm run test:integration
-        timeout-minutes: 5
-
-      - name: Architecture Validation
+      - name: Core validation
         working-directory: server
         run: |
-          echo "Validating new consolidated architecture..."
+          echo "Running core validation pipeline..."
+          npm run typecheck
+          npm run build
+          npm run test:integration
+          npm run test:functional-mcp
+        timeout-minutes: 10
 
-          # Check if consolidated MCP tools compiled
-          if [ -f "dist/mcp-tools/prompt-engine.js" ] && [ -f "dist/mcp-tools/prompt-manager.js" ] && [ -f "dist/mcp-tools/system-control.js" ]; then
-            echo "✅ All 3 consolidated MCP tools compiled successfully"
-          else
-            echo "❌ Consolidated MCP tools compilation failed"
-            ls -la dist/mcp-tools/ || echo "mcp-tools directory not found"
-            exit 1
-          fi
-
-          # Check if framework system compiled
-          if [ -f "dist/frameworks/framework-manager.js" ] && [ -f "dist/frameworks/framework-state-manager.js" ]; then
-            echo "✅ Framework system compiled successfully"
-          else
-            echo "❌ Framework system compilation failed"
-            exit 1
-          fi
-
-          # Check if methodology guides compiled
-          METHODOLOGY_COUNT=$(find dist/frameworks/adapters -name "*methodology-guide.js" 2>/dev/null | wc -l)
-          if [ "$METHODOLOGY_COUNT" -ge 4 ]; then
-            echo "✅ All ${METHODOLOGY_COUNT} methodology guides compiled successfully"
-          else
-            echo "❌ Methodology guides compilation failed - expected 4, found ${METHODOLOGY_COUNT}"
-            exit 1
-          fi
-
-          # Check if runtime system compiled
-          if [ -f "dist/runtime/application.js" ] && [ -f "dist/runtime/startup.js" ]; then
-            echo "✅ Runtime system compiled successfully"
-          else
-            echo "❌ Runtime system compilation failed"
-            exit 1
-          fi
-
-      - name: Server startup validation
+      - name: Server functionality validation
         working-directory: server
         run: |
-          echo "Testing server startup capability..."
+          echo "Testing complete server functionality..."
 
-          # Verify build artifacts exist
-          if [ ! -f "dist/index.js" ]; then
-            echo "❌ Build artifacts missing - dist/index.js not found"
-            exit 1
-          fi
+          # Test server startup functionality (includes build artifact validation)
+          npm run test:ci-startup
 
-          # Test help command first (quick validation)
-          echo "Testing help command..."
-          if ! npm run help > help.log 2>&1; then
-            echo "❌ Help command failed"
-            cat help.log
-            exit 1
-          fi
-          echo "✅ Help command succeeded"
-
-          # Test server startup with new validation mode
-          echo "Testing server startup with validation mode..."
-          if npm run start:test > startup.log 2>&1; then
-            echo "✅ Server startup validation passed"
-            echo "Startup log contents:"
-            cat startup.log | tail -10
-          else
-            echo "❌ Server startup validation failed"
-            echo "Build artifacts check:"
-            ls -la dist/ | head -10
-            echo "Startup log contents:"
-            cat startup.log || echo "No startup log found"
-            echo "Help log contents:"
-            cat help.log || echo "No help log found"
-            exit 1
-          fi
+          echo "✅ Server functionality validation completed"
 
       - name: Changed files analysis
         run: |
@@ -188,7 +119,7 @@ jobs:
                 '- ✅ TypeScript compilation successful',
                 '- ✅ Build process completed',
                 '- ✅ All tests passed',
-                '- ✅ Consolidated architecture validated (3 MCP tools, 4 methodologies, runtime system)',
+                '- ✅ Functional MCP validation passed (intelligent routing, framework system, transport layer)',
                 '- ✅ Server startup validation completed',
                 '',
                 '### Files Changed:',
@@ -216,7 +147,7 @@ jobs:
                 '- Run `cd server && npm run typecheck` locally',
                 '- Run `cd server && npm run build` locally',
                 '- Run `cd server && npm test` locally',
-                '- Ensure consolidated architecture compiles correctly (3 MCP tools + 4 methodologies)'
+                '- Ensure functional MCP validation passes (intelligent routing + framework system)'
               ];
               message = lines.join('\n');
             }
@@ -231,46 +162,3 @@ jobs:
               await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: message });
             }
 
-  compatibility-check:
-    name: Compatibility Check
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.base.ref == 'main'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "18"
-          cache: "npm"
-          cache-dependency-path: server/package-lock.json
-
-      - name: Install dependencies
-        working-directory: server
-        run: npm ci --prefer-offline --no-audit
-
-      - name: Build and test
-        working-directory: server
-        run: |
-          npm run build
-          npm run test:integration
-
-      - name: Check for breaking changes
-        run: |
-          echo "Checking for potential breaking changes..."
-
-          # Check if main entry points exist
-          if [ ! -f "server/dist/index.js" ]; then
-            echo "❌ Main entry point missing"
-            exit 1
-          fi
-
-          # Check if package.json is valid
-          if ! (cd server && npm run --silent > /dev/null 2>&1); then
-            echo "❌ npm scripts validation failed"
-            exit 1
-          fi
-
-          echo "✅ No breaking changes detected"

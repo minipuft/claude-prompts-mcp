@@ -14,6 +14,7 @@ import {
   FrameworkSelectionCriteria
 } from "./types/index.js";
 import { MethodologyRegistry, createMethodologyRegistry } from "./methodology/index.js";
+import type { FrameworkStateManager } from "./framework-state-manager.js";
 
 /**
  * Framework Manager Implementation
@@ -25,9 +26,19 @@ export class FrameworkManager {
   private defaultFramework: string = "CAGEERF";
   private logger: Logger;
   private initialized: boolean = false;
+  private frameworkStateManager?: FrameworkStateManager;
 
   constructor(logger: Logger) {
     this.logger = logger;
+  }
+
+  /**
+   * Set the framework state manager for synchronization
+   * FIXED: Allows Framework Manager to sync with active framework state
+   */
+  setFrameworkStateManager(frameworkStateManager: FrameworkStateManager): void {
+    this.frameworkStateManager = frameworkStateManager;
+    this.logger.debug("Framework State Manager synchronized with Framework Manager");
   }
 
   /**
@@ -69,13 +80,26 @@ export class FrameworkManager {
       }
     }
 
-    // Fallback to default framework (frameworks are user-switched, not auto-selected)
+    // FIXED: Check Framework State Manager for active framework before using hardcoded default
+    // This ensures all injection points get the same active framework
+    if (this.frameworkStateManager?.isFrameworkSystemEnabled()) {
+      const activeFramework = this.frameworkStateManager.getActiveFramework();
+      if (activeFramework) {
+        const framework = this.getFramework(activeFramework.methodology);
+        if (framework && framework.enabled) {
+          this.logger.debug(`Framework selected: ${framework.name} (from active state manager)`);
+          return framework;
+        }
+      }
+    }
+
+    // Fallback to default framework only if state manager is not available
     const defaultFramework = this.getFramework(this.defaultFramework);
     if (!defaultFramework) {
       throw new Error(`Default framework ${this.defaultFramework} not found`);
     }
-    
-    this.logger.debug(`Framework selected: ${defaultFramework.name} (default selection)`);
+
+    this.logger.debug(`Framework selected: ${defaultFramework.name} (default fallback)`);
     return defaultFramework;
   }
 

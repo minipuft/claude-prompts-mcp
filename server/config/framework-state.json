@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "frameworkSystemEnabled": true,
-  "activeFramework": "cageerf",
-  "lastSwitchedAt": "2025-09-28T12:49:38.090Z",
-  "switchReason": "Testing CAGEERF methodology and unified intelligence pipeline"
+  "frameworkSystemEnabled": false,
+  "activeFramework": "CAGEERF",
+  "lastSwitchedAt": "2025-09-28T20:47:41.145Z",
+  "switchReason": "Initial framework selection"
 }

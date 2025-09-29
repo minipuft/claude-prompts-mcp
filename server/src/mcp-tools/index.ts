@@ -184,6 +184,10 @@ export class ConsolidatedMcpToolsManager {
     this.promptEngine.setFrameworkStateManager(frameworkStateManager);
     this.systemControl.setFrameworkStateManager(frameworkStateManager);
     this.promptManagerTool.setFrameworkStateManager?.(frameworkStateManager);
+    // FIXED: Synchronize Framework Manager with Framework State Manager to prevent injection duplication
+    if (this.frameworkManager) {
+      this.frameworkManager.setFrameworkStateManager(frameworkStateManager);
+    }
     // Enhanced tool framework state management removed (Phase 1.2)
     // Core tools handle framework state directly
   }

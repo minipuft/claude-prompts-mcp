@@ -39,8 +39,8 @@
     "preserve_context": true
   },
   "activation": {
-    "prompt_categories": ["education", "documentation", "content_processing"],
+    "prompt_categories": ["education", "documentation", "content_processing", "development"],
     "explicit_request": false,
-    "framework_context": ["CAGEERF", "5W1H"]
+    "framework_context": ["CAGEERF", "ReACT", "5W1H", "SCAMPER"]
   }
 }
