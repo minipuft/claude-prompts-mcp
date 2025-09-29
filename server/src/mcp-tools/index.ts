@@ -434,8 +434,6 @@ export class ConsolidatedMcpToolsManager {
         [key: string]: any;
       }) => {
         try {
-          this.logger.error(`DEBUG: MCP handler called for prompt_manager with action: ${args.action}`);
-
           // Check if promptManagerTool exists
           if (!this.promptManagerTool) {
             this.logger.error(`ERROR: promptManagerTool is undefined!`);
@@ -444,8 +442,6 @@ export class ConsolidatedMcpToolsManager {
               isError: true
             };
           }
-
-          this.logger.error(`DEBUG: promptManagerTool exists, calling handleAction`);
 
           const toolResponse = await this.promptManagerTool.handleAction(args, {});
 

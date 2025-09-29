@@ -497,10 +497,6 @@ export class ConsolidatedPromptEngine {
         routingResult.translatedParams!,
         routingResult.originalCommand!
       );
-      // TEMP DEBUG: Add routing debug to response
-      if (routedResult.content && routedResult.content[0]) {
-        routedResult.content[0].text = `\n\n--- ROUTING DEBUG ---\n🔀 Command routed to tool: ${routingResult.targetTool}\n--- END DEBUG ---\n\n` + routedResult.content[0].text;
-      }
       return routedResult;
     }
 
@@ -650,28 +646,18 @@ export class ConsolidatedPromptEngine {
         this.logger.info(
           `📍 EXECUTION PATH: Taking PROMPT path for ${convertedPrompt.id}`
         );
-        // TEMP DEBUG: Inject debug into response to identify execution path
         const promptResult = await this.executePrompt(convertedPrompt, promptArgs);
-        // Add debug marker to response content
-        if (promptResult.content && promptResult.content[0]) {
-          promptResult.content[0].text = `\n\n--- EXECUTION PATH DEBUG ---\n📍 Taking PROMPT path for ${convertedPrompt.id}\n--- END DEBUG ---\n\n` + promptResult.content[0].text;
-        }
         return promptResult;
 
       case "template":
         this.logger.info(
           `📍 EXECUTION PATH: Taking TEMPLATE path for ${convertedPrompt.id}`
         );
-        // TEMP DEBUG: Inject debug into response to identify execution path
         const templateResult = await this.executeTemplateWithFramework(
           convertedPrompt,
           promptArgs,
           strategy.gateValidation
         );
-        // Add debug marker to response content
-        if (templateResult.content && templateResult.content[0]) {
-          templateResult.content[0].text = `\n\n--- EXECUTION PATH DEBUG ---\n📍 Taking TEMPLATE path for ${convertedPrompt.id}\n--- END DEBUG ---\n\n` + templateResult.content[0].text;
-        }
         return templateResult;
 
       case "chain":
@@ -1201,10 +1187,6 @@ export class ConsolidatedPromptEngine {
     if (gateResults) {
       this.logger.info(`🔀 [DEBUG] Taking IF branch (gateResults exists)`);
 
-      // TEMP DEBUG: Inject debug info into content
-      const debugInfo = `\n\n--- DEBUG INFO ---\n🔀 IF branch executed - gateResults exists: ${JSON.stringify(gateResults)}\n--- END DEBUG ---\n\n`;
-      enhancedContent = content + debugInfo;
-
       // Get selected gates from validation - basic prompts use 'prompt' mode gates
       const selectedGates = await this.getAdvancedGateSelection(prompt, 'prompt');
       const frameworkContext = await this.getFrameworkExecutionContext(prompt);
@@ -1224,17 +1206,14 @@ export class ConsolidatedPromptEngine {
       const testGates = ['framework-compliance', 'educational-clarity'];
       const frameworkContext = await this.getFrameworkExecutionContext(prompt);
 
-      // TEMP DEBUG: Inject debug info into content
-      const debugInfo = `\n\n--- DEBUG INFO ---\n🔀 ELSE branch executed - calling gate guidance renderer with gates: ${JSON.stringify(testGates)}\n--- END DEBUG ---\n\n`;
-
       const supplementalGuidance = await this.getSupplementalGateGuidance(
         testGates,
         frameworkContext
       );
       if (supplementalGuidance) {
-        enhancedContent = content + debugInfo + supplementalGuidance;
+        enhancedContent = content + supplementalGuidance;
       } else {
-        enhancedContent = content + debugInfo + "(Gate manager returned empty guidance)";
+        enhancedContent = content + "(Gate manager returned empty guidance)";
       }
     }
 
@@ -1538,12 +1517,7 @@ export class ConsolidatedPromptEngine {
     // Phase 4: Append supplemental gate guidance to content
     let enhancedContent = content;
 
-    // TEMP DEBUG: Add debug injection to template method
-    const templateDebugInfo = `\n\n--- TEMPLATE DEBUG ---\nTemplate method gate logic: gateResults=${!!gateResults}, selectedGates=${selectedGates.length}\n--- END DEBUG ---\n\n`;
-    enhancedContent = content + templateDebugInfo;
-
     if (gateResults && selectedGates.length > 0) {
-      enhancedContent = enhancedContent + `\n--- TEMPLATE IF BRANCH ---\nUsing validation gates\n--- END ---\n`;
       const supplementalGuidance = await this.getSupplementalGateGuidance(
         selectedGates,
         frameworkContext
@@ -1552,7 +1526,6 @@ export class ConsolidatedPromptEngine {
         enhancedContent = content + supplementalGuidance;
       }
     } else {
-      enhancedContent = enhancedContent + `\n--- TEMPLATE ELSE BRANCH ---\nForcing test gates\n--- END ---\n`;
       // TEMP TEST: Force gate guidance even without validation results (same as executePrompt)
       const testGates = ['framework-compliance', 'educational-clarity'];
       const supplementalGuidance = await this.getSupplementalGateGuidance(
