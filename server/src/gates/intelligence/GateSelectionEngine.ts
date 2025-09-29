@@ -321,3 +321,5 @@ export class GateSelectionEngine {
 export function createGateSelectionEngine(logger: Logger): GateSelectionEngine {
   return new GateSelectionEngine(logger);
 }
+
+// Interfaces are already exported via declaration above

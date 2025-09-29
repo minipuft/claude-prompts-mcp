@@ -5,6 +5,12 @@
  */
 
 async function runServerStartupIntegrationTests() {
+  // Global timeout for entire test suite
+  const globalTimeout = setTimeout(() => {
+    console.error('❌ Integration tests timed out after 2 minutes - forcing exit');
+    process.exit(1);
+  }, 120000); // 2 minutes
+
   try {
     console.log('🧪 Running Server Startup Integration tests...');
     console.log('📋 Testing full server initialization sequence and error recovery');
@@ -15,10 +21,25 @@ async function runServerStartupIntegrationTests() {
 
     let logger, orchestrator;
 
-    // Setup for each test
+    // Timeout wrapper for individual operations
+    async function runWithTimeout(operation, timeoutMs = 10000, operationName = 'operation') {
+      return Promise.race([
+        operation(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`${operationName} timed out after ${timeoutMs}ms`)), timeoutMs)
+        )
+      ]);
+    }
+
+    // Setup for each test - reuse orchestrator to prevent multiple full startups
     function setupTest() {
-      logger = createSimpleLogger();
-      orchestrator = new Application(logger);
+      if (!logger) {
+        logger = createSimpleLogger();
+      }
+      if (!orchestrator) {
+        orchestrator = new Application(logger);
+      }
+      return orchestrator;
     }
 
     // Simple assertion helpers
@@ -115,22 +136,22 @@ async function runServerStartupIntegrationTests() {
 
     try {
       // Step 1: Load Configuration
-      await orchestrator.loadConfiguration();
+      await runWithTimeout(() => orchestrator.loadConfiguration(), 5000, 'Configuration loading');
       testResults.push(assertTruthy(orchestrator.config, 'Configuration loaded'));
       testResults.push(assertTruthy(orchestrator.config !== null, 'Configuration not null'));
 
       // Step 2: Load Prompts Data
-      await orchestrator.loadPromptsData();
+      await runWithTimeout(() => orchestrator.loadPromptsData(), 10000, 'Prompts data loading');
       const promptsCount = orchestrator.promptsData ? orchestrator.promptsData.length : 0;
       testResults.push(assertGreaterThanOrEqual(promptsCount, 0, 'Prompts data loaded or initialized'));
 
       // Step 3: Initialize Modules
-      await orchestrator.initializeModules();
+      await runWithTimeout(() => orchestrator.initializeModules(), 8000, 'Module initialization');
       testResults.push(assertTruthy(orchestrator.mcpToolsManager, 'MCP tools manager initialized'));
       testResults.push(assertTruthy(orchestrator.mcpToolsManager !== null, 'MCP tools manager not null'));
 
       // Step 4: Get Diagnostic Info
-      const healthInfo = await orchestrator.getDiagnosticInfo();
+      const healthInfo = await runWithTimeout(() => orchestrator.getDiagnosticInfo(), 3000, 'Diagnostic info retrieval');
       testResults.push(assertTruthy(healthInfo, 'Health info retrieved'));
       testResults.push(assertType(healthInfo, 'object', 'Health info is object'));
       testResults.push(assertGreaterThan(Object.keys(healthInfo).length, 0, 'Health info has properties'));
@@ -143,9 +164,9 @@ async function runServerStartupIntegrationTests() {
     // Test 2: Configuration Loading
     console.log('🔍 Test 2: Configuration Loading');
 
-    setupTest();
+    // Reuse the already configured orchestrator from Test 1
     try {
-      await orchestrator.loadConfiguration();
+      // Configuration already loaded in Test 1, just verify it exists
 
       testResults.push(assertTruthy(orchestrator.config, 'Configuration object exists'));
       testResults.push(assertHasProperty(orchestrator.config, 'server', 'Config has server property'));
@@ -174,10 +195,9 @@ async function runServerStartupIntegrationTests() {
     // Test 3: Prompts Data Loading
     console.log('🔍 Test 3: Prompts Data Loading');
 
-    setupTest();
+    // Reuse the already initialized orchestrator from Test 1
     try {
-      await orchestrator.loadConfiguration();
-      await orchestrator.loadPromptsData();
+      // Prompts data already loaded in Test 1, just verify it exists
 
       testResults.push(assertTruthy(orchestrator.promptsData !== undefined, 'Prompts data property exists'));
 
@@ -204,11 +224,9 @@ async function runServerStartupIntegrationTests() {
     // Test 4: Module Initialization
     console.log('🔍 Test 4: Module Initialization');
 
-    setupTest();
+    // Reuse the already initialized orchestrator from Test 1
     try {
-      await orchestrator.loadConfiguration();
-      await orchestrator.loadPromptsData();
-      await orchestrator.initializeModules();
+      // Modules already initialized in Test 1, just verify they exist
 
       testResults.push(assertTruthy(orchestrator.mcpToolsManager, 'MCP tools manager initialized'));
       testResults.push(assertTruthy(orchestrator.mcpToolsManager !== null, 'MCP tools manager not null'));
@@ -221,13 +239,10 @@ async function runServerStartupIntegrationTests() {
     // Test 5: Health Diagnostics
     console.log('🔍 Test 5: Health Diagnostics');
 
-    setupTest();
+    // Reuse the already initialized orchestrator from Test 1
     try {
-      await orchestrator.loadConfiguration();
-      await orchestrator.loadPromptsData();
-      await orchestrator.initializeModules();
-
-      const healthInfo = await orchestrator.getDiagnosticInfo();
+      // Get fresh diagnostic info from the already initialized orchestrator
+      const healthInfo = await runWithTimeout(() => orchestrator.getDiagnosticInfo(), 3000, 'Health diagnostics');
 
       testResults.push(assertTruthy(healthInfo, 'Health info exists'));
       testResults.push(assertType(healthInfo, 'object', 'Health info is object'));
@@ -380,6 +395,9 @@ async function runServerStartupIntegrationTests() {
       console.error('Stack trace:', error.stack);
     }
     return false;
+  } finally {
+    // Clear the global timeout
+    clearTimeout(globalTimeout);
   }
 }
 

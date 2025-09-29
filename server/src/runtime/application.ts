@@ -85,6 +85,18 @@ export class Application {
   // Server root detector
   private serverRootDetector: ServerRootDetector;
 
+  // Debug output control
+  private debugOutput: boolean;
+
+  /**
+   * Conditional debug logging to prevent output flood during tests
+   */
+  private debugLog(message: string, ...args: any[]): void {
+    if (this.debugOutput) {
+      console.error(`DEBUG: ${message}`, ...args);
+    }
+  }
+
   constructor(logger?: Logger) {
     // Will be initialized in startup() if not provided
     this.logger = logger || (null as any);
@@ -101,6 +113,24 @@ export class Application {
     // Phase 1: Framework capabilities integrated into base components
     // Phase 3 consensus observer removed
     this.serverRootDetector = new ServerRootDetector();
+
+    // Initialize debug output control - suppress in test environments
+    this.debugOutput = !this.isTestEnvironment();
+  }
+
+  /**
+   * Detect if running in test environment to suppress debug output
+   */
+  private isTestEnvironment(): boolean {
+    return (
+      process.env.NODE_ENV === 'test' ||
+      process.argv.includes('--suppress-debug') ||
+      process.argv.includes('--test-mode') ||
+      // Detect common test runner patterns
+      process.argv.some(arg => arg.includes('test') || arg.includes('jest') || arg.includes('mocha')) ||
+      // Detect if called from integration test scripts
+      process.argv[1]?.includes('tests/scripts/')
+    );
   }
 
   /**
@@ -109,27 +139,27 @@ export class Application {
   async startup(): Promise<void> {
     try {
       // Phase 1: Core Foundation
-      console.error("DEBUG: Starting Phase 1 - Core Foundation...");
+      this.debugLog("Starting Phase 1 - Core Foundation...");
       await this.initializeFoundation();
-      console.error("DEBUG: Phase 1 completed successfully");
+      this.debugLog("Phase 1 completed successfully");
 
       // Phase 2: Data Loading and Processing
-      console.error("DEBUG: Starting Phase 2 - Data Loading and Processing...");
+      this.debugLog("Starting Phase 2 - Data Loading and Processing...");
       await this.loadAndProcessData();
-      console.error("DEBUG: Phase 2 completed successfully");
+      this.debugLog("Phase 2 completed successfully");
 
       // Phase 3: Module Initialization
-      console.error("DEBUG: Starting Phase 3 - Module Initialization...");
+      this.debugLog("Starting Phase 3 - Module Initialization...");
       await this.initializeModulesPrivate();
-      console.error("DEBUG: Phase 3 completed successfully");
+      this.debugLog("Phase 3 completed successfully");
 
       // Phase 4: Server Setup and Startup
-      console.error("DEBUG: Starting Phase 4 - Server Setup and Startup...");
+      this.debugLog("Starting Phase 4 - Server Setup and Startup...");
       // Check if this is a startup test mode
       const args = process.argv.slice(2);
       const isStartupTest = args.includes("--startup-test");
       await this.startServer(isStartupTest);
-      console.error("DEBUG: Phase 4 completed successfully");
+      this.debugLog("Phase 4 completed successfully");
       console.error(
         "DEBUG: All startup phases completed, server should be running..."
       );
@@ -184,52 +214,46 @@ export class Application {
   private async initializeFoundation(): Promise<void> {
     // Determine server root directory robustly
     const serverRoot = await this.serverRootDetector.determineServerRoot();
-    console.error("DEBUG: Server root detected:", serverRoot);
+    this.debugLog("Server root detected:", serverRoot);
 
     // Initialize configuration manager using the detected server root
-    console.error(
-      "DEBUG: About to call path.join with serverRoot:",
-      serverRoot
-    );
+    this.debugLog("About to call path.join with serverRoot:", serverRoot);
     const CONFIG_FILE = path.join(serverRoot, "config.json");
-    console.error("DEBUG: Config file path:", CONFIG_FILE);
-    console.error(
-      "DEBUG: About to create ConfigManager with CONFIG_FILE:",
-      CONFIG_FILE
-    );
+    this.debugLog("Config file path:", CONFIG_FILE);
+    this.debugLog("About to create ConfigManager with CONFIG_FILE:", CONFIG_FILE);
     try {
       this.configManager = new ConfigManager(CONFIG_FILE);
-      console.error("DEBUG: ConfigManager created successfully");
+      this.debugLog("ConfigManager created successfully");
     } catch (error) {
-      console.error("DEBUG: ConfigManager creation failed:", error);
+      this.debugLog("ConfigManager creation failed:", error);
       throw error;
     }
-    console.error("DEBUG: About to load config");
+    this.debugLog("About to load config");
     try {
       await this.configManager.loadConfig();
-      console.error("DEBUG: Config loaded successfully");
+      this.debugLog("Config loaded successfully");
     } catch (error) {
-      console.error("DEBUG: Config loading failed:", error);
+      this.debugLog("Config loading failed:", error);
       throw error;
     }
 
     // Determine transport from command line arguments
     const args = process.argv.slice(2);
-    console.error("DEBUG: Args:", args);
+    this.debugLog("Args:", args);
     const transport = TransportManager.determineTransport(
       args,
       this.configManager
     );
-    console.error("DEBUG: Transport determined:", transport);
+    this.debugLog("Transport determined:", transport);
 
     // Check verbosity flags for conditional logging
     const isVerbose =
       args.includes("--verbose") || args.includes("--debug-startup");
     const isQuiet = args.includes("--quiet");
-    console.error("DEBUG: Verbose:", isVerbose, "Quiet:", isQuiet);
+    this.debugLog("Verbose:", isVerbose, "Quiet:", isQuiet);
 
     // Initialize enhanced logger with config-based settings
-    console.error("DEBUG: About to create enhanced logger");
+    this.debugLog("About to create enhanced logger");
     const loggingConfig = this.configManager.getLoggingConfig();
     const logDirectory = path.isAbsolute(loggingConfig.directory)
       ? loggingConfig.directory
@@ -258,48 +282,48 @@ export class Application {
 
     // Initialize log file
     await (this.logger as any).initLogFile();
-    console.error("DEBUG: Enhanced logger created and initialized");
+    this.debugLog("Enhanced logger created and initialized");
 
     // Only show startup messages if not in quiet mode
     if (!isQuiet) {
-      console.error("DEBUG: About to call logger.info - Starting MCP...");
+      this.debugLog("About to call logger.info - Starting MCP...");
       this.logger.info("Starting MCP Claude Prompts Server...");
-      console.error("DEBUG: First logger.info completed");
+      this.debugLog("First logger.info completed");
       this.logger.info(`Transport: ${transport}`);
-      console.error("DEBUG: Second logger.info completed");
+      this.debugLog("Second logger.info completed");
     }
 
     // Verbose mode shows detailed configuration info
     if (isVerbose) {
-      console.error("DEBUG: About to call verbose logger.info calls");
+      this.debugLog("About to call verbose logger.info calls");
       this.logger.info(`Server root: ${serverRoot}`);
       this.logger.info(`Config file: ${CONFIG_FILE}`);
       this.logger.debug(`Command line args: ${JSON.stringify(args)}`);
       this.logger.debug(`Process working directory: ${process.cwd()}`);
-      console.error("DEBUG: Verbose logger.info calls completed");
+      this.debugLog("Verbose logger.info calls completed");
     }
 
     // Initialize text reference manager
-    console.error("DEBUG: About to create TextReferenceManager");
+    this.debugLog("About to create TextReferenceManager");
     this.textReferenceManager = new TextReferenceManager(this.logger);
-    console.error("DEBUG: TextReferenceManager created");
+    this.debugLog("TextReferenceManager created");
 
     // Initialize conversation manager
-    console.error("DEBUG: About to create ConversationManager");
+    this.debugLog("About to create ConversationManager");
     try {
       this.conversationManager = createConversationManager(this.logger);
-      console.error("DEBUG: ConversationManager created successfully");
+      this.debugLog("ConversationManager created successfully");
     } catch (error) {
-      console.error("DEBUG: ConversationManager creation failed:", error);
+      this.debugLog("ConversationManager creation failed:", error);
       throw error;
     }
-    console.error("DEBUG: ConversationManager created");
+    this.debugLog("ConversationManager created");
 
     // Create MCP server
-    console.error("DEBUG: About to get config");
+    this.debugLog("About to get config");
     const config = this.configManager.getConfig();
-    console.error("DEBUG: Config retrieved successfully");
-    console.error("DEBUG: About to create McpServer");
+    this.debugLog("Config retrieved successfully");
+    this.debugLog("About to create McpServer");
     this.mcpServer = new McpServer({
       name: config.server.name,
       version: config.server.version,
@@ -308,15 +332,15 @@ export class Application {
         tools: { listChanged: true },
       },
     });
-    console.error("DEBUG: McpServer created successfully");
+    this.debugLog("McpServer created successfully");
 
     // Only log completion in verbose mode
     if (isVerbose) {
-      console.error("DEBUG: About to log foundation initialized");
+      this.debugLog("About to log foundation initialized");
       this.logger.info("Foundation modules initialized");
-      console.error("DEBUG: Foundation initialized log completed");
+      this.debugLog("Foundation initialized log completed");
     }
-    console.error("DEBUG: initializeFoundation completed successfully");
+    this.debugLog("initializeFoundation completed successfully");
   }
 
   /**
