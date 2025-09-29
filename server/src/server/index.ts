@@ -7,7 +7,14 @@ import { createServer, Server } from "http";
 import { ApiManager } from "../api/index.js";
 import { ConfigManager } from "../config/index.js";
 import { Logger } from "../logging/index.js";
-import { TransportManager } from "../transport/index.js";
+import {
+  TransportManager,
+  createTransportManager,
+  TransportType
+} from "./transport/index.js";
+
+// Re-export transport types and utilities for external consumers
+export { TransportManager, createTransportManager, TransportType };
 
 /**
  * Server Manager class

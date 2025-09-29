@@ -1,56 +1,111 @@
 /**
- * Comprehensive type definitions for the MCP Prompts Server
- * Consolidates all type definitions from across the application
+ * Consolidated Type Index for MCP Prompts Server
+ *
+ * This module serves as the central type export hub, importing from domain-specific
+ * type files and re-exporting them for easy consumption. Types are now organized
+ * by domain for better maintainability and reduced duplication.
+ *
+ * Architecture: Domain-specific types -> This index -> Consumer modules
  */
 
-// Import PromptData specifically for use within this module
-import type { PromptData } from "../types.js";
+// ===== Import Domain-Specific Types =====
 
-// ===== Core Types =====
-
-/**
- * Definition of an argument for a prompt
- */
-export interface PromptArgument {
-  /** Name of the argument */
-  name: string;
-  /** Optional description of the argument */
-  description?: string;
-  /** Whether this argument is required */
-  required: boolean;
-}
-
-/**
- * A category for organizing prompts
- */
-export interface Category {
-  /** Unique identifier for the category */
-  id: string;
-  /** Display name for the category */
-  name: string;
-  /** Description of the category */
-  description: string;
-}
-
-// Import and re-export other types from the existing types.ts
+// Core configuration and protocol types
 export type {
   Config,
+  ServerConfig,
+  TransportConfig,
+  TransportsConfig,
+  LoggingConfig,
+  AnalysisMode,
+  LLMProvider,
+  LLMIntegrationConfig,
+  SemanticAnalysisConfig,
+  AnalysisConfig,
+  ToolDescriptionsOptions,
   Message,
   MessageContent,
   MessageRole,
-  PromptData, // Ensure PromptData from ../types.js is re-exported
+  TextMessageContent,
+  BaseMessageContent
+} from '../types.js';
+
+// Prompt system types
+export type {
+  PromptArgument,
+  Category,
+  PromptData,
   PromptFile,
   PromptsConfig,
   PromptsConfigFile,
   PromptsFile,
-  RegistrationMode,
-  ServerConfig,
-  TextMessageContent,
-  TransportConfig,
-  TransportsConfig,
-} from "../types.js";
+  PromptFileContent,
+  CategoryPromptsResult,
+  CategoryValidationResult,
+  CategoryStatistics,
+  CategoryPromptRelationship
+} from '../prompts/types.js';
 
-// ===== Additional Types from index.ts =====
+// Execution system types
+export type {
+  ConvertedPrompt,
+  ChainStep,
+  ExecutionStrategyType,
+  ExecutionType,
+  BaseExecutionContext,
+  UnifiedExecutionResult,
+  ExecutionStrategy,
+  ChainExecutionResult,
+  ChainStepResult,
+  ChainExecutionState,
+  EnhancedChainExecutionOptions,
+  TemplateContext,
+  ValidationResult,
+  ExecutionStats,
+  PerformanceMetrics
+} from '../execution/types.js';
+
+// Import additional types needed for interfaces in this file
+import type {
+  ChainStep,
+  EnhancedChainExecutionOptions,
+  ChainStepResult
+} from '../execution/types.js';
+import type {
+  GateStatus,
+  StepResult
+} from '../gates/types.js';
+
+// Gate system types
+export type {
+  GateDefinition,
+  GateRequirement,
+  GateRequirementType,
+  GateStatus,
+  GateEvaluationResult,
+  ValidationContext,
+  GateActivationResult,
+  LightweightGateDefinition,
+  GatePassCriteria,
+  ValidationCheck,
+  GatesConfig,
+  StepResult,
+  GateType
+} from '../gates/types.js';
+
+// Framework system types (consolidated in Phase 2)
+export type {
+  FrameworkDefinition,
+  FrameworkExecutionContext,
+  FrameworkSelectionCriteria,
+  FrameworkMethodology,
+  IMethodologyGuide,
+  FrameworkStateInfo,
+  IntegratedAnalysisResult,
+  FrameworkSwitchingConfig
+} from '../frameworks/types/index.js';
+
+// ===== Additional System Types =====
 
 // Text Reference System Types
 export interface TextReference {
@@ -75,73 +130,40 @@ export interface ConversationHistoryItem {
   isProcessedTemplate?: boolean; // Flag to indicate if this is a processed template rather than original user input
 }
 
-// Chain Execution Types
-export interface ChainStep {
-  promptId: string; // ID of the prompt to execute in this step
-  stepName: string; // Name of this step
-  inputMapping?: Record<string, string>; // Maps chain inputs to this step's inputs
-  outputMapping?: Record<string, string>; // Maps this step's outputs to chain outputs
-}
-
-export interface ChainExecutionState {
+// Advanced Chain Execution Types
+export interface EnhancedChainExecutionContext {
   chainId: string;
-  currentStepIndex: number;
-  totalSteps: number;
-  stepResults: Record<string, string>;
+  chainName: string;
   startTime: number;
-}
+  executionOptions: EnhancedChainExecutionOptions;
 
-export interface ChainExecutionResult {
-  results: Record<string, string>;
-  messages: {
-    role: "user" | "assistant";
-    content: { type: "text"; text: string };
-  }[];
-}
+  // Enhanced step tracking
+  allSteps: ChainStep[];                 // All steps in the chain
+  completedSteps: Set<string>;           // Step IDs that have completed successfully
+  failedSteps: Set<string>;              // Step IDs that have failed
+  skippedSteps: Set<string>;             // Step IDs that were skipped due to dependencies/conditions
+  stepResults: Record<string, StepResult>; // Detailed results from each step
 
-// ConvertedPrompt interface (enhanced from existing usage in codebase)
-export interface ConvertedPrompt {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  systemMessage?: string;
-  userMessageTemplate: string;
-  arguments: Array<{
-    name: string;
-    description?: string;
-    required: boolean;
-  }>;
-  // Chain-related properties
-  isChain?: boolean; // Whether this prompt is a chain of prompts
-  chainSteps?: ChainStep[];
-  tools?: boolean; // Whether this prompt should use available tools
-  /** Defines behavior when prompt is invoked without its defined arguments */
-  onEmptyInvocation?: "execute_if_possible" | "return_template";
-  // Gate validation properties
-  gates?: GateDefinition[];
-  executionMode?: 'auto' | 'template' | 'chain' | 'workflow';
-  requiresExecution?: boolean; // Whether this prompt should be executed rather than returned
-}
+  // Dependency management
+  executionPlan?: {
+    executionOrder: string[];             // Topologically sorted step execution order
+    parallelGroups: Map<string, string[]>; // Parallel execution groups
+  };
 
-// Prompt Loading Types
-export interface PromptFileContent {
-  systemMessage?: string;
-  userMessageTemplate: string;
-  isChain?: boolean;
-  chainSteps?: ChainStep[];
-}
+  // Advanced execution state
+  currentPhase: 'planning' | 'executing' | 'completed' | 'failed';
+  activeParallelGroups: Map<string, string[]>; // Currently executing parallel groups
+  retryCount: Record<string, number>;    // Retry attempts per step
 
-export interface CategoryPromptsResult {
-  promptsData: PromptData[]; // Use the directly imported PromptData
-  categories: Category[];
+  // Gate validation tracking
+  gateValidationResults: Record<string, GateStatus[]>; // Gate results per step
 }
 
 // API Response Types
 export interface ApiResponse {
   success: boolean;
   message: string;
-  data?: any;
+  data?: unknown;
 }
 
 export interface ToolResponse {
@@ -150,6 +172,129 @@ export interface ToolResponse {
     text: string;
   }>;
   isError?: boolean;
+
+  // Structured output data for programmatic access
+  structuredContent?: {
+    // Gate validation results in structured format
+    gateValidation?: {
+      enabled: boolean;
+      passed: boolean;
+      totalGates: number;
+      failedGates: Array<{
+        gateId: string;
+        gateName: string;
+        reason: string;
+        score?: number;
+        requirements: string[];
+        evaluationTime?: number;
+      }>;
+      passedGates?: Array<{
+        gateId: string;
+        gateName: string;
+        score?: number;
+      }>;
+      executionTime: number;
+      retryCount?: number;
+    };
+
+    // Core execution metadata
+    executionMetadata?: {
+      executionId: string;
+      executionType: "prompt" | "template" | "chain";
+      startTime: number;
+      endTime: number;
+      executionTime: number;
+      frameworkUsed?: string;
+      frameworkEnabled: boolean;
+      stepsExecuted?: number;
+      sessionId?: string;
+      memoryUsage?: {
+        heapUsed: number;
+        heapTotal: number;
+        external: number;
+      };
+    };
+
+    // Analytics and performance data
+    analytics?: {
+      totalExecutions: number;
+      successRate: number;
+      averageExecutionTime: number;
+      frameworkSwitches?: number;
+      gateValidationCount?: number;
+      errorCount?: number;
+      uptime: number;
+    };
+
+    // Chain execution progress (for chain operations)
+    chainProgress?: {
+      chainId: string;
+      chainName: string;
+      currentStep: number;
+      totalSteps: number;
+      status: "pending" | "running" | "completed" | "failed" | "paused";
+      steps: Array<{
+        stepIndex: number;
+        stepName: string;
+        promptId: string;
+        status: "pending" | "running" | "completed" | "failed" | "skipped";
+        startTime?: number;
+        endTime?: number;
+        duration?: number;
+        result?: string;
+        error?: string;
+      }>;
+      autoExecute: boolean;
+      sessionStrategy?: "auto" | "explicit" | "new";
+      executionOptions?: {
+        stepConfirmation: boolean;
+        gateValidation: boolean;
+        frameworkEnabled: boolean;
+      };
+    };
+
+    // Error information (for failed operations)
+    errorInfo?: {
+      errorCode: string;
+      errorType: "validation" | "execution" | "system" | "client" | "configuration";
+      message: string;
+      details?: any;
+      timestamp: number;
+      severity: "low" | "medium" | "high" | "critical";
+      suggestedActions?: string[];
+      relatedComponents?: string[];
+    };
+
+    // Tool-specific structured data
+    [key: string]: any;
+  };
+}
+
+// Tool Description Types
+export interface ToolParameter {
+  description?: string;
+  examples?: string[];
+}
+
+export interface ToolDescription {
+  description: string;
+  parameters?: Record<string, ToolParameter | string>;
+  shortDescription?: string;
+  category?: string;
+  frameworkAware?: {
+    enabled?: string;
+    disabled?: string;
+    parametersEnabled?: Record<string, ToolParameter | string>;
+    parametersDisabled?: Record<string, ToolParameter | string>;
+    methodologies?: Record<string, string>;
+    methodologyParameters?: Record<string, Record<string, ToolParameter | string>>;
+  };
+}
+
+export interface ToolDescriptionsConfig {
+  version: string;
+  lastUpdated?: string;
+  tools: Record<string, ToolDescription>;
 }
 
 // Server Management Types
@@ -175,19 +320,6 @@ export interface ModificationResult {
   message: string;
 }
 
-// Template Processing Types
-export interface TemplateContext {
-  specialContext?: Record<string, string>;
-  toolsEnabled?: boolean;
-}
-
-// Validation Types
-export interface ValidationResult {
-  valid: boolean;
-  errors?: string[];
-  sanitizedArgs?: Record<string, any>;
-}
-
 // Express and Transport Types
 export interface ExpressRequest {
   body: any;
@@ -208,67 +340,23 @@ export interface ExpressResponse {
   on: (event: string, callback: () => void) => void;
 }
 
-// Gate Validation Types
-export interface GateRequirement {
-  type: 'content_length' | 'keyword_presence' | 'format_validation' | 'section_validation' | 'custom';
-  criteria: any;
-  weight?: number;
-  required?: boolean;
-}
-
-export interface GateDefinition {
-  id: string;
-  name: string;
-  type: 'validation' | 'approval' | 'condition' | 'quality';
-  requirements: GateRequirement[];
-  failureAction: 'stop' | 'retry' | 'skip' | 'rollback';
-  retryPolicy?: {
-    maxRetries: number;
-    retryDelay: number;
-  };
-}
-
-export interface GateEvaluationResult {
-  requirementId: string;
-  passed: boolean;
-  score?: number;
-  message?: string;
-  details?: any;
-}
-
-export interface GateStatus {
-  gateId: string;
-  passed: boolean;
-  requirements: GateRequirement[];
-  evaluationResults: GateEvaluationResult[];
-  timestamp: number;
-  retryCount?: number;
-}
-
+// Execution State Types
 export interface ExecutionState {
-  type: 'single' | 'chain' | 'workflow';
+  type: 'single' | 'chain';
   promptId: string;
   status: 'pending' | 'running' | 'waiting_gate' | 'completed' | 'failed' | 'retrying';
   currentStep?: number;
   totalSteps?: number;
   gates: GateStatus[];
-  results: Record<string, any>;
+  results: Record<string, string | ChainStepResult>;
   metadata: {
     startTime: number;
     endTime?: number;
-    executionMode?: 'auto' | 'template' | 'chain' | 'workflow';
+    executionMode?: 'prompt' | 'template' | 'chain';
     stepConfirmation?: boolean;
     gateValidation?: boolean;
+    sessionId?: string; // For chain session management
   };
-}
-
-export interface StepResult {
-  content: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-  timestamp: number;
-  validationResults?: ValidationResult[];
-  gateResults?: GateStatus[];
-  metadata?: Record<string, any>;
 }
 
 // Enhanced Chain Execution Types
@@ -280,9 +368,47 @@ export interface EnhancedChainExecutionState {
   status: 'pending' | 'running' | 'waiting_gate' | 'completed' | 'failed';
   stepResults: Record<string, StepResult>;
   gates: Record<string, GateStatus>;
-  executionMode: 'auto' | 'chain' | 'workflow';
+  executionMode: 'auto' | 'chain';
   gateValidation: boolean;
   stepConfirmation: boolean;
+}
+
+// Chain execution progress tracking
+export interface ChainExecutionProgress {
+  chainId: string;
+  chainName: string;
+  currentStep: number;
+  totalSteps: number;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'paused';
+  steps: ChainStepProgress[];
+  startTime: number;
+  endTime?: number;
+  duration?: number;
+  errorCount: number;
+  autoExecute: boolean;
+}
+
+export interface ChainStepProgress {
+  stepIndex: number;
+  stepName: string;
+  promptId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  startTime?: number;
+  endTime?: number;
+  duration?: number;
+  result?: string;
+  error?: string;
+  gateResults?: GateStatus[];
+}
+
+// Auto-execution configuration for chains
+export interface AutoExecutionConfig {
+  enabled: boolean;
+  stepConfirmation: boolean;
+  gateValidation: boolean;
+  pauseOnError: boolean;
+  maxRetries: number;
+  retryDelay: number; // milliseconds
 }
 
 // Constants and Enums
@@ -302,9 +428,8 @@ export enum TransportType {
 
 export enum ExecutionMode {
   AUTO = "auto",
-  TEMPLATE = "template", 
+  TEMPLATE = "template",
   CHAIN = "chain",
-  WORKFLOW = "workflow",
 }
 
 export enum StepStatus {
@@ -315,9 +440,10 @@ export enum StepStatus {
   SKIPPED = "skipped",
 }
 
-export enum GateType {
-  VALIDATION = "validation",
-  APPROVAL = "approval",
-  CONDITION = "condition",
-  QUALITY = "quality",
-}
+// ===== End of Consolidated Type Definitions =====
+// Types are now organized by domain for better maintainability:
+// - Core types: ../types.js
+// - Prompt types: ../prompts/types.js
+// - Execution types: ../execution/types.js
+// - Gate types: ../gates/types.js
+// - Framework types: ../frameworks/types/index.js

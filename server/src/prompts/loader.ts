@@ -13,15 +13,18 @@ import {
   PromptsConfigFile,
 } from "../types/index.js";
 import { safeWriteFile } from "./promptUtils.js";
+import { CategoryManager, createCategoryManager } from "./category-manager.js";
 
 /**
  * Prompt Loader class
  */
 export class PromptLoader {
   private logger: Logger;
+  private categoryManager: CategoryManager;
 
   constructor(logger: Logger) {
     this.logger = logger;
+    this.categoryManager = createCategoryManager(logger);
   }
 
   /**
@@ -98,8 +101,22 @@ export class PromptLoader {
         promptsConfig.imports = [];
       }
 
-      // Get the categories from the config
-      const categories = promptsConfig.categories;
+      // Load and validate categories using CategoryManager
+      const categoryValidation = await this.categoryManager.loadCategories(promptsConfig.categories);
+      
+      if (!categoryValidation.isValid) {
+        this.logger.error("❌ Category validation failed:");
+        categoryValidation.issues.forEach(issue => this.logger.error(`  - ${issue}`));
+        throw new Error(`Category validation failed: ${categoryValidation.issues.join('; ')}`);
+      }
+
+      if (categoryValidation.warnings.length > 0) {
+        this.logger.warn("⚠️ Category validation warnings:");
+        categoryValidation.warnings.forEach(warning => this.logger.warn(`  - ${warning}`));
+      }
+
+      // Get validated categories
+      const categories = this.categoryManager.getCategories();
 
       // Initialize an array to store all prompts
       let allPrompts: PromptData[] = [];
@@ -268,6 +285,28 @@ export class PromptLoader {
       this.logger.info(`   Total prompts collected: ${allPrompts.length}`);
       this.logger.info(`   Categories available: ${categories.length}`);
 
+      // Validate category-prompt relationships using CategoryManager
+      this.logger.info(`🔍 Validating category-prompt relationships...`);
+      const promptCategoryValidation = this.categoryManager.validatePromptCategories(allPrompts);
+      
+      if (!promptCategoryValidation.isValid) {
+        this.logger.error("❌ Category-prompt relationship validation failed:");
+        promptCategoryValidation.issues.forEach(issue => this.logger.error(`  - ${issue}`));
+        this.logger.warn("Continuing with loading but some prompts may not display correctly");
+      }
+
+      if (promptCategoryValidation.warnings.length > 0) {
+        this.logger.warn("⚠️ Category-prompt relationship warnings:");
+        promptCategoryValidation.warnings.forEach(warning => this.logger.warn(`  - ${warning}`));
+      }
+
+      // Generate category statistics for debugging
+      const categoryStats = this.categoryManager.getCategoryStatistics(allPrompts);
+      this.logger.info(`📊 Category Statistics:`);
+      this.logger.info(`   Categories with prompts: ${categoryStats.categoriesWithPrompts}/${categoryStats.totalCategories}`);
+      this.logger.info(`   Empty categories: ${categoryStats.emptyCategoriesCount}`);
+      this.logger.info(`   Average prompts per category: ${categoryStats.averagePromptsPerCategory.toFixed(1)}`);
+
       const result = { promptsData: allPrompts, categories };
       this.logger.info(
         `✅ PromptLoader.loadCategoryPrompts() completed successfully`
@@ -278,6 +317,13 @@ export class PromptLoader {
       this.logger.error(`❌ PromptLoader.loadCategoryPrompts() FAILED:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Get the CategoryManager instance for external access
+   */
+  getCategoryManager(): CategoryManager {
+    return this.categoryManager;
   }
 
   /**
@@ -293,6 +339,7 @@ export class PromptLoader {
     chainSteps?: Array<{
       promptId: string;
       stepName: string;
+      gates?: string[];
       inputMapping?: Record<string, string>;
       outputMapping?: Record<string, string>;
     }>;
@@ -306,7 +353,7 @@ export class PromptLoader {
         /## System Message\s*\n([\s\S]*?)(?=\n##|$)/
       );
       const userMessageMatch = content.match(
-        /## User Message Template\s*\n([\s\S]*?)(?=\n##|$)/
+        /## User Message Template\s*\n([\s\S]*)$/
       );
 
       const systemMessage = systemMessageMatch
@@ -320,20 +367,19 @@ export class PromptLoader {
       const chainMatch = content.match(
         /## Chain Steps\s*\n([\s\S]*?)(?=\n##|$)/
       );
-      let isChain = false;
       let chainSteps: Array<{
         promptId: string;
         stepName: string;
+        gates?: string[];
         inputMapping?: Record<string, string>;
         outputMapping?: Record<string, string>;
       }> = [];
 
       if (chainMatch) {
-        isChain = true;
         const chainContent = chainMatch[1].trim();
-        // Updated regex to match the current markdown format
+        // Enhanced regex to match markdown format with optional gates
         const stepMatches = chainContent.matchAll(
-          /(\d+)\.\s*promptId:\s*([^\n]+)\s*\n\s*stepName:\s*([^\n]+)(?:\s*\n\s*inputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:outputMapping|promptId|\d+\.|$)))?\s*(?:\n\s*outputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:promptId|\d+\.|$)))?\s*/g
+          /(\d+)\.\s*promptId:\s*([^\n]+)\s*\n\s*stepName:\s*([^\n]+)(?:\s*\n\s*gates:\s*([^\n]+))?(?:\s*\n\s*inputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:outputMapping|promptId|\d+\.|$)))?\s*(?:\n\s*outputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:promptId|\d+\.|$)))?\s*/g
         );
 
         for (const match of stepMatches) {
@@ -342,6 +388,7 @@ export class PromptLoader {
             stepNumber,
             promptId,
             stepName,
+            gatesStr,
             inputMappingStr,
             outputMappingStr,
           ] = match;
@@ -349,12 +396,33 @@ export class PromptLoader {
           const step: {
             promptId: string;
             stepName: string;
+            gates?: string[];
             inputMapping?: Record<string, string>;
             outputMapping?: Record<string, string>;
           } = {
             promptId: promptId.trim(),
             stepName: stepName.trim(),
           };
+
+          // Parse gates if present
+          if (gatesStr) {
+            try {
+              // Handle both JSON array format ["gate1", "gate2"] and simple list format
+              const gatesStrTrimmed = gatesStr.trim();
+              if (gatesStrTrimmed.startsWith('[') && gatesStrTrimmed.endsWith(']')) {
+                // JSON array format
+                step.gates = JSON.parse(gatesStrTrimmed);
+              } else {
+                // Simple comma-separated format: "gate1, gate2"
+                step.gates = gatesStrTrimmed.split(',').map(g => g.trim()).filter(g => g.length > 0);
+              }
+              this.logger.debug(`Loaded ${step.gates?.length || 0} gate(s) for step ${stepNumber}: ${step.gates?.join(', ') || ''}`);
+            } catch (e) {
+              this.logger.warn(
+                `Invalid gates format in chain step ${stepNumber} of ${filePath}: ${e}`
+              );
+            }
+          }
 
           if (inputMappingStr) {
             try {
@@ -408,11 +476,11 @@ export class PromptLoader {
         );
       }
 
-      if (!userMessageTemplate && !isChain) {
+      if (!userMessageTemplate && !(chainSteps.length > 0)) {
         throw new Error(`No user message template found in ${filePath}`);
       }
 
-      return { systemMessage, userMessageTemplate, isChain, chainSteps };
+      return { systemMessage, userMessageTemplate, chainSteps };
     } catch (error) {
       this.logger.error(`Error loading prompt file ${filePath}:`, error);
       throw error;

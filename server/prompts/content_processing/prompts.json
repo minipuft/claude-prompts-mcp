@@ -1,131 +1,6 @@
 {
   "prompts": [
     {
-      "id": "content_preservation_analysis",
-      "name": "Content Preservation Analysis",
-      "category": "content_processing",
-      "description": "Systematic content analysis with full preservation of insights, designed to maintain all valuable information while creating structured understanding",
-      "file": "content_preservation_analysis.md",
-      "arguments": [
-        {
-          "name": "content",
-          "description": "The content to analyze with preservation focus",
-          "required": true
-        },
-        {
-          "name": "existing_content",
-          "description": "Any existing content to preserve and integrate",
-          "required": false
-        },
-        {
-          "name": "analysis_depth",
-          "description": "Analysis depth: 'surface', 'standard', 'comprehensive', 'exhaustive'",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "layered_note_structure",
-      "name": "Layered Note Structure Creator",
-      "category": "content_processing",
-      "description": "Creates comprehensive note structures with multiple information layers, designed for maximum knowledge retention and multiple use cases",
-      "file": "layered_note_structure.md",
-      "arguments": [
-        {
-          "name": "analyzed_content",
-          "description": "The analyzed content to structure",
-          "required": true
-        },
-        {
-          "name": "vault_context",
-          "description": "Vault context and existing connections",
-          "required": false
-        },
-        {
-          "name": "structure_type",
-          "description": "Structure type: 'comprehensive', 'method_focused', 'reference_optimized'",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "vault_integration_optimizer",
-      "name": "Vault Integration Optimizer",
-      "category": "content_processing",
-      "description": "Optimizes note integration with existing vault structure, creating comprehensive connections and cross-references for maximum knowledge network effect",
-      "file": "vault_integration_optimizer.md",
-      "arguments": [
-        {
-          "name": "note_content",
-          "description": "The note content to integrate",
-          "required": true
-        },
-        {
-          "name": "vault_structure",
-          "description": "Current vault structure and related content",
-          "required": true
-        },
-        {
-          "name": "integration_level",
-          "description": "Integration level: 'basic', 'standard', 'comprehensive', 'network_optimized'",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "note_quality_assurance",
-      "name": "Note Quality Assurance",
-      "category": "content_processing",
-      "description": "Comprehensive quality assurance for note-taking workflows, ensuring content preservation, structural integrity, and optimal knowledge retention",
-      "file": "note_quality_assurance.md",
-      "arguments": [
-        {
-          "name": "note_content",
-          "description": "The complete note content to evaluate",
-          "required": true
-        },
-        {
-          "name": "original_source",
-          "description": "Original source material for comparison",
-          "required": false
-        },
-        {
-          "name": "quality_standards",
-          "description": "Quality standards: 'basic', 'professional', 'comprehensive', 'academic'",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "smart_content_refinement",
-      "name": "Smart Content Refinement",
-      "category": "content_processing",
-      "description": "Intelligent content refinement with advanced Obsidian vault integration, utilizing backlinks, tags, plugins, and knowledge management features for optimal discoverability and connection",
-      "file": "smart_content_refinement.md",
-      "arguments": [
-        {
-          "name": "raw_content",
-          "description": "The raw content to refine and integrate",
-          "required": true
-        },
-        {
-          "name": "vault_context",
-          "description": "Context about the vault structure and existing content",
-          "required": false
-        },
-        {
-          "name": "integration_level",
-          "description": "Integration level: 'basic', 'standard', 'advanced', 'network_optimized'",
-          "required": false
-        },
-        {
-          "name": "target_readability",
-          "description": "Target readability: 'concise', 'balanced', 'comprehensive'",
-          "required": false
-        }
-      ]
-    },
-    {
       "id": "obsidian_metadata_optimizer",
       "name": "Obsidian Metadata Optimizer",
       "category": "content_processing",
@@ -169,64 +44,6 @@
         {
           "name": "enhancement_level",
           "description": "Enhancement intensity: standard, comprehensive, showcase (default: comprehensive)",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "noteSave_advanced",
-      "name": "Advanced Note Save Workflow",
-      "category": "content_processing",
-      "description": "Comprehensive workflow that creates publication-ready notes with advanced Obsidian formatting, systematic plugin integration, and professional documentation standards",
-      "file": "noteSave_advanced.md",
-      "arguments": [
-        {
-          "name": "video_link",
-          "description": "URL of the video (YouTube, etc.) or webpage to process",
-          "required": false
-        },
-        {
-          "name": "domain",
-          "description": "Knowledge domain: art, fashion, cinematography, computer_science, ai_ml, personal_development (auto-detected if not provided)",
-          "required": false
-        },
-        {
-          "name": "formatting_level",
-          "description": "Formatting intensity: basic, standard, comprehensive, showcase (default: comprehensive)",
-          "required": false
-        },
-        {
-          "name": "readability_priority",
-          "description": "Content balance: concise, balanced, comprehensive (default: balanced)",
-          "required": false
-        },
-        {
-          "name": "plugin_integration",
-          "description": "Obsidian plugin usage: minimal, standard, advanced, showcase (default: advanced)",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "noteSave",
-      "name": "Note Save Workflow",
-      "category": "content_processing",
-      "description": "Optimized workflow that creates clean, readable notes while preserving valuable insights through smart content processing and intelligent refinement",
-      "file": "noteSave.md",
-      "arguments": [
-        {
-          "name": "video_link",
-          "description": "URL of the video (YouTube, etc.) or webpage to process",
-          "required": false
-        },
-        {
-          "name": "note_style",
-          "description": "Note style: 'concise' (clean, focused), 'balanced' (comprehensive but readable), 'reference' (detailed for lookup)",
-          "required": false
-        },
-        {
-          "name": "readability_priority",
-          "description": "Readability priority: 'high' (very clean), 'balanced' (comprehensive but readable), 'comprehensive' (detailed reference)",
           "required": false
         }
       ]
@@ -293,8 +110,60 @@
           "description": "Enhancement intensity: 'standard', 'comprehensive', 'showcase' (default: comprehensive)",
           "required": false
         }
-      ],
-      "onEmptyInvocation": "execute_if_possible"
+      ]
+    },
+    {
+      "id": "vault_related_notes_finder",
+      "name": "Vault Related Notes Finder",
+      "category": "content_processing",
+      "description": "Searches vault for actual related notes using content analysis and glob/grep patterns to find real cross-references",
+      "file": "vault_related_notes_finder.md",
+      "arguments": [
+        {
+          "name": "note_topic",
+          "description": "Main topic of the note",
+          "required": true
+        },
+        {
+          "name": "content_areas",
+          "description": "Key content areas covered in the note",
+          "required": true
+        },
+        {
+          "name": "vault_path",
+          "description": "Path to vault root directory",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "video_notes_enhanced",
+      "name": "Enhanced Video Notes Chain",
+      "category": "content_processing",
+      "description": "Comprehensive video processing chain including content analysis, visual extraction, vault integration, and note creation with proper formatting",
+      "file": "video_notes_enhanced.md",
+      "arguments": [
+        {
+          "name": "video_url",
+          "description": "YouTube video URL",
+          "required": true
+        },
+        {
+          "name": "topic",
+          "description": "Main topic/subject",
+          "required": true
+        },
+        {
+          "name": "content_areas",
+          "description": "Key content areas covered",
+          "required": true
+        },
+        {
+          "name": "duration",
+          "description": "Video duration",
+          "required": false
+        }
+      ]
     }
   ]
 }

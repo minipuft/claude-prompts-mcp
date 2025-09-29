@@ -1,0 +1,40 @@
+{
+  "id": "framework-compliance",
+  "name": "Framework Methodology Compliance",
+  "type": "validation",
+  "description": "Ensures responses follow the active framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER)",
+  "guidance": "**Framework Methodology Compliance:**\n- CAGEERF: Include Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework considerations\n- ReACT: Show clear Reasoning and Acting phases with systematic problem-solving\n- 5W1H: Address Who, What, When, Where, Why, How in comprehensive analysis\n- SCAMPER: Apply creative thinking techniques (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)\n- Structure responses according to framework principles\n- Include systematic thinking and methodology awareness\n- Show iterative improvement and refinement processes",
+  "pass_criteria": [
+    {
+      "type": "content_check",
+      "min_length": 300,
+      "required_patterns": [
+        "context",
+        "analysis",
+        "systematic"
+      ]
+    },
+    {
+      "type": "pattern_check",
+      "keyword_count": {
+        "framework": 1,
+        "methodology": 1
+      }
+    },
+    {
+      "type": "llm_self_check",
+      "prompt_template": "framework_compliance_validation",
+      "pass_threshold": 0.75
+    }
+  ],
+  "retry_config": {
+    "max_attempts": 2,
+    "improvement_hints": true,
+    "preserve_context": true
+  },
+  "activation": {
+    "prompt_categories": ["analysis", "development", "research", "content_processing"],
+    "explicit_request": false,
+    "framework_context": ["CAGEERF", "ReACT", "5W1H", "SCAMPER"]
+  }
+}

@@ -1,56 +1,79 @@
-# Dependencies
+# Dependencies and Package Management
 server/node_modules/
-npm-debug.log
-yarn-debug.log
-yarn-error.log
+server/package-lock.json
+.npm/
+.yarn/
+.pnp.*
+yarn.lock
 
-# Build output
+# Build Output and TypeScript
 server/dist/
 build/
 out/
-server/package-lock.json
+*.tsbuildinfo
+.tsbuildinfo
 
-# Environment variables
-server/.env
-server/.env.local
-server/.env.development.local
-server/.env.test.local
-server/.env.production.local
+# Environment Variables
+server/.env*
+.env*
 
-# Logs
-server/logs/
+# Logs and Debug Files
+#server/logs/
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Editor directories and files
-.idea/
+# Test Coverage and Reports
+coverage/
+nyc_output/
+.coverage/
+junit.xml
+test-results/
+*.lcov
+
+# Editor and IDE Files
 .vscode/
-*.swp
-*.swo
+.cursor/
 
 # Operating System Files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+*:Zone.Identifier
+*.Zone.Identifier
 
-# Test directories
-test/
-test-output/
-tests/
+# Runtime and Cache Files
+.cache/
+tmp/
+temp/
+pids/
+*.pid
+*.seed
+*.pid.lock
 
-# Admin UI (temporary)
+# MCP Server Specific
 admin-ui/
 
-#Ignore cursor AI rules
-.cursor/
+# Runtime State Files
+# server/config/framework-state.json
+# .framework-state.json
 
-# Crash dumps and diagnostic reports
+# Crash Dumps and Diagnostics
 *.dmp
-core
 report.*.json
 *.diagraw
+heapdump-*
 
-#Temporary test files
-server/test-server.js
-server/test-listprompts.mjs
+# Claude-Code setup
+plans/archive/
+CLAUDE.md
+.codex/
+AGENTS.md
+.claude/
+server/.claude/

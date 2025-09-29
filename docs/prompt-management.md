@@ -1,15 +1,30 @@
 # Prompt Management
 
-This document describes how to manage prompts in the MCP server using the distributed prompts configuration system.
+This document describes how to manage prompts in the MCP server using the **consolidated prompt management system** through the `prompt_manager` tool and distributed prompts configuration.
+
+## Consolidated Architecture Overview
+
+The MCP server uses **3 consolidated tools** for all prompt management operations:
+
+- **`prompt_manager`**: Complete lifecycle management with intelligent analysis and filtering
+- **`prompt_engine`**: Execute prompts with framework integration and gate validation
+- **`system_control`**: Framework switching, analytics, and system administration
+
+**Key Benefits:**
+
+- **Action-Based Interface**: Single tools with multiple actions instead of separate tools
+- **Intelligent Features**: Type analysis, framework integration, advanced filtering
+- **MCP Protocol Only**: No HTTP API - works through MCP-compatible clients
 
 ## Distributed Prompts Configuration System
 
-The MCP server now uses a distributed configuration system where prompts are organized by category, with each category having its own configuration file. This makes it easier to manage large numbers of prompts and enables modular organization.
+The server organizes prompts using a distributed configuration system where prompts are organized by category, with each category having its own configuration file.
 
 ### Key Components
 
-1. **promptsConfig.json** - The main configuration file that defines categories and imports category-specific prompts.json files
-2. **Category-specific prompts.json files** - Each category has its own prompts.json file in its directory
+1. **promptsConfig.json** - Main configuration file defining categories and imports
+2. **Category-specific prompts.json files** - Each category has its own prompts.json file
+3. **Prompt .md files** - Individual prompt templates using Nunjucks templating
 
 ## Main Configuration (promptsConfig.json)
 
@@ -24,16 +39,21 @@ The main configuration file defines all available categories and specifies which
       "description": "General-purpose prompts for everyday tasks"
     },
     {
-      "id": "code",
-      "name": "Code",
-      "description": "Prompts related to programming and software development"
+      "id": "analysis",
+      "name": "Analysis",
+      "description": "Analytical and research-focused prompts"
+    },
+    {
+      "id": "development",
+      "name": "Development",
+      "description": "Software development and coding prompts"
     }
     // More categories...
   ],
   "imports": [
     "prompts/general/prompts.json",
-    "prompts/code/prompts.json",
-    "prompts/analysis/prompts.json"
+    "prompts/analysis/prompts.json",
+    "prompts/development/prompts.json"
     // More imports...
   ]
 }
@@ -41,33 +61,38 @@ The main configuration file defines all available categories and specifies which
 
 ### Categories
 
-Each category in the `categories` array has the following properties:
+Each category in the `categories` array has:
 
-- `id` (string) - Unique identifier for the category (used in URLs and file paths)
+- `id` (string) - Unique identifier for the category
 - `name` (string) - Display name for the category
-- `description` (string) - Description of what the category is for
+- `description` (string) - Description of the category's purpose
 
 ### Imports
 
-The `imports` array lists the paths to the category-specific prompts.json files, relative to the server's working directory.
+The `imports` array lists paths to category-specific prompts.json files, relative to the server's working directory.
 
 ## Category-Specific Prompts Files
 
-Each category has its own prompts.json file in its directory (e.g., `prompts/general/prompts.json`):
+Each category has its own prompts.json file (e.g., `prompts/general/prompts.json`):
 
 ```json
 {
   "prompts": [
     {
-      "id": "friendly_greeting",
-      "name": "Friendly Greeting",
-      "category": "general",
-      "description": "A warm, personalized greeting that makes the user feel welcome and valued.",
-      "file": "friendly_greeting.md",
+      "id": "content_analysis",
+      "name": "Content Analysis",
+      "category": "analysis",
+      "description": "Systematic analysis of content using structured methodology",
+      "file": "content_analysis.md",
       "arguments": [
         {
-          "name": "name",
-          "description": "The name of the person to greet",
+          "name": "content",
+          "description": "The content to analyze",
+          "required": true
+        },
+        {
+          "name": "focus",
+          "description": "Specific focus area for analysis",
           "required": false
         }
       ]
@@ -77,46 +102,209 @@ Each category has its own prompts.json file in its directory (e.g., `prompts/gen
 }
 ```
 
-Each prompt in the `prompts` array has:
+Each prompt has:
 
-- `id` (string) - Unique identifier for the prompt
-- `name` (string) - Display name for the prompt
+- `id` (string) - Unique identifier
+- `name` (string) - Display name
 - `category` (string) - Category this prompt belongs to
-- `description` (string) - Description of what the prompt does
-- `file` (string) - Path to the markdown file containing the prompt template, relative to the category directory
-- `arguments` (array) - Arguments accepted by the prompt
-  - `name` (string) - Name of the argument
-  - `description` (string) - Description of the argument
-  - `required` (boolean) - Whether this argument is required
-- `isChain` (boolean, optional) - Whether this prompt is a chain of prompts
-- `chainSteps` (array, optional) - Steps in the chain if this is a chain prompt
-- `tools` (boolean, optional) - Whether this prompt should use available tools
-- `onEmptyInvocation` (string, optional) - Defines behavior when a prompt is invoked without its defined arguments.
-  - `"return_template"`: If invoked with no arguments, the server returns a description of the prompt, its purpose, and its arguments instead of attempting to execute it. This is useful for prompts that strictly require specific inputs.
-  - `"execute_if_possible"` (default): If invoked with no arguments, the server attempts to execute the prompt, typically by using contextual information (like `{{previous_message}}`) for any missing arguments. This is the standard behavior if the field is omitted.
+- `description` (string) - What the prompt does
+- `file` (string) - Path to .md file with template
+- `arguments` (array) - Arguments the prompt accepts
+- `isChain` (boolean, optional) - Whether this is a chain prompt
+- `chainSteps` (array, optional) - Steps for chain prompts
+- `onEmptyInvocation` (string, optional) - Behavior when invoked without arguments
+
+## Consolidated Prompt Management
+
+### prompt_manager Tool Actions
+
+The `prompt_manager` tool provides comprehensive prompt lifecycle management through **action-based commands**:
+
+#### Core Actions
+
+- `list` - List and filter prompts with intelligent search
+- `create` - Auto-detect type and create appropriate prompt
+- `create_prompt` - Create basic prompt (fast variable substitution)
+- `create_template` - Create framework-enhanced template
+- `update` - Update existing prompts
+- `delete` - Delete prompts with safety checks
+
+#### Advanced Actions
+
+- `analyze_type` - Analyze prompt and recommend execution type
+- `migrate_type` - Convert between prompt types (prompt ↔ template)
+- `modify` - Precision editing of specific sections
+- `reload` - Trigger hot-reload of prompt system
+
+### Basic Prompt Management
+
+#### Listing Prompts
+
+```bash
+# List all prompts
+prompt_manager list
+
+# List prompts in specific category
+prompt_manager list filter="category:analysis"
+
+# List by execution type
+prompt_manager list filter="type:template"
+
+# Combined filters
+prompt_manager list filter="category:development type:chain"
+
+# Intent-based search
+prompt_manager list filter="intent:debugging"
+```
+
+#### Creating Prompts
+
+```bash
+# Auto-detect appropriate type
+prompt_manager create name="Data Processor" category="analysis" \
+  description="Process and analyze data systematically" \
+  content="Analyze {{data}} and provide insights on {{focus_area}}"
+
+# Create basic prompt (fast execution)
+prompt_manager create_prompt name="Simple Greeting" category="general" \
+  description="Basic personalized greeting" \
+  content="Hello {{name}}, welcome to {{service}}!" \
+  arguments='[{"name":"name","required":true},{"name":"service","required":false}]'
+
+# Create framework-enhanced template
+prompt_manager create_template name="Research Analysis" category="analysis" \
+  description="Comprehensive research analysis using active methodology" \
+  content="Research {{topic}} using systematic approach. Focus on {{aspects}}." \
+  arguments='[{"name":"topic","required":true},{"name":"aspects","required":false}]'
+```
+
+#### Updating Prompts
+
+```bash
+# Update prompt content
+prompt_manager update id="data_processor" \
+  content="Enhanced analysis of {{data}} with focus on {{methodology}}"
+
+# Update prompt metadata
+prompt_manager update id="greeting_prompt" \
+  name="Enhanced Greeting" \
+  description="Improved greeting with personalization"
+
+# Precision section editing
+prompt_manager modify id="analysis_prompt" \
+  section="User Message Template" \
+  new_content="Analyze {{content}} using {{framework}} methodology"
+```
+
+#### Deleting Prompts
+
+```bash
+# Delete prompt with safety checks
+prompt_manager delete id="old_prompt"
+
+# The system will warn if prompt is referenced by chains or other prompts
+```
+
+### Advanced Features
+
+#### Type Analysis & Migration
+
+```bash
+# Analyze existing prompt for optimization recommendations
+prompt_manager analyze_type id="basic_analysis"
+# Returns: execution type, framework suitability, improvement suggestions
+
+# Convert prompt to framework-enhanced template
+prompt_manager migrate_type id="simple_prompt" target_type="template"
+
+# Convert template back to basic prompt for speed
+prompt_manager migrate_type id="complex_template" target_type="prompt"
+```
+
+#### Framework Integration
+
+```bash
+# Switch to desired framework before creating templates
+system_control switch_framework framework="CAGEERF" reason="Complex analysis needed"
+
+# Create framework-aware template
+prompt_manager create_template name="Strategic Analysis" category="business" \
+  description="CAGEERF-enhanced strategic analysis" \
+  content="Analyze {{situation}} using comprehensive structured approach"
+
+# Templates automatically use active framework methodology
+```
+
+#### Chain Prompt Creation
+
+```bash
+# Create multi-step chain prompt
+prompt_manager create_template name="Research Workflow" category="research" \
+  description="Multi-step research and analysis workflow" \
+  content="Research workflow for {{topic}} with comprehensive analysis" \
+  chain_steps='[
+    {
+      "promptId": "data_collection",
+      "stepName": "Data Collection",
+      "inputMapping": {"topic": "research_topic"},
+      "outputMapping": {"collected_data": "step1_output"}
+    },
+    {
+      "promptId": "data_analysis",
+      "stepName": "Analysis",
+      "inputMapping": {"data": "step1_output"},
+      "outputMapping": {"analysis_result": "final_output"}
+    }
+  ]'
+```
+
+### Intelligent Filtering System
+
+The `prompt_manager list` command supports advanced filtering:
+
+#### Filter Syntax
+
+- **Category**: `category:analysis`, `category:development`
+- **Type**: `type:prompt`, `type:template`, `type:chain`
+- **Intent**: `intent:debugging`, `intent:analysis`, `intent:creation`
+- **Confidence**: `confidence:>80`, `confidence:70-90`
+- **Framework**: `framework:CAGEERF`, `framework:ReACT`
+
+#### Advanced Examples
+
+```bash
+# Find high-confidence templates in analysis category
+prompt_manager list filter="category:analysis type:template confidence:>85"
+
+# Find debugging-related prompts
+prompt_manager list filter="intent:debugging"
+
+# Find prompts suitable for current framework
+system_control status  # Check active framework
+prompt_manager list filter="framework:CAGEERF type:template"
+```
 
 ## Advanced Templating with Nunjucks
 
-The prompt templating engine now supports **Nunjucks**, a powerful templating language that allows for more dynamic and flexible prompt construction. This is in addition to the standard `{{variable}}` placeholder replacement.
+The prompt templating system supports **Nunjucks** for dynamic prompt construction:
 
-### Key Nunjucks Features Available:
+### Key Features
 
-- **Conditional Logic (`{% if %}`):** Show or hide parts of your prompt based on whether arguments are provided or have specific values.
-- **Loops (`{% for %}`):** Iterate over lists or arrays provided as arguments to dynamically generate parts of your prompt.
-- **Standard Placeholder Syntax:** The familiar `{{variable}}` syntax for simple variable replacement continues to work as before. Nunjucks handles these as well.
+- **Conditional Logic (`{% if %}`)**: Show/hide content based on arguments
+- **Loops (`{% for %}`)**: Iterate over arrays dynamically
+- **Standard Placeholders**: `{{variable}}` syntax continues to work
+- **Macros (`{% macro %}`)**: Reusable template components
+- **Filters (`|`)**: Transform data (upper, lower, default, etc.)
 
-### How Nunjucks is Processed:
+### Template Processing
 
-1.  **Nunjucks Rendering:** The entire `User Message Template` (and `System Message` if applicable) is first processed by Nunjucks. This means all `{% ... %}` tags and `{{ ... }}` placeholders are evaluated by Nunjucks using the provided arguments and special context variables (like `{{previous_message}}`, `{{tools_available}}`).
-2.  **Text Reference Expansion:** After Nunjucks has processed the template, the system then handles text reference expansion. If an argument's value was a long string that got converted to a `ref:xyz` placeholder by the `TextReferenceManager` (this happens before Nunjucks), Nunjucks will render `{{my_long_arg}}` to its `ref:xyz` value. Then, the existing reference replacement logic will swap `ref:xyz` with the actual long content.
+1. **Nunjucks Rendering**: Process `{% %}` tags and `{{ }}` placeholders
+2. **Text Reference Expansion**: Handle long text references (ref:xyz)
+3. **Framework Enhancement**: Apply active methodology if template type
 
-This two-step process ensures that Nunjucks logic operates on the argument values (or their reference IDs) and then the full text is assembled.
+### Examples
 
-### Examples:
-
-#### Conditional Logic:
-
-You can conditionally include text based on an argument:
+#### Conditional Logic
 
 ```nunjucks
 {% if user_name %}
@@ -125,331 +313,266 @@ Hello, {{user_name}}! Thanks for providing your name.
 Hello there!
 {% endif %}
 
-{% if task_details == "urgent" %}
-This is an URGENT task.
+{% if analysis_type == "comprehensive" %}
+This requires detailed CAGEERF methodology analysis.
+{% elif analysis_type == "quick" %}
+Using streamlined ReACT approach.
 {% endif %}
 ```
 
-This is particularly useful for optional arguments.
-
-#### Simple Loops:
-
-If you have an argument that is a list (e.g., a JSON array passed as a string argument, which you might need to parse or ensure your Nunjucks context can handle as an iterable), you can loop through it:
+#### Loops
 
 ```nunjucks
-Please summarize the following points:
-{% for point in points_list %}
-- {{ point }}
+Please analyze the following data points:
+{% for item in data_list %}
+- {{ loop.index }}. {{ item }}
 {% endfor %}
 ```
 
-_(Note: For complex data types like lists passed as arguments, ensure they are correctly formatted and accessible within the Nunjucks context. Simple string arguments are directly available. For lists or objects, you might need to ensure they are passed as actual iterables/objects to Nunjucks if your setup supports it, or use Nunjucks filters to parse them if they are strings.)_
-
-### Using Standard Placeholders:
-
-Simple variable replacement still works as you'd expect:
+#### Macros for Reusability
 
 ```nunjucks
-Your topic is: {{topic}}.
+{% macro analysis_section(title, content, methodology) %}
+## {{ title }}
+**Methodology**: {{ methodology }}
+**Content**: {{ content }}
+{% endmacro %}
+
+{{ analysis_section("Market Analysis", market_data, "CAGEERF") }}
+{{ analysis_section("Risk Assessment", risk_data, "5W1H") }}
 ```
 
-Nunjucks handles these standard placeholders.
+#### Filters
 
-### Advanced Nunjucks Features:
-
-Beyond basic conditionals and loops, Nunjucks offers several advanced features to make your prompt templates even more modular and powerful:
-
-- **Macros (`{% macro %}`):** Define reusable chunks of template logic. This is great for standardizing parts of prompts or complex formatting.
-
-  ```nunjucks
-  {% macro user_card(user) %}
-  User Details:
-  Name: {{ user.name | default("N/A") }}
-  Email: {{ user.email | default("N/A") }}
-  {% if user.is_admin %}Admin User{% endif %}
-  {% endmacro %}
-
-  --- User 1 ---
-  {{ user_card(user1_data) }}
-  --- User 2 ---
-  {{ user_card(user2_data) }}
-  ```
-
-- **Template Inheritance (`{% extends %}`, `{% block %}`):** Create a base prompt template and then have other prompts extend it, overriding specific blocks. This requires Nunjucks to be configured with a file system loader (see Phase 3, Task 2 in the integration plan).
-
-  - `base_prompt.njk` (or `.md` if your loader is configured for it):
-    ```nunjucks
-    System: You are a helpful assistant.
-    User: {% block user_query %}Default user query.{% endblock %}
-    Context: {{ previous_message }}
-    ```
-  - `specific_task.njk`:
-    `nunjucks
-    {% extends "base_prompt.njk" %}
-    {% block user_query %}Please tell me about {{ topic }}.{% endblock %}
-    `
-    _(Note: The exact paths for `extends` will depend on how the Nunjucks file loader is configured.)_
-
-- **Filters (`|`):** Nunjucks provides many built-in filters (e.g., `lower`, `upper`, `length`, `join`, `default`, `sum`, `sort`) and allows for custom global filters to be added in the Nunjucks environment setup.
-
-  ```nunjucks
-  Topic: {{ topic_name | upper }}
-  Item count: {{ item_list | length }}
-  Backup: {{ backup_contact | default("admin@example.com") }}
-  ```
-
-- **Setting Variables (`{% set %}`):** You can define variables directly within your template for temporary use.
-  ```nunjucks
-  {% set task_priority = "High" %}
-  {% if user_level > 4 %}
-    {% set task_priority = "Critical" %}
-  {% endif %}
-  Current task priority: {{ task_priority }}
-  ```
-
-For a comprehensive list of tags and filters, refer to the [official Nunjucks documentation](https://mozilla.github.io/nunjucks/templating.html).
-
----
-
-Each prompt in the `prompts` array has:
-
-## Working with Prompts
-
-### Adding a New Prompt to an Existing Category
-
-1. Create a new markdown file in the appropriate category folder (e.g., `prompts/general/my_prompt.md`)
-2. Add the prompt template to the file using markdown format
-3. Register the prompt in the category's prompts.json file (e.g., `prompts/general/prompts.json`)
-
-### Creating a New Category
-
-1. Create a new folder in the `prompts` directory for your category (e.g., `prompts/mycategory/`)
-2. Create a `prompts.json` file in the new category folder with the following structure:
-   ```json
-   {
-     "prompts": []
-   }
-   ```
-3. Add your category to the `categories` array in `promptsConfig.json`
-4. Add the path to your category's prompts.json file to the `imports` array in `promptsConfig.json`
-
-## Programmatic Management Tools
-
-The MCP server provides tools for programmatically managing prompts:
-
-1. `create_category` - Creates a new prompt category
-2. `update_prompt` - Creates or updates a prompt
-3. `delete_prompt` - Deletes a prompt
-
-These tools allow you to manage your prompts without having to manually edit the configuration files.
-
-### Creating a Category
-
-Use the `create_category` tool to create a new category:
-
-```javascript
-// Example: Creating a new category
-const response = await fetch(
-  "http://localhost:9090/api/v1/tools/create_category",
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      id: "my_category",
-      name: "My Category",
-      description: "A category for my custom prompts",
-    }),
-  }
-);
-
-const result = await response.json();
-console.log(result);
+```nunjucks
+Topic: {{ topic_name | upper }}
+Priority: {{ priority_level | default("Medium") }}
+Items: {{ item_count | length }} total
+Summary: {{ long_text | truncate(100) }}
 ```
 
-#### Parameters
+## Integration with Consolidated Architecture
 
-- `id` (string, required) - Unique identifier for the category
-- `name` (string, required) - Display name for the category
-- `description` (string, required) - Description of the category
+### MCP Tool Coordination
 
-### Creating or Updating a Prompt
-
-Use the `update_prompt` tool to create a new prompt or update an existing one:
-
-```javascript
-// Example: Creating a new prompt
-const response = await fetch(
-  "http://localhost:9090/api/v1/tools/update_prompt",
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      id: "my_prompt",
-      name: "My Prompt",
-      category: "my_category",
-      description: "A custom prompt for my use case",
-      systemMessage: "You are a helpful assistant.",
-      userMessageTemplate: "Hello {{name}}, please help me with {{task}}.",
-      arguments: [
-        {
-          name: "name",
-          description: "The name to greet",
-          required: true,
-        },
-        {
-          name: "task",
-          description: "The task to help with",
-          required: true,
-        },
-      ],
-    }),
-  }
-);
-
-const result = await response.json();
-console.log(result);
+```bash
+# Complete workflow using all 3 tools
+system_control status                          # Check system state
+system_control switch_framework framework="CAGEERF"  # Set methodology
+prompt_manager create_template name="..." category="..." # Create template
+prompt_engine >>template_name input="data" gate_validation=true # Execute with gates
+system_control analytics                       # Monitor performance
 ```
 
-#### Parameters
+### Framework-Aware Operations
 
-- `id` (string, required) - Unique identifier for the prompt
-- `name` (string, required) - Display name for the prompt
-- `category` (string, required) - Category this prompt belongs to (must exist)
-- `description` (string, required) - Description of the prompt
-- `systemMessage` (string, optional) - System message for the prompt
-- `userMessageTemplate` (string, required) - Template for generating the user message
-- `arguments` (array, required) - Arguments accepted by this prompt
-  - `name` (string, required) - Name of the argument
-  - `description` (string, optional) - Description of the argument
-  - `required` (boolean, required) - Whether this argument is required
-- `isChain` (boolean, optional) - Whether this prompt is a chain of prompts
-- `chainSteps` (array, optional) - Steps in the chain if this is a chain prompt
-  - `promptId` (string, required) - ID of the prompt to execute in this step
-  - `stepName` (string, required) - Name of this step
-  - `inputMapping` (object, optional) - Maps chain inputs to this step's inputs
-  - `outputMapping` (object, optional) - Maps this step's outputs to chain outputs
+```bash
+# Framework affects template creation and execution
+system_control list_frameworks                 # See available frameworks
+system_control switch_framework framework="ReACT" reason="Problem-solving focus"
 
-### Creating a Chain Prompt
+# Templates created after switching inherit framework
+prompt_manager create_template name="Problem Solver" category="analysis"
 
-Chain prompts allow you to create a sequence of prompts that are executed in order. Each step in the chain can use the outputs of previous steps as inputs.
-
-```javascript
-// Example: Creating a chain prompt
-const response = await fetch(
-  "http://localhost:9090/api/v1/tools/update_prompt",
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      id: "my_chain_prompt",
-      name: "My Chain Prompt",
-      category: "my_category",
-      description: "A chain prompt that processes data in multiple steps",
-      userMessageTemplate: "Process the following data: {{data}}",
-      arguments: [
-        {
-          name: "data",
-          description: "The data to process",
-          required: true,
-        },
-      ],
-      isChain: true,
-      chainSteps: [
-        {
-          promptId: "step1_prompt",
-          stepName: "Step 1: Analyze Data",
-          inputMapping: {
-            input_data: "data",
-          },
-          outputMapping: {
-            analysis_result: "step1_result",
-          },
-        },
-        {
-          promptId: "step2_prompt",
-          stepName: "Step 2: Generate Recommendations",
-          inputMapping: {
-            analysis: "step1_result",
-          },
-          outputMapping: {
-            recommendations: "final_recommendations",
-          },
-        },
-      ],
-    }),
-  }
-);
-
-const result = await response.json();
-console.log(result);
+# Execute with framework enhancement
+prompt_engine >>problem_solver issue="complex problem" execution_mode="template"
 ```
 
-## File Structure
+### Performance Monitoring
 
-When you create a prompt using the `update_prompt` tool, the following happens:
+```bash
+# Monitor prompt management operations
+system_control analytics include_history=true
+# Shows: prompt creation stats, execution statistics, framework usage
 
-1. A new entry is added to the appropriate category's prompts.json file
-2. A new markdown file is created in the corresponding category directory (e.g., `prompts/my_category/my_prompt.md`)
+# Check system health
+system_control health
+# Includes: prompt loading status, template processing health, framework integration
+```
 
-The markdown file follows this structure:
+## File Management
+
+### Automatic File Operations
+
+When using `prompt_manager`, the system automatically:
+
+1. **Creates .md files** in appropriate category directories
+2. **Updates prompts.json** in category folders
+3. **Maintains file consistency** across configuration and files
+4. **Triggers hot-reload** to refresh the system
+
+### File Structure
+
+```
+prompts/
+├── analysis/
+│   ├── prompts.json          # Category prompt registry
+│   ├── content_analysis.md   # Individual prompt templates
+│   └── research_workflow.md
+├── development/
+│   ├── prompts.json
+│   ├── code_review.md
+│   └── debugging_guide.md
+└── promptsConfig.json        # Main configuration
+```
+
+### Generated .md File Structure
 
 ```markdown
 # Prompt Name
 
 ## Description
 
-Prompt description
+Prompt description explaining purpose and usage
 
 ## System Message
 
-System message content
+Optional system message for framework enhancement
 
 ## User Message Template
 
-User message template content
+Template content with {{variables}} and Nunjucks logic
 
-## Chain Steps (only for chain prompts)
+## Arguments
 
-1. promptId: prompt_id
-   stepName: Step Name
-   inputMapping:
-   chain_input: step_input
-   outputMapping:
-   step_output: chain_output
+- name: Description (required/optional)
+- focus: Analysis focus area (optional)
+
+## Chain Steps (for chain prompts)
+
+1. Step 1: Data Collection
+2. Step 2: Analysis
+3. Step 3: Recommendations
 ```
 
-## Error Handling
+## Troubleshooting
 
-Both tools return a JSON response with the following structure:
+### Common Issues
 
-- Success:
+#### Tool Not Found Errors
 
-  ```json
-  {
-    "content": [
-      {
-        "type": "text",
-        "text": "Success message"
-      }
-    ]
-  }
-  ```
+- **Issue**: `create_category tool not found`
+- **Solution**: Use `prompt_manager` with action: `prompt_manager create_category`
 
-- Error:
-  ```json
-  {
-    "content": [
-      {
-        "type": "text",
-        "text": "Error message"
-      }
-    ],
-    "isError": true
-  }
-  ```
+#### Legacy Tool References
+
+- **Issue**: Documentation mentions `update_prompt` standalone tool
+- **Solution**: Use consolidated tool: `prompt_manager update id="..." content="..."`
+
+#### HTTP API Errors
+
+- **Issue**: HTTP fetch examples don't work
+- **Solution**: MCP server uses MCP protocol only - use MCP-compatible clients
+
+#### Framework Integration Issues
+
+- **Issue**: Templates not getting framework enhancement
+- **Solution**: Verify active framework with `system_control status` and use `create_template` action
+
+### Debug Commands
+
+```bash
+# Check system health including prompt loading
+system_control health
+
+# Verify prompt registration
+prompt_manager list
+
+# Check framework integration
+system_control status
+
+# View comprehensive diagnostics
+system_control diagnostics
+```
+
+## Best Practices
+
+### Prompt Type Selection
+
+- **Basic Prompts**: Use `create_prompt` for simple variable substitution (fastest)
+- **Framework Templates**: Use `create_template` for analysis, reasoning, complex tasks
+- **Chains**: Provide `chain_steps` array for multi-step workflows - chain status detected automatically
+
+### Framework Integration
+
+- Switch to appropriate framework before creating templates
+- Use `analyze_type` to get recommendations for existing prompts
+- Use `migrate_type` to upgrade prompts for framework enhancement
+
+### Organization
+
+- Group related prompts into logical categories
+- Use descriptive names and comprehensive descriptions
+- Leverage Nunjucks for maintainable, reusable templates
+- Test prompts with various argument combinations
+
+### Performance Optimization
+
+- Use basic prompts for simple operations (bypasses framework overhead)
+- Use templates when methodology enhancement adds value
+- Monitor performance with `system_control analytics`
+- Consider prompt complexity vs. execution speed trade-offs
+
+## Advanced Workflows
+
+### Template Development Workflow
+
+```bash
+# 1. Analyze requirements
+prompt_manager analyze_type id="existing_prompt"  # If converting existing
+
+# 2. Set appropriate framework
+system_control switch_framework framework="CAGEERF"
+
+# 3. Create framework-enhanced template
+prompt_manager create_template name="Advanced Analysis" category="research"
+
+# 4. Test execution with gates
+prompt_engine >>advanced_analysis input="test data" gate_validation=true
+
+# 5. Monitor performance
+system_control analytics
+```
+
+### Chain Development Workflow
+
+```bash
+# 1. Create individual step prompts
+prompt_manager create_template name="collect_data" category="research"
+prompt_manager create_template name="analyze_data" category="research"
+prompt_manager create_template name="generate_insights" category="research"
+
+# 2. Create chain prompt linking steps
+prompt_manager create_template name="research_pipeline" category="research" \
+  chain_steps='[{"promptId":"collect_data","stepName":"Collection"}, {"promptId":"analyze_data","stepName":"Analysis"}]'
+
+# 3. Execute complete chain with LLM coordination (requires semantic LLM integration)
+prompt_engine >>research_pipeline topic="market analysis" llm_driven_execution=true
+
+# 4. Monitor chain execution
+system_control status  # Check execution state
+```
+
+## Migration from Legacy Tools
+
+If you have references to old tool names:
+
+| Legacy Tool             | Consolidated Usage                  |
+| ----------------------- | ----------------------------------- |
+| `create_category`       | `prompt_manager create_category`    |
+| `update_prompt`         | `prompt_manager create` or `update` |
+| `delete_prompt`         | `prompt_manager delete`             |
+| `modify_prompt_section` | `prompt_manager modify`             |
+| `reload_prompts`        | `prompt_manager reload`             |
+| `listprompts`           | `prompt_manager list`               |
+
+**Key Changes:**
+
+- **No HTTP API**: Use MCP protocol through compatible clients
+- **Action-Based**: Single tools with actions instead of separate tools
+- **Enhanced Features**: Type analysis, framework integration, intelligent filtering
+- **Consolidated**: 3 tools instead of 24+ legacy tools
+
+---
+
+The consolidated prompt management system provides sophisticated prompt lifecycle management while maintaining simplicity and performance. The `prompt_manager` tool offers comprehensive capabilities from basic CRUD operations to advanced features like type analysis, framework integration, and intelligent filtering, all within the efficient 3-tool consolidated architecture.

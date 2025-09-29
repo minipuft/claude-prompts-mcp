@@ -62,25 +62,6 @@
       ]
     },
     {
-      "id": "test_analyzer",
-      "name": "Test Analyzer",
-      "category": "analysis",
-      "description": "A test prompt for content analysis with configurable depth",
-      "file": "test_analyzer.md",
-      "arguments": [
-        {
-          "name": "content",
-          "description": "The content to be analyzed",
-          "required": true
-        },
-        {
-          "name": "depth",
-          "description": "The depth of analysis (basic, detailed, or comprehensive)",
-          "required": false
-        }
-      ]
-    },
-    {
       "id": "advanced_analysis_engine",
       "name": "Advanced Analysis Engine",
       "category": "analysis",
@@ -138,12 +119,27 @@
       "id": "notes",
       "name": "Notes",
       "category": "analysis",
-      "description": "A comprehensive analysis chain that processes content through multiple stages: initial content analysis, deep analysis, conversion to a structured markdown notebook, and final refinement.",
+      "description": "Enhanced notes chain that searches the vault for actual related notes instead of generating fictional ones - UPDATED\"",
       "file": "notes.md",
       "arguments": [
         {
           "name": "content",
-          "description": "The content to be processed through the analysis chain",
+          "description": "Source content to analyze",
+          "required": true
+        },
+        {
+          "name": "video_url",
+          "description": "YouTube video URL for visual extraction",
+          "required": false
+        },
+        {
+          "name": "topic",
+          "description": "Main topic/subject",
+          "required": false
+        },
+        {
+          "name": "content_areas",
+          "description": "Key content areas covered",
           "required": false
         }
       ]
@@ -171,15 +167,15 @@
       "arguments": []
     },
     {
-      "id": "intelligent_test",
-      "name": "Intelligent Analysis Test",
+      "id": "deep_research",
+      "name": "Deep Research Framework",
       "category": "analysis",
-      "description": "Test prompt for intelligent semantic analysis without execution headers - should auto-detect as workflow",
-      "file": "intelligent_test.md",
+      "description": "A comprehensive framework for conducting thorough, methodical research on complex topics with academic rigor.",
+      "file": "deep_research.md",
       "arguments": [
         {
-          "name": "data",
-          "description": "The information or content to be analyzed",
+          "name": "topic",
+          "description": "The research topic to investigate comprehensively",
           "required": true
         }
       ]

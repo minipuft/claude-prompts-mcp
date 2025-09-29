@@ -4,6 +4,26 @@ import nunjucks from "nunjucks";
 import path from "path"; // Import path module
 import { fileURLToPath } from "url"; // For ES module __dirname equivalent
 import { PromptData } from "../types.js";
+// JSON escaping utilities (moved here to avoid circular dependency)
+function escapeJsonForNunjucks(jsonStr: string): string {
+  return jsonStr
+    .replace(/\{\{/g, '\\{\\{')  // Escape Nunjucks variable syntax
+    .replace(/\}\}/g, '\\}\\}')  // Escape Nunjucks variable syntax  
+    .replace(/\{%/g, '\\{\\%')   // Escape Nunjucks tag syntax
+    .replace(/%\}/g, '\\%\\}')   // Escape Nunjucks tag syntax
+    .replace(/\{#/g, '\\{\\#')   // Escape Nunjucks comment syntax
+    .replace(/#\}/g, '\\#\\}');  // Escape Nunjucks comment syntax
+}
+
+function unescapeJsonFromNunjucks(escapedStr: string): string {
+  return escapedStr
+    .replace(/\\{\\{/g, '{{')   // Unescape Nunjucks variable syntax
+    .replace(/\\}\\}/g, '}}')   // Unescape Nunjucks variable syntax
+    .replace(/\\{\\%/g, '{%')   // Unescape Nunjucks tag syntax  
+    .replace(/\\%\\}/g, '%}')   // Unescape Nunjucks tag syntax
+    .replace(/\\{\\#/g, '{#')   // Unescape Nunjucks comment syntax
+    .replace(/\\#\\}/g, '#}');  // Unescape Nunjucks comment syntax
+}
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -41,10 +61,10 @@ export function validateJsonArguments(
 ): {
   valid: boolean;
   errors?: string[];
-  sanitizedArgs?: Record<string, any>;
+  sanitizedArgs?: Record<string, string | number | boolean | null | any[]>;
 } {
   const errors: string[] = [];
-  const sanitizedArgs: Record<string, any> = {};
+  const sanitizedArgs: Record<string, string | number | boolean | null | any[]> = {};
 
   // Check for unexpected properties
   const expectedArgNames = prompt.arguments.map((arg) => arg.name);
@@ -105,14 +125,38 @@ export function validateJsonArguments(
  */
 export function processTemplate(
   template: string,
-  args: Record<string, string>,
+  args: Record<string, any>,
   specialContext: Record<string, string> = {}
 ): string {
-  const context = { ...specialContext, ...args };
+  // Pre-escape any string values that might contain Nunjucks syntax
+  const escapedArgs: Record<string, any> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (typeof value === 'string' && (value.includes('{{') || value.includes('{%') || value.includes('{#'))) {
+      escapedArgs[key] = escapeJsonForNunjucks(value);
+    } else {
+      // Pass non-string values (arrays, objects) directly to Nunjucks
+      escapedArgs[key] = value;
+    }
+  }
+
+  const context = { ...specialContext, ...escapedArgs };
 
   try {
     // Use Nunjucks to render the template with the combined context
-    return nunjucksEnv.renderString(template, context);
+    const rendered = nunjucksEnv.renderString(template, context);
+    
+    // Unescape any values that were escaped for Nunjucks
+    let unescapedResult = rendered;
+    for (const [key, value] of Object.entries(escapedArgs)) {
+      if (typeof value === 'string' && value !== args[key]) {
+        // This arg was escaped, so we need to unescape it in the result
+        const originalValue = args[key];
+        const escapedValue = value;
+        unescapedResult = unescapedResult.replace(new RegExp(escapedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), originalValue);
+      }
+    }
+    
+    return unescapedResult;
   } catch (error) {
     // Log the Nunjucks rendering error for debugging purposes.
     // The error will be re-thrown and should be handled by the calling function

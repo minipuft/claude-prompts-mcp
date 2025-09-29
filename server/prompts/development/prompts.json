@@ -27,6 +27,11 @@
           "description": "Any performance/security/quality considerations",
           "required": false
         }
+      ],
+      "gates": [
+        "security-awareness",
+        "code-quality",
+        "technical-accuracy"
       ]
     },
     {
@@ -40,6 +45,290 @@
           "name": "query",
           "description": "The user's initial coding request or problem statement",
           "required": false
+        }
+      ]
+    },
+    {
+      "id": "code_review_optimization_chain",
+      "name": "Code Review & Optimization Chain",
+      "category": "development",
+      "description": "6-step comprehensive code review and optimization workflow chain",
+      "file": "code_review_optimization_chain.md",
+      "arguments": [
+        {
+          "name": "target_code",
+          "description": "The code to be reviewed and optimized",
+          "required": true
+        },
+        {
+          "name": "language_framework",
+          "description": "Programming language and framework being used",
+          "required": true
+        },
+        {
+          "name": "performance_goals",
+          "description": "Specific performance targets or optimization goals",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "project_analysis_step",
+      "name": "Project Analysis for Neural Workbench",
+      "category": "development",
+      "description": "Analyzes project directory to detect type, sophistication level, and characteristics for neural workbench initialization",
+      "file": "project_analysis_step.md",
+      "arguments": [
+        {
+          "name": "project_path",
+          "description": "Path to the project directory",
+          "required": true
+        },
+        {
+          "name": "project_name",
+          "description": "Override project name",
+          "required": false
+        },
+        {
+          "name": "force_project_type",
+          "description": "Force specific project type",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "detect_project_commands",
+      "name": "Project Commands Detection",
+      "category": "development",
+      "description": "Intelligently detects and configures project validation commands (lint, test, build) for different project types with Enhanced CAGEERF integration",
+      "file": "detect_project_commands.md",
+      "arguments": [
+        {
+          "name": "project_path",
+          "description": "Path to the project directory",
+          "required": true
+        },
+        {
+          "name": "project_type",
+          "description": "Type of project (nodejs, rust, python, go, etc.)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "generate_comprehensive_claude_md",
+      "name": "Comprehensive CLAUDE.md Generator",
+      "category": "development",
+      "description": "Generates comprehensive CLAUDE.md files with all 6 development criteria, Enhanced CAGEERF integration, and project-specific configurations",
+      "file": "generate_comprehensive_claude_md.md",
+      "arguments": [
+        {
+          "name": "project_path",
+          "description": "Path to the project directory",
+          "required": true
+        },
+        {
+          "name": "project_name",
+          "description": "Name of the project",
+          "required": true
+        },
+        {
+          "name": "project_type",
+          "description": "Type of project",
+          "required": true
+        },
+        {
+          "name": "architecture_level",
+          "description": "Architecture sophistication level 1-10",
+          "required": true
+        },
+        {
+          "name": "project_commands",
+          "description": "JSON object with detected project commands",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "initialize_context_memory",
+      "name": "Context Memory System Initialization",
+      "category": "development",
+      "description": "Initializes the context memory system with working, episodic, semantic, and procedural memory files, plus neural workbench integration",
+      "file": "initialize_context_memory.md",
+      "arguments": [
+        {
+          "name": "project_path",
+          "description": "Path to the project directory",
+          "required": true
+        },
+        {
+          "name": "project_name",
+          "description": "Name of the project",
+          "required": true
+        },
+        {
+          "name": "project_type",
+          "description": "Type of project",
+          "required": true
+        },
+        {
+          "name": "architecture_level",
+          "description": "Architecture sophistication level 1-10",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "validation_summary",
+      "name": "Neural Workbench Validation Summary",
+      "category": "development",
+      "description": "Validate neural workbench setup and provide comprehensive status report",
+      "file": "validation_summary.md",
+      "arguments": [
+        {
+          "name": "project_path",
+          "description": "Path to validate",
+          "required": true
+        },
+        {
+          "name": "generated_claude_md",
+          "description": "Status of CLAUDE.md generation",
+          "required": false
+        },
+        {
+          "name": "context_memory_setup",
+          "description": "Status of context memory",
+          "required": false
+        },
+        {
+          "name": "validation_setup",
+          "description": "Status of validation configuration",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "neural_workbench_init",
+      "name": "Neural Workbench Initialization",
+      "category": "development",
+      "description": "Initialize a project with neural workbench cognitive architecture and CAGEERF framework",
+      "file": "neural_workbench_init.md",
+      "arguments": [
+        {
+          "name": "project_path",
+          "description": "Path to the project to initialize",
+          "required": true
+        },
+        {
+          "name": "force_project_type",
+          "description": "Override auto-detection with specific type",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "split_file_chain",
+      "name": "Split File Chain",
+      "category": "development",
+      "description": "A systematic approach to refactoring large files into smaller, more maintainable modules following best practices for code organization and modular design.",
+      "file": "split_file_chain.md",
+      "arguments": [
+        {
+          "name": "file_content",
+          "description": "The content of the file to be split",
+          "required": true
+        },
+        {
+          "name": "language",
+          "description": "Programming language of the file",
+          "required": true
+        },
+        {
+          "name": "file_path",
+          "description": "Path to the original file",
+          "required": true
+        },
+        {
+          "name": "specific_focus",
+          "description": "Specific areas to focus on during refactoring",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "analyze_file_structure",
+      "name": "Analyze File Structure",
+      "category": "development",
+      "description": "Analyzes a file's structure to identify potential modules, dependencies, and organization patterns for refactoring.",
+      "file": "analyze_file_structure.md",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "The source code to analyze",
+          "required": true
+        },
+        {
+          "name": "language",
+          "description": "Programming language of the code",
+          "required": true
+        },
+        {
+          "name": "file_path",
+          "description": "Path to the file being analyzed",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "create_modularization_plan",
+      "name": "Create Modularization Plan",
+      "category": "development",
+      "description": "Creates a detailed plan for splitting a file into smaller, more maintainable modules based on analysis of its structure and dependencies.",
+      "file": "create_modularization_plan.md",
+      "arguments": [
+        {
+          "name": "language",
+          "description": "Programming language of the code",
+          "required": true
+        },
+        {
+          "name": "file_path",
+          "description": "Path to the file being modularized",
+          "required": true
+        },
+        {
+          "name": "analysis_results",
+          "description": "Results from the file structure analysis",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "transform_code_to_modules",
+      "name": "Transform Code to Modules",
+      "category": "development",
+      "description": "Transforms a large file into multiple smaller module files according to a modularization plan, ensuring proper imports/exports and maintaining functionality.",
+      "file": "transform_code_to_modules.md",
+      "arguments": [
+        {
+          "name": "language",
+          "description": "Programming language of the code",
+          "required": true
+        },
+        {
+          "name": "file_path",
+          "description": "Path to the original file",
+          "required": true
+        },
+        {
+          "name": "original_code",
+          "description": "The original source code to be modularized",
+          "required": true
+        },
+        {
+          "name": "modularization_plan",
+          "description": "The detailed plan for how to split the code",
+          "required": true
         }
       ]
     }

@@ -5,7 +5,9 @@
 
 import path from "path";
 import { Logger } from "../logging/index.js";
-import { ConvertedPrompt, PromptData } from "../types/index.js";
+import type { ConvertedPrompt } from "../execution/types.js";
+import type { PromptData } from "./types.js";
+import { isChainPrompt } from "../utils/chainUtils.js";
 import { PromptLoader } from "./loader.js";
 
 /**
@@ -44,6 +46,9 @@ export class PromptConverter {
           fileBasePath
         );
 
+        // Load chain steps from markdown-embedded format
+        let chainSteps = promptFile.chainSteps || [];
+
         // Create converted prompt structure
         const convertedPrompt: ConvertedPrompt = {
           id: promptData.id,
@@ -57,13 +62,18 @@ export class PromptConverter {
             description: arg.description,
             required: arg.required,
           })),
-          // Include chain information if this is a chain
-          isChain: promptFile.isChain || false,
-          chainSteps: promptFile.chainSteps || [],
+          // Include chain information from markdown-embedded chainSteps
+          chainSteps: chainSteps,
           tools: promptData.tools || false,
           onEmptyInvocation:
             promptData.onEmptyInvocation || "execute_if_possible",
         };
+
+        // NOTE: All chains now use markdown-embedded format
+        // Modular chain system has been removed - chains are defined inline within markdown files
+        if (isChainPrompt(convertedPrompt) && chainSteps.length === 0) {
+          this.logger.debug(`Chain prompt '${convertedPrompt.id}' has no embedded chain steps - will be treated as single prompt`);
+        }
 
         // Validate the onEmptyInvocation field
         if (
@@ -125,14 +135,14 @@ export class PromptConverter {
     }
 
     // Check that either userMessageTemplate exists or it's a valid chain
-    if (!prompt.userMessageTemplate && !prompt.isChain) {
+    if (!prompt.userMessageTemplate && !((prompt.chainSteps?.length || 0) > 0)) {
       errors.push(
         "Either userMessageTemplate must be provided or prompt must be a valid chain"
       );
     }
 
     // Validate chain prompts
-    if (prompt.isChain) {
+    if ((prompt.chainSteps?.length || 0) > 0) {
       if (!prompt.chainSteps || prompt.chainSteps.length === 0) {
         errors.push("Chain prompt must have at least one chain step");
       } else {
@@ -253,7 +263,7 @@ export class PromptConverter {
     regularPrompts: number;
     totalArguments: number;
   } {
-    const chainPrompts = convertedPrompts.filter((p) => p.isChain).length;
+    const chainPrompts = convertedPrompts.filter((p) => isChainPrompt(p)).length;
     const regularPrompts = convertedPrompts.length - chainPrompts;
     const totalArguments = convertedPrompts.reduce(
       (sum, p) => sum + p.arguments.length,

@@ -7,11 +7,16 @@
 export * from "./converter.js";
 export * from "./loader.js";
 export * from "./registry.js";
-export * from "./template-processor.js";
+// Template processor moved to /execution/processor/template-processor.js for better organization
+export * from "./category-manager.js";
+export * from "./file-observer.js";
+export * from "./hot-reload-manager.js";
+// Framework-aware components removed in Phase 3 simplification
 
 import { ConfigManager } from "../config/index.js";
 import { Logger } from "../logging/index.js";
 import { TextReferenceManager } from "../text-references/index.js";
+import path from "path";
 import {
   Category,
   CategoryPromptsResult,
@@ -23,7 +28,9 @@ import {
 import { PromptConverter } from "./converter.js";
 import { PromptLoader } from "./loader.js";
 import { PromptRegistry } from "./registry.js";
-import { TemplateProcessor } from "./template-processor.js";
+// TemplateProcessor functionality consolidated into UnifiedPromptProcessor
+import { HotReloadManager, createHotReloadManager } from "./hot-reload-manager.js";
+// Phase 1: Framework capabilities integrated into enhanced HotReloadManager
 
 /**
  * Main Prompt Manager class that coordinates all prompt operations
@@ -38,34 +45,60 @@ export class PromptManager {
   private converter: PromptConverter;
   private loader: PromptLoader;
   private registry?: PromptRegistry;
-  private templateProcessor: TemplateProcessor;
+  // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
+  private hotReloadManager?: HotReloadManager;
+  // Framework-aware components removed in Phase 3 simplification
 
   constructor(
     logger: Logger,
     textReferenceManager: TextReferenceManager,
     configManager: ConfigManager,
-    mcpServer?: any
+    mcpServer?: any,
+    // Framework parameters removed in Phase 3 simplification
   ) {
     this.logger = logger;
     this.textReferenceManager = textReferenceManager;
     this.configManager = configManager;
     this.mcpServer = mcpServer;
+    // Framework initialization removed in Phase 3 simplification
 
     // Initialize individual modules
     this.loader = new PromptLoader(logger);
-    this.templateProcessor = new TemplateProcessor(
-      logger,
-      textReferenceManager
-    );
+    // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
     this.converter = new PromptConverter(logger, this.loader);
 
     if (mcpServer) {
       this.registry = new PromptRegistry(
         logger,
         mcpServer,
-        configManager,
-        this.templateProcessor
+        configManager
       );
+      
+      // Initialize HotReloadManager with CategoryManager integration
+      const categoryManager = this.loader.getCategoryManager();
+      
+      // Phase 1: Enhanced HotReloadManager with framework capabilities
+      this.hotReloadManager = createHotReloadManager(
+        logger,
+        categoryManager,
+        {
+          enabled: true,
+          autoReload: false, // Will be controlled by external triggers
+          debounceMs: 500,
+          batchChanges: true,
+          batchTimeoutMs: 2000,
+          frameworkCapabilities: {
+            enabled: true,
+            frameworkAnalysis: true,
+            performanceMonitoring: true,
+            preWarmAnalysis: true,
+            invalidateFrameworkCaches: true
+          }
+        },
+        this.configManager
+      );
+      
+      this.logger.info('🔄 Hot reload manager initialized');
     }
   }
 
@@ -88,22 +121,8 @@ export class PromptManager {
     return this.converter.convertMarkdownPromptsToJson(promptsData, basePath);
   }
 
-  /**
-   * Process template with text references and special context
-   */
-  async processTemplateAsync(
-    template: string,
-    args: Record<string, string>,
-    specialContext: Record<string, string> = {},
-    toolsEnabled: boolean = false
-  ): Promise<string> {
-    return this.templateProcessor.processTemplateAsync(
-      template,
-      args,
-      specialContext,
-      toolsEnabled
-    );
-  }
+  // Removed: processTemplateAsync - deprecated method no longer needed
+  // Template processing now handled directly using processTemplate from utils/jsonUtils.js
 
   /**
    * Register prompts with MCP server
@@ -113,6 +132,16 @@ export class PromptManager {
       throw new Error("MCP server not provided - cannot register prompts");
     }
     return this.registry.registerAllPrompts(prompts);
+  }
+
+  /**
+   * Notify clients that prompt list has changed (for hot-reload)
+   */
+  async notifyPromptsListChanged(): Promise<void> {
+    if (!this.registry) {
+      throw new Error("MCP server not provided - cannot send notifications");
+    }
+    await this.registry.notifyPromptsListChanged();
   }
 
   /**
@@ -262,14 +291,96 @@ export class PromptManager {
   }> {
     this.logger.info("Reloading prompt system...");
 
-    // Unregister existing prompts if registry is available
-    if (this.registry) {
-      await this.registry.unregisterAllPrompts();
-    }
+    // Note: MCP protocol doesn't support unregistering prompts
+    // Hot-reload will be handled via list_changed notifications
 
     // Reinitialize the system
     return this.initializePromptSystem(configPath, basePath);
   }
+
+  /**
+   * Start automatic file watching for hot reload
+   */
+  async startHotReload(promptsConfigPath: string, onReloadCallback?: () => Promise<void>): Promise<void> {
+    if (!this.hotReloadManager) {
+      this.logger.warn("HotReloadManager not available - hot reload not started");
+      return;
+    }
+
+    // Set up reload callback
+    if (onReloadCallback) {
+      this.hotReloadManager.setReloadCallback(async (event) => {
+        this.logger.info(`Hot reload triggered: ${event.reason}`);
+        try {
+          await onReloadCallback();
+        } catch (error) {
+          this.logger.error("Hot reload callback failed:", error);
+        }
+      });
+    }
+
+    // Start monitoring
+    await this.hotReloadManager.start();
+
+    // Watch prompts directory and config files
+    const promptsDir = path.dirname(promptsConfigPath);
+    const promptsCategoryDirs = await this.discoverPromptDirectories(promptsDir);
+
+    await this.hotReloadManager.watchDirectories([
+      { path: promptsDir }, // Watch main prompts directory
+      ...promptsCategoryDirs.map(dir => ({ path: dir.path, category: dir.category }))
+    ]);
+
+    this.logger.info(`🔄 Hot reload monitoring started for ${promptsCategoryDirs.length + 1} directories`);
+  }
+
+  /**
+   * Stop automatic file watching
+   */
+  async stopHotReload(): Promise<void> {
+    if (this.hotReloadManager) {
+      await this.hotReloadManager.stop();
+      this.logger.info("Hot reload monitoring stopped");
+    }
+  }
+
+  /**
+   * Discover prompt directories for watching
+   */
+  private async discoverPromptDirectories(promptsDir: string): Promise<Array<{ path: string; category?: string }>> {
+    const directories: Array<{ path: string; category?: string }> = [];
+
+    try {
+      const fs = await import("fs/promises");
+      const entries = await fs.readdir(promptsDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.')) {
+          const fullPath = path.join(promptsDir, entry.name);
+          
+          // Check if this directory contains prompts.json (indicating it's a category directory)
+          try {
+            const categoryPromptsPath = path.join(fullPath, 'prompts.json');
+            await fs.access(categoryPromptsPath);
+            directories.push({ path: fullPath, category: entry.name });
+          } catch {
+            // Directory doesn't have prompts.json, but still watch it
+            directories.push({ path: fullPath });
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.error("Failed to discover prompt directories:", error);
+    }
+
+    return directories;
+  }
+
+  // Phase 1: Framework capabilities integrated into enhanced HotReloadManager
+
+  // Framework-specific reload functionality removed in Phase 3 simplification
+
+  // Framework statistics functionality removed in Phase 3 simplification
 
   /**
    * Get all individual module instances for external access
@@ -279,8 +390,19 @@ export class PromptManager {
       converter: this.converter,
       loader: this.loader,
       registry: this.registry,
-      templateProcessor: this.templateProcessor,
+      // templateProcessor: removed - functionality consolidated into UnifiedPromptProcessor
+      categoryManager: this.loader.getCategoryManager(),
+      hotReloadManager: this.hotReloadManager,
+      // Framework-aware modules removed in Phase 3 simplification
     };
+  }
+
+  /**
+   * Get TextReferenceManager for direct access
+   * Added for UnifiedPromptProcessor consolidation
+   */
+  getTextReferenceManager(): TextReferenceManager {
+    return this.textReferenceManager;
   }
 
   /**

@@ -13,7 +13,7 @@ Please be respectful and considerate of others when contributing to this project
 3. Set up the development environment as described below
 4. Create a new branch for your changes
 
-## Development Workflow
+## Development Process
 
 ### Setting Up the Development Environment
 

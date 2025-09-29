@@ -1,21 +1,12 @@
-# Content Analysis Prompt
-
-**🎯 EXECUTION TYPE**: Workflow Template  
-**⚡ EXECUTION REQUIRED**: This template outputs analysis instructions that YOU must execute to systematically process the provided content  
-**🔄 AUTO-EXECUTION**: Use `>>execute_prompt {"command": ">>content_analysis [content]", "execution_mode": "workflow"}` for automatic execution with validation  
-**📊 OUTPUT TYPE**: Content analysis workflow with structured breakdown instructions  
-**📋 EXECUTION STEPS**: Apply analysis framework to content, extract insights, create structured output  
-**🔗 CHAIN POSITION**: Standalone analysis (can be used as input for other analysis chains)  
-**🛡️ QUALITY GATES**: Content validation, keyword presence, structured format verification
+# Content Analysis
 
 ## Description
-Systematically analyze web content, breaking it down into key components and insights with structured output.
+Systematically analyze web content, breaking it down into key components.
 
 ## System Message
 You are a content analysis expert. Follow the provided framework to systematically break down and analyze the given content.
 
 ## User Message Template
-
 Perform a comprehensive content analysis of the following material:
 
 {{content}}
@@ -65,4 +56,3 @@ Perform a comprehensive content analysis of the following material:
 - **Related Content**: What other materials would complement this?
 
 **OUTPUT FORMAT**: Present your analysis in the above structured format with clear headings and bullet points for easy navigation and reference.
-

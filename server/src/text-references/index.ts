@@ -13,6 +13,13 @@ export class TextReferenceManager {
   private store: TextReferenceStore;
   private logger: Logger;
 
+  // Chain step results storage - single source of truth for step content
+  private chainStepResults: Record<string, Record<number, {
+    content: string;
+    timestamp: number;
+    metadata?: any;
+  }>> = {};
+
   constructor(
     logger: Logger,
     maxAge: number = 24 * 60 * 60 * 1000,
@@ -156,7 +163,8 @@ export class TextReferenceManager {
    */
   clearAllReferences(): void {
     this.store.references = [];
-    this.logger.info("Cleared all text references");
+    this.chainStepResults = {};
+    this.logger.info("Cleared all text references and chain step results");
   }
 
   /**
@@ -174,6 +182,114 @@ export class TextReferenceManager {
     this.logger.info(
       `Updated text reference limits: maxAge=${maxAge}ms, maxSize=${maxSize}`
     );
+  }
+
+  // ===== CHAIN STEP MANAGEMENT METHODS =====
+  // Single source of truth for chain step content storage
+
+  /**
+   * Store a chain step result
+   */
+  storeChainStepResult(chainId: string, stepNumber: number, content: string, metadata?: any): void {
+    if (!this.chainStepResults[chainId]) {
+      this.chainStepResults[chainId] = {};
+    }
+
+    this.chainStepResults[chainId][stepNumber] = {
+      content,
+      timestamp: Date.now(),
+      metadata
+    };
+
+    this.logger.debug(`Stored step ${stepNumber} result for chain ${chainId} (${content.length} chars)`);
+  }
+
+  /**
+   * Get all step results for a specific chain
+   */
+  getChainStepResults(chainId: string): Record<number, string> {
+    const chainResults = this.chainStepResults[chainId] || {};
+    const results: Record<number, string> = {};
+
+    Object.entries(chainResults).forEach(([stepNum, stepData]) => {
+      results[parseInt(stepNum)] = stepData.content;
+    });
+
+    return results;
+  }
+
+  /**
+   * Get a specific step result
+   */
+  getChainStepResult(chainId: string, stepNumber: number): string | null {
+    const stepData = this.chainStepResults[chainId]?.[stepNumber];
+    return stepData ? stepData.content : null;
+  }
+
+  /**
+   * Build template variables for chain step interpolation
+   * Creates variables like {{step1_result}}, {{step2_result}}, etc.
+   */
+  buildChainVariables(chainId: string): Record<string, any> {
+    const stepResults = this.getChainStepResults(chainId);
+    const variables: Record<string, any> = {};
+
+    // Build step-specific variables
+    Object.entries(stepResults).forEach(([stepNum, content]) => {
+      const stepNumber = parseInt(stepNum);
+      variables[`step${stepNumber + 1}_result`] = content; // 1-based naming for user-friendliness
+      variables[`previous_step_result`] = content; // Always contains the latest result
+    });
+
+    // Add chain metadata
+    variables[`chain_id`] = chainId;
+    variables[`step_results`] = stepResults; // Raw step results for advanced access
+
+    return variables;
+  }
+
+  /**
+   * Get chain step metadata
+   */
+  getChainStepMetadata(chainId: string, stepNumber: number): any | null {
+    return this.chainStepResults[chainId]?.[stepNumber]?.metadata || null;
+  }
+
+  /**
+   * Clear all step results for a specific chain
+   */
+  clearChainStepResults(chainId: string): void {
+    delete this.chainStepResults[chainId];
+    this.logger.debug(`Cleared all step results for chain ${chainId}`);
+  }
+
+  /**
+   * Get statistics about chain step storage
+   */
+  getChainStats(): {
+    totalChains: number;
+    totalSteps: number;
+    chainsWithSteps: string[];
+  } {
+    const chainIds = Object.keys(this.chainStepResults);
+    let totalSteps = 0;
+
+    chainIds.forEach(chainId => {
+      totalSteps += Object.keys(this.chainStepResults[chainId]).length;
+    });
+
+    return {
+      totalChains: chainIds.length,
+      totalSteps,
+      chainsWithSteps: chainIds
+    };
+  }
+
+  /**
+   * Check if a chain has any step results
+   */
+  hasChainStepResults(chainId: string): boolean {
+    return !!this.chainStepResults[chainId] && Object.keys(this.chainStepResults[chainId]).length > 0;
   }
 }
 

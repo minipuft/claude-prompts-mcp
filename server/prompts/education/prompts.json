@@ -20,37 +20,18 @@
       ]
     },
     {
-      "id": "markdown_notebook",
-      "name": "Markdown Notebook Creator",
+      "id": "vault_integrated_notes",
+      "name": "Vault-Integrated Notes Creator",
       "category": "education",
-      "description": "Develop a comprehensive markdown document for a specific topic, designed for note-taking and in-depth exploration.",
-      "file": "markdown_notebook.md",
+      "description": "Create comprehensive notes that search the vault for real related notes instead of generating fictional ones",
+      "file": "vault_integrated_notes.md",
       "arguments": [
         {
-          "name": "notebook_topic",
-          "description": "The topic to create a notebook about",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "video_study_guide",
-      "name": "Video Study Guide Creator",
-      "category": "education",
-      "description": "Create a comprehensive, structured study guide for educational videos that helps viewers follow along and retain information more effectively.",
-      "file": "video_study_guide.md",
-      "arguments": [
-        {
-          "name": "video_title",
-          "description": "The title of the video",
-          "required": false
-        },
-        {
-          "name": "transcript",
-          "description": "The transcript of the video content",
-          "required": false
+          "name": "topic",
+          "description": "The topic to create comprehensive vault-integrated notes about",
+          "required": true
         }
       ]
     }
   ]
-} 
+}

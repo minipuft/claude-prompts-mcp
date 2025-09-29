@@ -1,6 +1,6 @@
 # Installation and Setup Guide
 
-This guide will walk you through the process of installing and setting up the Claude Custom Prompts server and admin UI.
+This guide will walk you through the process of installing and setting up the Claude Custom Prompts server.
 
 ## Prerequisites
 
@@ -33,15 +33,11 @@ Alternatively, you can download the source code as a ZIP file and extract it.
 
 ### Install Dependencies
 
-Once you have the source code, install the dependencies for both the server and admin UI:
+Once you have the source code, install the dependencies for both the server:
 
 ```bash
 # Install server dependencies
 cd server
-npm install
-
-# Install admin UI dependencies
-cd ../admin-ui
 npm install
 ```
 
@@ -59,13 +55,10 @@ The server configuration is stored in `server/config.json`. You can modify this 
     "port": 9090
   },
   "prompts": {
-    "file": "promptsConfig.json",
-    "registrationMode": "name"
+    "file": "promptsConfig.json"
   },
   "transports": {
-    "default": "stdio",
-    "sse": { "enabled": false },
-    "stdio": { "enabled": true }
+    "default": "stdio"
   },
   "logging": {
     "directory": "./logs",
@@ -78,10 +71,7 @@ Key configuration options:
 
 - **server.port**: The port on which the server will run (default: 9090)
 - **prompts.file**: The main prompts configuration file (default: promptsConfig.json)
-- **prompts.registrationMode**: How prompts are registered with the MCP server (options: id, name, both)
 - **transports.default**: The default transport to use (options: stdio, sse)
-- **transports.stdio.enabled**: Whether the stdio transport is enabled
-- **transports.sse.enabled**: Whether the SSE transport is enabled
 - **logging.directory**: The directory where logs will be stored (default: ./logs)
 - **logging.level**: The logging level (options: debug, info, warn, error)
 
@@ -112,111 +102,9 @@ The prompts configuration is distributed across multiple files:
 }
 ```
 
-For more details on managing prompts, see the [Prompt Management](prompt-management.md) documentation.
-
-### Admin UI Configuration
-
-The admin UI configuration is stored in environment files:
-
-- `.env.development`: Configuration for development environment
-- `.env.production`: Configuration for production environment
-
-The main configuration option is the API URL:
-
-```
-REACT_APP_API_URL=http://localhost:9090
-```
-
-Update this URL to match your server's address and port.
-
-## Building the Application
-
-### Build the Server
-
-```bash
-cd server
-npm run build
-```
-
-### Build the Admin UI
-
-```bash
-cd admin-ui
-npm run build
-```
-
-## Running the Application
-
-### Start the Server
-
-```bash
-cd server
-npm start
-```
-
-By default, the server will run on port 9090 (or the port specified in your config.json).
-
-### Start the Admin UI (Development Mode)
-
-```bash
-cd admin-ui
-npm start
-```
-
-This will start the admin UI in development mode, typically on port 3000.
-
-### Start the Admin UI (Production Mode)
-
-For production, you'll need to serve the built files using a static file server:
-
-```bash
-# Install a static file server if you don't have one
-npm install -g serve
-
-# Serve the built files
-cd admin-ui/build
-serve -s
-```
-
-## Verifying the Installation
-
-1. Open a web browser and navigate to `http://localhost:9090/status` to verify that the server is running.
-2. Navigate to `http://localhost:3000` (or your configured admin UI URL) to access the admin interface.
-
 ## Creating Your First Prompt
 
-1. Log in to the admin UI.
-2. Navigate to the "Categories" section and create a new category.
-3. Navigate to the "Prompts" section and click "Create".
-4. Fill in the prompt details:
-   - ID: A unique identifier for the prompt
-   - Name: A descriptive name
-   - Category: Select the category you created
-   - Description: A brief description of what the prompt does
-   - System Message: Instructions for Claude's behavior (optional)
-   - User Message Template: The template for the user message with placeholders
-   - Arguments: Define the arguments used in the template
-5. Click "Save" to create the prompt.
-
-## Troubleshooting
-
-### Server Won't Start
-
-- Check if the port is already in use by another application.
-- Verify that you have the correct Node.js version installed.
-- Check the server logs in the configured logging directory.
-
-### Admin UI Can't Connect to Server
-
-- Verify that the server is running.
-- Check that the API URL in the environment file is correct.
-- Ensure there are no CORS issues by checking the browser console.
-
 ### Prompt Execution Fails
-
-- Verify that the prompt ID is correct.
-- Check that all required arguments are provided.
-- Look for error messages in the server logs.
 
 ## Updating the Application
 
@@ -227,27 +115,23 @@ To update the application to a newer version:
    ```bash
    cd server
    npm install
-   cd ../admin-ui
-   npm install
    ```
 3. Rebuild the application:
    ```bash
    cd server
    npm run build
-   cd ../admin-ui
-   npm run build
    ```
-4. Restart the server and admin UI.
+4. Restart the server.
 
 ## Backup and Restore
 
 ### Backing Up Prompts
 
-The prompts are stored in the `prompts.json` file in the server directory. To back up your prompts, simply copy this file to a safe location.
+The prompts are stored in the `/prompts' folder in the server directory. To back up your prompts, simply copy this folder to a safe location.
 
 ### Restoring Prompts
 
-To restore prompts from a backup, replace the `prompts.json` file with your backup copy and restart the server.
+To restore prompts from a backup, drop in your copy of the '/prompts' directory and restart the server.
 
 ## Advanced Configuration
 
@@ -263,14 +147,6 @@ You can customize the logging behavior by modifying the logging section in `conf
   "maxSize": "10m"
 }
 ```
-
-### CORS Configuration
-
-If you're running the admin UI and server on different domains, you may need to configure CORS. This is handled automatically by the server, but you can modify the CORS settings in the server code if needed.
-
-### Running Behind a Proxy
-
-If you're running the application behind a proxy (like Nginx or Apache), ensure that the proxy is configured to forward requests correctly to the server and admin UI.
 
 ## Security Considerations
 
@@ -288,16 +164,9 @@ If you encounter issues or have questions:
 
 ## Next Steps
 
-Now that you have the Claude Custom Prompts server and admin UI up and running, you can:
+Now that you have the Claude Custom Prompts server up and running, you can:
 
 1. Create more prompts and categories.
-2. Experiment with chain prompts for complex workflows.
+2. Experiment with chain prompts for complex processes.
 3. Integrate the API with your applications.
 4. Contribute to the project by reporting issues or submitting pull requests.
-
-Refer to the other documentation files for more detailed information on specific topics:
-
-- [Prompt Format Guide](prompt-format-guide.md)
-- [Chain Execution Guide](chain-execution-guide.md)
-- [API Endpoints Reference](api-endpoints-reference.md)
-- [Index.ts Reference](index-ts-reference.md)

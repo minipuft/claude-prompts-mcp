@@ -1,0 +1,209 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_ENV: test
+
+jobs:
+  validate:
+    name: Build and Core Validation
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        node-version: [18]
+      fail-fast: false
+    
+    defaults:
+      run:
+        shell: bash
+    
+    steps:
+      - name: Detect Platform Environment
+        id: platform
+        shell: bash
+        run: |
+          if [ "$ACT" = "true" ]; then
+            echo "environment=act" >> $GITHUB_OUTPUT
+            echo "🎭 Running in ACT (local testing environment)"
+          else
+            echo "environment=github" >> $GITHUB_OUTPUT
+            echo "🚀 Running in GitHub Actions"  
+          fi
+          echo "os=${{ matrix.os }}" >> $GITHUB_OUTPUT
+      
+      
+      - name: Checkout repository
+        if: success() || failure()
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js ${{ matrix.node-version }}
+        if: success()
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+      
+      - name: Install dependencies
+        if: success()
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+      
+      - name: TypeScript type checking
+        if: success()
+        working-directory: server  
+        run: npm run typecheck
+      
+      - name: Build project
+        if: success()
+        working-directory: server
+        run: npm run build
+      
+      - name: Run server integration tests
+        if: success()
+        working-directory: server
+        run: npm run test:integration
+        timeout-minutes: 3
+      
+      - name: Validate MCP server startup (Cross-Platform)
+        if: success()
+        working-directory: server
+        env:
+          MCP_SERVER_ROOT: ${{ github.workspace }}/server
+        run: npm run test:ci-startup
+        timeout-minutes: 3
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            server/dist/
+            server/package.json
+            server/package-lock.json
+          retention-days: 7
+
+  enhanced-tests:
+    name: Enhanced Functionality Tests
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: server/
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+      
+      - name: Run all enhanced tests
+        working-directory: server
+        run: npm run test:all-enhanced
+        timeout-minutes: 10
+
+  release-platform-test:
+    name: Cross-Platform Release Validation
+    runs-on: ${{ matrix.os }}
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+        node-version: [18]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Build and basic validation
+        working-directory: server
+        run: |
+          npm run build
+          npm run test:ci-startup
+        timeout-minutes: 5
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: server/
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci --prefer-offline --no-audit
+      
+      - name: Check for sensitive files
+        run: |
+          if find . -name "*.env*" -o -name "*.key" -o -name "*.pem" -o -name "*.p12" | grep -v node_modules | grep -q .; then
+            echo "❌ Sensitive files found in repository"
+            find . -name "*.env*" -o -name "*.key" -o -name "*.pem" -o -name "*.p12" | grep -v node_modules
+            exit 1
+          else
+            echo "✅ No sensitive files found"
+          fi
+      
+      - name: Validate source file consistency
+        working-directory: server
+        run: |
+          # TypeScript projects should not have JS files in src/
+          if find src -name "*.js" | grep -q .; then
+            echo "❌ JavaScript files found in TypeScript source directory"
+            find src -name "*.js"
+            exit 1
+          else
+            echo "✅ Source directory contains only TypeScript files"
+          fi
+      
+      
+      - name: Validate build functionality
+        working-directory: server
+        run: |
+          # Test that the built server can actually start
+          npm run test:ci-startup

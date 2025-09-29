@@ -1,0 +1,42 @@
+{
+  "id": "research-quality",
+  "name": "Research Quality Guidelines",
+  "type": "validation",
+  "description": "Ensures thorough research with proper citations and credible sources",
+  "guidance": "**Research Quality Guidelines:**\n- Cite at least 3 credible sources when making factual claims\n- Include publication dates for time-sensitive information\n- Distinguish between primary and secondary sources\n- Cross-reference facts across multiple sources\n- Provide context for statistical claims\n- Use authoritative sources (academic journals, government data, established news outlets)",
+  "pass_criteria": [
+    {
+      "type": "content_check",
+      "min_length": 300,
+      "required_patterns": [
+        "according to",
+        "source",
+        "published",
+        "research",
+        "study"
+      ]
+    },
+    {
+      "type": "pattern_check",
+      "keyword_count": {
+        "according to": 1,
+        "source": 2
+      }
+    },
+    {
+      "type": "llm_self_check",
+      "prompt_template": "research_self_validation",
+      "pass_threshold": 0.75
+    }
+  ],
+  "retry_config": {
+    "max_attempts": 3,
+    "improvement_hints": true,
+    "preserve_context": true
+  },
+  "activation": {
+    "prompt_categories": ["research", "analysis"],
+    "explicit_request": true,
+    "framework_context": ["CAGEERF", "ReACT"]
+  }
+}

@@ -6,6 +6,30 @@
 // Re-export existing utilities
 export * from "./errorHandling.js";
 export * from "./jsonUtils.js";
+export * from "./chainUtils.js";
+
+// Re-export framework system from new locations (maintaining backward compatibility)
+export * from "../frameworks/index.js";
+
+// Re-export gate system from new locations (maintaining backward compatibility)
+// Note: Selective export to avoid ValidationResult conflicts
+export {
+  GateLoader,
+  createGateLoader,
+  GateValidator,
+  createGateValidator,
+  LightweightGateSystem,
+  createLightweightGateSystem
+} from "../gates/index.js";
+export type {
+  LightweightGateDefinition,
+  GatePassCriteria,
+  ValidationCheck,
+  ValidationContext,
+  GateActivationResult
+} from "../gates/index.js";
+
+// Template system removed - functionality moved to methodology guides
 
 // Additional utilities extracted from index.ts
 
@@ -126,6 +150,58 @@ export function isValidJson(str: string): boolean {
 }
 
 /**
+ * Escape JSON string for safe processing through Nunjucks templates
+ * Replaces problematic characters that Nunjucks might interpret as template syntax
+ */
+export function escapeJsonForNunjucks(jsonStr: string): string {
+  return jsonStr
+    .replace(/\{\{/g, '\\{\\{')  // Escape Nunjucks variable syntax
+    .replace(/\}\}/g, '\\}\\}')  // Escape Nunjucks variable syntax  
+    .replace(/\{%/g, '\\{\\%')   // Escape Nunjucks tag syntax
+    .replace(/%\}/g, '\\%\\}')   // Escape Nunjucks tag syntax
+    .replace(/\{#/g, '\\{\\#')   // Escape Nunjucks comment syntax
+    .replace(/#\}/g, '\\#\\}');  // Escape Nunjucks comment syntax
+}
+
+/**
+ * Unescape JSON string after Nunjucks processing
+ * Reverses the escaping applied by escapeJsonForNunjucks
+ */
+export function unescapeJsonFromNunjucks(escapedStr: string): string {
+  return escapedStr
+    .replace(/\\{\\{/g, '{{')     // Restore Nunjucks variable syntax
+    .replace(/\\}\\}/g, '}}')     // Restore Nunjucks variable syntax
+    .replace(/\\{\\%/g, '{%')     // Restore Nunjucks tag syntax  
+    .replace(/\\%\\}/g, '%}')     // Restore Nunjucks tag syntax
+    .replace(/\\{\\#/g, '{#')     // Restore Nunjucks comment syntax
+    .replace(/\\#\\}/g, '#}');    // Restore Nunjucks comment syntax
+}
+
+/**
+ * Safely parse JSON with Nunjucks compatibility
+ * Attempts to parse JSON, applying escaping if necessary
+ */
+export function safeJsonParse(jsonStr: string): { success: boolean; data?: any; error?: string } {
+  try {
+    // First try direct parsing
+    const data = JSON.parse(jsonStr);
+    return { success: true, data };
+  } catch (directError) {
+    try {
+      // If direct parsing fails, try with unescaping
+      const unescaped = unescapeJsonFromNunjucks(jsonStr);
+      const data = JSON.parse(unescaped);
+      return { success: true, data };
+    } catch (unescapeError) {
+      return { 
+        success: false, 
+        error: `JSON parsing failed: ${directError instanceof Error ? directError.message : String(directError)}` 
+      };
+    }
+  }
+}
+
+/**
  * Truncate text to a maximum length
  */
 export function truncateText(
@@ -183,4 +259,42 @@ export function parseArgs(args: string[]): Record<string, string> {
   }
 
   return parsed;
+}
+
+/**
+ * Mock logger for testing purposes
+ */
+export class MockLogger {
+  info(message: string, ...args: any[]): void {
+    console.log(`[INFO] ${message}`, ...args);
+  }
+
+  error(message: string, ...args: any[]): void {
+    console.error(`[ERROR] ${message}`, ...args);
+  }
+
+  warn(message: string, ...args: any[]): void {
+    console.warn(`[WARN] ${message}`, ...args);
+  }
+
+  debug(message: string, ...args: any[]): void {
+    console.log(`[DEBUG] ${message}`, ...args);
+  }
+
+  setTransport(_transport: string): void {
+    // Mock implementation - no-op
+  }
+
+  setDebugEnabled(_enabled: boolean): void {
+    // Mock implementation - no-op
+  }
+
+  logStartupInfo(transport: string, config: any): void {
+    this.info(`Mock startup - Transport: ${transport}`);
+    this.debug("Mock config:", JSON.stringify(config, null, 2));
+  }
+
+  logMemoryUsage(): void {
+    this.info(`Mock memory usage: ${JSON.stringify(process.memoryUsage())}`);
+  }
 }
