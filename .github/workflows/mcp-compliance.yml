@@ -119,6 +119,7 @@ jobs:
                 console.log('✅ Modules initialized successfully');
                 
                 console.log('🎉 MCP server initialization validation successful!');
+                process.exit(0);
               } catch (error) {
                 console.error('❌ MCP server initialization failed:', error.message);
                 process.exit(1);
@@ -272,10 +273,11 @@ jobs:
               
               console.log('✅ Transport module imported successfully');
               console.log('Available transport types:', Object.keys(transport));
-              
+
               console.log('🎉 MCP transport layer validation successful!');
+              process.exit(0);
             }
-            
+
             validateTransportLayer().catch(error => {
               console.error('❌ Transport layer validation failed:', error.message);
               process.exit(1);
@@ -340,8 +342,9 @@ jobs:
             }
             
             console.log('🎉 MCP message format validation successful!');
+            process.exit(0);
             }
-            
+
             runMessageFormatValidation().catch(error => {
               console.error('❌ Message format validation failed:', error.message);
               process.exit(1);
@@ -397,8 +400,9 @@ jobs:
             
               testErrorHandling();
               console.log('🎉 MCP error handling validation successful!');
+              process.exit(0);
             }
-            
+
             validateErrorHandling().catch(error => {
               console.error('❌ Error handling validation failed:', error.message);
               process.exit(1);
@@ -470,7 +474,15 @@ jobs:
                 console.log('🎉 MCP protocol integration test successful!');
                 console.log('   All components initialized and communicating properly');
                 console.log('   Protocol compliance verified across all layers');
-                
+
+                // Clean shutdown to prevent hanging
+                if (app && typeof app.shutdown === 'function') {
+                  console.log('🔄 Performing clean shutdown...');
+                  await app.shutdown();
+                  console.log('✅ Clean shutdown completed');
+                }
+                process.exit(0);
+
               } catch (error) {
                 console.error('❌ MCP protocol integration test failed:', error.message);
                 console.error('Stack trace:', error.stack);
@@ -540,7 +552,15 @@ jobs:
                 }
                 
                 console.log('✅ MCP performance validation completed');
-                
+
+                // Clean shutdown to prevent hanging
+                if (app && typeof app.shutdown === 'function') {
+                  console.log('🔄 Performing clean shutdown...');
+                  await app.shutdown();
+                  console.log('✅ Clean shutdown completed');
+                }
+                process.exit(0);
+
               } catch (error) {
                 console.error('❌ Performance test failed:', error.message);
                 process.exit(1);
