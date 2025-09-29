@@ -9,6 +9,9 @@ async function runRoutingSystemTests() {
     console.log('🧪 Running Routing System Integration tests...');
     console.log('📋 Testing intelligent command routing and built-in command support');
 
+    // Import global resource tracker for process cleanup
+    const { globalResourceTracker } = await import('../../dist/utils/global-resource-tracker.js');
+
     // Test the routing pattern detection directly (simulating the logic from prompt engine)
     function testRoutingPatterns() {
       const patterns = [
@@ -232,11 +235,25 @@ async function runRoutingSystemTests() {
     console.log(`   ✅ Passed: ${passedTests}/${totalTests} test categories`);
     console.log(`   📊 Success Rate: ${((passedTests/totalTests)*100).toFixed(1)}%`);
 
+    // Check for remaining resources before exit
+    console.log('\n🔍 Checking for remaining global resources...');
+    globalResourceTracker.logDiagnostics();
+    const cleared = globalResourceTracker.emergencyCleanup();
+    if (cleared > 0) {
+      console.log(`💀 Emergency cleanup cleared ${cleared} additional resources`);
+    }
+
     if (passedTests === totalTests) {
       console.log('🎉 All Routing System Integration tests passed!');
+      // Emergency process exit to prevent hanging due to global Node.js resources
+      console.log('💀 Forcing process exit to prevent hanging from global timers...');
+      setTimeout(() => process.exit(0), 100); // Small delay to ensure log output
       return true;
     } else {
       console.error('❌ Some Routing System Integration tests failed');
+      // Emergency process exit for failure case as well
+      console.log('💀 Forcing process exit to prevent hanging from global timers...');
+      setTimeout(() => process.exit(1), 100); // Small delay to ensure log output
       return false;
     }
 
@@ -245,6 +262,9 @@ async function runRoutingSystemTests() {
     if (error.stack) {
       console.error('Stack trace:', error.stack);
     }
+    // Emergency process exit for error case as well
+    console.log('💀 Forcing process exit due to test error to prevent hanging from global timers...');
+    setTimeout(() => process.exit(1), 100); // Small delay to ensure log output
     return false;
   }
 }

@@ -96,13 +96,38 @@ async function rollbackStartup(error: Error): Promise<void> {
 }
 
 /**
+ * Check if we're running in a test environment
+ */
+function isTestEnvironment(): boolean {
+  return (
+    process.env.NODE_ENV === 'test' ||
+    process.argv.includes('--suppress-debug') ||
+    process.argv.includes('--test-mode') ||
+    // Detect GitHub Actions CI environment
+    process.env.GITHUB_ACTIONS === 'true' ||
+    process.env.CI === 'true' ||
+    // Detect common test runner patterns
+    process.argv.some(arg => arg.includes('test') || arg.includes('jest') || arg.includes('mocha')) ||
+    // Detect if called from integration test scripts
+    process.argv[1]?.includes('tests/scripts/')
+  );
+}
+
+/**
  * Setup periodic health checks
+ * SUPPRESSED in test environments to prevent hanging processes
  */
 function setupHealthMonitoring(): void {
   if (!logger) return;
 
+  // Skip health monitoring in test environments to prevent hanging processes
+  if (isTestEnvironment()) {
+    logger.debug("Health monitoring suppressed in test environment");
+    return;
+  }
+
   // Health check every 30 seconds
-  setInterval(async () => {
+  const healthInterval = setInterval(async () => {
     if (isShuttingDown || !logger) return;
 
     try {

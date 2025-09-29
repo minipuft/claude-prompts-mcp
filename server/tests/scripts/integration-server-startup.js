@@ -8,6 +8,7 @@ async function runServerStartupIntegrationTests() {
   // Global timeout for entire test suite
   const globalTimeout = setTimeout(() => {
     console.error('❌ Integration tests timed out after 2 minutes - forcing exit');
+    console.log('💀 Global timeout triggered - forcing immediate process exit...');
     process.exit(1);
   }, 120000); // 2 minutes
 
@@ -18,6 +19,7 @@ async function runServerStartupIntegrationTests() {
     // Import modules
     const { Application } = await import('../../dist/runtime/application.js');
     const { createSimpleLogger } = await import('../../dist/logging/index.js');
+    const { globalResourceTracker } = await import('../../dist/utils/global-resource-tracker.js');
 
     let logger, orchestrator;
 
@@ -266,6 +268,14 @@ async function runServerStartupIntegrationTests() {
       testResults.push(assertTruthy(partialHealthInfo, 'Partial health info exists'));
       testResults.push(assertType(partialHealthInfo, 'object', 'Partial health info is object'));
 
+      // Clean up partial orchestrator
+      try {
+        await partialOrchestrator.shutdown();
+        partialOrchestrator.cleanup();
+      } catch (error) {
+        console.warn('⚠️ Warning: Error cleaning up partialOrchestrator:', error.message);
+      }
+
     } catch (error) {
       console.error(`❌ Health diagnostics failed: ${error.message}`);
       testResults.push(false);
@@ -320,6 +330,21 @@ async function runServerStartupIntegrationTests() {
 
       testResults.push(assertTruthy(moduleErrorThrown, 'Module initialization error handled'));
 
+      // Clean up error recovery test instances
+      try {
+        await failingOrchestrator.shutdown();
+        failingOrchestrator.cleanup();
+      } catch (error) {
+        console.warn('⚠️ Warning: Error cleaning up failingOrchestrator:', error.message);
+      }
+
+      try {
+        await moduleFailOrchestrator.shutdown();
+        moduleFailOrchestrator.cleanup();
+      } catch (error) {
+        console.warn('⚠️ Warning: Error cleaning up moduleFailOrchestrator:', error.message);
+      }
+
     } catch (error) {
       console.error(`❌ Error recovery test failed: ${error.message}`);
       testResults.push(false);
@@ -365,6 +390,14 @@ async function runServerStartupIntegrationTests() {
 
       console.log(`📊 Initialization timings - Config: ${timings.config}ms, Prompts: ${timings.prompts}ms, Modules: ${timings.modules}ms`);
 
+      // Clean up timing orchestrator
+      try {
+        await timingOrchestrator.shutdown();
+        timingOrchestrator.cleanup();
+      } catch (error) {
+        console.warn('⚠️ Warning: Error cleaning up timingOrchestrator:', error.message);
+      }
+
     } catch (error) {
       console.error(`❌ Performance validation failed: ${error.message}`);
       testResults.push(false);
@@ -381,11 +414,35 @@ async function runServerStartupIntegrationTests() {
     console.log(`   ✅ Passed: ${passedTests}/${totalTests} tests`);
     console.log(`   📊 Success Rate: ${((passedTests/totalTests)*100).toFixed(1)}%`);
 
+    // Cleanup: Properly shutdown Application instances to prevent hanging processes
+    if (orchestrator) {
+      try {
+        await orchestrator.shutdown();
+        orchestrator.cleanup();
+      } catch (error) {
+        console.warn('⚠️ Warning: Error during orchestrator cleanup:', error.message);
+      }
+    }
+
+    // Check for remaining resources before exit
+    console.log('\n🔍 Checking for remaining global resources...');
+    globalResourceTracker.logDiagnostics();
+    const cleared = globalResourceTracker.emergencyCleanup();
+    if (cleared > 0) {
+      console.log(`💀 Emergency cleanup cleared ${cleared} additional resources`);
+    }
+
     if (passedTests === totalTests) {
       console.log('🎉 All Server Startup Integration tests passed!');
+      // Emergency process exit to prevent hanging due to global Node.js resources
+      console.log('💀 Forcing process exit to prevent hanging from global timers...');
+      setTimeout(() => process.exit(0), 100); // Small delay to ensure log output
       return true;
     } else {
       console.error('❌ Some Server Startup Integration tests failed');
+      // Emergency process exit for failure case as well
+      console.log('💀 Forcing process exit to prevent hanging from global timers...');
+      setTimeout(() => process.exit(1), 100); // Small delay to ensure log output
       return false;
     }
 
@@ -394,10 +451,23 @@ async function runServerStartupIntegrationTests() {
     if (error.stack) {
       console.error('Stack trace:', error.stack);
     }
+    // Emergency process exit for error case as well
+    console.log('💀 Forcing process exit due to test error to prevent hanging from global timers...');
+    setTimeout(() => process.exit(1), 100); // Small delay to ensure log output
     return false;
   } finally {
     // Clear the global timeout
     clearTimeout(globalTimeout);
+
+    // Emergency cleanup: Ensure all Application instances are properly shut down
+    if (typeof orchestrator !== 'undefined' && orchestrator) {
+      try {
+        await orchestrator.shutdown();
+        orchestrator.cleanup();
+      } catch (error) {
+        console.warn('⚠️ Emergency cleanup warning:', error.message);
+      }
+    }
   }
 }
 

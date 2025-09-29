@@ -53,6 +53,7 @@ async function validateBuildArtifacts() {
     'runtime/application.js',
     'runtime/startup.js',
     'utils/index.js',
+    'utils/global-resource-tracker.js',
     'config/index.js',
     'logging/index.js',
     'mcp-tools/prompt-engine/index.js',

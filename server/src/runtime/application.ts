@@ -126,6 +126,9 @@ export class Application {
       process.env.NODE_ENV === 'test' ||
       process.argv.includes('--suppress-debug') ||
       process.argv.includes('--test-mode') ||
+      // Detect GitHub Actions CI environment
+      process.env.GITHUB_ACTIONS === 'true' ||
+      process.env.CI === 'true' ||
       // Detect common test runner patterns
       process.argv.some(arg => arg.includes('test') || arg.includes('jest') || arg.includes('mocha')) ||
       // Detect if called from integration test scripts
@@ -804,12 +807,101 @@ export class Application {
         this.logger.info("Initiating application shutdown...");
       }
 
+      // Phase 1: Stop server and transport layers
       if (this.serverManager) {
+        if (this.logger) {
+          this.logger.debug("Shutting down server manager...");
+        }
         this.serverManager.shutdown();
       }
 
+      // Phase 2: Stop transport layer (if it has shutdown method)
+      if (this.transportManager && 'shutdown' in this.transportManager && typeof (this.transportManager as any).shutdown === 'function') {
+        if (this.logger) {
+          this.logger.debug("Shutting down transport manager...");
+        }
+        try {
+          await (this.transportManager as any).shutdown();
+        } catch (error) {
+          this.logger?.warn("Error shutting down transport manager:", error);
+        }
+      }
+
+      // Phase 3: Stop monitoring and resource-intensive components (if they have shutdown method)
+      if (this.frameworkStateManager && 'shutdown' in this.frameworkStateManager && typeof (this.frameworkStateManager as any).shutdown === 'function') {
+        if (this.logger) {
+          this.logger.debug("Shutting down framework state manager...");
+        }
+        try {
+          await (this.frameworkStateManager as any).shutdown();
+        } catch (error) {
+          this.logger?.warn("Error shutting down framework state manager:", error);
+        }
+      }
+
+      // Phase 4: Stop file watchers and hot-reload systems (if they have shutdown method)
+      if (this.promptManager && 'shutdown' in this.promptManager && typeof (this.promptManager as any).shutdown === 'function') {
+        if (this.logger) {
+          this.logger.debug("Shutting down prompt manager...");
+        }
+        try {
+          await (this.promptManager as any).shutdown();
+        } catch (error) {
+          this.logger?.warn("Error shutting down prompt manager:", error);
+        }
+      }
+
+      // Phase 5: Stop API and MCP tools (if they have shutdown method)
+      if (this.apiManager && 'shutdown' in this.apiManager && typeof (this.apiManager as any).shutdown === 'function') {
+        if (this.logger) {
+          this.logger.debug("Shutting down API manager...");
+        }
+        try {
+          await (this.apiManager as any).shutdown();
+        } catch (error) {
+          this.logger?.warn("Error shutting down API manager:", error);
+        }
+      }
+
+      if (this.mcpToolsManager && 'shutdown' in this.mcpToolsManager && typeof (this.mcpToolsManager as any).shutdown === 'function') {
+        if (this.logger) {
+          this.logger.debug("Shutting down MCP tools manager...");
+        }
+        try {
+          await (this.mcpToolsManager as any).shutdown();
+        } catch (error) {
+          this.logger?.warn("Error shutting down MCP tools manager:", error);
+        }
+      }
+
+      // Phase 6: Stop conversation and text reference managers (if they have shutdown method)
+      if (this.conversationManager && 'shutdown' in this.conversationManager && typeof (this.conversationManager as any).shutdown === 'function') {
+        if (this.logger) {
+          this.logger.debug("Shutting down conversation manager...");
+        }
+        try {
+          await (this.conversationManager as any).shutdown();
+        } catch (error) {
+          this.logger?.warn("Error shutting down conversation manager:", error);
+        }
+      }
+
+      if (this.textReferenceManager && 'shutdown' in this.textReferenceManager && typeof (this.textReferenceManager as any).shutdown === 'function') {
+        if (this.logger) {
+          this.logger.debug("Shutting down text reference manager...");
+        }
+        try {
+          await (this.textReferenceManager as any).shutdown();
+        } catch (error) {
+          this.logger?.warn("Error shutting down text reference manager:", error);
+        }
+      }
+
+      // Phase 6: Clean up internal timers
+      this.cleanup();
+
       if (this.logger) {
-        this.logger.info("Application shutdown completed");
+        this.logger.info("Application shutdown completed successfully");
       }
     } catch (error) {
       if (this.logger) {

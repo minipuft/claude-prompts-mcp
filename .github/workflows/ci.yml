@@ -71,7 +71,7 @@ jobs:
         if: success()
         working-directory: server
         run: npm run test:integration
-        timeout-minutes: 5
+        timeout-minutes: 3
       
       - name: Validate MCP server startup (Cross-Platform)
         if: success()
@@ -120,7 +120,7 @@ jobs:
       - name: Run all enhanced tests
         working-directory: server
         run: npm run test:all-enhanced
-        timeout-minutes: 15
+        timeout-minutes: 10
 
   release-platform-test:
     name: Cross-Platform Release Validation

@@ -6,7 +6,7 @@
  * guidance system that enhances MCP prompts with methodology-specific improvements.
  */
 
-import type { ConvertedPrompt } from '../../types/index.js';
+import type { ConvertedPrompt } from '../../execution/types.js';
 import type { FrameworkDefinition, MethodologyEnhancement, ProcessingGuidance } from './methodology-types.js';
 
 /**

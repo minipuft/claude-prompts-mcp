@@ -21,8 +21,17 @@ export interface UserPreferences {
 
 /**
  * Extended gate selection criteria with semantic analysis
+ * Explicitly includes all base properties for strict TypeScript compilation compatibility
  */
 export interface ExtendedGateSelectionCriteria extends GateSelectionCriteria {
+  // Explicitly defined for GitHub Actions TypeScript compatibility
+  framework?: string;
+  category?: string;
+  promptId?: string;
+  executionMode?: 'prompt' | 'template' | 'chain';
+  complexityLevel?: 'low' | 'medium' | 'high';
+
+  // Extended properties
   semanticAnalysis?: ContentAnalysisResult;
   frameworkContext?: FrameworkDefinition;
   userPreferences?: UserPreferences;

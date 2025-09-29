@@ -6,7 +6,7 @@
  * layer that coordinates between different systems.
  */
 
-import type { ConvertedPrompt } from '../../types/index.js';
+import type { ConvertedPrompt } from '../../execution/types.js';
 import type { ContentAnalysisResult } from '../../semantic/configurable-semantic-analyzer.js';
 import type { FrameworkDefinition, FrameworkExecutionContext } from './methodology-types.js';
 

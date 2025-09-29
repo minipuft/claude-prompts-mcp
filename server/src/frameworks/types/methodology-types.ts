@@ -6,7 +6,7 @@
  * sources to eliminate duplication.
  */
 
-import type { ConvertedPrompt } from '../../types/index.js';
+import type { ConvertedPrompt } from '../../execution/types.js';
 import type { ContentAnalysisResult } from '../../semantic/configurable-semantic-analyzer.js';
 
 /**

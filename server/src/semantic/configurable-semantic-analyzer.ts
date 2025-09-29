@@ -11,9 +11,9 @@
  * - Transparent fallback mechanisms
  */
 
-import { ConvertedPrompt } from "../types/index.js";
+import { ConvertedPrompt } from "../execution/types.js";
 import { Logger } from "../logging/index.js";
-import { SemanticAnalysisConfig, AnalysisMode } from "../types/index.js";
+import { SemanticAnalysisConfig, AnalysisMode } from "../types.js";
 
 // Configuration constants - always use best practices
 const FALLBACK_TO_STRUCTURAL = true;
