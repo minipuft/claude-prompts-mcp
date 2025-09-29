@@ -1,8 +1,6 @@
 # Dependencies and Package Management
 server/node_modules/
-node_modules/
 server/package-lock.json
-package-lock.json
 .npm/
 .yarn/
 .pnp.*
@@ -26,7 +24,6 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
 
 # Test Coverage and Reports
 coverage/
@@ -37,13 +34,8 @@ test-results/
 *.lcov
 
 # Editor and IDE Files
-.idea/
 .vscode/
-.history/
-*.swp
-*.swo
 .cursor/
-.cursor\rules\codacy.mdc
 
 # Operating System Files
 .DS_Store
@@ -67,11 +59,6 @@ pids/
 
 # MCP Server Specific
 admin-ui/
-server/test-server.js
-server/test-listprompts.mjs
-*.mcp.temp
-mcp-debug-*
-startup*.log
 
 # Runtime State Files
 # server/config/framework-state.json
@@ -85,8 +72,9 @@ report.*.json
 heapdump-*
 
 # Claude-Code setup
-context-memory/
 plans/archive/
 CLAUDE.md
 .codex/
 AGENTS.md
+.claude/
+server/.claude/
