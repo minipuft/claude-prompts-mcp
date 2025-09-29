@@ -47,9 +47,14 @@
     "test:all-enhanced": "npm run test:runtime-integration && npm run test:methodology-guides && npm run test:consolidated-tools && npm run test:functional-mcp",
     "test:ci-startup": "node tests/ci-startup-validation.js",
     "test:ci-startup-verbose": "VERBOSE=true node tests/ci-startup-validation.js",
+    "test:enhanced-validation": "node tests/enhanced-validation/validation-orchestrator.js",
+    "test:contracts": "node tests/enhanced-validation/contract-validation/contract-test-suite.js",
+    "test:lifecycle": "node tests/enhanced-validation/lifecycle-validation/lifecycle-test-suite.js",
+    "test:environment": "node tests/enhanced-validation/environment-validation/environment-test-suite.js",
     "validate:dependencies": "node scripts/validate-dependencies.js",
     "validate:circular": "npx madge --circular --extensions ts,js src/",
     "validate:all": "npm run validate:dependencies && npm run validate:circular",
+    "validate:enhanced": "npm run test:enhanced-validation",
     "prepublishOnly": "npm run build"
   },
   "repository": {
