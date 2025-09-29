@@ -90,15 +90,15 @@ jobs:
             // Test server initialization without starting transport
             async function testInitialization() {
               // Use dynamic imports for ES modules
-              const { ApplicationRuntime } = await import('./dist/runtime/index.js');
+              const { Application } = await import('./dist/runtime/application.js');
               const { MockLogger } = await import('./dist/utils/index.js');
               
               console.log('✅ MCP server modules imported successfully');
               try {
                 const logger = new MockLogger();
-                const app = new ApplicationRuntime(logger);
-                
-                console.log('✅ ApplicationRuntime instantiated');
+                const app = new Application(logger);
+
+                console.log('✅ Application instantiated');
                 
                 // Test configuration loading
                 await app.loadConfiguration();
@@ -231,7 +231,7 @@ jobs:
               
               // Check if transport files exist
               const transportFiles = [
-                'dist/transport/index.js'
+                'dist/server/transport/index.js'
               ];
               
               for (const file of transportFiles) {
@@ -242,7 +242,7 @@ jobs:
               }
               
               // Import and validate transport module
-              const transport = await import('./dist/transport/index.js');
+              const transport = await import('./dist/server/transport/index.js');
               
               if (!transport || typeof transport !== 'object') {
                 throw new Error('Invalid transport module export');
@@ -391,7 +391,7 @@ jobs:
           node -e "
             async function mcpProtocolIntegrationTest() {
               // Use dynamic imports for ES modules
-              const { ApplicationRuntime } = await import('./dist/runtime/index.js');
+              const { Application } = await import('./dist/runtime/application.js');
               const { MockLogger } = await import('./dist/utils/index.js');
               
               console.log('🔄 Starting MCP protocol integration test...');
@@ -415,7 +415,7 @@ jobs:
                 };
                 
                 // Initialize application runtime with mock server
-                const app = new ApplicationRuntime(logger);
+                const app = new Application(logger);
                 
                 console.log('✅ Step 1: Application runtime created');
                 
@@ -473,7 +473,7 @@ jobs:
           node -e "
             async function performanceTest() {
               // Use dynamic imports for ES modules
-              const { ApplicationRuntime } = await import('./dist/runtime/index.js');
+              const { Application } = await import('./dist/runtime/application.js');
               const { MockLogger } = await import('./dist/utils/index.js');
               
               console.log('⏱️  Starting MCP performance validation...');
@@ -482,7 +482,7 @@ jobs:
               
               try {
                 const logger = new MockLogger();
-                const app = new ApplicationRuntime(logger);
+                const app = new Application(logger);
                 
                 // Time the initialization process
                 const initStart = Date.now();
