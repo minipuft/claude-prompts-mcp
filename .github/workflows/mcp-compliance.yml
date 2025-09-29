@@ -139,11 +139,11 @@ jobs:
           node -e "
             async function testToolsRegistration() {
               // Use dynamic imports for ES modules
-              const { McpToolsManager } = await import('./dist/mcp-tools/index.js');
+              const { createMcpToolsManager } = await import('./dist/mcp-tools/index.js');
               const { MockLogger } = await import('./dist/utils/index.js');
-              
+
               console.log('✅ MCP Tools Manager imported successfully');
-              
+
               // Mock MCP server for testing
               const registeredTools = [];
               const mockMcpServer = {
@@ -158,15 +158,36 @@ jobs:
                   if (!schema || typeof schema !== 'object') {
                     throw new Error(\`Invalid tool schema for \${name}\`);
                   }
-                  
+
                   registeredTools.push({ name, description, schema });
                   console.log(\`🔧 Registered tool: \${name}\`);
                   return { name, description, schema };
                 }
               };
+
+              // Create mock dependencies
+              const mockPromptManager = {
+                getPrompts: () => [],
+                getCategories: () => [],
+                loadPrompts: () => Promise.resolve([])
+              };
+
+              const mockConfigManager = {
+                getSemanticAnalysisConfig: () => ({ mode: 'lightweight' }),
+                getConfig: () => ({}),
+                getPromptConfig: () => ({})
+              };
+
               try {
                 const logger = new MockLogger();
-                const toolsManager = new McpToolsManager(logger, mockMcpServer, {});
+                const toolsManager = await createMcpToolsManager(
+                  logger,
+                  mockMcpServer,
+                  mockPromptManager,
+                  mockConfigManager,
+                  async () => {}, // onRefresh callback
+                  async () => {}  // onRestart callback
+                );
                 
                 console.log('✅ MCP Tools Manager instantiated');
                 
@@ -204,6 +225,7 @@ jobs:
                 }
                 
                 console.log('🎉 MCP tools registration validation successful!');
+                process.exit(0);
               } catch (error) {
                 console.error('❌ MCP tools registration failed:', error.message);
                 process.exit(1);
