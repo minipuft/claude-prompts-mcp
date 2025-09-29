@@ -8,6 +8,7 @@
 **Active Domain Rules**: JAVASCRIPT.md (ES modules, TypeScript strict mode, Jest testing, Node.js patterns)
 
 **Project-Specific Rule Overrides**:
+
 - **MCP tool usage** → NEVER use direct file operations, ALWAYS use MCP tools
 - **Framework switching** → Use methodology guides as single source of truth
 - **Hot-reload compatibility** → Maintain registry synchronization
@@ -37,17 +38,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 - **Debug Startup**: `npm run start:debug` - Extra debugging information
 - **Quiet Mode**: `npm run start:quiet` - Minimal output for production
 - **Help**: `npm run help` - Show command line options and environment variables
-
-### Working Directory
-
-All commands should be run from the `server/` directory: `cd server && npm run build`
-
-Examples:
-
-- `cd server && npm run build` - Compile TypeScript
-- `cd server && npm run typecheck` - Validate types only
-- `cd server && npm run dev` - Development mode with file watching
-- `cd server && npm test` - Run test suite
 
 ## ⚠️ CRITICAL: MCP Tool Usage Requirements
 
@@ -167,8 +157,6 @@ This is a **Model Context Protocol (MCP) server** that provides AI prompt manage
 - **Category manager** - Manages prompt organization and categorization
 
 #### `/server/src/mcp-tools/`
-
-**Consolidated MCP Architecture (87.5% tool reduction: 24+ tools → 3 intelligent tools)**
 
 - **Prompt Engine** (`prompt-engine.ts`) - Unified execution with intelligent analysis and semantic detection
 - **Prompt Manager** (`prompt-manager.ts`) - Complete lifecycle management with smart filtering and analysis
@@ -664,17 +652,19 @@ The system now includes advanced search capabilities implemented in `consolidate
 #### Testing & Validation Commands
 
 **Essential Commands:**
+
 - `npm run test:ci` - Complete test suite (unit + integration + performance)
 - `npm run test:all-enhanced` - Enhanced framework and MCP validation
-- `npm run validate:all` - Core validation (dependencies + circular) - **architectural layer validation temporarily disabled during rework**
-- `npm run validate:all-with-architecture` - Full validation including architectural layer checks (use when needed)
+- `npm run validate:all` - Core validation (dependencies + circular)
 - `npm run test:ci-startup` - Server startup validation
 
 **Development Commands:**
+
 - `npm run test:watch` - Continuous testing | `npm run test:coverage` - Coverage reports
 - `npm run test:consolidated-tools` - MCP tools validation | `npm run test:methodology-guides` - Framework validation
 
 **Quality Standards:**
+
 - **Jest Configuration**: ES modules, 30s timeout, single worker, `tests/setup.ts`
 - **Validation Integration**: Global Rules quality gates with evidence-based criteria
 - **Architecture Compliance**: Single source of truth principle enforcement
@@ -745,11 +735,13 @@ When modifying framework components:
 ### Evidence-Based Development Protocol
 
 **Required Language Standards** (from Global Rules):
+
 - **Prohibited**: "best|optimal|faster|secure|better|improved|enhanced|always|never|guaranteed"
 - **Required**: "may|could|potentially|typically|often|sometimes|measured|documented"
 - **Evidence**: "testing confirms|metrics show|benchmarks prove|data indicates|documentation states"
 
 **Research & Validation Standards**:
+
 - **Citations**: Official documentation required | Version compatibility verified | Sources documented
 - **Context7 Integration**: External libraries and documentation lookup for MCP protocol compliance
 - **WebSearch**: Official sources and current information for TypeScript/Node.js patterns
@@ -758,12 +750,14 @@ When modifying framework components:
 ### Quality Gates & Progressive Validation
 
 **Critical Thinking Standards** (from Global Rules):
+
 - **Critical** → Block | **High** → Warn | **Medium** → Advise | **Low** → Note
 - **Evidence-based assessment**: Claims require supporting data from benchmarks
 - **Challenge assumptions**: Question MCP protocol conventional wisdom respectfully
 - **Alternative approaches**: Consider multiple framework switching solutions before choosing
 
 **MCP-Specific Quality Gates**:
+
 - **Protocol Compliance**: All changes must maintain MCP SDK compatibility
 - **Transport Compatibility**: Changes validated against both STDIO and SSE transports
 - **Hot-Reload Integrity**: Registry synchronization verified after modifications
@@ -783,18 +777,22 @@ When modifying framework components:
 ### Development Workflow Standards
 
 #### Pre-Development Checklist (MANDATORY)
+
 1. **System Validation**: `npm run validate:all` → `npm run test:ci-startup`
 2. **Framework Review**: Document current state, plan methodology guide optimizations
 3. **Performance Baseline**: `npm run build && time npm run start:test`
 
 #### During Development Quality Gates
+
 **After significant changes (>50 lines)**: `npm run typecheck && npm run test:ci`
 **MCP Protocol Compliance**: `npm run test:consolidated-tools && npm run test:methodology-guides`
 
 #### Completion Checklist
+
 **Before marking work complete**: `npm run typecheck && npm run test:ci && npm run validate:all && npm run test:all-enhanced`
 
 #### Performance Budgets
+
 - Server startup: <3s | Tool response: <500ms | Framework switching: <100ms | Memory: <256MB
 
 ## 🎯 MCP-Specific Enhanced Development Integration
@@ -802,6 +800,7 @@ When modifying framework components:
 ### Domain Rule Auto-Detection & Integration
 
 **Intelligent Context Detection:**
+
 - **Project Detection**: Node.js TypeScript MCP Server → Auto-loads JAVASCRIPT.md domain rules
 - **Framework Context**: MCP SDK integration → Applies protocol-specific patterns from domain rules
 - **Critical Dependencies**: Framework system, semantic analysis, transport layer → Extra validation
@@ -810,24 +809,12 @@ When modifying framework components:
 ### Context Engineering Architecture (MCP)
 
 **MCP Protocol Context Sources:**
+
 - **Framework System Documentation**: `/src/frameworks/` methodology guide implementations
 - **Transport Layer Context**: STDIO vs SSE transport compatibility requirements
 - **Critical Dependencies**: Hot-reload manager, prompt registry, MCP tool consolidation
 - **Performance Baselines**: Server startup time, tool response latency, framework switching speed
 - **Integration Points**: Claude Desktop, web clients, custom MCP client compatibility
-
-### Enhanced Multi-Agent Development Coordination (MCP)
-
-**MCP Development Coordination Structure:**
-```
-mcp-server-root/
-├── CLAUDE.md                           # This file - MCP-specific development guide with global integration
-├── plans/                              # Development coordination center
-│   ├── mcp-server-status.md           # MCP server health, protocol compliance, transport status
-│   ├── framework-coordination.md      # Multi-methodology guide status and switching coordination
-│   ├── mcp-dependencies.md            # MCP SDK dependencies and protocol compatibility mapping
-│   └── architecture-decisions.md      # MCP-specific technical decisions and rationale
-```
 
 ### MCP Session Protocol
 
@@ -838,6 +825,7 @@ mcp-server-root/
 ### Context Discovery Protocol (MCP-Enhanced)
 
 **MCP-Specific Context Extensions:**
+
 - **MCP Protocol Architecture**: Document location of MCP SDK integration and transport implementations
 - **Framework Context**: Methodology guide context sources and framework switching patterns
 - **Critical Dependencies**: MCP tools requiring extra validation due to protocol coupling
@@ -847,6 +835,7 @@ mcp-server-root/
 ### Development Guidelines (MCP Integration)
 
 **MCP-Specific Guidelines:**
+
 - **Protocol-First Analysis**: Complete systematic MCP protocol discovery before implementation
 - **Direct MCP Integration**: Solve MCP protocol problems directly, coordinate with transport systems
 - **Framework-Friendly Code**: Clear methodology guide naming, minimal abstraction, maintainable patterns
