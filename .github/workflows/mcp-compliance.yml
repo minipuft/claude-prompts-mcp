@@ -163,6 +163,27 @@ jobs:
                   registeredTools.push({ name, description, schema });
                   console.log(\`🔧 Registered tool: \${name}\`);
                   return { name, description, schema };
+                },
+
+                // Add registerTool method that matches MCP SDK interface
+                registerTool: function(name, config, handler) {
+                  // Validate MCP SDK registerTool parameters
+                  if (typeof name !== 'string' || !name) {
+                    throw new Error(\`Invalid tool name: \${name}\`);
+                  }
+                  if (!config || typeof config !== 'object') {
+                    throw new Error(\`Invalid tool config for \${name}\`);
+                  }
+                  if (typeof handler !== 'function') {
+                    throw new Error(\`Invalid tool handler for \${name}\`);
+                  }
+
+                  // Extract description and schema from MCP SDK config format
+                  const description = config.description || config.title || name;
+                  const schema = config.inputSchema || {};
+
+                  // Delegate to existing tool method for actual registration
+                  return this.tool(name, description, schema);
                 }
               };
 
