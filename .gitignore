@@ -64,6 +64,10 @@ admin-ui/
 # server/config/framework-state.json
 # .framework-state.json
 
+# Runtime State (generated during server execution)
+runtime-state/
+server/runtime-state/
+
 # Crash Dumps and Diagnostics
 *.dmp
 report.*.json
