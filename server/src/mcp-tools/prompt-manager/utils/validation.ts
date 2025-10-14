@@ -6,7 +6,65 @@ import { ValidationError } from "../../../utils/index.js";
 import { ValidationContext } from "../core/types.js";
 
 /**
- * Validate required fields in operation arguments
+ * Action-specific parameter requirements and examples
+ */
+const ACTION_REQUIREMENTS: Record<string, { required: string[], example: string }> = {
+  create: {
+    required: ['id', 'name', 'description', 'user_message_template'],
+    example: `{action:'create', id:'my_prompt', name:'My Prompt', description:'What it does', user_message_template:'Process {{input}}'}`
+  },
+  create_prompt: {
+    required: ['id', 'name', 'description', 'user_message_template'],
+    example: `{action:'create_prompt', id:'simple_prompt', name:'Simple', description:'Basic prompt', user_message_template:'{{text}}'}`
+  },
+  create_template: {
+    required: ['id', 'name', 'description', 'user_message_template'],
+    example: `{action:'create_template', id:'smart_template', name:'Template', description:'Advanced', user_message_template:'{{input}}'}`
+  },
+  create_with_gates: {
+    required: ['id', 'name', 'description', 'user_message_template'],
+    example: `{action:'create_with_gates', id:'gated', name:'Gated', description:'With gates', user_message_template:'{{x}}', gate_configuration:{include:['validation']}}`
+  },
+  update: {
+    required: ['id'],
+    example: `{action:'update', id:'existing_prompt', description:'Updated description'}`
+  },
+  delete: {
+    required: ['id'],
+    example: `{action:'delete', id:'prompt_to_remove'}`
+  },
+  modify: {
+    required: ['id', 'section_name', 'new_content'],
+    example: `{action:'modify', id:'my_prompt', section_name:'description', new_content:'New text'}`
+  },
+  analyze_type: {
+    required: ['id'],
+    example: `{action:'analyze_type', id:'my_prompt'}`
+  },
+  migrate_type: {
+    required: ['id', 'target_type'],
+    example: `{action:'migrate_type', id:'my_prompt', target_type:'template'}`
+  },
+  analyze_gates: {
+    required: ['id'],
+    example: `{action:'analyze_gates', id:'my_prompt'}`
+  },
+  update_gates: {
+    required: ['id', 'gate_configuration'],
+    example: `{action:'update_gates', id:'my_prompt', gate_configuration:{include:['validation', 'quality']}}`
+  },
+  add_temporary_gates: {
+    required: ['id', 'temporary_gates'],
+    example: `{action:'add_temporary_gates', id:'my_prompt', temporary_gates:[{type:'validation', name:'custom', description:'...'}]}`
+  },
+  suggest_temporary_gates: {
+    required: ['execution_context'],
+    example: `{action:'suggest_temporary_gates', execution_context:{executionType:'chain', category:'analysis'}}`
+  }
+};
+
+/**
+ * Validate required fields in operation arguments with contextual error messages
  */
 export function validateRequiredFields(args: any, required: string[]): void {
   const missing: string[] = [];
@@ -18,7 +76,20 @@ export function validateRequiredFields(args: any, required: string[]): void {
   }
 
   if (missing.length > 0) {
-    throw new ValidationError(`Missing required fields: ${missing.join(', ')}`);
+    const action = args.action || 'unknown';
+    const actionInfo = ACTION_REQUIREMENTS[action];
+
+    let errorMessage = `❌ Missing required fields for action '${action}': ${missing.join(', ')}\n\n`;
+
+    if (actionInfo) {
+      errorMessage += `📋 Required parameters: ${actionInfo.required.join(', ')}\n`;
+      errorMessage += `📚 Example: ${actionInfo.example}\n\n`;
+    }
+
+    errorMessage += `💡 TIP: Check the 'action' parameter description for complete requirements.\n`;
+    errorMessage += `📖 See: docs/mcp-tool-usage-guide.md for detailed examples`;
+
+    throw new ValidationError(errorMessage);
   }
 }
 

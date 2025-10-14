@@ -21,12 +21,8 @@
     }
   },
   "gates": {
-    "enabled": true,
     "definitionsDirectory": "src/gates/definitions",
-    "templatesDirectory": "src/gates/templates",
-    "defaultRetryLimit": 3,
-    "enableGuidanceInjection": true,
-    "enableValidation": true
+    "templatesDirectory": "src/gates/templates"
   },
   "transports": {
     "default": "stdio"

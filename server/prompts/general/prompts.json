@@ -1,0 +1,25 @@
+{
+  "prompts": [
+    {
+      "id": "diagnose",
+      "name": "Codebase Diagnostics",
+      "category": "general",
+      "description": "Systematically diagnose issues in codebases including bugs, performance problems, security vulnerabilities, architecture issues, and technical debt",
+      "file": "diagnose.md",
+      "arguments": [
+        {
+          "name": "scope",
+          "description": "Specific files, directories, or areas to analyze (e.g., 'src/auth/**', 'performance issues', 'security')"
+        },
+        {
+          "name": "focus",
+          "description": "Specific diagnostic focus (e.g., 'security', 'performance', 'architecture', 'type errors')"
+        },
+        {
+          "name": "symptoms",
+          "description": "Reported symptoms or problems (e.g., 'slow build times', 'memory leaks', 'failing tests')"
+        }
+      ]
+    }
+  ]
+}

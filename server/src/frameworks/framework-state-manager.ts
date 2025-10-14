@@ -101,15 +101,15 @@ export class FrameworkStateManager extends EventEmitter {
     errorCount: 0
   };
   private isInitialized: boolean = false;
-  private stateFilePath: string;
+  private runtimeStatePath: string;
 
   constructor(logger: Logger, serverRoot?: string) {
     super();
     this.logger = logger;
 
     // Set state file path - place in config directory for better organization
-    const rootPath = serverRoot || process.cwd();
-    this.stateFilePath = path.join(rootPath, 'config', 'framework-state.json');
+    const rootPath = path.resolve(serverRoot || process.cwd());
+    this.runtimeStatePath = path.join(rootPath, 'runtime-state', 'framework-state.json');
 
     // Initialize with default framework state (will be overridden by loadPersistedState)
     this.currentState = {
@@ -176,30 +176,38 @@ export class FrameworkStateManager extends EventEmitter {
    */
   private async loadPersistedState(): Promise<void> {
     try {
-      const stateContent = await fs.readFile(this.stateFilePath, 'utf-8');
+      const stateContent = await fs.readFile(this.runtimeStatePath, 'utf-8');
       const persistedState: PersistedFrameworkState = JSON.parse(stateContent);
 
-      // Validate and apply persisted state
       if (this.isValidPersistedState(persistedState)) {
         this.currentState.frameworkSystemEnabled = persistedState.frameworkSystemEnabled;
         this.currentState.activeFramework = persistedState.activeFramework;
         this.currentState.switchedAt = new Date(persistedState.lastSwitchedAt);
         this.currentState.switchReason = persistedState.switchReason;
 
-        this.logger.info(`✅ Loaded persisted framework state: ${persistedState.frameworkSystemEnabled ? 'enabled' : 'disabled'}, active: ${persistedState.activeFramework}`);
-      } else {
-        this.logger.warn('⚠️ Invalid persisted state format, using defaults');
-        await this.saveStateToFile(); // Save valid defaults
+        this.logger.info(
+          `✅ Loaded framework state cache: ${
+            persistedState.frameworkSystemEnabled ? 'enabled' : 'disabled'
+          }, active: ${persistedState.activeFramework}`
+        );
+        return;
       }
-    } catch (error) {
-      if ((error as any)?.code === 'ENOENT') {
-        this.logger.info('📁 No persisted framework state found, using defaults');
-        await this.saveStateToFile(); // Create initial state file
-      } else {
-        this.logger.warn(`⚠️ Failed to load persisted state: ${error instanceof Error ? error.message : String(error)}, using defaults`);
-        await this.saveStateToFile(); // Save valid defaults
+
+      this.logger.warn(
+        `⚠️ Invalid framework state cache at ${this.runtimeStatePath}, falling back to defaults`
+      );
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT') {
+        this.logger.warn(
+          `⚠️ Failed to load framework state cache ${this.runtimeStatePath}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
       }
     }
+
+    this.logger.info('📁 No framework state cache found, using defaults');
+    await this.saveStateToFile();
   }
 
   /**
@@ -215,12 +223,14 @@ export class FrameworkStateManager extends EventEmitter {
         switchReason: this.currentState.switchReason
       };
 
-      // Ensure config directory exists
-      const configDir = path.dirname(this.stateFilePath);
-      await fs.mkdir(configDir, { recursive: true });
+      const runtimeDir = path.dirname(this.runtimeStatePath);
+      await fs.mkdir(runtimeDir, { recursive: true });
 
-      await fs.writeFile(this.stateFilePath, JSON.stringify(persistedState, null, 2));
-      this.logger.debug(`💾 Framework state saved to ${this.stateFilePath}`);
+      await fs.writeFile(
+        this.runtimeStatePath,
+        JSON.stringify(persistedState, null, 2)
+      );
+      this.logger.debug(`💾 Framework state saved to ${this.runtimeStatePath}`);
     } catch (error) {
       this.logger.error(`❌ Failed to save framework state: ${error instanceof Error ? error.message : String(error)}`);
     }

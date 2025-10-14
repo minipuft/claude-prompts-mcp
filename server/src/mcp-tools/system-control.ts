@@ -1,6 +1,6 @@
 /**
  * Consolidated System Control - Unified Framework & Analytics Management Tool
- * 
+ *
  * Consolidates all system management functionality into a single intelligent tool:
  * - Framework switching and management (from system-status-tools.ts)
  * - System status and health monitoring
@@ -9,29 +9,25 @@
  * - Configuration management
  */
 
-import { z } from "zod";
-import { Logger } from "../logging/index.js";
-import { ToolResponse } from "../types/index.js";
+import { ConfigManager } from "../config/index.js";
+import { FrameworkManager } from "../frameworks/framework-manager.js";
 import {
   FrameworkStateManager,
-  FrameworkState,
-  FrameworkSystemHealth,
-  FrameworkSwitchRequest
+  FrameworkSwitchRequest,
 } from "../frameworks/framework-state-manager.js";
-import { FrameworkManager } from "../frameworks/framework-manager.js";
-import { ConfigManager } from "../config/index.js";
-import { SafeConfigWriter, createSafeConfigWriter } from "./config-utils.js";
+import { Logger } from "../logging/index.js";
+import { ToolResponse } from "../types/index.js";
 import { handleError as utilsHandleError } from "../utils/index.js";
-import { ToolDescriptionManager } from "./tool-description-manager.js";
+import { SafeConfigWriter, createSafeConfigWriter } from "./config-utils.js";
 import { createSystemResponse } from "./shared/structured-response-builder.js";
+import { ToolDescriptionManager } from "./tool-description-manager.js";
 // Phase 3: Prompt guidance system integration
-import {
-  PromptGuidanceService,
-  MethodologyState,
-  MethodologySwitchRequest
-} from "../frameworks/prompt-guidance/index.js";
+import { PromptGuidanceService } from "../frameworks/prompt-guidance/index.js";
 // Phase 4: Clean architecture gate performance analytics
 import type { GatePerformanceAnalyzer } from "../gates/intelligence/GatePerformanceAnalyzer.js";
+// Gates system management integration
+import { GateSystemManager } from "../gates/gate-state-manager.js";
+import type { GateGuidanceRenderer } from "../gates/guidance/GateGuidanceRenderer.js";
 // Enhanced tool dependencies removed (Phase 1.3) - Core implementations
 // Simple core response handling without enhanced complexity
 interface SimpleResponseFormatter {
@@ -55,47 +51,55 @@ function createSimpleResponseFormatter(): SimpleResponseFormatter {
           startTime: Date.now(),
           endTime: Date.now(),
           executionTime: 0,
-          frameworkEnabled: false
-        }
-      }
+          frameworkEnabled: false,
+        },
+      },
     }),
-    setAnalyticsService: (service: any) => {} // No-op for now
+    setAnalyticsService: (service: any) => {}, // No-op for now
   };
 }
 
 // Simple output schema and response functions (minimal for Phase 1)
 const systemControlOutputSchema = {
   content: { type: "array" },
-  isError: { type: "boolean", optional: true }
+  isError: { type: "boolean", optional: true },
 };
 
-function createStructuredResponse(content: any, isError: boolean | any = false, ...extraArgs: any[]): any {
+function createStructuredResponse(
+  content: any,
+  isError: boolean | any = false,
+  ...extraArgs: any[]
+): any {
   // Handle flexible parameters for Phase 1 compatibility
-  const actualIsError = typeof isError === 'boolean' ? isError : false;
+  const actualIsError = typeof isError === "boolean" ? isError : false;
   const metadata = extraArgs.length > 0 ? extraArgs[0] : {};
 
   // Use shared response builder for consistency
   if (actualIsError) {
     // For errors, we might want to use createErrorResponse, but for compatibility, use createSystemResponse
     return createSystemResponse(
-      Array.isArray(content) ? content[0]?.text || String(content) : String(content),
+      Array.isArray(content)
+        ? content[0]?.text || String(content)
+        : String(content),
       "error",
       {
         systemHealth: metadata.systemHealth,
         analytics: metadata.analytics,
-        configChanges: metadata.configChanges
+        configChanges: metadata.configChanges,
       }
     );
   }
 
   return createSystemResponse(
-    Array.isArray(content) ? content[0]?.text || String(content) : String(content),
+    Array.isArray(content)
+      ? content[0]?.text || String(content)
+      : String(content),
     metadata.operation || "system_action",
     {
       frameworkState: metadata.frameworkState,
       systemHealth: metadata.systemHealth,
       analytics: metadata.analytics,
-      configChanges: metadata.configChanges
+      configChanges: metadata.configChanges,
     }
   );
 }
@@ -114,7 +118,7 @@ interface SystemAnalytics {
   totalExecutions: number;
   successfulExecutions: number;
   failedExecutions: number;
-  averageExecutionTime: number;  // Critical for dashboard APIs
+  averageExecutionTime: number; // Critical for dashboard APIs
   gateValidationCount: number;
   uptime: number;
   memoryUsage?: NodeJS.MemoryUsage;
@@ -122,9 +126,13 @@ interface SystemAnalytics {
   // Rich historical data with execution context
   performanceTrends: Array<{
     timestamp: number;
-    metric: 'executionTime' | 'memoryDelta' | 'successRate' | 'gateValidationTime';
+    metric:
+      | "executionTime"
+      | "memoryDelta"
+      | "successRate"
+      | "gateValidationTime";
     value: number;
-    executionMode?: string;  // Replaces executionsByMode aggregation
+    executionMode?: string; // Replaces executionsByMode aggregation
     framework?: string;
     success?: boolean;
   }>;
@@ -140,6 +148,7 @@ export class ConsolidatedSystemControl {
   private safeConfigWriter?: SafeConfigWriter;
   public frameworkStateManager?: FrameworkStateManager;
   private frameworkManager?: FrameworkManager;
+  public gateSystemManager?: GateSystemManager;
   private onRestart?: (reason: string) => Promise<void>;
   private toolDescriptionManager?: ToolDescriptionManager;
   private mcpToolsManager?: any; // Reference to MCPToolsManager for tool updates
@@ -149,8 +158,9 @@ export class ConsolidatedSystemControl {
   private promptGuidanceService?: PromptGuidanceService;
   // Phase 4: Clean architecture gate performance analytics
   public gatePerformanceAnalyzer?: GatePerformanceAnalyzer;
+  private gateGuidanceRenderer?: GateGuidanceRenderer;
   public startTime: number = Date.now();
-  
+
   // Analytics data
   public systemAnalytics: SystemAnalytics = {
     totalExecutions: 0,
@@ -159,10 +169,14 @@ export class ConsolidatedSystemControl {
     averageExecutionTime: 0,
     gateValidationCount: 0,
     uptime: 0,
-    performanceTrends: []
+    performanceTrends: [],
   };
 
-  constructor(logger: Logger, mcpServer: any, onRestart?: (reason: string) => Promise<void>) {
+  constructor(
+    logger: Logger,
+    mcpServer: any,
+    onRestart?: (reason: string) => Promise<void>
+  ) {
     this.logger = logger;
     this.mcpServer = mcpServer;
     this.onRestart = onRestart;
@@ -208,11 +222,19 @@ export class ConsolidatedSystemControl {
     try {
       // Get the config file path from the ConfigManager using proper getter method
       const configPath = configManager.getConfigPath();
-      this.safeConfigWriter = createSafeConfigWriter(this.logger, configManager, configPath);
-      this.logger.debug("ConfigManager and SafeConfigWriter configured for system control");
+      this.safeConfigWriter = createSafeConfigWriter(
+        this.logger,
+        configManager,
+        configPath
+      );
+      this.logger.debug(
+        "ConfigManager and SafeConfigWriter configured for system control"
+      );
     } catch (error) {
       this.logger.warn("Failed to initialize SafeConfigWriter:", error);
-      this.logger.debug("ConfigManager configured for system control (read-only mode)");
+      this.logger.debug(
+        "ConfigManager configured for system control (read-only mode)"
+      );
     }
   }
 
@@ -229,7 +251,9 @@ export class ConsolidatedSystemControl {
    */
   setMCPToolsManager(mcpToolsManager: any): void {
     this.mcpToolsManager = mcpToolsManager;
-    this.logger.debug("MCPToolsManager reference configured for dynamic tool updates");
+    this.logger.debug(
+      "MCPToolsManager reference configured for dynamic tool updates"
+    );
   }
 
   /**
@@ -241,9 +265,32 @@ export class ConsolidatedSystemControl {
   }
 
   /**
+   * Set gate system manager for runtime gate management
+   */
+  setGateSystemManager(gateSystemManager: GateSystemManager): void {
+    this.gateSystemManager = gateSystemManager;
+    this.logger.debug(
+      "Gate system manager configured for runtime gate control"
+    );
+  }
+
+  /**
+   * Set gate guidance renderer for discovery operations
+   */
+  setGateGuidanceRenderer(renderer: GateGuidanceRenderer): void {
+    this.gateGuidanceRenderer = renderer;
+    this.logger.debug(
+      "Gate guidance renderer configured for gate discovery"
+    );
+  }
+
+  /**
    * Helper function for minimal outputSchema compliance
    */
-  private createMinimalSystemResponse(text: string, action: string): ToolResponse {
+  private createMinimalSystemResponse(
+    text: string,
+    action: string
+  ): ToolResponse {
     return createStructuredResponse(text, false, {
       action,
       executionMetadata: {
@@ -252,7 +299,7 @@ export class ConsolidatedSystemControl {
         startTime: Date.now(),
         endTime: Date.now(),
         executionTime: 0,
-        frameworkEnabled: true
+        frameworkEnabled: true,
       },
       systemState: {
         frameworkEnabled: true,
@@ -263,10 +310,10 @@ export class ConsolidatedSystemControl {
           rss: 0,
           heapTotal: 0,
           heapUsed: 0,
-          external: 0
+          external: 0,
         },
-        serverHealth: "healthy" as const
-      }
+        serverHealth: "healthy" as const,
+      },
     });
   }
 
@@ -285,7 +332,9 @@ export class ConsolidatedSystemControl {
   /**
    * Update system analytics with rich execution data
    */
-  updateAnalytics(analytics: Partial<SystemAnalytics> & { currentExecution?: any }): void {
+  updateAnalytics(
+    analytics: Partial<SystemAnalytics> & { currentExecution?: any }
+  ): void {
     // Update aggregate fields
     Object.assign(this.systemAnalytics, analytics);
     this.systemAnalytics.uptime = Date.now() - this.startTime;
@@ -298,35 +347,39 @@ export class ConsolidatedSystemControl {
       const currentExecution = analytics.currentExecution;
       this.systemAnalytics.performanceTrends.push({
         timestamp: Date.now(),
-        metric: 'executionTime',
+        metric: "executionTime",
         value: currentExecution.executionTime,
         executionMode: currentExecution.executionMode,
         framework: currentExecution.framework,
-        success: currentExecution.success
+        success: currentExecution.success,
       });
     }
 
     // Add memory delta trend if significant change
     if (this.systemAnalytics.memoryUsage) {
       const memoryDelta = this.calculateMemoryDelta();
-      if (Math.abs(memoryDelta) > 1024 * 1024) { // Only track changes > 1MB
+      if (Math.abs(memoryDelta) > 1024 * 1024) {
+        // Only track changes > 1MB
         this.systemAnalytics.performanceTrends.push({
           timestamp: Date.now(),
-          metric: 'memoryDelta',
-          value: memoryDelta
+          metric: "memoryDelta",
+          value: memoryDelta,
         });
       }
     }
 
     // Add success rate trend periodically (every 10 executions)
     if (analytics.totalExecutions && analytics.totalExecutions % 10 === 0) {
-      const successRate = analytics.totalExecutions > 0
-        ? ((analytics.successfulExecutions || 0) / analytics.totalExecutions) * 100
-        : 0;
+      const successRate =
+        analytics.totalExecutions > 0
+          ? ((analytics.successfulExecutions || 0) /
+              analytics.totalExecutions) *
+            100
+          : 0;
       this.systemAnalytics.performanceTrends.push({
         timestamp: Date.now(),
-        metric: 'successRate',
-        value: successRate
+        metric: "successRate",
+        value: successRate,
       });
     }
 
@@ -350,15 +403,16 @@ export class ConsolidatedSystemControl {
     return delta;
   }
 
-
   /**
    * Main action handler
    */
-  public async handleAction(args: {
-    action: string;
-    [key: string]: any;
-  }, extra: any): Promise<ToolResponse> {
-
+  public async handleAction(
+    args: {
+      action: string;
+      [key: string]: any;
+    },
+    extra: any
+  ): Promise<ToolResponse> {
     const { action } = args;
     this.logger.info(`⚙️ System Control: Executing action "${action}"`);
 
@@ -375,6 +429,8 @@ export class ConsolidatedSystemControl {
         return new StatusActionHandler(this);
       case "framework":
         return new FrameworkActionHandler(this);
+      case "gates":
+        return new GateActionHandler(this);
       case "analytics":
         return new AnalyticsActionHandler(this);
       case "config":
@@ -382,7 +438,9 @@ export class ConsolidatedSystemControl {
       case "maintenance":
         return new MaintenanceActionHandler(this);
       default:
-        throw new Error(`Unknown action: ${action}. Valid actions: status, framework, analytics, config, maintenance`);
+        throw new Error(
+          `Unknown action: ${action}. Valid actions: status, framework, gates, analytics, config, maintenance`
+        );
     }
   }
 
@@ -400,11 +458,11 @@ export class ConsolidatedSystemControl {
     }
 
     const health = this.frameworkStateManager.getSystemHealth();
-    const statusIcon = health.status === 'healthy' ? '✅' : '⚠️';
+    const statusIcon = health.status === "healthy" ? "✅" : "⚠️";
 
     // Check if framework system is enabled for injection
     const isFrameworkEnabled = health.frameworkSystemEnabled;
-    const frameworkStatusIcon = isFrameworkEnabled ? '✅' : '🚫';
+    const frameworkStatusIcon = isFrameworkEnabled ? "✅" : "🚫";
     const frameworkStatusText = isFrameworkEnabled
       ? `${frameworkStatusIcon} Enabled (${health.activeFramework})`
       : `${frameworkStatusIcon} Disabled (${health.activeFramework} selected)`;
@@ -412,7 +470,9 @@ export class ConsolidatedSystemControl {
     let response = `${statusIcon} **System Status Overview**\n\n`;
     response += `**Framework System**: ${frameworkStatusText}\n`;
     response += `**Status**: ${health.status}\n`;
-    response += `**Uptime**: ${Math.floor((Date.now() - this.startTime) / 1000 / 60)} minutes\n\n`;
+    response += `**Uptime**: ${Math.floor(
+      (Date.now() - this.startTime) / 1000 / 60
+    )} minutes\n\n`;
 
     // Add warning message when framework is selected but system disabled
     if (!isFrameworkEnabled && health.activeFramework) {
@@ -424,8 +484,15 @@ export class ConsolidatedSystemControl {
     if (include_metrics) {
       response += `📊 **Performance Metrics**:\n`;
       response += `- Total Executions: ${this.systemAnalytics.totalExecutions}\n`;
-      response += `- Success Rate: ${this.systemAnalytics.totalExecutions > 0 ?
-        Math.round((this.systemAnalytics.successfulExecutions / this.systemAnalytics.totalExecutions) * 100) : 0}%\n`;
+      response += `- Success Rate: ${
+        this.systemAnalytics.totalExecutions > 0
+          ? Math.round(
+              (this.systemAnalytics.successfulExecutions /
+                this.systemAnalytics.totalExecutions) *
+                100
+            )
+          : 0
+      }%\n`;
       response += `- Average Execution Time: ${this.systemAnalytics.averageExecutionTime}ms\n\n`;
     }
 
@@ -445,7 +512,8 @@ export class ConsolidatedSystemControl {
       throw new Error("Framework parameter is required for switch operation");
     }
 
-    const { framework, reason = `User requested switch to ${args.framework}` } = args;
+    const { framework, reason = `User requested switch to ${args.framework}` } =
+      args;
 
     const currentState = this.frameworkStateManager.getCurrentState();
 
@@ -459,7 +527,7 @@ export class ConsolidatedSystemControl {
 
     const request: FrameworkSwitchRequest = {
       targetFramework: framework,
-      reason: reason
+      reason: reason,
     };
 
     const success = await this.frameworkStateManager.switchFramework(request);
@@ -477,12 +545,16 @@ export class ConsolidatedSystemControl {
       response += `- **Name**: ${activeFramework.name}\n`;
       response += `- **Description**: ${activeFramework.description}\n`;
       response += `- **Methodology**: ${activeFramework.methodology}\n\n`;
-      response += `**Guidelines**: ${activeFramework.executionGuidelines.join(' • ')}\n\n`;
+      response += `**Guidelines**: ${activeFramework.executionGuidelines.join(
+        " • "
+      )}\n\n`;
       response += `✅ All future prompt executions will now use the ${framework} methodology.`;
 
       return this.createMinimalSystemResponse(response, "switch_framework");
     } else {
-      throw new Error(`Failed to switch to framework '${framework}'. Please check framework availability and try again.`);
+      throw new Error(
+        `Failed to switch to framework '${framework}'. Please check framework availability and try again.`
+      );
     }
   }
 
@@ -501,7 +573,8 @@ export class ConsolidatedSystemControl {
 
     frameworks.forEach((framework: any) => {
       // Handle case variations by comparing uppercase versions
-      const isActive = framework.id.toUpperCase() === activeFramework.toUpperCase();
+      const isActive =
+        framework.id.toUpperCase() === activeFramework.toUpperCase();
       const status = isActive ? "🟢 ACTIVE" : "⚪ Available";
 
       response += `**${framework.name}** ${status}\n`;
@@ -509,8 +582,13 @@ export class ConsolidatedSystemControl {
       if (args.show_details) {
         response += `   📝 ${framework.description}\n`;
         response += `   🎯 Methodology: ${framework.methodology}\n`;
-        if (framework.executionGuidelines && framework.executionGuidelines.length > 0) {
-          response += `   📋 Guidelines: ${framework.executionGuidelines.slice(0, 2).join(' • ')}\n`;
+        if (
+          framework.executionGuidelines &&
+          framework.executionGuidelines.length > 0
+        ) {
+          response += `   📋 Guidelines: ${framework.executionGuidelines
+            .slice(0, 2)
+            .join(" • ")}\n`;
         }
         response += `\n`;
       }
@@ -542,18 +620,26 @@ export class ConsolidatedSystemControl {
 
     // Enable framework system (for now, just return success message since the method may not exist)
     try {
-      await (this.frameworkStateManager as any).enableFrameworkSystem?.(args.reason || "User requested to enable framework system");
+      await (this.frameworkStateManager as any).enableFrameworkSystem?.(
+        args.reason || "User requested to enable framework system"
+      );
     } catch (error) {
       // Method may not exist, that's ok for now
     }
 
-    const response = `✅ **Framework System Enabled**\n\n` +
-      `**Reason**: ${args.reason || "User requested to enable framework system"}\n` +
+    const response =
+      `✅ **Framework System Enabled**\n\n` +
+      `**Reason**: ${
+        args.reason || "User requested to enable framework system"
+      }\n` +
       `**Status**: Framework system is now active\n` +
       `**Active Framework**: ${currentState.activeFramework}\n\n` +
       `🎯 All prompt executions will now use framework-guided processing.`;
 
-    return this.createMinimalSystemResponse(response, "enable_framework_system");
+    return this.createMinimalSystemResponse(
+      response,
+      "enable_framework_system"
+    );
   }
 
   public async disableFrameworkSystem(args: {
@@ -573,18 +659,212 @@ export class ConsolidatedSystemControl {
 
     // Disable framework system (for now, just return success message since the method may not exist)
     try {
-      await (this.frameworkStateManager as any).disableFrameworkSystem?.(args.reason || "User requested to disable framework system");
+      await (this.frameworkStateManager as any).disableFrameworkSystem?.(
+        args.reason || "User requested to disable framework system"
+      );
     } catch (error) {
       // Method may not exist, that's ok for now
     }
 
-    const response = `⚠️ **Framework System Disabled**\n\n` +
-      `**Reason**: ${args.reason || "User requested to disable framework system"}\n` +
+    const response =
+      `⚠️ **Framework System Disabled**\n\n` +
+      `**Reason**: ${
+        args.reason || "User requested to disable framework system"
+      }\n` +
       `**Status**: Framework system is now inactive\n` +
       `**Previous Framework**: ${currentState.activeFramework}\n\n` +
       `📝 Prompt executions will now use basic processing without framework guidance.`;
 
-    return this.createMinimalSystemResponse(response, "disable_framework_system");
+    return this.createMinimalSystemResponse(
+      response,
+      "disable_framework_system"
+    );
+  }
+
+  /**
+   * Enable gate system
+   */
+  public async enableGateSystem(args: {
+    reason?: string;
+  }): Promise<ToolResponse> {
+    if (!this.gateSystemManager) {
+      throw new Error("Gate system manager not initialized");
+    }
+
+    const currentState = this.gateSystemManager.getCurrentState();
+    if (currentState.enabled) {
+      return this.createMinimalSystemResponse(
+        `ℹ️ Gate system is already enabled.`,
+        "enable_gate_system"
+      );
+    }
+
+    await this.gateSystemManager.enableGateSystem(
+      args.reason || "User requested to enable gate system"
+    );
+
+    const response =
+      `✅ **Gate System Enabled**\n\n` +
+      `**Reason**: ${args.reason || "User requested to enable gate system"}\n` +
+      `**Status**: Gate system is now active\n` +
+      `**Validation**: Quality gates will now be applied to prompt executions\n\n` +
+      `🔍 All template and chain executions will now include gate validation and guidance.`;
+
+    return this.createMinimalSystemResponse(response, "enable_gate_system");
+  }
+
+  /**
+   * Disable gate system
+   */
+  public async disableGateSystem(args: {
+    reason?: string;
+  }): Promise<ToolResponse> {
+    if (!this.gateSystemManager) {
+      throw new Error("Gate system manager not initialized");
+    }
+
+    const currentState = this.gateSystemManager.getCurrentState();
+    if (!currentState.enabled) {
+      return this.createMinimalSystemResponse(
+        `ℹ️ Gate system is already disabled.`,
+        "disable_gate_system"
+      );
+    }
+
+    await this.gateSystemManager.disableGateSystem(
+      args.reason || "User requested to disable gate system"
+    );
+
+    const response =
+      `⚠️ **Gate System Disabled**\n\n` +
+      `**Reason**: ${
+        args.reason || "User requested to disable gate system"
+      }\n` +
+      `**Status**: Gate system is now inactive\n` +
+      `**Impact**: Gate validation and guidance will be skipped\n\n` +
+      `📝 Prompt executions will now skip quality gate validation.`;
+
+    return this.createMinimalSystemResponse(response, "disable_gate_system");
+  }
+
+  /**
+   * Get gate system status
+   */
+  public async getGateSystemStatus(): Promise<ToolResponse> {
+    if (!this.gateSystemManager) {
+      return this.createMinimalSystemResponse(
+        `❌ Gate system manager not available.`,
+        "gate_system_status"
+      );
+    }
+
+    const currentState = this.gateSystemManager.getCurrentState();
+    const health = this.gateSystemManager.getSystemHealth();
+
+    let response = `🚪 **Gate System Status**\n\n`;
+    response += `**System State**: ${
+      currentState.enabled ? "Enabled" : "Disabled"
+    }\n`;
+    response += `**Health Status**: ${health.status}\n`;
+    response += `**Total Validations**: ${health.totalValidations}\n`;
+    response += `**Success Rate**: ${health.successRate}%\n`;
+    response += `**Average Validation Time**: ${health.averageValidationTime}ms\n`;
+
+    if (health.lastValidationTime) {
+      response += `**Last Validation**: ${health.lastValidationTime.toISOString()}\n`;
+    }
+
+    if (health.issues.length > 0) {
+      response += `\n⚠️ **Issues**:\n`;
+      health.issues.forEach((issue) => {
+        response += `- ${issue}\n`;
+      });
+    }
+
+    response += `\n🔧 Control gates using: action="gates", operation="enable/disable"`;
+
+    return this.createMinimalSystemResponse(response, "gate_system_status");
+  }
+
+  /**
+   * Get gate system health details
+   */
+  public async getGateSystemHealth(): Promise<ToolResponse> {
+    if (!this.gateSystemManager) {
+      return this.createMinimalSystemResponse(
+        `❌ Gate system manager not available.`,
+        "gate_system_health"
+      );
+    }
+
+    const health = this.gateSystemManager.getSystemHealth();
+
+    let response = `🏥 **Gate System Health Report**\n\n`;
+
+    // Health status indicator
+    const statusIcon =
+      health.status === "healthy"
+        ? "✅"
+        : health.status === "degraded"
+        ? "⚠️"
+        : "❌";
+    response += `**Overall Status**: ${statusIcon} ${health.status.toUpperCase()}\n\n`;
+
+    // Core metrics
+    response += `**Performance Metrics**:\n`;
+    response += `- Enabled: ${health.enabled ? "Yes" : "No"}\n`;
+    response += `- Total Validations: ${health.totalValidations}\n`;
+    response += `- Success Rate: ${health.successRate}%\n`;
+    response += `- Average Validation Time: ${health.averageValidationTime}ms\n`;
+
+    if (health.lastValidationTime) {
+      response += `- Last Validation: ${health.lastValidationTime.toISOString()}\n`;
+    }
+
+    // Health analysis
+    if (health.status === "healthy") {
+      response += "\n✅ System is performing optimally. No action required.\n";
+    } else if (health.status === "degraded") {
+      response += "\n⚠️ System performance is degraded. Monitor closely.\n";
+      if (health.issues.length > 0) {
+        response += "\n**Issues Detected**:\n";
+        health.issues.forEach((issue) => {
+          response += `- ${issue}\n`;
+        });
+      }
+    } else if (health.status === "disabled") {
+      response += "\n🚫 Gate system is currently disabled.\n";
+      response += "Enable using: `action='gates', operation='enable'`\n";
+    }
+
+    return this.createMinimalSystemResponse(response, "gate_system_health");
+  }
+
+  /**
+   * List all available quality gates
+   */
+  async listAvailableGates(): Promise<ToolResponse> {
+    const gates =
+      (await this.gateGuidanceRenderer?.getAvailableGates()) || [];
+
+    const gateList = gates.length
+      ? gates.map((gate) => `• ${gate}`).join("\n")
+      : "• No quality gates discovered. Ensure gate configuration is available.";
+
+    const exampleGate = gates[0] || "gate-name";
+
+    const response = [
+      "📋 **Available Quality Gates**",
+      "",
+      "Discover gates using: `system_control({ action: \"gates\", operation: \"list\" })`",
+      "",
+      gateList,
+      "",
+      "**Usage**: Specify gate names in prompt_engine's `quality_gates` parameter",
+      `**Example**: \`{ \\\"quality_gates\\\": [\"${exampleGate}\"], \\\"gate_mode\\\": \"enforce\" }\``,
+    ].join("\n");
+
+    return this.createMinimalSystemResponse(response, "gate_list");
   }
 
   public async resetMetrics(args: any): Promise<ToolResponse> {
@@ -620,32 +900,54 @@ abstract class ActionHandler {
   abstract execute(args: any): Promise<ToolResponse>;
 
   // Convenience getters for accessing system control properties
-  protected get responseFormatter() { return this.systemControl['responseFormatter']; }
-  protected get logger() { return this.systemControl['logger']; }
-  protected get startTime() { return this.systemControl.startTime; }
-  protected get frameworkManager() { return this.systemControl['frameworkManager']; }
-  protected get mcpToolsManager() { return this.systemControl['mcpToolsManager']; }
-  protected get configManager() { return this.systemControl['configManager']; }
-  protected get safeConfigWriter() { return this.systemControl['safeConfigWriter']; }
-  protected get onRestart() { return this.systemControl['onRestart']; }
+  protected get responseFormatter() {
+    return this.systemControl["responseFormatter"];
+  }
+  protected get logger() {
+    return this.systemControl["logger"];
+  }
+  protected get startTime() {
+    return this.systemControl.startTime;
+  }
+  protected get frameworkManager() {
+    return this.systemControl["frameworkManager"];
+  }
+  protected get mcpToolsManager() {
+    return this.systemControl["mcpToolsManager"];
+  }
+  protected get configManager() {
+    return this.systemControl["configManager"];
+  }
+  protected get safeConfigWriter() {
+    return this.systemControl["safeConfigWriter"];
+  }
+  protected get onRestart() {
+    return this.systemControl["onRestart"];
+  }
 
   // Helper methods for system status and formatting
-  protected createMinimalSystemResponse(text: string, action: string): ToolResponse {
+  protected createMinimalSystemResponse(
+    text: string,
+    action: string
+  ): ToolResponse {
     return createStructuredResponse(text, false, {
       action,
       systemState: {
         uptime: Date.now() - this.startTime,
-        framework: this.systemControl.frameworkStateManager?.getCurrentState().activeFramework
-      }
+        framework:
+          this.systemControl.frameworkStateManager?.getCurrentState()
+            .activeFramework,
+      },
     });
   }
 
   protected getExecutionsByMode(): Record<string, number> {
     // Extract execution mode data from performance trends
     const modeData: Record<string, number> = {};
-    this.systemControl.systemAnalytics.performanceTrends.forEach(trend => {
+    this.systemControl.systemAnalytics.performanceTrends.forEach((trend) => {
       if (trend.executionMode) {
-        modeData[trend.executionMode] = (modeData[trend.executionMode] || 0) + 1;
+        modeData[trend.executionMode] =
+          (modeData[trend.executionMode] || 0) + 1;
       }
     });
     return modeData;
@@ -668,7 +970,7 @@ abstract class ActionHandler {
   }
 
   protected formatBytes(bytes: number): string {
-    const units = ['B', 'KB', 'MB', 'GB'];
+    const units = ["B", "KB", "MB", "GB"];
     let value = bytes;
     let unitIndex = 0;
     while (value >= 1024 && unitIndex < units.length - 1) {
@@ -680,35 +982,47 @@ abstract class ActionHandler {
 
   protected getHealthIcon(status: string): string {
     switch (status) {
-      case 'healthy': return '✅';
-      case 'warning': return '⚠️';
-      case 'error': return '❌';
-      case 'critical': return '🚨';
-      default: return '❓';
+      case "healthy":
+        return "✅";
+      case "warning":
+        return "⚠️";
+      case "error":
+        return "❌";
+      case "critical":
+        return "🚨";
+      default:
+        return "❓";
     }
   }
 
   protected getSuccessRate(): number {
     const total = this.systemControl.systemAnalytics.totalExecutions;
     if (total === 0) return 100;
-    return Math.round((this.systemControl.systemAnalytics.successfulExecutions / total) * 100);
+    return Math.round(
+      (this.systemControl.systemAnalytics.successfulExecutions / total) * 100
+    );
   }
 
   protected formatTrendContext(trend: any): string {
-    let context = '';
+    let context = "";
     if (trend.framework) context += ` [${trend.framework}]`;
     if (trend.executionMode) context += ` (${trend.executionMode})`;
-    if (trend.success !== undefined) context += trend.success ? ' ✓' : ' ✗';
+    if (trend.success !== undefined) context += trend.success ? " ✓" : " ✗";
     return context;
   }
 
   protected formatTrendValue(metric: string, value: number): string {
     switch (metric) {
-      case 'executionTime': return `${Math.round(value)}ms`;
-      case 'memoryDelta': return `${value > 0 ? '+' : ''}${this.formatBytes(value)}`;
-      case 'successRate': return `${Math.round(value * 100)}%`;
-      case 'gateValidationTime': return `${Math.round(value)}ms validation`;
-      default: return String(value);
+      case "executionTime":
+        return `${Math.round(value)}ms`;
+      case "memoryDelta":
+        return `${value > 0 ? "+" : ""}${this.formatBytes(value)}`;
+      case "successRate":
+        return `${Math.round(value * 100)}%`;
+      case "gateValidationTime":
+        return `${Math.round(value)}ms validation`;
+      default:
+        return String(value);
     }
   }
 }
@@ -718,21 +1032,21 @@ abstract class ActionHandler {
  */
 class StatusActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
-    const operation = args.operation || 'default';
+    const operation = args.operation || "default";
 
     switch (operation) {
-      case 'health':
+      case "health":
         return await this.getSystemHealthStatus();
-      case 'diagnostics':
+      case "diagnostics":
         return await this.getSystemDiagnostics();
-      case 'framework_status':
+      case "framework_status":
         return await this.getFrameworkStatus();
-      case 'overview':
-      case 'default':
+      case "overview":
+      case "default":
       default:
         return await this.systemControl.getSystemStatus({
           include_history: args.include_history,
-          include_metrics: args.include_metrics
+          include_metrics: args.include_metrics,
         });
     }
   }
@@ -743,21 +1057,23 @@ class StatusActionHandler extends ActionHandler {
     }
 
     const health = this.systemControl.frameworkStateManager.getSystemHealth();
-    const statusIcon = health.status === 'healthy' ? '✅' : '⚠️';
+    const statusIcon = health.status === "healthy" ? "✅" : "⚠️";
 
     let response = `${statusIcon} **System Health Status**: ${health.status}\n\n`;
     response += `📊 **Metrics**:\n`;
 
     // Improved framework status display
     const isFrameworkEnabled = health.frameworkSystemEnabled;
-    const injectionStatus = isFrameworkEnabled ? 'Working' : 'Inactive';
+    const injectionStatus = isFrameworkEnabled ? "Working" : "Inactive";
     const frameworkStatusText = isFrameworkEnabled
       ? `✅ Enabled - ${health.activeFramework} methodology active`
       : `🚫 Disabled - ${health.activeFramework} selected but not injecting`;
 
     response += `- Framework System: ${frameworkStatusText}\n`;
     response += `- Framework Injection: ${injectionStatus}\n`;
-    response += `- Available Frameworks: ${health.availableFrameworks.join(', ')}\n`;
+    response += `- Available Frameworks: ${health.availableFrameworks.join(
+      ", "
+    )}\n`;
     response += `- Total Framework Switches: ${health.switchingMetrics.totalSwitches}\n`;
 
     return this.createMinimalSystemResponse(response, "health");
@@ -768,13 +1084,15 @@ class StatusActionHandler extends ActionHandler {
 
     try {
       if (this.systemControl.frameworkStateManager) {
-        const health = this.systemControl.frameworkStateManager.getSystemHealth();
+        const health =
+          this.systemControl.frameworkStateManager.getSystemHealth();
         response += `Framework State: ${health.status}\n`;
         response += `Active Framework: ${health.activeFramework}\n`;
       }
 
-      response += `Server Uptime: ${Date.now() - this.systemControl.startTime}ms\n`;
-
+      response += `Server Uptime: ${
+        Date.now() - this.systemControl.startTime
+      }ms\n`;
     } catch (error) {
       response += `❌ Error during diagnostics: ${error}\n`;
     }
@@ -793,16 +1111,20 @@ class StatusActionHandler extends ActionHandler {
 
     // Enhanced status display
     const isFrameworkEnabled = health.frameworkSystemEnabled;
-    const injectionStatusIcon = isFrameworkEnabled ? '✅' : '🚫';
+    const injectionStatusIcon = isFrameworkEnabled ? "✅" : "🚫";
     const injectionStatusText = isFrameworkEnabled
-      ? 'Active - Framework guidance being applied'
-      : 'Inactive - Framework guidance disabled';
+      ? "Active - Framework guidance being applied"
+      : "Inactive - Framework guidance disabled";
 
     response += `**Selected Framework**: ${health.activeFramework}\n`;
     response += `**Injection Status**: ${injectionStatusIcon} ${injectionStatusText}\n`;
-    response += `**System State**: ${health.frameworkSystemEnabled ? 'Enabled' : 'Disabled'}\n`;
+    response += `**System State**: ${
+      health.frameworkSystemEnabled ? "Enabled" : "Disabled"
+    }\n`;
     response += `**Health Status**: ${health.status}\n`;
-    response += `**Available Frameworks**: ${health.availableFrameworks.join(', ')}\n`;
+    response += `**Available Frameworks**: ${health.availableFrameworks.join(
+      ", "
+    )}\n`;
 
     // Add warning for confused state
     if (!isFrameworkEnabled && health.activeFramework) {
@@ -820,28 +1142,60 @@ class StatusActionHandler extends ActionHandler {
  */
 class FrameworkActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
-    const operation = args.operation || 'default';
+    const operation = args.operation || "default";
 
     switch (operation) {
-      case 'switch':
+      case "switch":
         return await this.systemControl.switchFramework({
           framework: args.framework,
-          reason: args.reason
+          reason: args.reason,
         });
-      case 'list':
+      case "list":
         return await this.systemControl.listFrameworks({
-          show_details: args.show_details
+          show_details: args.show_details,
         });
-      case 'enable':
+      case "enable":
         return await this.systemControl.enableFrameworkSystem({
-          reason: args.reason
+          reason: args.reason,
         });
-      case 'disable':
+      case "disable":
         return await this.systemControl.disableFrameworkSystem({
-          reason: args.reason
+          reason: args.reason,
         });
       default:
-        throw new Error(`Unknown framework operation: ${operation}. Valid operations: switch, list, enable, disable`);
+        throw new Error(
+          `Unknown framework operation: ${operation}. Valid operations: switch, list, enable, disable`
+        );
+    }
+  }
+}
+
+/**
+ * Handler for gates-related operations
+ */
+class GateActionHandler extends ActionHandler {
+  async execute(args: any): Promise<ToolResponse> {
+    const operation = args.operation || "status";
+
+    switch (operation) {
+      case "enable":
+        return await this.systemControl.enableGateSystem({
+          reason: args.reason,
+        });
+      case "disable":
+        return await this.systemControl.disableGateSystem({
+          reason: args.reason,
+        });
+      case "status":
+        return await this.systemControl.getGateSystemStatus();
+      case "health":
+        return await this.systemControl.getGateSystemHealth();
+      case "list":
+        return await this.systemControl.listAvailableGates();
+      default:
+        throw new Error(
+          `Unknown gates operation: ${operation}. Valid operations: enable, disable, status, health, list`
+        );
     }
   }
 }
@@ -851,23 +1205,23 @@ class FrameworkActionHandler extends ActionHandler {
  */
 class AnalyticsActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
-    const operation = args.operation || 'default';
+    const operation = args.operation || "default";
 
     switch (operation) {
-      case 'reset':
+      case "reset":
         return await this.systemControl.resetMetrics({
-          confirm: args.confirm
+          confirm: args.confirm,
         });
-      case 'history':
+      case "history":
         return await this.systemControl.getSwitchHistory({
-          limit: args.limit
+          limit: args.limit,
         });
-      case 'view':
-      case 'default':
+      case "view":
+      case "default":
       default:
         return await this.systemControl.getAnalytics({
           include_history: args.include_history,
-          reset_analytics: args.reset_analytics
+          reset_analytics: args.reset_analytics,
         });
     }
   }
@@ -878,22 +1232,22 @@ class AnalyticsActionHandler extends ActionHandler {
  */
 class ConfigActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
-    const operation = args.operation || 'default';
+    const operation = args.operation || "default";
 
     switch (operation) {
-      case 'restore':
+      case "restore":
         return await this.systemControl.restoreConfig({
           backup_path: args.backup_path,
-          confirm: args.confirm
+          confirm: args.confirm,
         });
-      case 'get':
-      case 'set':
-      case 'list':
-      case 'validate':
-      case 'default':
+      case "get":
+      case "set":
+      case "list":
+      case "validate":
+      case "default":
       default:
         return await this.systemControl.manageConfig({
-          config: args.config
+          config: args.config,
         });
     }
   }
@@ -904,15 +1258,15 @@ class ConfigActionHandler extends ActionHandler {
  */
 class MaintenanceActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
-    const operation = args.operation || 'default';
+    const operation = args.operation || "default";
 
     switch (operation) {
-      case 'restart':
-      case 'default':
+      case "restart":
+      case "default":
       default:
         return await this.systemControl.restartServer({
           reason: args.reason,
-          confirm: args.confirm
+          confirm: args.confirm,
         });
     }
   }
@@ -925,43 +1279,77 @@ class MaintenanceActionHandler extends ActionHandler {
     include_metrics?: boolean;
   }): Promise<ToolResponse> {
     const { include_history = false, include_metrics = true } = args;
-    
+
     if (!this.systemControl.frameworkStateManager) {
       throw new Error("Framework state manager not initialized");
     }
 
-    const currentState = this.systemControl.frameworkStateManager.getCurrentState();
-    const systemHealth = this.systemControl.frameworkStateManager.getSystemHealth();
-    const activeFramework = this.systemControl.frameworkStateManager.getActiveFramework();
-    
+    const currentState =
+      this.systemControl.frameworkStateManager.getCurrentState();
+    const systemHealth =
+      this.systemControl.frameworkStateManager.getSystemHealth();
+    const activeFramework =
+      this.systemControl.frameworkStateManager.getActiveFramework();
+
     let response = "# ⚙️ System Status Report\n\n";
-    
+
     // Framework Status
     response += "## 📋 Framework Status\n\n";
     response += `**Active Framework**: ${activeFramework.name} (${activeFramework.id})\n`;
     response += `**Description**: ${activeFramework.description}\n`;
-    response += `**System Health**: ${this.getHealthIcon(systemHealth.status)} ${systemHealth.status.toUpperCase()}\n`;
+    response += `**System Health**: ${this.getHealthIcon(
+      systemHealth.status
+    )} ${systemHealth.status.toUpperCase()}\n`;
     response += `**Last Switch**: ${currentState.switchedAt.toISOString()}\n`;
     response += `**Switch Reason**: ${currentState.switchReason}\n\n`;
 
+    // Gate System Status
+    if (this.systemControl.gateSystemManager) {
+      const gateHealth = this.systemControl.gateSystemManager.getSystemHealth();
+      response += "## 🚪 Gate System Status\n\n";
+      response += `**System State**: ${
+        gateHealth.enabled ? "Enabled" : "Disabled"
+      }\n`;
+      response += `**Health Status**: ${this.getHealthIcon(
+        gateHealth.status
+      )} ${gateHealth.status.toUpperCase()}\n`;
+      response += `**Total Validations**: ${gateHealth.totalValidations}\n`;
+      response += `**Success Rate**: ${gateHealth.successRate}%\n`;
+      if (gateHealth.lastValidationTime) {
+        response += `**Last Validation**: ${gateHealth.lastValidationTime.toISOString()}\n`;
+      }
+      response += `\n`;
+    } else {
+      response += "## 🚪 Gate System Status\n\n";
+      response += `**System State**: Not Available\n`;
+      response += `**Note**: Gate system manager not initialized\n\n`;
+    }
+
     // System Metrics
     response += "## 📊 System Metrics\n\n";
-    response += `**Uptime**: ${this.formatUptime(this.systemControl.systemAnalytics.uptime)}\n`;
+    response += `**Uptime**: ${this.formatUptime(
+      this.systemControl.systemAnalytics.uptime
+    )}\n`;
     response += `**Total Executions**: ${this.systemControl.systemAnalytics.totalExecutions}\n`;
     response += `**Success Rate**: ${this.getSuccessRate()}%\n`;
-    response += `**Average Execution Time**: ${this.formatExecutionTime(this.systemControl.systemAnalytics.averageExecutionTime)}\n`;
+    response += `**Average Execution Time**: ${this.formatExecutionTime(
+      this.systemControl.systemAnalytics.averageExecutionTime
+    )}\n`;
 
     if (this.systemControl.systemAnalytics.memoryUsage) {
       const mem = this.systemControl.systemAnalytics.memoryUsage;
-      response += `**Memory Usage**: ${this.formatBytes(mem.heapUsed)}/${this.formatBytes(mem.heapTotal)}\n`;
+      response += `**Memory Usage**: ${this.formatBytes(
+        mem.heapUsed
+      )}/${this.formatBytes(mem.heapTotal)}\n`;
     }
-    
+
     response += `\n`;
 
     // Available Frameworks
-    const availableFrameworks = this.systemControl.frameworkStateManager.getAvailableFrameworks();
+    const availableFrameworks =
+      this.systemControl.frameworkStateManager.getAvailableFrameworks();
     response += "## 🔄 Available Frameworks\n\n";
-    availableFrameworks.forEach(framework => {
+    availableFrameworks.forEach((framework) => {
       const isActive = framework.id === currentState.activeFramework;
       const icon = isActive ? "🟢" : "⚪";
       response += `${icon} **${framework.name}** - ${framework.description}\n`;
@@ -973,15 +1361,25 @@ class MaintenanceActionHandler extends ActionHandler {
       response += "## 🎯 Performance Breakdown\n\n";
       const switchingMetrics = systemHealth.switchingMetrics;
       response += `**Framework Switches**: ${switchingMetrics.totalSwitches}\n`;
-      response += `**Framework Switch Success Rate**: ${switchingMetrics.totalSwitches > 0 
-        ? Math.round((switchingMetrics.successfulSwitches / switchingMetrics.totalSwitches) * 100) 
-        : 100}%\n`;
-      response += `**Framework Switch Time**: ${Math.round(switchingMetrics.averageResponseTime)}ms\n`;
-      
+      response += `**Framework Switch Success Rate**: ${
+        switchingMetrics.totalSwitches > 0
+          ? Math.round(
+              (switchingMetrics.successfulSwitches /
+                switchingMetrics.totalSwitches) *
+                100
+            )
+          : 100
+      }%\n`;
+      response += `**Framework Switch Time**: ${Math.round(
+        switchingMetrics.averageResponseTime
+      )}ms\n`;
+
       response += `\n**Execution Modes**:\n`;
       const executionsByMode = this.getExecutionsByMode();
       Object.entries(executionsByMode).forEach(([mode, count]) => {
-        response += `- ${mode.charAt(0).toUpperCase() + mode.slice(1)}: ${count} executions\n`;
+        response += `- ${
+          mode.charAt(0).toUpperCase() + mode.slice(1)
+        }: ${count} executions\n`;
       });
       response += `\n`;
     }
@@ -989,20 +1387,30 @@ class MaintenanceActionHandler extends ActionHandler {
     // System Health Issues
     if (systemHealth.issues.length > 0) {
       response += "## ⚠️ System Issues\n\n";
-      systemHealth.issues.forEach(issue => {
+      systemHealth.issues.forEach((issue) => {
         response += `- ⚠️ ${issue}\n`;
       });
       response += "\n";
     }
 
     // Recent Activity
-    if (include_history && this.systemControl.systemAnalytics.performanceTrends.length > 0) {
+    if (
+      include_history &&
+      this.systemControl.systemAnalytics.performanceTrends.length > 0
+    ) {
       response += "## 📈 Recent Performance Trends\n\n";
-      const recentTrends = this.systemControl.systemAnalytics.performanceTrends.slice(-10);
+      const recentTrends =
+        this.systemControl.systemAnalytics.performanceTrends.slice(-10);
       recentTrends.forEach((trend, index) => {
-        const timestamp = new Date(trend.timestamp).toISOString().split('T')[1].split('.')[0];
+        const timestamp = new Date(trend.timestamp)
+          .toISOString()
+          .split("T")[1]
+          .split(".")[0];
         const contextInfo = this.formatTrendContext(trend);
-        response += `${index + 1}. ${timestamp}: ${this.formatTrendValue(trend.metric, trend.value)}${contextInfo}\n`;
+        response += `${index + 1}. ${timestamp}: ${this.formatTrendValue(
+          trend.metric,
+          trend.value
+        )}${contextInfo}\n`;
       });
       response += "\n";
     }
@@ -1010,10 +1418,13 @@ class MaintenanceActionHandler extends ActionHandler {
     // Control Commands
     response += "## 🎛️ Available Commands\n\n";
     response += "- `switch_framework` - Change active framework methodology\n";
+    response +=
+      "- `gates` - Control gate system (enable, disable, status, health)\n";
     response += "- `analytics` - View detailed execution analytics\n";
     response += "- `health` - Check system health status\n";
     response += "- `diagnostics` - Run comprehensive system diagnostics\n";
-    response += "- `config` - Manage system configuration (get, set, list, validate)\n";
+    response +=
+      "- `config` - Manage system configuration (get, set, list, validate)\n";
     response += "- `config_restore` - Restore configuration from backup\n";
     response += "- `reset_metrics` - Reset framework switching counters\n";
     response += "- `switch_history` - View framework change history\n";
@@ -1025,11 +1436,16 @@ class MaintenanceActionHandler extends ActionHandler {
       {
         frameworkEnabled: currentState.frameworkSystemEnabled,
         activeFramework: activeFramework.name,
-        availableFrameworks: this.frameworkManager?.listFrameworks().map((f: any) => f.name) || [],
+        availableFrameworks:
+          this.frameworkManager?.listFrameworks().map((f: any) => f.name) || [],
         uptime: (Date.now() - this.startTime) / 1000,
         memoryUsage: process.memoryUsage ? process.memoryUsage() : undefined,
-        serverHealth: systemHealth.status as "healthy" | "warning" | "error" | "critical",
-        lastFrameworkSwitch: currentState.switchedAt.toISOString()
+        serverHealth: systemHealth.status as
+          | "healthy"
+          | "warning"
+          | "error"
+          | "critical",
+        lastFrameworkSwitch: currentState.switchedAt.toISOString(),
       },
       undefined,
       {
@@ -1053,10 +1469,12 @@ class MaintenanceActionHandler extends ActionHandler {
       throw new Error("Framework parameter is required for switch operation");
     }
 
-    const { framework, reason = `User requested switch to ${args.framework}` } = args;
-    
-    const currentState = this.systemControl.frameworkStateManager.getCurrentState();
-    
+    const { framework, reason = `User requested switch to ${args.framework}` } =
+      args;
+
+    const currentState =
+      this.systemControl.frameworkStateManager.getCurrentState();
+
     // Check if already active
     if (currentState.activeFramework === framework) {
       return this.createMinimalSystemResponse(
@@ -1067,15 +1485,18 @@ class MaintenanceActionHandler extends ActionHandler {
 
     const request: FrameworkSwitchRequest = {
       targetFramework: framework,
-      reason: reason
+      reason: reason,
     };
 
-    const success = await this.systemControl.frameworkStateManager.switchFramework(request);
+    const success =
+      await this.systemControl.frameworkStateManager.switchFramework(request);
 
     if (success) {
-      const newState = this.systemControl.frameworkStateManager.getCurrentState();
-      const activeFramework = this.systemControl.frameworkStateManager.getActiveFramework();
-      
+      const newState =
+        this.systemControl.frameworkStateManager.getCurrentState();
+      const activeFramework =
+        this.systemControl.frameworkStateManager.getActiveFramework();
+
       let response = `🔄 **Framework Switch Successful**\n\n`;
       response += `**Previous**: ${currentState.activeFramework}\n`;
       response += `**Current**: ${newState.activeFramework}\n`;
@@ -1085,7 +1506,9 @@ class MaintenanceActionHandler extends ActionHandler {
       response += `- **Name**: ${activeFramework.name}\n`;
       response += `- **Description**: ${activeFramework.description}\n`;
       response += `- **Methodology**: ${activeFramework.methodology}\n\n`;
-      response += `**Guidelines**: ${activeFramework.executionGuidelines.join(' • ')}\n\n`;
+      response += `**Guidelines**: ${activeFramework.executionGuidelines.join(
+        " • "
+      )}\n\n`;
       response += `✅ All future prompt executions will now use the ${framework} methodology.`;
 
       // Trigger dynamic tool description updates
@@ -1094,14 +1517,21 @@ class MaintenanceActionHandler extends ActionHandler {
           await this.mcpToolsManager.reregisterToolsWithUpdatedDescriptions();
           response += `\n\n🔄 **Tool descriptions updated** - MCP clients will receive updated tool descriptions with ${framework} methodology guidance.`;
         } catch (error) {
-          this.logger.error(`Failed to update tool descriptions after framework switch: ${error instanceof Error ? error.message : String(error)}`);
+          this.logger.error(
+            `Failed to update tool descriptions after framework switch: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
           response += `\n\n⚠️ **Note**: Tool descriptions may need manual refresh for some clients.`;
         }
       }
 
       return this.createMinimalSystemResponse(response, "switch_framework");
     } else {
-      return this.createMinimalSystemResponse(`❌ Failed to switch to framework '${framework}'. Check system logs for details.`, "switch_framework");
+      return this.createMinimalSystemResponse(
+        `❌ Failed to switch to framework '${framework}'. Check system logs for details.`,
+        "switch_framework"
+      );
     }
   }
 
@@ -1116,39 +1546,45 @@ class MaintenanceActionHandler extends ActionHandler {
     }
 
     const { show_details = true } = args;
-    
-    const currentState = this.systemControl.frameworkStateManager.getCurrentState();
-    const availableFrameworks = this.systemControl.frameworkStateManager.getAvailableFrameworks();
-    
+
+    const currentState =
+      this.systemControl.frameworkStateManager.getCurrentState();
+    const availableFrameworks =
+      this.systemControl.frameworkStateManager.getAvailableFrameworks();
+
     let response = "# 📋 Available Framework Methodologies\n\n";
     response += `**Currently Active**: ${currentState.activeFramework}\n\n`;
 
-    availableFrameworks.forEach(framework => {
+    availableFrameworks.forEach((framework) => {
       const isActive = framework.id === currentState.activeFramework;
       const icon = isActive ? "🟢" : "⚪";
       const status = isActive ? " (ACTIVE)" : "";
-      
+
       response += `## ${icon} ${framework.name}${status}\n\n`;
       response += `**ID**: ${framework.id}\n`;
       response += `**Methodology**: ${framework.methodology}\n`;
       response += `**Description**: ${framework.description}\n`;
       response += `**Priority**: ${framework.priority}\n`;
-      response += `**Enabled**: ${framework.enabled ? '✅ Yes' : '❌ No'}\n`;
-      response += `**Applicable Types**: ${framework.applicableTypes.join(', ') || 'All'}\n`;
-      
+      response += `**Enabled**: ${framework.enabled ? "✅ Yes" : "❌ No"}\n`;
+      response += `**Applicable Types**: ${
+        framework.applicableTypes.join(", ") || "All"
+      }\n`;
+
       if (show_details && framework.executionGuidelines) {
         response += `\n**Execution Guidelines**:\n`;
         framework.executionGuidelines.forEach((guideline, index) => {
           response += `${index + 1}. ${guideline}\n`;
         });
       }
-      
+
       response += "\n";
     });
 
     response += "---\n\n";
-    response += "**Usage**: Use `switch_framework` action to change the active framework methodology.\n";
-    response += "**Note**: The framework methodology determines how prompts are processed systematically.";
+    response +=
+      "**Usage**: Use `switch_framework` action to change the active framework methodology.\n";
+    response +=
+      "**Note**: The framework methodology determines how prompts are processed systematically.";
 
     return this.createMinimalSystemResponse(response, "list_frameworks");
   }
@@ -1161,7 +1597,7 @@ class MaintenanceActionHandler extends ActionHandler {
     reset_analytics?: boolean;
   }): Promise<ToolResponse> {
     const { include_history = false, reset_analytics = false } = args;
-    
+
     if (reset_analytics) {
       this.resetAnalyticsData();
       return this.createMinimalSystemResponse(
@@ -1171,57 +1607,86 @@ class MaintenanceActionHandler extends ActionHandler {
     }
 
     const successRate = this.getSuccessRate();
-    const avgTime = this.formatExecutionTime(this.systemControl.systemAnalytics.averageExecutionTime);
-    
+    const avgTime = this.formatExecutionTime(
+      this.systemControl.systemAnalytics.averageExecutionTime
+    );
+
     let response = "# 📊 System Analytics Report\n\n";
-    
+
     // Overall Performance
     response += "## 📈 Overall Performance\n\n";
     response += `**Total Executions**: ${this.systemControl.systemAnalytics.totalExecutions}\n`;
     response += `**Success Rate**: ${successRate}%\n`;
     response += `**Failed Executions**: ${this.systemControl.systemAnalytics.failedExecutions}\n`;
     response += `**Average Execution Time**: ${avgTime}\n`;
-    response += `**System Uptime**: ${this.formatUptime(this.systemControl.systemAnalytics.uptime)}\n\n`;
-    
+    response += `**System Uptime**: ${this.formatUptime(
+      this.systemControl.systemAnalytics.uptime
+    )}\n\n`;
+
     // Execution Modes
     response += "## 🎯 Execution Mode Distribution\n\n";
     const executionsByMode = this.getExecutionsByMode();
-    const totalModeExecutions = Object.values(executionsByMode).reduce((a, b) => a + b, 0);
+    const totalModeExecutions = Object.values(executionsByMode).reduce(
+      (a, b) => a + b,
+      0
+    );
     Object.entries(executionsByMode).forEach(([mode, count]) => {
-      const percentage = totalModeExecutions > 0 ? Math.round((count / totalModeExecutions) * 100) : 0;
-      response += `- **${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode**: ${count} executions (${percentage}%)\n`;
+      const percentage =
+        totalModeExecutions > 0
+          ? Math.round((count / totalModeExecutions) * 100)
+          : 0;
+      response += `- **${
+        mode.charAt(0).toUpperCase() + mode.slice(1)
+      } Mode**: ${count} executions (${percentage}%)\n`;
     });
     response += "\n";
-    
+
     // Quality Gates (Phase 4: Enhanced with advanced analytics)
     response += "## 🛡️ Quality Gate Analytics\n\n";
     response += `**Gate Validations**: ${this.systemControl.systemAnalytics.gateValidationCount}\n`;
-    response += `**Gate Adoption Rate**: ${this.systemControl.systemAnalytics.totalExecutions > 0
-      ? Math.round((this.systemControl.systemAnalytics.gateValidationCount / this.systemControl.systemAnalytics.totalExecutions) * 100)
-      : 0}%\n`;
+    response += `**Gate Adoption Rate**: ${
+      this.systemControl.systemAnalytics.totalExecutions > 0
+        ? Math.round(
+            (this.systemControl.systemAnalytics.gateValidationCount /
+              this.systemControl.systemAnalytics.totalExecutions) *
+              100
+          )
+        : 0
+    }%\n`;
 
     // Phase 4: Clean architecture gate performance analytics
     if (this.systemControl.gatePerformanceAnalyzer) {
       try {
-        const gateAnalytics = this.systemControl.gatePerformanceAnalyzer.getPerformanceAnalytics();
+        const gateAnalytics =
+          this.systemControl.gatePerformanceAnalyzer.getPerformanceAnalytics();
         response += `**Advanced Gate System**: Enabled\n`;
         response += `**Total Gates Tracked**: ${gateAnalytics.totalGates}\n`;
-        response += `**Average Gate Execution Time**: ${Math.round(gateAnalytics.avgExecutionTime)}ms\n`;
-        response += `**Overall Gate Success Rate**: ${Math.round(gateAnalytics.overallSuccessRate * 100)}%\n`;
+        response += `**Average Gate Execution Time**: ${Math.round(
+          gateAnalytics.avgExecutionTime
+        )}ms\n`;
+        response += `**Overall Gate Success Rate**: ${Math.round(
+          gateAnalytics.overallSuccessRate * 100
+        )}%\n`;
 
         if (gateAnalytics.topPerformingGates.length > 0) {
-          response += `**Top Performing Gates**: ${gateAnalytics.topPerformingGates.join(', ')}\n`;
+          response += `**Top Performing Gates**: ${gateAnalytics.topPerformingGates.join(
+            ", "
+          )}\n`;
         }
 
         if (gateAnalytics.underperformingGates.length > 0) {
-          response += `**Needs Optimization**: ${gateAnalytics.underperformingGates.join(', ')}\n`;
+          response += `**Needs Optimization**: ${gateAnalytics.underperformingGates.join(
+            ", "
+          )}\n`;
         }
 
         if (gateAnalytics.recommendations.length > 0) {
           response += `\n**Optimization Recommendations**:\n`;
-          gateAnalytics.recommendations.forEach((rec: string, index: number) => {
-            response += `${index + 1}. ${rec}\n`;
-          });
+          gateAnalytics.recommendations.forEach(
+            (rec: string, index: number) => {
+              response += `${index + 1}. ${rec}\n`;
+            }
+          );
         }
       } catch (error) {
         response += `**Advanced Gate System**: Error retrieving analytics\n`;
@@ -1231,7 +1696,7 @@ class MaintenanceActionHandler extends ActionHandler {
     }
 
     response += "\n";
-    
+
     // System Resources
     if (this.systemControl.systemAnalytics.memoryUsage) {
       response += "## 💾 System Resources\n\n";
@@ -1241,30 +1706,45 @@ class MaintenanceActionHandler extends ActionHandler {
       response += `**RSS**: ${this.formatBytes(mem.rss)}\n`;
       response += `**External**: ${this.formatBytes(mem.external)}\n\n`;
     }
-    
+
     // Performance Trends
-    if (include_history && this.systemControl.systemAnalytics.performanceTrends.length > 0) {
+    if (
+      include_history &&
+      this.systemControl.systemAnalytics.performanceTrends.length > 0
+    ) {
       response += "## 📈 Performance Trends\n\n";
 
       // Group trends by metric type for better organization
-      const trendsByMetric = this.systemControl.systemAnalytics.performanceTrends.reduce((acc, trend) => {
-        if (!acc[trend.metric]) acc[trend.metric] = [];
-        acc[trend.metric].push(trend);
-        return acc;
-      }, {} as Record<string, any[]>);
+      const trendsByMetric =
+        this.systemControl.systemAnalytics.performanceTrends.reduce(
+          (acc, trend) => {
+            if (!acc[trend.metric]) acc[trend.metric] = [];
+            acc[trend.metric].push(trend);
+            return acc;
+          },
+          {} as Record<string, any[]>
+        );
 
       Object.entries(trendsByMetric).forEach(([metric, trends]) => {
         const recentTrends = trends.slice(-10);
-        response += `### ${metric.charAt(0).toUpperCase() + metric.slice(1)} Trends\n`;
+        response += `### ${
+          metric.charAt(0).toUpperCase() + metric.slice(1)
+        } Trends\n`;
         recentTrends.forEach((trend, index) => {
-          const time = new Date(trend.timestamp).toISOString().split('T')[1].split('.')[0];
+          const time = new Date(trend.timestamp)
+            .toISOString()
+            .split("T")[1]
+            .split(".")[0];
           const contextInfo = this.formatTrendContext(trend);
-          response += `${index + 1}. ${time}: ${this.formatTrendValue(trend.metric, trend.value)}${contextInfo}\n`;
+          response += `${index + 1}. ${time}: ${this.formatTrendValue(
+            trend.metric,
+            trend.value
+          )}${contextInfo}\n`;
         });
         response += "\n";
       });
     }
-    
+
     response += `\n---\n*Generated at: ${new Date().toISOString()}*`;
 
     return this.createMinimalSystemResponse(response, "analytics");
@@ -1280,22 +1760,32 @@ class MaintenanceActionHandler extends ActionHandler {
 
     const health = this.systemControl.frameworkStateManager.getSystemHealth();
     const statusIcon = this.getHealthIcon(health.status);
-    
+
     let response = `# 🏥 System Health Report\n\n`;
     response += `**Overall Status**: ${statusIcon} ${health.status.toUpperCase()}\n`;
     response += `**Active Framework**: ${health.activeFramework}\n`;
     response += `**Available Frameworks**: ${health.availableFrameworks.length}\n`;
-    response += `**System Uptime**: ${this.formatUptime(this.systemControl.systemAnalytics.uptime)}\n\n`;
-    
+    response += `**System Uptime**: ${this.formatUptime(
+      this.systemControl.systemAnalytics.uptime
+    )}\n\n`;
+
     // Performance Health
     response += "## 📊 Performance Health\n\n";
     response += `**Framework Switches**: ${health.switchingMetrics.totalSwitches}\n`;
-    response += `**Framework Switch Success Rate**: ${health.switchingMetrics.totalSwitches > 0 
-      ? Math.round((health.switchingMetrics.successfulSwitches / health.switchingMetrics.totalSwitches) * 100) 
-      : 100}%\n`;
-    response += `**Framework Switch Time**: ${Math.round(health.switchingMetrics.averageResponseTime)}ms\n`;
+    response += `**Framework Switch Success Rate**: ${
+      health.switchingMetrics.totalSwitches > 0
+        ? Math.round(
+            (health.switchingMetrics.successfulSwitches /
+              health.switchingMetrics.totalSwitches) *
+              100
+          )
+        : 100
+    }%\n`;
+    response += `**Framework Switch Time**: ${Math.round(
+      health.switchingMetrics.averageResponseTime
+    )}ms\n`;
     response += `**Execution Success Rate**: ${this.getSuccessRate()}%\n\n`;
-    
+
     // Issues
     if (health.issues.length > 0) {
       response += "## ⚠️ Detected Issues\n\n";
@@ -1304,12 +1794,13 @@ class MaintenanceActionHandler extends ActionHandler {
       });
       response += "\n";
     } else {
-      response += "## ✅ System Status\n\nNo issues detected. System is operating normally.\n\n";
+      response +=
+        "## ✅ System Status\n\nNo issues detected. System is operating normally.\n\n";
     }
-    
+
     // Health Recommendations
     response += "## 💡 Health Recommendations\n\n";
-    
+
     if (health.status === "healthy") {
       response += "✅ System is healthy. No action required.\n";
       response += "- Continue monitoring performance metrics\n";
@@ -1334,35 +1825,42 @@ class MaintenanceActionHandler extends ActionHandler {
    */
   public async runDiagnostics(args: any): Promise<ToolResponse> {
     let response = "# 🔧 System Diagnostics Report\n\n";
-    
+
     // Framework System Check
     response += "## 🔄 Framework System\n\n";
     if (this.systemControl.frameworkStateManager) {
       const state = this.systemControl.frameworkStateManager.getCurrentState();
       const health = this.systemControl.frameworkStateManager.getSystemHealth();
-      const frameworks = this.systemControl.frameworkStateManager.getAvailableFrameworks();
-      
+      const frameworks =
+        this.systemControl.frameworkStateManager.getAvailableFrameworks();
+
       response += `✅ **Framework Manager**: Operational\n`;
       response += `✅ **Active Framework**: ${state.activeFramework}\n`;
       response += `✅ **Available Frameworks**: ${frameworks.length} configured\n`;
-      response += `${this.getHealthIcon(health.status)} **System Health**: ${health.status}\n\n`;
-      
+      response += `${this.getHealthIcon(health.status)} **System Health**: ${
+        health.status
+      }\n\n`;
+
       // Check each framework
-      frameworks.forEach(fw => {
+      frameworks.forEach((fw) => {
         const icon = fw.enabled ? "✅" : "⚠️";
-        response += `${icon} **${fw.name}**: ${fw.enabled ? 'Enabled' : 'Disabled'}\n`;
+        response += `${icon} **${fw.name}**: ${
+          fw.enabled ? "Enabled" : "Disabled"
+        }\n`;
       });
       response += "\n";
     } else {
       response += `❌ **Framework Manager**: Not initialized\n\n`;
     }
-    
+
     // Performance Diagnostics
     response += "## 📊 Performance Diagnostics\n\n";
     response += `**Total Executions**: ${this.systemControl.systemAnalytics.totalExecutions}\n`;
     response += `**Success Rate**: ${this.getSuccessRate()}%\n`;
-    response += `**Average Execution Time**: ${this.formatExecutionTime(this.systemControl.systemAnalytics.averageExecutionTime)}\n`;
-    
+    response += `**Average Execution Time**: ${this.formatExecutionTime(
+      this.systemControl.systemAnalytics.averageExecutionTime
+    )}\n`;
+
     // Performance Assessment
     const successRate = this.getSuccessRate();
     if (successRate >= 95) {
@@ -1373,15 +1871,17 @@ class MaintenanceActionHandler extends ActionHandler {
       response += `❌ **Performance Assessment**: Needs attention (${successRate}%)\n`;
     }
     response += "\n";
-    
+
     // System Resources
     response += "## 💾 System Resources\n\n";
     if (this.systemControl.systemAnalytics.memoryUsage) {
       const mem = this.systemControl.systemAnalytics.memoryUsage;
       const heapUsagePercent = Math.round((mem.heapUsed / mem.heapTotal) * 100);
-      
-      response += `**Memory Usage**: ${this.formatBytes(mem.heapUsed)}/${this.formatBytes(mem.heapTotal)} (${heapUsagePercent}%)\n`;
-      
+
+      response += `**Memory Usage**: ${this.formatBytes(
+        mem.heapUsed
+      )}/${this.formatBytes(mem.heapTotal)} (${heapUsagePercent}%)\n`;
+
       if (heapUsagePercent < 70) {
         response += `✅ **Memory Status**: Healthy\n`;
       } else if (heapUsagePercent < 90) {
@@ -1390,27 +1890,37 @@ class MaintenanceActionHandler extends ActionHandler {
         response += `❌ **Memory Status**: High usage - consider optimization\n`;
       }
     }
-    
-    response += `**System Uptime**: ${this.formatUptime(this.systemControl.systemAnalytics.uptime)}\n\n`;
-    
+
+    response += `**System Uptime**: ${this.formatUptime(
+      this.systemControl.systemAnalytics.uptime
+    )}\n\n`;
+
     // Recommendations
     response += "## 💡 Diagnostic Recommendations\n\n";
-    
+
     const recommendations: string[] = [];
-    
+
     if (this.getSuccessRate() < 90) {
-      recommendations.push("Investigate execution failure patterns to improve success rate");
+      recommendations.push(
+        "Investigate execution failure patterns to improve success rate"
+      );
     }
-    
+
     if (this.systemControl.systemAnalytics.averageExecutionTime > 5000) {
-      recommendations.push("Consider optimizing execution performance - average time is high");
+      recommendations.push(
+        "Consider optimizing execution performance - average time is high"
+      );
     }
-    
-    if (this.systemControl.systemAnalytics.memoryUsage && 
-        (this.systemControl.systemAnalytics.memoryUsage.heapUsed / this.systemControl.systemAnalytics.memoryUsage.heapTotal) > 0.8) {
+
+    if (
+      this.systemControl.systemAnalytics.memoryUsage &&
+      this.systemControl.systemAnalytics.memoryUsage.heapUsed /
+        this.systemControl.systemAnalytics.memoryUsage.heapTotal >
+        0.8
+    ) {
       recommendations.push("Monitor memory usage - heap utilization is high");
     }
-    
+
     if (recommendations.length > 0) {
       recommendations.forEach((rec, index) => {
         response += `${index + 1}. ${rec}\n`;
@@ -1418,7 +1928,7 @@ class MaintenanceActionHandler extends ActionHandler {
     } else {
       response += "✅ No issues detected. System is operating optimally.\n";
     }
-    
+
     response += `\n---\n*Diagnostics completed at: ${new Date().toISOString()}*`;
 
     return this.createMinimalSystemResponse(response, "diagnostics");
@@ -1438,29 +1948,34 @@ class MaintenanceActionHandler extends ActionHandler {
     }
 
     const beforeMetrics = { ...this.systemControl.systemAnalytics };
-    
+
     this.resetAnalyticsData();
-    
+
     if (this.systemControl.frameworkStateManager) {
       this.systemControl.frameworkStateManager.resetMetrics();
     }
-    
+
     let response = `# 🔄 Metrics Reset Completed\n\n`;
     response += `**Reset Timestamp**: ${new Date().toISOString()}\n\n`;
-    
+
     response += "## Metrics Before Reset\n\n";
     response += `**Total Executions**: ${beforeMetrics.totalExecutions}\n`;
     response += `**Successful**: ${beforeMetrics.successfulExecutions}\n`;
     response += `**Failed**: ${beforeMetrics.failedExecutions}\n`;
-    response += `**Average Time**: ${this.formatExecutionTime(beforeMetrics.averageExecutionTime)}\n\n`;
-    
+    response += `**Average Time**: ${this.formatExecutionTime(
+      beforeMetrics.averageExecutionTime
+    )}\n\n`;
+
     response += "## Metrics After Reset\n\n";
     response += `**Total Executions**: ${this.systemControl.systemAnalytics.totalExecutions}\n`;
     response += `**Successful**: ${this.systemControl.systemAnalytics.successfulExecutions}\n`;
     response += `**Failed**: ${this.systemControl.systemAnalytics.failedExecutions}\n`;
-    response += `**Average Time**: ${this.formatExecutionTime(this.systemControl.systemAnalytics.averageExecutionTime)}\n\n`;
-    
-    response += "✅ All switching performance metrics have been reset. Framework switching monitoring will start fresh.";
+    response += `**Average Time**: ${this.formatExecutionTime(
+      this.systemControl.systemAnalytics.averageExecutionTime
+    )}\n\n`;
+
+    response +=
+      "✅ All switching performance metrics have been reset. Framework switching monitoring will start fresh.";
 
     return this.createMinimalSystemResponse(response, "reset_metrics");
   }
@@ -1476,28 +1991,31 @@ class MaintenanceActionHandler extends ActionHandler {
     }
 
     const { limit = 20 } = args;
-    
-    const history = this.systemControl.frameworkStateManager.getSwitchHistory(limit);
-    const currentState = this.systemControl.frameworkStateManager.getCurrentState();
-    
+
+    const history =
+      this.systemControl.frameworkStateManager.getSwitchHistory(limit);
+    const currentState =
+      this.systemControl.frameworkStateManager.getCurrentState();
+
     let response = `# 📈 Framework Switch History\n\n`;
     response += `**Current Framework**: ${currentState.activeFramework}\n`;
     response += `**History Entries**: ${history.length}\n\n`;
-    
+
     if (history.length === 0) {
       response += "No framework switches recorded yet.\n\n";
     } else {
       response += "## Recent Switches\n\n";
-      
+
       history.forEach((entry, index) => {
         response += `### ${index + 1}. ${entry.from} → ${entry.to}\n\n`;
         response += `**Timestamp**: ${entry.timestamp.toISOString()}\n`;
         response += `**Reason**: ${entry.reason}\n\n`;
       });
     }
-    
+
     response += "---\n\n";
-    response += "**Note**: This history helps track framework usage patterns and audit changes.";
+    response +=
+      "**Note**: This history helps track framework usage patterns and audit changes.";
 
     return this.createMinimalSystemResponse(response, "switch_history");
   }
@@ -1518,8 +2036,8 @@ class MaintenanceActionHandler extends ActionHandler {
     if (!this.configManager) {
       return createStructuredResponse(
         "❌ **Configuration Manager Unavailable**\n\n" +
-        "ConfigManager is not initialized. This indicates a system initialization issue.\n" +
-        "Configuration management requires proper system startup.",
+          "ConfigManager is not initialized. This indicates a system initialization issue.\n" +
+          "Configuration management requires proper system startup.",
         { operation: "config", error: "config_manager_unavailable" },
         true
       );
@@ -1537,11 +2055,19 @@ class MaintenanceActionHandler extends ActionHandler {
         case "get":
           return await this.handleConfigGet(configRequest.key);
         case "set":
-          return await this.handleConfigSet(configRequest.key, configRequest.value || "");
+          return await this.handleConfigSet(
+            configRequest.key,
+            configRequest.value || ""
+          );
         case "validate":
-          return await this.handleConfigValidate(configRequest.key, configRequest.value || "");
+          return await this.handleConfigValidate(
+            configRequest.key,
+            configRequest.value || ""
+          );
         default:
-          throw new Error(`Unknown config operation: ${configRequest.operation}`);
+          throw new Error(
+            `Unknown config operation: ${configRequest.operation}`
+          );
       }
     } catch (error) {
       return this.handleError(error, "config_management");
@@ -1565,13 +2091,19 @@ class MaintenanceActionHandler extends ActionHandler {
     // Transport Configuration
     response += "## 🚀 Transport Configuration\n\n";
     response += `**Default Transport**: ${config.transports.default}\n`;
-    response += `**STDIO Enabled**: ${config.transports.stdio.enabled ? '✅' : '❌'}\n`;
-    response += `**SSE Enabled**: ${config.transports.sse.enabled ? '✅' : '❌'}\n\n`;
+    response += `**STDIO Enabled**: ${
+      config.transports.stdio.enabled ? "✅" : "❌"
+    }\n`;
+    response += `**SSE Enabled**: ${
+      config.transports.sse.enabled ? "✅" : "❌"
+    }\n\n`;
 
     // Analysis Configuration
     if (config.analysis) {
       response += "## 🔍 Analysis Configuration\n\n";
-      response += `**LLM Integration**: ${config.analysis.semanticAnalysis.llmIntegration.enabled ? '✅' : '❌'}\n`;
+      response += `**LLM Integration**: ${
+        config.analysis.semanticAnalysis.llmIntegration.enabled ? "✅" : "❌"
+      }\n`;
       if (config.analysis.semanticAnalysis.llmIntegration.enabled) {
         response += `**Model**: ${config.analysis.semanticAnalysis.llmIntegration.model}\n`;
         response += `**Max Tokens**: ${config.analysis.semanticAnalysis.llmIntegration.maxTokens}\n`;
@@ -1589,10 +2121,14 @@ class MaintenanceActionHandler extends ActionHandler {
 
     // Runtime Status
     response += "## 📊 Runtime Status\n\n";
-    response += `**Framework System**: ${this.systemControl.frameworkStateManager ? '✅ Enabled' : '❌ Disabled'}\n`;
+    response += `**Framework System**: ${
+      this.systemControl.frameworkStateManager ? "✅ Enabled" : "❌ Disabled"
+    }\n`;
     response += `**Analytics Collection**: ✅ Enabled\n`;
     response += `**Performance Monitoring**: ✅ Enabled\n`;
-    response += `**System Uptime**: ${this.formatUptime(this.systemControl.systemAnalytics.uptime)}\n`;
+    response += `**System Uptime**: ${this.formatUptime(
+      this.systemControl.systemAnalytics.uptime
+    )}\n`;
     response += `**Start Time**: ${new Date(this.startTime).toISOString()}\n\n`;
 
     // Available Operations
@@ -1600,18 +2136,26 @@ class MaintenanceActionHandler extends ActionHandler {
     response += "**Server Configuration:**\n";
     response += "- `server.name` (string) - Server display name\n";
     response += "- `server.version` (string) - Server version\n";
-    response += "- `server.port` (number) - HTTP server port ⚠️ *restart required*\n\n";
+    response +=
+      "- `server.port` (number) - HTTP server port ⚠️ *restart required*\n\n";
     response += "**Transport Configuration:**\n";
-    response += "- `transports.default` (string) - Default transport ⚠️ *restart required*\n";
-    response += "- `transports.stdio.enabled` (boolean) - STDIO transport ⚠️ *restart required*\n";
-    response += "- `transports.sse.enabled` (boolean) - SSE transport ⚠️ *restart required*\n\n";
+    response +=
+      "- `transports.default` (string) - Default transport ⚠️ *restart required*\n";
+    response +=
+      "- `transports.stdio.enabled` (boolean) - STDIO transport ⚠️ *restart required*\n";
+    response +=
+      "- `transports.sse.enabled` (boolean) - SSE transport ⚠️ *restart required*\n\n";
     response += "**Logging Configuration:**\n";
-    response += "- `logging.level` (string) - Log level: debug, info, warn, error\n";
+    response +=
+      "- `logging.level` (string) - Log level: debug, info, warn, error\n";
     response += "- `logging.directory` (string) - Log file directory\n\n";
     response += "**Usage Examples:**\n";
-    response += "- Get value: `{ \"config\": { \"key\": \"server.port\", \"operation\": \"get\" } }`\n";
-    response += "- Set value: `{ \"config\": { \"key\": \"logging.level\", \"value\": \"debug\", \"operation\": \"set\" } }`\n";
-    response += "- Validate: `{ \"config\": { \"key\": \"server.port\", \"value\": \"3000\", \"operation\": \"validate\" } }`";
+    response +=
+      '- Get value: `{ "config": { "key": "server.port", "operation": "get" } }`\n';
+    response +=
+      '- Set value: `{ "config": { "key": "logging.level", "value": "debug", "operation": "set" } }`\n';
+    response +=
+      '- Validate: `{ "config": { "key": "server.port", "value": "3000", "operation": "validate" } }`';
 
     return this.createMinimalSystemResponse(response, "config");
   }
@@ -1628,8 +2172,8 @@ class MaintenanceActionHandler extends ActionHandler {
     if (value === undefined) {
       return createStructuredResponse(
         `❌ **Configuration Key Not Found**\n\n` +
-        `The key \`${key}\` does not exist in the configuration.\n\n` +
-        `Use the \`list\` operation to see available configuration keys.`,
+          `The key \`${key}\` does not exist in the configuration.\n\n` +
+          `Use the \`list\` operation to see available configuration keys.`,
         { operation: "config_get", key, error: "key_not_found" },
         true
       );
@@ -1655,7 +2199,10 @@ class MaintenanceActionHandler extends ActionHandler {
   /**
    * Handle config set operation
    */
-  private async handleConfigSet(key: string, value: string): Promise<ToolResponse> {
+  private async handleConfigSet(
+    key: string,
+    value: string
+  ): Promise<ToolResponse> {
     if (!key || value === undefined) {
       throw new Error("Both key and value are required for set operation");
     }
@@ -1664,12 +2211,17 @@ class MaintenanceActionHandler extends ActionHandler {
     if (!this.safeConfigWriter) {
       return createStructuredResponse(
         `⚠️ **Configuration Writing Unavailable**\n\n` +
-        `Configuration writing is not available (SafeConfigWriter not initialized).\n` +
-        `This may indicate a file system permission issue or invalid configuration path.\n\n` +
-        `**Key**: \`${key}\`\n` +
-        `**Value**: \`${value}\`\n\n` +
-        `**Fallback**: Use the \`validate\` operation to check if your change would be valid.`,
-        { operation: "config_set", key, value, error: "config_writer_unavailable" },
+          `Configuration writing is not available (SafeConfigWriter not initialized).\n` +
+          `This may indicate a file system permission issue or invalid configuration path.\n\n` +
+          `**Key**: \`${key}\`\n` +
+          `**Value**: \`${value}\`\n\n` +
+          `**Fallback**: Use the \`validate\` operation to check if your change would be valid.`,
+        {
+          operation: "config_set",
+          key,
+          value,
+          error: "config_writer_unavailable",
+        },
         true
       );
     }
@@ -1678,36 +2230,55 @@ class MaintenanceActionHandler extends ActionHandler {
     const validation = this.validateConfigValue(key, value);
     if (!validation.valid) {
       return {
-        content: [{
-          type: "text",
-          text: `❌ **Invalid Configuration Value**\n\n` +
-                `**Key**: \`${key}\`\n` +
-                `**Value**: \`${value}\`\n` +
-                `**Error**: ${validation.error}\n\n` +
-                `${validation.suggestion ? `**Suggestion**: ${validation.suggestion}` : ''}`
-        }],
-        isError: true
+        content: [
+          {
+            type: "text",
+            text:
+              `❌ **Invalid Configuration Value**\n\n` +
+              `**Key**: \`${key}\`\n` +
+              `**Value**: \`${value}\`\n` +
+              `**Error**: ${validation.error}\n\n` +
+              `${
+                validation.suggestion
+                  ? `**Suggestion**: ${validation.suggestion}`
+                  : ""
+              }`,
+          },
+        ],
+        isError: true,
       };
     }
 
     try {
       // Perform the actual configuration update
       const currentValue = this.getConfigValue(key);
-      const writeResult = await this.safeConfigWriter.updateConfigValue(key, value);
+      const writeResult = await this.safeConfigWriter.updateConfigValue(
+        key,
+        value
+      );
 
       if (!writeResult.success) {
         return {
-          content: [{
-            type: "text",
-            text: `❌ **Configuration Update Failed**\n\n` +
-                  `**Key**: \`${key}\`\n` +
-                  `**Value**: \`${value}\`\n` +
-                  `**Error**: ${writeResult.error || writeResult.message}\n\n` +
-                  `${writeResult.backupPath ? `**Backup**: ${writeResult.backupPath}\n` : ''}` +
-                  `**Current Value**: \`${JSON.stringify(currentValue)}\` (unchanged)\n\n` +
-                  `**Note**: Configuration file has been left unchanged. No restart required.`
-          }],
-          isError: true
+          content: [
+            {
+              type: "text",
+              text:
+                `❌ **Configuration Update Failed**\n\n` +
+                `**Key**: \`${key}\`\n` +
+                `**Value**: \`${value}\`\n` +
+                `**Error**: ${writeResult.error || writeResult.message}\n\n` +
+                `${
+                  writeResult.backupPath
+                    ? `**Backup**: ${writeResult.backupPath}\n`
+                    : ""
+                }` +
+                `**Current Value**: \`${JSON.stringify(
+                  currentValue
+                )}\` (unchanged)\n\n` +
+                `**Note**: Configuration file has been left unchanged. No restart required.`,
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -1733,20 +2304,25 @@ class MaintenanceActionHandler extends ActionHandler {
       response += `\`{ "action": "config_restore", "backup_path": "${writeResult.backupPath}" }\``;
 
       return this.createMinimalSystemResponse(response, "config");
-
     } catch (error) {
-      this.logger.error(`Unexpected error during config set for ${key}:`, error);
+      this.logger.error(
+        `Unexpected error during config set for ${key}:`,
+        error
+      );
       return {
-        content: [{
-          type: "text",
-          text: `❌ **Unexpected Configuration Error**\n\n` +
-                `**Key**: \`${key}\`\n` +
-                `**Value**: \`${value}\`\n` +
-                `**Error**: ${String(error)}\n\n` +
-                `**Status**: Configuration unchanged. System remains stable.\n` +
-                `**Action**: Check system logs for detailed error information.`
-        }],
-        isError: true
+        content: [
+          {
+            type: "text",
+            text:
+              `❌ **Unexpected Configuration Error**\n\n` +
+              `**Key**: \`${key}\`\n` +
+              `**Value**: \`${value}\`\n` +
+              `**Error**: ${String(error)}\n\n` +
+              `**Status**: Configuration unchanged. System remains stable.\n` +
+              `**Action**: Check system logs for detailed error information.`,
+          },
+        ],
+        isError: true,
       };
     }
   }
@@ -1754,7 +2330,10 @@ class MaintenanceActionHandler extends ActionHandler {
   /**
    * Handle config validate operation
    */
-  private async handleConfigValidate(key: string, value: string): Promise<ToolResponse> {
+  private async handleConfigValidate(
+    key: string,
+    value: string
+  ): Promise<ToolResponse> {
     if (!key || value === undefined) {
       throw new Error("Both key and value are required for validate operation");
     }
@@ -1766,7 +2345,7 @@ class MaintenanceActionHandler extends ActionHandler {
     response += `**Key**: \`${key}\`\n`;
     response += `**Proposed Value**: \`${value}\`\n`;
     response += `**Current Value**: \`${JSON.stringify(currentValue)}\`\n`;
-    response += `**Valid**: ${validation.valid ? '✅ Yes' : '❌ No'}\n\n`;
+    response += `**Valid**: ${validation.valid ? "✅ Yes" : "❌ No"}\n\n`;
 
     if (!validation.valid) {
       response += `**Error**: ${validation.error}\n`;
@@ -1775,7 +2354,9 @@ class MaintenanceActionHandler extends ActionHandler {
       }
     } else {
       response += `**Type**: ${validation.type}\n`;
-      response += `**Restart Required**: ${this.requiresRestart(key) ? '⚠️ Yes' : '✅ No'}\n`;
+      response += `**Restart Required**: ${
+        this.requiresRestart(key) ? "⚠️ Yes" : "✅ No"
+      }\n`;
     }
 
     return this.createMinimalSystemResponse(response, "config");
@@ -1786,11 +2367,11 @@ class MaintenanceActionHandler extends ActionHandler {
    */
   private getConfigValue(key: string): any {
     const config = this.configManager!.getConfig();
-    const parts = key.split('.');
+    const parts = key.split(".");
     let value: any = config;
 
     for (const part of parts) {
-      if (value && typeof value === 'object' && part in value) {
+      if (value && typeof value === "object" && part in value) {
         value = value[part];
       } else {
         return undefined;
@@ -1803,78 +2384,83 @@ class MaintenanceActionHandler extends ActionHandler {
   /**
    * Validate configuration value
    */
-  private validateConfigValue(key: string, value: string): { valid: boolean; error?: string; suggestion?: string; type?: string } {
+  private validateConfigValue(
+    key: string,
+    value: string
+  ): { valid: boolean; error?: string; suggestion?: string; type?: string } {
     // Basic key validation
     if (!this.isValidConfigKey(key)) {
       return {
         valid: false,
         error: `Unknown configuration key: ${key}`,
-        suggestion: "Use the 'list' operation to see available keys"
+        suggestion: "Use the 'list' operation to see available keys",
       };
     }
 
     // Type-specific validation
     try {
       switch (key) {
-        case 'server.port':
+        case "server.port":
           const port = parseInt(value, 10);
           if (isNaN(port) || port < 1024 || port > 65535) {
             return {
               valid: false,
               error: "Port must be a number between 1024-65535",
-              suggestion: "Try a value like 3000 or 8080"
+              suggestion: "Try a value like 3000 or 8080",
             };
           }
           return { valid: true, type: "number" };
 
-        case 'server.name':
-        case 'server.version':
+        case "server.name":
+        case "server.version":
           if (!value || value.trim().length === 0) {
             return {
               valid: false,
               error: "Value cannot be empty",
-              suggestion: "Provide a non-empty string value"
+              suggestion: "Provide a non-empty string value",
             };
           }
           return { valid: true, type: "string" };
 
-        case 'transports.default':
-          if (!['stdio', 'sse'].includes(value)) {
+        case "transports.default":
+          if (!["stdio", "sse"].includes(value)) {
             return {
               valid: false,
               error: "Transport must be 'stdio' or 'sse'",
-              suggestion: "Use 'stdio' for desktop clients or 'sse' for web clients"
+              suggestion:
+                "Use 'stdio' for desktop clients or 'sse' for web clients",
             };
           }
           return { valid: true, type: "string" };
 
-        case 'transports.stdio.enabled':
-        case 'transports.sse.enabled':
-          if (!['true', 'false'].includes(value.toLowerCase())) {
+        case "transports.stdio.enabled":
+        case "transports.sse.enabled":
+          if (!["true", "false"].includes(value.toLowerCase())) {
             return {
               valid: false,
               error: "Value must be 'true' or 'false'",
-              suggestion: "Use boolean values: true or false"
+              suggestion: "Use boolean values: true or false",
             };
           }
           return { valid: true, type: "boolean" };
 
-        case 'logging.level':
-          if (!['debug', 'info', 'warn', 'error'].includes(value)) {
+        case "logging.level":
+          if (!["debug", "info", "warn", "error"].includes(value)) {
             return {
               valid: false,
               error: "Log level must be: debug, info, warn, or error",
-              suggestion: "Use 'debug' for development or 'info' for production"
+              suggestion:
+                "Use 'debug' for development or 'info' for production",
             };
           }
           return { valid: true, type: "string" };
 
-        case 'logging.directory':
+        case "logging.directory":
           if (!value || value.trim().length === 0) {
             return {
               valid: false,
               error: "Directory path cannot be empty",
-              suggestion: "Provide a valid directory path like './logs'"
+              suggestion: "Provide a valid directory path like './logs'",
             };
           }
           return { valid: true, type: "string" };
@@ -1886,7 +2472,7 @@ class MaintenanceActionHandler extends ActionHandler {
       return {
         valid: false,
         error: `Validation error: ${error}`,
-        suggestion: "Check the value format and try again"
+        suggestion: "Check the value format and try again",
       };
     }
   }
@@ -1896,18 +2482,18 @@ class MaintenanceActionHandler extends ActionHandler {
    */
   private isValidConfigKey(key: string): boolean {
     const validKeys = [
-      'server.name',
-      'server.version',
-      'server.port',
-      'transports.default',
-      'transports.stdio.enabled',
-      'transports.sse.enabled',
-      'logging.level',
-      'logging.directory',
-      'analysis.semanticAnalysis.llmIntegration.enabled',
-      'analysis.semanticAnalysis.llmIntegration.model',
-      'analysis.semanticAnalysis.llmIntegration.maxTokens',
-      'analysis.semanticAnalysis.llmIntegration.temperature'
+      "server.name",
+      "server.version",
+      "server.port",
+      "transports.default",
+      "transports.stdio.enabled",
+      "transports.sse.enabled",
+      "logging.level",
+      "logging.directory",
+      "analysis.semanticAnalysis.llmIntegration.enabled",
+      "analysis.semanticAnalysis.llmIntegration.model",
+      "analysis.semanticAnalysis.llmIntegration.maxTokens",
+      "analysis.semanticAnalysis.llmIntegration.temperature",
     ];
     return validKeys.includes(key);
   }
@@ -1917,11 +2503,11 @@ class MaintenanceActionHandler extends ActionHandler {
    */
   private requiresRestart(key: string): boolean {
     const restartRequired = [
-      'server.port',
-      'transports.default',
-      'transports.stdio.enabled',
-      'transports.sse.enabled',
-      'analysis.semanticAnalysis.llmIntegration.enabled'
+      "server.port",
+      "transports.default",
+      "transports.stdio.enabled",
+      "transports.sse.enabled",
+      "analysis.semanticAnalysis.llmIntegration.enabled",
     ];
     return restartRequired.includes(key);
   }
@@ -1935,72 +2521,94 @@ class MaintenanceActionHandler extends ActionHandler {
   }): Promise<ToolResponse> {
     if (!args.backup_path) {
       return {
-        content: [{
-          type: "text",
-          text: `❌ **Backup Path Required**\n\n` +
-                `The \`backup_path\` parameter is required for config restore operations.\n\n` +
-                `**Usage**: \`{ "action": "config_restore", "backup_path": "/path/to/backup", "confirm": true }\`\n\n` +
-                `**Note**: Backup files are typically named like \`config.json.backup.1640995200000\``
-        }],
-        isError: true
+        content: [
+          {
+            type: "text",
+            text:
+              `❌ **Backup Path Required**\n\n` +
+              `The \`backup_path\` parameter is required for config restore operations.\n\n` +
+              `**Usage**: \`{ "action": "config_restore", "backup_path": "/path/to/backup", "confirm": true }\`\n\n` +
+              `**Note**: Backup files are typically named like \`config.json.backup.1640995200000\``,
+          },
+        ],
+        isError: true,
       };
     }
 
     if (!args.confirm) {
       return {
-        content: [{
-          type: "text",
-          text: `⚠️ **Configuration Restore Confirmation Required**\n\n` +
-                `**Backup Path**: \`${args.backup_path}\`\n` +
-                `**Impact**: This will overwrite the current configuration file\n` +
-                `**Data Loss Risk**: Current configuration will be lost unless backed up\n\n` +
-                `**To proceed**: Set \`confirm: true\` to execute the restore.\n\n` +
-                `**Alternative**: Use \`config\` operations to make individual changes instead of full restore.`
-        }]
+        content: [
+          {
+            type: "text",
+            text:
+              `⚠️ **Configuration Restore Confirmation Required**\n\n` +
+              `**Backup Path**: \`${args.backup_path}\`\n` +
+              `**Impact**: This will overwrite the current configuration file\n` +
+              `**Data Loss Risk**: Current configuration will be lost unless backed up\n\n` +
+              `**To proceed**: Set \`confirm: true\` to execute the restore.\n\n` +
+              `**Alternative**: Use \`config\` operations to make individual changes instead of full restore.`,
+          },
+        ],
       };
     }
 
     // Check if SafeConfigWriter is available
     if (!this.safeConfigWriter) {
       return {
-        content: [{
-          type: "text",
-          text: `❌ **Configuration Restore Unavailable**\n\n` +
-                `Configuration restoration is not available (SafeConfigWriter not initialized).\n` +
-                `This may indicate a file system permission issue or invalid configuration path.\n\n` +
-                `**Backup Path**: \`${args.backup_path}\`\n\n` +
-                `**Manual Restore**: You may need to manually copy the backup file to replace the current config.`
-        }],
-        isError: true
+        content: [
+          {
+            type: "text",
+            text:
+              `❌ **Configuration Restore Unavailable**\n\n` +
+              `Configuration restoration is not available (SafeConfigWriter not initialized).\n` +
+              `This may indicate a file system permission issue or invalid configuration path.\n\n` +
+              `**Backup Path**: \`${args.backup_path}\`\n\n` +
+              `**Manual Restore**: You may need to manually copy the backup file to replace the current config.`,
+          },
+        ],
+        isError: true,
       };
     }
 
     try {
       // Create a backup of the current config before restoring
-      const fs = await import('fs');
+      const fs = await import("fs");
       const currentConfigPath = this.safeConfigWriter.getConfigPath();
       const emergencyBackupPath = `${currentConfigPath}.emergency.backup.${Date.now()}`;
 
       if (fs.existsSync(currentConfigPath)) {
         await fs.promises.copyFile(currentConfigPath, emergencyBackupPath);
-        this.logger.info(`Emergency backup created before restore: ${emergencyBackupPath}`);
+        this.logger.info(
+          `Emergency backup created before restore: ${emergencyBackupPath}`
+        );
       }
 
       // Perform the restoration
-      const restoreResult = await this.safeConfigWriter.restoreFromBackup(args.backup_path);
+      const restoreResult = await this.safeConfigWriter.restoreFromBackup(
+        args.backup_path
+      );
 
       if (!restoreResult.success) {
         return {
-          content: [{
-            type: "text",
-            text: `❌ **Configuration Restore Failed**\n\n` +
-                  `**Backup Path**: \`${args.backup_path}\`\n` +
-                  `**Error**: ${restoreResult.error || restoreResult.message}\n\n` +
-                  `**Status**: Original configuration unchanged\n` +
-                  `${fs.existsSync(emergencyBackupPath) ? `**Emergency Backup**: ${emergencyBackupPath}\n` : ''}` +
-                  `**Action**: Verify the backup file exists and is readable.`
-          }],
-          isError: true
+          content: [
+            {
+              type: "text",
+              text:
+                `❌ **Configuration Restore Failed**\n\n` +
+                `**Backup Path**: \`${args.backup_path}\`\n` +
+                `**Error**: ${
+                  restoreResult.error || restoreResult.message
+                }\n\n` +
+                `**Status**: Original configuration unchanged\n` +
+                `${
+                  fs.existsSync(emergencyBackupPath)
+                    ? `**Emergency Backup**: ${emergencyBackupPath}\n`
+                    : ""
+                }` +
+                `**Action**: Verify the backup file exists and is readable.`,
+            },
+          ],
+          isError: true,
         };
       }
 
@@ -2021,19 +2629,24 @@ class MaintenanceActionHandler extends ActionHandler {
       response += `- **Check config**: \`{ "action": "config", "config": { "operation": "list" } }\``;
 
       return this.createMinimalSystemResponse(response, "config_restore");
-
     } catch (error) {
-      this.logger.error(`Unexpected error during config restore from ${args.backup_path}:`, error);
+      this.logger.error(
+        `Unexpected error during config restore from ${args.backup_path}:`,
+        error
+      );
       return {
-        content: [{
-          type: "text",
-          text: `❌ **Unexpected Restore Error**\n\n` +
-                `**Backup Path**: \`${args.backup_path}\`\n` +
-                `**Error**: ${String(error)}\n\n` +
-                `**Status**: Configuration unchanged. System remains stable.\n` +
-                `**Action**: Check file permissions and backup file validity.`
-        }],
-        isError: true
+        content: [
+          {
+            type: "text",
+            text:
+              `❌ **Unexpected Restore Error**\n\n` +
+              `**Backup Path**: \`${args.backup_path}\`\n` +
+              `**Error**: ${String(error)}\n\n` +
+              `**Status**: Configuration unchanged. System remains stable.\n` +
+              `**Action**: Check file permissions and backup file validity.`,
+          },
+        ],
+        isError: true,
       };
     }
   }
@@ -2045,29 +2658,37 @@ class MaintenanceActionHandler extends ActionHandler {
     reason?: string;
     confirm?: boolean;
   }): Promise<ToolResponse> {
-    const { reason = "Manual restart requested via system_control", confirm = false } = args;
+    const {
+      reason = "Manual restart requested via system_control",
+      confirm = false,
+    } = args;
 
     if (!this.onRestart) {
       return {
-        content: [{
-          type: "text",
-          text: "❌ **Restart Unavailable**: Server restart functionality not configured. This may indicate the server is running in a mode that doesn't support programmatic restart."
-        }],
-        isError: true
+        content: [
+          {
+            type: "text",
+            text: "❌ **Restart Unavailable**: Server restart functionality not configured. This may indicate the server is running in a mode that doesn't support programmatic restart.",
+          },
+        ],
+        isError: true,
       };
     }
 
     if (!confirm) {
       return {
-        content: [{
-          type: "text",
-          text: `⚠️ **Server Restart Confirmation Required**\n\n` +
-                `**Reason**: ${reason}\n` +
-                `**Impact**: All active connections will be terminated\n` +
-                `**Downtime**: Server will restart (typically 5-10 seconds)\n\n` +
-                `**To proceed**: Set 'confirm: true' to execute the restart.\n\n` +
-                `🔄 **Alternative**: Use hot-reload via prompt_manager 'reload' action for most changes.`
-        }]
+        content: [
+          {
+            type: "text",
+            text:
+              `⚠️ **Server Restart Confirmation Required**\n\n` +
+              `**Reason**: ${reason}\n` +
+              `**Impact**: All active connections will be terminated\n` +
+              `**Downtime**: Server will restart (typically 5-10 seconds)\n\n` +
+              `**To proceed**: Set 'confirm: true' to execute the restart.\n\n` +
+              `🔄 **Alternative**: Use hot-reload via prompt_manager 'reload' action for most changes.`,
+          },
+        ],
       };
     }
 
@@ -2075,12 +2696,15 @@ class MaintenanceActionHandler extends ActionHandler {
     response += `**Reason**: ${reason}\n`;
     response += `**Timestamp**: ${new Date().toISOString()}\n\n`;
     response += `📊 **Pre-Restart System Status**:\n`;
-    response += `- **Uptime**: ${this.formatUptime(this.systemControl.systemAnalytics.uptime)}\n`;
+    response += `- **Uptime**: ${this.formatUptime(
+      this.systemControl.systemAnalytics.uptime
+    )}\n`;
     response += `- **Total Executions**: ${this.systemControl.systemAnalytics.totalExecutions}\n`;
     response += `- **Success Rate**: ${this.getSuccessRate()}%\n`;
 
     if (this.systemControl.frameworkStateManager) {
-      const currentState = this.systemControl.frameworkStateManager.getCurrentState();
+      const currentState =
+        this.systemControl.frameworkStateManager.getCurrentState();
       response += `- **Active Framework**: ${currentState.activeFramework}\n`;
     }
 
@@ -2089,7 +2713,9 @@ class MaintenanceActionHandler extends ActionHandler {
 
     // Schedule restart after response is sent
     setTimeout(() => {
-      this.logger.info(`System restart initiated via system_control. Reason: ${reason}`);
+      this.logger.info(
+        `System restart initiated via system_control. Reason: ${reason}`
+      );
       this.onRestart!(reason);
     }, 2000);
 
@@ -2106,10 +2732,9 @@ class MaintenanceActionHandler extends ActionHandler {
       averageExecutionTime: 0,
       gateValidationCount: 0,
       uptime: Date.now() - this.startTime,
-      performanceTrends: []
+      performanceTrends: [],
     };
   }
-
 
   /**
    * Enable framework system
@@ -2121,7 +2746,10 @@ class MaintenanceActionHandler extends ActionHandler {
       if (!this.systemControl.frameworkStateManager) {
         return createStructuredResponse(
           "❌ Framework State Manager not available",
-          { operation: "enable_framework", error: "framework_manager_unavailable" },
+          {
+            operation: "enable_framework",
+            error: "framework_manager_unavailable",
+          },
           true
         );
       }
@@ -2129,18 +2757,22 @@ class MaintenanceActionHandler extends ActionHandler {
       const reason = args.reason || "Manual enable via MCP tool";
       this.systemControl.frameworkStateManager.enableFrameworkSystem(reason);
 
-      const status = this.systemControl.frameworkStateManager.isFrameworkSystemEnabled();
+      const status =
+        this.systemControl.frameworkStateManager.isFrameworkSystemEnabled();
 
       let response = "✅ **Framework System Enabled**\n\n";
       response += `**Status**: ${status ? "Enabled" : "Disabled"}\n`;
       response += `**Reason**: ${reason}\n`;
-      response += `**Active Framework**: ${this.systemControl.frameworkStateManager.getActiveFramework().name}\n`;
+      response += `**Active Framework**: ${
+        this.systemControl.frameworkStateManager.getActiveFramework().name
+      }\n`;
       response += `**Timestamp**: ${new Date().toISOString()}\n\n`;
-      response += "Framework injection will now be active for template and chain executions.\n\n";
-      response += "🔄 **Note**: Tool descriptions now reflect framework-enabled capabilities. Tool descriptions will show framework-enhanced functionality on next client connection/restart.";
+      response +=
+        "Framework injection will now be active for template and chain executions.\n\n";
+      response +=
+        "🔄 **Note**: Tool descriptions now reflect framework-enabled capabilities. Tool descriptions will show framework-enhanced functionality on next client connection/restart.";
 
       return this.createMinimalSystemResponse(response, "enable_framework");
-
     } catch (error) {
       return this.handleError(error, "enable_framework_system");
     }
@@ -2156,7 +2788,10 @@ class MaintenanceActionHandler extends ActionHandler {
       if (!this.systemControl.frameworkStateManager) {
         return createStructuredResponse(
           "❌ Framework State Manager not available",
-          { operation: "disable_framework", error: "framework_manager_unavailable" },
+          {
+            operation: "disable_framework",
+            error: "framework_manager_unavailable",
+          },
           true
         );
       }
@@ -2164,17 +2799,19 @@ class MaintenanceActionHandler extends ActionHandler {
       const reason = args.reason || "Manual disable via MCP tool";
       this.systemControl.frameworkStateManager.disableFrameworkSystem(reason);
 
-      const status = this.systemControl.frameworkStateManager.isFrameworkSystemEnabled();
+      const status =
+        this.systemControl.frameworkStateManager.isFrameworkSystemEnabled();
 
       let response = "🚫 **Framework System Disabled**\n\n";
       response += `**Status**: ${status ? "Enabled" : "Disabled"}\n`;
       response += `**Reason**: ${reason}\n`;
       response += `**Timestamp**: ${new Date().toISOString()}\n\n`;
-      response += "Framework injection is now bypassed. All executions will use standard prompts without methodology enhancements.\n\n";
-      response += "🔄 **Note**: Tool descriptions now reflect framework-disabled state. Tool descriptions will show basic functionality (no framework enhancement) on next client connection/restart.";
+      response +=
+        "Framework injection is now bypassed. All executions will use standard prompts without methodology enhancements.\n\n";
+      response +=
+        "🔄 **Note**: Tool descriptions now reflect framework-disabled state. Tool descriptions will show basic functionality (no framework enhancement) on next client connection/restart.";
 
       return this.createMinimalSystemResponse(response, "disable_framework");
-
     } catch (error) {
       return this.handleError(error, "disable_framework_system");
     }
@@ -2188,7 +2825,10 @@ class MaintenanceActionHandler extends ActionHandler {
       if (!this.systemControl.frameworkStateManager) {
         return createStructuredResponse(
           "❌ Framework State Manager not available",
-          { operation: "framework_status", error: "framework_manager_unavailable" },
+          {
+            operation: "framework_status",
+            error: "framework_manager_unavailable",
+          },
           true
         );
       }
@@ -2202,15 +2842,21 @@ class MaintenanceActionHandler extends ActionHandler {
       const isEnabled = state.frameworkSystemEnabled;
       const injectionStatus = isEnabled ? "✅ Active" : "🚫 Inactive";
 
-      response += `**System Status**: ${state.frameworkSystemEnabled ? "✅ Enabled" : "🚫 Disabled"}\n`;
+      response += `**System Status**: ${
+        state.frameworkSystemEnabled ? "✅ Enabled" : "🚫 Disabled"
+      }\n`;
       response += `**Selected Framework**: ${state.activeFramework}\n`;
       response += `**Framework Injection**: ${injectionStatus}\n`;
-      response += `**Health Status**: ${this.getHealthEmoji(health.status)} ${health.status.toUpperCase()}\n`;
+      response += `**Health Status**: ${this.getHealthEmoji(
+        health.status
+      )} ${health.status.toUpperCase()}\n`;
       response += `**Last Updated**: ${state.switchedAt.toISOString()}\n`;
       response += `**Last Reason**: ${state.switchReason}\n\n`;
 
       // Available frameworks
-      response += `**Available Frameworks**: ${health.availableFrameworks.join(", ")}\n\n`;
+      response += `**Available Frameworks**: ${health.availableFrameworks.join(
+        ", "
+      )}\n\n`;
 
       // Framework capabilities
       if (state.frameworkSystemEnabled) {
@@ -2220,25 +2866,27 @@ class MaintenanceActionHandler extends ActionHandler {
         response += "• Quality gate validation\n";
         response += "• Enhanced execution context\n\n";
       } else {
-        response += "**Current Mode**: Standard execution (no framework enhancements)\n\n";
+        response +=
+          "**Current Mode**: Standard execution (no framework enhancements)\n\n";
       }
 
       // Switching metrics
       response += "**Switching Metrics**:\n";
       response += `• Total Operations: ${state.switchingMetrics.switchCount}\n`;
       response += `• Error Count: ${state.switchingMetrics.errorCount}\n`;
-      response += `• Avg Response Time: ${state.switchingMetrics.averageResponseTime.toFixed(1)}ms\n`;
+      response += `• Avg Response Time: ${state.switchingMetrics.averageResponseTime.toFixed(
+        1
+      )}ms\n`;
 
       // Health issues
       if (health.issues.length > 0) {
         response += "\n**Issues**:\n";
-        health.issues.forEach(issue => {
+        health.issues.forEach((issue) => {
           response += `• ⚠️ ${issue}\n`;
         });
       }
 
       return this.createMinimalSystemResponse(response, "framework_status");
-
     } catch (error) {
       return this.handleError(error, "framework_system_status");
     }
@@ -2249,10 +2897,14 @@ class MaintenanceActionHandler extends ActionHandler {
    */
   private getHealthEmoji(status: string): string {
     switch (status) {
-      case "healthy": return "✅";
-      case "degraded": return "⚠️";
-      case "error": return "❌";
-      default: return "❓";
+      case "healthy":
+        return "✅";
+      case "degraded":
+        return "⚠️";
+      case "error":
+        return "❌";
+      default:
+        return "❓";
     }
   }
 
@@ -2266,10 +2918,10 @@ class MaintenanceActionHandler extends ActionHandler {
       error instanceof Error ? error : String(error),
       {
         tool: "system_control",
-        operation: context
+        operation: context,
       },
       {
-        includeStructuredData: true
+        includeStructuredData: true,
       }
     );
   }

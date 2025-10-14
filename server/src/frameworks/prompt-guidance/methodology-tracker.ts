@@ -49,6 +49,7 @@ export class MethodologyTracker extends EventEmitter {
   private logger: Logger;
   private config: MethodologyTrackerConfig;
   private currentState: MethodologyState;
+  private readonly rootPath: string;
   private switchHistory: Array<{
     from: string;
     to: string;
@@ -68,14 +69,27 @@ export class MethodologyTracker extends EventEmitter {
   constructor(logger: Logger, config?: Partial<MethodologyTrackerConfig>) {
     super();
     this.logger = logger;
-    this.config = {
+    const rootPath = path.resolve(process.env.MCP_SERVER_ROOT || process.cwd());
+    this.rootPath = rootPath;
+    const runtimeStatePath = path.join(rootPath, 'runtime-state', 'framework-state.json');
+
+    const defaultConfig: MethodologyTrackerConfig = {
       persistStateToDisk: true,
-      stateFilePath: path.join(process.cwd(), 'framework-state.json'),
+      stateFilePath: runtimeStatePath,
       enableHealthMonitoring: true,
       healthCheckIntervalMs: 30000, // 30 seconds
       maxSwitchHistory: 100,
-      enableMetrics: true,
-      ...config
+      enableMetrics: true
+    };
+
+    this.config = {
+      ...defaultConfig,
+      ...config,
+      stateFilePath: config?.stateFilePath
+        ? path.isAbsolute(config.stateFilePath)
+          ? config.stateFilePath
+          : path.resolve(rootPath, config.stateFilePath)
+        : defaultConfig.stateFilePath
     };
 
     // Initialize default state
@@ -425,7 +439,11 @@ export class MethodologyTracker extends EventEmitter {
         switchReason: this.currentState.switchReason
       };
 
-      await fs.writeFile(this.config.stateFilePath, JSON.stringify(persistedState, null, 2));
+      await fs.mkdir(path.dirname(this.config.stateFilePath), { recursive: true });
+      await fs.writeFile(
+        this.config.stateFilePath,
+        JSON.stringify(persistedState, null, 2)
+      );
       this.emit('state-persisted', persistedState);
       this.logger.debug(`State persisted to ${this.config.stateFilePath}`);
 
@@ -438,25 +456,39 @@ export class MethodologyTracker extends EventEmitter {
    * Restore state from disk
    */
   private async restoreState(): Promise<void> {
+    const persistedState = await this.readPersistedState();
+
+    if (!persistedState) {
+      this.logger.debug("Using default methodology state");
+      return;
+    }
+
+    this.currentState = {
+      ...this.currentState,
+      activeMethodology: persistedState.activeMethodology,
+      methodologySystemEnabled: persistedState.methodologySystemEnabled,
+      switchedAt: new Date(persistedState.lastSwitchedAt),
+      switchReason: persistedState.switchReason
+    };
+
+    this.logger.info(
+      `State restored from ${this.config.stateFilePath}: ${persistedState.activeMethodology}`
+    );
+  }
+
+  private async readPersistedState(): Promise<PersistedMethodologyState | null> {
     try {
       const stateData = await fs.readFile(this.config.stateFilePath, 'utf-8');
-      const persistedState: PersistedMethodologyState = JSON.parse(stateData);
-
-      this.currentState = {
-        ...this.currentState,
-        activeMethodology: persistedState.activeMethodology,
-        methodologySystemEnabled: persistedState.methodologySystemEnabled,
-        switchedAt: new Date(persistedState.lastSwitchedAt),
-        switchReason: persistedState.switchReason
-      };
-
-      this.logger.info(`State restored from ${this.config.stateFilePath}: ${persistedState.activeMethodology}`);
-
-    } catch (error) {
-      if ((error as any).code !== 'ENOENT') {
-        this.logger.warn("Failed to restore methodology state:", error);
+      return JSON.parse(stateData);
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT') {
+        this.logger.warn(
+          `Failed to read methodology state from ${this.config.stateFilePath}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
       }
-      this.logger.debug("Using default methodology state");
+      return null;
     }
   }
 
@@ -466,6 +498,12 @@ export class MethodologyTracker extends EventEmitter {
   updateConfig(config: Partial<MethodologyTrackerConfig>): void {
     const oldConfig = { ...this.config };
     this.config = { ...this.config, ...config };
+
+    if (config.stateFilePath) {
+      this.config.stateFilePath = path.isAbsolute(config.stateFilePath)
+        ? config.stateFilePath
+        : path.resolve(this.rootPath, config.stateFilePath);
+    }
 
     // Restart health monitoring if interval changed
     if (oldConfig.healthCheckIntervalMs !== this.config.healthCheckIntervalMs && this.config.enableHealthMonitoring) {

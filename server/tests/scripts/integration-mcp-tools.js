@@ -91,7 +91,7 @@ async function runMcpToolsIntegrationTests() {
       const mockConfigManager = {
         getConfig: () => ({
           server: { name: 'test-server', version: '1.0.0' },
-          gates: { enabled: false, enableValidation: false, autoGenerate: false }
+          gates: { definitionsDirectory: "src/gates/definitions", templatesDirectory: "src/gates/templates" }
         }),
         getPromptsFilePath: () => '/test/prompts.json'
       };

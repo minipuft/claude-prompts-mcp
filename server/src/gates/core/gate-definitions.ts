@@ -6,12 +6,18 @@
  */
 
 /**
+ * Gate type classification for precedence and activation logic
+ */
+export type GateType = 'framework' | 'category' | 'quality' | 'security';
+
+/**
  * Gate definition structure loaded from JSON files
  */
 export interface GateDefinition {
   id: string;
   name: string;
   guidance: string;
+  gate_type?: GateType;  // Framework gates bypass category checks
   activation: {
     prompt_categories?: string[];
     framework_context?: string[];

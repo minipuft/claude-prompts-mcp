@@ -179,6 +179,20 @@
           "required": true
         }
       ]
+    },
+    {
+      "id": "review",
+      "name": "review",
+      "category": "analysis",
+      "description": "Comprehensive audit template for modules, implementations, and system integrations",
+      "file": "review.md",
+      "arguments": [
+        {
+          "name": "target",
+          "type": "string",
+          "description": "The module, implementation, system, or functionality to audit (e.g., '@/ path implementation', 'MusicSyncService', 'color harmony modules')"
+        }
+      ]
     }
   ]
 }

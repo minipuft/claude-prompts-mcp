@@ -64,6 +64,8 @@ export class PromptConverter {
           })),
           // Include chain information from markdown-embedded chainSteps
           chainSteps: chainSteps,
+          // Phase 2: Include gate configuration from prompt file
+          gateConfiguration: promptFile.gateConfiguration,
           tools: promptData.tools || false,
           onEmptyInvocation:
             promptData.onEmptyInvocation || "execute_if_possible",
@@ -174,6 +176,22 @@ export class PromptConverter {
 
     // Check for placeholder validation in template
     if (prompt.userMessageTemplate) {
+      // Validate template syntax - reject Handlebars syntax
+      if (prompt.userMessageTemplate.includes('{{#if') ||
+          prompt.userMessageTemplate.includes('{{/if') ||
+          prompt.userMessageTemplate.includes('{{#each') ||
+          prompt.userMessageTemplate.includes('{{/each') ||
+          prompt.userMessageTemplate.includes('{{#unless') ||
+          prompt.userMessageTemplate.includes('{{/unless')) {
+        errors.push(
+          `Handlebars syntax detected in template. This system uses Nunjucks syntax.\n` +
+          `Replace: {{#if condition}} → {% if condition %}\n` +
+          `Replace: {{/if}} → {% endif %}\n` +
+          `Replace: {{#each items}} → {% for item in items %}\n` +
+          `Replace: {{/each}} → {% endfor %}`
+        );
+      }
+
       const placeholders = this.extractPlaceholders(prompt.userMessageTemplate);
       const argumentNames = prompt.arguments.map((arg) => arg.name);
 

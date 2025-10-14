@@ -159,22 +159,83 @@ export class FileOperations {
 
     content += `## User Message Template\n${promptData.userMessageTemplate}\n`;
 
+    // Build gate configuration section separately
+    let gateConfigSection = '';
+    this.logger.error(`[GATE-TRACE] 💾 FILE-OPS Gate Configuration Check for ${promptData.id}:`, {
+      hasGateConfiguration: !!promptData.gateConfiguration,
+      gateConfigType: typeof promptData.gateConfiguration,
+      gateConfigContent: promptData.gateConfiguration,
+      promptId: promptData.id
+    });
+
+    if (promptData.gateConfiguration) {
+      this.logger.error(`[GATE-TRACE] ✅ Building gate configuration section for prompt ${promptData.id}`);
+      gateConfigSection = `\n## Gate Configuration\n\n`;
+      gateConfigSection += `\`\`\`json\n`;
+      const gateConfigJson = JSON.stringify(promptData.gateConfiguration, null, 2);
+      gateConfigSection += gateConfigJson;
+      gateConfigSection += `\n\`\`\`\n`;
+      this.logger.error(`[GATE-TRACE] 📝 Gate configuration JSON content:`, gateConfigJson);
+    } else {
+      this.logger.error(`[GATE-TRACE] ❌ NO GATE CONFIGURATION FOUND for prompt ${promptData.id}`);
+    }
+
+    // Build chain steps section
+    let chainStepsSection = '';
     if ((promptData.chainSteps?.length ?? 0) > 0) {
-      content += `\n## Chain Steps\n\n`;
+      chainStepsSection = `\n## Chain Steps\n\n`;
       promptData.chainSteps.forEach((step: any, index: number) => {
-        content += `${index + 1}. **${step.stepName}** (${step.promptId})\n`;
+        chainStepsSection += `${index + 1}. **${step.stepName}** (${step.promptId})\n`;
         if (step.inputMapping) {
-          content += `   - Input Mapping: ${JSON.stringify(step.inputMapping)}\n`;
+          chainStepsSection += `   - Input Mapping: ${JSON.stringify(step.inputMapping)}\n`;
         }
         if (step.outputMapping) {
-          content += `   - Output Mapping: ${JSON.stringify(step.outputMapping)}\n`;
+          chainStepsSection += `   - Output Mapping: ${JSON.stringify(step.outputMapping)}\n`;
         }
-        content += `\n`;
+        chainStepsSection += `\n`;
       });
     }
 
-    // Write markdown file
+    // Check if file exists and handle Gate Configuration replacement
     const existsBefore = await fs.access(promptPath).then(() => true).catch(() => false);
+
+    if (existsBefore && gateConfigSection) {
+      try {
+        // Read existing file to preserve structure and replace Gate Configuration section
+        const existingContent = await readFile(promptPath, "utf8");
+
+        // Remove ALL existing Gate Configuration sections (handles multiple duplicates)
+        const gateConfigRegex = /## Gate Configuration\s*\n```json\s*\n[\s\S]*?\n```\s*/g;
+        let cleanedContent = existingContent.replace(gateConfigRegex, '');
+
+        // Find insertion point - after User Message Template, before Chain Steps or end
+        const chainStepsIndex = cleanedContent.indexOf('## Chain Steps');
+
+        if (chainStepsIndex > 0) {
+          // Insert gate config before Chain Steps
+          content = cleanedContent.slice(0, chainStepsIndex).trimEnd() + '\n' +
+                    gateConfigSection + '\n' +
+                    cleanedContent.slice(chainStepsIndex);
+          this.logger.error(`[GATE-TRACE] ✅ Replaced Gate Configuration section (inserted before Chain Steps)`);
+        } else {
+          // No Chain Steps - append at end
+          content = cleanedContent.trimEnd() + '\n' + gateConfigSection;
+          this.logger.error(`[GATE-TRACE] ✅ Replaced Gate Configuration section (appended at end)`);
+        }
+      } catch (readError) {
+        // If read fails, fall back to full regeneration
+        this.logger.warn(`[GATE-TRACE] ⚠️ Failed to read existing file for section replacement, using full regeneration`, readError);
+        content += gateConfigSection + chainStepsSection;
+      }
+    } else {
+      // New file or no gate configuration - use simple append
+      content += gateConfigSection + chainStepsSection;
+      if (gateConfigSection) {
+        this.logger.error(`[GATE-TRACE] ✅ Added Gate Configuration section to new file`);
+      }
+    }
+
+    // Write markdown file
     await safeWriteFile(promptPath, content, "utf8");
 
     // Update category prompts.json

@@ -30,13 +30,9 @@
         "\\/\\/.*\\w+",
         "try\\s*\\{"
       ]
-    },
-    {
-      "type": "llm_self_check",
-      "prompt_template": "code_quality_validation",
-      "pass_threshold": 0.8
     }
   ],
+  "_comment_llm_validation": "LLM self-check removed until API integration complete. Will be re-added when config.analysis.semanticAnalysis.llmIntegration is fully implemented.",
   "retry_config": {
     "max_attempts": 2,
     "improvement_hints": true,
@@ -44,7 +40,7 @@
   },
   "activation": {
     "prompt_categories": ["code", "development"],
-    "explicit_request": false,
-    "framework_context": ["CAGEERF"]
-  }
+    "explicit_request": false
+  },
+  "_comment": "Category gate - activates based on category only. Framework gates control methodology separately."
 }

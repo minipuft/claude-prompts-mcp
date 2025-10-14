@@ -22,6 +22,7 @@ import { FrameworkStateManager } from "../../../frameworks/framework-state-manag
 import { createLogger, Logger } from "../../../logging/index.js";
 import { isChainPrompt } from "../../../utils/chainUtils.js";
 import { ChainSessionManager } from "../../../chain-session/manager.js";
+import type { TemporaryGateDefinition } from "../../../gates/core/temporary-gate-registry.js";
 // Phase 4: Legacy cleanup - Advanced gate orchestration removed
 
 const logger = createLogger({
@@ -266,6 +267,10 @@ export class ChainExecutor {
       `🔍 [Chain Debug] generateChainInstructions called for: ${prompt.id}`
     );
 
+    // Generate unique chain execution ID for gate tracking
+    const chainExecutionId = `chain_${prompt.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const chainGateIds: string[] = [];
+
     try {
       if (!steps || steps.length === 0) {
         return this.responseFormatter.formatErrorResponse(
@@ -273,6 +278,54 @@ export class ChainExecutor {
           'ChainExecutor',
           'generateChainInstructions'
         );
+      }
+
+      // Phase 3B: Create chain-scoped temporary gates from prompt configuration
+      // Phase 4: Enhanced with execution-time temporary gate support
+      const temporaryGateRegistry = this.lightweightGateSystem.getTemporaryGateRegistry?.();
+
+      // Merge prompt-configured gates with execution-time gates
+      const allTemporaryGates = [
+        ...(prompt.enhancedGateConfiguration?.temporary_gates || []),
+        ...(options.temporary_gates || [])
+      ];
+
+      if (temporaryGateRegistry && allTemporaryGates.length > 0) {
+        logger.info(`[CHAIN GATES] Creating chain-scoped temporary gates for chain: ${chainExecutionId}`, {
+          chainId: prompt.id,
+          promptConfiguredGateCount: prompt.enhancedGateConfiguration?.temporary_gates?.length || 0,
+          executionTimeGateCount: options.temporary_gates?.length || 0,
+          totalGateCount: allTemporaryGates.length
+        });
+
+        for (const tempGateDef of allTemporaryGates) {
+          try {
+            // Create chain-scoped temporary gate
+            const gateSource: 'manual' | 'automatic' | 'analysis' = tempGateDef.source || 'manual';
+            const gateScope = options.gate_scope || 'chain'; // Use execution-time scope if provided
+            const gateDefinition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> = {
+              name: tempGateDef.name,
+              type: tempGateDef.type,
+              scope: gateScope, // Use configured scope instead of forcing chain
+              description: tempGateDef.description,
+              guidance: tempGateDef.guidance,
+              pass_criteria: tempGateDef.pass_criteria,
+              source: gateSource,
+              context: { chainId: prompt.id, chainExecutionId, executionTimeGate: !!(options.temporary_gates?.includes(tempGateDef)) }
+            };
+
+            const gateId = temporaryGateRegistry.createTemporaryGate(gateDefinition, chainExecutionId);
+            chainGateIds.push(gateId);
+
+            logger.debug(`[CHAIN GATES] Created chain gate: ${gateId} (${tempGateDef.name}, scope: ${gateScope})`);
+          } catch (gateError) {
+            logger.warn(`[CHAIN GATES] Failed to create chain gate:`, gateError);
+          }
+        }
+
+        if (chainGateIds.length > 0) {
+          logger.info(`[CHAIN GATES] Successfully created ${chainGateIds.length} chain-scoped gates for ${chainExecutionId}`);
+        }
       }
 
       // Get framework context for chain execution
@@ -361,12 +414,33 @@ export class ChainExecutor {
         instructions += `---\n\n`;
       }
 
+      // Add chain gate information (Phase 3B)
+      if (chainGateIds.length > 0) {
+        instructions += `## 🔒 Chain-Level Gates\n\n`;
+        instructions += `**Chain Execution ID**: \`${chainExecutionId}\`\n\n`;
+        instructions += `This chain has **${chainGateIds.length} chain-scoped temporary gates** that will be inherited by all steps:\n\n`;
+
+        const chainGates = temporaryGateRegistry?.getTemporaryGatesForScope('chain', chainExecutionId) || [];
+        for (const gate of chainGates) {
+          instructions += `- **${gate.name}** (${gate.type})\n`;
+          instructions += `  - ${gate.description}\n`;
+          if (gate.guidance) {
+            instructions += `  - Guidance: ${gate.guidance}\n`;
+          }
+        }
+
+        instructions += `\n**Gate Inheritance**: All steps in this chain automatically inherit these gates in addition to their own step-specific gates.\n\n`;
+      }
+
       // Add execution notes
       instructions += `## 📝 Execution Notes\n\n`;
       instructions += `- Execute steps sequentially, do not skip steps\n`;
       instructions += `- Validate outputs before proceeding to next step\n`;
       if (enableGates) {
         instructions += `- Gate validation is enabled - ensure quality gates pass\n`;
+      }
+      if (chainGateIds.length > 0) {
+        instructions += `- Chain-level gates apply to all steps automatically\n`;
       }
       instructions += `- Maintain context between steps for data flow\n`;
 
@@ -376,12 +450,22 @@ export class ChainExecutor {
 
       instructions += `\n**Total Steps**: ${steps.length}\n`;
       instructions += `**Estimated Time**: ${steps.length * 2} minutes\n`;
+      if (chainGateIds.length > 0) {
+        instructions += `**Chain Execution ID**: \`${chainExecutionId}\`\n`;
+        instructions += `**Chain Gates**: ${chainGateIds.length} active\n`;
+      }
 
       logger.debug('✅ [Chain Instructions] Generated instructions', {
         promptId: prompt.id,
         stepCount: steps.length,
-        instructionsLength: instructions.length
+        instructionsLength: instructions.length,
+        chainGatesCreated: chainGateIds.length,
+        chainExecutionId
       });
+
+      // Note: Chain cleanup will happen via expiration timers or manual cleanup
+      // Future enhancement: Track chain completion and trigger cleanup
+      // For now, gates expire based on defaultExpirationMs (1 hour)
 
       return this.responseFormatter.formatPromptEngineResponse({
         content: instructions,
@@ -390,7 +474,10 @@ export class ChainExecutor {
           promptId: prompt.id,
           stepCount: steps.length,
           gatesEnabled: enableGates,
-          framework: activeFramework?.name || 'none'
+          framework: activeFramework?.name || 'none',
+          chainExecutionId,
+          chainGateIds,
+          chainGateCount: chainGateIds.length
         }
       });
 

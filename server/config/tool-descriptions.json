@@ -1,25 +1,46 @@
 {
-  "version": "1.0.2",
-  "lastUpdated": "2025-09-21T20:52:30Z",
+  "version": "1.1.0",
+  "lastUpdated": "2025-01-14T00:00:00Z",
   "tools": {
     "prompt_engine": {
-      "description": "🚀 PROMPT TEMPLATE ENGINE [HOT-RELOADED]: Processes prompt templates and returns instructions for YOU (the client LLM) to execute. WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
-      "shortDescription": "🔥 DYNAMICALLY UPDATED: Process prompt templates and return executable instructions",
+      "description": "\ud83d\ude80 PROMPT ENGINE: Executes prompts with optional quality validation.\n\n\ud83d\udccb QUALITY GATE SYSTEM:\nQuality gates validate output before returning results. Use 'quality_gates' to apply validation rules, or 'custom_checks' for ad-hoc criteria.\n\n**Discover available gates**: Use `system_control({ action: 'gates', operation: 'list' })` to see all configured gates.\n\nGate modes:\n\u2022 enforce (default): Validates output, retries on failure with improvement hints (max 2 retries)\n\u2022 advise: Provides quality guidance without blocking\n\u2022 report: Validates and includes pass/fail status in response\n\nExample usage:\n{\n  \"command\": \">>code_review code='...'\",\n  \"quality_gates\": [\"gate-name-1\", \"gate-name-2\"],\n  \"gate_mode\": \"enforce\"\n}",
+      "shortDescription": "\ud83d\udd25 DYNAMICALLY UPDATED: Process prompt templates and return executable instructions",
       "category": "execution",
       "parameters": {
-        "command": "Prompt name and arguments to process. WARNING: Will return instructions for YOU to execute, not just information. SIMPLE: >>prompt_name content | ADVANCED: JSON with execution options",
+        "command": "Prompt name and arguments to process. WARNING: Will return instructions for YOU to execute, not just information. SIMPLE: >>prompt_name content (single-line arguments only). MULTI-LINE / RICH FORMATTING: {\"command\": \">>prompt_name\", \"args\": {\"content\": \"...\", \"execution_mode\": \"template\"}} keeps payload intact. ADVANCED: JSON with execution options",
         "execution_mode": "Override intelligent auto-detection (default: auto)",
         "gate_validation": "Quality gate validation (MANDATORY for chains, auto-detected by default, see metadata sections for gate details)",
+        "quality_gates": {
+          "type": "array",
+          "description": "Array of quality gate names to apply. Discover available gates using system_control with action='gates', operation='list'. Gates validate output quality and provide improvement guidance."
+        },
+        "custom_checks": {
+          "type": "array",
+          "description": "Array of custom quality checks (each with 'name' and 'description'). Creates simple validation gates based on your criteria. Example: [{name: 'production-ready', description: 'Include error handling'}]"
+        },
+        "gate_mode": {
+          "type": "string",
+          "enum": [
+            "enforce",
+            "advise",
+            "report"
+          ],
+          "description": "How to apply quality gates: 'enforce' (block on failure, retry with hints), 'advise' (guidance only), 'report' (validate and report). Default: 'enforce' when quality_gates specified."
+        },
         "step_confirmation": "Require confirmation between chain steps",
         "llm_driven_execution": "Enable LLM-driven chain step coordination (requires semantic LLM integration)",
         "force_restart": "Force restart chain from beginning, clearing all existing state",
         "session_id": "Specific session ID to use or resume",
         "chain_uri": "Full chain URI for precise session control (e.g., chain://research_pipeline/session-abc123?force_restart=true)",
-        "timeout": "Execution timeout in milliseconds"
+        "timeout": "Execution timeout in milliseconds",
+        "options": "Additional execution options (key-value pairs). Supports framework-specific flags, debugging controls, and experimental features",
+        "temporary_gates": "[ADVANCED] Full gate definition objects. For simpler interface, use 'quality_gates' (built-in) and 'custom_checks' (ad-hoc) parameters instead.",
+        "gate_scope": "Scope for execution-time temporary gates (execution, session, chain, step). Default: execution. Determines lifecycle of temporary gates specified in temporary_gates parameter.",
+        "inherit_chain_gates": "When executing chain steps, inherit gates from parent chain scope (default: true). Only applicable for chain step execution. Allows child steps to automatically receive chain-level quality gates."
       },
       "frameworkAware": {
-        "enabled": "🚀 PROMPT TEMPLATE ENGINE [HOT-RELOADED + FRAMEWORK-ENHANCED]: Processes prompt templates with intelligent framework methodology injection and returns instructions for YOU (the client LLM) to execute. Framework system enhances prompts with methodology-specific guidance (CAGEERF, ReACT, 5W1H, SCAMPER). WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
-        "disabled": "🚀 PROMPT TEMPLATE ENGINE [HOT-RELOADED]: Processes prompt templates and returns instructions for YOU (the client LLM) to execute. Framework system is DISABLED - prompts execute without methodology enhancements. WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
+        "enabled": "\ud83d\ude80 PROMPT TEMPLATE ENGINE [HOT-RELOADED + FRAMEWORK-ENHANCED]: Processes prompt templates with intelligent framework methodology injection and returns instructions for YOU (the client LLM) to execute. Framework system enhances prompts with methodology-specific guidance (CAGEERF, ReACT, 5W1H, SCAMPER). WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
+        "disabled": "\ud83d\ude80 PROMPT TEMPLATE ENGINE [HOT-RELOADED]: Processes prompt templates and returns instructions for YOU (the client LLM) to execute. Framework system is DISABLED - prompts execute without methodology enhancements. WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
         "parametersEnabled": {
           "execution_mode": "Override intelligent auto-detection with framework-aware selection (default: auto, framework-enhanced)"
         },
@@ -29,52 +50,63 @@
       }
     },
     "prompt_manager": {
-      "description": "📝 INTELLIGENT PROMPT MANAGER: Complete lifecycle management with configurable analysis, category organization, and comprehensive CRUD operations. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.\n\n🔬 ANALYSIS MODES:\n- 'structural': Honest analysis based on template structure (default)\n- 'semantic': LLM-powered intelligent analysis (requires future API integration)\n\n🎯 Type-specific creation commands:\n- 'create_prompt': Create basic prompt (fast variable substitution)\n- 'create_template': Create framework-aware template (intelligent analysis)\n- 'analyze_type': Analyze existing prompt and recommend type\n- 'migrate_type': Convert between prompt and template types",
-      "shortDescription": "Manage prompts lifecycle and organization",
+      "description": "\ud83e\uddf0 PROMPT MANAGER: Create, update, delete, list, and analyze prompts. Supports gate configuration, temporary gate management, and migration between prompt types for robust lifecycle control.",
+      "shortDescription": "Manage prompt lifecycle, gates, and discovery",
       "category": "management",
       "parameters": {
-        "action": "Management action: 'create' (auto-detect type), 'create_prompt' (basic prompt), 'create_template' (framework-aware), 'analyze_type' (recommend type), 'migrate_type' (convert type), 'update', 'delete', 'modify', 'reload', 'list'",
-        "id": "Prompt ID (required for update, delete, modify operations)",
-        "name": "Display name for the prompt",
-        "description": "Prompt description",
-        "user_message_template": "Main prompt template",
-        "system_message": "Optional system message",
-        "arguments": "Prompt arguments definition",
-        "category": "Category for organization",
-        "filter": "Filter prompts by structured patterns (type:prompt/template, category:code, gates:yes) or fuzzy text search (name/description matching, multi-word support)"
+        "action": "Action to perform. Supported: create, create_prompt, create_template, create_with_gates, update, delete, modify, reload, list, analyze_type, migrate_type, analyze_gates, update_gates, add_temporary_gates, suggest_temporary_gates.",
+        "id": "Prompt identifier. Required for create*, update, delete, modify, analyze_type, migrate_type, analyze_gates, update_gates, add_temporary_gates. Use letters, numbers, underscores, or hyphens.",
+        "name": "Friendly prompt name. Required for create*, create_with_gates.",
+        "description": "Short description of the prompt purpose. Required for create*, create_with_gates.",
+        "user_message_template": "Prompt body with Nunjucks placeholders (e.g. 'Analyze {{input}}'). Required for create*, create_with_gates.",
+        "system_message": "Optional system message to store with the prompt.",
+        "content": "Full prompt content for create/update operations when not using templates.",
+        "category": "Category label used for filtering and organization.",
+        "arguments": "Array of argument definitions ({name, type, description}) for prompts with structured inputs.",
+        "suggested_gates": "Gate suggestions used by create_with_gates. Each entry should include type, name, description, and optional criteria.",
+        "gate_configuration": "Explicit gate configuration (include/exclude lists, temporary gates, framework_gates flag).",
+        "temporary_gates": "Temporary gate definitions used by add_temporary_gates (include name, type, scope, description, guidance, pass_criteria).",
+        "gate_scope": "Scope for temporary gates (execution, session, chain, step).",
+        "inherit_chain_gates": "When true, inherit gates from the parent chain (default true for add_temporary_gates).",
+        "search_query": "Search expression for list (e.g. 'category:code type:chain').",
+        "force": "Bypass confirmation prompts for supported actions."
       },
       "frameworkAware": {
-        "enabled": "📝 INTELLIGENT PROMPT MANAGER [FRAMEWORK-ENHANCED]: Complete lifecycle management with framework methodology integration, configurable analysis, category organization, and comprehensive CRUD operations. Framework system enables creation of methodology-aware templates with intelligent guidance. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.\n\n🔬 ANALYSIS MODES:\n- 'structural': Honest analysis based on template structure (default)\n- 'semantic': LLM-powered intelligent analysis (requires future API integration)\n\n🎯 Type-specific creation commands:\n- 'create_prompt': Create basic prompt (fast variable substitution)\n- 'create_template': Create framework-aware template with methodology injection (CAGEERF, ReACT, 5W1H, SCAMPER)\n- 'analyze_type': Analyze existing prompt and recommend type\n- 'migrate_type': Convert between prompt and template types",
-        "disabled": "📝 INTELLIGENT PROMPT MANAGER [BASIC MODE]: Complete lifecycle management with configurable analysis, category organization, and comprehensive CRUD operations. Framework system is DISABLED - templates created without methodology enhancement. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.\n\n🔬 ANALYSIS MODES:\n- 'structural': Honest analysis based on template structure (default)\n- 'semantic': LLM-powered intelligent analysis (requires future API integration)\n\n🎯 Type-specific creation commands:\n- 'create_prompt': Create basic prompt (fast variable substitution)\n- 'create_template': Create basic template (no framework enhancement)\n- 'analyze_type': Analyze existing prompt and recommend type\n- 'migrate_type': Convert between prompt and template types",
+        "enabled": "\ud83e\uddf0 PROMPT MANAGER [FRAMEWORK-ENABLED]: Same functionality with framework-aware metadata exposed. Use when methodology switching is active.",
+        "disabled": "\ud83e\uddf0 PROMPT MANAGER [FRAMEWORK-DISABLED]: Operates without applying methodology metadata or guidance.",
         "parametersEnabled": {
-          "action": "Management action: 'create' (auto-detect type), 'create_prompt' (basic prompt), 'create_template' (framework-aware with methodology injection), 'analyze_type' (recommend type), 'migrate_type' (convert type), 'update', 'delete', 'modify', 'reload', 'list'"
+          "action": "Same as base mode; framework context is available for downstream processing"
         },
         "parametersDisabled": {
-          "action": "Management action: 'create' (auto-detect type), 'create_prompt' (basic prompt), 'create_template' (basic template, no framework enhancement), 'analyze_type' (recommend type), 'migrate_type' (convert type), 'update', 'delete', 'modify', 'reload', 'list'"
+          "action": "Same as base mode"
         }
       }
     },
     "system_control": {
-      "description": "⚙️ INTELLIGENT SYSTEM CONTROL: Unified framework management, analytics, diagnostics, and system administration. Handles framework switching, performance monitoring, health checks, and comprehensive system status reporting.",
-      "shortDescription": "Control system settings and frameworks",
+      "description": "\u2699\ufe0f SYSTEM CONTROL: Framework management, gate discovery, analytics, and system operations.\n\n**Discover quality gates**: Use `action='gates', operation='list'` to see all available validation gates.\n**Discover frameworks**: Use `action='framework', operation='list'` to see available methodologies.",
+      "shortDescription": "Manage framework state, metrics, and maintenance",
       "category": "system",
       "parameters": {
-        "action": "System action: 'status' (comprehensive overview), 'switch_framework' (change methodology), 'list_frameworks' (available options), 'analytics' (execution metrics), 'health' (system health), 'diagnostics' (detailed analysis), 'reset_metrics' (clear switching metrics), 'switch_history' (framework changes), 'config' (system configuration), 'config_restore' (restore config from backup), 'restart' (full server restart)",
-        "framework": "Target framework for switch_framework action",
-        "reason": "Reason for framework switch or operation",
-        "confirm": "Confirmation for destructive operations",
-        "show_details": "Show detailed information",
-        "include_history": "Include historical data in reports",
-        "include_metrics": "Include detailed performance metrics"
+        "action": "Top-level command. Supported values: status, framework, gates, analytics, config, maintenance.",
+        "operation": "Sub-command for the selected action (e.g. framework: switch|list|enable|disable, analytics: view|reset|history).",
+        "framework": "Framework identifier when switching (CAGEERF, ReACT, 5W1H, SCAMPER).",
+        "config_path": "Configuration path or key for config operations.",
+        "config_value": "Value to write when performing config updates.",
+        "reason": "Audit-friendly explanation for switches, config changes, or restarts.",
+        "restart_reason": "Specific reason recorded for maintenance/restart operations.",
+        "confirm": "Set true to acknowledge confirmation-required operations (e.g. reset, restore, restart).",
+        "include_history": "Include historical entries (where supported).",
+        "include_metrics": "Include detailed metrics output (where supported).",
+        "show_details": "Request an expanded response for list/status style commands."
       },
       "frameworkAware": {
-        "enabled": "⚙️ INTELLIGENT SYSTEM CONTROL [FRAMEWORK-ACTIVE]: Unified framework management, analytics, diagnostics, and system administration. Framework system is ACTIVE - supports switching between methodologies (CAGEERF, ReACT, 5W1H, SCAMPER), performance monitoring, health checks, and comprehensive system status reporting.",
-        "disabled": "⚙️ INTELLIGENT SYSTEM CONTROL [FRAMEWORK-DISABLED]: System administration, analytics, diagnostics, and basic system control. Framework system is DISABLED - framework switching is unavailable. Handles performance monitoring, health checks, and system status reporting.",
+        "enabled": "\u2699\ufe0f SYSTEM CONTROL [FRAMEWORK-ENABLED]: Framework switching and gate orchestration available.",
+        "disabled": "\u2699\ufe0f SYSTEM CONTROL [FRAMEWORK-DISABLED]: Limited to status, analytics, config, and maintenance.",
         "parametersEnabled": {
-          "action": "System action: 'status' (comprehensive overview), 'switch_framework' (change methodology), 'enable_framework' (activate framework system), 'disable_framework' (deactivate framework system), 'list_frameworks' (available options), 'analytics' (execution metrics), 'health' (system health), 'diagnostics' (detailed analysis), 'reset_metrics' (clear switching metrics), 'switch_history' (framework changes), 'config' (system configuration), 'config_restore' (restore config from backup), 'restart' (full server restart)"
+          "action": "Same as base mode; framework operations succeed"
         },
         "parametersDisabled": {
-          "action": "System action: 'status' (comprehensive overview), 'enable_framework' (activate framework system), 'analytics' (execution metrics), 'health' (system health), 'diagnostics' (detailed analysis), 'config' (system configuration), 'config_restore' (restore config from backup), 'restart' (full server restart) - NOTE: Framework switching unavailable when disabled"
+          "action": "Same as base mode; framework operations return informative errors"
         }
       }
     }

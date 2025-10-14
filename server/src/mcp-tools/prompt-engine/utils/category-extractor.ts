@@ -13,7 +13,16 @@ import type { Logger } from '../../../logging/index.js';
 import path from 'path';
 
 /**
- * Extracted category information with source tracking
+ * Template gate configuration
+ */
+export interface GateConfigurationInfo {
+  include?: string[];
+  exclude?: string[];
+  framework_gates?: boolean;
+}
+
+/**
+ * Extracted category and gate information with source tracking
  */
 export interface CategoryExtractionResult {
   /** The determined category */
@@ -22,6 +31,8 @@ export interface CategoryExtractionResult {
   source: 'metadata' | 'path' | 'pattern' | 'fallback';
   /** Confidence level (0-100) */
   confidence: number;
+  /** Template-level gate configuration */
+  gateConfiguration?: GateConfigurationInfo;
   /** Original data used for extraction */
   sourceData?: {
     metadata?: string;
@@ -53,7 +64,8 @@ export class CategoryExtractor {
     this.logger.debug('[CATEGORY EXTRACTOR] Extracting category from prompt:', {
       promptId: prompt?.id,
       promptCategory: prompt?.category,
-      promptFile: prompt?.file
+      promptFile: prompt?.file,
+      hasGateConfiguration: !!prompt?.gateConfiguration
     });
 
     // Strategy 1: Use prompt metadata category (highest priority)
@@ -64,6 +76,7 @@ export class CategoryExtractor {
           category: metadataCategory,
           source: 'metadata',
           confidence: 95,
+          gateConfiguration: prompt.gateConfiguration,
           sourceData: {
             metadata: prompt.category,
             filePath: prompt.file,
@@ -81,6 +94,7 @@ export class CategoryExtractor {
           category: pathCategory,
           source: 'path',
           confidence: 85,
+          gateConfiguration: prompt.gateConfiguration,
           sourceData: {
             filePath: prompt.file,
             promptId: prompt.id
@@ -97,6 +111,7 @@ export class CategoryExtractor {
           category: patternCategory,
           source: 'pattern',
           confidence: 60,
+          gateConfiguration: prompt.gateConfiguration,
           sourceData: {
             promptId: prompt.id,
             filePath: prompt.file
@@ -111,6 +126,7 @@ export class CategoryExtractor {
       category: 'general',
       source: 'fallback',
       confidence: 30,
+      gateConfiguration: prompt?.gateConfiguration,
       sourceData: {
         promptId: prompt?.id,
         filePath: prompt?.file
@@ -202,6 +218,117 @@ export class CategoryExtractor {
   }
 
   /**
+   * Intelligent gate selection with precedence logic
+   *
+   * Priority order:
+   * 1. Explicit template gates (highest priority)
+   * 2. Category-based gates
+   * 3. Framework-based gates
+   * 4. Default fallback gates (lowest priority)
+   */
+  selectGatesWithPrecedence(
+    categoryResult: CategoryExtractionResult,
+    frameworkGates: string[] = [],
+    fallbackGates: string[] = ['content-structure']
+  ): {
+    selectedGates: string[];
+    precedenceUsed: string[];
+    reasoning: string;
+  } {
+    const { category, gateConfiguration } = categoryResult;
+    const categoryGates = CategoryExtractor.getCategoryGateMapping()[category] || [];
+
+    this.logger.debug('[GATE PRECEDENCE] Input for gate selection:', {
+      category,
+      templateGates: gateConfiguration,
+      categoryGates,
+      frameworkGates,
+      fallbackGates
+    });
+
+    let selectedGates: string[] = [];
+    let precedenceUsed: string[] = [];
+    let reasoning = '';
+
+    // Phase 1: Start with template gates if specified
+    if (gateConfiguration) {
+      if (gateConfiguration.include && gateConfiguration.include.length > 0) {
+        selectedGates.push(...gateConfiguration.include);
+        precedenceUsed.push('template-include');
+        reasoning += `Template includes: [${gateConfiguration.include.join(', ')}]. `;
+      }
+
+      // Phase 2: Add category gates if framework_gates is true (default)
+      if (gateConfiguration.framework_gates !== false) {
+        const additionalCategoryGates = categoryGates.filter(gate => !selectedGates.includes(gate));
+        selectedGates.push(...additionalCategoryGates);
+        if (additionalCategoryGates.length > 0) {
+          precedenceUsed.push('category-gates');
+          reasoning += `Category gates: [${additionalCategoryGates.join(', ')}]. `;
+        }
+
+        // Phase 3: Add framework gates
+        const additionalFrameworkGates = frameworkGates.filter(gate => !selectedGates.includes(gate));
+        selectedGates.push(...additionalFrameworkGates);
+        if (additionalFrameworkGates.length > 0) {
+          precedenceUsed.push('framework-gates');
+          reasoning += `Framework gates: [${additionalFrameworkGates.join(', ')}]. `;
+        }
+      }
+
+      // Phase 4: Apply exclusions
+      if (gateConfiguration.exclude && gateConfiguration.exclude.length > 0) {
+        const originalCount = selectedGates.length;
+        selectedGates = selectedGates.filter(gate => !gateConfiguration.exclude!.includes(gate));
+        if (selectedGates.length < originalCount) {
+          precedenceUsed.push('template-exclude');
+          reasoning += `Template excludes: [${gateConfiguration.exclude.join(', ')}]. `;
+        }
+      }
+    } else {
+      // No template configuration - use standard precedence
+
+      // Phase 2: Category gates
+      selectedGates.push(...categoryGates);
+      if (categoryGates.length > 0) {
+        precedenceUsed.push('category-gates');
+        reasoning += `Category gates: [${categoryGates.join(', ')}]. `;
+      }
+
+      // Phase 3: Framework gates
+      const additionalFrameworkGates = frameworkGates.filter(gate => !selectedGates.includes(gate));
+      selectedGates.push(...additionalFrameworkGates);
+      if (additionalFrameworkGates.length > 0) {
+        precedenceUsed.push('framework-gates');
+        reasoning += `Framework gates: [${additionalFrameworkGates.join(', ')}]. `;
+      }
+    }
+
+    // Phase 5: Fallback if no gates selected
+    if (selectedGates.length === 0) {
+      selectedGates.push(...fallbackGates);
+      precedenceUsed.push('fallback');
+      reasoning += `Fallback gates: [${fallbackGates.join(', ')}]. `;
+    }
+
+    // Remove duplicates (shouldn't happen with our logic, but safety check)
+    selectedGates = [...new Set(selectedGates)];
+
+    this.logger.info('[GATE PRECEDENCE] Final gate selection:', {
+      category,
+      selectedGates,
+      precedenceUsed,
+      reasoning: reasoning.trim()
+    });
+
+    return {
+      selectedGates,
+      precedenceUsed,
+      reasoning: reasoning.trim()
+    };
+  }
+
+  /**
    * Get fallback category mapping for gate selection
    */
   public static getCategoryGateMapping(): Record<string, string[]> {
@@ -214,6 +341,143 @@ export class CategoryExtractor {
       'documentation': ['content-structure', 'clarity'],
       'content_processing': ['content-structure', 'format-consistency'],
       'general': ['content-structure']
+    };
+  }
+
+  /**
+   * Enhanced gate selection with 5-level precedence including temporary gates
+   *
+   * Priority order (Phase 3):
+   * 1. Temporary gates (highest priority - execution-specific)
+   * 2. Explicit template gates
+   * 3. Category-based gates
+   * 4. Framework-based gates
+   * 5. Default fallback gates (lowest priority)
+   */
+  selectGatesWithEnhancedPrecedence(
+    categoryResult: CategoryExtractionResult,
+    frameworkGates: string[] = [],
+    fallbackGates: string[] = ['content-structure'],
+    temporaryGates: string[] = [],
+    enhancedConfig?: any
+  ): {
+    selectedGates: string[];
+    precedenceUsed: string[];
+    reasoning: string;
+    temporaryGatesApplied: string[];
+  } {
+    const { category, gateConfiguration } = categoryResult;
+    const categoryGates = CategoryExtractor.getCategoryGateMapping()[category] || [];
+
+    this.logger.debug('[ENHANCED GATE PRECEDENCE] Input for enhanced gate selection:', {
+      category,
+      templateGates: gateConfiguration,
+      categoryGates,
+      frameworkGates,
+      fallbackGates,
+      temporaryGates,
+      enhancedConfig
+    });
+
+    let selectedGates: string[] = [];
+    let precedenceUsed: string[] = [];
+    let reasoning = '';
+    let temporaryGatesApplied: string[] = [];
+
+    // Phase 1: Start with temporary gates (highest priority)
+    if (temporaryGates.length > 0) {
+      selectedGates.push(...temporaryGates);
+      precedenceUsed.push('temporary-gates');
+      temporaryGatesApplied = [...temporaryGates];
+      reasoning += `Temporary gates: [${temporaryGates.join(', ')}]. `;
+    }
+
+    // Phase 2: Add template gates if specified
+    if (gateConfiguration) {
+      if (gateConfiguration.include && gateConfiguration.include.length > 0) {
+        const additionalTemplateGates = gateConfiguration.include.filter(gate => !selectedGates.includes(gate));
+        selectedGates.push(...additionalTemplateGates);
+        if (additionalTemplateGates.length > 0) {
+          precedenceUsed.push('template-include');
+          reasoning += `Template includes: [${additionalTemplateGates.join(', ')}]. `;
+        }
+      }
+
+      // Phase 3: Add category gates if framework_gates is true (default)
+      if (gateConfiguration.framework_gates !== false) {
+        const additionalCategoryGates = categoryGates.filter(gate => !selectedGates.includes(gate));
+        selectedGates.push(...additionalCategoryGates);
+        if (additionalCategoryGates.length > 0) {
+          precedenceUsed.push('category-gates');
+          reasoning += `Category gates: [${additionalCategoryGates.join(', ')}]. `;
+        }
+
+        // Phase 4: Add framework gates
+        const additionalFrameworkGates = frameworkGates.filter(gate => !selectedGates.includes(gate));
+        selectedGates.push(...additionalFrameworkGates);
+        if (additionalFrameworkGates.length > 0) {
+          precedenceUsed.push('framework-gates');
+          reasoning += `Framework gates: [${additionalFrameworkGates.join(', ')}]. `;
+        }
+      }
+
+      // Phase 5: Apply exclusions (can remove temporary, template, category, or framework gates)
+      if (gateConfiguration.exclude && gateConfiguration.exclude.length > 0) {
+        const originalCount = selectedGates.length;
+        selectedGates = selectedGates.filter(gate => !gateConfiguration.exclude!.includes(gate));
+
+        // Update temporary gates applied if they were excluded
+        temporaryGatesApplied = temporaryGatesApplied.filter(gate => !gateConfiguration.exclude!.includes(gate));
+
+        if (selectedGates.length < originalCount) {
+          precedenceUsed.push('template-exclude');
+          reasoning += `Template excludes: [${gateConfiguration.exclude.join(', ')}]. `;
+        }
+      }
+    } else {
+      // No template configuration - use standard precedence (skip template level)
+
+      // Phase 3: Category gates
+      const additionalCategoryGates = categoryGates.filter(gate => !selectedGates.includes(gate));
+      selectedGates.push(...additionalCategoryGates);
+      if (additionalCategoryGates.length > 0) {
+        precedenceUsed.push('category-gates');
+        reasoning += `Category gates: [${additionalCategoryGates.join(', ')}]. `;
+      }
+
+      // Phase 4: Framework gates
+      const additionalFrameworkGates = frameworkGates.filter(gate => !selectedGates.includes(gate));
+      selectedGates.push(...additionalFrameworkGates);
+      if (additionalFrameworkGates.length > 0) {
+        precedenceUsed.push('framework-gates');
+        reasoning += `Framework gates: [${additionalFrameworkGates.join(', ')}]. `;
+      }
+    }
+
+    // Phase 6: Fallback if no gates selected
+    if (selectedGates.length === 0) {
+      selectedGates.push(...fallbackGates);
+      precedenceUsed.push('fallback');
+      reasoning += `Fallback gates: [${fallbackGates.join(', ')}]. `;
+    }
+
+    // Remove duplicates (shouldn't happen with our logic, but safety check)
+    selectedGates = [...new Set(selectedGates)];
+    temporaryGatesApplied = [...new Set(temporaryGatesApplied)];
+
+    this.logger.info('[ENHANCED GATE PRECEDENCE] Final enhanced gate selection:', {
+      category,
+      selectedGates,
+      precedenceUsed,
+      temporaryGatesApplied,
+      reasoning: reasoning.trim()
+    });
+
+    return {
+      selectedGates,
+      precedenceUsed,
+      reasoning: reasoning.trim(),
+      temporaryGatesApplied
     };
   }
 }

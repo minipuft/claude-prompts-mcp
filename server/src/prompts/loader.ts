@@ -336,6 +336,25 @@ export class PromptLoader {
     systemMessage?: string;
     userMessageTemplate: string;
     isChain?: boolean;
+    gateConfiguration?: {
+      include?: string[];
+      exclude?: string[];
+      framework_gates?: boolean;
+      temporary_gates?: Array<{
+        id?: string;
+        name: string;
+        type: 'validation' | 'approval' | 'condition';
+        scope: 'execution' | 'session' | 'chain' | 'step';
+        description: string;
+        guidance: string;
+        pass_criteria: any[];
+        expires_at?: number;
+        source?: 'manual' | 'automatic' | 'analysis';
+        context?: Record<string, any>;
+      }>;
+      gate_scope?: 'execution' | 'session' | 'chain' | 'step';
+      inherit_chain_gates?: boolean;
+    };
     chainSteps?: Array<{
       promptId: string;
       stepName: string;
@@ -359,9 +378,72 @@ export class PromptLoader {
       const systemMessage = systemMessageMatch
         ? systemMessageMatch[1].trim()
         : undefined;
-      const userMessageTemplate = userMessageMatch
+      let userMessageTemplate = userMessageMatch
         ? userMessageMatch[1].trim()
         : "";
+
+      // Extract gate configuration if present (Phase 3: Enhanced gate configuration with temporary gates)
+      let gateConfiguration: {
+        include?: string[];
+        exclude?: string[];
+        framework_gates?: boolean;
+        temporary_gates?: Array<{
+          id?: string;
+          name: string;
+          type: 'validation' | 'approval' | 'condition';
+          scope: 'execution' | 'session' | 'chain' | 'step';
+          description: string;
+          guidance: string;
+          pass_criteria: any[];
+          expires_at?: number;
+          source?: 'manual' | 'automatic' | 'analysis';
+          context?: Record<string, any>;
+        }>;
+        gate_scope?: 'execution' | 'session' | 'chain' | 'step';
+        inherit_chain_gates?: boolean;
+      } | undefined;
+
+      const gateConfigMatch = content.match(
+        /## Gate Configuration\s*\n```json\s*\n([\s\S]*?)\n```/
+      );
+
+      if (gateConfigMatch) {
+        try {
+          const gateConfigContent = gateConfigMatch[1].trim();
+          const parsedConfig = JSON.parse(gateConfigContent);
+
+          // Validate and normalize the gate configuration
+          if (Array.isArray(parsedConfig)) {
+            // Simple array format: ["gate1", "gate2"]
+            gateConfiguration = {
+              include: parsedConfig,
+              framework_gates: true
+            };
+          } else if (typeof parsedConfig === 'object' && parsedConfig !== null) {
+            // Object format: {"include": [...], "exclude": [...], "framework_gates": true, "temporary_gates": [...]}
+            gateConfiguration = {
+              include: Array.isArray(parsedConfig.include) ? parsedConfig.include : undefined,
+              exclude: Array.isArray(parsedConfig.exclude) ? parsedConfig.exclude : undefined,
+              framework_gates: typeof parsedConfig.framework_gates === 'boolean' ? parsedConfig.framework_gates : true,
+              temporary_gates: Array.isArray(parsedConfig.temporary_gates) ? parsedConfig.temporary_gates : undefined,
+              gate_scope: typeof parsedConfig.gate_scope === 'string' ? parsedConfig.gate_scope : undefined,
+              inherit_chain_gates: typeof parsedConfig.inherit_chain_gates === 'boolean' ? parsedConfig.inherit_chain_gates : undefined
+            };
+          }
+
+          this.logger.debug(`[LOADER] Gate configuration parsed for ${filePath}:`, gateConfiguration);
+
+          // Phase 3 Fix: Strip Gate Configuration section from userMessageTemplate
+          // so it doesn't appear in the output to the user
+          if (gateConfigMatch) {
+            const gateConfigSectionRegex = /## Gate Configuration\s*\n```json\s*\n[\s\S]*?\n```\s*/;
+            userMessageTemplate = userMessageTemplate.replace(gateConfigSectionRegex, '').trim();
+            this.logger.debug(`[LOADER] Stripped Gate Configuration section from user message template for ${filePath}`);
+          }
+        } catch (gateConfigError) {
+          this.logger.warn(`[LOADER] Failed to parse gate configuration in ${filePath}:`, gateConfigError);
+        }
+      }
 
       // Extract chain information if present
       const chainMatch = content.match(
@@ -480,7 +562,12 @@ export class PromptLoader {
         throw new Error(`No user message template found in ${filePath}`);
       }
 
-      return { systemMessage, userMessageTemplate, chainSteps };
+      return {
+        systemMessage,
+        userMessageTemplate,
+        gateConfiguration,
+        chainSteps
+      };
     } catch (error) {
       this.logger.error(`Error loading prompt file ${filePath}:`, error);
       throw error;

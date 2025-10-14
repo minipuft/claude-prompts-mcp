@@ -14,7 +14,8 @@ import {
 } from "./system-prompt-injector.js";
 import {
   MethodologyTracker,
-  createMethodologyTracker
+  createMethodologyTracker,
+  type MethodologyTrackerConfig
 } from "./methodology-tracker.js";
 import {
   TemplateEnhancer,
@@ -35,6 +36,10 @@ import { FrameworkManager } from "../framework-manager.js";
 /**
  * Prompt guidance service configuration
  */
+type MethodologyTrackingServiceConfig = Partial<MethodologyTrackerConfig> & {
+  enabled: boolean;
+};
+
 export interface PromptGuidanceServiceConfig {
   systemPromptInjection: {
     enabled: boolean;
@@ -48,11 +53,7 @@ export interface PromptGuidanceServiceConfig {
     enableArgumentSuggestions: boolean;
     enableStructureOptimization: boolean;
   };
-  methodologyTracking: {
-    enabled: boolean;
-    persistStateToDisk: boolean;
-    enableHealthMonitoring: boolean;
-  };
+  methodologyTracking: MethodologyTrackingServiceConfig;
 }
 
 /**
@@ -110,7 +111,10 @@ export class PromptGuidanceService {
       methodologyTracking: {
         enabled: true,
         persistStateToDisk: true,
-        enableHealthMonitoring: true
+        enableHealthMonitoring: true,
+        healthCheckIntervalMs: 30000,
+        maxSwitchHistory: 100,
+        enableMetrics: true
       },
       ...config
     };
@@ -133,10 +137,18 @@ export class PromptGuidanceService {
 
     try {
       // Initialize methodology tracker
+      const { enabled: trackingEnabled, ...trackerConfig } =
+        this.config.methodologyTracking;
       this.methodologyTracker = await createMethodologyTracker(
         this.logger,
-        this.config.methodologyTracking
+        trackerConfig
       );
+
+      if (!trackingEnabled) {
+        this.logger.info(
+          "Prompt guidance methodology tracking initialized but marked disabled in config"
+        );
+      }
 
       // Set framework manager if provided
       if (frameworkManager) {
@@ -213,8 +225,15 @@ export class PromptGuidanceService {
 
           result.systemPromptInjection = injectionResult;
 
-          // Update enhanced prompt with injected system message
-          enhancedPrompt.systemMessage = injectionResult.enhancedPrompt;
+          // FIXED: Combine original system message with framework-injected guidance
+          // This preserves the original prompt's system message while adding framework context
+          const originalSystemMessage = prompt.systemMessage || '';
+          const frameworkGuidance = injectionResult.enhancedPrompt;
+
+          // Combine both: framework guidance first (sets context), then original system message
+          enhancedPrompt.systemMessage = originalSystemMessage
+            ? `${frameworkGuidance}\n\n${originalSystemMessage}`
+            : frameworkGuidance;
 
           result.metadata.enhancementsApplied.push('system_prompt_injection');
           totalConfidence += injectionResult.metadata.confidence;
@@ -344,7 +363,14 @@ export class PromptGuidanceService {
     this.templateEnhancer.updateConfig(config.templateEnhancement || {});
 
     if (config.methodologyTracking && this.methodologyTracker) {
-      this.methodologyTracker.updateConfig(config.methodologyTracking);
+      const { enabled: trackingEnabled, ...trackerConfig } =
+        config.methodologyTracking;
+
+      if (typeof trackingEnabled === 'boolean') {
+        this.config.methodologyTracking.enabled = trackingEnabled;
+      }
+
+      this.methodologyTracker.updateConfig(trackerConfig);
     }
 
     this.logger.debug("PromptGuidanceService configuration updated");

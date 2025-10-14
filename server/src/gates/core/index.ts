@@ -3,38 +3,109 @@
  * Provides guidance and validation capabilities for prompt execution
  */
 
-import { GateLoader, createGateLoader } from './gate-loader.js';
-import { GateValidator, createGateValidator, GateValidationStatistics } from './gate-validator.js';
-import type {
-  LightweightGateDefinition,
-  GatePassCriteria,
-  ValidationCheck,
-  ValidationContext,
-  GateActivationResult
-} from '../types.js';
-import type { ValidationResult } from '../../execution/types.js';
+import type { ValidationResult } from "../../execution/types.js";
+import { GateSystemManager } from "../gate-state-manager.js";
+import { GateLoader, createGateLoader } from "./gate-loader.js";
+import { GateValidator, createGateValidator } from "./gate-validator.js";
+import {
+  TemporaryGateRegistry,
+  createTemporaryGateRegistry,
+  type TemporaryGateDefinition,
+} from "./temporary-gate-registry.js";
 
-export { GateLoader, createGateLoader } from './gate-loader.js';
-export { GateValidator, createGateValidator } from './gate-validator.js';
+export { GateLoader, createGateLoader } from "./gate-loader.js";
+export { GateValidator, createGateValidator } from "./gate-validator.js";
+export {
+  TemporaryGateRegistry,
+  createTemporaryGateRegistry,
+  type TemporaryGateDefinition as TemporaryGateRegistryDefinition,
+} from "./temporary-gate-registry.js";
 
+export type { ValidationResult } from "../../execution/types.js";
 export type {
-  LightweightGateDefinition,
+  GateActivationResult,
   GatePassCriteria,
+  LightweightGateDefinition,
   ValidationCheck,
   ValidationContext,
-  GateActivationResult
-} from '../types.js';
-export type { ValidationResult } from '../../execution/types.js';
-export type { GateValidationStatistics } from './gate-validator.js';
+} from "../types.js";
+export type { GateValidationStatistics } from "./gate-validator.js";
 
 /**
- * Core gate system manager
+ * Core gate system manager with temporary gate support
  */
 export class LightweightGateSystem {
+  private gateSystemManager?: GateSystemManager;
+  private temporaryGateRegistry?: TemporaryGateRegistry;
+
   constructor(
     public gateLoader: GateLoader,
-    public gateValidator: GateValidator
-  ) {}
+    public gateValidator: GateValidator,
+    temporaryGateRegistry?: TemporaryGateRegistry
+  ) {
+    this.temporaryGateRegistry = temporaryGateRegistry;
+  }
+
+  /**
+   * Set gate system manager for runtime state checking
+   */
+  setGateSystemManager(gateSystemManager: GateSystemManager): void {
+    this.gateSystemManager = gateSystemManager;
+  }
+
+  /**
+   * Set temporary gate registry
+   */
+  setTemporaryGateRegistry(temporaryGateRegistry: TemporaryGateRegistry): void {
+    this.temporaryGateRegistry = temporaryGateRegistry;
+  }
+
+  /**
+   * Create a temporary gate
+   */
+  createTemporaryGate(
+    definition: Omit<TemporaryGateDefinition, "id" | "created_at">,
+    scopeId?: string
+  ): string | null {
+    if (!this.temporaryGateRegistry) {
+      return null;
+    }
+    return this.temporaryGateRegistry.createTemporaryGate(definition, scopeId);
+  }
+
+  /**
+   * Get temporary gates for scope
+   */
+  getTemporaryGatesForScope(
+    scope: string,
+    scopeId: string
+  ): TemporaryGateDefinition[] {
+    if (!this.temporaryGateRegistry) {
+      return [];
+    }
+    return this.temporaryGateRegistry.getTemporaryGatesForScope(scope, scopeId);
+  }
+
+  /**
+   * Clean up temporary gates for scope
+   */
+  cleanupTemporaryGates(scope: string, scopeId?: string): number {
+    if (!this.temporaryGateRegistry) {
+      return 0;
+    }
+    return this.temporaryGateRegistry.cleanupScope(scope, scopeId);
+  }
+
+  /**
+   * Check if gate system is enabled
+   */
+  private isGateSystemEnabled(): boolean {
+    // If no gate system manager is set, default to enabled for backwards compatibility
+    if (!this.gateSystemManager) {
+      return true;
+    }
+    return this.gateSystemManager.isGateSystemEnabled();
+  }
 
   /**
    * Get guidance text for active gates
@@ -47,6 +118,11 @@ export class LightweightGateSystem {
       explicitRequest?: boolean;
     }
   ): Promise<string[]> {
+    // Check if gate system is enabled
+    if (!this.isGateSystemEnabled()) {
+      return []; // Return empty guidance if gates are disabled
+    }
+
     const activation = await this.gateLoader.getActiveGates(gateIds, context);
     return activation.guidanceText;
   }
@@ -65,6 +141,23 @@ export class LightweightGateSystem {
       metadata?: Record<string, any>;
     }
   ): Promise<ValidationResult[]> {
+    // Check if gate system is enabled
+    if (!this.isGateSystemEnabled()) {
+      // Return success results for all gates if system is disabled
+      return gateIds.map((gateId) => ({
+        gateId,
+        valid: true,
+        passed: true,
+        message: "Gate system disabled - validation skipped",
+        score: 1.0,
+        details: {},
+        retryHints: [],
+        suggestions: [],
+      }));
+    }
+
+    const startTime = performance.now();
+
     const context = {
       content,
       metadata: validationContext.metadata,
@@ -72,11 +165,20 @@ export class LightweightGateSystem {
         promptId: validationContext.promptId,
         stepId: validationContext.stepId,
         attemptNumber: validationContext.attemptNumber,
-        previousAttempts: validationContext.previousAttempts
-      }
+        previousAttempts: validationContext.previousAttempts,
+      },
     };
 
-    return this.gateValidator.validateGates(gateIds, context);
+    const results = await this.gateValidator.validateGates(gateIds, context);
+
+    // Record validation metrics if gate system manager is available
+    if (this.gateSystemManager) {
+      const executionTime = performance.now() - startTime;
+      const success = results.every((r) => r.passed);
+      this.gateSystemManager.recordValidation(success, executionTime);
+    }
+
+    return results;
   }
 
   /**
@@ -87,7 +189,11 @@ export class LightweightGateSystem {
     currentAttempt: number,
     maxAttempts: number = 3
   ): boolean {
-    return this.gateValidator.shouldRetry(validationResults, currentAttempt, maxAttempts);
+    return this.gateValidator.shouldRetry(
+      validationResults,
+      currentAttempt,
+      maxAttempts
+    );
   }
 
   /**
@@ -102,7 +208,7 @@ export class LightweightGateSystem {
         if (result.retryHints) {
           allHints.push(...result.retryHints);
         }
-        allHints.push(''); // Empty line for separation
+        allHints.push(""); // Empty line for separation
       }
     }
 
@@ -115,20 +221,53 @@ export class LightweightGateSystem {
   getStatistics() {
     return {
       gateLoader: this.gateLoader.getStatistics(),
-      gateValidator: this.gateValidator.getStatistics()
+      gateValidator: this.gateValidator.getStatistics(),
     };
+  }
+
+  /**
+   * Get the temporary gate registry instance (Phase 3 enhancement)
+   */
+  getTemporaryGateRegistry(): TemporaryGateRegistry | undefined {
+    return this.temporaryGateRegistry;
   }
 }
 
 /**
- * Create a complete core gate system
+ * Create a complete core gate system with optional temporary gate support
  */
 export function createLightweightGateSystem(
   logger: any,
-  gatesDirectory?: string
+  gatesDirectory?: string,
+  gateSystemManager?: GateSystemManager,
+  options?: {
+    enableTemporaryGates?: boolean;
+    maxMemoryGates?: number;
+    defaultExpirationMs?: number;
+    llmConfig?: any; // LLMIntegrationConfig from types
+  }
 ): LightweightGateSystem {
   const gateLoader = createGateLoader(logger, gatesDirectory);
-  const gateValidator = createGateValidator(logger, gateLoader);
+  const gateValidator = createGateValidator(logger, gateLoader, options?.llmConfig);
 
-  return new LightweightGateSystem(gateLoader, gateValidator);
+  // Create temporary gate registry if enabled
+  let temporaryGateRegistry: TemporaryGateRegistry | undefined;
+  if (options?.enableTemporaryGates !== false) {
+    temporaryGateRegistry = createTemporaryGateRegistry(logger, {
+      maxMemoryGates: options?.maxMemoryGates,
+      defaultExpirationMs: options?.defaultExpirationMs,
+    });
+  }
+
+  const gateSystem = new LightweightGateSystem(
+    gateLoader,
+    gateValidator,
+    temporaryGateRegistry
+  );
+
+  if (gateSystemManager) {
+    gateSystem.setGateSystemManager(gateSystemManager);
+  }
+
+  return gateSystem;
 }

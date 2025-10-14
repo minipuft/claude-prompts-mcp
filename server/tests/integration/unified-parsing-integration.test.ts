@@ -191,6 +191,22 @@ describe('Unified Parsing Integration Tests', () => {
 
       expect(mockExecutePrompt).toHaveBeenCalled();
     });
+
+    test('should parse multi-line arguments in simple command format', async () => {
+      const multiLineCommand = [
+        '>>simple_test **Title**: Network Layers Model',
+        '**Summary**:',
+        'Line one of details.',
+        'Line two of details.'
+      ].join('\n');
+
+      const result = await (promptEngine as any).parseCommandUnified(multiLineCommand);
+
+      expect(result.promptId).toBe('simple_test');
+      expect(result.arguments).toBeDefined();
+      expect(result.arguments.content).toContain('Line two of details.');
+      expect(result.arguments.content.split('\n').length).toBeGreaterThan(1);
+    });
   });
 
   describe('Context-Aware Processing', () => {
