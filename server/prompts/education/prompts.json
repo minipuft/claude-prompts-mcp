@@ -1,25 +1,6 @@
 {
   "prompts": [
     {
-      "id": "explain_concept",
-      "name": "Explain Concept",
-      "category": "education",
-      "description": "A clear, comprehensive explanation of complex concepts tailored to the specified knowledge level.",
-      "file": "explain_concept.md",
-      "arguments": [
-        {
-          "name": "concept",
-          "description": "The concept to be explained",
-          "required": false
-        },
-        {
-          "name": "level",
-          "description": "The knowledge level of the audience",
-          "required": false
-        }
-      ]
-    },
-    {
       "id": "vault_integrated_notes",
       "name": "Vault-Integrated Notes Creator",
       "category": "education",

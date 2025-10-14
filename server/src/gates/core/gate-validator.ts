@@ -12,6 +12,7 @@ import type {
   GatePassCriteria
 } from '../types.js';
 import type { ValidationResult } from '../../execution/types.js';
+import type { LLMIntegrationConfig } from '../../types.js';
 
 /**
  * Gate validation statistics
@@ -30,6 +31,7 @@ export interface GateValidationStatistics {
 export class GateValidator {
   private logger: Logger;
   private gateLoader: GateLoader;
+  private llmConfig?: LLMIntegrationConfig;
   private validationStats: GateValidationStatistics = {
     totalValidations: 0,
     successfulValidations: 0,
@@ -39,9 +41,10 @@ export class GateValidator {
   };
   private validationTimes: number[] = [];
 
-  constructor(logger: Logger, gateLoader: GateLoader) {
+  constructor(logger: Logger, gateLoader: GateLoader, llmConfig?: LLMIntegrationConfig) {
     this.logger = logger;
     this.gateLoader = gateLoader;
+    this.llmConfig = llmConfig;
   }
 
   /**
@@ -300,37 +303,72 @@ export class GateValidator {
   }
 
   /**
-   * Run LLM self-check validation (placeholder for now)
+   * Run LLM self-check validation
+   *
+   * TODO: IMPLEMENT LLM API INTEGRATION
+   * This requires connecting to the LLM client configured at:
+   * config.analysis.semanticAnalysis.llmIntegration
+   *
+   * Requirements for implementation:
+   * - LLM client instance (from semantic analyzer)
+   * - Validation prompt templates
+   * - Quality assessment criteria
+   * - Confidence threshold enforcement
+   *
+   * Current behavior: Gracefully skips when LLM not configured
    */
   private async runLLMSelfCheck(
     criteria: GatePassCriteria,
     context: ValidationContext
   ): Promise<ValidationCheck> {
-    // TODO: Implement actual LLM self-validation in Phase 2
-    // For now, return a simple heuristic-based check
+    // Check if LLM integration is configured and enabled
+    if (!this.llmConfig?.enabled) {
+      this.logger.debug('[LLM GATE] LLM self-check skipped - LLM integration disabled in config');
+      return {
+        type: 'llm_self_check',
+        passed: true, // Auto-pass when not configured
+        score: 1.0,
+        message: 'LLM validation skipped (not configured - set analysis.semanticAnalysis.llmIntegration.enabled=true)',
+        details: {
+          skipped: true,
+          reason: 'LLM integration disabled in config',
+          configPath: 'config.analysis.semanticAnalysis.llmIntegration.enabled'
+        }
+      };
+    }
 
-    this.logger.debug(`LLM self-check requested with template: ${criteria.prompt_template}`);
+    if (!this.llmConfig.endpoint) {
+      this.logger.warn('[LLM GATE] LLM self-check skipped - no endpoint configured');
+      return {
+        type: 'llm_self_check',
+        passed: true,
+        score: 1.0,
+        message: 'LLM validation skipped (no endpoint configured)',
+        details: {
+          skipped: true,
+          reason: 'No LLM endpoint configured',
+          configPath: 'config.analysis.semanticAnalysis.llmIntegration.endpoint'
+        }
+      };
+    }
 
-    // Simple heuristic: check if content is substantial and well-structured
-    const content = context.content;
-    const wordCount = content.split(/\s+/).length;
-    const hasStructure = content.includes('\n') && (content.includes('##') || content.includes('-'));
-
-    const score = Math.min(1.0, (wordCount / 100) * 0.5 + (hasStructure ? 0.5 : 0));
-    const passed = score >= (criteria.pass_threshold || 0.7);
+    // TODO: Once LLM API client is available, implement actual validation here
+    // For now, log that it's not yet implemented even though config is enabled
+    this.logger.warn('[LLM GATE] LLM self-check requested but API client not yet implemented');
+    this.logger.debug(`[LLM GATE] Would validate with template: ${criteria.prompt_template}`);
 
     return {
       type: 'llm_self_check',
-      passed,
-      score,
-      message: passed
-        ? `LLM self-check passed (score: ${score.toFixed(2)})`
-        : `LLM self-check failed (score: ${score.toFixed(2)}, threshold: ${criteria.pass_threshold || 0.7})`,
+      passed: true, // Auto-pass until implementation complete
+      score: 1.0,
+      message: 'LLM validation not yet implemented (API client integration pending)',
       details: {
-        wordCount,
-        hasStructure,
-        threshold: criteria.pass_threshold || 0.7,
-        templateUsed: criteria.prompt_template || 'default'
+        skipped: true,
+        reason: 'LLM API client not yet implemented',
+        configEnabled: this.llmConfig.enabled,
+        endpoint: this.llmConfig.endpoint,
+        templateRequested: criteria.prompt_template || 'default',
+        implementation: 'TODO: Wire LLM client from semantic analyzer'
       }
     };
   }
@@ -459,6 +497,6 @@ export class GateValidator {
 /**
  * Create a gate validator instance
  */
-export function createGateValidator(logger: Logger, gateLoader: GateLoader): GateValidator {
-  return new GateValidator(logger, gateLoader);
+export function createGateValidator(logger: Logger, gateLoader: GateLoader, llmConfig?: LLMIntegrationConfig): GateValidator {
+  return new GateValidator(logger, gateLoader, llmConfig);
 }

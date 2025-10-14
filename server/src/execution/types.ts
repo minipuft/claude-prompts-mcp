@@ -61,6 +61,14 @@ export interface ConvertedPrompt {
   onEmptyInvocation?: "execute_if_possible" | "return_template";
   // Gate validation properties
   gates?: GateDefinition[];
+  // Phase 2: Template-level gate configuration
+  gateConfiguration?: {
+    include?: string[];
+    exclude?: string[];
+    framework_gates?: boolean;
+  };
+  // Phase 3: Enhanced gate configuration with temporary gates
+  enhancedGateConfiguration?: EnhancedGateConfiguration;
   executionMode?: 'prompt' | 'template' | 'chain'; // 3-tier execution model
   requiresExecution?: boolean; // Whether this prompt should be executed rather than returned
 }
@@ -327,4 +335,49 @@ export interface ValidationCheck {
   message: string;
   /** Additional context */
   details?: Record<string, any>;
+}
+
+/**
+ * Enhanced gate configuration supporting temporary gates
+ * Phase 3: Extends basic gate configuration with temporary gate support
+ */
+export interface EnhancedGateConfiguration {
+  /** Gates to explicitly include */
+  include?: string[];
+  /** Gates to explicitly exclude */
+  exclude?: string[];
+  /** Whether to include framework-based gates (default: true) */
+  framework_gates?: boolean;
+  /** Temporary gate definitions for this execution */
+  temporary_gates?: TemporaryGateDefinition[];
+  /** Scope for temporary gates */
+  gate_scope?: 'execution' | 'session' | 'chain' | 'step';
+  /** Whether to inherit gates from parent chain (default: true) */
+  inherit_chain_gates?: boolean;
+}
+
+/**
+ * Temporary gate definition for enhanced configuration
+ */
+export interface TemporaryGateDefinition {
+  /** Unique identifier (will be auto-generated if not provided) */
+  id?: string;
+  /** Human-readable name */
+  name: string;
+  /** Gate type */
+  type: 'validation' | 'approval' | 'condition' | 'quality' | 'guidance';
+  /** Scope of the temporary gate */
+  scope: 'execution' | 'session' | 'chain' | 'step';
+  /** Description of what this gate checks/guides */
+  description: string;
+  /** Guidance text injected into prompts */
+  guidance: string;
+  /** Pass/fail criteria for validation gates */
+  pass_criteria?: ValidationCheck[];
+  /** Expiration timestamp (optional) */
+  expires_at?: number;
+  /** Source of gate creation */
+  source?: 'manual' | 'automatic' | 'analysis';
+  /** Additional context for gate creation */
+  context?: Record<string, any>;
 }

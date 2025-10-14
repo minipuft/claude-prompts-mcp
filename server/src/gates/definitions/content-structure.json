@@ -23,13 +23,9 @@
         "^##\\s+.+$",
         "^\\s*[-*]\\s+.+"
       ]
-    },
-    {
-      "type": "llm_self_check",
-      "prompt_template": "structure_validation",
-      "pass_threshold": 0.7
     }
   ],
+  "_comment_llm_validation": "LLM self-check removed until API integration complete. Will be re-added when config.analysis.semanticAnalysis.llmIntegration is fully implemented.",
   "retry_config": {
     "max_attempts": 2,
     "improvement_hints": true,
@@ -37,7 +33,7 @@
   },
   "activation": {
     "prompt_categories": ["documentation", "content_processing", "education"],
-    "explicit_request": false,
-    "framework_context": ["CAGEERF", "5W1H"]
-  }
+    "explicit_request": false
+  },
+  "_comment": "Category gate - activates based on category only. Framework gates control methodology separately."
 }

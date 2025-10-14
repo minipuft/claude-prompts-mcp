@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
-  "frameworkSystemEnabled": true,
-  "activeFramework": "ReACT",
-  "lastSwitchedAt": "2025-09-28T22:55:08.317Z",
-  "switchReason": "Switch back to ReACT for clean injection testing"
+  "frameworkSystemEnabled": false,
+  "activeFramework": "CAGEERF",
+  "lastSwitchedAt": "2025-10-14T10:55:24.202Z",
+  "switchReason": "Initial framework selection"
 }

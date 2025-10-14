@@ -9,193 +9,167 @@
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-ff6b35?style=for-the-badge&logo=anthropic)](https://modelcontextprotocol.io)
 [![Node.js](https://img.shields.io/badge/Node.js-16%2B-339933?style=for-the-badge&logo=node.js)](https://nodejs.org)
 
-**🚀 The Universal Model Context Protocol Server for Any MCP Client**
+**A Universal Model Context Protocol Server for Advanced Prompt Management**
 
-_Supercharge your AI workflows with battle-tested prompt engineering, intelligent orchestration, and lightning-fast hot-reload capabilities. Works seamlessly with Claude Desktop, Cursor Windsurf, and any MCP-compatible client._
+Production-ready MCP server with intelligent prompt orchestration, hot-reload capabilities, and framework-driven AI workflows. Compatible with Claude Desktop, Cursor Windsurf, and any MCP client.
 
-[⚡ Quick Start](#-one-command-installation) • [🎯 Features](#-performance--reliability) • [📚 Docs](#-documentation-hub) • [🛠️ Advanced](#-advanced-features)
+[Quick Start](#quick-start) • [Features](#core-features) • [Documentation](#documentation) • [Configuration](#configuration)
 
 ---
 
 </div>
 
-## 🌟 What Makes This Special? (v1.3.0 - "Consolidated Architecture with Systematic Framework Application")
+## Core Features
 
-- **🎯 Three-Tier Execution Model** → Routes between prompts (lightning-fast), templates (framework-enhanced), and chains (LLM-driven) based on file structure
-- **🧠 Structural Analysis Engine** → File structure analysis detects execution type (with optional W.I.P LLM-powered semantic enhancement)
-- **⚡ Three-Tier Performance** → From instant variable substitution to comprehensive methodology-guided processing
-- **🔧 Unified Creation Tools** → Create prompts or templates with type-specific optimization
-- **🛡️ Intelligent Quality Gates** → Framework-aware validation with conditional injection based on execution tier
-- **🔄 Configurable Analysis** → Structural analysis with optional semantic enhancement and manual methodology selection
-- **🔥 Intelligent Hot-Reload System** → Update prompts instantly without restarts
-- **🎨 Advanced Template Engine** → Nunjucks-powered with conditionals, loops, and dynamic data
-- **⚡ Multi-Phase Orchestration** → Robust startup sequence with comprehensive health monitoring
-- **🚀 Universal MCP Compatibility** → Works flawlessly with Claude Desktop, Cursor Windsurf, and any MCP client
+**Three-Tier Execution Architecture**
 
-Transform your AI assistant experience with a **three-tier execution architecture** that routes between lightning-fast prompts, framework-enhanced templates, and LLM-driven chains based on file structure analysis across any MCP-compatible platform.
+- **Prompt Execution**: Lightning-fast single prompt execution with variable substitution
+- **Template Processing**: Framework-enhanced templates with Nunjucks templating engine
+- **Chain Workflows**: Multi-step LLM-driven workflows with state management
 
-## 🚀 Revolutionary Interactive Prompt Management
+**Intelligent System Components**
 
-**🎯 The Future is Here: Manage Your AI's Capabilities FROM WITHIN the AI Conversation**
+- **Structural Analysis**: Automatic execution type detection based on file structure
+- **Hot-Reload System**: Update prompts instantly without server restarts
+- **Quality Gates**: Framework-aware validation with conditional logic
+- **Performance Monitoring**: Comprehensive startup orchestration and health monitoring
 
-This isn't just another prompt server – it's a **living, breathing prompt ecosystem** that evolves through natural conversation with your AI assistant. Imagine being able to:
+**Universal MCP Compatibility**
+
+- **Transport Support**: STDIO for desktop clients, SSE for web applications
+- **Client Integration**: Native support for Claude Desktop, Cursor Windsurf, and custom MCP clients
+- **Protocol Compliance**: Full Model Context Protocol implementation with tool registration
+
+## Interactive Prompt Management
+
+Manage AI capabilities directly within conversations through three consolidated MCP tools:
 
 ```bash
-# 🎯 Universal prompt execution with intelligent type detection
+# Universal prompt execution with intelligent type detection
 prompt_engine >>code_formatter language="Python" style="PEP8"
-→ System detects execution tier, applies appropriate processing automatically
 
-# 📋 Create and manage prompts with intelligent analysis
+# Create and manage prompts with intelligent analysis
 prompt_manager create name="code_reviewer" type="template" \
   content="Analyze {{code}} for security, performance, and maintainability"
-→ Creates framework-enhanced template with CAGEERF methodology integration
 
-# 🔍 Analyze existing prompts for execution optimization
+# Analyze existing prompts for execution optimization
 prompt_manager analyze_type prompt_id="my_prompt"
-→ Shows: "Type: template, Framework: CAGEERF, Confidence: 85%, Gates: enabled"
 
-# ⚙️ System control and framework management
+# System control and framework management
 system_control switch_framework framework="ReACT" reason="Problem-solving focus"
-→ Switches active methodology with performance monitoring
 
-# 🔥 Execute with full three-tier intelligence
-prompt_engine >>analysis_chain input="complex research data" llm_driven_execution=true
-→ LLM-driven chain execution with step-by-step coordination (requires semantic LLM integration)
+# Execute complex multi-step LLM-driven chains
+prompt_engine >>code_review_optimization_chain target_code="..." language_framework="TypeScript"
 ```
 
-**🌟 Why This Architecture Matters:**
+**Key Benefits:**
 
-- **🧠 Structural Intelligence**: File structure analysis provides reliable execution routing with minimal configuration
-- **🔄 Dynamic Capability Building**: Build and extend your AI assistant's capabilities through conversational prompt management
-- **🎮 Reduced Friction**: Minimal configuration required - execution type detected from file structure
-- **⚡ Systematic Workflow**: Create → Structure-based routing → Framework application in a reliable flow
-- **🧠 Intelligent Command Routing**: Built-in command detection with multi-strategy parsing and automatic tool routing
-- **🧠 Sophisticated Methodology System**: Four proven thinking frameworks (CAGEERF, ReACT, 5W1H, SCAMPER) with manual selection and conditional application
+- **Structural Intelligence**: Automatic execution routing based on file structure analysis
+- **Dynamic Capability Building**: Extend AI assistant capabilities through conversational management
+- **Minimal Configuration**: Execution type detection requires no manual setup
+- **Systematic Workflow**: Integrated creation, routing, and framework application
+- **Intelligent Command Routing**: Built-in command detection with multi-strategy parsing
+- **Methodology Integration**: Four thinking frameworks (CAGEERF, ReACT, 5W1H, SCAMPER) with conditional application
 
-This is what **well-architected AI infrastructure** looks like – where systematic analysis and proven methodologies enhance your AI interactions through structured approaches rather than magic.
+## Framework System
 
-## 🧠 Advanced Framework System
+The server implements a sophisticated methodology system that applies structured thinking frameworks to AI interactions:
 
-**🎯 Revolutionary Methodology Integration**
+### Available Methodologies
 
-The server features a sophisticated framework system that brings structured thinking methodologies to your AI interactions:
+- **CAGEERF**: Comprehensive structured approach (Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework)
+- **ReACT**: Reasoning and Acting pattern for systematic problem-solving
+- **5W1H**: Who, What, When, Where, Why, How systematic analysis
+- **SCAMPER**: Creative problem-solving (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)
 
-### 🎨 **Four Intelligent Methodologies**
+### Framework Features
 
-- **🔍 CAGEERF**: Comprehensive structured approach (Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework)
-- **🧠 ReACT**: Reasoning and Acting pattern for systematic problem-solving
-- **❓ 5W1H**: Who, What, When, Where, Why, How systematic analysis
-- **🚀 SCAMPER**: Creative problem-solving (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)
-
-### ⚙️ **Intelligent Framework Features**
-
-- **🧠 Manual Selection**: Choose optimal methodology manually based on your needs, with sophisticated conditional application
-- **🔄 Runtime Switching**: Change active framework with performance monitoring and seamless transition
-- **⚡ Conditional Injection**: Framework enhancement applied only when beneficial (bypassed for simple prompts)
-- **📊 Switching Performance**: Monitor framework switching mechanics and performance
+- **Manual Selection**: Choose optimal methodology based on specific needs
+- **Runtime Switching**: Change active framework with performance monitoring
+- **Conditional Application**: Framework enhancement applied when beneficial
+- **Performance Monitoring**: Track framework switching mechanics and usage
 
 ```bash
-# 🔄 Switch methodology for different thinking approaches
+# Switch methodology for different approaches
 system_control switch_framework framework="ReACT" reason="Problem-solving focus"
-→ Switches to ReACT methodology with performance monitoring
 
-# 📊 Monitor framework performance and usage
+# Monitor framework performance and usage
 system_control analytics show_details=true
-→ View framework switching history and performance metrics
 
-# ⚙️ Get current framework status
+# Get current framework status
 system_control status
-→ Shows active framework, available methodologies, and system health
 ```
 
-**🎆 The Result**: Your AI conversations become more structured, thoughtful, and effective through proven thinking methodologies applied systematically based on your chosen framework.
+**Result**: Structured, systematic AI conversations through proven thinking methodologies.
 
-### ⚠️ **Analysis System Capabilities**
+### Analysis System Capabilities
 
-**🗓️ What the System Actually Does:**
+**Core Analysis Functions:**
 
-- **📝 Structural Analysis**: Detects execution type by examining template variables (`{{variable}}`), chain steps, and file structure
-- **🔄 Framework Application**: Applies manually selected framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER) based on execution tier
-- **⚡ Routing Logic**: Routes to appropriate execution tier (prompt/template/chain) based on structural characteristics
+- **Structural Analysis**: Detects execution type by examining template variables (`{{variable}}`), chain steps, and file structure
+- **Framework Application**: Applies selected framework methodology based on execution tier
+- **Routing Logic**: Routes to appropriate execution tier (prompt/template/chain) based on structural characteristics
 
-**🧠 Optional Semantic Enhancement:**
+**Optional Semantic Enhancement:**
 
-- **LLM Integration**: When enabled, provides true semantic understanding of prompt content
-- **Advanced Analysis**: Intelligent methodology recommendations and complexity assessment
-- **Default Mode**: Structural analysis only - honest about limitations without LLM access
+- **LLM Integration**: When enabled, provides semantic understanding of prompt content
+- **Advanced Analysis**: Methodology recommendations and complexity assessment
+- **Default Mode**: Structural analysis only (no LLM dependency)
 
-**🎯 Manual Framework Control:**
+**Framework Control:**
 
 ```bash
-# Framework selection is manual, not automatic
+# Manual framework selection
 system_control switch_framework framework="ReACT" reason="Problem-solving focus"
 ```
 
-## ⚡ Features & Reliability
+## Architecture & Reliability
 
-<table>
-<tr>
-<td width="50%">
+### Developer Experience
 
-**🎯 Developer Experience**
+- **One-Command Installation**: Complete setup in under 60 seconds
+- **Hot-Reload System**: Update prompts, configs, and templates without restart
+- **Rich Template Engine**: Nunjucks with conditionals, loops, and data injection
+- **Universal MCP Integration**: Works with Claude Desktop, Cursor Windsurf, and any MCP client
+- **Multi-Transport Support**: STDIO for desktop + SSE/REST for web
+- **Dynamic Management**: Update, delete, and reload prompts on-the-fly
 
-- 🔥 **One-Command Installation** in under 60 seconds
-- ⚡ **Hot-Reload Everything** → prompts, configs, templates
-- 🎨 **Rich Template Engine** → conditionals, loops, data injection
-- 🚀 **Universal MCP Integration** → works with Claude Desktop, Cursor Windsurf, and any MCP client
-- 📱 **Multi-Transport Support** → STDIO for Claude Desktop + SSE/REST for web
-- 🛠️ **Dynamic Management Tools** → update, delete, reload prompts on-the-fly
-- 🤖 **Claude Code Support** → Harness Anthropic’s coding model for refactoring, doc generation, note-taking, research and any complex workflows that arises
+### Enterprise Architecture
 
-</td>
-<td width="50%">
+- **Orchestrated Startup**: Phased initialization with dependency management
+- **Error Handling**: Graceful degradation with comprehensive logging
+- **Health Monitoring**: Real-time module status, performance metrics, diagnostics
+- **Environment Detection**: Automatic adaptation for development and production
+- **Modular Design**: Extensible architecture for custom workflows
+- **Security**: Input validation, sanitization, and error boundaries
 
-**🚀 Enterprise Architecture**
+### Consolidated MCP Tools (3 Tools)
 
-- 🏗️ **Orchestration** → phased startup with dependency management
-- 🔧 **Robust Error Handling** → graceful degradation with comprehensive logging
-- 📊 **Real-Time Health Monitoring** → module status, performance metrics, diagnostics
-- 🎯 **Smart Environment Detection** → works across development and production contexts
-- ⚙️ **Modular Plugin System** → extensible architecture for custom workflows
-- 🔐 **Production-Ready Security** → input validation, sanitization, error boundaries
+- **prompt_engine**: Universal execution with intelligent analysis and chain coordination
+- **prompt_manager**: Complete lifecycle management with smart filtering and gate management
+- **system_control**: Framework management, analytics, and system administration
 
-</td>
-</tr>
-<tr>
-<td colspan="2">
+### Intelligent Features
 
-**🛠️ Consolidated MCP Tools Suite (87.5% Reduction: 24+ → 3 Tools)**
+- **Structural Type Detection**: Automatic routing between prompt/template/chain execution
+- **Framework Integration**: Four methodologies with manual selection and conditional injection
+- **LLM-Driven Chains**: Step-by-step workflow coordination with state management
+- **Performance Analytics**: Three-tier execution monitoring with framework switching tracking
+- **Smart Argument Parsing**: JSON objects, single arguments, or conversational context
 
-- 🎯 **prompt_engine** → Universal execution with intelligent analysis, semantic detection, and LLM-driven chain coordination
-- 📋 **prompt_manager** → Complete lifecycle management with smart filtering, type analysis, and configurable semantic analysis
-- ⚙️ **system_control** → Framework management, analytics, health monitoring, and comprehensive system administration
+## Quick Start
 
-**🤖 Intelligent Features:**
-
-- 🧠 **Structural Type Detection** → System routes between prompt/template/chain execution based on file structure analysis
-- 🛡️ **Framework Integration** → CAGEERF, ReACT, 5W1H, SCAMPER methodologies with manual selection and conditional injection
-- 🔄 **LLM-Driven Chains** → Step-by-step workflow coordination with conversation state management
-- 📊 **Performance Analytics** → Three-tier execution monitoring with framework switching performance tracking
-- 🔥 **Hot-Reload Everything** → Update prompts, templates, and configurations without restart
-- ⚙️ **Smart Argument Parsing** → JSON objects, single arguments, or fallback to conversational context
-
-</td>
-</tr>
-</table>
-
-## 🎯 One-Command Installation
-
-Get your AI command center running in **under a minute**:
+Get the server running in under a minute:
 
 ```bash
-# Clone → Install → Launch → Profit! 🚀
+# Clone, install, build, and start
 git clone https://github.com/minipuft/claude-prompts-mcp.git
 cd claude-prompts-mcp/server && npm install && npm run build && npm start
 ```
 
-### 🔌 **Universal MCP Client Integration**
+### MCP Client Integration
 
-#### **Claude Desktop**
+#### Claude Desktop
 
 Drop this into your `claude_desktop_config.json`:
 
@@ -213,7 +187,7 @@ Drop this into your `claude_desktop_config.json`:
 }
 ```
 
-#### **Cursor Windsurf & Other MCP Clients**
+#### Cursor Windsurf & Other MCP Clients
 
 Configure your MCP client to connect via STDIO transport:
 
@@ -221,64 +195,54 @@ Configure your MCP client to connect via STDIO transport:
 - **Args**: `["path/to/claude-prompts-mcp/server/dist/index.js"]`
 - **Environment** (Optional): `MCP_PROMPTS_CONFIG_PATH=path/to/prompts/promptsConfig.json`
 
-#### **Claude Code CLI Installation**
+#### Claude Code CLI Installation
 
-For Claude Code CLI users, use the one-command installation:
+For Claude Code CLI users:
 
 ```bash
 claude mcp add-json claude-prompts-mcp '{"type":"stdio","command":"node","args":["path/to/claude-prompts-mcp/server/dist/index.js"],"env":{}}'
 ```
 
-> 💡 **Pro Tip**: Environment variables are optional - the server auto-detects paths in 99% of cases. Use absolute paths for guaranteed compatibility across all MCP clients!
+### Usage Examples
 
-### 🎮 **Start Building Immediately (v1.3.0 Consolidated Architecture)**
-
-Your AI command arsenal is ready with **enhanced reliability**:
+Start using the server immediately:
 
 ```bash
-# 🧠 Discover your intelligent superpowers
+# Discover prompts with intelligent filtering
 prompt_manager list filter="category:analysis"
-→ Intelligent filtering shows relevant prompts with usage examples
 
-# 🎯 Structural execution routing - system detects execution type from file structure
+# Execute prompts with automatic type detection
 prompt_engine >>friendly_greeting name="Developer"
-→ Detected as template (has {{variables}}), returns framework-enhanced greeting
 
-prompt_engine >>content_analysis input="my research data"
-→ Detected as template (structural analysis), applies framework injection, executes with quality gates
+# Analyze content with framework enhancement
+prompt_engine >>content_analysis input="research data"
 
-prompt_engine >>analysis_chain input="my content" llm_driven_execution=true
-→ Detected as chain (has chainSteps), provides LLM-driven step-by-step execution (requires semantic LLM integration)
+# Run multi-step LLM-driven chains
+prompt_engine >>code_review_optimization_chain target_code="..." language_framework="TypeScript"
 
-# 📊 Monitor intelligent detection performance
+# Monitor system performance
 system_control analytics include_history=true
-→ See how accurately the system detects prompt types and applies gates
 
-# 🚀 Create prompts that just work (zero configuration)
+# Create new prompts conversationally
 "Create a prompt called 'bug_analyzer' that finds and explains code issues"
-→ Prompt created via conversation, system detects execution type from structure, applies active framework
 
-# 🔄 Refine prompts through conversation (intelligence improves)
+# Refine existing prompts
 "Make the bug_analyzer prompt also suggest performance improvements"
-→ Prompt updated, system re-analyzes, updates detection profile automatically
 
-# 🧠 Build LLM-driven chain workflows
-"Create a prompt chain that reviews code, validates output, tests it, then documents it"
-→ Chain created, each step auto-analyzed, appropriate gates assigned automatically
+# Reference existing chain prompts
+# Example chains available: code_review_optimization_chain, create_docs_chain, video_notes_enhanced
 
-# 🎛️ Manual override when needed (but rarely necessary)
+# Manual control when needed
 prompt_engine >>content_analysis input="sensitive data" step_confirmation=true gate_validation=true
-→ Force step confirmation for sensitive analysis
 ```
 
-**🌟 The Architecture**: Your prompt library becomes a **structured extension of your workflow**, organized and enhanced through systematic methodology application.
+The system provides a structured approach to prompt management through systematic methodology application.
 
-## 🔥 Why Developers Choose This Server
+## Key Features
 
-<details>
-<summary><strong>⚡ Lightning-Fast Hot-Reload</strong> → Edit prompts, see changes instantly</summary>
+### Lightning-Fast Hot-Reload
 
-Our sophisticated orchestration engine monitors your files and reloads everything seamlessly:
+The orchestration engine monitors files and reloads everything seamlessly:
 
 ```bash
 # Edit any prompt file → Server detects → Reloads automatically → Zero downtime
@@ -289,12 +253,9 @@ Our sophisticated orchestration engine monitors your files and reloads everythin
 - **Smart Dependency Tracking**: Only reloads what actually changed
 - **Graceful Error Recovery**: Invalid changes don't crash the server
 
-</details>
+### Advanced Template Engine
 
-<details>
-<summary><strong>🎨 Next-Gen Template Engine</strong> → Nunjucks-powered dynamic prompts</summary>
-
-Go beyond simple text replacement with a full template engine:
+Nunjucks-powered dynamic prompts with full templating capabilities:
 
 ```nunjucks
 Analyze {{content}} for {% if focus_area %}{{focus_area}}{% else %}general{% endif %} insights.
@@ -313,12 +274,9 @@ Build upon: {{previous_context}}
 - **Template Inheritance**: Reuse and extend prompt patterns
 - **Real-Time Processing**: Templates render with live data injection
 
-</details>
+### Performance Forward Orchestration
 
-<details>
-<summary><strong>🏗️ Enterprise-Grade Orchestration</strong> → Multi-phase startup with health monitoring</summary>
-
-Built like production software with comprehensive architecture:
+Multi-phase startup with comprehensive health monitoring:
 
 ```typescript
 Phase 1: Foundation → Config, logging, core services
@@ -332,46 +290,84 @@ Phase 4: Server Launch → Transport, API, diagnostics
 - **Performance Metrics**: Memory usage, uptime, connection tracking
 - **Diagnostic Tools**: Built-in troubleshooting and debugging
 
-</details>
+### Intelligent Prompt Chains
 
-<details>
-<summary><strong>🔄 Intelligent Prompt Chains</strong> → Multi-step AI workflows</summary>
+Multi-step workflows implemented as LLM-driven instruction sequences embedded in markdown templates:
 
-Create sophisticated workflows where each step builds on the previous:
+#### LLM-Driven Chain Format (Primary Method)
 
-```json
-{
-  "id": "content_analysis_chain",
-  "name": "Content Analysis Chain",
-  "isChain": true,
-  "executionMode": "chain",
-  "chainSteps": [
-    {
-      "stepName": "Extract Key Points",
-      "promptId": "extract_key_points",
-      "inputMapping": { "content": "original_content" },
-      "outputMapping": { "key_points": "extracted_points" },
-      "executionType": "template"
-    },
-    {
-      "stepName": "Analyze Sentiment",
-      "promptId": "sentiment_analysis",
-      "inputMapping": { "text": "extracted_points" },
-      "outputMapping": { "sentiment": "analysis_result" },
-      "executionType": "template"
-    }
-  ]
-}
+Chains are defined directly in markdown files using step headers that guide Claude through a systematic process:
+
+```markdown
+# Comprehensive Code Review
+
+## User Message Template
+
+**Target Code**: {{target_code}}
+**Language/Framework**: {{language_framework}}
+
+This chain performs a systematic 6-step code review:
+
+## Step 1: Structure & Organization Analysis
+Analyze code architecture, organization, patterns, naming conventions...
+
+**Output Required**: Structural assessment with identified patterns.
+
+---
+
+## Step 2: Functionality & Logic Review
+Examine business logic correctness, edge cases, error handling...
+
+**Output Required**: Logic validation with edge case analysis.
+
+---
+
+## Step 3: Security & Best Practices Audit
+Review for security vulnerabilities: input validation, authentication...
+
+**Output Required**: Security assessment with vulnerability identification.
 ```
 
-- **Visual Step Planning**: See your workflow before execution
-- **Input/Output Mapping**: Data flows seamlessly between steps
-- **Error Recovery**: Failed steps don't crash the entire chain
-- **Flexible Execution**: Run chains or individual steps as needed
+**Key Features:**
+- **LLM-Driven Execution**: Claude follows step-by-step instructions embedded in the template
+- **Context Preservation**: Each step builds on previous outputs naturally
+- **Flexible Structure**: Steps can include conditional logic and branching
+- **Framework Integration**: Automatically enhanced with active methodology (CAGEERF/ReACT)
 
-</details>
+#### Modular Chain Format (Alternative)
 
-## 📊 System Architecture
+For chains that orchestrate multiple reusable prompts, use the markdown-embedded format:
+
+```markdown
+## Chain Steps
+
+1. promptId: extract_key_points
+   stepName: Extract Key Points
+   inputMapping:
+     content: original_content
+   outputMapping:
+     key_points: extracted_points
+
+2. promptId: sentiment_analysis
+   stepName: Analyze Sentiment
+   inputMapping:
+     text: extracted_points
+   outputMapping:
+     sentiment: analysis_result
+```
+
+**Capabilities:**
+- **Prompt Reuse**: Chain together existing prompts
+- **Data Flow Mapping**: Explicit input/output variable mapping
+- **Gate Integration**: Apply quality gates at each step
+- **Error Recovery**: Graceful handling of failed steps
+
+**Real Examples**: See working chain implementations:
+- `server/prompts/development/code_review_optimization_chain.md` - 6-step code review workflow
+- `server/prompts/documentation/create_docs_chain.md` - Documentation generation chain
+- `server/prompts/content_processing/video_notes_enhanced.md` - Video analysis workflow
+
+## System Architecture
 
 ```mermaid
 graph TB
@@ -389,48 +385,34 @@ graph TB
     style E fill:#0066cc
 ```
 
-## 🌐 MCP Client Compatibility
+## MCP Client Compatibility
 
-This server implements the **Model Context Protocol (MCP)** standard and works with any compatible client:
+This server implements the Model Context Protocol (MCP) standard and works with any compatible client:
 
-<table>
-<tr>
-<td width="33%">
+### Tested & Verified Clients
 
-**✅ Tested & Verified**
+- **Claude Desktop**: Full integration support
+- **Cursor Windsurf**: Native MCP compatibility
+- **Claude Code**: Full native support
 
-- 🎯 **Claude Desktop** → Full integration support
-- 🚀 **Cursor Windsurf** → Native MCP compatibility
-- 🤖 **Claude Code** → Full native support
+### Transport Support
 
-</td>
-<td width="33%">
+- **STDIO**: Primary transport for desktop clients
+- **Server-Sent Events (SSE)**: Web-based clients and integrations
+- **HTTP Endpoints**: Basic endpoints for health checks and data queries
 
-**🔌 Transport Support**
+### Integration Features
 
-- 📡 **STDIO** → Primary transport for desktop clients
-- 🌐 **Server-Sent Events (SSE)** → Web-based clients and integrations
-- 🔗 **HTTP Endpoints** → Basic endpoints for health checks and data queries
+- **Auto-Discovery**: Clients detect tools automatically
+- **Tool Registration**: Dynamic capability announcement
+- **Hot Reload**: Changes appear instantly in clients
+- **Error Handling**: Graceful degradation across clients
 
-</td>
-<td width="34%">
+**Note**: As MCP adoption grows, this server will work with any new MCP-compatible AI assistant or development environment without modification.
 
-**🎯 Integration Features**
+## Configuration
 
-- 🔄 **Auto-Discovery** → Clients detect tools automatically
-- 📋 **Tool Registration** → Dynamic capability announcement
-- ⚡ **Hot Reload** → Changes appear instantly in clients
-- 🛠️ **Error Handling** → Graceful degradation across clients
-
-</td>
-</tr>
-</table>
-
-> 💡 **Developer Note**: As MCP adoption grows, this server will work with any new MCP-compatible AI assistant or development environment without modification.
-
-## 🛠️ Advanced Configuration
-
-### ⚙️ **Server Powerhouse** (`config.json`)
+### Server Configuration (`config.json`)
 
 Fine-tune your server's behavior:
 
@@ -453,7 +435,7 @@ Fine-tune your server's behavior:
 }
 ```
 
-### 🗂️ **Prompt Organization** (`promptsConfig.json`)
+### Prompt Organization (`promptsConfig.json`)
 
 Structure your AI command library:
 
@@ -484,12 +466,15 @@ Structure your AI command library:
 }
 ```
 
-## 🚀 Advanced Features
+## Advanced Features
 
-<details>
-<summary><strong>🔄 Multi-Step Prompt Chains</strong> → Build sophisticated AI workflows</summary>
+### Multi-Step Prompt Chains
 
-Create complex workflows that chain multiple prompts together:
+Build sophisticated AI workflows using two complementary approaches:
+
+#### LLM-Driven Chains (Recommended)
+
+The primary method uses step-by-step instructions embedded directly in markdown templates. Claude executes each step systematically while maintaining context:
 
 ```markdown
 # Research Analysis Chain
@@ -498,24 +483,91 @@ Create complex workflows that chain multiple prompts together:
 
 Research {{topic}} and provide {{analysis_type}} analysis.
 
-## Chain Configuration
+## Step 1: Initial Research
+Gather comprehensive information about {{topic}} from available sources.
+Focus on {{analysis_type}} perspectives.
 
-Steps: research → extract → analyze → summarize
-Input Mapping: {topic} → {content} → {key_points} → {insights}
-Output Format: Structured report with executive summary
+**Output Required**: Research summary with key findings.
+
+---
+
+## Step 2: Extract Key Insights
+From the research findings, identify the most relevant insights.
+Organize by importance and relevance to {{analysis_type}} analysis.
+
+**Output Required**: Prioritized list of insights with supporting evidence.
+
+---
+
+## Step 3: Analyze Patterns
+Examine the extracted insights for patterns, trends, and relationships.
+Consider multiple analytical frameworks.
+
+**Output Required**: Pattern analysis with framework comparisons.
+
+---
+
+## Step 4: Synthesize Report
+Create comprehensive report combining all findings.
+
+**Output Required**: Structured report with executive summary.
+```
+
+**Benefits:**
+- **Natural Flow**: Claude maintains context automatically across steps
+- **Flexible Logic**: Steps can include conditional branching and decision points
+- **Framework Enhanced**: Automatically augmented with active methodology (CAGEERF/ReACT)
+- **Clear Outputs**: Each step specifies required deliverables
+
+#### Modular Prompt Chains (Alternative)
+
+For orchestrating multiple reusable prompts with explicit data flow:
+
+```markdown
+## Chain Steps
+
+1. promptId: research_topic
+   stepName: Initial Research
+   inputMapping:
+     query: topic
+   outputMapping:
+     findings: research_data
+
+2. promptId: extract_insights
+   stepName: Extract Key Insights
+   inputMapping:
+     content: research_data
+   outputMapping:
+     insights: key_findings
+
+3. promptId: analyze_patterns
+   stepName: Analyze Patterns
+   inputMapping:
+     data: key_findings
+   outputMapping:
+     analysis: pattern_results
+
+4. promptId: generate_report
+   stepName: Synthesize Report
+   inputMapping:
+     insights: key_findings
+     patterns: pattern_results
+   outputMapping:
+     report: final_output
 ```
 
 **Capabilities:**
 
-- **Sequential Processing**: Each step uses output from previous step
-- **Parallel Execution**: Run multiple analysis streams simultaneously
-- **Error Recovery**: Graceful handling of failed steps
-- **Custom Logic**: Conditional branching based on intermediate results
+- **Prompt Reuse**: Leverage existing prompts as chain building blocks
+- **Explicit Data Flow**: Clear input/output mapping between steps
+- **Error Recovery**: Graceful handling of failed steps with retry logic
+- **Gate Validation**: Apply quality gates at each step for validation
 
-</details>
+**Real Examples**: View production chain implementations:
+- `server/prompts/content_processing/noteIntegration.md` - Note processing with modular steps
+- Review the `## Chain Steps` section in any chain prompt for complete syntax
 
-<details>
-<summary><strong>🎨 Advanced Template Features</strong> → Dynamic, intelligent prompts</summary>
+### Advanced Template Features
 
 Leverage the full power of Nunjucks templating:
 
@@ -549,25 +601,19 @@ Building upon previous analysis: {{ previous_analysis | summary }}
 - **Loops & Iteration**: Handle complex data structures
 - **Template Inheritance**: Build reusable prompt components
 
-</details>
-
-<details>
-<summary><strong>🔧 Real-Time Management Tools</strong> → Hot management without downtime</summary>
+### Real-Time Management Tools
 
 Manage your prompts dynamically while the server runs:
 
 ```bash
 # Update prompts with intelligent re-analysis
 prompt_manager update id="analysis_prompt" content="new template"
-→ System re-analyzes execution type and framework requirements
 
 # Modify specific sections with validation
 prompt_manager modify id="research" section="examples" content="new examples"
-→ Section updated with automatic template validation
 
 # Hot-reload with comprehensive validation
 system_control reload reason="updated templates"
-→ Full system reload with health monitoring
 ```
 
 **Management Capabilities:**
@@ -577,10 +623,9 @@ system_control reload reason="updated templates"
 - **Bulk Operations**: Update multiple prompts at once
 - **Rollback Support**: Undo changes when things go wrong
 
-</details>
+### Production Monitoring
 
-<details>
-<summary><strong>📊 Production Monitoring</strong> → Enterprise-grade observability</summary>
+Enterprise-grade observability:
 
 Built-in monitoring and diagnostics for production environments:
 
@@ -610,32 +655,29 @@ Built-in monitoring and diagnostics for production environments:
 - **Diagnostic Tools**: Comprehensive troubleshooting information
 - **Error Tracking**: Graceful error handling with detailed logging
 
-</details>
+## Documentation
 
-## 📚 Documentation Hub
+| Guide                                                  | Description                                                     |
+| ------------------------------------------------------ | --------------------------------------------------------------- |
+| [Installation Guide](docs/installation-guide.md)       | Complete setup walkthrough with troubleshooting                 |
+| [Troubleshooting Guide](docs/troubleshooting.md)       | Common issues, diagnostic tools, and solutions                  |
+| [Architecture Overview](docs/architecture.md)          | Deep dive into the orchestration engine, modules, and data flow |
+| [Prompt Format Guide](docs/prompt-format-guide.md)     | Master prompt creation including chain workflows                |
+| [Prompt Management](docs/prompt-management.md)         | Dynamic management and hot-reload features                      |
+| [MCP Tools Reference](docs/mcp-tools-reference.md)     | Complete MCP tools documentation                                |
+| [Roadmap & TODO](docs/TODO.md)                         | Planned features and development roadmap                        |
+| [Contributing](docs/contributing.md)                   | Join our development community                                  |
 
-| Guide                                                     | Description                                                       |
-| --------------------------------------------------------- | ----------------------------------------------------------------- |
-| [📥 Installation Guide](docs/installation-guide.md)       | Complete setup walkthrough with troubleshooting                   |
-| [🛠️ Troubleshooting Guide](docs/troubleshooting.md)       | Common issues, diagnostic tools, and solutions                    |
-| [🏗️ Architecture Overview](docs/architecture.md)          | A deep dive into the orchestration engine, modules, and data flow |
-| [📝 Prompt Format Guide](docs/prompt-format-guide.md)     | Master prompt creation with examples                              |
-| [🔗 Chain Execution Guide](docs/chain-execution-guide.md) | Build complex multi-step workflows                                |
-| [⚙️ Prompt Management](docs/prompt-management.md)         | Dynamic management and hot-reload features                        |
-| [🚀 MCP Tools Reference](docs/mcp-tools-reference.md)     | Complete MCP tools documentation                                  |
-| [🗺️ Roadmap & TODO](docs/TODO.md)                         | Planned features and development roadmap                          |
-| [🤝 Contributing](docs/contributing.md)                   | Join our development community                                    |
+## Contributing
 
-## 🤝 Contributing
+Join our development community:
 
-We're building the future of AI prompt engineering! Join our community:
+- **Found a bug?** [Open an issue](https://github.com/minipuft/claude-prompts-mcp/issues)
+- **Have an idea?** [Start a discussion](https://github.com/minipuft/claude-prompts-mcp/discussions)
+- **Want to contribute?** Check our [Contributing Guide](docs/contributing.md)
+- **Need help?** Visit our [Documentation](docs/README.md)
 
-- 🐛 **Found a bug?** [Open an issue](https://github.com/minipuft/claude-prompts-mcp/issues)
-- 💡 **Have an idea?** [Start a discussion](https://github.com/minipuft/claude-prompts-mcp/discussions)
-- 🔧 **Want to contribute?** Check our [Contributing Guide](docs/contributing.md)
-- 📖 **Need help?** Visit our [Documentation](docs/README.md)
-
-## 📄 License
+## License
 
 Released under the [MIT License](LICENSE) - see the file for details.
 
@@ -643,10 +685,10 @@ Released under the [MIT License](LICENSE) - see the file for details.
 
 <div align="center">
 
-**⭐ Star this repo if it's transforming your AI workflow!**
+**Star this repo if it's improving your AI workflow**
 
 [Report Bug](https://github.com/minipuft/claude-prompts-mcp/issues) • [Request Feature](https://github.com/minipuft/claude-prompts-mcp/issues) • [View Docs](docs/README.md)
 
-_Built with ❤️ for the AI development community_
+_Built for the AI development community_
 
 </div>

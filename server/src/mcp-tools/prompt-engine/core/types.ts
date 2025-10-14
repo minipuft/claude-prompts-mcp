@@ -6,6 +6,7 @@
  */
 
 import { ConvertedPrompt, ToolResponse } from "../../../types/index.js";
+import type { TemporaryGateDefinition } from "../../../execution/types.js";
 
 /**
  * Chain step execution context
@@ -17,6 +18,12 @@ export interface ChainExecutionContext {
   isChainManagement?: boolean;
   chainAction?: string;
   chainParameters?: Record<string, any>;
+  /** Chain-level temporary gate IDs that child steps inherit */
+  chainGateIds?: string[];
+  /** Chain execution ID for scope tracking */
+  chainExecutionId?: string;
+  /** Whether this chain execution should inherit gates from parent */
+  inheritParentGates?: boolean;
 }
 
 /**
@@ -57,6 +64,22 @@ export interface ChainExecutionOptions {
   enableGates: boolean;
   force_restart?: boolean;
   session_id?: string;
+  step_confirmation?: boolean;
+  llm_driven_execution?: boolean;
+  chain_uri?: string;
+  timeout?: number;
+  /** Execution-time temporary gates (not persisted to prompt configuration) */
+  temporary_gates?: TemporaryGateDefinition[];
+  /** Scope for execution-time temporary gates (default: execution) */
+  gate_scope?: 'execution' | 'session' | 'chain' | 'step';
+  /** Whether to inherit gates from parent chain scope (default: true) */
+  inherit_chain_gates?: boolean;
+  /** Built-in quality gates to apply (by name) - use system_control to discover */
+  quality_gates?: string[];
+  /** Custom quality checks (simplified: name + description only) */
+  custom_checks?: Array<{ name: string; description: string }>;
+  /** Gate validation mode: enforce, advise, or report */
+  gate_mode?: 'enforce' | 'advise' | 'report';
 }
 
 /**

@@ -21,6 +21,10 @@ import {
   PromptData,
   ToolResponse,
 } from "../../../types/index.js";
+// Import enhanced gate configuration from execution types
+import {
+  type EnhancedGateConfiguration,
+} from "../../../execution/types.js";
 // REMOVED: ModularChainDefinition from deleted chain-scaffolding.ts
 import {
   PromptError,
@@ -44,6 +48,7 @@ import { createExecutionResponse } from "../../shared/structured-response-builde
 import {
   LightweightGateSystem,
   createLightweightGateSystem,
+  type TemporaryGateRegistryDefinition as TemporaryGateDefinition,
 } from "../../../gates/core/index.js";
 // NEW: Role-based gate components (Phase 3)
 import {
@@ -64,6 +69,12 @@ import {
 import {
   GateSelectionResult,
 } from "../../../gates/core/gate-definitions.js";
+// Phase 1: Intelligent category detection
+import {
+  CategoryExtractor,
+  extractPromptCategory,
+  CategoryExtractionResult
+} from "../utils/category-extractor.js";
 // Phase 3: Prompt guidance system integration
 import {
   PromptGuidanceService,
@@ -176,6 +187,7 @@ export class ConsolidatedPromptEngine {
   private mcpServer: any;
   private promptManager: PromptManager;
   private configManager: ConfigManager;
+  private readonly serverRoot: string;
   private semanticAnalyzer: ContentAnalyzer;
   private conversationManager: ConversationManager;
   private textReferenceManager: TextReferenceManager;
@@ -185,6 +197,10 @@ export class ConsolidatedPromptEngine {
   // Legacy gate system removed - using only lightweightGateSystem
   // NEW: Lightweight gate system (Phase 2 integration)
   private lightweightGateSystem: LightweightGateSystem;
+  // NEW: Temporary gate registry access (Phase 3 enhancement)
+  private get temporaryGateRegistry() {
+    return this.lightweightGateSystem.getTemporaryGateRegistry?.();
+  }
   // NEW: Role-based gate guidance renderer (Phase 3)
   private gateGuidanceRenderer: GateGuidanceRenderer;
   // Gate validation engine
@@ -217,6 +233,14 @@ export class ConsolidatedPromptEngine {
 
   // Phase 3: Prompt guidance service
   private promptGuidanceService?: PromptGuidanceService;
+
+  private activeGateRequest?: {
+    gateIds: string[];
+    gateMode: 'enforce' | 'advise' | 'report';
+    qualityGates: string[];
+    customChecks: Array<{ name: string; description: string }>;
+    executionScopeId?: string;
+  };
 
   // Data references
   private promptsData: PromptData[] = [];
@@ -254,19 +278,44 @@ export class ConsolidatedPromptEngine {
     this.mcpToolsManager = mcpToolsManager;
     // Phase 3: Removed executionCoordinator assignment - using LLM-driven chain model
 
-    // Initialize lightweight gate system (Phase 2 integration)
+    // Initialize lightweight gate system with temporary gates (Phase 3 enhancement)
     const config = configManager.getConfig();
     const gatesConfig = config.gates;
+    const configRoot =
+      typeof this.configManager.getServerRoot === 'function'
+        ? this.configManager.getServerRoot()
+        : path.dirname(this.configManager.getConfigPath?.() ?? path.join(process.cwd(), 'config.json'));
+    this.serverRoot = configRoot;
+
     const gatesDirectory = gatesConfig?.definitionsDirectory
-      ? path.join(process.cwd(), 'server', gatesConfig.definitionsDirectory)
-      : undefined;
+      ? path.isAbsolute(gatesConfig.definitionsDirectory)
+        ? gatesConfig.definitionsDirectory
+        : path.resolve(configRoot, gatesConfig.definitionsDirectory)
+      : path.resolve(configRoot, 'src/gates/definitions');
+
+    // Get LLM config for gate validator
+    const llmConfig = config.analysis?.semanticAnalysis?.llmIntegration;
+
     this.lightweightGateSystem = createLightweightGateSystem(
       logger,
-      gatesDirectory
+      gatesDirectory,
+      undefined, // gateSystemManager - will be set later if needed
+      {
+        enableTemporaryGates: true,
+        maxMemoryGates: 100, // Allow up to 100 temporary gates in memory
+        defaultExpirationMs: 30 * 60 * 1000, // 30 minutes default expiration
+        llmConfig // Pass LLM config to gate validator
+      }
     );
 
     // NEW: Initialize role-based gate guidance renderer (Phase 3)
-    this.gateGuidanceRenderer = createGateGuidanceRenderer(logger, gatesDirectory);
+    // Phase 3 Enhancement: Pass temporary gate registry to renderer for temp gate support
+    const temporaryGateRegistry = this.lightweightGateSystem.getTemporaryGateRegistry();
+    this.gateGuidanceRenderer = createGateGuidanceRenderer(
+      logger,
+      gatesDirectory,
+      temporaryGateRegistry
+    );
 
     // Initialize EngineValidator with gate system (Phase 1.1 fix)
     this.engineValidator = new EngineValidator(this.lightweightGateSystem);
@@ -342,6 +391,12 @@ export class ConsolidatedPromptEngine {
   private async initializePromptGuidanceService(): Promise<void> {
     if (this.frameworkManager && !this.promptGuidanceService) {
       try {
+        const methodologyStatePath = path.join(
+          this.serverRoot,
+          'runtime-state',
+          'framework-state.json'
+        );
+
         this.promptGuidanceService = await createPromptGuidanceService(
           this.logger,
           {
@@ -360,7 +415,8 @@ export class ConsolidatedPromptEngine {
             methodologyTracking: {
               enabled: true,
               persistStateToDisk: true,
-              enableHealthMonitoring: true
+              enableHealthMonitoring: true,
+              stateFilePath: methodologyStatePath
             }
           },
           this.frameworkManager
@@ -410,6 +466,21 @@ export class ConsolidatedPromptEngine {
    */
   getLightweightGateSystem(): LightweightGateSystem {
     return this.lightweightGateSystem;
+  }
+
+  /**
+   * Expose gate guidance renderer for discovery operations
+   */
+  getGateGuidanceRenderer(): GateGuidanceRenderer {
+    return this.gateGuidanceRenderer;
+  }
+
+  /**
+   * Set gate system manager for runtime gate management
+   */
+  setGateSystemManager(gateSystemManager: any): void {
+    this.lightweightGateSystem.setGateSystemManager(gateSystemManager);
+    this.logger.debug("Gate system manager configured for prompt engine");
   }
 
   /**
@@ -470,13 +541,53 @@ export class ConsolidatedPromptEngine {
     args: {
       command: string;
       execution_mode?: "auto" | "prompt" | "template" | "chain";
+      gate_validation?: boolean;
+      step_confirmation?: boolean;
+      llm_driven_execution?: boolean;
       force_restart?: boolean;
       session_id?: string;
+      chain_uri?: string;
+      timeout?: number;
       options?: Record<string, any>;
+      temporary_gates?: TemporaryGateDefinition[];
+      gate_scope?: 'execution' | 'session' | 'chain' | 'step';
+      inherit_chain_gates?: boolean;
+      quality_gates?: string[];
+      custom_checks?: Array<{ name: string; description: string }>;
+      gate_mode?: 'enforce' | 'advise' | 'report';
     },
     extra: any
   ): Promise<ToolResponse> {
-    const { command, execution_mode = "auto", options = {} } = args;
+    const {
+      command,
+      execution_mode = "auto",
+      gate_validation,
+      step_confirmation,
+      llm_driven_execution,
+      force_restart,
+      session_id,
+      chain_uri,
+      timeout,
+      options = {},
+      temporary_gates,
+      gate_scope = 'execution',
+      inherit_chain_gates = true,
+      quality_gates,
+      custom_checks,
+      gate_mode,
+    } = args;
+
+    const hasSimplifiedGates =
+      (quality_gates?.length ?? 0) > 0 || (custom_checks?.length ?? 0) > 0;
+    const resolvedGateMode: 'enforce' | 'advise' | 'report' =
+      gate_mode ?? (hasSimplifiedGates ? 'enforce' : 'advise');
+
+    const normalizedArgs = {
+      ...args,
+      gate_mode: resolvedGateMode,
+      quality_gates,
+      custom_checks,
+    };
 
     this.logger.info(
       `🚀 [ENTRY] Prompt Engine: Executing "${command}" (mode: ${execution_mode})`
@@ -515,14 +626,33 @@ export class ConsolidatedPromptEngine {
     // Determine execution strategy
     const strategy = await this.determineExecutionStrategy(
       executionContext.convertedPrompt,
-      execution_mode
+      execution_mode,
+      {
+        gate_validation,
+        quality_gates,
+        custom_checks,
+      }
     );
 
     // Initialize execution state with session tracking
-    this.initializeExecutionState(executionContext.convertedPrompt, strategy, args.session_id);
+    this.initializeExecutionState(
+      executionContext.convertedPrompt,
+      strategy,
+      session_id
+    );
 
     // Execute using determined strategy
-    return await this.executeWithStrategy(strategy, executionContext, args);
+    return await this.executeWithStrategy(strategy, executionContext, {
+      ...normalizedArgs,
+      gate_validation,
+      step_confirmation,
+      llm_driven_execution,
+      force_restart,
+      session_id,
+      chain_uri,
+      timeout,
+      options,
+    });
   }
 
   /**
@@ -538,26 +668,49 @@ export class ConsolidatedPromptEngine {
       chainParameters,
     } = await this.parseCommandUnified(command);
 
-    // TEMP DISABLE: Apply prompt guidance if available and not a chain management command
+    // Apply prompt guidance if available and not a chain management command
     let enhancedPrompt = convertedPrompt;
     let guidanceResult: ServicePromptGuidanceResult | undefined;
 
-    // TEMP DISABLE: Disable entire PromptGuidanceService to eliminate framework duplication
-    // if (!isChainManagement && this.promptGuidanceService && convertedPrompt) {
-    //   try {
-    //     guidanceResult = await this.promptGuidanceService.applyGuidance(convertedPrompt, {
-    //       includeSystemPromptInjection: false,  // FIXED: Disable to prevent duplication with Engine framework context
-    //       includeTemplateEnhancement: false     // FIXED: Disabled since template enhancer was also causing duplication
-    //     });
+    // FIXED: Re-enable PromptGuidanceService with system prompt injection only
+    // This provides framework methodology reminder at the START of responses
+    // Gate guidance (framework-compliance) provides quality criteria at the END
+    if (!isChainManagement && this.promptGuidanceService && convertedPrompt) {
+      try {
+        this.logger.info(`🔧 [FRAMEWORK DEBUG] Calling PromptGuidanceService for ${convertedPrompt.id}`, {
+          hasPromptGuidanceService: !!this.promptGuidanceService,
+          isInitialized: this.promptGuidanceService.isInitialized(),
+          originalSystemMessage: convertedPrompt.systemMessage?.substring(0, 100)
+        });
 
-    //     if (guidanceResult.guidanceApplied && guidanceResult.enhancedPrompt) {
-    //       enhancedPrompt = guidanceResult.enhancedPrompt;
-    //       this.logger.debug(`Prompt guidance applied: ${guidanceResult.metadata.enhancementsApplied.join(', ')}`);
-    //     }
-    //   } catch (error) {
-    //     this.logger.warn("Prompt guidance failed, continuing with original prompt:", error);
-    //   }
-    // }
+        guidanceResult = await this.promptGuidanceService.applyGuidance(convertedPrompt, {
+          includeSystemPromptInjection: true,   // ENABLED: Framework reminder at beginning
+          includeTemplateEnhancement: false     // DISABLED: Prevent template duplication
+        });
+
+        this.logger.info(`🔧 [FRAMEWORK DEBUG] PromptGuidanceService result:`, {
+          guidanceApplied: guidanceResult.guidanceApplied,
+          hasEnhancedPrompt: !!guidanceResult.enhancedPrompt,
+          enhancementsApplied: guidanceResult.metadata.enhancementsApplied,
+          enhancedSystemMessage: guidanceResult.enhancedPrompt?.systemMessage?.substring(0, 200)
+        });
+
+        if (guidanceResult.guidanceApplied && guidanceResult.enhancedPrompt) {
+          enhancedPrompt = guidanceResult.enhancedPrompt;
+          this.logger.info(`✅ [FRAMEWORK DEBUG] Prompt guidance applied: ${guidanceResult.metadata.enhancementsApplied.join(', ')}`);
+        } else {
+          this.logger.warn(`⚠️ [FRAMEWORK DEBUG] Guidance not applied - guidanceApplied=${guidanceResult.guidanceApplied}, hasEnhancedPrompt=${!!guidanceResult.enhancedPrompt}`);
+        }
+      } catch (error) {
+        this.logger.error("❌ [FRAMEWORK DEBUG] Prompt guidance failed:", error);
+      }
+    } else {
+      this.logger.warn(`⚠️ [FRAMEWORK DEBUG] Skipping PromptGuidanceService:`, {
+        isChainManagement,
+        hasService: !!this.promptGuidanceService,
+        hasPrompt: !!convertedPrompt
+      });
+    }
 
     return {
       promptId,
@@ -576,7 +729,12 @@ export class ConsolidatedPromptEngine {
    */
   private async determineExecutionStrategy(
     convertedPrompt: any,
-    execution_mode: string
+    execution_mode: string,
+    overrides?: {
+      gate_validation?: boolean;
+      quality_gates?: string[];
+      custom_checks?: Array<{ name: string; description: string }>;
+    }
   ): Promise<{
     mode: "prompt" | "template" | "chain";
     gateValidation: boolean;
@@ -593,10 +751,16 @@ export class ConsolidatedPromptEngine {
         | "chain";
     }
 
-    const effectiveGateValidation = effectiveExecutionMode === "chain";
+    const hasSimplifiedGates =
+      (overrides?.quality_gates?.length ?? 0) > 0 ||
+      (overrides?.custom_checks?.length ?? 0) > 0;
+
+    const effectiveGateValidation =
+      overrides?.gate_validation ??
+      (hasSimplifiedGates ? true : effectiveExecutionMode === "chain");
 
     this.logger.info(
-      `🔍 EXECUTION MODE DEBUG: Effective settings: mode=${effectiveExecutionMode}, gates=${effectiveGateValidation}, prompt=${convertedPrompt.id}`
+      `🔍 EXECUTION MODE DEBUG: Effective settings: mode=${effectiveExecutionMode}, gates=${effectiveGateValidation}, prompt=${convertedPrompt.id}, simplifiedGates=${hasSimplifiedGates}`
     );
 
     return {
@@ -641,12 +805,21 @@ export class ConsolidatedPromptEngine {
   ): Promise<ToolResponse> {
     const { convertedPrompt, promptArgs } = context;
 
+    // Phase 3: Create execution scope for temporary gates
+    const executionScopeId = this.createExecutionScope(convertedPrompt, strategy, args);
+
+    try {
+
     switch (strategy.mode) {
       case "prompt":
         this.logger.info(
           `📍 EXECUTION PATH: Taking PROMPT path for ${convertedPrompt.id}`
         );
-        const promptResult = await this.executePrompt(convertedPrompt, promptArgs);
+        const promptResult = await this.executePrompt(
+          convertedPrompt,
+          promptArgs,
+          this.getExecutionContext(executionScopeId, 'execution')
+        );
         return promptResult;
 
       case "template":
@@ -656,7 +829,8 @@ export class ConsolidatedPromptEngine {
         const templateResult = await this.executeTemplateWithFramework(
           convertedPrompt,
           promptArgs,
-          strategy.gateValidation
+          strategy.gateValidation,
+          this.getExecutionContext(executionScopeId, 'execution')
         );
         return templateResult;
 
@@ -688,13 +862,235 @@ export class ConsolidatedPromptEngine {
             enableGates: strategy.gateValidation,
             force_restart: args.force_restart,
             session_id: chainSessionId,
-            ...args.options
+            step_confirmation: args.step_confirmation,
+            llm_driven_execution: args.llm_driven_execution,
+            chain_uri: args.chain_uri,
+            timeout: args.timeout,
+            temporary_gates: args.temporary_gates,
+            gate_scope: args.gate_scope,
+            inherit_chain_gates: args.inherit_chain_gates,
+            ...args.options,
           }
         );
 
       default:
         throw new ValidationError(`Unknown execution mode: ${strategy.mode}`);
     }
+
+    } finally {
+      // Phase 3: Cleanup execution scope and temporary gates
+      this.cleanupExecutionScope(executionScopeId);
+    }
+  }
+
+  /**
+   * Phase 3: Create execution scope for temporary gate lifecycle management
+   * Phase 4: Enhanced with execution-time temporary gate support
+   */
+  private createExecutionScope(
+    convertedPrompt: any,
+    strategy: { mode: string; gateValidation: boolean },
+    args: any
+  ): string {
+    const scopeId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    this.logger.info(`🔧 [EXECUTION SCOPE] Created execution scope:`, {
+      scopeId,
+      promptId: convertedPrompt?.id,
+      mode: strategy.mode,
+      gateValidation: strategy.gateValidation,
+      sessionId: args.session_id,
+      hasExecutionTimeGates: !!args.temporary_gates,
+      executionTimeGateCount: args.temporary_gates?.length || 0
+    });
+
+    // Create execution-time temporary gates if provided
+    if (args.temporary_gates && args.temporary_gates.length > 0 && this.temporaryGateRegistry) {
+      const gateScope = args.gate_scope || 'execution';
+      this.logger.info(`🚀 [EXECUTION-TIME GATES] Creating ${args.temporary_gates.length} execution-time temporary gates`, {
+        scope: gateScope,
+        scopeId
+      });
+
+      for (const tempGate of args.temporary_gates) {
+        try {
+          const gateId = this.temporaryGateRegistry.createTemporaryGate(
+            {
+              name: tempGate.name,
+              type: tempGate.type,
+              scope: gateScope,
+              description: tempGate.description,
+              guidance: tempGate.guidance,
+              pass_criteria: tempGate.pass_criteria,
+              source: 'manual',
+              context: { executionTimeGate: true, promptId: convertedPrompt?.id }
+            },
+            scopeId
+          );
+
+          this.logger.debug(`✅ [EXECUTION-TIME GATES] Created temporary gate: ${gateId} (${tempGate.name})`);
+        } catch (error) {
+          this.logger.error(`❌ [EXECUTION-TIME GATES] Failed to create temporary gate:`, {
+            error: error instanceof Error ? error.message : String(error),
+            gateName: tempGate.name
+          });
+        }
+      }
+    }
+
+    const simplifiedGateIds = this.convertSimplifiedGates(
+      args.quality_gates,
+      args.custom_checks,
+      scopeId
+    );
+
+    const hasSimplifiedGates =
+      (args.quality_gates?.length ?? 0) > 0 ||
+      (args.custom_checks?.length ?? 0) > 0;
+
+    if (hasSimplifiedGates || args.gate_mode) {
+      const gateMode = (args.gate_mode as 'enforce' | 'advise' | 'report') || 'advise';
+      this.activeGateRequest = {
+        gateIds: simplifiedGateIds,
+        gateMode,
+        qualityGates: args.quality_gates || [],
+        customChecks: args.custom_checks || [],
+        executionScopeId: scopeId,
+      };
+    } else {
+      this.activeGateRequest = undefined;
+    }
+
+    return scopeId;
+  }
+
+  /**
+   * Phase 3: Cleanup execution scope and associated temporary gates
+   */
+  private cleanupExecutionScope(scopeId: string): void {
+    if (this.temporaryGateRegistry) {
+      this.temporaryGateRegistry.cleanupScope(scopeId);
+      this.logger.info(`🧹 [EXECUTION SCOPE] Cleaned up execution scope: ${scopeId}`);
+    } else {
+      this.logger.debug(`🧹 [EXECUTION SCOPE] No temporary gate registry available for cleanup: ${scopeId}`);
+    }
+
+    if (this.activeGateRequest?.executionScopeId === scopeId) {
+      this.activeGateRequest = undefined;
+    }
+  }
+
+  private convertSimplifiedGates(
+    qualityGates?: string[],
+    customChecks?: Array<{ name: string; description: string }>,
+    executionScopeId?: string
+  ): string[] {
+    const gateIds: string[] = [];
+
+    if (qualityGates && qualityGates.length > 0) {
+      gateIds.push(...qualityGates);
+    }
+
+    if (customChecks && customChecks.length > 0) {
+      if (!this.temporaryGateRegistry) {
+        this.logger.warn(
+          "Temporary gate registry unavailable; custom checks cannot be registered"
+        );
+      } else {
+        for (const check of customChecks) {
+          try {
+            const gateId = this.temporaryGateRegistry.createTemporaryGate(
+              {
+                name: check.name,
+                type: 'validation',
+                scope: 'execution',
+                description: check.description,
+                guidance: `Ensure: ${check.description}`,
+                pass_criteria: [],
+                source: 'manual',
+              },
+              executionScopeId
+            );
+
+            gateIds.push(gateId);
+          } catch (error) {
+            this.logger.error(
+              `Failed to create temporary gate for custom check ${check.name}:`,
+              error
+            );
+          }
+        }
+      }
+    }
+
+    return gateIds;
+  }
+
+  private mergeRequestedGates(gates: string[]): string[] {
+    const requested = this.activeGateRequest?.gateIds || [];
+    if (!requested.length) {
+      return gates;
+    }
+
+    const combined = [...requested, ...gates];
+    return [...new Set(combined)];
+  }
+
+  private formatGateStatus(validation: GateValidationResult | null): string {
+    if (!validation) {
+      if (this.activeGateRequest?.gateMode === 'report') {
+        return `\n\n---\nℹ️ **Quality Gates**: Validation not executed\n`;
+      }
+      return '';
+    }
+
+    const total = validation.results?.length ?? 0;
+
+    if (validation.passed) {
+      return `\n\n---\n✅ **Quality Gates**: All checks passed (${total} gates)\n`;
+    }
+
+    const failed = (validation.results || []).filter((result) => !result.passed);
+    let message = `\n\n---\n⚠️ **Quality Gates**: ${failed.length} of ${total} failed\n\n`;
+
+    for (const result of failed) {
+      message += `❌ **${result.gate}**: ${result.message}\n`;
+    }
+
+    return message;
+  }
+
+  /**
+   * Phase 3: Get execution context for temporary gates
+   */
+  private getExecutionContext(scopeId: string, scope: 'execution' | 'session' | 'chain' | 'step' = 'execution') {
+    return {
+      scopeId,
+      scope
+    };
+  }
+
+  /**
+   * Phase 3: Extract temporary gates from prompt configuration
+   */
+  private getTemporaryGatesFromPrompt(prompt: ConvertedPrompt): Array<Omit<TemporaryGateDefinition, 'id' | 'created_at'>> | undefined {
+    // Phase 3 Fix: Check enhancedGateConfiguration first, then fall back to gateConfiguration
+    const gateConfig = (prompt.enhancedGateConfiguration || prompt.gateConfiguration) as EnhancedGateConfiguration | undefined;
+    if (!gateConfig?.temporary_gates) {
+      return undefined;
+    }
+
+    return gateConfig.temporary_gates.map((tempGate: any) => ({
+      name: tempGate.name,
+      type: tempGate.type,
+      scope: tempGate.scope,
+      description: tempGate.description,
+      guidance: tempGate.guidance,
+      pass_criteria: tempGate.pass_criteria,
+      expires_at: tempGate.expires_at,
+      source: tempGate.source || 'manual',
+      context: tempGate.context
+    }));
   }
 
   /**
@@ -1098,7 +1494,11 @@ export class ConsolidatedPromptEngine {
    */
   private async executePrompt(
     prompt: ConvertedPrompt,
-    args: Record<string, string>
+    args: Record<string, string>,
+    executionContext?: {
+      scopeId?: string;
+      scope?: 'execution' | 'session' | 'chain' | 'step';
+    }
   ): Promise<ToolResponse> {
     if (!this.currentExecutionState) {
       throw new PromptError("No execution state available");
@@ -1124,9 +1524,13 @@ export class ConsolidatedPromptEngine {
     // Phase 4: Enhanced gate validation for basic prompts (only when framework system is enabled)
     let gateResults: GateValidationResult | null = null;
     const frameworkEnabled = this.frameworkStateManager?.isFrameworkSystemEnabled();
-    this.logger.info(`🔍 [DEBUG] Framework system enabled: ${frameworkEnabled}`);
+    const hasRequestedGates = (this.activeGateRequest?.gateIds?.length || 0) > 0;
+    const shouldValidate = frameworkEnabled || hasRequestedGates;
+    this.logger.info(
+      `🔍 [DEBUG] Framework system enabled: ${frameworkEnabled}, requestedGates=${hasRequestedGates}`
+    );
 
-    if (frameworkEnabled) {
+    if (shouldValidate) {
       const gateValidation = await this.validateContentWithGates(prompt, content, sessionEnhancedArgs, 'prompt');
       gateResults = gateValidation.validation;
       this.logger.info(`🔍 [DEBUG] Gate validation result:`, {
@@ -1165,7 +1569,7 @@ export class ConsolidatedPromptEngine {
     const frameworkEnabledForContext =
       this.frameworkStateManager?.isFrameworkSystemEnabled() || false;
 
-    const executionContext: FormatterExecutionContext = {
+    const formatterContext: FormatterExecutionContext = {
       executionId,
       executionType: "prompt",
       startTime: this.currentExecutionState.metadata.startTime,
@@ -1192,9 +1596,13 @@ export class ConsolidatedPromptEngine {
       const frameworkContext = await this.getFrameworkExecutionContext(prompt);
 
       if (selectedGates.length > 0) {
+        const temporaryGates = this.getTemporaryGatesFromPrompt(prompt);
         const supplementalGuidance = await this.getSupplementalGateGuidance(
           selectedGates,
-          frameworkContext
+          frameworkContext,
+          prompt,
+          temporaryGates,
+          executionContext
         );
         if (supplementalGuidance) {
           enhancedContent = content + supplementalGuidance;
@@ -1205,10 +1613,14 @@ export class ConsolidatedPromptEngine {
       // TEMP TEST: Force gate guidance even without validation results
       const testGates = ['framework-compliance', 'educational-clarity'];
       const frameworkContext = await this.getFrameworkExecutionContext(prompt);
+      const temporaryGates = this.getTemporaryGatesFromPrompt(prompt);
 
       const supplementalGuidance = await this.getSupplementalGateGuidance(
         testGates,
-        frameworkContext
+        frameworkContext,
+        prompt,
+        temporaryGates,
+        executionContext
       );
       if (supplementalGuidance) {
         enhancedContent = content + supplementalGuidance;
@@ -1217,12 +1629,16 @@ export class ConsolidatedPromptEngine {
       }
     }
 
+    if (this.activeGateRequest) {
+      enhancedContent += this.formatGateStatus(gateResults);
+    }
+
     // Format response with structured data
     const executionWarning = `⚠️ EXECUTION REQUIRED: The following content contains instructions that YOU must interpret and execute:\n\n`;
 
     return this.responseFormatter.formatPromptEngineResponse(
       executionWarning + enhancedContent,
-      executionContext,
+      formatterContext,
       {
         includeAnalytics: true,
         includeMetadata: true,
@@ -1377,7 +1793,11 @@ export class ConsolidatedPromptEngine {
   private async executeTemplateWithFramework(
     prompt: ConvertedPrompt,
     args: Record<string, string>,
-    enableGates: boolean
+    enableGates: boolean,
+    executionContext?: {
+      scopeId?: string;
+      scope?: 'execution' | 'session' | 'chain' | 'step';
+    }
   ): Promise<ToolResponse> {
     if (!this.currentExecutionState) {
       throw new PromptError("No execution state available");
@@ -1440,7 +1860,8 @@ export class ConsolidatedPromptEngine {
     let gateResults: GateValidationResult | null = null;
     let selectedGates: string[] = [];
     let retryAttempt = 0;
-    const maxRetries = 2; // Allow up to 2 retries for template mode
+    const gateModeForExecution = this.activeGateRequest?.gateMode || (enableGates ? 'enforce' : 'advise');
+    const maxRetries = gateModeForExecution === 'enforce' ? 2 : 0;
 
     if (enableGates) {
       do {
@@ -1448,7 +1869,7 @@ export class ConsolidatedPromptEngine {
         gateResults = gateValidation.validation;
         selectedGates = gateValidation.selectedGates;
 
-        if (gateResults && !gateResults.passed && retryAttempt < maxRetries) {
+      if (gateResults && !gateResults.passed && retryAttempt < maxRetries) {
           retryAttempt++;
           this.logger.warn(`Gate validation failed for ${prompt.id} (attempt ${retryAttempt}):`, gateResults.results);
 
@@ -1504,7 +1925,7 @@ export class ConsolidatedPromptEngine {
     const frameworkEnabledForContext =
       this.frameworkStateManager?.isFrameworkSystemEnabled() || false;
 
-    const executionContext: FormatterExecutionContext = {
+    const formatterContext: FormatterExecutionContext = {
       executionId,
       executionType: "template",
       startTime: this.currentExecutionState.metadata.startTime,
@@ -1518,9 +1939,13 @@ export class ConsolidatedPromptEngine {
     let enhancedContent = content;
 
     if (gateResults && selectedGates.length > 0) {
+      const temporaryGates = this.getTemporaryGatesFromPrompt(prompt);
       const supplementalGuidance = await this.getSupplementalGateGuidance(
         selectedGates,
-        frameworkContext
+        frameworkContext,
+        prompt,
+        temporaryGates,
+        executionContext
       );
       if (supplementalGuidance) {
         enhancedContent = content + supplementalGuidance;
@@ -1528,9 +1953,13 @@ export class ConsolidatedPromptEngine {
     } else {
       // TEMP TEST: Force gate guidance even without validation results (same as executePrompt)
       const testGates = ['framework-compliance', 'educational-clarity'];
+      const temporaryGates = this.getTemporaryGatesFromPrompt(prompt);
       const supplementalGuidance = await this.getSupplementalGateGuidance(
         testGates,
-        frameworkContext
+        frameworkContext,
+        prompt,
+        temporaryGates,
+        executionContext
       );
       if (supplementalGuidance) {
         enhancedContent = enhancedContent + supplementalGuidance;
@@ -1539,12 +1968,16 @@ export class ConsolidatedPromptEngine {
       }
     }
 
+    if (this.activeGateRequest) {
+      enhancedContent += this.formatGateStatus(gateResults);
+    }
+
     // Format response with structured data
     const executionWarning = `⚠️ EXECUTION REQUIRED: The following content contains instructions that YOU must interpret and execute:\n\n`;
 
     return this.responseFormatter.formatPromptEngineResponse(
       executionWarning + enhancedContent,
-      executionContext,
+      formatterContext,
       {
         includeAnalytics: true,
         includeMetadata: true,
@@ -1558,38 +1991,132 @@ export class ConsolidatedPromptEngine {
   // REMOVED: generateMetadataSection - migrated to ChainExecutor
 
   /**
-   * Get supplemental gate guidance to append to responses (Phase 1 - Framework-style implementation)
+   * Get supplemental gate guidance to append to responses (Phase 1 - Enhanced with intelligent category detection)
    */
   private async getSupplementalGateGuidance(
     selectedGates: string[],
-    frameworkContext?: any
+    frameworkContext?: any,
+    prompt?: any,
+    temporaryGates?: Array<Omit<TemporaryGateDefinition, 'id' | 'created_at'>>,
+    executionContext?: {
+      scopeId?: string;
+      scope?: 'execution' | 'session' | 'chain' | 'step';
+    }
   ): Promise<string> {
+    // Phase 1: Enhanced category detection
+    let categoryExtractionResult: CategoryExtractionResult;
+    if (prompt) {
+      categoryExtractionResult = extractPromptCategory(prompt, this.logger);
+      this.logger.info(`🏷️ [CATEGORY EXTRACTOR] Category detected:`, {
+        category: categoryExtractionResult.category,
+        source: categoryExtractionResult.source,
+        confidence: categoryExtractionResult.confidence,
+        promptId: prompt.id
+      });
+    } else {
+      // Fallback when prompt not available
+      categoryExtractionResult = {
+        category: 'general',
+        source: 'fallback',
+        confidence: 20,
+        sourceData: {}
+      };
+      this.logger.warn(`🏷️ [CATEGORY EXTRACTOR] No prompt provided, using fallback category`);
+    }
+
     console.log(`🎯 [CONSOLE DEBUG] getSupplementalGateGuidance called:`, {
       selectedGatesCount: selectedGates.length,
       selectedGates,
       hasFrameworkContext: !!frameworkContext,
-      frameworkMethodology: frameworkContext?.selectedFramework?.methodology
+      frameworkMethodology: frameworkContext?.selectedFramework?.methodology,
+      detectedCategory: categoryExtractionResult.category,
+      categorySource: categoryExtractionResult.source,
+      categoryConfidence: categoryExtractionResult.confidence
     });
     this.logger.info(`🎯 [GATE MANAGER] getSupplementalGateGuidance called:`, {
       selectedGatesCount: selectedGates.length,
       selectedGates,
       hasFrameworkContext: !!frameworkContext,
-      frameworkMethodology: frameworkContext?.selectedFramework?.methodology
+      frameworkMethodology: frameworkContext?.selectedFramework?.methodology,
+      detectedCategory: categoryExtractionResult.category,
+      categorySource: categoryExtractionResult.source
     });
 
-    if (selectedGates.length === 0) {
-      this.logger.debug(`[GATE MANAGER] No gates selected, returning empty guidance`);
+    // Phase 3: Enhanced gate selection with 5-level precedence and temporary gates
+    let finalSelectedGates = selectedGates;
+    let temporaryGateIds: string[] = [];
+
+    // Step 1: Create temporary gates if provided
+    if (temporaryGates && temporaryGates.length > 0 && this.temporaryGateRegistry && executionContext) {
+      for (const tempGate of temporaryGates) {
+        try {
+          const gateId = this.temporaryGateRegistry.createTemporaryGate(
+            tempGate,
+            executionContext.scopeId
+          );
+          temporaryGateIds.push(gateId);
+          this.logger.info(`🚀 [TEMPORARY GATE] Created temporary gate:`, {
+            gateId,
+            name: tempGate.name,
+            scope: tempGate.scope,
+            scopeId: executionContext.scopeId
+          });
+        } catch (error) {
+          this.logger.error(`❌ [TEMPORARY GATE] Failed to create temporary gate:`, {
+            error: error instanceof Error ? error.message : String(error),
+            gateName: tempGate.name
+          });
+        }
+      }
+    }
+
+    // Step 2: Apply 5-level precedence selection
+    if (prompt) {
+      const extractor = new CategoryExtractor(this.logger);
+      const frameworkGates = this.getFrameworkGates(frameworkContext);
+
+      // Use enhanced precedence system with temporary gates
+      const intelligentSelection = extractor.selectGatesWithEnhancedPrecedence(
+        categoryExtractionResult,
+        frameworkGates,
+        selectedGates.length > 0 ? selectedGates : ['content-structure'], // fallback
+        temporaryGateIds, // temporary gates have highest precedence
+        categoryExtractionResult.gateConfiguration
+      );
+
+      finalSelectedGates = intelligentSelection.selectedGates;
+
+      this.logger.info(`🎯 [5-LEVEL PRECEDENCE] Applied enhanced gate selection:`, {
+        originalGates: selectedGates,
+        temporaryGates: temporaryGateIds,
+        finalGates: finalSelectedGates,
+        precedenceUsed: intelligentSelection.precedenceUsed,
+        reasoning: intelligentSelection.reasoning,
+        temporaryGatesApplied: intelligentSelection.temporaryGatesApplied
+      });
+    } else if (temporaryGateIds.length > 0) {
+      // No prompt context but we have temporary gates - include them
+      finalSelectedGates = [...selectedGates, ...temporaryGateIds];
+      this.logger.info(`🎯 [TEMPORARY GATES ONLY] Applied temporary gates without prompt context:`, {
+        originalGates: selectedGates,
+        temporaryGates: temporaryGateIds,
+        finalGates: finalSelectedGates
+      });
+    }
+
+    if (finalSelectedGates.length === 0) {
+      this.logger.debug(`[GATE MANAGER] No gates selected after intelligent selection, returning empty guidance`);
       return '';
     }
 
     try {
 
-      // NEW: Use role-based gate guidance renderer (Phase 3)
+      // NEW: Use role-based gate guidance renderer with intelligent category detection and gate selection (Phase 1 & 2)
       const supplementalGuidance = await this.gateGuidanceRenderer.renderGuidance(
-        selectedGates,
+        finalSelectedGates, // Use intelligently selected gates
         {
           framework: frameworkContext?.selectedFramework?.methodology || 'CAGEERF',
-          category: 'development', // Could be dynamic based on prompt category
+          category: categoryExtractionResult.category, // Dynamic category based on intelligent detection
           promptId: frameworkContext?.promptId
         }
       );
@@ -1603,6 +2130,35 @@ export class ConsolidatedPromptEngine {
     } catch (error) {
       this.logger.error("Failed to get supplemental gate guidance:", error);
       return '';
+    }
+  }
+
+  /**
+   * Get framework-specific gates for intelligent selection
+   *
+   * Returns the universal framework-compliance gate for all frameworks.
+   * Future: Can add framework-specific quality gates alongside framework-compliance.
+   */
+  private getFrameworkGates(frameworkContext?: any): string[] {
+    if (!frameworkContext?.selectedFramework?.methodology) {
+      return [];
+    }
+
+    const methodology = frameworkContext.selectedFramework.methodology;
+
+    // All frameworks get universal framework-compliance gate
+    // Framework-specific gates can be added in future iterations
+    switch (methodology) {
+      case 'CAGEERF':
+        return ['framework-compliance'];
+      case 'ReACT':
+        return ['framework-compliance'];
+      case '5W1H':
+        return ['framework-compliance'];
+      case 'SCAMPER':
+        return ['framework-compliance'];
+      default:
+        return ['framework-compliance'];
     }
   }
 
@@ -1653,7 +2209,7 @@ export class ConsolidatedPromptEngine {
 
     if (!this.gateSelectionEngine) {
       this.logger.debug(`[GATE DEBUG] No gate selection engine, using fallback gates`);
-      return this.getFallbackGates(prompt);
+      return this.mergeRequestedGates(this.getFallbackGates(prompt));
     }
 
     try {
@@ -1694,13 +2250,13 @@ export class ConsolidatedPromptEngine {
         estimatedTime: selection.estimatedExecutionTime
       });
 
-      return selection.selectedGates;
+      return this.mergeRequestedGates(selection.selectedGates);
 
     } catch (error) {
       this.logger.error("Advanced gate selection failed, using fallback:", error);
       const fallbackGates = this.getFallbackGates(prompt);
       this.logger.debug(`[GATE DEBUG] Using fallback gates:`, { fallbackGates });
-      return fallbackGates;
+      return this.mergeRequestedGates(fallbackGates);
     }
   }
 

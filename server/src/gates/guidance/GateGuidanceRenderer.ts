@@ -11,23 +11,29 @@ import { fileURLToPath } from 'url';
 import type { Logger } from '../../logging/index.js';
 import { GateDefinition, GateContext } from '../core/gate-definitions.js';
 import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './FrameworkGuidanceFilter.js';
+import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 
 /**
- * Gate guidance renderer with framework-specific filtering
+ * Gate guidance renderer with framework-specific filtering and temporary gate support
  */
 export class GateGuidanceRenderer {
   private gateCache = new Map<string, GateDefinition>();
   private gatesDirectory: string;
   private logger: Logger;
+  private temporaryGateRegistry?: TemporaryGateRegistry;
 
-  constructor(logger: Logger, gatesDirectory?: string) {
+  constructor(logger: Logger, gatesDirectory?: string, temporaryGateRegistry?: TemporaryGateRegistry) {
     this.logger = logger;
     // Use same directory resolution pattern as existing system
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     this.gatesDirectory = gatesDirectory || path.join(__dirname, '../../gates/definitions');
+    this.temporaryGateRegistry = temporaryGateRegistry;
 
     this.logger.debug('[GATE GUIDANCE RENDERER] Initialized with directory:', this.gatesDirectory);
+    if (temporaryGateRegistry) {
+      this.logger.debug('[GATE GUIDANCE RENDERER] Temporary gate registry enabled');
+    }
   }
 
   /**
@@ -76,13 +82,13 @@ export class GateGuidanceRenderer {
     }
 
     // Format as supplemental guidance section (clean formatting)
+    // NOTE: Framework is already described in tool descriptions and system prompt
+    // so we don't duplicate the framework reference in the header
     const supplementalGuidance = `
 
 ---
 
 ## 🎯 Quality Enhancement Gates
-
-*These are supplemental quality guidelines to enhance your ${context.framework || 'framework'} methodology:*
 
 ${guidanceTexts.join('\n\n')}
 
@@ -97,7 +103,7 @@ ${guidanceTexts.join('\n\n')}
   }
 
   /**
-   * Load gate definition from file system
+   * Load gate definition from temporary registry or file system
    */
   private async loadGateDefinition(gateId: string): Promise<GateDefinition | null> {
     // Check cache first (performance optimization)
@@ -105,6 +111,37 @@ ${guidanceTexts.join('\n\n')}
       return this.gateCache.get(gateId)!;
     }
 
+    // Phase 3 Enhancement: Check temporary gate registry first for temp_ prefixed gates
+    if (gateId.startsWith('temp_') && this.temporaryGateRegistry) {
+      this.logger.debug('[GATE GUIDANCE RENDERER] Attempting to load temporary gate:', gateId);
+      const tempGate = this.temporaryGateRegistry.getTemporaryGate(gateId);
+
+      if (tempGate) {
+        // Convert temporary gate to standard gate definition format
+        const gate: GateDefinition = {
+          id: tempGate.id,
+          name: tempGate.name,
+          guidance: tempGate.guidance,
+          activation: {
+            explicit_request: true // Temporary gates are explicitly requested
+          }
+        };
+
+        // Cache for reuse during this execution
+        this.gateCache.set(gateId, gate);
+        this.logger.info('[GATE GUIDANCE RENDERER] ✅ Loaded temporary gate:', {
+          gateId,
+          name: tempGate.name,
+          guidanceLength: tempGate.guidance.length
+        });
+
+        return gate;
+      } else {
+        this.logger.warn('[GATE GUIDANCE RENDERER] ⚠️ Temporary gate not found in registry:', gateId);
+      }
+    }
+
+    // Fall back to filesystem for non-temporary gates or if registry lookup fails
     try {
       const gateFile = path.join(this.gatesDirectory, `${gateId}.json`);
       const fileContent = await fs.readFile(gateFile, 'utf-8');
@@ -120,7 +157,7 @@ ${guidanceTexts.join('\n\n')}
 
       // Cache for reuse (performance optimization)
       this.gateCache.set(gateId, gate);
-      this.logger.debug('[GATE GUIDANCE RENDERER] Loaded and cached gate definition:', gateId);
+      this.logger.debug('[GATE GUIDANCE RENDERER] Loaded and cached gate definition from filesystem:', gateId);
 
       return gate;
     } catch (error) {
@@ -131,12 +168,19 @@ ${guidanceTexts.join('\n\n')}
 
   /**
    * Check if gate should be activated for current context
+   *
+   * Framework gates (gate_type: "framework") bypass category checks and activate
+   * based on framework context alone. This ensures framework methodology guidance
+   * applies universally across all categories.
    */
   private shouldActivateGate(gate: GateDefinition, context: GateContext): boolean {
     const activation = gate.activation;
+    const isFrameworkGate = gate.gate_type === 'framework' || gate.id === 'framework-compliance';
 
     this.logger.debug('[GATE GUIDANCE RENDERER] shouldActivateGate called:', {
       gateId: gate.id,
+      gateType: gate.gate_type,
+      isFrameworkGate,
       contextFramework: context.framework,
       activationFrameworkContext: activation.framework_context,
       contextCategory: context.category,
@@ -153,9 +197,19 @@ ${guidanceTexts.join('\n\n')}
         });
         return false;
       }
+
+      // Framework gates activate on framework match alone (bypass category checks)
+      if (isFrameworkGate) {
+        this.logger.info('[GATE GUIDANCE RENDERER] ✅ Framework gate activated (universal):', {
+          gateId: gate.id,
+          framework: context.framework,
+          category: context.category
+        });
+        return true;
+      }
     }
 
-    // Check category context match
+    // Category gates check category context match
     if (context.category && activation.prompt_categories) {
       if (!activation.prompt_categories.includes(context.category)) {
         this.logger.debug('[GATE GUIDANCE RENDERER] Gate not activated - category mismatch:', {
@@ -227,6 +281,6 @@ ${guidanceTexts.join('\n\n')}
 /**
  * Factory function for creating gate guidance renderer
  */
-export function createGateGuidanceRenderer(logger: Logger, gatesDirectory?: string): GateGuidanceRenderer {
-  return new GateGuidanceRenderer(logger, gatesDirectory);
+export function createGateGuidanceRenderer(logger: Logger, gatesDirectory?: string, temporaryGateRegistry?: TemporaryGateRegistry): GateGuidanceRenderer {
+  return new GateGuidanceRenderer(logger, gatesDirectory, temporaryGateRegistry);
 }

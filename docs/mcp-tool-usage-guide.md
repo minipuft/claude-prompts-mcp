@@ -174,6 +174,51 @@ system_control(action: "switch_framework", framework: "CAGEERF",
 system_control(action: "analytics", include_history: true)
 ```
 
+### Pattern 5: Quality Gates (Simplified)
+
+Use the simplified hybrid interface to combine built-in gates with quick custom checks.
+
+#### Discover Available Gates
+
+```javascript
+// List all configured gates
+system_control({
+  action: "gates",
+  operation: "list"
+})
+```
+
+#### Basic Usage: Built-in Gates
+
+```javascript
+prompt_engine({
+  command: ">>code_review code='...'",
+  quality_gates: ["gate-name-1", "gate-name-2"],
+  gate_mode: "enforce"
+})
+```
+
+#### Advanced: Custom Checks
+
+```javascript
+prompt_engine({
+  command: ">>my_prompt",
+  quality_gates: ["gate-name"],
+  custom_checks: [
+    { name: "production-ready", description: "Include error handling and logging" }
+  ],
+  gate_mode: "enforce"
+})
+```
+
+#### Gate Modes
+
+- **enforce**: Validates output, retries on failure with improvement hints (default when gates provided)
+- **advise**: Provides guidance without blocking execution
+- **report**: Runs validation once and includes pass/fail status in the response
+
+> Need full control? `temporary_gates` remains available for advanced scenarios, but prefer `quality_gates` and `custom_checks` for most workflows.
+
 ## Advanced Search and Discovery
 
 The prompt_manager supports advanced filtering:
@@ -236,17 +281,94 @@ If you encounter MCP protocol errors:
 
 ## Troubleshooting
 
-### "MCP error -32602: Tool has output schema but no structured content"
+### Common Parameter Mistakes
+
+#### ❌ "Missing required fields: id, name, description, user_message_template"
+
+**Problem**: Trying to create a prompt without all required parameters.
+
+**Solution**: All create actions require 4 essential parameters:
+```bash
+prompt_manager(
+  action: "create",
+  id: "unique_identifier",           # ⚠️ REQUIRED
+  name: "Human Readable Name",        # ⚠️ REQUIRED
+  description: "What it does",        # ⚠️ REQUIRED
+  user_message_template: "{{input}}"  # ⚠️ REQUIRED
+)
+```
+
+**Common variations**:
+- ❌ `userMessageTemplate` → ✅ `user_message_template` (snake_case)
+- ❌ Missing `id` → ✅ Always include unique identifier
+- ❌ Empty string → ✅ Provide meaningful content
+
+#### ❌ "Missing required fields: id"
+
+**Problem**: Trying to update/delete/modify without specifying which prompt.
+
+**Solution**: Most operations need the `id` parameter:
+```bash
+# Update
+prompt_manager(action: "update", id: "my_prompt", description: "New description")
+
+# Delete
+prompt_manager(action: "delete", id: "my_prompt")
+
+# Analyze
+prompt_manager(action: "analyze_type", id: "my_prompt")
+```
+
+#### ❌ "Prompt ID must contain only alphanumeric characters, underscores, and hyphens"
+
+**Problem**: Using invalid characters in prompt ID.
+
+**Solution**: IDs must match pattern `^[a-zA-Z0-9_-]+$`:
+```bash
+# ❌ Bad IDs
+id: "my prompt"        # spaces not allowed
+id: "my.prompt"        # dots not allowed
+id: "my/prompt"        # slashes not allowed
+
+# ✅ Good IDs
+id: "my_prompt"        # underscores OK
+id: "my-prompt"        # hyphens OK
+id: "MyPrompt123"      # alphanumeric OK
+```
+
+### Parameter Quick Reference
+
+| Action | Required Parameters | Optional Parameters |
+|--------|-------------------|-------------------|
+| `create` | `id`, `name`, `description`, `user_message_template` | `category`, `system_message`, `arguments` |
+| `create_prompt` | `id`, `name`, `description`, `user_message_template` | `category`, `system_message`, `arguments` |
+| `create_template` | `id`, `name`, `description`, `user_message_template` | `category`, `system_message`, `arguments` |
+| `create_with_gates` | `id`, `name`, `description`, `user_message_template`, `gate_configuration` OR `suggested_gates` | `category`, `system_message`, `arguments` |
+| `update` | `id` | Any field to update |
+| `delete` | `id` | - |
+| `modify` | `id`, `section_name`, `new_content` | - |
+| `analyze_type` | `id` | - |
+| `migrate_type` | `id`, `target_type` | - |
+| `analyze_gates` | `id` | - |
+| `update_gates` | `id`, `gate_configuration` | - |
+| `add_temporary_gates` | `id`, `temporary_gates` | `gate_scope`, `inherit_chain_gates` |
+| `suggest_temporary_gates` | `execution_context` | - |
+| `reload` | - | `full_restart`, `reason` |
+| `list` | - | `search_query` |
+
+### MCP Protocol Errors
+
+#### "MCP error -32602: Tool has output schema but no structured content"
 This indicates a tool isn't returning properly structured responses. This has been fixed in recent versions, but if encountered:
 - Update to the latest server version
 - Use the MCP tools instead of direct file operations
 
-### "Resource not found" errors
+#### "Resource not found" errors
 - Use `prompt_manager(action: "list")` to see available prompts
 - Check that the prompt ID exists before trying to modify it
 - Use reload to refresh the registry
 
-### Chain execution failures
+### Chain Execution Failures
 - Validate chain structure with `prompt_manager(action: "list", filter: "type:chain")`
 - Check step dependencies and input/output mappings
 - Use `system_control(action: "diagnostics")` for debugging

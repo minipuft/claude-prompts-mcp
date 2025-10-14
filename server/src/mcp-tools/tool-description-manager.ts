@@ -44,23 +44,31 @@ export class ToolDescriptionManager extends EventEmitter {
   }
 
   /**
+   * Normalize methodology keys for consistent lookup (case-insensitive)
+   */
+  private normalizeMethodologyKey(methodology?: string): string | undefined {
+    if (!methodology) return undefined;
+    return methodology.trim().toUpperCase();
+  }
+
+  /**
    * Create default descriptions as fallback
    */
   private createDefaults(): Map<string, ToolDescription> {
     return new Map([
       ['prompt_engine', {
-        description: '🚀 PROMPT TEMPLATE ENGINE: Processes prompt templates and returns instructions for YOU (the client LLM) to execute. WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it\'s active instructions you must follow and execute.',
-        shortDescription: 'Process prompt templates and return executable instructions',
+        description: '🚀 PROMPT ENGINE [HOT-RELOAD]: Processes Nunjucks templates, returns executable instructions. WARNING: Output contains instructions YOU must execute (code gen, analysis, multi-step tasks) - not just information. IMPORTANT: When your arguments include newlines or multi-line payloads, wrap the call in JSON so the parser receives a single-line command shell.',
+        shortDescription: 'Execute prompts, templates, and chains',
         category: 'execution'
       }],
       ['prompt_manager', {
-        description: '📝 INTELLIGENT PROMPT MANAGER: Complete lifecycle management with configurable analysis, category organization, and comprehensive CRUD operations. Handles create, update, delete, modify, reload, and list operations with intelligent feedback.',
-        shortDescription: 'Manage prompts lifecycle and organization',
+        description: '🧰 PROMPT MANAGER: Create, update, delete, list, and analyze prompts. Supports gate configuration, temporary gates, and prompt-type migration for full lifecycle control.',
+        shortDescription: 'Manage prompt lifecycle, gates, and discovery',
         category: 'management'
       }],
       ['system_control', {
-        description: '⚙️ INTELLIGENT SYSTEM CONTROL: Unified framework management, analytics, diagnostics, and system administration. Handles framework switching, performance monitoring, health checks, and comprehensive system status reporting.',
-        shortDescription: 'Control system settings and frameworks',
+        description: '⚙️ SYSTEM CONTROL: Unified interface for status reporting, framework and gate controls, analytics, configuration management, and maintenance operations.',
+        shortDescription: 'Manage framework state, metrics, and maintenance',
         category: 'system'
       }]
     ]);
@@ -72,16 +80,27 @@ export class ToolDescriptionManager extends EventEmitter {
   private preloadMethodologyDescriptions(): void {
     try {
       // Initialize all methodology guides
-      const cageerfGuide = new CAGEERFMethodologyGuide();
-      const reactGuide = new ReACTMethodologyGuide();
-      const fiveW1HGuide = new FiveW1HMethodologyGuide();
-      const scamperGuide = new SCAMPERMethodologyGuide();
+      const guides = [
+        new CAGEERFMethodologyGuide(),
+        new ReACTMethodologyGuide(),
+        new FiveW1HMethodologyGuide(),
+        new SCAMPERMethodologyGuide()
+      ];
 
-      // Pre-load tool descriptions for each methodology
-      this.methodologyDescriptions.set('CAGEERF', cageerfGuide.getToolDescriptions?.() || {});
-      this.methodologyDescriptions.set('ReACT', reactGuide.getToolDescriptions?.() || {});
-      this.methodologyDescriptions.set('5W1H', fiveW1HGuide.getToolDescriptions?.() || {});
-      this.methodologyDescriptions.set('SCAMPER', scamperGuide.getToolDescriptions?.() || {});
+      // Pre-load tool descriptions for each methodology using normalized keys
+      for (const guide of guides) {
+        const descriptions = guide.getToolDescriptions?.() || {};
+        const methodologyKey = this.normalizeMethodologyKey(guide.methodology);
+        const frameworkKey = this.normalizeMethodologyKey(guide.frameworkId);
+
+        if (methodologyKey) {
+          this.methodologyDescriptions.set(methodologyKey, descriptions);
+        }
+
+        if (frameworkKey) {
+          this.methodologyDescriptions.set(frameworkKey, descriptions);
+        }
+      }
 
       this.logger.info(`✅ Pre-loaded tool descriptions for ${this.methodologyDescriptions.size} methodologies`);
     } catch (error) {
@@ -129,9 +148,31 @@ export class ToolDescriptionManager extends EventEmitter {
   }
 
   /**
-   * Get description for a specific tool
+   * Get description for a specific tool with corrected priority hierarchy
    */
-  getDescription(toolName: string, frameworkEnabled?: boolean, activeMethodology?: string): string {
+  getDescription(
+    toolName: string,
+    frameworkEnabled?: boolean,
+    activeMethodology?: string,
+    options?: { applyMethodologyOverride?: boolean }
+  ): string {
+    const applyMethodologyOverride = options?.applyMethodologyOverride ?? true;
+    this.logger.debug(`Getting description for ${toolName} (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`);
+    const methodologyKey = this.normalizeMethodologyKey(activeMethodology);
+    const methodologyLogName = activeMethodology ?? methodologyKey;
+
+    // PRIORITY 1: Methodology-specific descriptions from guides (HIGHEST PRIORITY)
+    if (applyMethodologyOverride && methodologyKey) {
+      const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
+      if (methodologyDescs?.[toolName as keyof MethodologyToolDescriptions]?.description) {
+        const methodologyDesc = methodologyDescs[toolName as keyof MethodologyToolDescriptions]!.description!;
+        this.logger.debug(`✅ Using methodology-specific description from ${methodologyLogName} guide for ${toolName}`);
+        return methodologyDesc;
+      }
+      this.logger.debug(`⚠️ No methodology-specific description found for ${toolName} in ${methodologyLogName} guide`);
+    }
+
+    // Get config/default descriptions for fallback priority checks
     const toolDesc = this.descriptions.get(toolName) || this.defaults.get(toolName);
 
     if (!toolDesc) {
@@ -139,47 +180,65 @@ export class ToolDescriptionManager extends EventEmitter {
       return `Tool: ${toolName}`;
     }
 
-    // Return methodology-specific description if available (from pre-loaded cache)
-    if (frameworkEnabled && activeMethodology) {
-      const methodologyDescs = this.methodologyDescriptions.get(activeMethodology);
-      if (methodologyDescs?.[toolName as keyof MethodologyToolDescriptions]?.description) {
-        return methodologyDescs[toolName as keyof MethodologyToolDescriptions]!.description!;
-      }
-      // Fallback to static config if available
-      if (toolDesc.frameworkAware?.methodologies?.[activeMethodology]) {
-        return toolDesc.frameworkAware.methodologies[activeMethodology];
-      }
-    }
-
-    // Return framework-aware description if available and framework state is provided
+    // PRIORITY 2: Framework-aware descriptions from config (if methodology desc not available)
     if (frameworkEnabled !== undefined && toolDesc.frameworkAware) {
       if (frameworkEnabled && toolDesc.frameworkAware.enabled) {
+        this.logger.debug(`✅ Using framework-aware enabled description from config for ${toolName}`);
         return toolDesc.frameworkAware.enabled;
       } else if (!frameworkEnabled && toolDesc.frameworkAware.disabled) {
+        this.logger.debug(`✅ Using framework-aware disabled description from config for ${toolName}`);
         return toolDesc.frameworkAware.disabled;
+      }
+
+      // Check for static methodology descriptions in config as fallback
+      if (frameworkEnabled && methodologyKey && toolDesc.frameworkAware?.methodologies) {
+        const configMethodologyDescription =
+          toolDesc.frameworkAware.methodologies[methodologyKey] ??
+          (activeMethodology
+            ? toolDesc.frameworkAware.methodologies[activeMethodology]
+            : undefined);
+        if (configMethodologyDescription) {
+          this.logger.debug(
+            `✅ Using static methodology description from config for ${toolName} (${methodologyLogName})`
+          );
+          return configMethodologyDescription;
+        }
       }
     }
 
+    // PRIORITY 3: Basic config file descriptions (LOWER PRIORITY)
+    this.logger.debug(`✅ Using basic config/default description for ${toolName}`);
     return toolDesc.description;
   }
 
   /**
    * Get parameter description for a specific tool parameter
    */
-  getParameterDescription(toolName: string, paramName: string, frameworkEnabled?: boolean, activeMethodology?: string): string | undefined {
+  getParameterDescription(
+    toolName: string,
+    paramName: string,
+    frameworkEnabled?: boolean,
+    activeMethodology?: string,
+    options?: { applyMethodologyOverride?: boolean }
+  ): string | undefined {
+    const applyMethodologyOverride = options?.applyMethodologyOverride ?? true;
     const toolDesc = this.descriptions.get(toolName) || this.defaults.get(toolName);
     if (!toolDesc?.parameters) return undefined;
+    const methodologyKey = this.normalizeMethodologyKey(activeMethodology);
 
     // Check for methodology-specific parameter descriptions first (from pre-loaded cache)
-    if (frameworkEnabled && activeMethodology) {
-      const methodologyDescs = this.methodologyDescriptions.get(activeMethodology);
+    if (applyMethodologyOverride && methodologyKey) {
+      const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
       const methodologyTool = methodologyDescs?.[toolName as keyof MethodologyToolDescriptions];
       if (methodologyTool?.parameters?.[paramName]) {
         return methodologyTool.parameters[paramName];
       }
       // Fallback to static config if available
-      if (toolDesc.frameworkAware?.methodologyParameters?.[activeMethodology]?.[paramName]) {
-        const param = toolDesc.frameworkAware.methodologyParameters[activeMethodology][paramName];
+      const methodologyParameters = toolDesc.frameworkAware?.methodologyParameters;
+      const methodologyParamConfig = methodologyParameters?.[methodologyKey] ??
+        (activeMethodology ? methodologyParameters?.[activeMethodology] : undefined);
+      if (methodologyParamConfig?.[paramName]) {
+        const param = methodologyParamConfig[paramName];
         return typeof param === 'string' ? param : param?.description;
       }
     }

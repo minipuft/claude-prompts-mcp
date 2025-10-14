@@ -122,8 +122,8 @@ async function runUnifiedParsingIntegrationTests() {
       const mockConfigManager = {
         getConfig: () => ({
           server: { name: 'test-server', version: '1.0.0' },
-          // Disable gates completely to avoid __dirname issues in ES modules
-          gates: { enabled: false, enableValidation: false, autoGenerate: false }
+          // Minimal gates config - runtime enable/disable now handled by GateSystemManager
+          gates: { definitionsDirectory: "src/gates/definitions", templatesDirectory: "src/gates/templates" }
         })
       };
       const mockConversationManager = {

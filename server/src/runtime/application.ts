@@ -24,6 +24,7 @@ import {
   Logger,
 } from "../logging/index.js";
 import { createMcpToolsManager, McpToolsManager } from "../mcp-tools/index.js";
+import { createToolDescriptionManager, ToolDescriptionManager } from "../mcp-tools/tool-description-manager.js";
 import { PromptManager } from "../prompts/index.js";
 import {
   ServerManager,
@@ -64,6 +65,7 @@ export class Application {
   // REMOVED: executionCoordinator - modular chain system removed
   // REMOVED: gateEvaluator - gate evaluation system removed
   private mcpToolsManager: McpToolsManager;
+  private toolDescriptionManager: ToolDescriptionManager;
   private frameworkStateManager: FrameworkStateManager;
   private transportManager: TransportManager;
   private apiManager?: ApiManager;
@@ -107,6 +109,7 @@ export class Application {
     // REMOVED: executionCoordinator - modular chain system removed
     // REMOVED: gateEvaluator - gate evaluation system removed
     this.mcpToolsManager = null as any;
+    this.toolDescriptionManager = null as any;
     this.frameworkStateManager = null as any;
     this.transportManager = null as any;
     this.mcpServer = null as any;
@@ -574,7 +577,14 @@ export class Application {
     // Initialize Framework State Manager (for framework switching)
     if (isVerbose)
       this.logger.info("🔄 Initializing Framework State Manager...");
-    this.frameworkStateManager = await createFrameworkStateManager(this.logger);
+    const frameworkStateRoot =
+      typeof this.configManager.getServerRoot === 'function'
+        ? this.configManager.getServerRoot()
+        : path.dirname(this.configManager.getConfigPath());
+    this.frameworkStateManager = await createFrameworkStateManager(
+      this.logger,
+      frameworkStateRoot
+    );
 
     // Validation: Ensure FrameworkStateManager was created successfully
     if (!this.frameworkStateManager) {
@@ -630,6 +640,15 @@ export class Application {
     // Initialize and connect Framework Manager
     if (isVerbose) this.logger.info("🔄 Initializing Framework Manager...");
     await this.mcpToolsManager.setFrameworkManager();
+
+    // Initialize Tool Description Manager
+    if (isVerbose) this.logger.info("🔄 Initializing Tool Description Manager...");
+    this.toolDescriptionManager = createToolDescriptionManager(this.logger, this.configManager);
+    await this.toolDescriptionManager.initialize();
+
+    // Connect Tool Description Manager to MCP Tools Manager
+    if (isVerbose) this.logger.info("🔄 Connecting Tool Description Manager to MCP Tools...");
+    this.mcpToolsManager.setToolDescriptionManager(this.toolDescriptionManager);
 
     // REMOVED: ConsolidatedPromptEngine to ExecutionCoordinator wiring - ExecutionCoordinator removed
 

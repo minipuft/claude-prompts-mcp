@@ -100,6 +100,93 @@ The project uses GitHub Actions for automated testing and validation:
 - **CAGEERF Validation**: All analyzer modules, template tools, and MCP integrations
 - **Code Quality**: No sensitive files, proper TypeScript structure, dependency consistency
 
+## Nunjucks Dynamic Chain Orchestration Strategy
+
+### Strategic Architecture Decision
+
+**Decision**: Keep Nunjucks template engine for dynamic chain orchestration capabilities.
+
+**Critical Discovery**: Nunjucks templates render on EACH chain step with access to previous step results, enabling powerful result-based conditional logic and adaptive prompt instructions.
+
+### Chain Step Variable Access
+
+**How It Works**:
+```
+Step 1: analysis
+  → Renders template with input variables
+  → Outputs: {analysis: "...", confidence: 0.85}
+
+Step 2: validation
+  → Renders template with: {analysis: "...", confidence: 0.85, threshold: 0.8}
+  → Outputs: {score: 0.6, issues: [...]}
+
+Step 3: refinement
+  → Renders template with: ALL previous outputs + new variables
+  → Can use {% if score < 0.7 %} conditionals!
+```
+
+### Capabilities Enabled
+
+**Result-Based Conditionals**:
+```nunjucks
+{% if validation_score < 0.7 %}
+⚠️ CRITICAL QUALITY ISSUES
+Apply aggressive refinement with citations...
+{% elif validation_score < 0.9 %}
+Moderate improvements needed...
+{% else %}
+Excellent quality - polish only...
+{% endif %}
+```
+
+**Quality-Driven Adaptation**:
+- Adjust instruction depth based on previous step quality
+- Customize approach based on validation results
+- Adapt error recovery based on failure types
+- Modify format based on content characteristics
+
+**Complexity-Based Branching**:
+```nunjucks
+{% set complexity = sources|length + topics|length %}
+{% if complexity > 20 %}
+  🔥 MAXIMUM COMPLEXITY - Apply systematic framework...
+{% elif complexity > 10 %}
+  ⚡ HIGH COMPLEXITY - Structured analysis...
+{% else %}
+  📊 STANDARD - Focus on key insights...
+{% endif %}
+```
+
+### Implementation Guidelines
+
+**Best Practices**:
+1. **Progressive Instruction Clarity**: More specific instructions as quality decreases
+2. **Error Context Preservation**: Carry error context through recovery steps
+3. **Metric-Driven Branching**: Use multiple quality metrics for nuanced decisions
+4. **Accumulated State Tracking**: Reference outputs from multiple previous steps
+5. **Self-Documenting Templates**: Make conditional logic clear and maintainable
+
+**Performance Considerations**:
+- Template rendering: <50ms per step
+- Variable substitution: ~1ms per 100 variables
+- Conditionals: ~0.5ms per condition
+- Templates cached in production (configured in jsonUtils.ts)
+
+**What Nunjucks CANNOT Do** (requires execution engine):
+- ❌ Change which prompt executes next (static chain definition)
+- ❌ Loop the same step (no recursive execution)
+- ❌ Dynamically select from prompt library (no runtime routing)
+
+### Future Enhancements
+
+**Execution Engine Extensions** (beyond Nunjucks):
+- Dynamic step selection based on quality scores
+- Recursive step execution with quality thresholds
+- LLM-driven chain orchestration
+- Automatic quality gate enforcement
+
+**Reference**: See `/plans/nunjucks-dynamic-chain-orchestration.md` for comprehensive implementation strategy, patterns, and examples.
+
 ## Project Architecture
 
 ### Core System Structure

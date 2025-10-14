@@ -35,24 +35,10 @@
       ]
     },
     {
-      "id": "coding_solution_chain",
-      "name": "Coding Solution Chain",
-      "category": "development",
-      "description": "A comprehensive process that refines user coding requests and then provides expert implementation with explanations, best practices, and error handling.",
-      "file": "coding_solution_chain.md",
-      "arguments": [
-        {
-          "name": "query",
-          "description": "The user's initial coding request or problem statement",
-          "required": false
-        }
-      ]
-    },
-    {
       "id": "code_review_optimization_chain",
-      "name": "Code Review & Optimization Chain",
+      "name": "Comprehensive Code Review",
       "category": "development",
-      "description": "6-step comprehensive code review and optimization workflow chain",
+      "description": "Systematic 6-step code review covering structure, functionality, security, performance, optimization, and quality assurance",
       "file": "code_review_optimization_chain.md",
       "arguments": [
         {
@@ -68,30 +54,6 @@
         {
           "name": "performance_goals",
           "description": "Specific performance targets or optimization goals",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "project_analysis_step",
-      "name": "Project Analysis for Neural Workbench",
-      "category": "development",
-      "description": "Analyzes project directory to detect type, sophistication level, and characteristics for neural workbench initialization",
-      "file": "project_analysis_step.md",
-      "arguments": [
-        {
-          "name": "project_path",
-          "description": "Path to the project directory",
-          "required": true
-        },
-        {
-          "name": "project_name",
-          "description": "Override project name",
-          "required": false
-        },
-        {
-          "name": "force_project_type",
-          "description": "Force specific project type",
           "required": false
         }
       ]
@@ -146,112 +108,6 @@
           "name": "project_commands",
           "description": "JSON object with detected project commands",
           "required": true
-        }
-      ]
-    },
-    {
-      "id": "initialize_context_memory",
-      "name": "Context Memory System Initialization",
-      "category": "development",
-      "description": "Initializes the context memory system with working, episodic, semantic, and procedural memory files, plus neural workbench integration",
-      "file": "initialize_context_memory.md",
-      "arguments": [
-        {
-          "name": "project_path",
-          "description": "Path to the project directory",
-          "required": true
-        },
-        {
-          "name": "project_name",
-          "description": "Name of the project",
-          "required": true
-        },
-        {
-          "name": "project_type",
-          "description": "Type of project",
-          "required": true
-        },
-        {
-          "name": "architecture_level",
-          "description": "Architecture sophistication level 1-10",
-          "required": true
-        }
-      ]
-    },
-    {
-      "id": "validation_summary",
-      "name": "Neural Workbench Validation Summary",
-      "category": "development",
-      "description": "Validate neural workbench setup and provide comprehensive status report",
-      "file": "validation_summary.md",
-      "arguments": [
-        {
-          "name": "project_path",
-          "description": "Path to validate",
-          "required": true
-        },
-        {
-          "name": "generated_claude_md",
-          "description": "Status of CLAUDE.md generation",
-          "required": false
-        },
-        {
-          "name": "context_memory_setup",
-          "description": "Status of context memory",
-          "required": false
-        },
-        {
-          "name": "validation_setup",
-          "description": "Status of validation configuration",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "neural_workbench_init",
-      "name": "Neural Workbench Initialization",
-      "category": "development",
-      "description": "Initialize a project with neural workbench cognitive architecture and CAGEERF framework",
-      "file": "neural_workbench_init.md",
-      "arguments": [
-        {
-          "name": "project_path",
-          "description": "Path to the project to initialize",
-          "required": true
-        },
-        {
-          "name": "force_project_type",
-          "description": "Override auto-detection with specific type",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "split_file_chain",
-      "name": "Split File Chain",
-      "category": "development",
-      "description": "A systematic approach to refactoring large files into smaller, more maintainable modules following best practices for code organization and modular design.",
-      "file": "split_file_chain.md",
-      "arguments": [
-        {
-          "name": "file_content",
-          "description": "The content of the file to be split",
-          "required": true
-        },
-        {
-          "name": "language",
-          "description": "Programming language of the file",
-          "required": true
-        },
-        {
-          "name": "file_path",
-          "description": "Path to the original file",
-          "required": true
-        },
-        {
-          "name": "specific_focus",
-          "description": "Specific areas to focus on during refactoring",
-          "required": false
         }
       ]
     },
@@ -330,6 +186,44 @@
           "description": "The detailed plan for how to split the code",
           "required": true
         }
+      ]
+    },
+    {
+      "id": "test_temporary_gates",
+      "name": "Test Temporary Gates Implementation",
+      "category": "development",
+      "description": "Test prompt for validating the enhanced gate system with temporary gates. Demonstrates 5-level precedence, execution-scoped lifecycle management, and multiple gate types.",
+      "file": "test-temporary-gates.md",
+      "arguments": [
+        {
+          "name": "analysis_type",
+          "description": "Type of analysis to perform (e.g., 'technical specification', 'architectural design', 'implementation plan')",
+          "required": true
+        },
+        {
+          "name": "topic",
+          "description": "The main subject to analyze",
+          "required": true
+        },
+        {
+          "name": "content",
+          "description": "The content or scenario to analyze",
+          "required": true
+        },
+        {
+          "name": "focus_area",
+          "description": "Specific area to emphasize in the analysis",
+          "required": true
+        },
+        {
+          "name": "context",
+          "description": "The broader context or use case for the analysis",
+          "required": true
+        }
+      ],
+      "gates": [
+        "content-structure",
+        "technical-accuracy"
       ]
     }
   ]

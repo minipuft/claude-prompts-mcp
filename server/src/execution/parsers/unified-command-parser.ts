@@ -134,7 +134,7 @@ export class UnifiedCommandParser {
       },
       parse: (command: string): CommandParseResult | null => {
         // Enhanced regex to handle more natural command formats
-        const match = command.trim().match(/^(>>|\/)([a-zA-Z0-9_\-\s]+?)(?:\s+(.*?))?$/);
+        const match = command.trim().match(/^(>>|\/)([a-zA-Z0-9_\-\s]+?)(?:\s+([\s\S]*))?$/);
         if (!match) return null;
 
         const [, prefix, rawPromptId, rawArgs] = match;

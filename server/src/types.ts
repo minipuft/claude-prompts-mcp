@@ -121,18 +121,10 @@ export interface ToolDescriptionsOptions {
  * Configuration for gates subsystem
  */
 export interface GatesConfig {
-  /** Whether gates are enabled */
-  enabled: boolean;
   /** Directory containing gate definitions */
   definitionsDirectory: string;
   /** Directory containing LLM validation templates */
   templatesDirectory: string;
-  /** Default retry limit for failed validations */
-  defaultRetryLimit: number;
-  /** Whether to inject gate guidance into prompts */
-  enableGuidanceInjection: boolean;
-  /** Whether to perform gate validation */
-  enableValidation: boolean;
 }
 
 export interface Config {

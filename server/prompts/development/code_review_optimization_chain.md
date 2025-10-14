@@ -1,68 +1,71 @@
-# Code Review & Optimization Chain
+# Comprehensive Code Review
 
 ## Description
-6-step comprehensive code review and optimization workflow chain
+Systematic 6-step code review covering structure, functionality, security, performance, optimization, and quality assurance
 
 ## System Message
-You are an expert assistant providing structured, systematic analysis. Apply appropriate methodology and reasoning frameworks to deliver comprehensive responses.
+You are an expert code reviewer providing systematic, comprehensive analysis. Apply appropriate methodology (CAGEERF/ReACT) to deliver structured, evidence-based feedback with actionable recommendations.
 
 ## User Message Template
-# Code Review & Optimization Chain
-
-This is a comprehensive 6-step code review and optimization workflow chain.
+# Comprehensive Code Review
 
 **Target Code**: {{target_code}}
 **Language/Framework**: {{language_framework}}
 **Performance Goals**: {{performance_goals}}
 
-## Chain Execution Steps:
+This chain performs a systematic 6-step code review:
 
-### Step 1: Code Analysis & Structure Review
-Analyze the provided code for:
-- Code structure and organization
-- Naming conventions and readability
-- Design patterns and architectural decisions
-- Dependency management and coupling
-- Documentation completeness
+## Step 1: Structure & Organization Analysis
+Analyze code architecture, organization, patterns, naming conventions, documentation, and dependency management.
 
-### Step 2: Functionality & Logic Review
-Examine the code for:
-- Correctness of business logic
-- Edge case handling
-- Error handling and validation
-- Input/output processing
-- Algorithm efficiency
+**Output Required**: Structural assessment with identified patterns, coupling issues, and organization recommendations.
 
-### Step 3: Security & Best Practices Audit
-Review for security vulnerabilities and best practices:
-- Input validation and sanitization
-- Authentication and authorization
-- Data exposure risks
-- Injection vulnerabilities
-- Framework-specific security patterns
+---
 
-### Step 4: Performance Analysis
-Evaluate performance characteristics:
-- Time complexity analysis
-- Memory usage patterns
-- I/O operations efficiency
-- Caching opportunities
-- Database query optimization (if applicable)
+## Step 2: Functionality & Logic Review
+Examine business logic correctness, edge cases, error handling, input/output processing, and algorithm efficiency.
 
-### Step 5: Optimization Implementation
-Apply identified optimizations:
-- Refactor inefficient algorithms
-- Implement performance improvements
-- Add caching where beneficial
-- Optimize data structures
-- Reduce computational complexity
+**Output Required**: Logic validation with edge case analysis, error handling assessment, and correctness verification.
 
-### Step 6: Quality Assurance & Documentation
-Finalize with quality checks:
-- Code formatting and style consistency
-- Test coverage analysis
-- Documentation updates
-- Performance benchmarking
-- Final review summary with metrics
+---
 
-**Expected Output**: Optimized code with detailed analysis report, performance improvements, and quality metrics.
+## Step 3: Security & Best Practices Audit
+Review for security vulnerabilities: input validation, authentication/authorization, data exposure, injection risks, and framework-specific security patterns.
+
+**Output Required**: Security assessment with vulnerability identification, risk levels, and mitigation strategies.
+
+---
+
+## Step 4: Performance Analysis
+Evaluate time complexity, memory usage, I/O efficiency, caching opportunities, and database query optimization.
+
+**Output Required**: Performance metrics with complexity analysis, bottleneck identification, and optimization opportunities.
+
+---
+
+## Step 5: Optimization Implementation
+Apply identified optimizations: refactor algorithms, implement performance improvements, add caching, optimize data structures, reduce complexity.
+
+**Output Required**: Optimized code with documented changes, performance improvements, and refactoring rationale.
+
+---
+
+## Step 6: Quality Assurance & Documentation
+Finalize with: code formatting consistency, test coverage analysis, documentation updates, performance benchmarking, and summary with metrics.
+
+**Output Required**: Final review report with quality metrics, test coverage, performance benchmarks, and comprehensive summary.
+
+## Gate Configuration
+
+```json
+{
+  "include": [
+    "code-quality",
+    "research-quality",
+    "technical-accuracy",
+    "content-structure",
+    "security-awareness"
+  ],
+  "framework_gates": true
+}
+```
