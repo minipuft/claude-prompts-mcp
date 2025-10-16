@@ -1260,9 +1260,10 @@ export class ConsolidatedPromptEngine {
       this.promptsData
     );
 
-    // Find the matching prompt data and converted prompt
+    // Find the matching prompt data and converted prompt (case-insensitive lookup)
     const promptData = this.promptsData.find(
-      (p) => p.id === parseResult.promptId || p.name === parseResult.promptId
+      (p) => p.id.toLowerCase() === parseResult.promptId.toLowerCase() || 
+             (p.name && p.name.toLowerCase() === parseResult.promptId.toLowerCase())
     );
     if (!promptData) {
       throw new PromptError(

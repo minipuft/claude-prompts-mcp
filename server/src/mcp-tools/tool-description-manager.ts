@@ -57,7 +57,7 @@ export class ToolDescriptionManager extends EventEmitter {
   private createDefaults(): Map<string, ToolDescription> {
     return new Map([
       ['prompt_engine', {
-        description: '🚀 PROMPT ENGINE [HOT-RELOAD]: Processes Nunjucks templates, returns executable instructions. WARNING: Output contains instructions YOU must execute (code gen, analysis, multi-step tasks) - not just information. IMPORTANT: When your arguments include newlines or multi-line payloads, wrap the call in JSON so the parser receives a single-line command shell.',
+        description: '🚀 PROMPT ENGINE [HOT-RELOAD]: Processes Nunjucks templates, returns executable instructions. WARNING: Output contains instructions YOU must execute (code gen, analysis, multi-step tasks) - not just information. IMPORTANT: Prompt names are case-insensitive and hyphens are converted to underscores. When your arguments include newlines or multi-line payloads, wrap the call in JSON so the parser receives a single-line command shell.',
         shortDescription: 'Execute prompts, templates, and chains',
         category: 'execution'
       }],

@@ -7,7 +7,7 @@
       "shortDescription": "\ud83d\udd25 DYNAMICALLY UPDATED: Process prompt templates and return executable instructions",
       "category": "execution",
       "parameters": {
-        "command": "Prompt name and arguments to process. WARNING: Will return instructions for YOU to execute, not just information. SIMPLE: >>prompt_name content (single-line arguments only). MULTI-LINE / RICH FORMATTING: {\"command\": \">>prompt_name\", \"args\": {\"content\": \"...\", \"execution_mode\": \"template\"}} keeps payload intact. ADVANCED: JSON with execution options",
+        "command": "Prompt name and arguments to process. WARNING: Will return instructions for YOU to execute, not just information. SIMPLE: >>prompt_name arguments (case-insensitive, hyphens converted to underscores). MULTI-LINE / RICH FORMATTING: {\"command\": \">>prompt_name\", \"args\": {\"content\": \"...\", \"execution_mode\": \"template\"}} keeps payload intact. ADVANCED: JSON with execution options",
         "execution_mode": "Override intelligent auto-detection (default: auto)",
         "gate_validation": "Quality gate validation (MANDATORY for chains, auto-detected by default, see metadata sections for gate details)",
         "quality_gates": {

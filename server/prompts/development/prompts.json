@@ -225,6 +225,25 @@
         "content-structure",
         "technical-accuracy"
       ]
+    },
+    {
+      "id": "strategicImplement",
+      "name": "Strategic Implementation",
+      "category": "development",
+      "description": "Systematically implement a plan phase with architectural alignment, compatibility checking, and progress tracking",
+      "file": "strategicImplement.md",
+      "arguments": [
+        {
+          "name": "plan_path",
+          "type": "string",
+          "description": "Path to the plan document to implement (e.g., plans/current/feature-plan.md)"
+        },
+        {
+          "name": "phase_identifier",
+          "type": "string",
+          "description": "Specific phase to implement (e.g., 'Phase 1', 'Phase 2A', 'Step 3: Integration')"
+        }
+      ]
     }
   ]
 }

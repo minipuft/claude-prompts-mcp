@@ -139,11 +139,11 @@ export class UnifiedCommandParser {
 
         const [, prefix, rawPromptId, rawArgs] = match;
         
-        // Clean up prompt ID: convert spaces to underscores, normalize
+        // Clean up prompt ID: convert spaces and hyphens to underscores, normalize
         const promptId = rawPromptId.trim()
           .toLowerCase()
-          .replace(/\s+/g, '_')           // Spaces to underscores
-          .replace(/[^a-z0-9_-]/g, '')    // Remove invalid characters
+          .replace(/[\s-]+/g, '_')        // Spaces and hyphens to underscores
+          .replace(/[^a-z0-9_]/g, '')     // Remove invalid characters (except underscores)
           .replace(/_+/g, '_')            // Collapse multiple underscores
           .replace(/^_|_$/g, '');         // Trim leading/trailing underscores
 
@@ -320,7 +320,11 @@ export class UnifiedCommandParser {
       return; // Built-in commands are valid and will be routed by the prompt engine
     }
 
-    const found = availablePrompts.find(p => p.id === promptId || p.name === promptId);
+    // Use case-insensitive matching to find the prompt
+    const found = availablePrompts.find(p => 
+      p.id.toLowerCase() === promptId.toLowerCase() || 
+      p.name?.toLowerCase() === promptId.toLowerCase()
+    );
     if (!found) {
       const suggestions = this.generatePromptSuggestions(promptId, availablePrompts);
       const builtinHint = this.getBuiltinCommandHint(promptId);
@@ -414,19 +418,33 @@ export class UnifiedCommandParser {
   private generateHelpfulError(command: string, availablePrompts: PromptData[]): string {
     let message = `Could not parse command: "${command}"\n\n`;
     
-    message += 'Supported command formats (STREAMLINED):\n';
+    message += 'Supported command formats:\n';
     message += '• Simple: >>prompt_name arguments\n';
     message += '• Simple: /prompt_name arguments\n';
-    message += '• JSON: {"command": ">>prompt_name", "args": "arguments"}\n\n';
+    message += '• JSON: {"command": ">>prompt_name", "args": "arguments"}\n';
+    message += '• JSON: {"command": ">>prompt_name", "args": {"key": "value"}}\n\n';
     
-    // Try to give specific suggestions
+    // Try to give specific suggestions based on command analysis
     if (command.includes('>>') || command.includes('/')) {
-      message += 'Make sure the prompt name contains only letters, numbers, underscores, and hyphens.\n';
+      const promptMatch = command.match(/^(>>|\/)([a-zA-Z0-9_\-]+)/);
+      if (promptMatch) {
+        const promptName = promptMatch[2];
+        message += `Prompt name "${promptName}" not found. `;
+        message += 'Prompt names are case-insensitive.\n\n';
+        
+        // Show some available prompts as examples
+        const examplePrompts = availablePrompts.slice(0, 5).map(p => p.id).join(', ');
+        message += `Available prompts include: ${examplePrompts}...\n\n`;
+      } else {
+        message += 'Invalid prompt name format. Use letters, numbers, underscores, and hyphens only.\n\n';
+      }
     } else if (command.startsWith('{')) {
-      message += 'JSON format detected but could not parse. Check JSON syntax.\n';
+      message += 'JSON format detected but could not parse. Check JSON syntax and structure.\n\n';
+    } else {
+      message += 'Command format not recognized. Use >>prompt_name or /prompt_name format.\n\n';
     }
     
-    message += '\nUse >>listprompts to see all available prompts.';
+    message += 'Use >>listprompts to see all available prompts, or >>help for assistance.';
     
     return message;
   }
