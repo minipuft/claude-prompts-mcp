@@ -180,8 +180,18 @@ export class StructuredResponseBuilder {
       category?: string;
       analysisResult?: any;
       affectedFiles?: string[];
-    }
+    },
+    includeStructuredContent: boolean = false
   ): ToolResponse {
+    // Return simple text response by default for Claude Code visibility
+    if (!includeStructuredContent) {
+      return {
+        content: [{ type: "text", text: content }],
+        isError: false
+      };
+    }
+
+    // Include structured metadata when explicitly requested
     return this.createToolResponse(content, {
       tool: "prompt_manager",
       operation,
@@ -209,8 +219,18 @@ export class StructuredResponseBuilder {
       stepsExecuted?: number;
       sessionId?: string;
       gateResults?: any;
-    }
+    },
+    includeStructuredContent: boolean = true
   ): ToolResponse {
+    // For template/prompt execution, return simple text response so Claude Code can see instructions
+    if (!includeStructuredContent) {
+      return {
+        content: [{ type: "text", text: content }],
+        isError: false
+      };
+    }
+
+    // For other operations (chains, etc.), include full structured metadata
     return this.createToolResponse(content, {
       tool: "prompt_engine",
       operation,
@@ -235,8 +255,18 @@ export class StructuredResponseBuilder {
       systemHealth?: any;
       configChanges?: any;
       analytics?: any;
-    }
+    },
+    includeStructuredContent: boolean = false
   ): ToolResponse {
+    // Return simple text response by default for Claude Code visibility
+    if (!includeStructuredContent) {
+      return {
+        content: [{ type: "text", text: content }],
+        isError: false
+      };
+    }
+
+    // Include structured metadata when explicitly requested
     return this.createToolResponse(content, {
       tool: "system_control",
       operation,
@@ -273,9 +303,10 @@ export function createPromptResponse(
     category?: string;
     analysisResult?: any;
     affectedFiles?: string[];
-  }
+  },
+  includeStructuredContent: boolean = false
 ): ToolResponse {
-  return StructuredResponseBuilder.createPromptResponse(content, operation, promptData);
+  return StructuredResponseBuilder.createPromptResponse(content, operation, promptData, includeStructuredContent);
 }
 
 export function createExecutionResponse(
@@ -288,9 +319,10 @@ export function createExecutionResponse(
     stepsExecuted?: number;
     sessionId?: string;
     gateResults?: any;
-  }
+  },
+  includeStructuredContent: boolean = true
 ): ToolResponse {
-  return StructuredResponseBuilder.createExecutionResponse(content, operation, executionData);
+  return StructuredResponseBuilder.createExecutionResponse(content, operation, executionData, includeStructuredContent);
 }
 
 export function createSystemResponse(
@@ -301,7 +333,8 @@ export function createSystemResponse(
     systemHealth?: any;
     configChanges?: any;
     analytics?: any;
-  }
+  },
+  includeStructuredContent: boolean = false
 ): ToolResponse {
-  return StructuredResponseBuilder.createSystemResponse(content, operation, systemData);
+  return StructuredResponseBuilder.createSystemResponse(content, operation, systemData, includeStructuredContent);
 }

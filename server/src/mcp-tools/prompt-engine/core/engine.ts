@@ -112,17 +112,23 @@ function createSimpleResponseFormatter(): SimpleResponseFormatter {
       const executionContext = args[0] || {};
       const options = args[1] || {};
 
+      // For template/prompt execution, return simple text so Claude Code can see instructions
+      // For chain execution, keep structured content for state tracking
+      const executionType = executionContext.executionType || "prompt";
+      const includeStructuredContent = executionType === "chain";
+
       return createExecutionResponse(
         String(response),
         "execute",
         {
-          executionType: executionContext.executionType || "prompt",
+          executionType,
           executionTime: executionContext.executionTime,
           frameworkUsed: executionContext.frameworkUsed,
           stepsExecuted: executionContext.stepsExecuted,
           sessionId: executionContext.sessionId,
           gateResults: executionContext.gateResults
-        }
+        },
+        includeStructuredContent
       );
     },
     formatErrorResponse: (error: any, ...args: any[]) => {

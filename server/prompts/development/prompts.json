@@ -244,6 +244,35 @@
           "description": "Specific phase to implement (e.g., 'Phase 1', 'Phase 2A', 'Step 3: Integration')"
         }
       ]
+    },
+    {
+      "id": "component_flow_analysis",
+      "name": "Component Flow Analysis",
+      "category": "development",
+      "description": "Comprehensive component review that tracks data flow, lifecycle, dependencies, and integration points",
+      "file": "component_flow_analysis.md",
+      "arguments": [
+        {
+          "name": "component_path",
+          "type": "string",
+          "description": "Path to the component file (e.g., src/components/UserProfile.tsx)"
+        },
+        {
+          "name": "component_code",
+          "type": "string",
+          "description": "The complete component source code to analyze"
+        },
+        {
+          "name": "framework",
+          "type": "string",
+          "description": "Framework being used (React, Vue, Angular, Svelte, etc.)"
+        },
+        {
+          "name": "language",
+          "type": "string",
+          "description": "Programming language (JavaScript, TypeScript, etc.)"
+        }
+      ]
     }
   ]
 }
