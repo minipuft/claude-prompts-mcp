@@ -43,10 +43,6 @@ export {
 } from "./processors/template-processor.js";
 
 export {
-  ArgumentParser,
-} from "./processors/argument-parser.js";
-
-export {
   ResponseFormatter,
 } from "./processors/response-formatter.js";
 

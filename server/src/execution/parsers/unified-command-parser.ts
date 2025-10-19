@@ -110,14 +110,12 @@ export class UnifiedCommandParser {
   }
 
   /**
-   * Initialize parsing strategies (STREAMLINED: Reduced from 4 to 2 strategies)
+   * Initialize parsing strategies (STREAMLINED: 2 core strategies)
    */
   private initializeStrategies(): ParsingStrategy[] {
     return [
       this.createSimpleCommandStrategy(),
       this.createJsonCommandStrategy()
-      // Removed: createStructuredCommandStrategy() - too complex
-      // Removed: createLegacyCommandStrategy() - unreliable
     ];
   }
 
@@ -226,90 +224,6 @@ export class UnifiedCommandParser {
     };
   }
 
-  /**
-   * Structured command strategy: prompt_name {args...}
-   */
-  private createStructuredCommandStrategy(): ParsingStrategy {
-    return {
-      name: 'structured',
-      confidence: 0.7,
-      canHandle: (command: string) => {
-        return /^[a-zA-Z0-9_-]+\s*\{.*\}$/.test(command.trim());
-      },
-      parse: (command: string): CommandParseResult | null => {
-        const match = command.match(/^([a-zA-Z0-9_-]+)\s*(\{.*\})$/);
-        if (!match) return null;
-
-        const [, promptId, jsonArgs] = match;
-        
-        return {
-          promptId: promptId.trim(),
-          rawArgs: jsonArgs.trim(),
-          format: 'structured',
-          confidence: 0.75,
-          metadata: {
-            originalCommand: command,
-            parseStrategy: 'structured',
-            detectedFormat: 'prompt_name {json_args}',
-            warnings: []
-          }
-        };
-      }
-    };
-  }
-
-  /**
-   * Legacy command strategy: fallback for unusual formats
-   */
-  private createLegacyCommandStrategy(): ParsingStrategy {
-    return {
-      name: 'legacy',
-      confidence: 0.3,
-      canHandle: (command: string) => {
-        // Always can handle as last resort
-        return true;
-      },
-      parse: (command: string): CommandParseResult | null => {
-        // Try to extract anything that looks like a prompt ID
-        const words = command.trim().split(/\s+/);
-        if (words.length === 0) return null;
-
-        // Look for the first word that could be a prompt ID
-        let promptId = '';
-        let rawArgs = '';
-
-        for (let i = 0; i < words.length; i++) {
-          const word = words[i].replace(/^(>>|\/)+/, ''); // Remove prefixes
-          if (/^[a-zA-Z0-9_-]+$/.test(word)) {
-            promptId = word;
-            rawArgs = words.slice(i + 1).join(' ');
-            break;
-          }
-        }
-
-        if (!promptId) {
-          // Last resort: use first word
-          promptId = words[0].replace(/^(>>|\/)+/, '');
-          rawArgs = words.slice(1).join(' ');
-        }
-
-        const warnings = ['Command format not recognized, using legacy parsing'];
-        
-        return {
-          promptId,
-          rawArgs,
-          format: 'legacy',
-          confidence: 0.4,
-          metadata: {
-            originalCommand: command,
-            parseStrategy: 'legacy',
-            detectedFormat: 'legacy fallback parsing',
-            warnings
-          }
-        };
-      }
-    };
-  }
 
   /**
    * Validate that the prompt ID exists in available prompts
