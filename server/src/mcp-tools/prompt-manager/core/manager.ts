@@ -266,8 +266,8 @@ export class ConsolidatedPromptManager {
       if (promptData.gateConfiguration.temporary_gates) {
         response += `- Temporary Gates: ${promptData.gateConfiguration.temporary_gates.length} defined\n`;
       }
-    } else {
-      // Suggest gate configuration for prompts without gates
+    } else if (this.semanticAnalyzer.isLLMEnabled()) {
+      // Suggest gate configuration for prompts without gates (only when API analysis is enabled)
       try {
         const gateAnalysis = await this.gateAnalyzer.analyzePromptForGates({
           id: promptData.id,
