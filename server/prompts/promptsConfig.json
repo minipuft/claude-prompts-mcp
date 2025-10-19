@@ -39,6 +39,11 @@
       "id": "general",
       "name": "general",
       "description": "Prompts related to general"
+    },
+    {
+      "id": "testing",
+      "name": "testing",
+      "description": "Prompts related to testing"
     }
   ],
   "prompts": [],
@@ -50,6 +55,7 @@
     "debugging/prompts.json",
     "content_processing/prompts.json",
     "architecture/prompts.json",
-    "general/prompts.json"
+    "general/prompts.json",
+    "testing/prompts.json"
   ]
 }

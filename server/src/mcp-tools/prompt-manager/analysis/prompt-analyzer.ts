@@ -41,38 +41,27 @@ export class PromptAnalyzer {
 
     const classification = await this.analyzePrompt(tempPrompt);
 
-    // Build analysis-aware feedback showing current capabilities
+    // When API Analysis is disabled, show minimal message with no gate suggestions
+    if (!this.semanticAnalyzer.isLLMEnabled()) {
+      return {
+        classification,
+        feedback: `⚠️ API Analysis Disabled\n`,
+        suggestions: []
+      };
+    }
+
+    // Normal mode: show concise single-line format with type and suggested gates
     const analysisIcon = this.getAnalysisIcon(classification.analysisMode || classification.framework);
     let feedback = `${analysisIcon} ${classification.executionType}`;
 
-    // Add gates info if present
+    // Add suggested gates if present
     if (classification.suggestedGates.length > 0) {
-      feedback += ` • gates: ${classification.suggestedGates.slice(0, 2).join(', ')}`;
+      feedback += ` • Suggested gates: ${classification.suggestedGates.join(', ')}`;
     }
     feedback += '\n';
 
-    // Analysis status line (show what analysis is actually doing)
-    if (classification.analysisMode === 'disabled' || classification.framework === 'disabled') {
-      feedback += `⚠️ Semantic analysis disabled - using basic structure detection\n`;
-    } else if (classification.analysisMode === 'structural') {
-      feedback += `🔧 Structural analysis mode - no semantic understanding\n`;
-    } else if (classification.analysisMode === 'fallback' || classification.framework === 'fallback') {
-      feedback += `🚨 Analysis failed - using fallback detection\n`;
-    }
-
-    // Show key limitations if present
-    const importantLimitations = classification.limitations?.filter(l =>
-      l.includes('disabled') || l.includes('No semantic') || l.includes('Framework recommendation unavailable')) || [];
-
-    if (importantLimitations.length > 0) {
-      const shortLimitation = importantLimitations[0].length > 50
-        ? importantLimitations[0].substring(0, 47) + '...'
-        : importantLimitations[0];
-      feedback += `⚠️ ${shortLimitation}\n`;
-    }
-
-    // Generate capability-aware suggestions
-    const suggestions = this.generateSuggestions(classification);
+    // Generate capability-aware suggestions (empty for now in concise mode)
+    const suggestions: string[] = [];
 
     return { classification, feedback, suggestions };
   }
@@ -197,7 +186,7 @@ export class PromptAnalyzer {
   private generateSuggestions(classification: PromptClassification): string[] {
     const suggestions: string[] = [];
 
-    if (classification.analysisMode === 'disabled' || classification.framework === 'disabled') {
+    if (!this.semanticAnalyzer.isLLMEnabled()) {
       suggestions.push("💡 Enable semantic analysis for enhanced capabilities");
       suggestions.push("🎯 Framework recommendation unavailable");
     } else if (classification.analysisMode === 'structural') {

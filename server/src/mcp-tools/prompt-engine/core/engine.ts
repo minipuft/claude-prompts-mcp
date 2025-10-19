@@ -1429,10 +1429,8 @@ export class ConsolidatedPromptEngine {
   private async analyzePrompt(
     prompt: ConvertedPrompt
   ): Promise<PromptClassification> {
-    // Check if semantic analysis is enabled via the analyzer's config
-    const analysisConfig = this.semanticAnalyzer.getConfig();
-
-    if (!analysisConfig.llmIntegration.enabled) {
+    // Check if semantic analysis is enabled via the analyzer
+    if (!this.semanticAnalyzer.isLLMEnabled()) {
       this.logger.debug(
         `Semantic analysis disabled for ${prompt.id} - using structural fallback`
       );

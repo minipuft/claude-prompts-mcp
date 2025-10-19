@@ -273,6 +273,48 @@
           "description": "Programming language (JavaScript, TypeScript, etc.)"
         }
       ]
+    },
+    {
+      "id": "test_concise_format",
+      "name": "Test Concise Format",
+      "category": "development",
+      "description": "Testing the new concise message format",
+      "file": "test_concise_format.md",
+      "arguments": [
+        {
+          "name": "test_param",
+          "type": "string",
+          "description": "Test parameter"
+        }
+      ]
+    },
+    {
+      "id": "test_concise_v2",
+      "name": "Test Concise Format V2",
+      "category": "development",
+      "description": "Testing the simplified concise message format after restart",
+      "file": "test_concise_v2.md",
+      "arguments": [
+        {
+          "name": "input",
+          "type": "string",
+          "description": "Test input"
+        }
+      ]
+    },
+    {
+      "id": "test_final_concise",
+      "name": "Test Final Concise Format",
+      "category": "development",
+      "description": "Final test of concise message format with isLLMEnabled() fix",
+      "file": "test_final_concise.md",
+      "arguments": [
+        {
+          "name": "test_input",
+          "type": "string",
+          "description": "Test input parameter"
+        }
+      ]
     }
   ]
 }

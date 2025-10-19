@@ -156,6 +156,13 @@ export class ContentAnalyzer {
   }
 
   /**
+   * Check if LLM integration is enabled
+   */
+  isLLMEnabled(): boolean {
+    return this.config.llmIntegration.enabled;
+  }
+
+  /**
    * Main analysis method - mode-aware with honest limitations
    */
   async analyzePrompt(prompt: ConvertedPrompt): Promise<ContentAnalysisResult> {
@@ -241,7 +248,7 @@ export class ContentAnalyzer {
     startTime: number
   ): Promise<ContentAnalysisResult> {
     // Try LLM integration
-    if (this.config.llmIntegration.enabled && this.llmClient) {
+    if (this.isLLMEnabled() && this.llmClient) {
       try {
         return await this.performLLMAnalysis(prompt, startTime);
       } catch (error) {
