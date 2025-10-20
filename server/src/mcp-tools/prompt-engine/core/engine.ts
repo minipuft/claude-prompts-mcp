@@ -89,6 +89,16 @@ import {
   type ExecutionContext,
   type ParsingSystem,
 } from "../../../execution/parsers/index.js";
+import type {
+  SymbolicCommandParseResult,
+  FrameworkOperator,
+  GateOperator,
+} from "../../../execution/parsers/types/operator-types.js";
+import {
+  ChainOperatorExecutor,
+  GateOperatorExecutor,
+  FrameworkOperatorExecutor,
+} from "../../../execution/operators/index.js";
 // REMOVED: Dynamic template discovery - scaffolding system deprecated
 // Tool description manager
 import { ToolDescriptionManager } from "../../tool-description-manager.js";
@@ -185,6 +195,17 @@ interface ToolRoutingResult {
   originalCommand?: string;
 }
 
+interface SymbolicExecutionContext {
+  parseResult: SymbolicCommandParseResult;
+  stepPrompts: Array<{
+    stepNumber: number;
+    promptId: string;
+    promptData: PromptData;
+    convertedPrompt?: ConvertedPrompt;
+    args: string;
+  }>;
+}
+
 /**
  * Consolidated Prompt Engine Tool
  */
@@ -215,6 +236,9 @@ export class ConsolidatedPromptEngine {
   private gateSelectionEngine?: GateSelectionEngine;
   // Chain execution delegation
   private chainExecutor?: ChainExecutor;
+  private chainOperatorExecutor?: ChainOperatorExecutor;
+  private gateOperatorExecutor: GateOperatorExecutor;
+  private frameworkOperatorExecutor?: FrameworkOperatorExecutor;
   // REMOVED: chainOrchestrator - modular chain system removed
   // Chain URI addressing system
   // REMOVED: chainAddressingSystem - deprecated with markdown-embedded chains
@@ -326,6 +350,10 @@ export class ConsolidatedPromptEngine {
     // Initialize EngineValidator with gate system (Phase 1.1 fix)
     this.engineValidator = new EngineValidator(this.lightweightGateSystem);
 
+    // Initialize symbolic operator executors
+    this.gateOperatorExecutor = new GateOperatorExecutor(this.lightweightGateSystem, this.logger);
+    this.chainOperatorExecutor = new ChainOperatorExecutor(this.logger);
+
     // Phase 4: Initialize clean architecture gate intelligence
     this.gateSelectionEngine = createGateSelectionEngine(logger);
 
@@ -362,6 +390,7 @@ export class ConsolidatedPromptEngine {
    */
   setFrameworkStateManager(frameworkStateManager: FrameworkStateManager): void {
     this.frameworkStateManager = frameworkStateManager;
+    this.frameworkOperatorExecutor = new FrameworkOperatorExecutor(frameworkStateManager, this.logger);
     this.initializeChainExecutor();
   }
 
@@ -629,6 +658,17 @@ export class ConsolidatedPromptEngine {
       );
     }
 
+    if (executionContext.symbolicExecution) {
+      return await this.executeSymbolicCommand(
+        executionContext.symbolicExecution,
+        {
+          command,
+          gate_validation,
+          options,
+        }
+      );
+    }
+
     // Determine execution strategy
     const strategy = await this.determineExecutionStrategy(
       executionContext.convertedPrompt,
@@ -672,7 +712,22 @@ export class ConsolidatedPromptEngine {
       isChainManagement,
       chainAction,
       chainParameters,
+      symbolicExecution,
     } = await this.parseCommandUnified(command);
+
+    if (symbolicExecution) {
+      return {
+        promptId,
+        promptArgs,
+        convertedPrompt: undefined,
+        originalPrompt: undefined,
+        guidanceResult: undefined,
+        isChainManagement,
+        chainAction,
+        chainParameters,
+        symbolicExecution,
+      };
+    }
 
     // Apply prompt guidance if available and not a chain management command
     let enhancedPrompt = convertedPrompt;
@@ -727,7 +782,88 @@ export class ConsolidatedPromptEngine {
       isChainManagement,
       chainAction,
       chainParameters,
+      symbolicExecution: undefined,
     };
+  }
+
+  private async executeSymbolicCommand(
+    symbolicExecution: SymbolicExecutionContext,
+    context: {
+      command: string;
+      gate_validation?: boolean;
+      options?: Record<string, any>;
+    }
+  ): Promise<ToolResponse> {
+    if (!this.chainOperatorExecutor) {
+      this.chainOperatorExecutor = new ChainOperatorExecutor(this.logger);
+    }
+
+    const { parseResult, stepPrompts } = symbolicExecution;
+
+    const executePlan = async () =>
+      await this.chainOperatorExecutor!.execute({
+        command: context.command,
+        steps: parseResult.executionPlan.steps,
+        stepPrompts: stepPrompts.map((step) => ({
+          stepNumber: step.stepNumber,
+          promptId: step.promptId,
+          args: step.args,
+        })),
+      });
+
+    const frameworkOp = parseResult.operators?.operators.find(
+      (op): op is FrameworkOperator => op.type === "framework"
+    );
+
+    let response = await (async () => {
+      if (frameworkOp && this.frameworkOperatorExecutor) {
+        return await this.frameworkOperatorExecutor.executeWithFramework(
+          frameworkOp,
+          executePlan
+        );
+      }
+
+      if (frameworkOp && !this.frameworkOperatorExecutor) {
+        this.logger.warn(
+          "Framework operator detected but framework state manager is unavailable; executing without override"
+        );
+      }
+
+      return await executePlan();
+    })();
+
+    const gateOp = parseResult.operators?.operators.find(
+      (op): op is GateOperator => op.type === "gate"
+    );
+
+    if (gateOp && context.gate_validation !== false) {
+      const gateResult = await this.gateOperatorExecutor.execute({
+        gate: gateOp,
+        executionResult: response,
+        executionId: `symbolic_${Date.now()}`,
+      });
+
+      const metadata = (response as any).metadata || {};
+      const failedGates = gateResult.gateResults.filter((result: any) => !result.passed);
+      const passedGates = gateResult.gateResults.filter((result: any) => result.passed);
+
+      metadata.gateValidation = {
+        enabled: true,
+        passed: gateResult.passed,
+        totalGates: gateResult.gateResults.length,
+        failedGates,
+        passedGates,
+        executionTime: 0,
+        retryCount: gateResult.retryRequired ? 1 : 0,
+      };
+
+      (response as any).metadata = metadata;
+      if ((response as any).structuredContent) {
+        (response as any).structuredContent.gateValidation = metadata.gateValidation;
+      }
+    }
+
+    return response;
   }
 
   /**
@@ -1240,10 +1376,20 @@ export class ConsolidatedPromptEngine {
   private async parseCommandUnified(command: string): Promise<{
     promptId: string;
     arguments: Record<string, any>;
-    convertedPrompt: ConvertedPrompt;
+    convertedPrompt?: ConvertedPrompt;
     isChainManagement?: boolean;
     chainAction?: string;
     chainParameters?: Record<string, any>;
+    symbolicExecution?: {
+      parseResult: SymbolicCommandParseResult;
+      stepPrompts: Array<{
+        stepNumber: number;
+        promptId: string;
+        promptData: PromptData;
+        convertedPrompt?: ConvertedPrompt;
+        args: string;
+      }>;
+    };
   }> {
     // Phase 1: Smart chain management command detection
     if (this.chainExecutor) {
@@ -1266,9 +1412,60 @@ export class ConsolidatedPromptEngine {
       this.promptsData
     );
 
+    if (parseResult.format === 'symbolic' && parseResult.executionPlan && parseResult.operators) {
+      const symbolicParse = parseResult as SymbolicCommandParseResult;
+      const stepPrompts: Array<{
+        stepNumber: number;
+        promptId: string;
+        promptData: PromptData;
+        convertedPrompt?: ConvertedPrompt;
+        args: string;
+      }> = [];
+
+      for (const step of symbolicParse.executionPlan.steps) {
+        if (!step.promptId) {
+          continue;
+        }
+
+        const promptData = this.promptsData.find(
+          (p) =>
+            p.id.toLowerCase() === step.promptId!.toLowerCase() ||
+            (p.name && p.name.toLowerCase() === step.promptId!.toLowerCase())
+        );
+
+        if (!promptData) {
+          throw new PromptError(
+            `Unknown prompt referenced in symbolic command: "${step.promptId}"`
+          );
+        }
+
+        const convertedPrompt = this.convertedPrompts.find(
+          (p) => p.id === promptData.id
+        );
+
+        stepPrompts.push({
+          stepNumber: step.stepNumber,
+          promptId: promptData.id,
+          promptData,
+          convertedPrompt,
+          args: step.args || '',
+        });
+      }
+
+      return {
+        promptId: symbolicParse.promptId,
+        arguments: {},
+        convertedPrompt: undefined,
+        symbolicExecution: {
+          parseResult: symbolicParse,
+          stepPrompts,
+        },
+      };
+    }
+
     // Find the matching prompt data and converted prompt (case-insensitive lookup)
     const promptData = this.promptsData.find(
-      (p) => p.id.toLowerCase() === parseResult.promptId.toLowerCase() || 
+      (p) => p.id.toLowerCase() === parseResult.promptId.toLowerCase() ||
              (p.name && p.name.toLowerCase() === parseResult.promptId.toLowerCase())
     );
     if (!promptData) {

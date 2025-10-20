@@ -14,6 +14,12 @@
 import { Logger } from "../../logging/index.js";
 import { PromptData } from "../../types/index.js";
 import { ValidationError, PromptError, safeJsonParse } from "../../utils/index.js";
+import { SymbolicCommandParser, createSymbolicCommandParser } from "./symbolic-command-parser.js";
+import type {
+  ExecutionPlan,
+  OperatorDetectionResult,
+  SymbolicCommandParseResult,
+} from "./types/operator-types.js";
 
 /**
  * Command parsing result with metadata
@@ -21,7 +27,7 @@ import { ValidationError, PromptError, safeJsonParse } from "../../utils/index.j
 export interface CommandParseResult {
   promptId: string;
   rawArgs: string;
-  format: 'simple' | 'json' | 'structured' | 'legacy';
+  format: 'simple' | 'json' | 'structured' | 'legacy' | 'symbolic';
   confidence: number;
   metadata: {
     originalCommand: string;
@@ -29,6 +35,8 @@ export interface CommandParseResult {
     detectedFormat: string;
     warnings: string[];
   };
+  operators?: OperatorDetectionResult;
+  executionPlan?: ExecutionPlan;
 }
 
 /**
@@ -47,6 +55,7 @@ interface ParsingStrategy {
 export class UnifiedCommandParser {
   private logger: Logger;
   private strategies: ParsingStrategy[];
+  private symbolicParser: SymbolicCommandParser;
   
   // Parsing statistics for monitoring
   private stats = {
@@ -59,6 +68,7 @@ export class UnifiedCommandParser {
 
   constructor(logger: Logger) {
     this.logger = logger;
+    this.symbolicParser = createSymbolicCommandParser(logger);
     this.strategies = this.initializeStrategies();
     this.logger.debug(`UnifiedCommandParser initialized with ${this.strategies.length} parsing strategies`);
   }
@@ -114,9 +124,40 @@ export class UnifiedCommandParser {
    */
   private initializeStrategies(): ParsingStrategy[] {
     return [
+      this.createSymbolicCommandStrategy(),
       this.createSimpleCommandStrategy(),
       this.createJsonCommandStrategy()
     ];
+  }
+
+  private createSymbolicCommandStrategy(): ParsingStrategy {
+    return {
+      name: 'symbolic',
+      confidence: 0.97,
+      canHandle: (command: string) => {
+        return /-->|=\s*["']|^@[A-Za-z0-9_-]+|\+|\?/.test(command);
+      },
+      parse: (command: string): SymbolicCommandParseResult | null => {
+        const operators = this.symbolicParser.detectOperators(command);
+        if (!operators.hasOperators) {
+          return null;
+        }
+
+        let cleanCommand = command.replace(/^@[A-Za-z0-9_-]+\s+/, '');
+        cleanCommand = cleanCommand.replace(/\s*=\s*["'].+?["']\s*$/, '');
+
+        const baseSegment = cleanCommand.split(/-->|\+|\?/)[0]?.trim() ?? '';
+        const firstPromptMatch = baseSegment.match(/^(?:>>)?([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
+        if (!firstPromptMatch) {
+          return null;
+        }
+
+        const basePromptId = firstPromptMatch[1];
+        const baseArgs = (firstPromptMatch[2] ?? '').trim();
+
+        return this.symbolicParser.buildParseResult(command, operators, basePromptId, baseArgs);
+      }
+    };
   }
 
   /**
