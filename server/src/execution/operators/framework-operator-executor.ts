@@ -25,17 +25,17 @@ export class FrameworkOperatorExecutor {
 
   private async applyFramework(operator: FrameworkOperator): Promise<void> {
     const currentFramework = this.frameworkStateManager.getActiveFramework();
-    this.originalFramework = currentFramework?.frameworkId ?? null;
+    this.originalFramework = currentFramework?.id ?? null;
 
     this.logger.info("[SymbolicFramework] Applying temporary framework", {
       framework: operator.normalizedId,
       previous: this.originalFramework,
     });
 
-    await this.frameworkStateManager.switchFramework(
-      operator.normalizedId,
-      "Symbolic command framework override",
-    );
+    await this.frameworkStateManager.switchFramework({
+      targetFramework: operator.normalizedId,
+      reason: "Symbolic command framework override",
+    });
   }
 
   private async restoreFramework(): Promise<void> {
@@ -47,10 +47,10 @@ export class FrameworkOperatorExecutor {
       framework: this.originalFramework,
     });
 
-    await this.frameworkStateManager.switchFramework(
-      this.originalFramework,
-      "Restoring framework after symbolic execution",
-    );
+    await this.frameworkStateManager.switchFramework({
+      targetFramework: this.originalFramework,
+      reason: "Restoring framework after symbolic execution",
+    });
 
     this.originalFramework = null;
   }

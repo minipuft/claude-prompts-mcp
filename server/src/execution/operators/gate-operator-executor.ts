@@ -23,11 +23,12 @@ export class GateOperatorExecutor {
 
     const gateDefinition = {
       name: `inline_gate_${Date.now()}`,
-      type: "quality",
+      type: "quality" as const,
       scope: gate.scope,
       description: `Inline validation criteria: ${gate.criteria}`,
       guidance: this.generateGuidance(gate.parsedCriteria),
       pass_criteria: gate.parsedCriteria,
+      source: "automatic" as const,
     };
 
     this.logger.debug("[SymbolicGate] Registering temporary gate", {
@@ -35,12 +36,32 @@ export class GateOperatorExecutor {
       executionId,
     });
 
-    const gateId = await this.gateSystem.registerTemporaryGate(
+    const gateId = await this.gateSystem.createTemporaryGate(
       gateDefinition,
       executionId,
     );
 
-    const results = await this.gateSystem.evaluateGates([gateId], executionResult);
+    if (!gateId) {
+      this.logger.error("[SymbolicGate] Failed to create temporary gate");
+      return {
+        passed: false,
+        gateResults: [],
+        retryRequired: false,
+      };
+    }
+
+    const contentString =
+      typeof executionResult === "string"
+        ? executionResult
+        : JSON.stringify(executionResult);
+
+    const results = await this.gateSystem.validateContent(
+      [gateId],
+      contentString,
+      {
+        metadata: { executionId },
+      },
+    );
 
     const passed = results.every((result: any) => result.passed);
     const retryRequired = !passed && gate.retryOnFailure && gate.maxRetries > 0;
