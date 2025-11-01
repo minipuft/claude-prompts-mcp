@@ -9,11 +9,11 @@ async function runSemanticAnalyzerTests() {
     console.log('🧪 Running Semantic Analyzer unit tests...');
     console.log('📋 Testing prompt classification and analysis functionality');
 
-    // Import modules - use configurable semantic analyzer which exists
-    const semanticModule = await import('../../dist/analysis/configurable-semantic-analyzer.js');
+    // Import modules - use content analyzer which exists
+    const semanticModule = await import('../../dist/semantic/configurable-semantic-analyzer.js');
 
-    // Get SemanticAnalyzer from available exports
-    const ConfigurableSemanticAnalyzer = semanticModule.ConfigurableSemanticAnalyzer;
+    // Get ContentAnalyzer from available exports
+    const ContentAnalyzer = semanticModule.ContentAnalyzer;
 
     // Mock logger
     const mockLogger = {
@@ -27,8 +27,11 @@ async function runSemanticAnalyzerTests() {
 
     // Setup for each test
     function setupTest() {
-      analyzer = new ConfigurableSemanticAnalyzer(mockLogger, {
-        enableCaching: false // Disable caching for consistent testing
+      analyzer = new ContentAnalyzer(mockLogger, {
+        mode: 'structural', // Use structural mode for testing
+        llmIntegration: {
+          enabled: false
+        }
       });
     }
 

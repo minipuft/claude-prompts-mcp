@@ -90,7 +90,7 @@ function validateSystemConsolidation() {
       name: "Consolidated MCP Tools",
       files: [
         "mcp-tools/prompt-engine/core/engine.ts",
-        "mcp-tools/prompt-manager.ts",
+        "mcp-tools/prompt-manager/core/manager.ts",
         "mcp-tools/system-control.ts"
       ],
       required: 3
@@ -98,10 +98,10 @@ function validateSystemConsolidation() {
     {
       name: "Methodology Guides",
       files: [
-        "frameworks/adapters/cageerf-methodology-guide.ts",
-        "frameworks/adapters/react-methodology-guide.ts",
-        "frameworks/adapters/5w1h-methodology-guide.ts",
-        "frameworks/adapters/scamper-methodology-guide.ts"
+        "frameworks/methodology/guides/cageerf-guide.ts",
+        "frameworks/methodology/guides/react-guide.ts",
+        "frameworks/methodology/guides/5w1h-guide.ts",
+        "frameworks/methodology/guides/scamper-guide.ts"
       ],
       required: 4
     },

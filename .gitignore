@@ -81,3 +81,20 @@ CLAUDE.md
 AGENTS.md
 .claude/
 server/.claude/
+
+# Temporary test files
+test_*.js
+test_*.ts
+
+# Backup files
+*.backup
+*.bak
+
+# Temporary directories
+opencodetmp/
+
+# Future planning
+plans/future/
+
+# Test prompts
+server/prompts/general/test_*.md
