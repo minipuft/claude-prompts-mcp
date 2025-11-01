@@ -6,8 +6,10 @@
  */
 
 import type { Logger } from '../../logging/index.js';
+import { ConfigManager } from '../../config/index.js';
+import type { FrameworksConfig } from '../../types/index.js';
 import { GateSelectionCriteria, GateSelectionResult } from '../core/gate-definitions.js';
-import type { ContentAnalysisResult } from '../../semantic/configurable-semantic-analyzer.js';
+import type { ContentAnalysisResult } from '../../semantic/types.js';
 import type { FrameworkDefinition } from '../../frameworks/types/index.js';
 
 /**
@@ -43,9 +45,31 @@ export interface ExtendedGateSelectionCriteria extends GateSelectionCriteria {
 export class GateSelectionEngine {
   private logger: Logger;
   private selectionHistory: GateSelectionResult[] = [];
+  private configManager: ConfigManager;
+  private frameworksConfig: FrameworksConfig;
+  private frameworksConfigListener: (newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void;
 
-  constructor(logger: Logger) {
+  private static readonly METHODOLOGY_GATES = new Set<string>([
+    'framework-compliance',
+    'educational-clarity',
+    'research-quality',
+    'technical-accuracy',
+    'content-structure',
+    'code-quality',
+    'security-awareness',
+  ]);
+
+  constructor(logger: Logger, configManager: ConfigManager) {
     this.logger = logger;
+    this.configManager = configManager;
+    this.frameworksConfig = this.configManager.getFrameworksConfig();
+    this.frameworksConfigListener = (newConfig: FrameworksConfig) => {
+      this.frameworksConfig = { ...newConfig };
+      this.logger.info(
+        `Gate selection engine feature toggles updated (methodologyGates: ${this.frameworksConfig.enableMethodologyGates})`
+      );
+    };
+    this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
     this.logger.debug('[GATE SELECTION ENGINE] Initialized');
   }
 
@@ -75,21 +99,24 @@ export class GateSelectionEngine {
 
     // Merge and deduplicate
     const selectedGates = this.mergeGateSelections(primaryGates, semanticGates);
+    const gatedSelection = this.frameworksConfig.enableMethodologyGates
+      ? selectedGates
+      : selectedGates.filter(gate => !GateSelectionEngine.METHODOLOGY_GATES.has(gate));
 
     // Generate reasoning
     const reasoning = this.generateSelectionReasoning(criteria, primaryGates, semanticGates);
 
     // Calculate confidence
-    const confidence = this.calculateSelectionConfidence(criteria, selectedGates);
+    const confidence = this.calculateSelectionConfidence(criteria, gatedSelection);
 
     // Estimate execution time
-    const estimatedExecutionTime = this.estimateExecutionTime(selectedGates, criteria);
+    const estimatedExecutionTime = this.estimateExecutionTime(gatedSelection, criteria);
 
     // Determine fallback gates
     const fallbackGates = this.determineFallbackGates(criteria);
 
     const result: GateSelectionResult = {
-      selectedGates,
+      selectedGates: gatedSelection,
       reasoning,
       confidence,
       estimatedExecutionTime,
@@ -117,6 +144,9 @@ export class GateSelectionEngine {
    * Select primary gates based on framework and category
    */
   private selectPrimaryGates(criteria: ExtendedGateSelectionCriteria): string[] {
+    if (!this.frameworksConfig.enableMethodologyGates) {
+      return [];
+    }
     const gates: string[] = [];
 
     // Framework-based selection
@@ -166,6 +196,9 @@ export class GateSelectionEngine {
    * Select gates based on semantic analysis
    */
   private selectSemanticGates(criteria: ExtendedGateSelectionCriteria): string[] {
+    if (!this.frameworksConfig.enableMethodologyGates) {
+      return [];
+    }
     if (!criteria.semanticAnalysis) {
       return [];
     }
@@ -327,8 +360,8 @@ export class GateSelectionEngine {
 /**
  * Factory function for creating gate selection engine
  */
-export function createGateSelectionEngine(logger: Logger): GateSelectionEngine {
-  return new GateSelectionEngine(logger);
+export function createGateSelectionEngine(logger: Logger, configManager: ConfigManager): GateSelectionEngine {
+  return new GateSelectionEngine(logger, configManager);
 }
 
 // Interfaces are already exported via declaration above
