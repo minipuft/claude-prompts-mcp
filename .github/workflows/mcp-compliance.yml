@@ -194,10 +194,24 @@ jobs:
                 loadPrompts: () => Promise.resolve([])
               };
 
+              const frameworksConfig = {
+                enableSystemPromptInjection: false,
+                enableMethodologyGates: false,
+                enableDynamicToolDescriptions: false
+              };
+
               const mockConfigManager = {
                 getSemanticAnalysisConfig: () => ({ mode: 'lightweight' }),
                 getConfig: () => ({}),
-                getPromptConfig: () => ({})
+                getPromptConfig: () => ({}),
+                getFrameworksConfig: () => ({ ...frameworksConfig }),
+                on: (event, listener) => {
+                  if (event === 'frameworksConfigChanged' && typeof listener === 'function') {
+                    listener({ ...frameworksConfig }, { ...frameworksConfig });
+                  }
+                },
+                off: () => {},
+                emit: () => {}
               };
 
               try {
