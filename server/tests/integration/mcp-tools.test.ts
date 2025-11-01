@@ -238,6 +238,22 @@ describe('Consolidated MCP Tools Integration', () => {
       expect(promptManager).toBeDefined();
       expect(systemControl).toBeDefined();
     });
+
+    test('should reject conflicting force_restart and session_id parameters', async () => {
+      // Test the prompt engine with conflicting parameters
+      const result = await promptEngine.executePromptCommand({
+        command: '>>analyze_code test code',
+        force_restart: true,
+        session_id: 'test-session-123'
+      }, {});
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].type).toBe('text');
+      expect(result.content[0].text).toContain('Conflicting parameters detected');
+      expect(result.content[0].text).toContain('force_restart=true');
+      expect(result.content[0].text).toContain('session_id');
+    });
   });
 
   describe('Performance', () => {

@@ -35,7 +35,6 @@ MCP clients execute server capabilities by sending tool requests. Each tool uses
   command: string;                    // Required: Command to execute (>>prompt_name args)
   execution_mode?: "auto" | "template" | "chain";  // Optional: Override detection
   gate_validation?: boolean;          // Optional: Enable quality gates
-  step_confirmation?: boolean;        // Optional: Confirm each chain step
   llm_driven_execution?: boolean;     // Optional: Enable LLM-driven chain coordination (requires semantic LLM integration)
   force_restart?: boolean;            // Optional: Force restart chain from beginning, clearing all state
   session_id?: string;                // Optional: Specific session ID to use or resume
@@ -57,7 +56,7 @@ prompt_engine >>content_analysis text="my data"
 prompt_engine >>analysis_prompt input="data" execution_mode="template"
 
 # Chain execution with LLM coordination (requires semantic LLM integration enabled)
-prompt_engine >>research_chain topic="AI" llm_driven_execution=true step_confirmation=true
+prompt_engine >>research_chain topic="AI" llm_driven_execution=true
 ```
 
 #### Chain Execution Parameters
@@ -102,7 +101,6 @@ chain://chainId[/sessionId[/stepId]][?queryParams]
 **Query Parameters**:
 - `force_restart=true` - Force restart clearing all state
 - `framework=CAGEERF` - Specify framework methodology
-- `step_confirmation=true` - Enable step-by-step confirmation
 - `error_handling=continue` - Error handling strategy
 - `max_retries=5` - Maximum retry attempts per step
 - `conditional_mode=true` - Enable conditional branching execution (Phase 2A)
@@ -120,7 +118,7 @@ prompt_engine chain_uri="chain://research_pipeline?force_restart=true"
 prompt_engine chain_uri="chain://research_pipeline/session-abc123"
 
 # Custom framework and options
-prompt_engine chain_uri="chain://research_pipeline?framework=CAGEERF&step_confirmation=true"
+prompt_engine chain_uri="chain://research_pipeline?framework=CAGEERF"
 
 # Complex configuration
 prompt_engine chain_uri="chain://research_pipeline?force_restart=true&framework=ReACT&error_handling=continue"
@@ -129,7 +127,7 @@ prompt_engine chain_uri="chain://research_pipeline?force_restart=true&framework=
 prompt_engine chain_uri="chain://research_pipeline?conditional_mode=true"
 
 # Conditional debugging and enhanced workflow
-prompt_engine chain_uri="chain://research_pipeline?conditional_mode=true&conditional_debug=true&step_confirmation=true"
+prompt_engine chain_uri="chain://research_pipeline?conditional_mode=true&conditional_debug=true"
 ```
 
 **Smart Error Recovery**:
@@ -491,10 +489,10 @@ prompt_manager create_template name="adaptive_analysis" category="analysis" \
 
 # 2. Execute conditional chain with debugging enabled
 prompt_engine >>adaptive_analysis input="complex data analysis task" \
-  conditional_mode=true conditional_debug=true step_confirmation=true
+  conditional_mode=true conditional_debug=true
 
 # 3. Alternative execution with URI syntax for precise control
-prompt_engine chain_uri="chain://adaptive_analysis?conditional_mode=true&conditional_debug=true&framework=CAGEERF&step_confirmation=true"
+prompt_engine chain_uri="chain://adaptive_analysis?conditional_mode=true&conditional_debug=true&framework=CAGEERF"
 
 # 4. Monitor conditional execution and branching decisions
 system_control status

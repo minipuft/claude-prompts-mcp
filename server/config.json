@@ -9,7 +9,6 @@
   },
   "analysis": {
     "semanticAnalysis": {
-      "enabled": false,
       "llmIntegration": {
         "enabled": false,
         "apiKey": null,
@@ -23,6 +22,11 @@
   "gates": {
     "definitionsDirectory": "src/gates/definitions",
     "templatesDirectory": "src/gates/templates"
+  },
+  "frameworks": {
+    "enableSystemPromptInjection": false,
+    "enableMethodologyGates": true,
+    "enableDynamicToolDescriptions": true
   },
   "transports": {
     "default": "stdio"

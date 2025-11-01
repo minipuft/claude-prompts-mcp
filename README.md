@@ -200,7 +200,8 @@ Configure your MCP client to connect via STDIO transport:
 For Claude Code CLI users:
 
 ```bash
-claude mcp add-json claude-prompts-mcp '{"type":"stdio","command":"node","args":["path/to/claude-prompts-mcp/server/dist/index.js"],"env":{}}'
+claude mcp add --transport stdio claude-prompts-mcp -- node
+      /path/to/claude-prompts-mcp/server/dist/index.js
 ```
 
 ### Usage Examples
@@ -233,7 +234,7 @@ system_control analytics include_history=true
 # Example chains available: code_review_optimization_chain, create_docs_chain, video_notes_enhanced
 
 # Manual control when needed
-prompt_engine >>content_analysis input="sensitive data" step_confirmation=true gate_validation=true
+prompt_engine >>content_analysis input="sensitive data" gate_validation=true
 ```
 
 The system provides a structured approach to prompt management through systematic methodology application.
@@ -309,6 +310,7 @@ Chains are defined directly in markdown files using step headers that guide Clau
 This chain performs a systematic 6-step code review:
 
 ## Step 1: Structure & Organization Analysis
+
 Analyze code architecture, organization, patterns, naming conventions...
 
 **Output Required**: Structural assessment with identified patterns.
@@ -316,6 +318,7 @@ Analyze code architecture, organization, patterns, naming conventions...
 ---
 
 ## Step 2: Functionality & Logic Review
+
 Examine business logic correctness, edge cases, error handling...
 
 **Output Required**: Logic validation with edge case analysis.
@@ -323,12 +326,14 @@ Examine business logic correctness, edge cases, error handling...
 ---
 
 ## Step 3: Security & Best Practices Audit
+
 Review for security vulnerabilities: input validation, authentication...
 
 **Output Required**: Security assessment with vulnerability identification.
 ```
 
 **Key Features:**
+
 - **LLM-Driven Execution**: Claude follows step-by-step instructions embedded in the template
 - **Context Preservation**: Each step builds on previous outputs naturally
 - **Flexible Structure**: Steps can include conditional logic and branching
@@ -344,25 +349,27 @@ For chains that orchestrate multiple reusable prompts, use the markdown-embedded
 1. promptId: extract_key_points
    stepName: Extract Key Points
    inputMapping:
-     content: original_content
+   content: original_content
    outputMapping:
-     key_points: extracted_points
+   key_points: extracted_points
 
 2. promptId: sentiment_analysis
    stepName: Analyze Sentiment
    inputMapping:
-     text: extracted_points
+   text: extracted_points
    outputMapping:
-     sentiment: analysis_result
+   sentiment: analysis_result
 ```
 
 **Capabilities:**
+
 - **Prompt Reuse**: Chain together existing prompts
 - **Data Flow Mapping**: Explicit input/output variable mapping
 - **Gate Integration**: Apply quality gates at each step
 - **Error Recovery**: Graceful handling of failed steps
 
 **Real Examples**: See working chain implementations:
+
 - `server/prompts/development/code_review_optimization_chain.md` - 6-step code review workflow
 - `server/prompts/documentation/create_docs_chain.md` - Documentation generation chain
 - `server/prompts/content_processing/video_notes_enhanced.md` - Video analysis workflow
@@ -484,6 +491,7 @@ The primary method uses step-by-step instructions embedded directly in markdown 
 Research {{topic}} and provide {{analysis_type}} analysis.
 
 ## Step 1: Initial Research
+
 Gather comprehensive information about {{topic}} from available sources.
 Focus on {{analysis_type}} perspectives.
 
@@ -492,6 +500,7 @@ Focus on {{analysis_type}} perspectives.
 ---
 
 ## Step 2: Extract Key Insights
+
 From the research findings, identify the most relevant insights.
 Organize by importance and relevance to {{analysis_type}} analysis.
 
@@ -500,6 +509,7 @@ Organize by importance and relevance to {{analysis_type}} analysis.
 ---
 
 ## Step 3: Analyze Patterns
+
 Examine the extracted insights for patterns, trends, and relationships.
 Consider multiple analytical frameworks.
 
@@ -508,12 +518,14 @@ Consider multiple analytical frameworks.
 ---
 
 ## Step 4: Synthesize Report
+
 Create comprehensive report combining all findings.
 
 **Output Required**: Structured report with executive summary.
 ```
 
 **Benefits:**
+
 - **Natural Flow**: Claude maintains context automatically across steps
 - **Flexible Logic**: Steps can include conditional branching and decision points
 - **Framework Enhanced**: Automatically augmented with active methodology (CAGEERF/ReACT)
@@ -529,31 +541,31 @@ For orchestrating multiple reusable prompts with explicit data flow:
 1. promptId: research_topic
    stepName: Initial Research
    inputMapping:
-     query: topic
+   query: topic
    outputMapping:
-     findings: research_data
+   findings: research_data
 
 2. promptId: extract_insights
    stepName: Extract Key Insights
    inputMapping:
-     content: research_data
+   content: research_data
    outputMapping:
-     insights: key_findings
+   insights: key_findings
 
 3. promptId: analyze_patterns
    stepName: Analyze Patterns
    inputMapping:
-     data: key_findings
+   data: key_findings
    outputMapping:
-     analysis: pattern_results
+   analysis: pattern_results
 
 4. promptId: generate_report
    stepName: Synthesize Report
    inputMapping:
-     insights: key_findings
-     patterns: pattern_results
+   insights: key_findings
+   patterns: pattern_results
    outputMapping:
-     report: final_output
+   report: final_output
 ```
 
 **Capabilities:**
@@ -564,6 +576,7 @@ For orchestrating multiple reusable prompts with explicit data flow:
 - **Gate Validation**: Apply quality gates at each step for validation
 
 **Real Examples**: View production chain implementations:
+
 - `server/prompts/content_processing/noteIntegration.md` - Note processing with modular steps
 - Review the `## Chain Steps` section in any chain prompt for complete syntax
 
@@ -657,16 +670,16 @@ Built-in monitoring and diagnostics for production environments:
 
 ## Documentation
 
-| Guide                                                  | Description                                                     |
-| ------------------------------------------------------ | --------------------------------------------------------------- |
-| [Installation Guide](docs/installation-guide.md)       | Complete setup walkthrough with troubleshooting                 |
-| [Troubleshooting Guide](docs/troubleshooting.md)       | Common issues, diagnostic tools, and solutions                  |
-| [Architecture Overview](docs/architecture.md)          | Deep dive into the orchestration engine, modules, and data flow |
-| [Prompt Format Guide](docs/prompt-format-guide.md)     | Master prompt creation including chain workflows                |
-| [Prompt Management](docs/prompt-management.md)         | Dynamic management and hot-reload features                      |
-| [MCP Tools Reference](docs/mcp-tools-reference.md)     | Complete MCP tools documentation                                |
-| [Roadmap & TODO](docs/TODO.md)                         | Planned features and development roadmap                        |
-| [Contributing](docs/contributing.md)                   | Join our development community                                  |
+| Guide                                              | Description                                                     |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| [Installation Guide](docs/installation-guide.md)   | Complete setup walkthrough with troubleshooting                 |
+| [Troubleshooting Guide](docs/troubleshooting.md)   | Common issues, diagnostic tools, and solutions                  |
+| [Architecture Overview](docs/architecture.md)      | Deep dive into the orchestration engine, modules, and data flow |
+| [Prompt Format Guide](docs/prompt-format-guide.md) | Master prompt creation including chain workflows                |
+| [Prompt Management](docs/prompt-management.md)     | Dynamic management and hot-reload features                      |
+| [MCP Tools Reference](docs/mcp-tools-reference.md) | Complete MCP tools documentation                                |
+| [Roadmap & TODO](docs/TODO.md)                     | Planned features and development roadmap                        |
+| [Contributing](docs/contributing.md)               | Join our development community                                  |
 
 ## Contributing
 

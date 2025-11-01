@@ -4,8 +4,10 @@
  */
 
 import { readFile } from "fs/promises";
+import { watch, FSWatcher } from "fs";
+import { EventEmitter } from "events";
 import path from "path";
-import { Config, AnalysisConfig, SemanticAnalysisConfig, LLMIntegrationConfig, AnalysisMode, LoggingConfig } from "../types/index.js";
+import { Config, AnalysisConfig, SemanticAnalysisConfig, LLMIntegrationConfig, AnalysisMode, LoggingConfig, FrameworksConfig } from "../types/index.js";
 // Removed: ToolDescriptionManager import to break circular dependency
 // Now injected via dependency injection pattern
 
@@ -42,8 +44,11 @@ const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   },
 };
 
-// DEFAULT_FRAMEWORK_CONFIG removed - framework state managed at runtime
-// Use system_control MCP tool to enable/disable and switch frameworks
+const DEFAULT_FRAMEWORKS_CONFIG: FrameworksConfig = {
+  enableSystemPromptInjection: true,
+  enableMethodologyGates: true,
+  enableDynamicToolDescriptions: true,
+};
 
 
 const DEFAULT_CONFIG: Config = {
@@ -56,6 +61,7 @@ const DEFAULT_CONFIG: Config = {
     file: "prompts/promptsConfig.json",
   },
   analysis: DEFAULT_ANALYSIS_CONFIG,
+  frameworks: DEFAULT_FRAMEWORKS_CONFIG,
   transports: {
     default: "stdio",
     sse: { enabled: false },
@@ -66,26 +72,35 @@ const DEFAULT_CONFIG: Config = {
 /**
  * Configuration manager class
  */
-export class ConfigManager {
+export class ConfigManager extends EventEmitter {
   private config: Config;
   private configPath: string;
   // Removed: private toolDescriptionManager - now injected via dependency injection
+  private fileWatcher?: FSWatcher;
+  private watching: boolean = false;
+  private reloadDebounceTimer?: NodeJS.Timeout;
+  private frameworksConfigCache: FrameworksConfig;
 
   constructor(configPath: string) {
+    super();
     this.configPath = configPath;
     this.config = DEFAULT_CONFIG;
+    this.frameworksConfigCache = { ...DEFAULT_FRAMEWORKS_CONFIG };
   }
 
   /**
    * Load configuration from file
    */
   async loadConfig(): Promise<Config> {
+    const previousFrameworks = { ...this.frameworksConfigCache };
     try {
       const configContent = await readFile(this.configPath, "utf8");
       this.config = JSON.parse(configContent) as Config;
 
       // Validate and set defaults for any missing properties
       this.validateAndSetDefaults();
+
+      this.emitConfigChange(previousFrameworks);
 
       return this.config;
     } catch (error) {
@@ -95,6 +110,8 @@ export class ConfigManager {
       );
       console.info("Using default configuration");
       this.config = DEFAULT_CONFIG;
+      this.validateAndSetDefaults();
+      this.emitConfigChange(previousFrameworks);
       return this.config;
     }
   }
@@ -148,6 +165,17 @@ export class ConfigManager {
     return this.config.logging || {
       directory: "./logs",
       level: "info"
+    };
+  }
+
+  /**
+   * Get frameworks configuration
+   */
+  getFrameworksConfig(): FrameworksConfig {
+    return {
+      enableSystemPromptInjection: this.config.frameworks?.enableSystemPromptInjection ?? DEFAULT_FRAMEWORKS_CONFIG.enableSystemPromptInjection,
+      enableMethodologyGates: this.config.frameworks?.enableMethodologyGates ?? DEFAULT_FRAMEWORKS_CONFIG.enableMethodologyGates,
+      enableDynamicToolDescriptions: this.config.frameworks?.enableDynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.enableDynamicToolDescriptions,
     };
   }
 
@@ -236,6 +264,16 @@ export class ConfigManager {
         ...this.config.transports,
       };
     }
+
+    // Ensure frameworks config exists
+    if (!this.config.frameworks) {
+      this.config.frameworks = { ...DEFAULT_FRAMEWORKS_CONFIG };
+    } else {
+      this.config.frameworks = {
+        ...DEFAULT_FRAMEWORKS_CONFIG,
+        ...this.config.frameworks,
+      };
+    }
   }
 
   /**
@@ -267,6 +305,79 @@ export class ConfigManager {
       },
     };
   }
+
+  /**
+   * Start watching the configuration file for changes
+   */
+  startWatching(debounceMs = 500): void {
+    if (this.watching) {
+      return;
+    }
+
+    try {
+      this.fileWatcher = watch(this.configPath, () => {
+        if (this.reloadDebounceTimer) {
+          clearTimeout(this.reloadDebounceTimer);
+        }
+        this.reloadDebounceTimer = setTimeout(() => {
+          this.handleExternalConfigChange().catch((err) => {
+            console.error("Config reload failed:", err);
+          });
+        }, debounceMs);
+      });
+      this.watching = true;
+      this.fileWatcher.on("error", (err) => {
+        console.error("Config file watcher error:", err);
+        this.stopWatching();
+      });
+    } catch (error) {
+      console.error(`Failed to start config watcher for ${this.configPath}:`, error);
+    }
+  }
+
+  /**
+   * Stop watching the configuration file
+   */
+  stopWatching(): void {
+    if (!this.fileWatcher) {
+      return;
+    }
+
+    try {
+      this.fileWatcher.close();
+    } catch (error) {
+      console.error("Error closing config watcher:", error);
+    }
+
+    this.fileWatcher = undefined;
+    this.watching = false;
+    if (this.reloadDebounceTimer) {
+      clearTimeout(this.reloadDebounceTimer);
+      this.reloadDebounceTimer = undefined;
+    }
+  }
+
+  private async handleExternalConfigChange(): Promise<void> {
+    await this.loadConfig();
+    this.emit("configChanged", this.getConfig());
+  }
+
+  private emitConfigChange(previousFrameworks: FrameworksConfig): void {
+    const currentFrameworks = this.getFrameworksConfig();
+    const frameworksChanged = this.haveFrameworkConfigsChanged(previousFrameworks, currentFrameworks);
+    this.frameworksConfigCache = { ...currentFrameworks };
+    if (frameworksChanged) {
+      this.emit("frameworksConfigChanged", currentFrameworks, previousFrameworks);
+    }
+  }
+
+  private haveFrameworkConfigsChanged(a: FrameworksConfig, b: FrameworksConfig): boolean {
+    return (
+      a.enableSystemPromptInjection !== b.enableSystemPromptInjection ||
+      a.enableMethodologyGates !== b.enableMethodologyGates ||
+      a.enableDynamicToolDescriptions !== b.enableDynamicToolDescriptions
+    );
+  }
 }
 
 /**
@@ -279,4 +390,3 @@ export async function createConfigManager(
   await configManager.loadConfig();
   return configManager;
 }
-

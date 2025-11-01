@@ -58,8 +58,3 @@ export {
 export {
   ContextBuilder,
 } from "./utils/context-builder.js";
-
-// Re-export shared utilities for backwards compatibility
-export {
-  createExecutionResponse,
-} from "../shared/structured-response-builder.js";

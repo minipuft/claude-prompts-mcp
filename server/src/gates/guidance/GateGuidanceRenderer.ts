@@ -90,6 +90,9 @@ export class GateGuidanceRenderer {
 
 ## 🎯 Quality Enhancement Gates
 
+**Post-Execution Review Guidelines:**
+Review your output against these quality standards before finalizing your response.
+
 ${guidanceTexts.join('\n\n')}
 
 ---`;

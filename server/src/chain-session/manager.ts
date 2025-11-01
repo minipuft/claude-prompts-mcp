@@ -4,12 +4,17 @@
  * Manages chain execution sessions, providing the bridge between MCP session IDs
  * and the chain state management in ConversationManager. This enables stateful
  * chain execution across multiple MCP tool calls.
+ *
+ * CRITICAL: Uses file-based persistence to survive STDIO transport's ephemeral processes.
+ * Sessions are saved to disk after every change and loaded on initialization.
  */
 
+import { promises as fs } from "fs";
+import * as path from "path";
 import { Logger } from "../logging/index.js";
+import { ChainState } from "../mcp-tools/prompt-engine/core/types.js";
 import { ConversationManager } from "../text-references/conversation.js";
 import { TextReferenceManager } from "../text-references/index.js";
-import { ChainState } from "../mcp-tools/prompt-engine/core/types.js";
 
 /**
  * Session information for chain execution
@@ -37,51 +42,191 @@ export class ChainSessionManager {
   private textReferenceManager: TextReferenceManager;
   private activeSessions: Map<string, ChainSession> = new Map();
   private chainSessionMapping: Map<string, Set<string>> = new Map(); // chainId -> sessionIds
+  private sessionsFilePath: string;
 
-  constructor(logger: Logger, conversationManager: ConversationManager, textReferenceManager: TextReferenceManager) {
+  constructor(
+    logger: Logger,
+    conversationManager: ConversationManager,
+    textReferenceManager: TextReferenceManager
+  ) {
     this.logger = logger;
     this.conversationManager = conversationManager;
     this.textReferenceManager = textReferenceManager;
 
+    // Set up file-based persistence path
+    const runtimeStateDir = path.join(process.cwd(), "runtime-state");
+    this.sessionsFilePath = path.join(runtimeStateDir, "chain-sessions.json");
+
     // Integrate with conversation manager (with enhanced null checking for testing)
     try {
-      if (conversationManager !== null && conversationManager !== undefined &&
-          conversationManager.setChainSessionManager &&
-          typeof conversationManager.setChainSessionManager === 'function') {
+      if (
+        conversationManager !== null &&
+        conversationManager !== undefined &&
+        conversationManager.setChainSessionManager &&
+        typeof conversationManager.setChainSessionManager === "function"
+      ) {
         conversationManager.setChainSessionManager(this);
       } else {
         if (this.logger) {
-          this.logger.debug("ConversationManager is null or missing setChainSessionManager method - running in test mode");
+          this.logger.debug(
+            "ConversationManager is null or missing setChainSessionManager method - running in test mode"
+          );
         }
       }
     } catch (error) {
       // Handle any errors during integration (e.g., null references during testing)
       if (this.logger) {
-        this.logger.debug(`Failed to integrate with conversation manager: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger.debug(
+          `Failed to integrate with conversation manager: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
       }
     }
 
     if (this.logger) {
-      this.logger.debug("ChainSessionManager initialized with conversation and text reference manager integration");
+      this.logger.debug(
+        "ChainSessionManager initialized with conversation and text reference manager integration"
+      );
+    }
+
+    // Initialize asynchronously
+    this.initialize();
+  }
+
+  /**
+   * Initialize the manager asynchronously
+   */
+  private async initialize(): Promise<void> {
+    try {
+      // Ensure runtime-state directory exists
+      const runtimeStateDir = path.join(process.cwd(), "runtime-state");
+      await fs.mkdir(runtimeStateDir, { recursive: true });
+
+      // Load persisted sessions from file
+      await this.loadSessions();
+    } catch (error) {
+      if (this.logger) {
+        this.logger.warn(
+          `Failed to initialize ChainSessionManager: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+  }
+
+  /**
+   * Load sessions from file (for STDIO transport persistence)
+   */
+  private async loadSessions(): Promise<void> {
+    try {
+      try {
+        await fs.access(this.sessionsFilePath);
+      } catch {
+        // File doesn't exist, which is fine
+        if (this.logger) {
+          this.logger.debug(
+            `No persisted sessions file found at ${this.sessionsFilePath}`
+          );
+        }
+        return;
+      }
+
+      const data = await fs.readFile(this.sessionsFilePath, "utf-8");
+      const parsed = JSON.parse(data);
+
+      // Restore activeSessions Map
+      if (parsed.sessions) {
+        for (const [sessionId, session] of Object.entries(parsed.sessions)) {
+          this.activeSessions.set(sessionId, session as ChainSession);
+        }
+      }
+
+      // Restore chainSessionMapping Map
+      if (parsed.chainMapping) {
+        for (const [chainId, sessionIds] of Object.entries(
+          parsed.chainMapping
+        )) {
+          this.chainSessionMapping.set(
+            chainId,
+            new Set(sessionIds as string[])
+          );
+        }
+      }
+
+      if (this.logger) {
+        this.logger.debug(
+          `Loaded ${this.activeSessions.size} persisted sessions from ${this.sessionsFilePath}`
+        );
+      }
+    } catch (error) {
+      if (this.logger) {
+        this.logger.warn(
+          `Failed to load persisted sessions: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+  }
+
+  /**
+   * Save sessions to file (for STDIO transport persistence)
+   */
+  private async saveSessions(): Promise<void> {
+    try {
+      const data = {
+        sessions: Object.fromEntries(this.activeSessions),
+        chainMapping: Object.fromEntries(
+          Array.from(this.chainSessionMapping.entries()).map(
+            ([chainId, sessionIds]) => [chainId, Array.from(sessionIds)]
+          )
+        ),
+      };
+
+      await fs.writeFile(
+        this.sessionsFilePath,
+        JSON.stringify(data, null, 2),
+        "utf-8"
+      );
+      if (this.logger) {
+        this.logger.debug(
+          `Saved ${this.activeSessions.size} sessions to ${this.sessionsFilePath}`
+        );
+      }
+    } catch (error) {
+      if (this.logger) {
+        this.logger.error(
+          `Failed to save sessions: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
     }
   }
 
   /**
    * Create a new chain session
    */
-  createSession(sessionId: string, chainId: string, totalSteps: number, originalArgs: Record<string, any> = {}): ChainSession {
+  async createSession(
+    sessionId: string,
+    chainId: string,
+    totalSteps: number,
+    originalArgs: Record<string, any> = {}
+  ): Promise<ChainSession> {
     const session: ChainSession = {
       sessionId,
       chainId,
       state: {
         currentStep: 0,
         totalSteps,
-        lastUpdated: Date.now()
+        lastUpdated: Date.now(),
       },
       executionOrder: [],
       startTime: Date.now(),
       lastActivity: Date.now(),
-      originalArgs
+      originalArgs,
     };
 
     this.activeSessions.set(sessionId, session);
@@ -95,7 +240,14 @@ export class ChainSessionManager {
     // Sync with conversation manager
     this.conversationManager.setChainState(chainId, 0, totalSteps);
 
-    this.logger.debug(`Created chain session ${sessionId} for chain ${chainId} with ${totalSteps} steps`);
+    // Persist to file
+    await this.saveSessions();
+
+    if (this.logger) {
+      this.logger.debug(
+        `Created chain session ${sessionId} for chain ${chainId} with ${totalSteps} steps`
+      );
+    }
     return session;
   }
 
@@ -113,10 +265,19 @@ export class ChainSessionManager {
   /**
    * Update session state after step completion
    */
-  updateSessionState(sessionId: string, stepNumber: number, stepResult: string, stepMetadata?: any): boolean {
+  async updateSessionState(
+    sessionId: string,
+    stepNumber: number,
+    stepResult: string,
+    stepMetadata?: any
+  ): Promise<boolean> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
-      this.logger.warn(`Attempted to update non-existent session: ${sessionId}`);
+      if (this.logger) {
+        this.logger.warn(
+          `Attempted to update non-existent session: ${sessionId}`
+        );
+      }
       return false;
     }
 
@@ -141,7 +302,14 @@ export class ChainSessionManager {
       session.state.totalSteps
     );
 
-    this.logger.debug(`Updated session ${sessionId}: step ${stepNumber} completed, moved to step ${session.state.currentStep}`);
+    // Persist to file
+    await this.saveSessions();
+
+    if (this.logger) {
+      this.logger.debug(
+        `Updated session ${sessionId}: step ${stepNumber} completed, moved to step ${session.state.currentStep}`
+      );
+    }
     return true;
   }
 
@@ -151,12 +319,16 @@ export class ChainSessionManager {
   getChainContext(sessionId: string): Record<string, any> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
-      this.logger.debug(`No session found for ${sessionId}, returning empty context`);
+      this.logger.debug(
+        `No session found for ${sessionId}, returning empty context`
+      );
       return {};
     }
 
     // Get chain variables from text reference manager (single source of truth)
-    const chainVariables = this.textReferenceManager.buildChainVariables(session.chainId);
+    const chainVariables = this.textReferenceManager.buildChainVariables(
+      session.chainId
+    );
 
     // Merge with session-specific context
     const contextData: Record<string, any> = {
@@ -167,10 +339,14 @@ export class ChainSessionManager {
       execution_order: session.executionOrder,
 
       // Chain variables (step results, etc.) from TextReferenceManager
-      ...chainVariables
+      ...chainVariables,
     };
 
-    this.logger.debug(`Retrieved context for session ${sessionId}: ${Object.keys(contextData).length} context variables`);
+    this.logger.debug(
+      `Retrieved context for session ${sessionId}: ${
+        Object.keys(contextData).length
+      } context variables`
+    );
     return contextData;
   }
 
@@ -224,7 +400,7 @@ export class ChainSessionManager {
   /**
    * Clear session
    */
-  clearSession(sessionId: string): boolean {
+  async clearSession(sessionId: string): Promise<boolean> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
       return false;
@@ -242,21 +418,28 @@ export class ChainSessionManager {
     // Remove session
     this.activeSessions.delete(sessionId);
 
-    this.logger.debug(`Cleared session ${sessionId} for chain ${session.chainId}`);
+    // Persist to file
+    await this.saveSessions();
+
+    if (this.logger) {
+      this.logger.debug(
+        `Cleared session ${sessionId} for chain ${session.chainId}`
+      );
+    }
     return true;
   }
 
   /**
    * Clear all sessions for a chain
    */
-  clearSessionsForChain(chainId: string): void {
+  async clearSessionsForChain(chainId: string): Promise<void> {
     const sessionIds = this.chainSessionMapping.get(chainId);
     if (!sessionIds) {
       return;
     }
 
     // Clear all sessions
-    sessionIds.forEach(sessionId => {
+    sessionIds.forEach((sessionId) => {
       this.activeSessions.delete(sessionId);
     });
 
@@ -266,25 +449,39 @@ export class ChainSessionManager {
     // Clear step results from text reference manager
     this.textReferenceManager.clearChainStepResults(chainId);
 
-    this.logger.debug(`Cleared all sessions for chain ${chainId}`);
+    // Persist to file
+    await this.saveSessions();
+
+    if (this.logger) {
+      this.logger.debug(`Cleared all sessions for chain ${chainId}`);
+    }
   }
 
   /**
-   * Cleanup stale sessions (older than 1 hour)
+   * Cleanup stale sessions (older than 24 hours)
    */
-  cleanupStaleSessions(): number {
-    const oneHourAgo = Date.now() - 3600000;
+  async cleanupStaleSessions(): Promise<number> {
+    const twentyFourHoursAgo = Date.now() - 86400000; // 24 hours in milliseconds
     let cleaned = 0;
 
+    // Collect stale session IDs first to avoid modifying Map during iteration
+    const staleSessionIds: string[] = [];
     for (const [sessionId, session] of this.activeSessions) {
-      if (session.lastActivity < oneHourAgo) {
-        this.clearSession(sessionId);
-        cleaned++;
+      if (session.lastActivity < twentyFourHoursAgo) {
+        staleSessionIds.push(sessionId);
       }
     }
 
-    if (cleaned > 0) {
-      this.logger.info(`Cleaned up ${cleaned} stale chain sessions`);
+    // Clear stale sessions
+    for (const sessionId of staleSessionIds) {
+      await this.clearSession(sessionId);
+      cleaned++;
+    }
+
+    if (cleaned > 0 && this.logger) {
+      this.logger.info(
+        `Cleaned up ${cleaned} stale chain sessions (>24 hours old)`
+      );
     }
 
     return cleaned;
@@ -316,7 +513,7 @@ export class ChainSessionManager {
       totalSessions,
       totalChains,
       averageStepsPerChain: totalChains > 0 ? totalSteps / totalChains : 0,
-      oldestSessionAge: Date.now() - oldestSessionTime
+      oldestSessionAge: Date.now() - oldestSessionTime,
     };
   }
 
@@ -333,23 +530,33 @@ export class ChainSessionManager {
     }
 
     // Check if conversation manager has corresponding state
-    const conversationState = this.conversationManager.getChainState(session.chainId);
+    const conversationState = this.conversationManager.getChainState(
+      session.chainId
+    );
     if (!conversationState) {
       issues.push("No corresponding conversation state found");
     } else {
       // Check state consistency
       if (conversationState.currentStep !== session.state.currentStep) {
-        issues.push(`State mismatch: session=${session.state.currentStep}, conversation=${conversationState.currentStep}`);
+        issues.push(
+          `State mismatch: session=${session.state.currentStep}, conversation=${conversationState.currentStep}`
+        );
       }
       if (conversationState.totalSteps !== session.state.totalSteps) {
-        issues.push(`Step count mismatch: session=${session.state.totalSteps}, conversation=${conversationState.totalSteps}`);
+        issues.push(
+          `Step count mismatch: session=${session.state.totalSteps}, conversation=${conversationState.totalSteps}`
+        );
       }
     }
 
     // Check for stale session
     const hoursSinceActivity = (Date.now() - session.lastActivity) / 3600000;
     if (hoursSinceActivity > 1) {
-      issues.push(`Session stale: ${hoursSinceActivity.toFixed(1)} hours since last activity`);
+      issues.push(
+        `Session stale: ${hoursSinceActivity.toFixed(
+          1
+        )} hours since last activity`
+      );
     }
 
     return { valid: issues.length === 0, issues };
@@ -364,5 +571,10 @@ export function createChainSessionManager(
   conversationManager: ConversationManager,
   textReferenceManager: TextReferenceManager
 ): ChainSessionManager {
-  return new ChainSessionManager(logger, conversationManager, textReferenceManager);
+  const manager = new ChainSessionManager(
+    logger,
+    conversationManager,
+    textReferenceManager
+  );
+  return manager;
 }

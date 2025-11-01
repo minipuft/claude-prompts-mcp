@@ -239,6 +239,7 @@ export class TextReferenceManager {
       const stepNumber = parseInt(stepNum);
       variables[`step${stepNumber + 1}_result`] = content; // 1-based naming for user-friendliness
       variables[`previous_step_result`] = content; // Always contains the latest result
+      variables[`input`] = content; // Alias for template compatibility
     });
 
     // Add chain metadata

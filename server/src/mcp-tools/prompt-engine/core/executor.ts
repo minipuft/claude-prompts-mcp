@@ -181,18 +181,12 @@ export class ChainExecutor {
           return await this.getGateInfo(chainCommand.target);
         default:
           return this.responseFormatter.formatErrorResponse(
-            `Unknown chain management action: ${chainCommand.action}`,
-            'ChainExecutor',
-            'handleChainManagementCommand'
+            `Unknown chain management action: ${chainCommand.action}`
           );
       }
     } catch (error) {
       logger.error('❌ [Chain Management] Error handling chain management command:', error);
-      return this.responseFormatter.formatErrorResponse(
-        error,
-        'ChainExecutor',
-        'handleChainManagementCommand'
-      );
+      return this.responseFormatter.formatErrorResponse(error);
     }
   }
 
@@ -239,18 +233,12 @@ export class ChainExecutor {
           return await this.getGateInfo(parameters.target || '');
         default:
           return this.responseFormatter.formatErrorResponse(
-            `Unknown chain management action: ${action}`,
-            'ChainExecutor',
-            'executeChainManagement'
+            `Unknown chain management action: ${action}`
           );
       }
     } catch (error) {
       logger.error('❌ [Chain Management] Error in executeChainManagement:', error);
-      return this.responseFormatter.formatErrorResponse(
-        error,
-        'ChainExecutor',
-        'executeChainManagement'
-      );
+      return this.responseFormatter.formatErrorResponse(error);
     }
   }
 
@@ -274,9 +262,7 @@ export class ChainExecutor {
     try {
       if (!steps || steps.length === 0) {
         return this.responseFormatter.formatErrorResponse(
-          `Chain ${prompt.id} has no steps defined`,
-          'ChainExecutor',
-          'generateChainInstructions'
+          `Chain ${prompt.id} has no steps defined`
         );
       }
 
@@ -467,6 +453,20 @@ export class ChainExecutor {
       // Future enhancement: Track chain completion and trigger cleanup
       // For now, gates expire based on defaultExpirationMs (1 hour)
 
+      // Create execution context for chain response formatting
+      const startTime = Date.now();
+      const executionContext = {
+        executionId: chainExecutionId,
+        executionType: "chain" as const,
+        startTime,
+        endTime: Date.now(),
+        frameworkUsed: activeFramework?.name,
+        frameworkEnabled: !!activeFramework,
+        success: true,
+        stepsExecuted: steps.length,
+        sessionId: chainExecutionId
+      };
+
       return this.responseFormatter.formatPromptEngineResponse({
         content: instructions,
         metadata: {
@@ -479,15 +479,11 @@ export class ChainExecutor {
           chainGateIds,
           chainGateCount: chainGateIds.length
         }
-      });
+      }, executionContext);
 
     } catch (error) {
       logger.error('❌ [Chain Instructions] Error generating chain instructions:', error);
-      return this.responseFormatter.formatErrorResponse(
-        error,
-        'ChainExecutor',
-        'generateChainInstructions'
-      );
+      return this.responseFormatter.formatErrorResponse(error);
     }
   }
 
@@ -562,9 +558,7 @@ export class ChainExecutor {
     try {
       if (!target) {
         return this.responseFormatter.formatErrorResponse(
-          'Chain ID is required for validation',
-          'ChainExecutor',
-          'handleValidateCommand'
+          'Chain ID is required for validation'
         );
       }
 
@@ -587,11 +581,7 @@ export class ChainExecutor {
 
     } catch (error) {
       logger.error('❌ [Chain Validation] Error validating chain:', error);
-      return this.responseFormatter.formatErrorResponse(
-        error,
-        'ChainExecutor',
-        'handleValidateCommand'
-      );
+      return this.responseFormatter.formatErrorResponse(error);
     }
   }
 
@@ -614,11 +604,7 @@ export class ChainExecutor {
 
     } catch (error) {
       logger.error('❌ [Chain List] Error listing chains:', error);
-      return this.responseFormatter.formatErrorResponse(
-        error,
-        'ChainExecutor',
-        'handleListChainsCommand'
-      );
+      return this.responseFormatter.formatErrorResponse(error);
     }
   }
 
@@ -631,9 +617,7 @@ export class ChainExecutor {
     try {
       if (!target) {
         return this.responseFormatter.formatErrorResponse(
-          'Chain ID is required for gate information',
-          'ChainExecutor',
-          'getGateInfo'
+          'Chain ID is required for gate information'
         );
       }
 
@@ -658,11 +642,7 @@ export class ChainExecutor {
 
     } catch (error) {
       logger.error('❌ [Gate Info] Error getting gate information:', error);
-      return this.responseFormatter.formatErrorResponse(
-        error,
-        'ChainExecutor',
-        'getGateInfo'
-      );
+      return this.responseFormatter.formatErrorResponse(error);
     }
   }
 

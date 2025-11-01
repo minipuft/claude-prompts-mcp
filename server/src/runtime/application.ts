@@ -48,7 +48,7 @@ import {
 import { ServerRootDetector } from "./startup.js";
 
 // Import types
-import { Category, ConvertedPrompt, PromptData } from "../types/index.js";
+import { Category, ConvertedPrompt, PromptData, FrameworksConfig } from "../types/index.js";
 // Import chain utilities
 import { isChainPrompt } from "../utils/chainUtils.js";
 
@@ -89,6 +89,8 @@ export class Application {
 
   // Debug output control
   private debugOutput: boolean;
+
+  private frameworksConfigListener?: (newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void;
 
   /**
    * Conditional debug logging to prevent output flood during tests
@@ -243,6 +245,9 @@ export class Application {
       throw error;
     }
 
+    // Enable config hot-reload watching
+    this.configManager.startWatching();
+
     // Determine transport from command line arguments
     const args = process.argv.slice(2);
     this.debugLog("Args:", args);
@@ -289,6 +294,9 @@ export class Application {
     // Initialize log file
     await (this.logger as any).initLogFile();
     this.debugLog("Enhanced logger created and initialized");
+
+    // Monitor framework feature toggles and log state changes
+    this.setupFrameworkConfigListener();
 
     // Only show startup messages if not in quiet mode
     if (!isQuiet) {
@@ -917,6 +925,14 @@ export class Application {
       }
 
       // Phase 6: Clean up internal timers
+      if (this.configManager) {
+        if (this.frameworksConfigListener) {
+          this.configManager.removeListener('frameworksConfigChanged', this.frameworksConfigListener);
+          this.frameworksConfigListener = undefined;
+        }
+        this.configManager.stopWatching();
+      }
+
       this.cleanup();
 
       if (this.logger) {
@@ -1228,6 +1244,52 @@ export class Application {
       this.memoryOptimizationInterval = undefined;
       this.logger.debug("Memory optimization timer stopped");
     }
+  }
+
+  private setupFrameworkConfigListener(): void {
+    if (!this.configManager || this.frameworksConfigListener) {
+      return;
+    }
+
+    this.frameworksConfigListener = (newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => {
+      this.handleFrameworkConfigChange(newConfig, previousConfig);
+    };
+
+    this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
+    this.handleFrameworkConfigChange(this.configManager.getFrameworksConfig());
+  }
+
+  private handleFrameworkConfigChange(newConfig: FrameworksConfig, previousConfig?: FrameworksConfig): void {
+    if (!this.logger) {
+      return;
+    }
+
+    const disabled = this.describeDisabledFrameworkFeatures(newConfig);
+    if (disabled.length > 0) {
+      this.logger.warn(`⚠️ Framework features disabled via config: ${disabled.join(', ')}`);
+      return;
+    }
+
+    if (previousConfig) {
+      const previouslyDisabled = this.describeDisabledFrameworkFeatures(previousConfig);
+      if (previouslyDisabled.length > 0) {
+        this.logger.info('✅ Framework features re-enabled; all toggles active');
+      }
+    }
+  }
+
+  private describeDisabledFrameworkFeatures(config: FrameworksConfig): string[] {
+    const disabled: string[] = [];
+    if (!config.enableSystemPromptInjection) {
+      disabled.push('system prompt injection');
+    }
+    if (!config.enableMethodologyGates) {
+      disabled.push('methodology gates');
+    }
+    if (!config.enableDynamicToolDescriptions) {
+      disabled.push('dynamic tool descriptions');
+    }
+    return disabled;
   }
 
   /**

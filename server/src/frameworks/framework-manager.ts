@@ -14,7 +14,11 @@ import {
   FrameworkSelectionCriteria
 } from "./types/index.js";
 import { MethodologyRegistry, createMethodologyRegistry } from "./methodology/index.js";
-import type { FrameworkStateManager } from "./framework-state-manager.js";
+
+interface FrameworkStateAccessor {
+  isFrameworkSystemEnabled(): boolean;
+  getActiveFramework(): { methodology: string } | null | undefined;
+}
 
 /**
  * Framework Manager Implementation
@@ -26,7 +30,7 @@ export class FrameworkManager {
   private defaultFramework: string = "CAGEERF";
   private logger: Logger;
   private initialized: boolean = false;
-  private frameworkStateManager?: FrameworkStateManager;
+  private frameworkStateManager?: FrameworkStateAccessor;
 
   constructor(logger: Logger) {
     this.logger = logger;
@@ -36,7 +40,7 @@ export class FrameworkManager {
    * Set the framework state manager for synchronization
    * FIXED: Allows Framework Manager to sync with active framework state
    */
-  setFrameworkStateManager(frameworkStateManager: FrameworkStateManager): void {
+  setFrameworkStateManager(frameworkStateManager: FrameworkStateAccessor): void {
     this.frameworkStateManager = frameworkStateManager;
     this.logger.debug("Framework State Manager synchronized with Framework Manager");
   }
