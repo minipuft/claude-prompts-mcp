@@ -1,16 +1,51 @@
 # Symbolic Command Language Implementation Plan
 
-**Status**: Planning Phase
+**Status**: Phase 1 – In Progress (Session-Aware Architecture Baseline Complete)
 **Created**: 2025-10-19
-**Last Updated**: 2025-10-19
+**Last Updated**: 2025-10-21
 **Priority**: High
 **Complexity**: Medium-High
 
 ## Executive Summary
 
-Enhance the parser system to support intuitive symbolic operators for dynamic prompt composition, eliminating the need for explicit template files for common workflow patterns like chaining, quality gates, and framework selection.
+We now operate under a **session-aware, step-by-step execution model**: the MCP server renders prompts and manages state, while the client LLM performs each step iteratively. This plan realigns the symbolic command language work with that architecture, ensuring operators (chain, gates, frameworks, parallel, conditional) integrate cleanly with session persistence, LLM guidance, and our consolidated prompt engine.
 
-**Core Vision**: Transform `>>content_analysis {{content}} --> deep_analysis --> notes = "comprehensive"` into a first-class command syntax.
+**Core Vision**: Users express workflows like `@ReACT >>diagnose logs="..." --> fix --> verify = "tests pass"` and the system:
+- parses symbolic syntax reliably,
+- provides the LLM with clear per-step instructions and context cues,
+- manages session state for resumable execution,
+- enforces inline quality gates and temporary framework overrides,
+- keeps future operators (parallel/conditional) extensible.
+
+## Architectural Alignment
+
+- **Execution Model**: Chain execution now progresses **one step per MCP call** using `ChainSessionManager`. Symbolic features must cooperate with this state machine instead of “execute all steps at once.”
+- **LLM Guidance**: Output formatting must follow the **Chain Operator LLM Execution Model** (see Phase 1B) so the client LLM receives explicit instructions on sequencing and context propagation.
+- **Operator Pipeline**:
+  1. `UnifiedCommandParser` detects symbolic operators and prepares an execution plan.
+  2. `executeSymbolicCommand` hands step metadata to the session engine.
+  3. Each MCP invocation renders the next step using `ChainOperatorExecutor`, applying framework overrides or gate checks when required.
+  4. Additional operators (parallel, conditional) extend the plan but feed into the same step-by-step execution loop.
+
+## Updated Problem Statement
+
+### Current Gaps (Post Step-by-Step Rollout)
+
+1. **Operator Execution Bypass**:
+   - Session logic short-circuits before the original operator executors run.
+   - Framework/gate behavior must be re-injected into the new flow.
+
+2. **LLM Guidance Deficit**:
+   - Chain output still uses the pre-LLM-guidance format.
+- Needs to adopt the enhanced instructions we drafted for the LLM guidance blueprint (now merged into this plan).
+
+3. **Documentation + Telemetry Debt**:
+   - Public docs do not reflect symbolic syntax or the new execution behavior.
+   - Metrics/analytics lack visibility into symbolic usage.
+
+4. **Future Operators (Parallel/Conditional)**:
+   - Parsing stubs exist but no execution pathway yet.
+   - Must plan them around the session model, potentially as multi-branch chains executed step-by-step.
 
 ## Problem Statement
 
@@ -61,7 +96,265 @@ EOF
 >>web_search "AI trends" --> deep_analysis --> synthesis_report = "actionable insights"
 ```
 
-## Proposed Solution: Symbolic Command Language
+## Unified Blueprint
+
+Symbolic command language evolves across four aligned tracks:
+
+1. **Phase 1A – Parser & Session Integration (Complete / Polish Pending)**
+2. **Phase 1B – LLM Execution Model & Guidance (from `chain-operator-llm-execution-model.md`)**
+3. **Phase 2 – Inline Gates & Framework Overrides**
+4. **Phase 3 – Advanced Operators (Parallel, Conditional, Future Extensions)**
+5. **Phase 4 – Documentation, Telemetry, Developer Ergonomics**
+
+Each phase builds on the step-by-step execution core and keeps the LLM as the active agent.
+
+---
+
+## Phase 1A – Parser & Session Integration (Current Focus)
+
+**Goal**: Ensure symbolic chain commands route cleanly through the session-aware engine, preserving the developer ergonomics delivered by the parser while maintaining backward compatibility.
+
+### Baseline (Completed January 2025)
+
+This phase builds on the “step-by-step chain execution” implementation delivered on 2025‑01‑23. The baseline already provides:
+
+- **Single-step execution per MCP call**, with `ChainSessionManager` persisting progress and outputs.
+- **Hybrid session discovery**: automatic detection by chain ID hash, optional explicit `session_id`, and `force_restart=true` for reset semantics.
+- **Continuation via identical command replay**, enabling the client LLM to resume seamlessly.
+- **24-hour session persistence** with support for multiple concurrent instances of the same chain.
+- Helper utilities (`generateChainId`, `generateSessionId`, `hashString`) wired into `executeSymbolicCommand` to uniquely track active sessions.
+
+All subsequent tasks must respect these invariants so we do not regress existing functionality.
+
+### Deliverables
+
+- ✅ `SymbolicCommandParser` with operator detection (chain, gate, framework, parallel, conditional).
+- ✅ `UnifiedCommandParser` strategy for symbolic commands.
+- ✅ Session-aware `executeSymbolicCommand` scaffold (start/continue logic).
+- ✅ Rewire session flow to actually invoke the operator executors (ChainOperatorExecutor, GateOperatorExecutor, FrameworkOperatorExecutor) within the step lifecycle.
+- 🔄 Validate that `stepPrompts` include `PromptData`/`ConvertedPrompt` and surface clear errors when prompts are missing.
+- ✅ Integration test covering symbolic chain start/resume/complete (`tests/integration/symbolic-chain-integration.test.ts`).
+
+### Key Tasks
+
+- ✅ Refactor `startNewChainExecution` / `continueChainExecution` to delegate rendering to `ChainOperatorExecutor`, returning the enhanced LLM guidance format (Phase 1B).
+- ✅ Ensure gate/framework operators hook into step execution (pre-step, post-step) without breaking session resumability.
+- Establish feature flags or configuration toggles if we need to stage the rollout.
+
+**Progress snapshot (current iteration)**:
+- `executeSymbolicCommand` now normalises all symbolic sessions through the operator executors, with framework overrides applied per call and gate evaluation triggered on completion (results attached as structured metadata).
+- `ChainOperatorExecutor.renderStep` now emits concise step guidance (explicit context cues without excessive boilerplate) and reuses the same formatter for new/continuation calls.
+- Session responses append only the minimal continuation metadata (session/chain IDs, gate summary) so the rendered template remains the primary content seen by the LLM.
+- Response formatting is covered by unit tests to ensure future changes cannot strip template bodies or overwrite them with metadata.
+- End-to-end verification for symbolic chains now runs in CI (see `symbolic-chain-integration.test.ts`), exercising session restart and completion flow.
+
+### Success Criteria
+
+```bash
+>>analysis --> synthesis --> report
+```
+
+- Each MCP call renders exactly one step with proper instructions.
+- Sessions resume automatically, with clear continuation guidance.
+- Parser fallbacks (simple `>>prompt`) unaffected.
+
+---
+
+## Phase 1B – LLM Execution Model & Guidance
+
+**Origin**: Consolidates the Chain Operator LLM guidance blueprint (now retired as a standalone plan).
+
+### Objectives
+
+- Deliver concise step guidance that keeps the rendered template as the primary payload.
+- Provide minimal contextual cues (system message + quick reminder to reuse previous output) without extra headers or execution protocol blocks.
+- Ensure continuation metadata (session/chain IDs, gate result summaries) stays in the footer only.
+- Keep responses token-efficient so downstream LLMs can focus on the actual template instructions.
+
+### Implementation Hooks
+
+- `ChainOperatorExecutor.renderStep` emits streamlined step output (system hint, optional previous-step reminder, template body, single-line CTA).
+- `startNewChainExecution` / `continueChainExecution` reuse the same renderer and append only footer metadata needed for resumability.
+- Response formatter unit tests guard against regressions that strip or replace the template body.
+
+### Acceptance Tests
+
+1. Multi-step chain shows a short reminder for non-first steps but no execution protocol block.
+2. Final step emits only the template body plus a “deliver final response” CTA.
+3. Footer continues to expose session/chain IDs and gate summary without duplicating instructions.
+
+---
+
+## Phase 2 – Inline Gates & Framework Overrides (Session-Aware)
+
+### Goals
+
+- Re-enable inline gate evaluation (`=` operator) after the final step or designated steps.
+- Allow temporary framework overrides (`@FRAMEWORK`) that wrap the entire session lifecycle (ensuring restoration even if execution spans multiple MCP calls).
+
+### Implementation Strategy
+
+- **Gate Execution**:
+  - On final step completion, invoke `GateOperatorExecutor` using the aggregated output.
+  - Store gate results in session metadata, return pass/fail guidance to the LLM.
+- **Framework Overrides**:
+  - Persist framework context in session state so restarts keep the override.
+  - Apply override before rendering each step; restore after chain completion or cancellation.
+
+### Testing
+
+- Simulate chains with gates and confirm retries/validation messaging.
+- Assert framework state manager receives apply/restore calls only once per session.
+
+---
+
+## Phase 3 – Advanced Operators (Parallel, Conditional)
+
+### Vision
+
+- Extend symbolic syntax with execution semantics that still honor the session model.
+- **Parallel (`+`)**: Render simultaneous prompts as sibling steps within a single MCP response, instructing the LLM to tackle them in parallel logically (client executes sequentially but understands they represent concurrent analyses).
+- **Conditional (`? :`)**: Allow branching instructions; the LLM decides which branch to follow based on its prior output.
+
+### Plan
+
+- Define execution-plan enhancements to represent parallel groups and conditions explicitly.
+- Update `ChainOperatorExecutor` to format guidance for parallel steps (e.g., “Combine results from Step 1A/1B before proceeding”).
+- For conditionals, provide instructions to evaluate the condition and choose the next step accordingly, capturing the decision in session state.
+
+### Constraints
+
+- Initial implementation may stay informational (LLM handles branching). Later work could allow partial automation via structured outputs.
+
+---
+
+## Phase 4 – Documentation, Telemetry, Developer Ergonomics
+
+### Documentation
+
+- Create `/docs/symbolic-command-language.md` covering:
+  - Syntax quick-start
+  - Session behavior explanation
+  - Examples for chain, gate, framework, parallel, conditional
+- Update existing guides (`mcp-tool-usage-guide.md`, `prompt-format-guide.md`) to reference symbolic commands.
+
+### Telemetry & Analytics
+
+- Track symbolic command usage, session durations, gate pass/fail rates.
+- Provide admin diagnostics for active sessions and chain states.
+
+### Developer Tooling
+
+- CLI examples, integration tests, and linting rules for prompts that support `previous_step_output`.
+
+---
+
+## Operator Catalog (Updated Overview)
+
+### 1. Chain Operator: `-->`
+
+**Purpose**: Compose multi-step workflows without templates, aligned with session execution.
+
+**Execution**:
+- Each step rendered one per MCP invocation.
+- Session manager persists outputs.
+- LLM guidance follows Phase 1B template.
+
+### 2. Quality Gate Operator: `=`
+
+**Purpose**: Inline validation after chain completion.
+
+**Execution**:
+- Evaluated when the final step completes or as configured.
+- Results surfaced in completion response (pass/fail, retry instructions).
+
+### 3. Framework Selector: `@`
+
+**Purpose**: Apply methodology for the duration of the session.
+
+**Execution**:
+- Framework override stored in session context, applied to each step.
+
+### 4. Parallel Operator: `+`
+
+**Purpose**: Present concurrent prompts in a single step group, instructing LLM to synthesize combined insights.
+
+### 5. Conditional Operator: `? :`
+
+**Purpose**: Provide branching instructions based on previous output decisions.
+
+---
+
+## Testing Strategy (Revised)
+
+### Unit Tests
+
+- Parser: operator detection for all syntaxes, including edge cases with quotes.
+- Session Helpers: start/continue/complete flows with various session inputs.
+- Gate/Framework Executors: stand-alone validation using mocks.
+
+### Integration Tests
+
+- Symbolic chain end-to-end via CLI harness (multi-step, resume, completion).
+- Chain with gate operator verifying metadata and retry instructions.
+- Framework override persistence across multiple MCP invocations.
+
+### Exploratory / Manual
+
+- Run symbolic commands in Claude Desktop/Web to validate LLM understands instructions.
+- Force session expirations to ensure graceful degradation.
+
+---
+
+## Risks & Mitigations (Updated)
+
+- **LLM Misinterpretation** → Provide explicit numbered steps and execution protocol.
+- **Session State Drift** → Add defensive logging and validation on each resume.
+- **Framework Lock-in** → Guarantee restoration via finally blocks, test cancellation paths.
+- **Operator Explosion** → Maintain modular operator detection/execution files for extensibility.
+
+---
+
+## Roadmap & Checklist
+
+### Phase 1A (Parser & Session Wiring)
+- [x] Parser + execution plan generation
+- [x] Session-aware scaffolding (start/continue)
+- [x] Rewire session path through operator executors
+- [ ] Integration tests verifying end-to-end chain rendering
+
+### Phase 1B (LLM Guidance)
+- [x] Update ChainOperatorExecutor output format
+- [x] Align session responses with guidance template
+- [ ] Document guidance expectations for prompt authors
+
+### Phase 2 (Gates & Frameworks)
+- [ ] Persist framework override across sessions
+- [ ] Trigger gate evaluation on completion with retries
+- [ ] Expose gate results in ToolResponse metadata
+
+### Phase 3 (Advanced Operators)
+- [ ] Execution plan support for parallel groups
+- [ ] Conditional branch instructions and state capture
+- [ ] Tests covering mixed operator chains
+
+### Phase 4 (Docs, Telemetry, Developer Experience)
+- [ ] Ship user-facing docs for symbolic commands
+- [ ] Instrument telemetry + dashboards
+- [ ] Provide CLI examples and lint rules
+
+---
+
+## Appendix
+
+- **Related Plans**:
+  - Step-by-step chain execution baseline (January 2025) – now merged into Phase 1A above.
+- Chain Operator LLM guidance blueprint – integrated here as Phase 1B (original standalone note archived).
+- **Key Modules**:
+  - Parser: `server/src/execution/parsers/symbolic-command-parser.ts`
+  - Executors: `server/src/execution/operators/*.ts`
+  - Engine: `server/src/mcp-tools/prompt-engine/core/engine.ts`
+- **Contact / Owners**: Prompt Engine team (session + parser), UX/Docs stakeholders for LLM guidance.
 
 ### Operator Catalog
 

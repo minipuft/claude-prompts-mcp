@@ -217,7 +217,7 @@ prompt_engine({
 - **advise**: Provides guidance without blocking execution
 - **report**: Runs validation once and includes pass/fail status in the response
 
-> Need full control? `temporary_gates` remains available for advanced scenarios, but prefer `quality_gates` and `custom_checks` for most workflows.
+> Need full control? `gate_configuration.temporary_gates` remains available for advanced scenarios, but prefer `quality_gates` and `custom_checks` for most workflows.
 
 ## Advanced Search and Discovery
 
@@ -340,18 +340,15 @@ id: "MyPrompt123"      # alphanumeric OK
 
 | Action | Required Parameters | Optional Parameters |
 |--------|-------------------|-------------------|
-| `create` | `id`, `name`, `description`, `user_message_template` | `category`, `system_message`, `arguments` |
-| `create_prompt` | `id`, `name`, `description`, `user_message_template` | `category`, `system_message`, `arguments` |
-| `create_template` | `id`, `name`, `description`, `user_message_template` | `category`, `system_message`, `arguments` |
-| `create_with_gates` | `id`, `name`, `description`, `user_message_template`, `gate_configuration` OR `suggested_gates` | `category`, `system_message`, `arguments` |
+| `create` | `id`, `name`, `description`, `user_message_template` | `category`, `system_message`, `arguments`, `gate_configuration` |
+| `create_prompt` | `id`, `name`, `description`, `user_message_template` | `category`, `system_message`, `arguments`, `gate_configuration` |
+| `create_template` | `id`, `name`, `description`, `user_message_template` | `category`, `system_message`, `arguments`, `gate_configuration` |
 | `update` | `id` | Any field to update |
 | `delete` | `id` | - |
 | `modify` | `id`, `section_name`, `new_content` | - |
 | `analyze_type` | `id` | - |
 | `migrate_type` | `id`, `target_type` | - |
 | `analyze_gates` | `id` | - |
-| `update_gates` | `id`, `gate_configuration` | - |
-| `add_temporary_gates` | `id`, `temporary_gates` | `gate_scope`, `inherit_chain_gates` |
 | `suggest_temporary_gates` | `execution_context` | - |
 | `reload` | - | `full_restart`, `reason` |
 | `list` | - | `search_query` |

@@ -115,6 +115,18 @@ export interface ToolDescriptionsOptions {
 }
 
 /**
+ * Configuration toggles for framework-driven features
+ */
+export interface FrameworksConfig {
+  /** Enable system prompt injection from frameworks */
+  enableSystemPromptInjection: boolean;
+  /** Enable methodology-specific gate behavior */
+  enableMethodologyGates: boolean;
+  /** Enable dynamic tool descriptions per methodology */
+  enableDynamicToolDescriptions: boolean;
+}
+
+/**
  * Complete application configuration
  */
 /**
@@ -136,6 +148,8 @@ export interface Config {
   analysis?: AnalysisConfig;
   /** Gates system configuration */
   gates?: GatesConfig;
+  /** Framework feature configuration */
+  frameworks?: FrameworksConfig;
   /** Transports configuration */
   transports: TransportsConfig;
   /** Logging configuration */

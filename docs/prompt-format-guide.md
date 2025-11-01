@@ -117,7 +117,6 @@ The system automatically decides whether to:
 - **Execute immediately**: For high-confidence chains
 - **Return template info**: For information-only prompts
 - **Apply quality gates**: Based on prompt complexity and type
-- **Enable step confirmation**: For sensitive or complex chains
 
 ### Usage Examples
 
@@ -140,8 +139,8 @@ The system automatically decides whether to:
 # Force specific execution mode
 >>execute_prompt {"command": ">>content_analysis data", "execution_mode": "chain"}
 
-# Enable step confirmation for sensitive chains
->>execute_prompt {"command": ">>notes data", "step_confirmation": true}
+# Apply stricter gate validation for sensitive chains
+>>execute_prompt {"command": ">>notes data", "quality_gates": ["accuracy", "safety"]}
 ```
 
 ### Required Sections

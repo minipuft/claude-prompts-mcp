@@ -780,16 +780,148 @@ The system now includes advanced search capabilities implemented in `consolidate
 
 **Essential Commands:**
 
-- `npm run test:ci` - Complete test suite (unit + integration + performance)
+- `npm run test:ci` - Complete test suite (unit + integration)
 - `npm run test:all-enhanced` - Enhanced framework and MCP validation
 - `npm run validate:all` - Core validation (dependencies + circular)
 - `npm run test:ci-startup` - Server startup validation
+
+**Performance Monitoring:**
+
+- `npm run test:performance-memory` - Memory usage monitoring with GC profiling
+- `npm run test:establish-baselines` - Establish performance baselines for benchmarking
+- Node script tests provide comprehensive performance metrics
+- Parsing performance validated in integration tests (Test 6: Performance Validation)
+
+**Deprecated:**
+
+- ❌ `npm run test:performance` - Jest performance tests deprecated (outdated architecture)
+- ⚠️ Jest tests in `tests/performance/*.test.ts` reference legacy parsing system
+- ✅ Use Node script equivalents instead (listed above under Performance Monitoring)
+- **Rationale**: Tests written for legacy architecture; functionality covered by working Node scripts
 
 **Quality Standards:**
 
 - **Jest Configuration**: ES modules, 30s timeout, single worker, `tests/setup.ts`
 - **Validation Integration**: Global Rules quality gates with evidence-based criteria
 - **Architecture Compliance**: Single source of truth principle enforcement
+
+#### Hybrid Testing Strategy
+
+**Decision: Use Node.js Scripts for Integration Tests, Jest for Unit Tests**
+
+After analyzing the testing requirements and Jest's limitations with ES modules, the project uses a hybrid testing approach:
+
+**Node.js Integration Scripts** (`tests/scripts/*.js`):
+- ✅ **Best for**: Integration tests, E2E tests, performance tests, server lifecycle tests, MCP protocol tests
+- ✅ **Advantages**:
+  - Tests actual compiled code (`dist/`) in production environment
+  - No transformation/transpilation layer (tests real ES module behavior)
+  - Simple: Just Node.js + imports, no complex configuration
+  - Direct integration testing of MCP server code paths
+  - Fast execution with standard Node debugging
+- ✅ **Total**: ~3,665 lines across 13 working scripts
+- ✅ **Examples**: `integration-mcp-tools.js`, `integration-server-startup.js`, `integration-symbolic-chains.js`
+
+**Jest Unit Tests** (`tests/unit/*.test.ts`):
+- ✅ **Best for**: Pure unit tests of isolated logic (formatters, parsers, utilities)
+- ✅ **Advantages**:
+  - Better assertions and test organization
+  - Mocking/stubbing capabilities
+  - Code coverage metrics
+  - Fast parallel execution
+- ⚠️ **Limitations**:
+  - Jest transforms TypeScript → CommonJS (different from production)
+  - `import.meta.url` requires workarounds (lazy initialization with eval)
+  - Cannot test modules that import from `dist/` (ES module syntax errors)
+- ✅ **Total**: ~2,411 lines across 13 test files
+- ✅ **Examples**: `response-formatter.test.ts`, `semantic-analyzer-three-tier.test.ts`
+
+**When to Use Each:**
+
+| Test Type | Use Node.js Scripts | Use Jest Unit Tests |
+|-----------|-------------------|-------------------|
+| Server startup/lifecycle | ✅ Yes | ❌ No |
+| MCP protocol compliance | ✅ Yes | ❌ No |
+| Real module interactions | ✅ Yes | ❌ No |
+| Performance benchmarks | ✅ Yes | ❌ No |
+| Pure logic (no imports) | ⚠️ Either | ✅ Preferred |
+| Formatters/utilities | ⚠️ Either | ✅ Preferred |
+| Complex mocking needed | ❌ No | ✅ Yes |
+
+**Jest ES Module Compatibility Fix:**
+
+The `jsonUtils.ts` module uses lazy initialization to support both Jest and production ES modules:
+
+```typescript
+// Lazy initialization prevents Jest from parsing import.meta at module load time
+let nunjucksEnv: nunjucks.Environment | null = null;
+
+function getPromptTemplatesPath(): string {
+  if (typeof __dirname !== 'undefined') {
+    // Jest/CommonJS environment
+    return path.resolve(__dirname, "../../prompts");
+  }
+  // ES modules - use eval to prevent Jest parse-time errors
+  const metaUrl = eval('import.meta.url');
+  return path.resolve(path.dirname(fileURLToPath(metaUrl)), "../../prompts");
+}
+
+function getNunjucksEnv(): nunjucks.Environment {
+  if (!nunjucksEnv) {
+    nunjucksEnv = nunjucks.configure(getPromptTemplatesPath(), { /* config */ });
+  }
+  return nunjucksEnv;
+}
+```
+
+**Key Insight**: Using `eval('import.meta.url')` prevents Jest from parsing `import.meta` at compile time, while still allowing it to work in production ES modules.
+
+**Test Organization:**
+
+```
+server/tests/
+├── scripts/                          # Node.js integration tests (3,665 lines)
+│   ├── integration-mcp-tools.js      # MCP tools integration
+│   ├── integration-server-startup.js # Server lifecycle
+│   ├── integration-symbolic-chains.js # Symbolic chain execution
+│   ├── integration-routing-system.js  # Command routing
+│   └── ... (9 more scripts)
+├── unit/                             # Jest unit tests (2,411 lines)
+│   ├── response-formatter.test.ts    # ✅ Pure logic
+│   ├── semantic-analyzer.test.ts     # ✅ Isolated analysis
+│   └── ... (11 more tests)
+├── integration/                      # Jest integration tests (deprecated)
+│   └── *.test.ts                     # ⚠️ Migrate to Node.js scripts
+└── performance/                      # Jest performance tests (deprecated)
+    └── *.test.ts                     # ⚠️ Use Node.js scripts instead
+```
+
+**Migration Guidance:**
+
+- ✅ **Keep Node.js scripts**: They test actual production code paths and work perfectly
+- ✅ **Keep Jest for pure unit tests**: Isolated logic without server dependencies
+- ❌ **Don't migrate scripts to Jest**: Integration tests belong in Node.js scripts
+- ⚠️ **Migrate Jest integration tests**: Move `tests/integration/*.test.ts` to Node.js scripts
+- **ROI**: Migrating 3,665 lines of working Node.js scripts to Jest has negative ROI
+
+**Running Tests:**
+
+```bash
+# Run all Node.js integration scripts
+npm run test:integration
+
+# Run all Jest unit tests
+npx jest
+
+# Run complete test suite
+npm run test:ci
+
+# Run specific Node.js script
+node tests/scripts/integration-mcp-tools.js
+
+# Run specific Jest test
+npx jest tests/unit/response-formatter.test.ts
+```
 
 ### Code Quality Standards
 

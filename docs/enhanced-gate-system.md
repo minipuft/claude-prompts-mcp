@@ -474,86 +474,53 @@ The Temporary Gates System provides dynamic, execution-scoped quality gates that
    - Memory-efficient registry with automatic pruning
 
 4. **MCP Tool Integration**
-   - 5 dedicated gate management actions in `prompt_manager`
-   - Hot-reload support for dynamic gate updates
-   - Full gate configuration persistence
+   - Gate management lives in standard create/update flows via `gate_configuration`
+   - `analyze_gates` and `suggest_temporary_gates` provide dedicated analysis endpoints
+   - Hot-reload support for dynamic gate updates with full configuration persistence
 
 ### MCP Actions for Gate Management
 
-The `prompt_manager` tool provides 5 actions for comprehensive gate management:
+Gate management now happens through the standard lifecycle actions plus two dedicated analysis endpoints. Legacy actions (`create_with_gates`, `update_gates`, `add_temporary_gates`) have been retired to keep the API surface consistent.
 
-#### 1. **create_with_gates** - Create Prompts with Suggested Gates
+#### 1. Create / Update with `gate_configuration`
 ```bash
-prompt_manager action="create_with_gates" \
+prompt_manager action="create" \
   id="my_prompt" \
   name="My Prompt" \
   description="Prompt description" \
   category="development" \
   user_message_template="Template with {{variable}}" \
-  arguments='[{"name": "variable", "type": "string"}]' \
-  suggested_gates='[{"type": "validation", "name": "input_validation", "description": "..."}]'
+  gate_configuration='{
+    "include": ["code-quality", "safety"],
+    "temporary_gates": [{
+      "name": "custom_validation",
+      "type": "validation",
+      "scope": "execution",
+      "description": "Extra validation for this run",
+      "guidance": "Ensure criteria are met",
+      "pass_criteria": ["Criterion 1", "Criterion 2"]
+    }],
+    "framework_gates": true
+  }'
 ```
 
-**Features:**
-- Create prompts with initial gate suggestions
-- Analyze prompt intent and recommend appropriate gates
-- Automatic gate configuration generation
+Use the same pattern with `action="update"` to modify gate settings. Temporary gate scope and inheritance are encoded inside each definition, so no extra parameters are required.
 
-#### 2. **update_gates** - Modify Gate Configuration
+#### 2. **analyze_gates** – Gate Analysis and Recommendations
 ```bash
-prompt_manager action="update_gates" \
-  id="my_prompt" \
-  gate_configuration='{"include": ["code-quality"], "exclude": ["security"], "framework_gates": true}'
+prompt_manager action="analyze_gates" id="my_prompt"
 ```
 
-**Features:**
-- Update include/exclude gate lists
-- Toggle framework gates on/off
-- Immediate hot-reload updates
+Generates recommendations, highlights missing gates, and previews how `gate_configuration` will be applied.
 
-#### 3. **add_temporary_gates** - Add Runtime Gates
-```bash
-prompt_manager action="add_temporary_gates" \
-  id="my_prompt" \
-  temporary_gates='[{
-    "name": "custom_validation",
-    "type": "validation",
-    "scope": "execution",
-    "description": "Custom validation for this execution",
-    "guidance": "Ensure specific criteria are met",
-    "pass_criteria": ["Criterion 1", "Criterion 2"]
-  }]' \
-  gate_scope="execution" \
-  inherit_chain_gates=true
-```
-
-**Features:**
-- Add temporary gates to any prompt
-- Support execution, chain, and step scopes
-- Automatic cleanup after expiration
-
-#### 4. **analyze_gates** - Gate Analysis and Recommendations
-```bash
-prompt_manager action="analyze_gates" \
-  id="my_prompt"
-```
-
-**Features:**
-- Analyze prompt complexity and recommend gates
-- Suggest temporary gates for specific use cases
-- Provide gate configuration templates
-
-#### 5. **suggest_temporary_gates** - Contextual Gate Suggestions
+#### 3. **suggest_temporary_gates** – Contextual Gate Suggestions
 ```bash
 prompt_manager action="suggest_temporary_gates" \
   id="my_prompt" \
   execution_context='{"complexity": "high", "domain": "security"}'
 ```
 
-**Features:**
-- Context-aware gate suggestions
-- Automatic temporary gate generation
-- Integration with semantic analysis
+Returns ready-to-merge `temporary_gates` blocks that you can drop into a subsequent `gate_configuration` update.
 
 ### Chain-Level Gate Inheritance (Phase 3B)
 
@@ -567,17 +534,20 @@ prompt_manager action="suggest_temporary_gates" \
 **Example:**
 ```bash
 # Create chain with temporary gates
-prompt_manager action="add_temporary_gates" \
+prompt_manager action="update" \
   id="analysis_chain" \
-  temporary_gates='[{
-    "name": "chain_quality_gate",
-    "type": "quality",
-    "scope": "chain",
-    "description": "Quality standards for entire chain",
-    "guidance": "Maintain quality across all steps",
-    "pass_criteria": ["All steps complete", "Results coherent"]
-  }]' \
-  gate_scope="chain"
+  gate_configuration='{
+    "temporary_gates": [{
+      "name": "chain_quality_gate",
+      "type": "quality",
+      "scope": "chain",
+      "description": "Quality standards for entire chain",
+      "guidance": "Maintain quality across all steps",
+      "pass_criteria": ["All steps complete", "Results coherent"]
+    }],
+    "gate_scope": "chain",
+    "inherit_chain_gates": true
+  }'
 
 # Execute chain - all steps automatically inherit chain gates
 prompt_engine >>analysis_chain input="data"
@@ -593,7 +563,7 @@ prompt_engine >>analysis_chain input="data"
 ```
 ┌─────────────────────────────────────────────────┐
 │ 1. CREATION                                     │
-│    - Via add_temporary_gates MCP action         │
+│    - Via gate_configuration.temporary_gates     │
 │    - Or automatically by semantic analysis      │
 │    - Assigned unique ID and creation timestamp  │
 └─────────────────────────────────────────────────┘
@@ -628,44 +598,50 @@ prompt_engine >>analysis_chain input="data"
 **1. One-Time Validation Requirements**
 ```bash
 # Add temporary gate for specific execution
-prompt_manager action="add_temporary_gates" \
+prompt_manager action="update" \
   id="code_review" \
-  temporary_gates='[{
-    "name": "security_audit",
-    "type": "validation",
-    "scope": "execution",
-    "description": "Extra security validation for sensitive code",
-    "pass_criteria": ["No hardcoded credentials", "All inputs validated"]
-  }]'
+  gate_configuration='{
+    "temporary_gates": [{
+      "name": "security_audit",
+      "type": "validation",
+      "scope": "execution",
+      "description": "Extra security validation for sensitive code",
+      "pass_criteria": ["No hardcoded credentials", "All inputs validated"]
+    }]
+  }'
 ```
 
 **2. Chain Workflow Quality Standards**
 ```bash
 # Set chain-wide quality gates
-prompt_manager action="add_temporary_gates" \
+prompt_manager action="update" \
   id="data_pipeline" \
-  temporary_gates='[{
-    "name": "data_quality",
-    "type": "quality",
-    "scope": "chain",
-    "description": "Data quality standards for entire pipeline",
-    "pass_criteria": ["No null values", "Schema validated"]
-  }]' \
-  gate_scope="chain"
+  gate_configuration='{
+    "temporary_gates": [{
+      "name": "data_quality",
+      "type": "quality",
+      "scope": "chain",
+      "description": "Data quality standards for entire pipeline",
+      "pass_criteria": ["No null values", "Schema validated"]
+    }],
+    "gate_scope": "chain"
+  }'
 ```
 
 **3. Context-Specific Guidance**
 ```bash
 # Add guidance gate for novice users
-prompt_manager action="add_temporary_gates" \
+prompt_manager action="update" \
   id="tutorial_prompt" \
-  temporary_gates='[{
-    "name": "beginner_guidance",
-    "type": "guidance",
-    "scope": "execution",
-    "description": "Extra explanation for learning",
-    "guidance": "Provide step-by-step explanations with examples"
-  }]'
+  gate_configuration='{
+    "temporary_gates": [{
+      "name": "beginner_guidance",
+      "type": "guidance",
+      "scope": "execution",
+      "description": "Extra explanation for learning",
+      "guidance": "Provide step-by-step explanations with examples"
+    }]
+  }'
 ```
 
 ### Architecture Components
@@ -725,7 +701,7 @@ interface EnhancedGateConfiguration {
 ### Testing and Validation
 
 **Phase 3A: Bug Fixes & Validation** ✅
-- Fixed `add_temporary_gates` parameter validation
+- Hardened `gate_configuration.temporary_gates` validation
 - Created comprehensive test prompts
 - Verified MCP schema completeness
 - TypeScript compilation validated
