@@ -14,7 +14,7 @@ import {
   ProcessingGuidance,
   TemplateEnhancementConfig
 } from "../types/index.js";
-import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
+import type { ContentAnalysisResult } from "../../semantic/types.js";
 import { LightweightGateSystem } from "../../gates/core/index.js";
 
 /**

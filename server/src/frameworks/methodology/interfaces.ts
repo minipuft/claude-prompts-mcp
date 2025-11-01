@@ -26,9 +26,3 @@ export type {
 export {
   BaseMethodologyGuide
 } from "../types/methodology-types.js";
-
-// Registry-specific interfaces
-export type {
-  MethodologyRegistryConfig,
-  MethodologyGuideEntry
-} from "./registry.js";
