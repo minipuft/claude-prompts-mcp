@@ -21,7 +21,6 @@ import {
 import { ContentAnalyzer } from "../../../semantic/configurable-semantic-analyzer.js";
 import { FrameworkStateManager } from "../../../frameworks/framework-state-manager.js";
 import { FrameworkManager } from "../../../frameworks/framework-manager.js";
-import { createPromptResponse, createErrorResponse } from "../../shared/structured-response-builder.js";
 
 // Modular components
 import {
@@ -147,7 +146,7 @@ export class ConsolidatedPromptManager {
    * Main action handler - Routes to appropriate modules
    */
   public async handleAction(args: {
-    action: "create" | "create_prompt" | "create_template" | "analyze_type" | "migrate_type" | "update" | "delete" | "modify" | "reload" | "list" | "analyze_gates" | "suggest_temporary_gates" | "create_with_gates" | "update_gates" | "add_temporary_gates";
+    action: "create" | "create_prompt" | "create_template" | "analyze_type" | "migrate_type" | "update" | "delete" | "modify" | "reload" | "list" | "analyze_gates" | "suggest_temporary_gates";
     [key: string]: any;
   }, extra: any): Promise<ToolResponse> {
 
@@ -194,15 +193,6 @@ export class ConsolidatedPromptManager {
 
         case "suggest_temporary_gates":
           return await this.suggestTemporaryGates(args);
-
-        case "create_with_gates":
-          return await this.createPromptWithGates(args);
-
-        case "update_gates":
-          return await this.updatePromptGates(args);
-
-        case "add_temporary_gates":
-          return await this.addTemporaryGates(args);
 
         default:
           throw new ValidationError(`Unknown action: ${action}`);
@@ -284,7 +274,7 @@ export class ConsolidatedPromptManager {
           gateAnalysis.recommendedGates.slice(0, 3).forEach(gate => {
             response += `- ${gate}\n`;
           });
-          response += `Use \`update_gates\` action to add gate configuration.\n`;
+          response += `Use \`update\` action with \`gate_configuration\` parameter to add gates.\n`;
         }
       } catch (error) {
         this.logger.warn('Failed to analyze gates for new prompt:', error);
@@ -293,12 +283,10 @@ export class ConsolidatedPromptManager {
 
     await this.handleSystemRefresh(args.full_restart, `Prompt created: ${args.id}`);
 
-    return createPromptResponse(response, "create", {
-      promptId: args.id,
-      category: args.category,
-      analysisResult: analysis,
-      affectedFiles: [`${args.id}.md`]
-    });
+    return {
+      content: [{ type: "text" as const, text: response }],
+      isError: false
+    };
   }
 
   /**
@@ -355,12 +343,10 @@ export class ConsolidatedPromptManager {
 
     await this.handleSystemRefresh(args.full_restart, `Prompt updated: ${args.id}`);
 
-    return createPromptResponse(response, "update", {
-      promptId: args.id,
-      category: promptData.category,
-      analysisResult: afterAnalysis,
-      affectedFiles: [`${args.id}.md`]
-    });
+    return {
+      content: [{ type: "text" as const, text: response }],
+      isError: false
+    };
   }
 
   /**
@@ -393,11 +379,10 @@ export class ConsolidatedPromptManager {
 
     await this.handleSystemRefresh(args.full_restart, `Prompt deleted: ${args.id}`);
 
-    return createPromptResponse(response, "delete", {
-      promptId: args.id,
-      category: promptToDelete.category,
-      affectedFiles: [`${args.id}.md`]
-    });
+    return {
+      content: [{ type: "text" as const, text: response }],
+      isError: false
+    };
   }
 
   /**
@@ -438,15 +423,10 @@ export class ConsolidatedPromptManager {
     });
 
     if (matchingPrompts.length === 0) {
-      return createPromptResponse(
-        `📭 No prompts found matching filter: "${args.search_query || 'all'}"\n\n💡 Try broader search terms or use filters like 'type:template', 'category:analysis'`,
-        "list",
-        {
-          promptId: "none",
-          category: "all",
-          affectedFiles: []
-        }
-      );
+      return {
+        content: [{ type: "text" as const, text: `📭 No prompts found matching filter: "${args.search_query || 'all'}"\n\n💡 Try broader search terms or use filters like 'type:template', 'category:analysis'` }],
+        isError: false
+      };
     }
 
     // Generate response using existing format
@@ -499,10 +479,10 @@ export class ConsolidatedPromptManager {
     result += `• Use \`analyze_type\` to get type recommendations\n`;
     result += `• Use \`migrate_type\` to convert between prompt/template\n`;
 
-    return createPromptResponse(result, "list_intelligent", {
-      promptId: "multiple",
-      category: "all"
-    });
+    return {
+      content: [{ type: "text" as const, text: result }],
+      isError: false
+    };
   }
 
   /**
@@ -513,12 +493,10 @@ export class ConsolidatedPromptManager {
 
     const prompt = this.convertedPrompts.find(p => p.id === args.id);
     if (!prompt) {
-      return createErrorResponse(`Prompt not found: ${args.id}`, {
-        tool: "prompt_manager",
-        operation: "analyze_type",
-        errorType: "validation",
-        severity: "medium"
-      });
+      return {
+        content: [{ type: "text" as const, text: `Prompt not found: ${args.id}` }],
+        isError: true
+      };
     }
 
     const analysis = await this.promptAnalyzer.analyzePrompt(prompt);
@@ -548,10 +526,10 @@ export class ConsolidatedPromptManager {
       recommendation += `\n🔒 **Suggested Quality Gates**: ${analysis.suggestedGates.join(', ')}\n`;
     }
 
-    return createPromptResponse(recommendation, "analyze_type", {
-      promptId: args.id,
-      analysisResult: { classification: analysis, feedback: '', suggestions: [] }
-    });
+    return {
+      content: [{ type: "text" as const, text: recommendation }],
+      isError: false
+    };
   }
 
   // Additional helper methods (maintaining original API)
@@ -577,30 +555,23 @@ export class ConsolidatedPromptManager {
 
     const prompt = this.convertedPrompts.find(p => p.id === args.id);
     if (!prompt) {
-      return createErrorResponse(`Prompt not found: ${args.id}`, {
-        tool: "prompt_manager",
-        operation: "migrate_type",
-        errorType: "validation",
-        severity: "medium"
-      });
+      return { content: [{ type: "text" as const, text: `Prompt not found: ${args.id}` }], isError: true };
     }
 
-    return createPromptResponse(
-      `🔄 Migration from ${prompt.id} to ${args.target_type} would be implemented here`,
-      "migrate_type",
-      { promptId: args.id }
-    );
+    return {
+      content: [{ type: "text" as const, text: `🔄 Migration from ${prompt.id} to ${args.target_type} would be implemented here` }],
+      isError: false
+    };
   }
 
   private async modifyPrompt(args: any): Promise<ToolResponse> {
     // Simplified implementation - full modify logic could be in operations module
     validateRequiredFields(args, ['id', 'section_name', 'new_content']);
 
-    return createPromptResponse(
-      `✏️ **Section Modified**: ${args.section_name} in ${args.id}`,
-      "modify",
-      { promptId: args.id }
-    );
+    return {
+      content: [{ type: "text" as const, text: `✏️ **Section Modified**: ${args.section_name} in ${args.id}` }],
+      isError: false
+    };
   }
 
   private async reloadPrompts(args: any): Promise<ToolResponse> {
@@ -618,10 +589,7 @@ export class ConsolidatedPromptManager {
       response += `✅ **Hot reload completed** - All prompts refreshed from disk.\n`;
     }
 
-    return createPromptResponse(response, "reload", {
-      promptId: "system",
-      affectedFiles: args.full_restart ? ["server"] : ["prompts"]
-    });
+    return { content: [{ type: "text" as const, text: response }], isError: false };
   }
 
   // Helper methods
@@ -657,12 +625,7 @@ export class ConsolidatedPromptManager {
 
     const prompt = this.convertedPrompts.find(p => p.id === args.id);
     if (!prompt) {
-      return createErrorResponse(`Prompt not found: ${args.id}`, {
-        tool: "prompt_manager",
-        operation: "analyze_gates",
-        errorType: "validation",
-        severity: "medium"
-      });
+      return { content: [{ type: "text" as const, text: `Prompt not found: ${args.id}` }], isError: true };
     }
 
     const analysis = await this.gateAnalyzer.analyzePromptForGates(prompt);
@@ -701,11 +664,7 @@ export class ConsolidatedPromptManager {
     response += `📋 **Suggested Gate Configuration**:\n`;
     response += `\`\`\`json\n${JSON.stringify(analysis.gateConfigurationPreview, null, 2)}\n\`\`\`\n`;
 
-    return createPromptResponse(response, "analyze_gates", {
-      promptId: args.id,
-      category: prompt.category,
-      analysisResult: analysis
-    });
+    return { content: [{ type: "text" as const, text: response }], isError: false };
   }
 
   /**
@@ -732,207 +691,15 @@ export class ConsolidatedPromptManager {
 
     response += `\n💡 **Usage**: Use these suggestions when creating or updating prompts to ensure appropriate quality gates are applied.\n`;
 
-    return createPromptResponse(response, "suggest_temporary_gates", {
-      promptId: "context-based",
-      category: context.category || "general",
-      analysisResult: { suggestions: suggestedGates }
-    });
-  }
-
-  /**
-   * Create prompt with enhanced gate configuration
-   */
-  private async createPromptWithGates(args: any): Promise<ToolResponse> {
-    // USING ERROR LEVEL FOR GUARANTEED VISIBILITY
-    this.logger.error(`[GATE-TRACE] 🎯 createPromptWithGates called for prompt: ${args.id}`);
-    this.logger.error(`[GATE-TRACE] Gate config raw data:`, {
-      hasGateConfig: !!args.gate_configuration,
-      gateConfigType: typeof args.gate_configuration,
-      gateConfigRaw: args.gate_configuration,
-      hasSuggestedGates: !!args.suggested_gates
-    });
-
-    validateRequiredFields(args, ['id', 'name', 'description', 'user_message_template']);
-
-    // Validate and parse gate configuration
-    let gateConfiguration: any = null;
-    if (args.gate_configuration) {
-      this.logger.info(`[GATE-DEBUG] Processing gate_configuration for ${args.id}`);
-      try {
-        gateConfiguration = typeof args.gate_configuration === 'string'
-          ? JSON.parse(args.gate_configuration)
-          : args.gate_configuration;
-        this.logger.debug(`[GATE-DEBUG] Parsed gate configuration:`, gateConfiguration);
-      } catch (error) {
-        this.logger.error(`[GATE-DEBUG] Failed to parse gate configuration:`, error);
-        throw new ValidationError(`Invalid gate configuration JSON: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    } else if (args.suggested_gates) {
-      this.logger.info(`[GATE-DEBUG] Auto-generating from suggested_gates for ${args.id}`);
-      // Auto-generate basic gate configuration from suggested gates
-      // Extract gate names from gate objects
-      const gateNames = Array.isArray(args.suggested_gates)
-        ? args.suggested_gates.map((gate: any) => gate.name)
-        : [args.suggested_gates.name];
-
-      gateConfiguration = {
-        include: gateNames,
-        framework_gates: true
-      };
-      this.logger.debug(`[GATE-DEBUG] Auto-generated gate configuration with extracted names:`, gateConfiguration);
-    } else {
-      this.logger.warn(`[GATE-DEBUG] No gate configuration or suggested gates found for ${args.id}`);
-    }
-
-    // Create prompt with gates
-    const enhancedArgs = {
-      ...args,
-      gate_configuration: gateConfiguration
+    return {
+      content: [{ type: "text" as const, text: response }],
+      isError: false
     };
-
-    this.logger.debug(`[GATE-DEBUG] Enhanced args being passed to createPrompt:`, {
-      id: enhancedArgs.id,
-      hasGateConfig: !!enhancedArgs.gate_configuration,
-      gateConfigContent: enhancedArgs.gate_configuration
-    });
-
-    return await this.createPrompt(enhancedArgs);
-  }
-
-  /**
-   * Update gate configuration for existing prompt
-   */
-  private async updatePromptGates(args: any): Promise<ToolResponse> {
-    validateRequiredFields(args, ['id']);
-
-    const currentPrompt = this.convertedPrompts.find(p => p.id === args.id);
-    if (!currentPrompt) {
-      throw new PromptError(`Prompt not found: ${args.id}`);
-    }
-
-    // Parse new gate configuration
-    let gateConfiguration: any = null;
-    if (args.gate_configuration) {
-      try {
-        gateConfiguration = typeof args.gate_configuration === 'string'
-          ? JSON.parse(args.gate_configuration)
-          : args.gate_configuration;
-      } catch (error) {
-        throw new ValidationError(`Invalid gate configuration JSON: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-
-    // Update only the gate configuration
-    const updateArgs = {
-      id: args.id,
-      gate_configuration: gateConfiguration
-    };
-
-    const result = await this.updatePrompt(updateArgs);
-
-    let response = `🔧 **Gate Configuration Updated**: ${currentPrompt.name} (${args.id})\n\n`;
-    response += `✅ Gate configuration has been updated successfully.\n`;
-
-    if (gateConfiguration) {
-      response += `📋 **Applied Configuration**:\n`;
-      if (gateConfiguration.include) {
-        response += `- Include Gates: ${gateConfiguration.include.join(', ')}\n`;
-      }
-      if (gateConfiguration.exclude) {
-        response += `- Exclude Gates: ${gateConfiguration.exclude.join(', ')}\n`;
-      }
-      if (gateConfiguration.temporary_gates) {
-        response += `- Temporary Gates: ${gateConfiguration.temporary_gates.length} gates defined\n`;
-      }
-      response += `- Framework Gates: ${gateConfiguration.framework_gates !== false ? 'Enabled' : 'Disabled'}\n`;
-    }
-
-    return createPromptResponse(response, "update_gates", {
-      promptId: args.id,
-      category: currentPrompt.category,
-      analysisResult: { gateConfiguration }
-    });
-  }
-
-  /**
-   * Add temporary gates to existing prompt configuration
-   * Phase 3 Fix: This now adds gates to in-memory configuration only (no file writes)
-   * Gates are truly temporary and will be activated during prompt execution
-   */
-  private async addTemporaryGates(args: any): Promise<ToolResponse> {
-    validateRequiredFields(args, ['id', 'temporary_gates']);
-
-    const currentPrompt = this.convertedPrompts.find(p => p.id === args.id);
-    if (!currentPrompt) {
-      throw new PromptError(`Prompt not found: ${args.id}`);
-    }
-
-    // Parse temporary gates
-    let temporaryGates: any[];
-    try {
-      temporaryGates = typeof args.temporary_gates === 'string'
-        ? JSON.parse(args.temporary_gates)
-        : args.temporary_gates;
-
-      if (!Array.isArray(temporaryGates)) {
-        throw new Error("temporary_gates must be an array");
-      }
-    } catch (error) {
-      throw new ValidationError(`Invalid temporary gates configuration: ${error instanceof Error ? error.message : String(error)}`);
-    }
-
-    // Phase 3 Fix: Update in-memory configuration only - NO FILE WRITES
-    // This makes gates truly temporary - they exist only in memory and expire/cleanup automatically
-    // Use enhancedGateConfiguration which supports temporary_gates
-    const existingGateConfig = currentPrompt.enhancedGateConfiguration || currentPrompt.gateConfiguration || {};
-    currentPrompt.enhancedGateConfiguration = {
-      ...existingGateConfig,
-      temporary_gates: temporaryGates,
-      gate_scope: args.gate_scope || 'execution',
-      inherit_chain_gates: args.inherit_chain_gates !== false
-    };
-
-    this.logger.info(`[TEMP GATES] Added ${temporaryGates.length} temporary gates to ${args.id} (in-memory only, no file write)`, {
-      promptId: args.id,
-      gateCount: temporaryGates.length,
-      scope: args.gate_scope || 'execution'
-    });
-
-    let response = `⚡ **Temporary Gates Added (In-Memory)**: ${currentPrompt.name} (${args.id})\n\n`;
-    response += `✅ ${temporaryGates.length} temporary gates added to in-memory configuration.\n`;
-    response += `⚠️ **Note**: Gates are temporary and will NOT be written to disk. They expire after use.\n\n`;
-
-    response += `🔒 **Added Temporary Gates**:\n`;
-    temporaryGates.forEach((gate, i) => {
-      response += `${i + 1}. **${gate.name}** (${gate.type}, ${gate.scope})\n`;
-      response += `   - ${gate.description}\n`;
-    });
-
-    response += `\n📋 **Configuration**:\n`;
-    response += `- Gate Scope: ${args.gate_scope || 'execution'}\n`;
-    response += `- Inherit Chain Gates: ${args.inherit_chain_gates !== false ? 'Yes' : 'No'}\n`;
-    response += `- Persistence: In-memory only (no file writes)\n`;
-    response += `- Lifecycle: Will be auto-activated on next prompt execution\n`;
-
-    return createPromptResponse(response, "add_temporary_gates", {
-      promptId: args.id,
-      category: currentPrompt.category,
-      analysisResult: {
-        temporaryGatesAdded: temporaryGates.length,
-        inMemoryOnly: true,
-        gateConfiguration: currentPrompt.enhancedGateConfiguration
-      }
-    });
   }
 
   private handleError(error: unknown, context: string): ToolResponse {
     const { message, isError } = utilsHandleError(error, context, this.logger);
-    return createErrorResponse(message, {
-      tool: "prompt_manager",
-      operation: context,
-      errorType: "system",
-      severity: "medium"
-    });
+    return { content: [{ type: "text" as const, text: message }], isError: true };
   }
 }
 

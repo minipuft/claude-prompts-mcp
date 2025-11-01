@@ -21,13 +21,9 @@ const ACTION_REQUIREMENTS: Record<string, { required: string[], example: string 
     required: ['id', 'name', 'description', 'user_message_template'],
     example: `{action:'create_template', id:'smart_template', name:'Template', description:'Advanced', user_message_template:'{{input}}'}`
   },
-  create_with_gates: {
-    required: ['id', 'name', 'description', 'user_message_template'],
-    example: `{action:'create_with_gates', id:'gated', name:'Gated', description:'With gates', user_message_template:'{{x}}', gate_configuration:{include:['validation']}}`
-  },
   update: {
     required: ['id'],
-    example: `{action:'update', id:'existing_prompt', description:'Updated description'}`
+    example: `{action:'update', id:'existing_prompt', description:'Updated description', gate_configuration:{include:['validation']}}`
   },
   delete: {
     required: ['id'],
@@ -48,14 +44,6 @@ const ACTION_REQUIREMENTS: Record<string, { required: string[], example: string 
   analyze_gates: {
     required: ['id'],
     example: `{action:'analyze_gates', id:'my_prompt'}`
-  },
-  update_gates: {
-    required: ['id', 'gate_configuration'],
-    example: `{action:'update_gates', id:'my_prompt', gate_configuration:{include:['validation', 'quality']}}`
-  },
-  add_temporary_gates: {
-    required: ['id', 'temporary_gates'],
-    example: `{action:'add_temporary_gates', id:'my_prompt', temporary_gates:[{type:'validation', name:'custom', description:'...'}]}`
   },
   suggest_temporary_gates: {
     required: ['execution_context'],

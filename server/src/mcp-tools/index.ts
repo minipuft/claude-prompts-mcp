@@ -444,24 +444,6 @@ export class ConsolidatedMcpToolsManager {
                   "Quality gate validation (MANDATORY for chains, auto-detected by default, see metadata sections for gate details)"
                 )
               ),
-            step_confirmation: z
-              .boolean()
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  "step_confirmation",
-                  "Require confirmation between chain steps"
-                )
-              ),
-            llm_driven_execution: z
-              .boolean()
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  "llm_driven_execution",
-                  "Enable LLM-driven chain step coordination (requires semantic LLM integration)"
-                )
-              ),
             force_restart: z
               .boolean()
               .optional()
@@ -485,60 +467,24 @@ export class ConsolidatedMcpToolsManager {
                   "Specific session ID to use or resume"
                 )
               ),
-            chain_uri: z
-              .string()
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  "chain_uri",
-                  "Full chain URI for precise session control (e.g., chain://research_pipeline/session-abc123?force_restart=true)"
-                )
-              ),
-            timeout: z
-              .number()
-              .int()
-              .positive()
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  "timeout",
-                  "Execution timeout in milliseconds"
-                )
-              ),
-            options: z
-              .record(z.any())
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  "options",
-                  "Additional execution options (key-value pairs). Supports framework-specific flags, debugging controls, and experimental features"
-                )
-              ),
           },
         },
         async (args: {
           command: string;
           execution_mode?: "auto" | "prompt" | "template" | "chain";
           gate_validation?: boolean;
-          step_confirmation?: boolean;
-          llm_driven_execution?: boolean;
           force_restart?: boolean;
           session_id?: string;
-          chain_uri?: string;
-          timeout?: number;
-          options?: Record<string, any>;
         }) => {
           try {
             const toolResponse = await this.promptEngine.executePromptCommand(
               args,
               {}
             );
+
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
-              ...(toolResponse.structuredContent && {
-                structuredContent: toolResponse.structuredContent,
-              }),
             };
           } catch (error) {
             this.logger.error(
@@ -625,14 +571,11 @@ export class ConsolidatedMcpToolsManager {
                 "list",
                 "analyze_gates",
                 "suggest_temporary_gates",
-                "create_with_gates",
-                "update_gates",
-                "add_temporary_gates",
               ])
               .describe(
                 getPromptManagerParamDescription(
                   "action",
-                  "Action to perform. Supported: create, create_prompt, create_template, create_with_gates, update, delete, modify, reload, list, analyze_type, migrate_type, analyze_gates, update_gates, add_temporary_gates, suggest_temporary_gates."
+                  "Action to perform. Supported: create, create_prompt, create_template, update, delete, modify, reload, list, analyze_type, migrate_type, analyze_gates, suggest_temporary_gates."
                 )
               ),
             id: z
@@ -641,7 +584,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptManagerParamDescription(
                   "id",
-                  "Prompt identifier. Required for create*, update, delete, modify, analyze_type, migrate_type, analyze_gates, update_gates, add_temporary_gates. Use letters, numbers, underscores, or hyphens."
+                  "Prompt identifier. Required for create*, update, delete, modify, analyze_type, migrate_type, analyze_gates. Use letters, numbers, underscores, or hyphens."
                 )
               ),
             name: z
@@ -650,7 +593,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptManagerParamDescription(
                   "name",
-                  "Friendly prompt name. Required for create*, create_with_gates."
+                  "Friendly prompt name. Required for create*."
                 )
               ),
             description: z
@@ -659,7 +602,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptManagerParamDescription(
                   "description",
-                  "Short description of the prompt purpose. Required for create*, create_with_gates."
+                  "Short description of the prompt purpose. Required for create*."
                 )
               ),
             user_message_template: z
@@ -668,7 +611,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptManagerParamDescription(
                   "user_message_template",
-                  "Prompt body with Nunjucks placeholders (e.g. 'Analyze {{input}}'). Required for create*, create_with_gates."
+                  "Prompt body with Nunjucks placeholders (e.g. 'Analyze {{input}}'). Required for create*."
                 )
               ),
             system_message: z
@@ -713,22 +656,6 @@ export class ConsolidatedMcpToolsManager {
                   "Array of argument definitions ({name, type, description}) for prompts with structured inputs."
                 )
               ),
-            suggested_gates: z
-              .array(
-                z.object({
-                  type: z.enum(['validation', 'quality', 'approval', 'condition', 'guidance']),
-                  name: z.string(),
-                  description: z.string(),
-                  criteria: z.array(z.string()).optional(),
-                })
-              )
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  "suggested_gates",
-                  "Gate suggestions used by create_with_gates. Each entry should include type, name, description, and optional criteria."
-                )
-              ),
             gate_configuration: z
               .object({
                 include: z.array(z.string()).optional(),
@@ -743,33 +670,6 @@ export class ConsolidatedMcpToolsManager {
                   "Explicit gate configuration (include/exclude lists, temporary gates, framework_gates flag)."
                 )
               ),
-            temporary_gates: z
-              .array(z.any())
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  "temporary_gates",
-                  "Temporary gate definitions used by add_temporary_gates (include name, type, scope, description, guidance, pass_criteria)."
-                )
-              ),
-            gate_scope: z
-              .enum(['execution', 'session', 'chain', 'step'])
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  "gate_scope",
-                  "Scope for temporary gates (execution, session, chain, step)."
-                )
-              ),
-            inherit_chain_gates: z
-              .boolean()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  "inherit_chain_gates",
-                  "When true, inherit gates from the parent chain (default true for add_temporary_gates)."
-                )
-              ),
             search_query: z
               .string()
               .optional()
@@ -777,15 +677,6 @@ export class ConsolidatedMcpToolsManager {
                 getPromptManagerParamDescription(
                   "search_query",
                   "Search expression for list (e.g. 'category:code type:chain')."
-                )
-              ),
-            force: z
-              .boolean()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  "force",
-                  "Bypass confirmation prompts for supported actions."
                 )
               ),
           },
@@ -803,10 +694,7 @@ export class ConsolidatedMcpToolsManager {
             | "reload"
             | "list"
             | "analyze_gates"
-            | "suggest_temporary_gates"
-            | "create_with_gates"
-            | "update_gates"
-            | "add_temporary_gates";
+            | "suggest_temporary_gates";
           [key: string]: any;
         }) => {
           try {
@@ -969,33 +857,6 @@ export class ConsolidatedMcpToolsManager {
                 getSystemControlParamDescription(
                   "framework",
                   "Framework identifier when switching (CAGEERF, ReACT, 5W1H, SCAMPER)."
-                )
-              ),
-            config_path: z
-              .string()
-              .optional()
-              .describe(
-                getSystemControlParamDescription(
-                  "config_path",
-                  "Configuration path or key for config operations."
-                )
-              ),
-            config_value: z
-              .any()
-              .optional()
-              .describe(
-                getSystemControlParamDescription(
-                  "config_value",
-                  "Value to write when performing config updates."
-                )
-              ),
-            restart_reason: z
-              .string()
-              .optional()
-              .describe(
-                getSystemControlParamDescription(
-                  "restart_reason",
-                  "Specific reason recorded for maintenance/restart operations."
                 )
               ),
             reason: z

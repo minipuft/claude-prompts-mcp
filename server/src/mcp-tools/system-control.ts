@@ -18,8 +18,14 @@ import {
 import { Logger } from "../logging/index.js";
 import { ToolResponse } from "../types/index.js";
 import { handleError as utilsHandleError } from "../utils/index.js";
-import { SafeConfigWriter, createSafeConfigWriter } from "./config-utils.js";
-import { createSystemResponse } from "./shared/structured-response-builder.js";
+import {
+  CONFIG_RESTART_REQUIRED_KEYS,
+  CONFIG_VALID_KEYS,
+  SafeConfigWriter,
+  createSafeConfigWriter,
+  validateConfigInput,
+} from "./config-utils.js";
+import type { ConfigKey } from "./config-utils.js";
 import { ToolDescriptionManager } from "./tool-description-manager.js";
 // Phase 3: Prompt guidance system integration
 import { PromptGuidanceService } from "../frameworks/prompt-guidance/index.js";
@@ -74,34 +80,15 @@ function createStructuredResponse(
   const actualIsError = typeof isError === "boolean" ? isError : false;
   const metadata = extraArgs.length > 0 ? extraArgs[0] : {};
 
-  // Use shared response builder for consistency
-  if (actualIsError) {
-    // For errors, we might want to use createErrorResponse, but for compatibility, use createSystemResponse
-    return createSystemResponse(
-      Array.isArray(content)
-        ? content[0]?.text || String(content)
-        : String(content),
-      "error",
-      {
-        systemHealth: metadata.systemHealth,
-        analytics: metadata.analytics,
-        configChanges: metadata.configChanges,
-      }
-    );
-  }
+  // Use simple response format
+  const textContent = Array.isArray(content)
+    ? content[0]?.text || String(content)
+    : String(content);
 
-  return createSystemResponse(
-    Array.isArray(content)
-      ? content[0]?.text || String(content)
-      : String(content),
-    metadata.operation || "system_action",
-    {
-      frameworkState: metadata.frameworkState,
-      systemHealth: metadata.systemHealth,
-      analytics: metadata.analytics,
-      configChanges: metadata.configChanges,
-    }
-  );
+  return {
+    content: [{ type: "text" as const, text: textContent }],
+    isError: actualIsError
+  };
 }
 
 // Type aliases for compatibility
@@ -287,32 +274,60 @@ export class ConsolidatedSystemControl {
   /**
    * Helper function for minimal outputSchema compliance
    */
-  private createMinimalSystemResponse(
+  createMinimalSystemResponse(
     text: string,
     action: string
   ): ToolResponse {
+    const now = Date.now();
+    const frameworkState = this.frameworkStateManager?.getCurrentState();
+    const systemHealth = this.frameworkStateManager?.getSystemHealth?.();
+    const frameworkEnabled =
+      systemHealth?.frameworkSystemEnabled ??
+      frameworkState?.frameworkSystemEnabled ??
+      false;
+
+    const activeFramework =
+      frameworkState?.activeFramework ?? systemHealth?.activeFramework ?? "unknown";
+
+    const availableFrameworks =
+      systemHealth?.availableFrameworks ??
+      this.frameworkManager?.listFrameworks(true).map((framework) => framework.id) ??
+      [];
+
+    const uptime = now - this.startTime;
+
+    const memoryUsage =
+      typeof process !== "undefined" && typeof process.memoryUsage === "function"
+        ? process.memoryUsage()
+        : undefined;
+
+    const structuredMemoryUsage = memoryUsage
+      ? {
+          rss: memoryUsage.rss,
+          heapTotal: memoryUsage.heapTotal,
+          heapUsed: memoryUsage.heapUsed,
+          external: memoryUsage.external,
+          arrayBuffers: memoryUsage.arrayBuffers,
+        }
+      : undefined;
+
     return createStructuredResponse(text, false, {
       action,
       executionMetadata: {
-        executionId: `sc-${action}-${Date.now()}`,
+        executionId: `sc-${action}-${now}`,
         executionType: "prompt" as const,
-        startTime: Date.now(),
-        endTime: Date.now(),
+        startTime: now,
+        endTime: now,
         executionTime: 0,
-        frameworkEnabled: true,
+        frameworkEnabled,
       },
       systemState: {
-        frameworkEnabled: true,
-        activeFramework: "CAGEERF",
-        availableFrameworks: ["CAGEERF", "ReACT", "5W1H", "SCAMPER"],
-        uptime: 0,
-        memoryUsage: {
-          rss: 0,
-          heapTotal: 0,
-          heapUsed: 0,
-          external: 0,
-        },
-        serverHealth: "healthy" as const,
+        frameworkEnabled,
+        activeFramework,
+        availableFrameworks,
+        uptime,
+        ...(structuredMemoryUsage ? { memoryUsage: structuredMemoryUsage } : {}),
+        serverHealth: systemHealth?.status ?? "unknown",
       },
     });
   }
@@ -930,15 +945,7 @@ abstract class ActionHandler {
     text: string,
     action: string
   ): ToolResponse {
-    return createStructuredResponse(text, false, {
-      action,
-      systemState: {
-        uptime: Date.now() - this.startTime,
-        framework:
-          this.systemControl.frameworkStateManager?.getCurrentState()
-            .activeFramework,
-      },
-    });
+    return this.systemControl.createMinimalSystemResponse(text, action);
   }
 
   protected getExecutionsByMode(): Record<string, number> {
@@ -2388,7 +2395,6 @@ class MaintenanceActionHandler extends ActionHandler {
     key: string,
     value: string
   ): { valid: boolean; error?: string; suggestion?: string; type?: string } {
-    // Basic key validation
     if (!this.isValidConfigKey(key)) {
       return {
         valid: false,
@@ -2397,119 +2403,59 @@ class MaintenanceActionHandler extends ActionHandler {
       };
     }
 
-    // Type-specific validation
-    try {
-      switch (key) {
-        case "server.port":
-          const port = parseInt(value, 10);
-          if (isNaN(port) || port < 1024 || port > 65535) {
-            return {
-              valid: false,
-              error: "Port must be a number between 1024-65535",
-              suggestion: "Try a value like 3000 or 8080",
-            };
-          }
-          return { valid: true, type: "number" };
+    const validation = validateConfigInput(key, value);
 
-        case "server.name":
-        case "server.version":
-          if (!value || value.trim().length === 0) {
-            return {
-              valid: false,
-              error: "Value cannot be empty",
-              suggestion: "Provide a non-empty string value",
-            };
-          }
-          return { valid: true, type: "string" };
-
-        case "transports.default":
-          if (!["stdio", "sse"].includes(value)) {
-            return {
-              valid: false,
-              error: "Transport must be 'stdio' or 'sse'",
-              suggestion:
-                "Use 'stdio' for desktop clients or 'sse' for web clients",
-            };
-          }
-          return { valid: true, type: "string" };
-
-        case "transports.stdio.enabled":
-        case "transports.sse.enabled":
-          if (!["true", "false"].includes(value.toLowerCase())) {
-            return {
-              valid: false,
-              error: "Value must be 'true' or 'false'",
-              suggestion: "Use boolean values: true or false",
-            };
-          }
-          return { valid: true, type: "boolean" };
-
-        case "logging.level":
-          if (!["debug", "info", "warn", "error"].includes(value)) {
-            return {
-              valid: false,
-              error: "Log level must be: debug, info, warn, or error",
-              suggestion:
-                "Use 'debug' for development or 'info' for production",
-            };
-          }
-          return { valid: true, type: "string" };
-
-        case "logging.directory":
-          if (!value || value.trim().length === 0) {
-            return {
-              valid: false,
-              error: "Directory path cannot be empty",
-              suggestion: "Provide a valid directory path like './logs'",
-            };
-          }
-          return { valid: true, type: "string" };
-
-        default:
-          return { valid: true, type: "unknown" };
-      }
-    } catch (error) {
+    if (!validation.valid) {
       return {
         valid: false,
-        error: `Validation error: ${error}`,
-        suggestion: "Check the value format and try again",
+        error: validation.error,
+        suggestion: this.getValidationSuggestion(key),
       };
     }
+
+    const inferredType =
+      validation.valueType ??
+      (typeof validation.convertedValue !== "undefined"
+        ? typeof validation.convertedValue
+        : "unknown");
+
+    return {
+      valid: true,
+      type: inferredType,
+    };
   }
 
   /**
    * Check if config key is valid
    */
   private isValidConfigKey(key: string): boolean {
-    const validKeys = [
-      "server.name",
-      "server.version",
-      "server.port",
-      "transports.default",
-      "transports.stdio.enabled",
-      "transports.sse.enabled",
-      "logging.level",
-      "logging.directory",
-      "analysis.semanticAnalysis.llmIntegration.enabled",
-      "analysis.semanticAnalysis.llmIntegration.model",
-      "analysis.semanticAnalysis.llmIntegration.maxTokens",
-      "analysis.semanticAnalysis.llmIntegration.temperature",
-    ];
-    return validKeys.includes(key);
+    return CONFIG_VALID_KEYS.includes(key as ConfigKey);
   }
 
   /**
    * Check if config key requires restart
    */
   private requiresRestart(key: string): boolean {
-    const restartRequired = [
-      "server.port",
-      "transports.default",
-      "transports.stdio.enabled",
-      "transports.sse.enabled",
-      "analysis.semanticAnalysis.llmIntegration.enabled",
-    ];
-    return restartRequired.includes(key);
+    return CONFIG_RESTART_REQUIRED_KEYS.includes(key as ConfigKey);
+  }
+
+  private getValidationSuggestion(key: string): string | undefined {
+    const suggestions: Record<string, string> = {
+      "server.port": "Try a value like 3000 or 8080",
+      "server.name": "Provide a non-empty string value",
+      "server.version": "Provide a non-empty string value",
+      "transports.default": "Use 'stdio' for desktop clients or 'sse' for web clients",
+      "transports.stdio.enabled": "Use boolean values: true or false",
+      "transports.sse.enabled": "Use boolean values: true or false",
+      "logging.level": "Use 'debug' for development or 'info' for production",
+      "logging.directory": "Provide a valid directory path like './logs'",
+      "analysis.semanticAnalysis.llmIntegration.enabled": "Use boolean values: true or false",
+      "analysis.semanticAnalysis.llmIntegration.model": "Provide a non-empty model identifier",
+      "analysis.semanticAnalysis.llmIntegration.maxTokens": "Use a number between 1 and 4000",
+      "analysis.semanticAnalysis.llmIntegration.temperature": "Provide a number between 0 and 2",
+    };
+
+    return suggestions[key];
   }
 
   /**

@@ -7,7 +7,7 @@
 
 import { Logger } from '../logging/index.js';
 import { ConfigManager } from '../config/index.js';
-import { ToolDescription, ToolDescriptionsConfig } from '../types/index.js';
+import type { ToolDescription, ToolDescriptionsConfig, FrameworksConfig } from '../types/index.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { watch, FSWatcher } from 'fs';
@@ -19,6 +19,81 @@ import {
   SCAMPERMethodologyGuide
 } from '../frameworks/methodology/index.js';
 import { MethodologyToolDescriptions } from '../frameworks/types/index.js';
+
+const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[
+  string,
+  ToolDescription
+]> = [
+  [
+    'prompt_engine',
+    {
+      description:
+        '🚀 PROMPT ENGINE [HOT-RELOAD]: Processes Nunjucks templates, returns executable instructions. WARNING: Output contains instructions YOU must execute (code gen, analysis, multi-step tasks) - not just information. IMPORTANT: Prompt names are case-insensitive and hyphens are converted to underscores. When your arguments include newlines or multi-line payloads, wrap the call in JSON so the parser receives a single-line command shell.',
+      shortDescription: 'Execute prompts, templates, and chains',
+      category: 'execution'
+    }
+  ],
+  [
+    'prompt_manager',
+    {
+      description:
+        '🧰 PROMPT MANAGER: Create, update, delete, list, and analyze prompts. Supports gate configuration, temporary gates, and prompt-type migration for full lifecycle control.',
+      shortDescription: 'Manage prompt lifecycle, gates, and discovery',
+      category: 'management'
+    }
+  ],
+  [
+    'system_control',
+    {
+      description:
+        '⚙️ SYSTEM CONTROL: Unified interface for status reporting, framework and gate controls, analytics, configuration management, and maintenance operations.',
+      shortDescription: 'Manage framework state, metrics, and maintenance',
+      category: 'system'
+    }
+  ]
+];
+
+function cloneToolDescription(description: ToolDescription): ToolDescription {
+  return {
+    ...description,
+    parameters: description.parameters
+      ? { ...description.parameters }
+      : undefined,
+    frameworkAware: description.frameworkAware
+      ? {
+          ...description.frameworkAware,
+          methodologies: description.frameworkAware.methodologies
+            ? { ...description.frameworkAware.methodologies }
+            : undefined,
+          parametersEnabled: description.frameworkAware.parametersEnabled
+            ? { ...description.frameworkAware.parametersEnabled }
+            : undefined,
+          parametersDisabled: description.frameworkAware.parametersDisabled
+            ? { ...description.frameworkAware.parametersDisabled }
+            : undefined,
+          methodologyParameters: description.frameworkAware.methodologyParameters
+            ? { ...description.frameworkAware.methodologyParameters }
+            : undefined
+        }
+      : undefined
+  };
+}
+
+function createDefaultToolDescriptionMap(): Map<string, ToolDescription> {
+  return new Map(
+    DEFAULT_TOOL_DESCRIPTION_ENTRIES.map(([name, description]) => [
+      name,
+      cloneToolDescription(description)
+    ])
+  );
+}
+
+export function getDefaultToolDescription(
+  toolName: string
+): ToolDescription | undefined {
+  const entry = DEFAULT_TOOL_DESCRIPTION_ENTRIES.find(([name]) => name === toolName);
+  return entry ? cloneToolDescription(entry[1]) : undefined;
+}
 
 /**
  * Manages tool descriptions loaded from external configuration with hot-reload support
@@ -33,14 +108,26 @@ export class ToolDescriptionManager extends EventEmitter {
   private fileWatcher?: FSWatcher;
   private isWatching: boolean = false;
   private reloadDebounceTimer?: NodeJS.Timeout;
+  private configManager: ConfigManager;
+  private frameworksConfig: FrameworksConfig;
+  private frameworksConfigListener: (newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void;
 
   constructor(logger: Logger, configManager: ConfigManager) {
     super();
     this.logger = logger;
+    this.configManager = configManager;
     this.configPath = path.join(configManager.getServerRoot(), 'config', 'tool-descriptions.json');
     this.descriptions = new Map();
     this.defaults = this.createDefaults();
     this.methodologyDescriptions = new Map();
+    this.frameworksConfig = this.configManager.getFrameworksConfig();
+    this.frameworksConfigListener = (newConfig: FrameworksConfig) => {
+      this.frameworksConfig = { ...newConfig };
+      this.logger.info(
+        `Tool description manager feature toggle updated (dynamicDescriptions: ${this.frameworksConfig.enableDynamicToolDescriptions})`
+      );
+    };
+    this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
   }
 
   /**
@@ -55,23 +142,7 @@ export class ToolDescriptionManager extends EventEmitter {
    * Create default descriptions as fallback
    */
   private createDefaults(): Map<string, ToolDescription> {
-    return new Map([
-      ['prompt_engine', {
-        description: '🚀 PROMPT ENGINE [HOT-RELOAD]: Processes Nunjucks templates, returns executable instructions. WARNING: Output contains instructions YOU must execute (code gen, analysis, multi-step tasks) - not just information. IMPORTANT: Prompt names are case-insensitive and hyphens are converted to underscores. When your arguments include newlines or multi-line payloads, wrap the call in JSON so the parser receives a single-line command shell.',
-        shortDescription: 'Execute prompts, templates, and chains',
-        category: 'execution'
-      }],
-      ['prompt_manager', {
-        description: '🧰 PROMPT MANAGER: Create, update, delete, list, and analyze prompts. Supports gate configuration, temporary gates, and prompt-type migration for full lifecycle control.',
-        shortDescription: 'Manage prompt lifecycle, gates, and discovery',
-        category: 'management'
-      }],
-      ['system_control', {
-        description: '⚙️ SYSTEM CONTROL: Unified interface for status reporting, framework and gate controls, analytics, configuration management, and maintenance operations.',
-        shortDescription: 'Manage framework state, metrics, and maintenance',
-        category: 'system'
-      }]
-    ]);
+    return createDefaultToolDescriptionMap();
   }
 
   /**
@@ -156,6 +227,17 @@ export class ToolDescriptionManager extends EventEmitter {
     activeMethodology?: string,
     options?: { applyMethodologyOverride?: boolean }
   ): string {
+    const toolDesc = this.descriptions.get(toolName) || this.defaults.get(toolName);
+    if (!toolDesc) {
+      this.logger.warn(`No description found for tool: ${toolName}`);
+      return `Tool: ${toolName}`;
+    }
+
+    if (!this.frameworksConfig.enableDynamicToolDescriptions) {
+      this.logger.debug(`Dynamic tool descriptions disabled; using base description for ${toolName}`);
+      return toolDesc.description;
+    }
+
     const applyMethodologyOverride = options?.applyMethodologyOverride ?? true;
     this.logger.debug(`Getting description for ${toolName} (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`);
     const methodologyKey = this.normalizeMethodologyKey(activeMethodology);
@@ -170,14 +252,6 @@ export class ToolDescriptionManager extends EventEmitter {
         return methodologyDesc;
       }
       this.logger.debug(`⚠️ No methodology-specific description found for ${toolName} in ${methodologyLogName} guide`);
-    }
-
-    // Get config/default descriptions for fallback priority checks
-    const toolDesc = this.descriptions.get(toolName) || this.defaults.get(toolName);
-
-    if (!toolDesc) {
-      this.logger.warn(`No description found for tool: ${toolName}`);
-      return `Tool: ${toolName}`;
     }
 
     // PRIORITY 2: Framework-aware descriptions from config (if methodology desc not available)
@@ -221,9 +295,18 @@ export class ToolDescriptionManager extends EventEmitter {
     activeMethodology?: string,
     options?: { applyMethodologyOverride?: boolean }
   ): string | undefined {
-    const applyMethodologyOverride = options?.applyMethodologyOverride ?? true;
     const toolDesc = this.descriptions.get(toolName) || this.defaults.get(toolName);
-    if (!toolDesc?.parameters) return undefined;
+    if (!toolDesc) {
+      return undefined;
+    }
+
+    if (!this.frameworksConfig.enableDynamicToolDescriptions) {
+      const param = toolDesc.parameters?.[paramName];
+      return typeof param === 'string' ? param : param?.description;
+    }
+
+    const applyMethodologyOverride = options?.applyMethodologyOverride ?? true;
+    if (!toolDesc.parameters) return undefined;
     const methodologyKey = this.normalizeMethodologyKey(activeMethodology);
 
     // Check for methodology-specific parameter descriptions first (from pre-loaded cache)
