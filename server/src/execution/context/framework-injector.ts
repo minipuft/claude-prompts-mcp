@@ -5,14 +5,15 @@
  */
 
 import { Logger } from "../../logging/index.js";
-import { ConvertedPrompt } from "../../types/index.js";
+import { ConfigManager } from "../../config/index.js";
+import type { ConvertedPrompt, FrameworksConfig } from "../../types/index.js";
 import { FrameworkManager } from "../../frameworks/framework-manager.js";
 import {
   FrameworkExecutionContext,
   FrameworkSelectionCriteria
 } from "../../frameworks/types/index.js";
 import { FrameworkStateManager } from "../../frameworks/framework-state-manager.js";
-import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
+import type { ContentAnalysisResult } from "../../semantic/types.js";
 import {
   IMethodologyGuide,
   MethodologyEnhancement
@@ -70,16 +71,22 @@ export class FrameworkInjector {
   private frameworkStateManager?: FrameworkStateManager; // NEW: For checking if framework system is enabled
   private logger: Logger;
   private config: FrameworkInjectionConfig;
+  private configManager: ConfigManager;
+  private frameworksConfig: FrameworksConfig;
+
+  private frameworksConfigListener: (newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void;
 
   constructor(
     frameworkManager: FrameworkManager,
     logger: Logger,
+    configManager: ConfigManager,
     config: Partial<FrameworkInjectionConfig> = {},
     frameworkStateManager?: FrameworkStateManager // NEW: Optional state manager
   ) {
     this.frameworkManager = frameworkManager;
     this.frameworkStateManager = frameworkStateManager;
     this.logger = logger;
+    this.configManager = configManager;
 
     this.config = {
       enableInjection: config.enableInjection ?? true,
@@ -89,6 +96,16 @@ export class FrameworkInjector {
       userPreferenceOverride: config.userPreferenceOverride,
       enableMethodologyGuides: config.enableMethodologyGuides ?? true
     };
+
+    this.frameworksConfig = this.configManager.getFrameworksConfig();
+    this.frameworksConfigListener = (newConfig: FrameworksConfig) => {
+      this.frameworksConfig = { ...newConfig };
+      this.logger.info(
+        `Framework injector feature toggles updated (systemPrompt: ${this.frameworksConfig.enableSystemPromptInjection}, methodologyGates: ${this.frameworksConfig.enableMethodologyGates})`
+      );
+    };
+
+    this.configManager.on("frameworksConfigChanged", this.frameworksConfigListener);
   }
 
   /**
@@ -104,7 +121,10 @@ export class FrameworkInjector {
     
     try {
       // Skip injection if disabled
-      if (!this.config.enableInjection) {
+      if (!this.config.enableInjection || !this.frameworksConfig.enableSystemPromptInjection) {
+        if (!this.frameworksConfig.enableSystemPromptInjection) {
+          this.logger.debug(`Skipping framework injection - disabled via config: ${prompt.id}`);
+        }
         return this.createPassthroughResult(prompt);
       }
 
@@ -230,7 +250,7 @@ export class FrameworkInjector {
     }
     
     // Apply methodology guide enhancements if enabled
-    if (this.config.enableMethodologyGuides) {
+    if (this.shouldApplyMethodologyGuides()) {
       const methodologyGuide = this.getMethodologyGuide(framework.id);
       if (methodologyGuide) {
         try {
@@ -321,6 +341,10 @@ export class FrameworkInjector {
   getConfig(): FrameworkInjectionConfig {
     return { ...this.config };
   }
+
+  private shouldApplyMethodologyGuides(): boolean {
+    return this.config.enableMethodologyGuides && this.frameworksConfig.enableMethodologyGates;
+  }
 }
 
 /**
@@ -329,8 +353,9 @@ export class FrameworkInjector {
 export async function createFrameworkInjector(
   frameworkManager: FrameworkManager,
   logger: Logger,
+  configManager: ConfigManager,
   config?: Partial<FrameworkInjectionConfig>,
   frameworkStateManager?: FrameworkStateManager // NEW: Optional state manager
 ): Promise<FrameworkInjector> {
-  return new FrameworkInjector(frameworkManager, logger, config, frameworkStateManager);
+  return new FrameworkInjector(frameworkManager, logger, configManager, config, frameworkStateManager);
 }

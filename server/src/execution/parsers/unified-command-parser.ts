@@ -20,24 +20,12 @@ import type {
   OperatorDetectionResult,
   SymbolicCommandParseResult,
 } from "./types/operator-types.js";
+import type { CommandParseResultBase } from "./types/command-parse-types.js";
 
-/**
- * Command parsing result with metadata
- */
-export interface CommandParseResult {
-  promptId: string;
-  rawArgs: string;
-  format: 'simple' | 'json' | 'structured' | 'legacy' | 'symbolic';
-  confidence: number;
-  metadata: {
-    originalCommand: string;
-    parseStrategy: string;
-    detectedFormat: string;
-    warnings: string[];
-  };
-  operators?: OperatorDetectionResult;
-  executionPlan?: ExecutionPlan;
-}
+export type CommandParseResult = CommandParseResultBase<
+  OperatorDetectionResult,
+  ExecutionPlan
+>;
 
 /**
  * Parsing strategy interface
@@ -444,6 +432,7 @@ export class UnifiedCommandParser {
     };
   }
 }
+
 
 /**
  * Factory function to create unified command parser

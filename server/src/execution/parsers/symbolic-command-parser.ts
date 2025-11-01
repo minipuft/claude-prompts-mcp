@@ -98,19 +98,27 @@ export class SymbolicCommandParser {
   }
 
   private parseChainOperator(command: string): ChainOperator {
+    // Remove framework operator prefix if present
     let cleanCommand = command.replace(this.OPERATOR_PATTERNS.framework, "");
-    cleanCommand = cleanCommand.replace(this.OPERATOR_PATTERNS.gate, "");
+    // NOTE: Do NOT strip gate patterns here - they conflict with regular arguments like input="value"
+    // Gate operators should be detected and handled separately by the gate operator executor
 
-    const stepStrings = cleanCommand
-      .split("-->")
-      .map((segment) => segment.trim())
-      .filter(Boolean);
+    this.logger.debug(`[parseChainOperator] Original command: ${command}`);
+    this.logger.debug(`[parseChainOperator] Clean command: ${cleanCommand}`);
+
+    // Use argument-aware splitting that respects quoted strings
+    const stepStrings = this.splitChainSteps(cleanCommand);
+
+    this.logger.debug(`[parseChainOperator] Split into ${stepStrings.length} steps:`, stepStrings);
 
     const steps: ChainStep[] = stepStrings.map((stepStr, index) => {
       const stepMatch = stepStr.match(/^(?:>>)?([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
       if (!stepMatch) {
+        this.logger.error(`[parseChainOperator] Failed to match step: "${stepStr}"`);
         throw new ValidationError(`Invalid chain step format: ${stepStr}`);
       }
+
+      this.logger.debug(`[parseChainOperator] Step ${index + 1}: promptId="${stepMatch[1]}", args="${stepMatch[2]?.trim() ?? ""}"`);
 
       return {
         promptId: stepMatch[1],
@@ -120,11 +128,58 @@ export class SymbolicCommandParser {
       };
     });
 
+    this.logger.debug(`[parseChainOperator] Final steps array length: ${steps.length}`);
+
     return {
       type: "chain",
       steps,
       contextPropagation: "automatic",
     };
+  }
+
+  /**
+   * Split chain steps by --> delimiter while respecting quoted string boundaries
+   * Handles: >>prompt1 input="test --> quoted" --> prompt2
+   */
+  private splitChainSteps(command: string): string[] {
+    const steps: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    let i = 0;
+
+    while (i < command.length) {
+      const char = command[i];
+      const next = command[i + 1];
+      const next2 = command[i + 2];
+
+      // Toggle quote state (handle escaped quotes)
+      if (char === '"' && (i === 0 || command[i - 1] !== '\\')) {
+        inQuotes = !inQuotes;
+        current += char;
+        i++;
+        continue;
+      }
+
+      // Check for --> delimiter (only outside quotes)
+      if (!inQuotes && char === '-' && next === '-' && next2 === '>') {
+        if (current.trim()) {
+          steps.push(current.trim());
+        }
+        current = '';
+        i += 3; // Skip -->
+        continue;
+      }
+
+      current += char;
+      i++;
+    }
+
+    // Add final step
+    if (current.trim()) {
+      steps.push(current.trim());
+    }
+
+    return steps.filter(Boolean);
   }
 
   private parseParallelOperator(command: string): ParallelOperator {

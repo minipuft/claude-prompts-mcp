@@ -1,4 +1,4 @@
-import type { CommandParseResult } from "../unified-command-parser.js";
+import type { CommandParseResultBase } from "./command-parse-types.js";
 
 /**
  * Chain operator representing sequential execution
@@ -79,7 +79,8 @@ export interface OperatorDetectionResult {
   parseComplexity: "simple" | "moderate" | "complex";
 }
 
-export interface SymbolicCommandParseResult extends CommandParseResult {
+export interface SymbolicCommandParseResult
+  extends CommandParseResultBase<OperatorDetectionResult, ExecutionPlan> {
   format: "symbolic";
   operators: OperatorDetectionResult;
   executionPlan: ExecutionPlan;
