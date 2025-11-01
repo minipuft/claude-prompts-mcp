@@ -102,531 +102,147 @@ The project uses GitHub Actions for automated testing and validation:
 
 ## Nunjucks Dynamic Chain Orchestration Strategy
 
-### Strategic Architecture Decision
+**Decision**: Keep Nunjucks for dynamic chain orchestration - templates render on EACH step with access to previous results, enabling result-based conditionals and adaptive instructions.
 
-**Decision**: Keep Nunjucks template engine for dynamic chain orchestration capabilities.
+**Chain Step Variable Access**: Step 1 outputs → Step 2 inputs (+ Step 1 outputs) → Step 3 inputs (+ all previous outputs). Templates use `{% if score < 0.7 %}` conditionals for quality-driven adaptation.
 
-**Critical Discovery**: Nunjucks templates render on EACH chain step with access to previous step results, enabling powerful result-based conditional logic and adaptive prompt instructions.
+**Capabilities**: Quality-driven adaptation (adjust instructions based on previous step quality/validation), complexity-based branching (adapt to source/topic count), error recovery (adapt based on failure types), format modification (based on content characteristics)
 
-### Chain Step Variable Access
+**Best Practices**: Progressive instruction clarity (more specific as quality decreases), error context preservation, metric-driven branching (multiple quality metrics), accumulated state tracking, self-documenting templates
 
-**How It Works**:
+**Performance**: Template rendering <50ms/step, variable substitution ~1ms/100 vars, conditionals ~0.5ms/condition, templates cached in production (jsonUtils.ts)
 
-```
-Step 1: analysis
-  → Renders template with input variables
-  → Outputs: {analysis: "...", confidence: 0.85}
+**Limitations**: Cannot change next prompt (static chain), no recursive execution, no dynamic library selection (requires execution engine)
 
-Step 2: validation
-  → Renders template with: {analysis: "...", confidence: 0.85, threshold: 0.8}
-  → Outputs: {score: 0.6, issues: [...]}
+**Future**: Dynamic step selection, recursive execution with quality thresholds, LLM-driven orchestration, automatic quality gates
 
-Step 3: refinement
-  → Renders template with: ALL previous outputs + new variables
-  → Can use {% if score < 0.7 %} conditionals!
-```
-
-### Capabilities Enabled
-
-**Result-Based Conditionals**:
-
-```nunjucks
-{% if validation_score < 0.7 %}
-⚠️ CRITICAL QUALITY ISSUES
-Apply aggressive refinement with citations...
-{% elif validation_score < 0.9 %}
-Moderate improvements needed...
-{% else %}
-Excellent quality - polish only...
-{% endif %}
-```
-
-**Quality-Driven Adaptation**:
-
-- Adjust instruction depth based on previous step quality
-- Customize approach based on validation results
-- Adapt error recovery based on failure types
-- Modify format based on content characteristics
-
-**Complexity-Based Branching**:
-
-```nunjucks
-{% set complexity = sources|length + topics|length %}
-{% if complexity > 20 %}
-  🔥 MAXIMUM COMPLEXITY - Apply systematic framework...
-{% elif complexity > 10 %}
-  ⚡ HIGH COMPLEXITY - Structured analysis...
-{% else %}
-  📊 STANDARD - Focus on key insights...
-{% endif %}
-```
-
-### Implementation Guidelines
-
-**Best Practices**:
-
-1. **Progressive Instruction Clarity**: More specific instructions as quality decreases
-2. **Error Context Preservation**: Carry error context through recovery steps
-3. **Metric-Driven Branching**: Use multiple quality metrics for nuanced decisions
-4. **Accumulated State Tracking**: Reference outputs from multiple previous steps
-5. **Self-Documenting Templates**: Make conditional logic clear and maintainable
-
-**Performance Considerations**:
-
-- Template rendering: <50ms per step
-- Variable substitution: ~1ms per 100 variables
-- Conditionals: ~0.5ms per condition
-- Templates cached in production (configured in jsonUtils.ts)
-
-**What Nunjucks CANNOT Do** (requires execution engine):
-
-- ❌ Change which prompt executes next (static chain definition)
-- ❌ Loop the same step (no recursive execution)
-- ❌ Dynamically select from prompt library (no runtime routing)
-
-### Future Enhancements
-
-**Execution Engine Extensions** (beyond Nunjucks):
-
-- Dynamic step selection based on quality scores
-- Recursive step execution with quality thresholds
-- LLM-driven chain orchestration
-- Automatic quality gate enforcement
-
-**Reference**: See `/plans/nunjucks-dynamic-chain-orchestration.md` for comprehensive implementation strategy, patterns, and examples.
+**Reference**: `/plans/nunjucks-dynamic-chain-orchestration.md`
 
 ## Project Architecture
 
 ### Core System Structure
 
-This is a **Model Context Protocol (MCP) server** that provides AI prompt management with hot-reloading capabilities. The architecture follows a multi-phase orchestration pattern:
-
-1. **Foundation Phase**: Configuration loading, logging setup, core services
-2. **Data Loading Phase**: Prompt loading, category parsing, validation
-3. **Module Initialization Phase**: Tools, executors, conversation managers
-4. **Server Launch Phase**: Transport layer, API endpoints, health monitoring
+**MCP server** with AI prompt management and hot-reloading. Multi-phase orchestration: Foundation → Data Loading → Module Initialization → Server Launch.
 
 ### Key Components
 
 #### `/server/src/runtime/`
-
-- **Application Runtime** (`application.ts`) - Main entry point with comprehensive health monitoring and graceful shutdown
-- **Multi-phase startup** with dependency management and error recovery (Foundation → Data Loading → Module Initialization → Server Launch)
-- **Performance monitoring** with memory usage tracking and uptime metrics
-- **Startup orchestration** with strategy-based server detection
+- **application.ts**: Main entry with health monitoring, graceful shutdown, multi-phase startup, performance tracking
 
 #### `/server/src/frameworks/`
-
-- **Framework Manager** (`framework-manager.ts`) - Stateless framework orchestration, loads methodology guides and generates framework definitions
-- **Framework State Manager** (`framework-state-manager.ts`) - Stateful framework management, tracks active framework and handles switching
-- **Methodology Guides** (`adapters/`) - CAGEERF, ReACT, 5W1H, SCAMPER guides providing framework-specific guidance
-- **Framework Integration** (`integration/`) - Integration between frameworks and semantic analysis
-- **Framework Interfaces** (`interfaces/`) - Type definitions and contracts for framework system
+- **framework-manager.ts**: Stateless orchestration, loads methodology guides (CAGEERF, ReACT, 5W1H, SCAMPER), generates framework definitions
+- **framework-state-manager.ts**: Stateful management, tracks active framework, handles switching with validation/history
+- **adapters/**: Methodology guide implementations | **integration/**: Framework-semantic analysis bridge | **interfaces/**: Type definitions
 
 #### `/server/src/execution/`
-
-- **Execution Index** (`index.ts`) - Main execution orchestration and entry point
-- **Context Management** (`context/`) - Context resolution and framework injection
-- **Command Routing** (`routing/`) - Lightweight command routing optimized for LLM interactions
-  - `command-router.ts` (149 lines) - Simple format detection and prompt resolution
-  - `builtin-commands.ts` (52 lines) - Built-in command registry (listprompts, help, status, etc.)
-  - Replaced legacy parsing system (1,354 lines) with 84% code reduction
-- **Execution Context** (`execution-context.ts`) - Type definitions for execution context
-- **Legacy Parsers** (`parsers/index.ts`) - Backwards compatibility exports (deprecated)
-- **Execution Types** (`types.ts`) - TypeScript interfaces for execution system
+- **index.ts**: Execution orchestration | **context/**: Context resolution, framework injection | **routing/**: Lightweight command routing (149 lines, replaced 1,354-line legacy system, 84% reduction)
+- **execution-context.ts**: Type definitions | **parsers/**: Legacy compatibility (deprecated)
 
 #### `/server/src/gates/`
-
-- **Gate Definitions** (`definitions/`) - Gate definition templates and configurations
-- **Core Gates** (`core/`) - Core gate validation implementations and processors
-- **Gate Templates** (`templates/`) - Reusable gate template structures
-- **Main Index** (`index.ts`) - Gate system entry point and orchestration
+- **definitions/**: Gate templates | **core/**: Validation implementations | **templates/**: Reusable structures | **index.ts**: Orchestration
 
 #### `/server/src/semantic/`
-
-- **Semantic Analysis Engine** - Automatic prompt type detection and analysis capabilities
-- **Integration Layer** (`integrations/`) - Framework and analysis system integration
-- **Analysis Types** - Type definitions for semantic analysis operations
+- **Semantic Analysis Engine**: Auto prompt type detection | **integrations/**: Framework integration | **Analysis Types**: Type definitions
 
 #### `/server/src/prompts/`
-
-- **Template processor** using Nunjucks with advanced features (conditionals, loops, macros)
-- **Prompt registry** for dynamic loading and hot-reloading
-- **Converter system** for format transformation and validation
-- **Hot-reload manager** - Supports dynamic prompt reloading without server restart
-- **Category manager** - Manages prompt organization and categorization
+- **Nunjucks template processor** (conditionals, loops, macros) | **Prompt registry** (dynamic loading, hot-reload) | **Converter system** | **Category manager**
 
 #### `/server/src/mcp-tools/`
+- **prompt-engine.ts**: Execution with analysis/semantic detection | **prompt-manager.ts**: Lifecycle management, smart filtering | **system-control.ts**: Framework management, analytics
+- **config-utils.ts, error-handler.ts**: Config/error management | **filters/**: Search capabilities | **formatters/**: Response formatting | **validators/**: Input validation
 
-- **Prompt Engine** (`prompt-engine.ts`) - Unified execution with intelligent analysis and semantic detection
-- **Prompt Manager** (`prompt-manager.ts`) - Complete lifecycle management with smart filtering and analysis
-- **System Control** (`system-control.ts`) - Framework management, analytics, and comprehensive system control
-- **Configuration & Error Handling** (`config-utils.ts`, `error-handler.ts`) - Centralized configuration and error management
-- **Advanced Filtering** (`filters/`) - Intelligent search and discovery capabilities
-- **Response Formatting** (`formatters/`) - Consistent MCP response formatting
-- **Validation System** (`validators/`) - Comprehensive input validation and schema checking
-- **Type Definitions** (`types/`) - TypeScript interfaces for MCP tool system
-
-#### `/server/src/performance/`
-
-- **Performance Monitor** (`monitor.ts`) - System performance tracking and metrics collection
-- **Memory Usage** - Memory monitoring and garbage collection optimization
-- **Startup Optimization** - Server startup time optimization and health monitoring
-
-#### `/server/src/metrics/`
-
-- **Usage Analytics** - Prompt usage patterns and execution metrics
-- **Performance Metrics** - System performance indicators and benchmarks
-- **Health Monitoring** - Server health status and diagnostic collection
+#### `/server/src/performance/` & `/server/src/metrics/`
+- Performance monitoring, memory tracking, usage analytics, health diagnostics
 
 #### `/server/src/server/transport/`
-
-- **STDIO transport** for Claude Desktop integration
-- **SSE transport** for web-based clients
-- **Transport-aware logging** to avoid interference with STDIO protocol
-- **HTTP request processing and routing** for web-based clients
-- **WebSocket handlers** for real-time communication management
+- **STDIO** (Claude Desktop) | **SSE** (web clients) | Transport-aware logging | HTTP routing | WebSocket handlers
 
 ### Configuration System
 
-#### Main Configuration (`server/config.json`)
-
-- Server settings (name, version, port)
-- Transport configuration (STDIO/SSE)
-- Logging configuration (directory, level)
-- Prompts file reference pointing to `prompts/promptsConfig.json`
-
-#### Prompts Configuration (`server/prompts/promptsConfig.json`)
-
-- **Category organization** with logical grouping (18 categories including analysis, development, research, content_processing)
-- **Modular import system** using category-specific `prompts.json` files in `prompts/[category]/` directories
-- **Registration modes** (ID, NAME, or BOTH) with default NAME registration
-- **Dynamic imports** - categories are loaded from individual JSON files in subdirectories
+**server/config.json**: Server settings, transport config (STDIO/SSE), logging, prompts reference
+**prompts/promptsConfig.json**: 18 categories (analysis, development, research, etc.), modular imports via `prompts/[category]/prompts.json`, registration modes (ID, NAME, BOTH)
 
 ### Prompt Organization
 
-#### File Structure
-
-```
-server/prompts/
-├── category-name/
-│   ├── prompts.json          # Category prompt registry
-│   ├── prompt-name.md        # Individual prompt files
-│   └── ...
-└── promptsConfig.json        # Main configuration
-```
-
-#### Prompt Format
-
-- **Markdown files** with structured sections
-- **Nunjucks templating** with `{{variable}}` syntax
-- **Argument definitions** with type information and validation
-- **Category association** for organization
+**File Structure**: `server/prompts/[category]/` containing `prompts.json` registry + `*.md` prompt files
+**Prompt Format**: Markdown with Nunjucks `{{variable}}` templating, typed argument definitions, category association
 
 ### TypeScript Architecture
 
-#### Core Types (`src/types.ts`)
-
-- **Config interfaces** for application configuration
-- **PromptData** for prompt metadata and structure
-- **Message types** for conversation handling
-- **Transport types** for protocol abstraction
-
-#### Key Interfaces
-
-- `PromptData`: Complete prompt structure with metadata, arguments, and configuration
-- `PromptArgument`: Typed argument definitions with validation
-- `Category`: Prompt organization and categorization
-- `MessageContent`: Extensible content type system
+**Core Types** (`src/types.ts`): Config interfaces, PromptData (metadata/structure), Message types, Transport types
+**Key Interfaces**: PromptData, PromptArgument (validation), Category (organization), MessageContent (extensible)
 
 ### Framework System Architecture
 
-#### Methodology-Driven Design
+**Methodology-Driven Design**: Core architecture uses methodology guides (CAGEERF, ReACT, 5W1H, SCAMPER) providing systematic approaches to prompt creation/processing/execution, replacing hard-coded logic with flexible, guideline-based behavior.
 
-The core architecture is built around **methodology guides** that provide systematic approaches to prompt creation, processing, and execution. This replaces hard-coded framework logic with flexible, guideline-based behavior.
+**Framework Manager** (`framework-manager.ts`): Stateless orchestration, loads methodology guides, generates framework definitions, creates execution contexts with framework-specific system prompts
+**Framework State Manager** (`framework-state-manager.ts`): Stateful management, tracks active framework (default: CAGEERF), handles switching with validation/history, health monitoring, performance metrics, event emission
+**Methodology Guides** (`adapters/`): Single source of truth for framework behavior
 
-#### Framework Components
+**IMethodologyGuide Interface**: Prompt creation guidance (structure/arguments/quality), template processing (framework-specific steps), execution steps (methodology application), methodology enhancement (quality gates/validation), compliance validation
 
-##### Framework Manager (Stateless Orchestration)
+**Framework Selection & Switching**: Dynamic selection (complexity/execution type/preference), runtime switching via MCP tools (`switch_framework`), state persistence (cross-session history), performance monitoring
 
-- **Location**: `/server/src/frameworks/framework-manager.ts`
-- **Purpose**: Loads methodology guides and dynamically generates framework definitions
-- **Key Functions**:
-  - Initializes methodology guides (e.g CAGEERF, ReACT, 5W1H, SCAMPER)
-  - Generates framework definitions from guide metadata
-  - Creates execution contexts with framework-specific system prompts
-  - Provides framework selection based on criteria
-
-##### Framework State Manager (Stateful Management)
-
-- **Location**: `/server/src/frameworks/framework-state-manager.ts`
-- **Purpose**: Tracks active framework state and handles switching
-- **Key Functions**:
-  - Maintains current active framework (default: CAGEERF)
-  - Manages framework switching with validation and history
-  - Provides health monitoring and performance metrics
-  - Emits framework change events for system coordination
-
-##### Methodology Guides
-
-- **Location**: `/server/src/frameworks/adapters/`
-- **Purpose**: Single source of truth for framework behavior
--
-
-#### Framework Guide Interface
-
-Each methodology guide implements `IMethodologyGuide` with these capabilities:
-
-- **Prompt Creation Guidance**: Structure suggestions, argument recommendations, quality guidance
-- **Template Processing**: Framework-specific processing steps and enhancements
-- **Execution Steps**: Step-by-step guidance for applying the methodology
-- **Methodology Enhancement**: Quality gates and validation criteria
-- **Compliance Validation**: Checks prompt compliance with methodology principles
-
-#### Framework Selection & Switching
-
-- **Dynamic Selection**: Frameworks can be selected based on prompt complexity, execution type, and user preference
-- **Runtime Switching**: Active framework can be changed via MCP tools (`switch_framework`)
-- **State Persistence**: Framework state maintained across sessions with history tracking
-- **Performance Monitoring**: Tracks framework switching success rates and response times
-
-#### Integration Points
-
-##### Semantic Analysis Integration
-
-- **Location**: `/server/src/frameworks/integration/framework-semantic-integration.ts`
-- **Purpose**: Coordinates semantic analysis results with framework selection
-- **Key Features**:
-  - Uses semantic analysis to inform framework selection
-  - Provides framework-specific execution contexts
-  - Maintains separation between analysis (WHAT) and methodology (HOW)
-
-##### Framework-Aware Gates
-
-- **Location**: `/server/src/gates/integration/framework-aware-gates.ts`
-- **Purpose**: Gate validation that adapts to active framework
-- **Key Features**:
-  - Framework-specific validation criteria
-  - Methodology-aware quality gates
-  - Adaptive gate evaluation based on framework context
-
-##### Framework Injection
-
-- **Location**: `/server/src/execution/processor/framework-injector.ts`
-- **Purpose**: Injects framework-specific guidance into execution context
-- **Key Features**:
-  - Dynamic system prompt generation from methodology guides
-  - Framework-enhanced template processing
-  - Execution context augmentation with methodology guidance
+**Integration Points**:
+- **Semantic Analysis** (`framework-semantic-integration.ts`): Coordinates analysis results with framework selection, maintains WHAT vs HOW separation
+- **Framework-Aware Gates** (`framework-aware-gates.ts`): Adaptive gate validation with framework-specific criteria
+- **Framework Injection** (`framework-injector.ts`): Dynamic system prompt generation from methodology guides, framework-enhanced template processing
 
 ### Execution Strategy Architecture
 
-#### Strategy Pattern Implementation
-
-The system uses the strategy pattern to handle different types of prompt execution:
-
-##### Execution Engine
-
-- **Location**: `/server/src/execution/engine.ts`
-- **Purpose**: Orchestrates execution using appropriate strategy
-- **Key Functions**:
-  - Strategy selection based on execution mode (prompt/chain/workflow)
-  - Context management across execution phases
-  - Error handling and recovery
-  - Performance monitoring and logging
-
-##### Execution Strategies
-
-- **Location**: `/server/src/execution/strategies/`
-- **Available Strategies**:
-  - **Prompt Strategy**: Single prompt execution with framework injection
-  - **Chain Strategy**: Sequential multi-step prompt execution with state management
-  - **Workflow Strategy**: Complex workflow execution with gate validation and branching logic
-
-#### Template Processing Pipeline
-
-1. **Template Loading**: Nunjucks template loaded from prompt definition
-2. **Framework Injection**: Active methodology guide provides system prompt enhancements
-3. **Variable Substitution**: User arguments processed through template
-4. **Context Enhancement**: Framework-specific context added to execution
-5. **Execution**: Strategy-appropriate execution with monitoring
-
-#### Conversation Management
-
-- **Location**: `/server/src/execution/conversation.ts`
-- **Purpose**: Manages conversation state across execution strategies
-- **Key Features**:
-  - Message history tracking
-  - Context preservation between steps
-  - Framework-aware conversation enhancement
-  - State persistence for long-running workflows
+**Strategy Pattern**: Handles different execution types (prompt/chain/workflow)
+**Execution Engine** (`engine.ts`): Strategy selection, context management, error handling/recovery, performance monitoring
+**Strategies** (`strategies/`): Prompt (single execution + framework injection), Chain (sequential multi-step + state management), Workflow (complex execution + gate validation/branching)
+**Template Pipeline**: Template loading → Framework injection → Variable substitution → Context enhancement → Execution
+**Conversation Management** (`conversation.ts`): Message history, context preservation, framework-aware enhancement, state persistence
 
 ### Development Patterns
 
-#### Hot-Reloading System
-
-- **File watching** for prompt changes
-- **Registry updates** without server restart
-- **Template recompilation** on modification
-- **MCP client notification** of changes
-
-#### Error Handling
-
-- **Comprehensive error boundaries** at all levels
-- **Graceful degradation** for partial failures
-- **Health monitoring** with periodic validation
-- **Rollback mechanisms** for startup failures
-
-#### Template Processing
-
-- **Nunjucks engine** with full feature support
-- **Dynamic variable substitution** from arguments
-- **Conditional logic** and loops in templates
-- **Macro system** for reusable components
+**Hot-Reloading**: File watching, registry updates without restart, template recompilation, MCP client notification
+**Error Handling**: Comprehensive boundaries, graceful degradation, health monitoring, rollback mechanisms
+**Template Processing**: Nunjucks engine (conditionals, loops, macros), dynamic variable substitution
 
 ### MCP Integration
 
-#### Protocol Implementation
-
-- **Model Context Protocol SDK** integration
-- **Tool registration** for prompt management
-- **Conversation management** with state tracking
-- **Transport abstraction** for multiple client types
-
-#### Available MCP Tools (User Interface)
-
-The server exposes 3 consolidated MCP tools that users interact with:
-
-- **`prompt_engine`** - Execute prompts with intelligent analysis and semantic detection
-- **`prompt_manager`** - Create, update, delete, and manage prompts with smart filtering
-- **`system_control`** - Framework switching, analytics, health monitoring, and system management
+**Protocol Implementation**: MCP SDK integration, tool registration, conversation management, transport abstraction
+**3 Consolidated MCP Tools**: `prompt_engine` (execution + analysis), `prompt_manager` (lifecycle + filtering), `system_control` (framework switching + analytics)
 
 ### Performance Considerations
 
-#### Startup Optimization
-
-- **Strategy-based server detection** with early termination
-- **Environment variable bypass** for instant path detection
-- **Conditional logging** based on verbosity level
-- **Dependency management** with proper initialization order
-
-#### Runtime Performance
-
-- **Memory usage monitoring** with periodic reporting
-- **Health check validation** every 30 seconds
-- **Diagnostic collection** for troubleshooting
-- **Graceful shutdown** with resource cleanup
+**Startup**: Strategy-based detection (early termination), env variable bypass, conditional logging, dependency management
+**Runtime**: Memory monitoring (periodic reporting), health checks (30s intervals), diagnostics, graceful shutdown
 
 ### Enhanced Systems
 
-#### Framework System Integration
-
-- **Methodology-driven architecture** with CAGEERF, ReACT, 5W1H, SCAMPER framework guides
-- **Dynamic framework switching** with runtime state management and performance monitoring
-- **Framework-aware quality gates** that adapt validation criteria based on active methodology
-- **Semantic analysis integration** for intelligent framework selection
-- **Framework injection system** for methodology-specific system prompt enhancement
-
-#### Execution Strategy System
-
-- **Strategy pattern implementation** with prompt, chain, and workflow execution strategies
-- **Execution engine orchestration** with context management and error recovery
-- **Template processing pipeline** with framework injection and Nunjucks template processing
-- **Conversation state management** with framework-aware conversation enhancement
-
-#### Gate Validation System
-
-- **Gate Registry** manages validation rules and quality gates with framework awareness
-- **Enhanced Gate Evaluators** with intelligent workflow validation and methodology-specific criteria
-- **Framework-aware gates** that adapt validation based on active framework context
-- **Multi-level validation** supporting validation, approval, condition, and quality gate types
-
-#### Advanced Analysis System
-
-- **Semantic Analyzer** for automatic prompt type detection and execution strategy recommendation
-- **Framework-semantic integration** coordinating analysis results with methodology selection
-- **Execution type detection** (prompt/chain/workflow) with framework-appropriate handling
-- **Quality assessment** with framework-specific validation criteria
+**Framework System**: Methodology-driven architecture (4 guides), dynamic switching, framework-aware gates, semantic analysis integration, injection system
+**Execution Strategy**: Strategy pattern (3 types), engine orchestration, template pipeline, conversation state management
+**Gate Validation**: Registry (framework awareness), enhanced evaluators (methodology-specific criteria), multi-level validation
+**Advanced Analysis**: Semantic analyzer (auto type detection), framework-semantic integration, execution type detection, quality assessment
 
 ### Key Development Guidelines
 
-- **Each functional area MUST have exactly ONE primary implementation**
-- **NEVER add new systems without explicit deprecation of old ones**
+**Core Rules**: ONE primary implementation per functional area, explicit deprecation required before adding new systems
 
-##### Dependency Direction Enforcement
+**Dependency Direction**: Clear hierarchy (no bidirectional imports), use dependency injection/event patterns instead of circular imports
 
-- **Establish clear architectural hierarchy** - lower layers cannot import from higher layers
-- **Bidirectional imports are STRICTLY FORBIDDEN**
-- **Example Fix Required**: `execution-coordinator.ts` ↔ `strategies/index.ts` circular import must be broken
-- **Use dependency injection or event patterns** instead of circular imports
+**Consolidation Over Addition**: Enhance existing systems vs creating new ones, require architectural justification for parallel systems, verify no duplicate functionality
 
-##### Consolidation Over Addition Policy
+**Framework Development**: Methodology guides = single source of truth (never hard-code), dynamic generation from guide metadata, guide-driven enhancements (system prompts, quality gates, validation)
 
-- **Strong preference for enhancing existing systems vs creating new ones**
-- **Question before coding**: "Can this functionality be added to an existing system?"
-- **Require architectural justification** for creating parallel systems
-- **Code reviews must verify no duplicate functionality is being introduced**
+**Domain Cohesion**: Framework logic in `/frameworks`, separate stateless (manager) from stateful (state manager), clear separation (analysis WHAT vs methodology HOW), explicit integration points (`/integration`)
 
-#### Framework Development Rules
+**Methodology Guide Development**: Implement `IMethodologyGuide` interface (all required methods: `guidePromptCreation`, `guideTemplateProcessing`, `guideExecutionSteps`, `enhanceWithMethodology`, `validateMethodologyCompliance`), framework-specific quality gates, template enhancement suggestions, methodology validation
 
-##### Methodology Guides as Single Source of Truth
+**Framework Integration**: No direct coupling (integrate via framework manager), event-driven communication, semantic analysis coordination (informed by, not dependent on), gates adapt to framework (remain framework-agnostic in core)
 
-- **Never hard-code framework behavior** - All framework logic must come from methodology guides
-- **Methodology guides define framework identity** - `frameworkId`, `frameworkName`, `methodology` in guides
-- **Dynamic framework generation** - Framework definitions generated from guide metadata, not static configuration
-- **Guide-driven enhancements** - All framework-specific behavior (system prompts, quality gates, validation) comes from guide methods
+**Configuration**: Env vars for path overrides (`MCP_SERVER_ROOT`, `MCP_PROMPTS_CONFIG_PATH`), separate server/prompts config, modular imports, absolute paths for Claude Desktop
 
-##### Domain Cohesion Principles
+**Error Handling**: Comprehensive boundaries (all orchestration levels), structured logging (verbose/quiet modes), meaningful error messages (diagnostics), rollback mechanisms (startup failures)
 
-- **Framework logic belongs in `/frameworks`** - Keep all framework-related logic centralized
-- **Separate stateless from stateful** - Framework manager (stateless orchestration) separate from state manager (stateful tracking)
-- **Clear separation of concerns** - Analysis (WHAT the prompt needs) separate from methodology (HOW to approach it)
-- **Integration points are explicit** - Framework integration clearly defined in `/integration` directory
+**Testing**: Transport layer (STDIO/SSE), Nunjucks template rendering, hot-reloading, MCP protocol compliance, framework system validation, framework switching, state persistence
 
-##### Methodology Guide Development
-
-- **Implement `IMethodologyGuide` interface** - All guides must follow the established contract
-- **Provide comprehensive guidance** - Implement all required methods: `guidePromptCreation`, `guideTemplateProcessing`, `guideExecutionSteps`, `enhanceWithMethodology`, `validateMethodologyCompliance`
-- **Framework-specific quality gates** - Each guide defines its own validation criteria and quality gates
-- **Template enhancement suggestions** - Guides provide specific suggestions for improving prompts
-- **Methodology validation** - Guides can validate prompt compliance with their methodology principles
-
-##### Framework Integration Standards
-
-- **No direct framework coupling** - Other systems integrate through framework manager, not directly with guides
-- **Event-driven communication** - Framework state changes communicated through events
-- **Semantic analysis coordination** - Framework selection informed by, but not dependent on, semantic analysis
-- **Gate system integration** - Gates adapt to active framework but remain framework-agnostic in core logic
-
-#### Configuration Management
-
-- Use environment variables for path overrides (`MCP_SERVER_ROOT`, `MCP_PROMPTS_CONFIG_PATH`)
-- Maintain separation between server config and prompts config
-- Follow modular import patterns for prompt organization
-- Configure absolute paths for reliable Claude Desktop integration
--
-
-#### Error Handling
-
-- Implement comprehensive error boundaries at all orchestration levels
-- Use structured logging with appropriate levels (supports both verbose and quiet modes)
-- Provide meaningful error messages with diagnostic information
-- Include rollback mechanisms for startup failures
-
-#### Testing
-
-- Test transport layer compatibility (STDIO and SSE)
-- Validate prompt template rendering with Nunjucks engine
-- Check hot-reloading functionality and workflow engine integration
-- Verify MCP protocol compliance and framework system validation
-- Test framework switching functionality and state persistence
-
-### Environment Setup
-
-#### Required Environment Variables
-
-- `MCP_SERVER_ROOT`: Override server root directory detection (recommended for Claude Desktop)
-- `MCP_PROMPTS_CONFIG_PATH`: Direct path to prompts configuration file (bypasses server root detection)
+**Environment Variables**: `MCP_SERVER_ROOT` (override server root, recommended for Claude Desktop), `MCP_PROMPTS_CONFIG_PATH` (direct path to prompts config, bypasses root detection)
 
 ## Project-Specific Development Integration
 
@@ -648,116 +264,29 @@ The server exposes 3 consolidated MCP tools that users interact with:
 
 ### Command Format Specification
 
-The system uses a simplified CommandRouter (149 lines) optimized for LLM interactions, replacing the legacy parsing system (1,354 lines) with 84% code reduction.
+**CommandRouter** (149 lines, replaced 1,354-line legacy system, 84% reduction): Simplified router optimized for LLM interactions
 
-#### Supported Command Formats
+**Formats**: Simple (`>>prompt_name arguments`), JSON (`{"command": ">>prompt_name", "args": {...}}`), Key=value (`key="value"`), Single argument (text → first param)
 
-**1. Simple Format** (Most Common):
-```
->>prompt_name arguments
-```
+**Built-in Commands**: `listprompts`/`list_prompts`/`listprompt` (list prompts), `help`/`commands` (help), `status`/`health` (diagnostics), `analytics`/`metrics` (metrics)
 
-**Examples**:
-```
->>listprompts
->>analyze_code function foo() { return bar; }
->>code_review target_code="./src/app.ts" language_framework="TypeScript/React"
-```
+**Resolution**: Case-insensitive, match by ID or name, no typo correction (LLMs exact), clear error messages (suggest `>>listprompts`)
 
-**2. JSON Format** (Structured Data):
-```json
-{
-  "command": ">>prompt_name",
-  "args": { "key": "value", "key2": "value2" }
-}
-```
+**Arguments**: Auto-detect JSON (parsed directly), single arg (→ first param), key=value format, simple text (→ first arg or `input`). Type handling: LLMs send correct types, Zod validation at MCP tool level, optional `z.coerce.number()` if needed
 
-**Examples**:
-```json
-{
-  "command": ">>analyze_code",
-  "args": {
-    "code": "function foo() { return bar; }",
-    "language": "javascript"
-  }
-}
-```
+**Template Variables**: `{{previous_message}}` (conversation history), `{{arg_name}}` (any prompt arg), framework-specific context (auto-injected)
 
-#### Built-in Commands
+**Removed Features** (LLM-optimized): Typo correction, type coercion, smart content mapping, content-aware inference, env var defaults
 
-The following commands are handled specially by the system:
-
-- `listprompts`, `list_prompts`, `listprompt` - List all available prompts
-- `help`, `commands` - Show command help
-- `status`, `health` - Server status and health diagnostics
-- `analytics`, `metrics` - Usage analytics and performance metrics
-
-#### Command Resolution
-
-- **Case-Insensitive**: `>>ANALYZE_CODE` and `>>analyze_code` both work
-- **Name or ID**: Match by prompt ID or prompt name
-- **No Typo Correction**: LLMs send exact command names (no Levenshtein distance)
-- **Clear Error Messages**: Unknown prompts suggest using `>>listprompts`
-
-#### Argument Processing
-
-**Automatic Format Detection**:
-
-1. **JSON args**: Parsed directly (LLMs send correct types)
-2. **Single argument prompts**: Text mapped to first parameter
-3. **Key=value format**: `key1="value1" key2="value2"`
-4. **Simple text**: Passed as-is to first argument or `input` parameter
-
-**Type Handling**:
-- LLMs send correct types (no coercion needed)
-- Zod schema validation at MCP tool level
-- Optional: Use `z.coerce.number()` if type coercion needed
-
-#### Template Context Variables
-
-Special variables available in templates:
-
-- `{{previous_message}}` - Resolved from conversation history
-- `{{arg_name}}` - Any prompt argument
-- Framework-specific context injected automatically
-
-#### Migration from Legacy System
-
-**Removed Features** (No longer needed for LLM usage):
-- Typo correction (Levenshtein distance)
-- Type coercion (LLMs send correct types)
-- Smart content mapping (LLMs use schema descriptions)
-- Content-aware inference (over-engineered)
-- Environment variable defaults (rarely used)
-
-**See Also**:
-- Migration Guide: `docs/parser-migration-guide.md`
-- Refactoring Plan: `plans/parser-simplification-refactor.md`
-- CommandRouter Source: `server/src/execution/routing/command-router.ts`
+**References**: `docs/parser-migration-guide.md`, `plans/parser-simplification-refactor.md`, `server/src/execution/routing/command-router.ts`
 
 ## Coding Guidelines and Development Rules
 
 ### Enhanced Search System Implementation
 
-The system now includes advanced search capabilities implemented in `consolidated-prompt-manager.ts`:
+**Advanced search** (`consolidated-prompt-manager.ts`): Category (`category:code`), intent (`intent:debugging`), type (`type:chain`), confidence (`confidence:>80`, `confidence:70-90`), gates (`gates:yes`), execution (`execution:required`), text (fuzzy/partial word), combined filters (`category:code type:workflow confidence:>80`)
 
-#### Search Filter Syntax
-
-- **Category Filtering**: `category:code`, `category:analysis`, `category:research`
-- **Intent-Based Discovery**: `intent:debugging`, `intent:analysis`, `intent:research`
-- **Execution Type Filtering**: `type:prompt`, `type:template`, `type:chain`, `type:workflow`
-- **Confidence-Based Filtering**: `confidence:>80`, `confidence:<100`, `confidence:70-90`
-- **Quality Gate Filtering**: `gates:yes`, `gates:no`
-- **Execution Requirements**: `execution:required`, `execution:optional`
-- **Text Search**: Supports fuzzy matching and partial word matching
-- **Combined Filters**: Multiple filters can be combined: `category:code type:workflow confidence:>80`
-
-#### Search Implementation Rules
-
-- **Fuzzy Text Matching**: Searches support partial word matching and multiple search terms
-- **Intent-Based Matching**: Maps user intents to relevant prompts using semantic analysis
-- **Category-Aware Results**: Results are organized by category with proper filtering
-- **LLM-Optimized Output**: Results include usage examples, confidence indicators, and actionable descriptions
+**Features**: Fuzzy text matching (partial words, multiple terms), intent-based matching (semantic analysis), category-aware results, LLM-optimized output (usage examples, confidence indicators, actionable descriptions)
 
 ### TypeScript Development Standards
 
@@ -778,150 +307,26 @@ The system now includes advanced search capabilities implemented in `consolidate
 
 #### Testing & Validation Commands
 
-**Essential Commands:**
+**Essential**: `npm run test:ci` (complete suite), `test:all-enhanced` (framework/MCP validation), `validate:all` (dependencies/circular), `test:ci-startup` (server startup)
 
-- `npm run test:ci` - Complete test suite (unit + integration)
-- `npm run test:all-enhanced` - Enhanced framework and MCP validation
-- `npm run validate:all` - Core validation (dependencies + circular)
-- `npm run test:ci-startup` - Server startup validation
+**Performance**: `test:performance-memory` (GC profiling), `test:establish-baselines` (benchmarking baselines), Node scripts (comprehensive metrics), integration Test 6 (parsing performance)
 
-**Performance Monitoring:**
+**Deprecated**: ❌ `test:performance` (Jest tests for legacy architecture) → Use Node scripts
 
-- `npm run test:performance-memory` - Memory usage monitoring with GC profiling
-- `npm run test:establish-baselines` - Establish performance baselines for benchmarking
-- Node script tests provide comprehensive performance metrics
-- Parsing performance validated in integration tests (Test 6: Performance Validation)
-
-**Deprecated:**
-
-- ❌ `npm run test:performance` - Jest performance tests deprecated (outdated architecture)
-- ⚠️ Jest tests in `tests/performance/*.test.ts` reference legacy parsing system
-- ✅ Use Node script equivalents instead (listed above under Performance Monitoring)
-- **Rationale**: Tests written for legacy architecture; functionality covered by working Node scripts
-
-**Quality Standards:**
-
-- **Jest Configuration**: ES modules, 30s timeout, single worker, `tests/setup.ts`
-- **Validation Integration**: Global Rules quality gates with evidence-based criteria
-- **Architecture Compliance**: Single source of truth principle enforcement
+**Quality Standards**: Jest config (ES modules, 30s timeout, single worker, `tests/setup.ts`), Global Rules integration (evidence-based criteria), architecture compliance (single source of truth)
 
 #### Hybrid Testing Strategy
 
-**Decision: Use Node.js Scripts for Integration Tests, Jest for Unit Tests**
+**Node.js Scripts** (`tests/scripts/*.js`, 3,665 lines, 13 scripts): Integration/E2E/performance/lifecycle/MCP protocol tests | Tests compiled `dist/` code (production environment) | No transformation layer (real ES modules) | Simple Node.js + imports | Examples: `integration-mcp-tools.js`, `integration-server-startup.js`
 
-After analyzing the testing requirements and Jest's limitations with ES modules, the project uses a hybrid testing approach:
+**Jest Unit Tests** (`tests/unit/*.test.ts`, 2,411 lines, 13 files): Pure unit tests (formatters, parsers, utilities) | Better assertions, mocking, coverage metrics, parallel execution | Limitations: Jest transforms TS→CommonJS, `import.meta.url` needs eval workaround, can't test `dist/` imports | Examples: `response-formatter.test.ts`, `semantic-analyzer-three-tier.test.ts`
 
-**Node.js Integration Scripts** (`tests/scripts/*.js`):
-- ✅ **Best for**: Integration tests, E2E tests, performance tests, server lifecycle tests, MCP protocol tests
-- ✅ **Advantages**:
-  - Tests actual compiled code (`dist/`) in production environment
-  - No transformation/transpilation layer (tests real ES module behavior)
-  - Simple: Just Node.js + imports, no complex configuration
-  - Direct integration testing of MCP server code paths
-  - Fast execution with standard Node debugging
-- ✅ **Total**: ~3,665 lines across 13 working scripts
-- ✅ **Examples**: `integration-mcp-tools.js`, `integration-server-startup.js`, `integration-symbolic-chains.js`
+**Use Node.js for**: Server startup/lifecycle, MCP protocol, real module interactions, performance benchmarks
+**Use Jest for**: Pure logic (no imports), formatters/utilities, complex mocking
 
-**Jest Unit Tests** (`tests/unit/*.test.ts`):
-- ✅ **Best for**: Pure unit tests of isolated logic (formatters, parsers, utilities)
-- ✅ **Advantages**:
-  - Better assertions and test organization
-  - Mocking/stubbing capabilities
-  - Code coverage metrics
-  - Fast parallel execution
-- ⚠️ **Limitations**:
-  - Jest transforms TypeScript → CommonJS (different from production)
-  - `import.meta.url` requires workarounds (lazy initialization with eval)
-  - Cannot test modules that import from `dist/` (ES module syntax errors)
-- ✅ **Total**: ~2,411 lines across 13 test files
-- ✅ **Examples**: `response-formatter.test.ts`, `semantic-analyzer-three-tier.test.ts`
+**Jest ES Module Fix** (`jsonUtils.ts`): Lazy initialization with `eval('import.meta.url')` prevents Jest parse-time errors while supporting production ES modules
 
-**When to Use Each:**
-
-| Test Type | Use Node.js Scripts | Use Jest Unit Tests |
-|-----------|-------------------|-------------------|
-| Server startup/lifecycle | ✅ Yes | ❌ No |
-| MCP protocol compliance | ✅ Yes | ❌ No |
-| Real module interactions | ✅ Yes | ❌ No |
-| Performance benchmarks | ✅ Yes | ❌ No |
-| Pure logic (no imports) | ⚠️ Either | ✅ Preferred |
-| Formatters/utilities | ⚠️ Either | ✅ Preferred |
-| Complex mocking needed | ❌ No | ✅ Yes |
-
-**Jest ES Module Compatibility Fix:**
-
-The `jsonUtils.ts` module uses lazy initialization to support both Jest and production ES modules:
-
-```typescript
-// Lazy initialization prevents Jest from parsing import.meta at module load time
-let nunjucksEnv: nunjucks.Environment | null = null;
-
-function getPromptTemplatesPath(): string {
-  if (typeof __dirname !== 'undefined') {
-    // Jest/CommonJS environment
-    return path.resolve(__dirname, "../../prompts");
-  }
-  // ES modules - use eval to prevent Jest parse-time errors
-  const metaUrl = eval('import.meta.url');
-  return path.resolve(path.dirname(fileURLToPath(metaUrl)), "../../prompts");
-}
-
-function getNunjucksEnv(): nunjucks.Environment {
-  if (!nunjucksEnv) {
-    nunjucksEnv = nunjucks.configure(getPromptTemplatesPath(), { /* config */ });
-  }
-  return nunjucksEnv;
-}
-```
-
-**Key Insight**: Using `eval('import.meta.url')` prevents Jest from parsing `import.meta` at compile time, while still allowing it to work in production ES modules.
-
-**Test Organization:**
-
-```
-server/tests/
-├── scripts/                          # Node.js integration tests (3,665 lines)
-│   ├── integration-mcp-tools.js      # MCP tools integration
-│   ├── integration-server-startup.js # Server lifecycle
-│   ├── integration-symbolic-chains.js # Symbolic chain execution
-│   ├── integration-routing-system.js  # Command routing
-│   └── ... (9 more scripts)
-├── unit/                             # Jest unit tests (2,411 lines)
-│   ├── response-formatter.test.ts    # ✅ Pure logic
-│   ├── semantic-analyzer.test.ts     # ✅ Isolated analysis
-│   └── ... (11 more tests)
-├── integration/                      # Jest integration tests (deprecated)
-│   └── *.test.ts                     # ⚠️ Migrate to Node.js scripts
-└── performance/                      # Jest performance tests (deprecated)
-    └── *.test.ts                     # ⚠️ Use Node.js scripts instead
-```
-
-**Migration Guidance:**
-
-- ✅ **Keep Node.js scripts**: They test actual production code paths and work perfectly
-- ✅ **Keep Jest for pure unit tests**: Isolated logic without server dependencies
-- ❌ **Don't migrate scripts to Jest**: Integration tests belong in Node.js scripts
-- ⚠️ **Migrate Jest integration tests**: Move `tests/integration/*.test.ts` to Node.js scripts
-- **ROI**: Migrating 3,665 lines of working Node.js scripts to Jest has negative ROI
-
-**Running Tests:**
-
-```bash
-# Run all Node.js integration scripts
-npm run test:integration
-
-# Run all Jest unit tests
-npx jest
-
-# Run complete test suite
-npm run test:ci
-
-# Run specific Node.js script
-node tests/scripts/integration-mcp-tools.js
-
-# Run specific Jest test
-npx jest tests/unit/response-formatter.test.ts
-```
+**Running**: `npm run test:integration` (Node.js), `npx jest` (Jest unit), `npm run test:ci` (complete), `node tests/scripts/[name].js` (specific Node.js), `npx jest tests/unit/[name].test.ts` (specific Jest)
 
 ### Code Quality Standards
 
@@ -948,69 +353,23 @@ npx jest tests/unit/response-formatter.test.ts
 
 ### Development Workflow Standards
 
-#### Pre-Development Checklist (MANDATORY)
+**Pre-Development Checklist (MANDATORY)**: System overlap check (`npm run validate:all`), architecture review (add to existing vs create new?), dependency check (`validate:circular`), single source verification
 
-Before starting any feature or system:
+**Code Changes**: Validation first (`validate:all`), type check (`typecheck`), build verification (`build`), test validation (relevant suites), hot-reload testing (`npm run dev`)
 
-1. **System Overlap Check**: Run `npm run validate:all` to detect existing systems
-2. **Architecture Review**: Can this be added to an existing system instead of creating new one?
-3. **Dependency Check**: Will this create circular dependencies? Use `npm run validate:circular`
-4. **Single Source Verification**: Does this violate "one system per function" rule?
+**Consolidated Tool Changes**: Tool schema updates (Zod validation), response format (consistent `ToolResponse`), error handling (`handleError()` function), filter support (add to intelligent filtering), test coverage (`test:mcp-tools`)
 
-#### Code Changes
-
-- **System Validation First**: Run `npm run validate:all` before committing
-- **Type Check**: Always run `npm run typecheck` before committing
-- **Build Verification**: Run `npm run build` to ensure compilation succeeds
-- **Test Validation**: Run relevant test suites for changed components
-- **Hot-Reload Testing**: Verify changes work with `npm run dev` and hot-reloading
-
-#### Consolidated Tool Changes
-
-When modifying the consolidated MCP tools:
-
-1. **Tool Schema Updates**: Update Zod schema validation for new parameters or options
-2. **Response Format**: Maintain consistent `ToolResponse` interface across all tools
-3. **Error Handling**: Use standardized `handleError()` function for consistent error responses
-4. **Filter Support**: Add new filter types to intelligent filtering system in prompt manager
-5. **Test Coverage**: Verify changes work with relevant test suites (`npm run test:mcp-tools`)
-
-#### Framework System Changes
-
-When modifying framework components:
-
-1. **Methodology guides are single source of truth** - never bypass guide methods
-2. **Test framework switching** using MCP tools after changes
-3. **Validate guide interface compliance** with all required methods
-4. **Ensure integration points remain decoupled** from direct guide access
+**Framework System Changes**: Methodology guides = single source (never bypass), test framework switching (MCP tools), validate interface compliance (all required methods), ensure decoupled integration points
 
 ## 🚀 Enhanced Development Standards Integration
 
-### Evidence-Based Development Protocol
+**Evidence-Based Development**: Prohibited (best|optimal|faster|secure|better|improved|enhanced|always|never|guaranteed), Required (may|could|potentially|typically|often|sometimes|measured|documented), Evidence (testing confirms|metrics show|benchmarks prove|data indicates|documentation states)
 
-**Required Language Standards** (from Global Rules):
+**Research & Validation**: Citations (official docs, version compatibility, sources documented), Context7 (library/MCP protocol docs lookup), WebSearch (official sources, TypeScript/Node.js patterns), workflow (research → validate → implement), MCP SDK compatibility (all changes)
 
-- **Prohibited**: "best|optimal|faster|secure|better|improved|enhanced|always|never|guaranteed"
-- **Required**: "may|could|potentially|typically|often|sometimes|measured|documented"
-- **Evidence**: "testing confirms|metrics show|benchmarks prove|data indicates|documentation states"
+**Environment & Deployment**: Dev setup (Node.js 16+, TypeScript strict, env vars: `MCP_SERVER_ROOT`, `MCP_PROMPTS_CONFIG_PATH`), transport testing (`start:stdio` Claude Desktop, `start:sse` web clients), CI/CD (cross-platform Ubuntu/Windows/macOS, Node 16/18/20, evidence-based quality gates)
 
-**Research & Validation Standards**:
-
-- **Citations**: Official documentation required | Version compatibility verified | Sources documented
-- **Context7 Integration**: External libraries and documentation lookup for MCP protocol compliance
-- **WebSearch**: Official sources and current information for TypeScript/Node.js patterns
-- **Evidence before implementation**: Research → validate → implement (Global Rules workflow)
-- **Protocol Compliance**: All changes must maintain MCP SDK compatibility
-
-### Environment & Deployment
-
-**Development Setup**: Node.js 16+ | TypeScript strict mode | Environment variables: `MCP_SERVER_ROOT`, `MCP_PROMPTS_CONFIG_PATH`
-**Transport Testing**: `npm run start:stdio` (Claude Desktop) | `npm run start:sse` (web clients)
-**CI/CD**: Cross-platform testing (Ubuntu/Windows/macOS, Node 16/18/20) | Quality gates with evidence-based validation
-
-#### Performance Budgets
-
-- Server startup: <3s | Tool response: <500ms | Framework switching: <100ms | Memory: <128MB
+**Performance Budgets**: Server startup <3s, tool response <500ms, framework switching <100ms, memory <128MB
 
 ---
 

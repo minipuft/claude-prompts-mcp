@@ -147,6 +147,7 @@ All subsequent tasks must respect these invariants so we do not regress existing
 - Session responses append only the minimal continuation metadata (session/chain IDs, gate summary) so the rendered template remains the primary content seen by the LLM.
 - Response formatting is covered by unit tests to ensure future changes cannot strip template bodies or overwrite them with metadata.
 - End-to-end verification for symbolic chains now runs in CI (see `symbolic-chain-integration.test.ts`), exercising session restart and completion flow.
+- Framework override executor now guards disabled states, surfaces switch/restore failures, and is covered by targeted unit tests plus new integration coverage for `@FRAMEWORK` chains (valid + invalid targets).
 
 ### Success Criteria
 
@@ -185,26 +186,37 @@ All subsequent tasks must respect these invariants so we do not regress existing
 
 ---
 
-## Phase 2 – Inline Gates & Framework Overrides (Session-Aware)
+## Phase 2 – Framework Selector & Inline Gates (Session-Aware)
 
-### Goals
+Phase 2 is split into two concrete tracks:
 
-- Re-enable inline gate evaluation (`=` operator) after the final step or designated steps.
-- Allow temporary framework overrides (`@FRAMEWORK`) that wrap the entire session lifecycle (ensuring restoration even if execution spans multiple MCP calls).
+### Phase 2A – Framework Selector (`@`)
 
-### Implementation Strategy
+**Status**: Implementation exists; needs verification + docs.
 
-- **Gate Execution**:
-  - On final step completion, invoke `GateOperatorExecutor` using the aggregated output.
-  - Store gate results in session metadata, return pass/fail guidance to the LLM.
-- **Framework Overrides**:
-  - Persist framework context in session state so restarts keep the override.
-  - Apply override before rendering each step; restore after chain completion or cancellation.
+**Goals**:
+- Ensure `@FRAMEWORK` applies on every symbolic-call (start, resume, complete) and always restores the prior framework.
+- Surface clear errors when framework switching fails or is disabled.
+- Keep output lean (no extra headers or protocol blocks) while still identifying the system context.
 
-### Testing
+**Plan**:
+- ✅ Add integration tests covering single-step and multi-step chains with `@FRAMEWORK`, including invalid framework scenarios.
+- ✅ Add unit tests for `FrameworkOperatorExecutor` error paths (switch failure, restoration).
+- ⏳ Update documentation to explain temporary overrides vs persistent `system_control` switches.
 
-- Simulate chains with gates and confirm retries/validation messaging.
-- Assert framework state manager receives apply/restore calls only once per session.
+### Phase 2B – Inline Quality Gates (`=`)
+
+**Status**: Parser captures criteria; execution needs stronger validation tests.
+
+**Goals**:
+- Evaluate gate criteria against aggregated chain output on completion.
+- Present concise pass/fail messaging in the footer; include retry hints where configured.
+- Maintain minimal template output (no extra blocks).
+
+**Plan**:
+- Add integration tests where the chain ends with `=` verifying pass/fail and retry scenarios.
+- Extend unit tests for `GateOperatorExecutor` (temporary gate creation, failure paths).
+- Document inline gate usage and the meaning of footer summaries.
 
 ---
 
@@ -321,17 +333,17 @@ All subsequent tasks must respect these invariants so we do not regress existing
 - [x] Parser + execution plan generation
 - [x] Session-aware scaffolding (start/continue)
 - [x] Rewire session path through operator executors
-- [ ] Integration tests verifying end-to-end chain rendering
+- [x] Integration tests verifying end-to-end chain rendering
 
 ### Phase 1B (LLM Guidance)
 - [x] Update ChainOperatorExecutor output format
 - [x] Align session responses with guidance template
 - [ ] Document guidance expectations for prompt authors
 
-### Phase 2 (Gates & Frameworks)
-- [ ] Persist framework override across sessions
-- [ ] Trigger gate evaluation on completion with retries
-- [ ] Expose gate results in ToolResponse metadata
+### Phase 2 (Framework Selector & Gates)
+- [x] Framework selector verification (tests + error handling)
+- [ ] Inline gate evaluation coverage (pass/fail + retry messaging)
+- [ ] Documentation updates for `@` and `=` operators
 
 ### Phase 3 (Advanced Operators)
 - [ ] Execution plan support for parallel groups

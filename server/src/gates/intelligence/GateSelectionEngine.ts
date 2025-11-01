@@ -63,12 +63,14 @@ export class GateSelectionEngine {
     this.logger = logger;
     this.configManager = configManager;
     this.frameworksConfig = this.configManager.getFrameworksConfig();
+
     this.frameworksConfigListener = (newConfig: FrameworksConfig) => {
       this.frameworksConfig = { ...newConfig };
       this.logger.info(
         `Gate selection engine feature toggles updated (methodologyGates: ${this.frameworksConfig.enableMethodologyGates})`
       );
     };
+
     this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
     this.logger.debug('[GATE SELECTION ENGINE] Initialized');
   }

@@ -98,6 +98,7 @@ export class FrameworkInjector {
     };
 
     this.frameworksConfig = this.configManager.getFrameworksConfig();
+
     this.frameworksConfigListener = (newConfig: FrameworksConfig) => {
       this.frameworksConfig = { ...newConfig };
       this.logger.info(

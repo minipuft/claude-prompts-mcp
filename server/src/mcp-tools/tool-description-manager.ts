@@ -121,12 +121,14 @@ export class ToolDescriptionManager extends EventEmitter {
     this.defaults = this.createDefaults();
     this.methodologyDescriptions = new Map();
     this.frameworksConfig = this.configManager.getFrameworksConfig();
+
     this.frameworksConfigListener = (newConfig: FrameworksConfig) => {
       this.frameworksConfig = { ...newConfig };
       this.logger.info(
         `Tool description manager feature toggle updated (dynamicDescriptions: ${this.frameworksConfig.enableDynamicToolDescriptions})`
       );
     };
+
     this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
   }
 
