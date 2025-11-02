@@ -176,3 +176,18 @@ export class PerformanceTimer {
     return this.endTime - this.startTime;
   }
 }
+
+/**
+ * Cleanup helper for ConsolidatedPromptEngine instances
+ * Safely cleans up prompt engines to prevent async handle leaks
+ */
+export async function cleanupPromptEngine(engine) {
+  if (engine && typeof engine.cleanup === 'function') {
+    try {
+      await engine.cleanup();
+    } catch (error) {
+      // Log error but don't throw to prevent test failures
+      console.error('Error cleaning up prompt engine:', error);
+    }
+  }
+}

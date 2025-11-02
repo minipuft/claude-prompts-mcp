@@ -106,16 +106,22 @@ async function runMcpToolsIntegrationTests() {
 
       const mockConversationManager = {
         addToConversationHistory: () => {},
-        getConversationHistory: () => [],
-        saveStepResult: () => {},
-        getStepResult: () => null,
-        setChainSessionManager: () => {}
-      };
+      getConversationHistory: () => [],
+      saveStepResult: () => {},
+      getStepResult: () => null,
+      setChainSessionManager: () => {},
+      setTextReferenceManager: () => {},
+      setChainState: () => {}
+    };
 
       const mockTextReferenceManager = {
         extractReferences: () => [],
         resolveReferences: () => {},
-        addReference: () => {}
+        addReference: () => {},
+        storeChainStepResult: () => {},
+        getChainStepResult: () => null,
+        getChainStepMetadata: () => null,
+        buildChainVariables: () => ({})
       };
 
       const mockMcpToolsManager = {

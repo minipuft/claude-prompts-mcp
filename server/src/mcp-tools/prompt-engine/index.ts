@@ -14,6 +14,7 @@
 export {
   ConsolidatedPromptEngine,
   createConsolidatedPromptEngine,
+  cleanupPromptEngine,
 } from "./core/engine.js";
 
 // Chain execution exports

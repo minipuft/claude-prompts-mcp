@@ -427,4 +427,14 @@ export class PromptManager {
 
     return stats;
   }
+
+  /**
+   * Shutdown the prompt manager and cleanup resources
+   * Prevents async handle leaks by stopping hot reload manager
+   */
+  async shutdown(): Promise<void> {
+    if (this.hotReloadManager) {
+      await this.hotReloadManager.stop();
+    }
+  }
 }

@@ -28,6 +28,7 @@ export interface ChainSession {
   startTime: number;
   lastActivity: number;
   originalArgs: Record<string, any>;
+  inlineGateIds?: string[];
 }
 
 /**
@@ -227,6 +228,7 @@ export class ChainSessionManager {
       startTime: Date.now(),
       lastActivity: Date.now(),
       originalArgs,
+      inlineGateIds: [],
     };
 
     this.activeSessions.set(sessionId, session);
@@ -269,7 +271,7 @@ export class ChainSessionManager {
     sessionId: string,
     stepNumber: number,
     stepResult: string,
-    stepMetadata?: any
+    stepMetadata?: Record<string, any>
   ): Promise<boolean> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
@@ -287,12 +289,19 @@ export class ChainSessionManager {
     session.lastActivity = Date.now();
     session.executionOrder.push(stepNumber);
 
-    // Store result in text reference manager (single source of truth)
-    this.textReferenceManager.storeChainStepResult(
+    const metadataRecord = {
+      ...(stepMetadata || {}),
+      isPlaceholder: stepMetadata?.isPlaceholder ?? false,
+      storedAt: Date.now(),
+    };
+
+    // Store result via conversation manager so both contexts stay aligned
+    this.conversationManager.saveStepResult(
       session.chainId,
       stepNumber,
       stepResult,
-      stepMetadata
+      metadataRecord.isPlaceholder,
+      metadataRecord
     );
 
     // Update conversation manager state for coordination
@@ -310,6 +319,59 @@ export class ChainSessionManager {
         `Updated session ${sessionId}: step ${stepNumber} completed, moved to step ${session.state.currentStep}`
       );
     }
+    return true;
+  }
+
+  /**
+   * Update an existing step result (e.g., replace placeholder with LLM output)
+   */
+  async updateStepResult(
+    sessionId: string,
+    stepNumber: number,
+    stepResult: string,
+    stepMetadata?: Record<string, any>
+  ): Promise<boolean> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      if (this.logger) {
+        this.logger.warn(
+          `Attempted to update result for non-existent session: ${sessionId}`
+        );
+      }
+      return false;
+    }
+
+    const existingMetadata = this.textReferenceManager.getChainStepMetadata(
+      session.chainId,
+      stepNumber
+    ) || {};
+
+    const mergedMetadata = {
+      ...existingMetadata,
+      ...(stepMetadata || {}),
+      isPlaceholder: stepMetadata?.isPlaceholder ?? false,
+      updatedAt: Date.now(),
+    };
+
+    this.conversationManager.saveStepResult(
+      session.chainId,
+      stepNumber,
+      stepResult,
+      mergedMetadata.isPlaceholder,
+      mergedMetadata
+    );
+
+    session.lastActivity = Date.now();
+    session.state.lastUpdated = Date.now();
+
+    // Keep chain state synchronized
+    this.conversationManager.setChainState(
+      session.chainId,
+      session.state.currentStep,
+      session.state.totalSteps
+    );
+
+    await this.saveSessions();
     return true;
   }
 
@@ -356,6 +418,24 @@ export class ChainSessionManager {
   getOriginalArgs(sessionId: string): Record<string, any> {
     const session = this.activeSessions.get(sessionId);
     return session?.originalArgs || {};
+  }
+
+  setInlineGateIds(sessionId: string, gateIds: string[]): void {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+    session.inlineGateIds = [...gateIds];
+    this.saveSessions().catch((error) => {
+      if (this.logger) {
+        this.logger.error(`Failed to persist inline gate IDs for session ${sessionId}:`, error);
+      }
+    });
+  }
+
+  getInlineGateIds(sessionId: string): string[] | undefined {
+    const session = this.activeSessions.get(sessionId);
+    return session?.inlineGateIds ? [...session.inlineGateIds] : undefined;
   }
 
   /**
@@ -560,6 +640,29 @@ export class ChainSessionManager {
     }
 
     return { valid: issues.length === 0, issues };
+  }
+
+  /**
+   * Cleanup the chain session manager and persist state
+   * Prevents async handle leaks by finalizing all file operations
+   */
+  async cleanup(): Promise<void> {
+    this.logger.info("Shutting down ChainSessionManager...");
+
+    try {
+      // Perform final state save to persist any pending session data
+      await this.saveSessions();
+      this.logger.debug("Chain sessions persisted during cleanup");
+    } catch (error) {
+      this.logger.warn("Error persisting sessions during cleanup:", error);
+    }
+
+    // Clear in-memory state
+    this.activeSessions.clear();
+    this.chainSessionMapping.clear();
+    this.logger.debug("In-memory session state cleared");
+
+    this.logger.info("ChainSessionManager cleanup complete");
   }
 }
 

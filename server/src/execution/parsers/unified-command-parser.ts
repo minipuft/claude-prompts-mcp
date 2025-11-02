@@ -123,7 +123,7 @@ export class UnifiedCommandParser {
       name: 'symbolic',
       confidence: 0.97,
       canHandle: (command: string) => {
-        return /-->|=\s*["']|^@[A-Za-z0-9_-]+|\+|\?/.test(command);
+        return /-->|(::|=)\s*["']|^@[A-Za-z0-9_-]+|\+|\?/.test(command);
       },
       parse: (command: string): SymbolicCommandParseResult | null => {
         const operators = this.symbolicParser.detectOperators(command);
@@ -132,7 +132,7 @@ export class UnifiedCommandParser {
         }
 
         let cleanCommand = command.replace(/^@[A-Za-z0-9_-]+\s+/, '');
-        cleanCommand = cleanCommand.replace(/\s*=\s*["'].+?["']\s*$/, '');
+        cleanCommand = cleanCommand.replace(/\s+(::|=)\s*["']([^"']+)["']\s*$/, '');
 
         const baseSegment = cleanCommand.split(/-->|\+|\?/)[0]?.trim() ?? '';
         const firstPromptMatch = baseSegment.match(/^(?:>>)?([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);

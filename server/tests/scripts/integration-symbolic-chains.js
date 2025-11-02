@@ -160,7 +160,8 @@ async function runSymbolicChainTests() {
       resolveReferences: () => {},
       addReference: () => {},
       storeChainStepResult: () => {},
-      buildChainVariables: () => ({})
+      buildChainVariables: () => ({}),
+      getChainStepMetadata: () => null
     };
 
     const mockMcpToolsManager = {

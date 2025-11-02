@@ -56,53 +56,81 @@ export class GateGuidanceRenderer {
       return '';
     }
 
-    const guidanceTexts: string[] = [];
+    const inlineGuidance: string[] = [];
+    const frameworkGuidance: string[] = [];
 
     for (const gateId of gateIds) {
       try {
         const gate = await this.loadGateDefinition(gateId);
-        if (gate) {
-          if (this.shouldActivateGate(gate, context)) {
-            guidanceTexts.push(this.formatGateGuidance(gate, context));
-            this.logger.debug('[GATE GUIDANCE RENDERER] Added guidance for gate:', gateId);
-          } else {
-            this.logger.debug('[GATE GUIDANCE RENDERER] Skipped gate (not applicable):', gateId);
-          }
-        } else {
+        if (!gate) {
           this.logger.debug('[GATE GUIDANCE RENDERER] Failed to load gate:', gateId);
+          continue;
         }
+
+        const inline = this.isInlineGate(gateId, gate);
+
+        if (!inline && !this.shouldActivateGate(gate, context)) {
+          this.logger.debug('[GATE GUIDANCE RENDERER] Skipped gate (not applicable):', gateId);
+          continue;
+        }
+
+        const formatted = this.formatGateGuidance(gate, context);
+        if (inline) {
+          inlineGuidance.push(formatted);
+        } else {
+          frameworkGuidance.push(formatted);
+        }
+        this.logger.debug('[GATE GUIDANCE RENDERER] Added guidance for gate:', gateId);
       } catch (error) {
         this.logger.warn('[GATE GUIDANCE RENDERER] Failed to load gate:', gateId, error);
       }
     }
 
-    if (guidanceTexts.length === 0) {
+    if (inlineGuidance.length === 0 && frameworkGuidance.length === 0) {
       this.logger.debug('[GATE GUIDANCE RENDERER] No applicable gates found, returning empty guidance');
       return '';
     }
 
-    // Format as supplemental guidance section (clean formatting)
-    // NOTE: Framework is already described in tool descriptions and system prompt
-    // so we don't duplicate the framework reference in the header
-    const supplementalGuidance = `
+    const sections: string[] = [
+      '\n\n---\n\n## 🎯 Quality Enhancement Gates',
+    ];
 
----
+    // Add inline guidance first (task-specific)
+    if (inlineGuidance.length > 0) {
+      sections.push('\n\n### 🎯 **Inline Quality Criteria** (PRIMARY VALIDATION)\n');
+      sections.push(inlineGuidance.join('\n\n'));
+    }
 
-## 🎯 Quality Enhancement Gates
+    // Add framework guidance second (universal standards)
+    if (frameworkGuidance.length > 0) {
+      sections.push('\n\n');
+      sections.push(frameworkGuidance.join('\n\n'));
+    }
 
-**Post-Execution Review Guidelines:**
-Review your output against these quality standards before finalizing your response.
+    // Add post-execution review LAST (final reminder)
+    sections.push('\n\n**Post-Execution Review Guidelines:**');
+    sections.push('Review your output against these quality standards before finalizing your response.');
 
-${guidanceTexts.join('\n\n')}
+    sections.push('\n\n---');
 
----`;
+    const supplementalGuidance = sections.join('');
 
     this.logger.debug('[GATE GUIDANCE RENDERER] Generated supplemental guidance:', {
-      gateCount: guidanceTexts.length,
+      inlineGateCount: inlineGuidance.length,
+      frameworkGateCount: frameworkGuidance.length,
       guidanceLength: supplementalGuidance.length
     });
 
     return supplementalGuidance;
+  }
+
+  private isInlineGate(gateId: string, gate: GateDefinition): boolean {
+    if (gateId.startsWith('inline_gate_')) {
+      return true;
+    }
+
+    const normalizedName = gate.name?.toLowerCase() ?? '';
+    return normalizedName.includes('inline quality') || normalizedName.includes('inline gate');
   }
 
   /**

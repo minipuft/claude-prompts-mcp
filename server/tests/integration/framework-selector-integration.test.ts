@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { createConsolidatedPromptEngine } from '../../dist/mcp-tools/prompt-engine/index.js';
-import { MockLogger, MockMcpServer } from '../helpers/test-helpers.js';
+import { MockLogger, MockMcpServer, cleanupPromptEngine } from '../helpers/test-helpers.js';
 
 const contentAnalysisPrompt = {
   id: 'content_analysis',
@@ -166,6 +166,7 @@ describe('Symbolic framework selector integration', () => {
       getStepResult: () => null,
       setChainSessionManager: () => {},
       setTextReferenceManager: () => {},
+      setChainState: () => {},
     };
 
     const mockTextReferenceManager = {
@@ -174,6 +175,7 @@ describe('Symbolic framework selector integration', () => {
       addReference: () => {},
       storeChainStepResult: () => {},
       buildChainVariables: () => ({}),
+      getChainStepMetadata: () => null,
     };
 
     const mockMcpToolsManager = {
@@ -200,7 +202,12 @@ describe('Symbolic framework selector integration', () => {
     promptEngine.updateData(promptsData as any, convertedPrompts as any);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Cleanup prompt engine to prevent async handle leaks
+    if (promptEngine) {
+      await cleanupPromptEngine(promptEngine);
+    }
+    
     logger.clear();
     mockMcpServer.clear();
     switchFrameworkMock.mockClear();

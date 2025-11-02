@@ -293,6 +293,10 @@ export class MethodologyTracker extends EventEmitter {
       await this.persistState();
     }
 
+    // Remove all event listeners to prevent memory leaks
+    this.removeAllListeners();
+    this.logger.debug("Event listeners removed during shutdown");
+
     this.logger.info("MethodologyTracker shutdown complete");
   }
 

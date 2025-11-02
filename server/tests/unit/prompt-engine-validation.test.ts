@@ -44,11 +44,13 @@ const mockSemanticAnalyzer: SemanticAnalyzer = {
 const mockConversationManager: ConversationManager = {
   setChainSessionManager: jest.fn(),
   setTextReferenceManager: jest.fn(),
+  setChainState: jest.fn(),
 } as any;
 
 const mockTextReferenceManager: TextReferenceManager = {
   saveStepResult: jest.fn(),
   getStepResult: jest.fn(),
+  getChainStepMetadata: jest.fn(),
 } as any;
 
 const mockMcpServer = {

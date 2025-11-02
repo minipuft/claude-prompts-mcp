@@ -10,7 +10,7 @@
 
 We now operate under a **session-aware, step-by-step execution model**: the MCP server renders prompts and manages state, while the client LLM performs each step iteratively. This plan realigns the symbolic command language work with that architecture, ensuring operators (chain, gates, frameworks, parallel, conditional) integrate cleanly with session persistence, LLM guidance, and our consolidated prompt engine.
 
-**Core Vision**: Users express workflows like `@ReACT >>diagnose logs="..." --> fix --> verify = "tests pass"` and the system:
+**Core Vision**: Users express workflows like `@ReACT >>diagnose logs="..." --> fix --> verify :: "tests pass"` and the system:
 - parses symbolic syntax reliably,
 - provides the LLM with clear per-step instructions and context cues,
 - manages session state for resumable execution,
@@ -93,7 +93,7 @@ EOF
 **Desired Workflow**:
 ```bash
 # Single command - no template needed
->>web_search "AI trends" --> deep_analysis --> synthesis_report = "actionable insights"
+>>web_search "AI trends" --> deep_analysis --> synthesis_report :: "actionable insights"
 ```
 
 ## Unified Blueprint
@@ -147,6 +147,11 @@ All subsequent tasks must respect these invariants so we do not regress existing
 - Session responses append only the minimal continuation metadata (session/chain IDs, gate summary) so the rendered template remains the primary content seen by the LLM.
 - Response formatting is covered by unit tests to ensure future changes cannot strip template bodies or overwrite them with metadata.
 - End-to-end verification for symbolic chains now runs in CI (see `symbolic-chain-integration.test.ts`), exercising session restart and completion flow.
+- Inline gate executor now returns retry hints, footer messaging reports pass/fail succinctly, and new tests cover success/failure + retry scenarios.
+- Gate loader now reads temporary inline gates from the registry, making `=` operators functional end-to-end without requiring on-disk definitions.
+- Chain sessions now mark rendered prompts as placeholders and replace them with captured LLM responses before rendering the next step, restoring accurate `previous_step_output` context.
+- Inline gate evaluation now emits a client-facing validation prompt and accepts `gate_validation_feedback` so the LLM self-checks output; structured metadata reflects the LLM verdict when provided and requests feedback when absent.
+- Gate operator syntax now uses `::` for inline criteria; legacy `=` still parses with a deprecation warning to ease migration.
 - Framework override executor now guards disabled states, surfaces switch/restore failures, and is covered by targeted unit tests plus new integration coverage for `@FRAMEWORK` chains (valid + invalid targets).
 
 ### Success Criteria
@@ -214,9 +219,9 @@ Phase 2 is split into two concrete tracks:
 - Maintain minimal template output (no extra blocks).
 
 **Plan**:
-- Add integration tests where the chain ends with `=` verifying pass/fail and retry scenarios.
-- Extend unit tests for `GateOperatorExecutor` (temporary gate creation, failure paths).
-- Document inline gate usage and the meaning of footer summaries.
+- ✅ Add integration tests where the chain ends with `=` verifying pass/fail and retry scenarios.
+- ✅ Extend unit tests for `GateOperatorExecutor` (temporary gate creation, failure paths).
+- ⏳ Document inline gate usage and the meaning of footer summaries.
 
 ---
 
@@ -342,7 +347,7 @@ Phase 2 is split into two concrete tracks:
 
 ### Phase 2 (Framework Selector & Gates)
 - [x] Framework selector verification (tests + error handling)
-- [ ] Inline gate evaluation coverage (pass/fail + retry messaging)
+- [x] Inline gate evaluation coverage (pass/fail + retry messaging)
 - [ ] Documentation updates for `@` and `=` operators
 
 ### Phase 3 (Advanced Operators)

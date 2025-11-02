@@ -65,7 +65,8 @@ describe('Consolidated MCP Tools Integration', () => {
       },
       setTextReferenceManager: (manager: any) => {
         // Mock implementation for text reference manager integration
-      }
+      },
+      setChainState: () => {}
     };
 
     const mockTextReferenceManager = {
@@ -78,7 +79,11 @@ describe('Consolidated MCP Tools Integration', () => {
       getStepResult: (stepId: string) => {
         // Mock implementation returns null for non-existent steps
         return null;
-      }
+      },
+      storeChainStepResult: () => {},
+      getChainStepResult: () => null,
+      getChainStepMetadata: () => null,
+      buildChainVariables: () => ({})
     };
 
     const mockMcpToolsManager = {
@@ -125,7 +130,12 @@ describe('Consolidated MCP Tools Integration', () => {
     mockMcpServer.tool('system_control', 'Framework and system management', { type: 'object' });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Cleanup prompt engine to prevent async handle leaks
+    if (promptEngine) {
+      await cleanupPromptEngine(promptEngine);
+    }
+    
     logger.clear();
     mockMcpServer.clear();
   });
@@ -216,9 +226,14 @@ describe('Consolidated MCP Tools Integration', () => {
         const minimalSemanticAnalyzer = { analyzePrompt: () => Promise.resolve({ executionType: 'prompt' }) };
         const minimalConversationManager = {
           setChainSessionManager: () => {},
-          setTextReferenceManager: () => {}
+          setTextReferenceManager: () => {},
+          setChainState: () => {}
         };
-        const minimalTextReferenceManager = { saveStepResult: () => {}, getStepResult: () => null };
+        const minimalTextReferenceManager = {
+          saveStepResult: () => {},
+          getStepResult: () => null,
+          getChainStepMetadata: () => null
+        };
 
         createConsolidatedPromptEngine(
           minimalLogger as any,

@@ -24,7 +24,7 @@ export class SymbolicCommandParser {
 
   private readonly OPERATOR_PATTERNS = {
     chain: /-->/g,
-    gate: /\s*=\s*["'](.+?)["']\s*$/,
+    gate: /\s+(::|=)\s*["']([^"']+)["']\s*$/,
     framework: /^@([A-Za-z0-9_-]+)\s+/,
     parallel: /\s*\+\s*/g,
     conditional: /\s*\?\s*["'](.+?)["']\s*:\s*([A-Za-z0-9_-]+)/,
@@ -58,11 +58,18 @@ export class SymbolicCommandParser {
 
     const gateMatch = command.match(this.OPERATOR_PATTERNS.gate);
     if (gateMatch) {
+      const operatorToken = gateMatch[1];
+      const criteria = gateMatch[2];
+
+      if (operatorToken === '=') {
+        this.logger.warn('[SymbolicParser] Gate operator "=" is deprecated. Use "::" instead.');
+      }
+
       operatorTypes.push("gate");
       operators.push({
         type: "gate",
-        criteria: gateMatch[1],
-        parsedCriteria: this.parseCriteria(gateMatch[1]),
+        criteria,
+        parsedCriteria: this.parseCriteria(criteria),
         scope: "execution",
         retryOnFailure: true,
         maxRetries: 1,

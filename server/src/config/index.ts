@@ -357,6 +357,18 @@ export class ConfigManager extends EventEmitter {
     }
   }
 
+  /**
+   * Shutdown the config manager and cleanup resources
+   * Prevents async handle leaks by stopping file watcher and removing listeners
+   */
+  shutdown(): void {
+    // Stop file watching
+    this.stopWatching();
+
+    // Remove all event listeners
+    this.removeAllListeners();
+  }
+
   private async handleExternalConfigChange(): Promise<void> {
     await this.loadConfig();
     this.emit("configChanged", this.getConfig());

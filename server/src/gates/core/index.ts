@@ -231,6 +231,30 @@ export class LightweightGateSystem {
   getTemporaryGateRegistry(): TemporaryGateRegistry | undefined {
     return this.temporaryGateRegistry;
   }
+
+  /**
+   * Cleanup the lightweight gate system and sub-components
+   * Prevents async handle leaks by delegating to sub-component cleanup
+   */
+  async cleanup(): Promise<void> {
+    // Cleanup gate system manager if present
+    if (this.gateSystemManager && 'cleanup' in this.gateSystemManager && typeof (this.gateSystemManager as any).cleanup === 'function') {
+      try {
+        await (this.gateSystemManager as any).cleanup();
+      } catch (error) {
+        // Errors are already logged by sub-components
+      }
+    }
+
+    // Cleanup temporary gate registry if present
+    if (this.temporaryGateRegistry && 'cleanup' in this.temporaryGateRegistry && typeof (this.temporaryGateRegistry as any).cleanup === 'function') {
+      try {
+        await (this.temporaryGateRegistry as any).cleanup();
+      } catch (error) {
+        // Errors are already logged by sub-components
+      }
+    }
+  }
 }
 
 /**
@@ -247,9 +271,6 @@ export function createLightweightGateSystem(
     llmConfig?: any; // LLMIntegrationConfig from types
   }
 ): LightweightGateSystem {
-  const gateLoader = createGateLoader(logger, gatesDirectory);
-  const gateValidator = createGateValidator(logger, gateLoader, options?.llmConfig);
-
   // Create temporary gate registry if enabled
   let temporaryGateRegistry: TemporaryGateRegistry | undefined;
   if (options?.enableTemporaryGates !== false) {
@@ -258,6 +279,9 @@ export function createLightweightGateSystem(
       defaultExpirationMs: options?.defaultExpirationMs,
     });
   }
+
+  const gateLoader = createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
+  const gateValidator = createGateValidator(logger, gateLoader, options?.llmConfig);
 
   const gateSystem = new LightweightGateSystem(
     gateLoader,

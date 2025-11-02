@@ -14,6 +14,8 @@ export interface ChainStepExecutionInput {
   stepPrompts: ChainStepPrompt[];
   currentStepIndex: number;
   chainContext?: Record<string, any>;
+  additionalGateIds?: string[];
+  inlineGuidanceText?: string;
 }
 
 export interface ChainStepRenderResult {
@@ -33,12 +35,14 @@ export class ChainOperatorExecutor {
     private readonly enhanceContent: (
       content: string,
       prompt: ConvertedPrompt,
-      context?: { scopeId?: string; scope?: 'execution' | 'session' | 'chain' | 'step' }
+      context?: { scopeId?: string; scope?: 'execution' | 'session' | 'chain' | 'step' },
+      additionalGateIds?: string[],
+      inlineGuidanceText?: string
     ) => Promise<string>
   ) {}
 
   async renderStep(input: ChainStepExecutionInput): Promise<ChainStepRenderResult> {
-    const { stepPrompts, currentStepIndex, chainContext = {} } = input;
+    const { stepPrompts, currentStepIndex, chainContext = {}, additionalGateIds = [], inlineGuidanceText } = input;
 
     if (stepPrompts.length === 0) {
       return {
@@ -76,10 +80,20 @@ export class ChainOperatorExecutor {
       templateContext.previous_step_output = "**[CONTEXT INSTRUCTION]**: This is the first step. Begin the workflow here.";
       templateContext.previous_step_result = templateContext.previous_step_output;
     } else {
-      const previousName = this.getPromptDisplayName(stepPrompts[previousStepIndex]);
-      const instruction = `**[CONTEXT INSTRUCTION]**: Use the response you produced for Step ${currentStepIndex} (${previousName}) wherever {{previous_step_output}} is referenced.`;
-      templateContext.previous_step_output = instruction;
-      templateContext.previous_step_result = instruction;
+      const storedOutput = this.getStoredStepResult(
+        chainContext,
+        stepPrompts[previousStepIndex].stepNumber,
+      );
+
+      if (storedOutput) {
+        templateContext.previous_step_output = storedOutput;
+        templateContext.previous_step_result = storedOutput;
+      } else {
+        const previousName = this.getPromptDisplayName(stepPrompts[previousStepIndex]);
+        const instruction = `**[CONTEXT INSTRUCTION]**: Use the response you produced for Step ${currentStepIndex} (${previousName}) wherever {{previous_step_output}} is referenced.`;
+        templateContext.previous_step_output = instruction;
+        templateContext.previous_step_result = instruction;
+      }
     }
 
     let renderedTemplate = this.renderTemplate(convertedPrompt, templateContext, step.promptId);
@@ -89,7 +103,9 @@ export class ChainOperatorExecutor {
       renderedTemplate = await this.enhanceContent(
         renderedTemplate,
         convertedPrompt,
-        { scopeId: undefined, scope: 'step' as const }
+        { scopeId: chainContext.session_id, scope: 'step' as const },
+        additionalGateIds,
+        inlineGuidanceText
       );
     }
 
@@ -118,6 +134,36 @@ export class ChainOperatorExecutor {
       content,
       callToAction,
     };
+  }
+
+  private getStoredStepResult(
+    chainContext: Record<string, any>,
+    stepNumber: number,
+  ): string | undefined {
+    if (!chainContext) {
+      return undefined;
+    }
+
+    const stepResults = chainContext.step_results as Record<string, string> | undefined;
+    if (stepResults) {
+      const key = String(stepNumber);
+      if (typeof stepResults[key] === "string" && stepResults[key].trim().length > 0) {
+        return stepResults[key];
+      }
+    }
+
+    const previous = chainContext.previous_step_output;
+    if (typeof previous === "string" && previous.trim().length > 0) {
+      return previous;
+    }
+
+    const stepResultKey = `step${stepNumber}_result`;
+    const alternate = chainContext[stepResultKey];
+    if (typeof alternate === "string" && alternate.trim().length > 0) {
+      return alternate;
+    }
+
+    return undefined;
   }
 
   /**

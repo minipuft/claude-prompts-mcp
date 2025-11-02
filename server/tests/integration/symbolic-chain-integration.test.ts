@@ -1,6 +1,6 @@
-import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
-import { createConsolidatedPromptEngine } from '../../dist/mcp-tools/prompt-engine/index.js';
-import { MockLogger, MockMcpServer } from '../helpers/test-helpers.js';
+import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { createConsolidatedPromptEngine } from '../../src/mcp-tools/prompt-engine/index.js';
+import { MockLogger, MockMcpServer, cleanupPromptEngine } from '../helpers/test-helpers.js';
 
 const contentAnalysisPrompt = {
   id: 'content_analysis',
@@ -42,6 +42,7 @@ describe('Symbolic chain execution integration', () => {
   beforeEach(() => {
     logger = new MockLogger();
     mockMcpServer = new MockMcpServer();
+    const chainStepStore: Record<string, Record<number, { content: string; metadata?: any }>> = {};
 
     const promptsData = [
       {
@@ -117,21 +118,65 @@ describe('Symbolic chain execution integration', () => {
       on: () => {}
     };
 
-    const mockConversationManager = {
-      addToConversationHistory: () => {},
-      getConversationHistory: () => [],
-      saveStepResult: () => {},
-      getStepResult: () => null,
-      setChainSessionManager: () => {},
-      setTextReferenceManager: () => {}
-    };
-
     const mockTextReferenceManager = {
       extractReferences: () => [],
       resolveReferences: () => {},
       addReference: () => {},
-      storeChainStepResult: () => {},
-      buildChainVariables: () => ({})
+      storeChainStepResult: (chainId: string, stepNumber: number, content: string, metadata?: any) => {
+        if (!chainStepStore[chainId]) {
+          chainStepStore[chainId] = {};
+        }
+        chainStepStore[chainId][stepNumber] = { content, metadata };
+      },
+      getChainStepResult: (chainId: string, stepNumber: number) => {
+        return chainStepStore[chainId]?.[stepNumber]?.content ?? null;
+      },
+      getChainStepMetadata: (chainId: string, stepNumber: number) => {
+        return chainStepStore[chainId]?.[stepNumber]?.metadata ?? null;
+      },
+      getChainStepResults: (chainId: string) => {
+        const store = chainStepStore[chainId];
+        if (!store) {
+          return {};
+        }
+        const results: Record<number, string> = {};
+        Object.entries(store).forEach(([step, record]) => {
+          results[Number(step)] = record.content;
+        });
+        return results;
+      },
+      buildChainVariables: (chainId: string) => {
+        const results = mockTextReferenceManager.getChainStepResults(chainId);
+        const variables: Record<string, any> = { chain_id: chainId, step_results: results };
+        Object.entries(results).forEach(([step, content]) => {
+          const stepNumber = Number(step);
+          variables[`step${stepNumber}_result`] = content;
+          variables.previous_step_result = content;
+          variables.previous_step_output = content;
+          variables.input = content;
+        });
+        return variables;
+      },
+      clearChainStepResults: (chainId: string) => {
+        delete chainStepStore[chainId];
+      }
+    };
+
+    const mockConversationManager = {
+      addToConversationHistory: () => {},
+      getConversationHistory: () => [],
+      saveStepResult: (chainId: string, stepNumber: number, result: string, isPlaceholder: boolean, metadata?: any) => {
+        mockTextReferenceManager.storeChainStepResult(chainId, stepNumber, result, {
+          ...(metadata || {}),
+          isPlaceholder,
+        });
+      },
+      getStepResult: (chainId: string, stepNumber: number) =>
+        mockTextReferenceManager.getChainStepResult(chainId, stepNumber),
+      setChainSessionManager: () => {},
+      setTextReferenceManager: () => {},
+      setChainState: () => {},
+      getChainState: () => null
     };
 
     const mockMcpToolsManager = {
@@ -159,7 +204,12 @@ describe('Symbolic chain execution integration', () => {
     promptEngine.updateData(promptsData as any, convertedPrompts as any);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Cleanup prompt engine to prevent async handle leaks
+    if (promptEngine) {
+      await cleanupPromptEngine(promptEngine);
+    }
+    
     logger.clear();
     mockMcpServer.clear();
   });
@@ -181,13 +231,85 @@ describe('Symbolic chain execution integration', () => {
     expect(sessionMatch).not.toBeNull();
     const sessionId = sessionMatch ? sessionMatch[1] : '';
 
-    const second = await promptEngine.executePromptCommand({ command }, {});
+    const assistantOutput = 'Analysis report: sample content reviewed successfully.';
+    const second = await promptEngine.executePromptCommand(
+      { command },
+      { previous_step_output: assistantOutput }
+    );
     expect(second.isError).toBeFalsy();
     expect(second.content).toHaveLength(1);
 
     const secondText = second.content[0].text;
     expect(secondText).toContain('improve results');
+    expect(secondText).toContain(assistantOutput);
     expect(secondText).toContain(`Session ID: ${sessionId}`);
     expect(secondText).toContain('✓ Chain complete (2/2).');
+  });
+
+  test('evaluates inline gate and reports pass summary', async () => {
+    const gateSystem = promptEngine.getLightweightGateSystem();
+    const createGateSpy = jest.spyOn(gateSystem, 'createTemporaryGate').mockReturnValue('inline_gate_pass');
+    const validateSpy = jest.spyOn(gateSystem, 'validateContent').mockResolvedValue([
+      { gateId: 'inline_gate_pass', passed: true, retryHints: [] },
+    ]);
+
+    const command = '>>content_analysis content="all criteria satisfied" :: "inline gate criteria"';
+
+    const response = await promptEngine.executePromptCommand({ command }, {});
+
+    expect(response.isError).toBeFalsy();
+    const text = response.content[0].text;
+    expect(text).toContain('Inline gate passed all criteria.');
+    expect(text).toContain('✓ Chain complete (1/1).');
+
+    const structured = response.structuredContent?.gateValidation;
+    expect(structured).toBeDefined();
+    expect(structured).toMatchObject({
+      passed: true,
+      retryRequired: false,
+      totalGates: 1,
+      retryHints: [],
+    });
+
+    expect(createGateSpy).toHaveBeenCalled();
+    expect(validateSpy).toHaveBeenCalledWith(
+      ['inline_gate_pass'],
+      expect.any(String),
+      expect.objectContaining({ metadata: expect.objectContaining({ executionId: expect.any(String) }) }),
+    );
+
+    createGateSpy.mockRestore();
+    validateSpy.mockRestore();
+  });
+
+  test('reports inline gate failure with retry recommendation and hints', async () => {
+    const gateSystem = promptEngine.getLightweightGateSystem();
+    const createGateSpy = jest.spyOn(gateSystem, 'createTemporaryGate').mockReturnValue('inline_gate_fail');
+    const validateSpy = jest.spyOn(gateSystem, 'validateContent').mockResolvedValue([
+      {
+        gateId: 'inline_gate_fail',
+        passed: false,
+        retryHints: ['add quantitative findings'],
+      },
+    ]);
+
+    const command = '>>content_analysis content="needs improvement" :: "provide quantitative findings"';
+
+    const response = await promptEngine.executePromptCommand({ command }, {});
+
+    expect(response.isError).toBeFalsy();
+    const text = response.content[0].text;
+    expect(text).toContain('❌ Inline gate failed 1 criterion. Retry recommended: add quantitative findings');
+
+    const structured = response.structuredContent?.gateValidation;
+    expect(structured).toMatchObject({
+      passed: false,
+      retryRequired: true,
+      failedGates: expect.any(Array),
+      retryHints: ['add quantitative findings'],
+    });
+
+    createGateSpy.mockRestore();
+    validateSpy.mockRestore();
   });
 });

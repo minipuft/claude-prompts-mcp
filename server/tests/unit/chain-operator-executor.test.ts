@@ -80,13 +80,20 @@ const mockConvertedPrompts: ConvertedPrompt[] = [
 
 describe('ChainOperatorExecutor', () => {
   let executor: ChainOperatorExecutor;
+  const enhanceStub = jest.fn(async (content: string) => content);
 
   beforeEach(() => {
-    executor = new ChainOperatorExecutor(mockLogger, mockPromptsData, mockConvertedPrompts);
+    jest.clearAllMocks();
+    executor = new ChainOperatorExecutor(
+      mockLogger,
+      mockPromptsData,
+      mockConvertedPrompts,
+      enhanceStub
+    );
   });
 
-  test('renders first step instructions with guidance', () => {
-    const result = executor.renderStep({
+  test('renders first step instructions with guidance', async () => {
+    const result = await executor.renderStep({
       stepPrompts: [
         { stepNumber: 1, promptId: 'analyze', args: 'code="function foo() {}"' },
         { stepNumber: 2, promptId: 'summarize', args: '' }
@@ -99,22 +106,29 @@ describe('ChainOperatorExecutor', () => {
     expect(result.callToAction).toContain('Step 2');
   });
 
-  test('includes previous step instruction for later steps', () => {
-    const result = executor.renderStep({
+  test('injects stored previous step output when available', async () => {
+    const chainContext = {
+      step_results: {
+        '1': 'Analysis result: key findings identified',
+      },
+    };
+
+    const result = await executor.renderStep({
       stepPrompts: [
         { stepNumber: 1, promptId: 'analyze', args: 'code="test"' },
         { stepNumber: 2, promptId: 'summarize', args: '' }
       ],
-      currentStepIndex: 1
+      currentStepIndex: 1,
+      chainContext,
     });
 
     expect(result.content).toContain('You are a summarizer');
-    expect(result.content).toContain('Use your output from Step 1');
-    expect(result.content).toContain('Summarize: **[CONTEXT INSTRUCTION]**');
+    expect(result.content).toContain('Analysis result: key findings identified');
+    expect(result.content).toContain('Summarize: Analysis result: key findings identified');
   });
 
-  test('handles empty chains gracefully', () => {
-    const result = executor.renderStep({
+  test('handles empty chains gracefully', async () => {
+    const result = await executor.renderStep({
       stepPrompts: [],
       currentStepIndex: 0
     });
@@ -122,8 +136,8 @@ describe('ChainOperatorExecutor', () => {
     expect(result.content).toContain('No executable steps');
   });
 
-  test('falls back when prompt is missing', () => {
-    const result = executor.renderStep({
+  test('falls back when prompt is missing', async () => {
+    const result = await executor.renderStep({
       stepPrompts: [
         { stepNumber: 1, promptId: 'unknown_prompt', args: '' }
       ],
@@ -134,8 +148,8 @@ describe('ChainOperatorExecutor', () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Prompt not found: unknown_prompt'));
   });
 
-  test('parses key=value arguments correctly', () => {
-    const result = executor.renderStep({
+  test('parses key=value arguments correctly', async () => {
+    const result = await executor.renderStep({
       stepPrompts: [
         { stepNumber: 1, promptId: 'analyze', args: 'code="test code"' }
       ],
@@ -145,8 +159,8 @@ describe('ChainOperatorExecutor', () => {
     expect(result.content).toContain('Analyze this code: test code');
   });
 
-  test('parses JSON arguments correctly', () => {
-    const result = executor.renderStep({
+  test('parses JSON arguments correctly', async () => {
+    const result = await executor.renderStep({
       stepPrompts: [
         { stepNumber: 1, promptId: 'analyze', args: '{"code":"json test"}' }
       ],

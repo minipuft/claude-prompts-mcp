@@ -193,7 +193,7 @@ Configure your MCP client to connect via STDIO transport:
 
 - **Command**: `node`
 - **Args**: `["path/to/claude-prompts-mcp/server/dist/index.js"]`
-- **Environment** (Optional): `MCP_PROMPTS_CONFIG_PATH=path/to/prompts/promptsConfig.json`
+- **Environment** (Optional): `MCP_PROMPTS_CONFIG_PATH=path/to/server/prompts/promptsConfig.json`
 
 #### Claude Code CLI Installation
 
