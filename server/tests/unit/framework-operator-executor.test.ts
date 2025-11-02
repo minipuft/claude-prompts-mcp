@@ -120,3 +120,150 @@ describe('FrameworkOperatorExecutor', () => {
     expect(errorCalls).toContain('[SymbolicFramework] Failed to restore framework after symbolic execution');
   });
 });
+
+  // Additional Framework Operator Tests - NEW
+  describe('Framework Manager Unavailable Scenarios', () => {
+    test('handles null/undefined framework manager gracefully', async () => {
+      const executor = new FrameworkOperatorExecutor(null as any, logger);
+      
+      await expect(
+        executor.executeWithFramework(frameworkOperator, async () => 'result')
+      ).rejects.toThrow(/Cannot read properties of null/);
+    });
+
+    test('handles framework manager with missing methods', async () => {
+      const incompleteManager = {} as FrameworkStateManager;
+      const executor = new FrameworkOperatorExecutor(incompleteManager, logger);
+      
+      await expect(
+        executor.executeWithFramework(frameworkOperator, async () => 'result')
+      ).rejects.toThrow(/isFrameworkSystemEnabled/);
+    });
+  });
+
+  describe('Guard Condition Tests', () => {
+    test('skips restoration if framework was never applied', async () => {
+      // Mock framework system disabled during apply
+      isFrameworkSystemEnabledMock.mockReturnValueOnce(false);
+      
+      const executor = new FrameworkOperatorExecutor(frameworkStateManager, logger);
+      
+      await expect(
+        executor.executeWithFramework(frameworkOperator, async () => 'result')
+      ).rejects.toThrow('Framework overrides are disabled');
+      
+      // Should not attempt restoration
+      expect(switchFrameworkMock).toHaveBeenCalledTimes(0);
+    });
+
+    test('skips restoration if no original framework exists', async () => {
+      getActiveFrameworkMock.mockReturnValueOnce(null); // No original framework
+      
+      const executor = new FrameworkOperatorExecutor(frameworkStateManager, logger);
+      
+      const result = await executor.executeWithFramework(frameworkOperator, async () => 'success');
+      
+      expect(result).toBe('success');
+      
+      // Should apply framework but not restore
+      expect(switchFrameworkMock).toHaveBeenCalledTimes(1);
+      expect(switchFrameworkMock).toHaveBeenCalledWith(
+        expect.objectContaining({ targetFramework: 'REACT' })
+      );
+    });
+  });
+
+  describe('State Cleanup Tests', () => {
+    test('cleans up state after successful execution', async () => {
+      const executor = new FrameworkOperatorExecutor(frameworkStateManager, logger);
+      
+      await executor.executeWithFramework(frameworkOperator, async () => 'success');
+      
+      // Access private state through type assertion for testing
+      const privateExecutor = executor as any;
+      expect(privateExecutor.originalFramework).toBeNull();
+      expect(privateExecutor.overrideActive).toBe(false);
+    });
+
+    test('cleans up state after failed execution', async () => {
+      const executor = new FrameworkOperatorExecutor(frameworkStateManager, logger);
+      
+      await expect(
+        executor.executeWithFramework(frameworkOperator, async () => {
+          throw new Error('Execution failed');
+        })
+      ).rejects.toThrow('Execution failed');
+      
+      // State should still be cleaned up
+      const privateExecutor = executor as any;
+      expect(privateExecutor.originalFramework).toBeNull();
+      expect(privateExecutor.overrideActive).toBe(false);
+    });
+  });
+
+  describe('Concurrent Execution Scenarios', () => {
+    test('handles concurrent framework overrides correctly', async () => {
+      const executor = new FrameworkOperatorExecutor(frameworkStateManager, logger);
+      
+      const reactOperator: FrameworkOperator = {
+        type: 'framework',
+        frameworkId: 'react',
+        normalizedId: 'REACT',
+        temporary: true,
+        scopeType: 'execution'
+      };
+      
+      const vueOperator: FrameworkOperator = {
+        type: 'framework',
+        frameworkId: 'vue',
+        normalizedId: 'VUE',
+        temporary: true,
+        scopeType: 'execution'
+      };
+      
+      // Execute both concurrently
+      const [reactResult, vueResult] = await Promise.all([
+        executor.executeWithFramework(reactOperator, async () => 'react-result'),
+        executor.executeWithFramework(vueOperator, async () => 'vue-result')
+      ]);
+      
+      expect(reactResult).toBe('react-result');
+      expect(vueResult).toBe('vue-result');
+      
+      // Each should have proper apply/restore cycles
+      expect(switchFrameworkMock).toHaveBeenCalledTimes(4); // 2 applies + 2 restores
+    });
+
+    test('handles nested framework overrides', async () => {
+      const executor = new FrameworkOperatorExecutor(frameworkStateManager, logger);
+      
+      const outerOperator: FrameworkOperator = {
+        type: 'framework',
+        frameworkId: 'react',
+        normalizedId: 'REACT',
+        temporary: true,
+        scopeType: 'execution'
+      };
+      
+      const innerOperator: FrameworkOperator = {
+        type: 'framework',
+        frameworkId: 'vue',
+        normalizedId: 'VUE',
+        temporary: true,
+        scopeType: 'execution'
+      };
+      
+      const result = await executor.executeWithFramework(outerOperator, async () => {
+        return await executor.executeWithFramework(innerOperator, async () => 'nested-result');
+      });
+      
+      expect(result).toBe('nested-result');
+      
+      // Should have proper nesting: CAGEERF -> REACT -> VUE -> REACT -> CAGEERF
+      expect(switchFrameworkMock).toHaveBeenCalledTimes(4);
+      expect(switchFrameworkMock).toHaveBeenNthCalledWith(1, expect.objectContaining({ targetFramework: 'REACT' }));
+      expect(switchFrameworkMock).toHaveBeenNthCalledWith(2, expect.objectContaining({ targetFramework: 'VUE' }));
+      expect(switchFrameworkMock).toHaveBeenNthCalledWith(3, expect.objectContaining({ targetFramework: 'REACT' }));
+      expect(switchFrameworkMock).toHaveBeenNthCalledWith(4, expect.objectContaining({ targetFramework: 'CAGEERF' }));
+    });
+  });
