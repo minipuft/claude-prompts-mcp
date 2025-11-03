@@ -2666,7 +2666,8 @@ Chain: ${chainId}`
     const frameworksConfig = this.configManager.getFrameworksConfig();
     if (frameworksConfig.enableSystemPromptInjection &&
         frameworkContext &&
-        frameworkContext.systemPrompt) {
+        frameworkContext.systemPrompt &&
+        frameworkContext.selectedFramework) {
       const frameworkGuidance = `---
 
 ## 🎯 Framework Methodology Active
@@ -3114,7 +3115,8 @@ ${frameworkContext.systemPrompt}
     const frameworksConfig = this.configManager.getFrameworksConfig();
     if (frameworksConfig.enableSystemPromptInjection &&
         frameworkContext &&
-        frameworkContext.systemPrompt) {
+        frameworkContext.systemPrompt &&
+        frameworkContext.selectedFramework) {
       const frameworkGuidance = `---
 
 ## 🎯 Framework Methodology Active

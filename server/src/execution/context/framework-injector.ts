@@ -154,7 +154,13 @@ export class FrameworkInjector {
         prompt,
         selectionCriteria
       );
-      
+
+      // Validate frameworkContext has selectedFramework
+      if (!frameworkContext || !frameworkContext.selectedFramework) {
+        this.logger.warn(`Framework context missing selectedFramework for prompt: ${prompt.id}`);
+        return this.createPassthroughResult(prompt);
+      }
+
       // Create enhanced prompt with framework injection
       const enhancedPrompt = this.performFrameworkInjection(
         prompt,

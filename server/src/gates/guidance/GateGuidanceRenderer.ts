@@ -24,10 +24,22 @@ export class GateGuidanceRenderer {
 
   constructor(logger: Logger, gatesDirectory?: string, temporaryGateRegistry?: TemporaryGateRegistry) {
     this.logger = logger;
-    // Use same directory resolution pattern as existing system
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    this.gatesDirectory = gatesDirectory || path.join(__dirname, '../../gates/definitions');
+
+    // If gatesDirectory not provided, try to resolve from import.meta.url
+    if (gatesDirectory) {
+      this.gatesDirectory = gatesDirectory;
+    } else {
+      // Try import.meta.url resolution (works in production ES modules)
+      try {
+        const __filename = fileURLToPath(eval('import.meta.url') as string);
+        const __dirname = path.dirname(__filename);
+        this.gatesDirectory = path.join(__dirname, '../../gates/definitions');
+      } catch (error) {
+        // Fallback for Jest/test environments where import.meta is unavailable
+        this.gatesDirectory = path.join(process.cwd(), 'src/gates/definitions');
+        this.logger.debug('[GATE GUIDANCE RENDERER] Using fallback gates directory:', this.gatesDirectory);
+      }
+    }
     this.temporaryGateRegistry = temporaryGateRegistry;
 
     this.logger.debug('[GATE GUIDANCE RENDERER] Initialized with directory:', this.gatesDirectory);

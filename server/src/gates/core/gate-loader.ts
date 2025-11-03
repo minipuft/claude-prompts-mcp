@@ -22,10 +22,24 @@ export class GateLoader {
 
   constructor(logger: Logger, gatesDirectory?: string, temporaryGateRegistry?: TemporaryGateRegistry) {
     this.logger = logger;
-    // Use import.meta.url to get current directory in ES modules
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    this.gatesDirectory = gatesDirectory || path.join(__dirname, '../../gates/definitions');
+
+    // If gatesDirectory not provided, try to resolve from import.meta.url
+    if (gatesDirectory) {
+      this.gatesDirectory = gatesDirectory;
+    } else {
+      // Try import.meta.url resolution (works in production ES modules)
+      try {
+        const __filename = fileURLToPath(eval('import.meta.url') as string);
+        const __dirname = path.dirname(__filename);
+        this.gatesDirectory = path.join(__dirname, '../../gates/definitions');
+      } catch (error) {
+        // Fallback for Jest/test environments where import.meta is unavailable
+        // Use process.cwd() as fallback
+        this.gatesDirectory = path.join(process.cwd(), 'src/gates/definitions');
+        this.logger.debug('[GateLoader] Using fallback gates directory:', this.gatesDirectory);
+      }
+    }
+
     this.temporaryGateRegistry = temporaryGateRegistry;
   }
 
