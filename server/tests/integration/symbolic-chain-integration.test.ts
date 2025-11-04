@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { createConsolidatedPromptEngine } from '../../src/mcp-tools/prompt-engine/index.js';
-import { MockLogger, MockMcpServer, cleanupPromptEngine } from '../helpers/test-helpers.js';
+import { MockLogger, MockMcpServer, MockConfigManager, MockFrameworkStateManager, cleanupPromptEngine } from '../helpers/test-helpers.js';
 
 const contentAnalysisPrompt = {
   id: 'content_analysis',
@@ -37,11 +37,15 @@ const queryRefinementPrompt = {
 describe('Symbolic chain execution integration', () => {
   let logger: MockLogger;
   let mockMcpServer: MockMcpServer;
+  let mockConfigManager: MockConfigManager;
+  let mockFrameworkStateManager: MockFrameworkStateManager;
   let promptEngine: any;
 
   beforeEach(() => {
     logger = new MockLogger();
     mockMcpServer = new MockMcpServer();
+    mockConfigManager = new MockConfigManager();
+    mockFrameworkStateManager = new MockFrameworkStateManager();
     const chainStepStore: Record<string, Record<number, { content: string; metadata?: any }>> = {};
 
     const promptsData = [
@@ -97,29 +101,6 @@ describe('Symbolic chain execution integration', () => {
         framework: 'CAGEERF',
         selectedFramework: { name: 'CAGEERF', methodology: 'CAGEERF' }
       })
-    };
-
-    const mockFrameworkStateManager = {
-      switchFramework: ({ targetFramework }: { targetFramework: string }) => {
-        // Accept any framework for testing
-        return Promise.resolve(true);
-      },
-      getActiveFramework: () => ({ id: 'CAGEERF' }),
-      isFrameworkSystemEnabled: () => true
-    };
-
-    const mockConfigManager = {
-      getConfig: () => ({
-        server: { name: 'test-server', version: '1.0.0' },
-        gates: { definitionsDirectory: 'src/gates/definitions', templatesDirectory: 'src/gates/templates' }
-      }),
-      getPromptsFilePath: () => '/test/prompts.json',
-      getFrameworksConfig: () => ({
-        enableSystemPromptInjection: true, // Enable to see framework context in response
-        enableMethodologyGates: false,
-        enableDynamicToolDescriptions: false
-      }),
-      on: () => {}
     };
 
     const mockTextReferenceManager = {
@@ -213,9 +194,21 @@ describe('Symbolic chain execution integration', () => {
     if (promptEngine) {
       await cleanupPromptEngine(promptEngine);
     }
-    
+
+    // Cleanup mocks with async handles
+    if (mockConfigManager && typeof mockConfigManager.shutdown === 'function') {
+      mockConfigManager.shutdown();
+    }
+
+    if (mockFrameworkStateManager && typeof mockFrameworkStateManager.shutdown === 'function') {
+      mockFrameworkStateManager.shutdown();
+    }
+
     logger.clear();
     mockMcpServer.clear();
+
+    // Ensure garbage collection
+    promptEngine = null;
   });
 
   test('executes symbolic chain across multiple invocations', async () => {

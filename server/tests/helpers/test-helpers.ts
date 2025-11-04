@@ -176,16 +176,89 @@ export class PerformanceTimer {
 }
 
 /**
+ * Mock ConfigManager with proper event listener cleanup
+ * Simulates EventEmitter behavior for testing
+ */
+export class MockConfigManager {
+  private listeners = new Map<string, Function[]>();
+
+  getConfig() {
+    return {
+      server: { name: 'test-server', version: '1.0.0' },
+      gates: { definitionsDirectory: 'src/gates/definitions', templatesDirectory: 'src/gates/templates' }
+    };
+  }
+
+  getPromptsFilePath() {
+    return '/test/prompts.json';
+  }
+
+  getFrameworksConfig() {
+    return {
+      enableSystemPromptInjection: true,
+      enableMethodologyGates: false,
+      enableDynamicToolDescriptions: false
+    };
+  }
+
+  on(event: string, handler: Function) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
+    }
+    this.listeners.get(event)!.push(handler);
+  }
+
+  shutdown() {
+    this.listeners.clear();
+  }
+}
+
+/**
+ * Mock FrameworkStateManager with proper cleanup
+ * Includes jest.fn() methods for testing framework switching
+ */
+export class MockFrameworkStateManager {
+  switchFramework: any;
+  getActiveFramework: any;
+  isFrameworkSystemEnabled: any;
+
+  constructor() {
+    this.switchFramework = jest.fn(({ targetFramework }: { targetFramework: string }) => {
+      // Accept any framework for testing
+      return Promise.resolve(true);
+    });
+    this.getActiveFramework = jest.fn(() => ({ id: 'CAGEERF' }));
+    this.isFrameworkSystemEnabled = jest.fn(() => true);
+  }
+
+  shutdown() {
+    // Clear any timers or listeners if needed in the future
+    // For now, just ensure the mock functions can be garbage collected
+  }
+}
+
+/**
  * Cleanup helper for ConsolidatedPromptEngine instances
  * Safely cleans up prompt engines to prevent async handle leaks
  */
 export async function cleanupPromptEngine(engine) {
-  if (engine && typeof engine.cleanup === 'function') {
+  if (!engine) return;
+
+  if (typeof engine.cleanup === 'function') {
     try {
       await engine.cleanup();
     } catch (error) {
       // Log error but don't throw to prevent test failures
       console.error('Error cleaning up prompt engine:', error);
+    }
+  }
+
+  // Additional defensive cleanup for any lingering listeners
+  if (typeof engine.removeAllListeners === 'function') {
+    try {
+      engine.removeAllListeners();
+    } catch (error) {
+      // Silent cleanup to prevent cascading errors
     }
   }
 }
