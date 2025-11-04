@@ -357,6 +357,20 @@ export class GateSelectionEngine {
       historySize: this.selectionHistory.length
     };
   }
+
+  /**
+   * Cleanup method - removes event listeners to prevent memory leaks
+   */
+  async cleanup(): Promise<void> {
+    if (this.configManager && 'off' in this.configManager && typeof this.configManager.off === 'function') {
+      try {
+        this.configManager.off('frameworksConfigChanged', this.frameworksConfigListener);
+        this.logger.debug('[GATE SELECTION ENGINE] Event listener removed');
+      } catch (error) {
+        this.logger.warn('[GATE SELECTION ENGINE] Error removing event listener:', error);
+      }
+    }
+  }
 }
 
 /**

@@ -305,8 +305,10 @@ export class ConsolidatedPromptEngine {
     conversationManager: ConversationManager,
     textReferenceManager: TextReferenceManager,
     // Legacy gateEvaluationService parameter removed - using lightweight system only
-    mcpToolsManager?: any
+    mcpToolsManager?: any,
     // Phase 3: Removed executionCoordinator parameter - no longer needed
+    // Test Infrastructure: Optional PromptGuidanceService injection for testing
+    promptGuidanceService?: any
   ) {
     this.logger = logger;
     this.mcpServer = mcpServer;
@@ -322,6 +324,13 @@ export class ConsolidatedPromptEngine {
     // Legacy gate evaluation service assignment removed
     this.mcpToolsManager = mcpToolsManager;
     // Phase 3: Removed executionCoordinator assignment - using LLM-driven chain model
+
+    // Test Infrastructure: Accept injected PromptGuidanceService (for testing with mocks)
+    if (promptGuidanceService) {
+      this.promptGuidanceService = promptGuidanceService;
+      this.logger.debug("Using injected PromptGuidanceService (test mode)");
+    }
+    // else: will be created lazily in initializePromptGuidanceService() as before
 
     // Initialize lightweight gate system with temporary gates (Phase 3 enhancement)
     const config = configManager.getConfig();
@@ -445,6 +454,12 @@ export class ConsolidatedPromptEngine {
    * Initialize PromptGuidanceService once framework manager is available
    */
   private async initializePromptGuidanceService(): Promise<void> {
+    // Test Infrastructure: Skip initialization if service was already injected
+    if (this.promptGuidanceService) {
+      this.logger.debug("PromptGuidanceService already injected, skipping creation");
+      return;
+    }
+
     if (this.frameworkManager && !this.promptGuidanceService) {
       try {
         const methodologyStatePath = path.join(
@@ -617,13 +632,23 @@ export class ConsolidatedPromptEngine {
         }
       }
 
-      // Phase 6: Cleanup prompt guidance service (if it has cleanup method)
-      if (this.promptGuidanceService && 'cleanup' in this.promptGuidanceService && typeof this.promptGuidanceService.cleanup === 'function') {
+      // Phase 6: Cleanup prompt guidance service (if it has shutdown method)
+      if (this.promptGuidanceService && 'shutdown' in this.promptGuidanceService && typeof this.promptGuidanceService.shutdown === 'function') {
         try {
-          await this.promptGuidanceService.cleanup();
-          this.logger.debug("Prompt guidance service cleanup completed");
+          await this.promptGuidanceService.shutdown();
+          this.logger.debug("Prompt guidance service shutdown completed");
         } catch (error) {
-          this.logger.warn("Error cleaning up prompt guidance service:", error);
+          this.logger.warn("Error shutting down prompt guidance service:", error);
+        }
+      }
+
+      // Phase 7: Cleanup gate selection engine (EventEmitter listeners on configManager)
+      if (this.gateSelectionEngine && 'cleanup' in this.gateSelectionEngine && typeof this.gateSelectionEngine.cleanup === 'function') {
+        try {
+          await this.gateSelectionEngine.cleanup();
+          this.logger.debug("Gate selection engine cleanup completed");
+        } catch (error) {
+          this.logger.warn("Error cleaning up gate selection engine:", error);
         }
       }
 
@@ -3846,8 +3871,10 @@ export function createConsolidatedPromptEngine(
   semanticAnalyzer: ContentAnalyzer,
   conversationManager: ConversationManager,
   textReferenceManager: TextReferenceManager,
-  mcpToolsManager?: any
+  mcpToolsManager?: any,
   // Phase 3: Removed executionCoordinator parameter - using LLM-driven chain model
+  // Test Infrastructure: Optional PromptGuidanceService injection
+  promptGuidanceService?: any
 ): ConsolidatedPromptEngine {
   const engine = new ConsolidatedPromptEngine(
     logger,
@@ -3858,8 +3885,10 @@ export function createConsolidatedPromptEngine(
     conversationManager,
     textReferenceManager,
     // Phase 3: Legacy gateEvaluationService removed - using lightweight system only
-    mcpToolsManager
+    mcpToolsManager,
     // Phase 3: Removed executionCoordinator parameter
+    // Test Infrastructure: Pass through optional PromptGuidanceService
+    promptGuidanceService
   );
 
   logger.info("ConsolidatedPromptEngine created with enhanced features:");

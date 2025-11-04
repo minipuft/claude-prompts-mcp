@@ -3,6 +3,7 @@
  * Common utilities and fixtures for tests
  */
 
+import { jest } from '@jest/globals';
 import path from 'path';
 
 // Get project root for consistent paths
@@ -208,6 +209,17 @@ export class MockConfigManager {
     this.listeners.get(event)!.push(handler);
   }
 
+  off(event: string, handler: Function) {
+    if (!this.listeners.has(event)) {
+      return;
+    }
+    const handlers = this.listeners.get(event)!;
+    const index = handlers.indexOf(handler);
+    if (index !== -1) {
+      handlers.splice(index, 1);
+    }
+  }
+
   shutdown() {
     this.listeners.clear();
   }
@@ -260,5 +272,177 @@ export async function cleanupPromptEngine(engine) {
     } catch (error) {
       // Silent cleanup to prevent cascading errors
     }
+  }
+}
+
+/**
+ * Mock PromptGuidanceService for testing
+ *
+ * Simulates PromptGuidanceService behavior without creating real infrastructure:
+ * - NO MethodologyTracker with 30-second interval timers
+ * - NO file system state persistence
+ * - NO heavy framework operations
+ *
+ * This mock prevents Jest hanging issues caused by setInterval timers
+ * that keep the event loop alive after tests complete.
+ *
+ * Usage:
+ * ```typescript
+ * const mockGuidance = new MockPromptGuidanceService(logger);
+ * const engine = createConsolidatedPromptEngine(
+ *   // ... other params,
+ *   mockGuidance  // Inject mock instead of creating real service
+ * );
+ * ```
+ */
+export class MockPromptGuidanceService {
+  // Jest spy functions for verification
+  applyGuidance: any;
+  switchMethodology: any;
+  getCurrentMethodologyState: any;
+  getSystemHealth: any;
+  setGuidanceEnabled: any;
+  updateConfig: any;
+  getConfig: any;
+  setFrameworkManager: any;
+  initialize: any;
+  shutdown: any;
+  isInitialized: any;
+
+  private initialized: boolean = false;
+  private config: any;
+  private currentMethodology: string = 'CAGEERF';
+  private logger: any;
+
+  constructor(logger?: any) {
+    this.logger = logger;
+
+    // Initialize all methods as jest.fn() with realistic implementations
+
+    this.initialize = jest.fn(async (frameworkManager?: any) => {
+      this.initialized = true;
+      if (this.logger) {
+        this.logger.debug('MockPromptGuidanceService initialized');
+      }
+      return Promise.resolve();
+    });
+
+    this.shutdown = jest.fn(async () => {
+      this.initialized = false;
+      if (this.logger) {
+        this.logger.debug('MockPromptGuidanceService shutdown (no timers to clean)');
+      }
+      // NO TIMERS TO CLEAN UP - this is the key fix
+      return Promise.resolve();
+    });
+
+    this.isInitialized = jest.fn(() => this.initialized);
+
+    this.applyGuidance = jest.fn(async (prompt: any, options: any = {}) => {
+      return {
+        originalPrompt: prompt,
+        enhancedPrompt: prompt,
+        activeMethodology: this.currentMethodology,
+        guidanceApplied: true,
+        processingTimeMs: 1,
+        metadata: {
+          frameworkUsed: this.currentMethodology,
+          enhancementsApplied: ['mock_enhancement'],
+          confidenceScore: 0.9,
+          semanticAware: options.semanticAnalysis !== undefined,
+          semanticComplexity: options.semanticAnalysis?.complexity || 'low',
+          semanticConfidence: options.semanticAnalysis?.confidence || 0.8
+        }
+      };
+    });
+
+    this.switchMethodology = jest.fn(async (request: any) => {
+      this.currentMethodology = request.targetMethodology;
+      if (this.logger) {
+        this.logger.debug(`MockPromptGuidanceService switched to ${this.currentMethodology}`);
+      }
+      return true;
+    });
+
+    this.getCurrentMethodologyState = jest.fn(() => ({
+      activeMethodology: this.currentMethodology,
+      previousMethodology: null,
+      switchedAt: new Date(),
+      switchReason: 'Test initialization',
+      isHealthy: true,
+      methodologySystemEnabled: true,
+      switchingMetrics: {
+        switchCount: 0,
+        averageResponseTime: 0,
+        errorCount: 0
+      }
+    }));
+
+    this.getSystemHealth = jest.fn(() => ({
+      status: 'healthy',
+      activeMethodology: this.currentMethodology,
+      methodologySystemEnabled: true,
+      lastSwitchTime: new Date(),
+      switchingMetrics: {
+        totalSwitches: 0,
+        successfulSwitches: 0,
+        failedSwitches: 0,
+        averageResponseTime: 0
+      },
+      issues: []
+    }));
+
+    this.setGuidanceEnabled = jest.fn((enabled: boolean) => {
+      // State update without side effects
+      if (this.logger) {
+        this.logger.debug(`MockPromptGuidanceService guidance ${enabled ? 'enabled' : 'disabled'}`);
+      }
+    });
+
+    this.updateConfig = jest.fn((config: any) => {
+      this.config = { ...this.config, ...config };
+      if (this.logger) {
+        this.logger.debug('MockPromptGuidanceService config updated');
+      }
+    });
+
+    this.getConfig = jest.fn(() => ({
+      systemPromptInjection: {
+        enabled: true,
+        injectionMethod: 'smart',
+        enableTemplateVariables: true,
+        enableContextualEnhancement: true
+      },
+      templateEnhancement: {
+        enabled: true,
+        enhancementLevel: 'moderate',
+        enableArgumentSuggestions: true,
+        enableStructureOptimization: true
+      },
+      methodologyTracking: {
+        enabled: true,
+        enableHealthMonitoring: false,  // KEY: Disabled in tests
+        persistStateToDisk: false         // KEY: Disabled in tests
+      }
+    }));
+
+    this.setFrameworkManager = jest.fn((frameworkManager: any) => {
+      // Accept framework manager without triggering MethodologyTracker creation
+      if (this.logger) {
+        this.logger.debug('MockPromptGuidanceService framework manager set');
+      }
+    });
+  }
+
+  /**
+   * Reset all jest.fn() call counts for clean test isolation
+   * Call this in afterEach if you need to verify call counts
+   */
+  resetMock() {
+    Object.values(this).forEach(value => {
+      if (typeof value === 'function' && 'mockClear' in value) {
+        value.mockClear();
+      }
+    });
   }
 }

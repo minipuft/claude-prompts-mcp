@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { createConsolidatedPromptEngine } from '../../src/mcp-tools/prompt-engine/index.js';
-import { MockLogger, MockMcpServer, MockConfigManager, MockFrameworkStateManager, cleanupPromptEngine } from '../helpers/test-helpers.js';
+import { MockLogger, MockMcpServer, MockConfigManager, MockFrameworkStateManager, MockPromptGuidanceService, cleanupPromptEngine } from '../helpers/test-helpers.js';
 
 const contentAnalysisPrompt = {
   id: 'content_analysis',
@@ -46,6 +46,7 @@ describe('Symbolic chain execution integration', () => {
     mockMcpServer = new MockMcpServer();
     mockConfigManager = new MockConfigManager();
     mockFrameworkStateManager = new MockFrameworkStateManager();
+    const mockPromptGuidance = new MockPromptGuidanceService(logger);
     const chainStepStore: Record<string, Record<number, { content: string; metadata?: any }>> = {};
 
     const promptsData = [
@@ -179,7 +180,8 @@ describe('Symbolic chain execution integration', () => {
       mockSemanticAnalyzer as any,
       mockConversationManager as any,
       mockTextReferenceManager as any,
-      mockMcpToolsManager
+      mockMcpToolsManager,
+      mockPromptGuidance
     );
 
     promptEngine.setFrameworkManager(mockFrameworkManager as any);
