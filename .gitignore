@@ -1,6 +1,5 @@
 # Dependencies and Package Management
 server/node_modules/
-server/package-lock.json
 .npm/
 .yarn/
 .pnp.*
@@ -81,6 +80,7 @@ CLAUDE.md
 AGENTS.md
 .claude/
 server/.claude/
+.clinerules/
 
 # Temporary test files
 test_*.js
