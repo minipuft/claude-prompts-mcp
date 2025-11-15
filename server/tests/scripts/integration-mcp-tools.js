@@ -93,21 +93,35 @@ async function runMcpToolsIntegrationTests() {
           server: { name: 'test-server', version: '1.0.0' },
           gates: { definitionsDirectory: "src/gates/definitions", templatesDirectory: "src/gates/templates" }
         }),
-        getPromptsFilePath: () => '/test/prompts.json'
+        getPromptsFilePath: () => '/test/prompts.json',
+        getFrameworksConfig: () => ({
+          enableSystemPromptInjection: true,
+          enableMethodologyGates: true,
+          enableDynamicToolDescriptions: true
+        }),
+        on: () => {}, // EventEmitter compatibility for event listeners
+        off: () => {}, // EventEmitter compatibility for removing listeners
+        emit: () => {} // EventEmitter compatibility for emitting events
       };
 
       const mockConversationManager = {
         addToConversationHistory: () => {},
-        getConversationHistory: () => [],
-        saveStepResult: () => {},
-        getStepResult: () => null,
-        setChainSessionManager: () => {}
-      };
+      getConversationHistory: () => [],
+      saveStepResult: () => {},
+      getStepResult: () => null,
+      setChainSessionManager: () => {},
+      setTextReferenceManager: () => {},
+      setChainState: () => {}
+    };
 
       const mockTextReferenceManager = {
         extractReferences: () => [],
         resolveReferences: () => {},
-        addReference: () => {}
+        addReference: () => {},
+        storeChainStepResult: () => {},
+        getChainStepResult: () => null,
+        getChainStepMetadata: () => null,
+        buildChainVariables: () => ({})
       };
 
       const mockMcpToolsManager = {

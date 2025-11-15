@@ -7,7 +7,7 @@
  */
 
 import type { ConvertedPrompt } from '../../execution/types.js';
-import type { ContentAnalysisResult } from '../../semantic/configurable-semantic-analyzer.js';
+import type { ContentAnalysisResult } from '../../semantic/types.js';
 
 /**
  * Framework methodology definitions

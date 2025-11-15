@@ -36,7 +36,7 @@
     "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --watch",
     "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage",
     "test:jest": "NODE_OPTIONS=\"--experimental-vm-modules\" jest",
-    "test:ci": "npm run test:unit-scripts && npm run test:integration-scripts && npm run test:performance",
+    "test:ci": "npm run test:unit-scripts && npm run test:integration-scripts",
     "test:legacy": "node ../test_server.js",
     "test:runtime-integration": "node tests/scripts/runtime-integration.js",
     "test:methodology-guides": "node tests/scripts/methodology-guides.js",

@@ -12,6 +12,7 @@ import { ConsolidatedPromptEngine, createConsolidatedPromptEngine } from '../../
 import { SemanticAnalyzer } from '../../src/analysis/semantic-analyzer.js';
 import { PromptData, ConvertedPrompt } from '../../src/types/index.js';
 import { isChainPrompt } from '../../src/utils/chainUtils.js';
+import { cleanupPromptEngine } from '../helpers/test-helpers.js';
 
 // Mock logger
 const mockLogger: Logger = {
@@ -525,5 +526,12 @@ describe('System Health and Monitoring', () => {
     // Verify metrics are being collected
     expect(stats.commandParser.totalParses).toBeGreaterThan(0);
     expect(stats.commandParser.averageConfidence).toBeGreaterThanOrEqual(0);
+  });
+
+  afterEach(async () => {
+    // Cleanup prompt engine to prevent async handle leaks
+    if (promptEngine) {
+      await cleanupPromptEngine(promptEngine);
+    }
   });
 });

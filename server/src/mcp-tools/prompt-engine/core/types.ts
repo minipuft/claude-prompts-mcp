@@ -64,10 +64,6 @@ export interface ChainExecutionOptions {
   enableGates: boolean;
   force_restart?: boolean;
   session_id?: string;
-  step_confirmation?: boolean;
-  llm_driven_execution?: boolean;
-  chain_uri?: string;
-  timeout?: number;
   /** Execution-time temporary gates (not persisted to prompt configuration) */
   temporary_gates?: TemporaryGateDefinition[];
   /** Scope for execution-time temporary gates (default: execution) */
@@ -101,9 +97,18 @@ export interface FormatterExecutionContext {
  * Simple response formatter interface
  */
 export interface SimpleResponseFormatter {
-  formatResponse(content: any): any;
-  formatPromptEngineResponse(response: any, ...args: any[]): any;
-  formatErrorResponse(error: any, ...args: any[]): any;
+  formatResponse(content: any): ToolResponse;
+  formatPromptEngineResponse(
+    response: any,
+    executionContext?: FormatterExecutionContext,
+    options?: Record<string, any>,
+    gateResults?: any
+  ): ToolResponse;
+  formatErrorResponse(
+    error: any,
+    executionContext?: FormatterExecutionContext,
+    options?: Record<string, any>
+  ): ToolResponse;
   setAnalyticsService(service: any): void;
 }
 

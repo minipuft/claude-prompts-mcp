@@ -77,11 +77,23 @@ async function consolidatedToolsTests() {
         }
       };
       const mockPromptManager = {};
+      const mockFrameworksConfig = {
+        enableSystemPromptInjection: false,
+        enableMethodologyGates: false,
+        enableDynamicToolDescriptions: false
+      };
+
       const mockConfigManager = {
         getSemanticAnalysisConfig: () => ({
           mode: 'structural',
           llmIntegration: { enabled: false }
-        })
+        }),
+        getFrameworksConfig: () => ({ ...mockFrameworksConfig }),
+        on: (event, listener) => {
+          if (event === 'frameworksConfigChanged' && typeof listener === 'function') {
+            listener({ ...mockFrameworksConfig }, { ...mockFrameworksConfig });
+          }
+        }
       };
       
       // Test manager construction
@@ -128,10 +140,10 @@ async function consolidatedToolsTests() {
       // Test individual tool construction and registration
       console.log('🔧 Testing ConsolidatedPromptEngine...');
       // Note: ConsolidatedPromptEngine requires many dependencies, so we'll test basic construction
-      
+
       console.log('🔧 Testing ConsolidatedPromptManager...');
       // Note: ConsolidatedPromptManager also requires many dependencies
-      
+
       console.log('🔧 Testing ConsolidatedSystemControl...');
       const systemControl = new ConsolidatedSystemControl(mockLogger, mockMcpServer);
       systemControl.registerTool();

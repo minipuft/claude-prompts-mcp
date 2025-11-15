@@ -23,6 +23,7 @@ export type {
   SemanticAnalysisConfig,
   AnalysisConfig,
   ToolDescriptionsOptions,
+  FrameworksConfig,
   Message,
   MessageContent,
   MessageRole,
@@ -172,102 +173,7 @@ export interface ToolResponse {
     text: string;
   }>;
   isError?: boolean;
-
-  // Structured output data for programmatic access
-  structuredContent?: {
-    // Gate validation results in structured format
-    gateValidation?: {
-      enabled: boolean;
-      passed: boolean;
-      totalGates: number;
-      failedGates: Array<{
-        gateId: string;
-        gateName: string;
-        reason: string;
-        score?: number;
-        requirements: string[];
-        evaluationTime?: number;
-      }>;
-      passedGates?: Array<{
-        gateId: string;
-        gateName: string;
-        score?: number;
-      }>;
-      executionTime: number;
-      retryCount?: number;
-    };
-
-    // Core execution metadata
-    executionMetadata?: {
-      executionId: string;
-      executionType: "prompt" | "template" | "chain";
-      startTime: number;
-      endTime: number;
-      executionTime: number;
-      frameworkUsed?: string;
-      frameworkEnabled: boolean;
-      stepsExecuted?: number;
-      sessionId?: string;
-      memoryUsage?: {
-        heapUsed: number;
-        heapTotal: number;
-        external: number;
-      };
-    };
-
-    // Analytics and performance data
-    analytics?: {
-      totalExecutions: number;
-      successRate: number;
-      averageExecutionTime: number;
-      frameworkSwitches?: number;
-      gateValidationCount?: number;
-      errorCount?: number;
-      uptime: number;
-    };
-
-    // Chain execution progress (for chain operations)
-    chainProgress?: {
-      chainId: string;
-      chainName: string;
-      currentStep: number;
-      totalSteps: number;
-      status: "pending" | "running" | "completed" | "failed" | "paused";
-      steps: Array<{
-        stepIndex: number;
-        stepName: string;
-        promptId: string;
-        status: "pending" | "running" | "completed" | "failed" | "skipped";
-        startTime?: number;
-        endTime?: number;
-        duration?: number;
-        result?: string;
-        error?: string;
-      }>;
-      autoExecute: boolean;
-      sessionStrategy?: "auto" | "explicit" | "new";
-      executionOptions?: {
-        stepConfirmation: boolean;
-        gateValidation: boolean;
-        frameworkEnabled: boolean;
-      };
-    };
-
-    // Error information (for failed operations)
-    errorInfo?: {
-      errorCode: string;
-      errorType: "validation" | "execution" | "system" | "client" | "configuration";
-      message: string;
-      details?: any;
-      timestamp: number;
-      severity: "low" | "medium" | "high" | "critical";
-      suggestedActions?: string[];
-      relatedComponents?: string[];
-    };
-
-    // Tool-specific structured data
-    [key: string]: any;
-  };
+  structuredContent?: Record<string, any>;
 }
 
 // Tool Description Types

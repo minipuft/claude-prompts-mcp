@@ -7,7 +7,7 @@
 
 import { Logger } from "../../logging/index.js";
 import { LLMIntegrationConfig, LLMProvider } from "../../types/index.js";
-import { LLMClient } from "../configurable-semantic-analyzer.js";
+import type { LLMClient } from "../types.js";
 
 /**
  * Base LLM client with common functionality

@@ -3,7 +3,8 @@
  */
 
 import { Logger } from "../../../logging/index.js";
-import { ContentAnalyzer, ContentAnalysisResult } from "../../../semantic/configurable-semantic-analyzer.js";
+import { ContentAnalyzer } from "../../../semantic/configurable-semantic-analyzer.js";
+import type { ContentAnalysisResult } from "../../../semantic/types.js";
 import { ConvertedPrompt } from "../../../types/index.js";
 import {
   PromptClassification,

@@ -263,4 +263,4 @@ export function createSemanticIntegrationFactory(logger: Logger): SemanticIntegr
 
 // Re-export integration components
 export { LLMClientFactory, loadLLMConfigFromEnv } from "./llm-clients.js";
-export type { LLMClient } from "../configurable-semantic-analyzer.js";
+export type { LLMClient } from "../types.js";

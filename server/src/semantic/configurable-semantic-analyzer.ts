@@ -14,6 +14,7 @@
 import { ConvertedPrompt } from "../execution/types.js";
 import { Logger } from "../logging/index.js";
 import { SemanticAnalysisConfig, AnalysisMode } from "../types.js";
+import type { ContentAnalysisResult, LLMClient } from "./types.js";
 
 // Configuration constants - always use best practices
 const FALLBACK_TO_STRUCTURAL = true;
@@ -21,98 +22,6 @@ const WARN_ON_LIMITATIONS = true;
 const HONEST_REPORTING = true;
 const CACHE_ANALYSIS = true;
 const CACHE_EXPIRY_MS = 300000; // 5 minutes
-
-/**
- * Enhanced content analysis result with honest limitations reporting
- */
-export interface ContentAnalysisResult {
-  // Core execution strategy - HOW to execute this prompt (3-tier model)
-  executionType: "prompt" | "template" | "chain";
-  requiresExecution: boolean;
-  requiresFramework: boolean;
-  confidence: number;
-  reasoning: string[];
-  
-  // Analysis capabilities and limitations
-  capabilities: {
-    canDetectStructure: boolean;
-    canAnalyzeComplexity: boolean;
-    canRecommendFramework: boolean;
-    hasSemanticUnderstanding: boolean;
-  };
-  
-  limitations: string[];
-  warnings: string[];
-  
-  // Execution characteristics - WHAT makes this prompt complex
-  executionCharacteristics: {
-    hasConditionals: boolean;
-    hasLoops: boolean;
-    hasChainSteps: boolean;
-    argumentCount: number;
-    templateComplexity: number;
-    hasSystemMessage: boolean;
-    hasUserTemplate: boolean;
-    // Detectable patterns (structural analysis)
-    hasStructuredReasoning: boolean;
-    hasMethodologyKeywords: boolean;
-    hasComplexAnalysis: boolean;
-    // Advanced chain features
-    advancedChainFeatures?: {
-      hasDependencies: boolean;
-      hasParallelSteps: boolean;
-      hasAdvancedStepTypes: boolean;
-      hasAdvancedErrorHandling: boolean;
-      hasStepConfigurations: boolean;
-      hasCustomTimeouts: boolean;
-      requiresAdvancedExecution: boolean;
-      complexityScore: number;
-    };
-  };
-  
-  // Execution complexity
-  complexity: "low" | "medium" | "high";
-  suggestedGates: string[];
-  
-  // Framework recommendation (honest about limitations)
-  frameworkRecommendation: {
-    shouldUseFramework: boolean;
-    reasoning: string[];
-    confidence: number;
-    requiresUserChoice?: boolean; // When semantic analysis is unavailable
-    availableFrameworks?: string[]; // When user choice is needed
-  };
-  
-  // Analysis metadata
-  analysisMetadata: {
-    version: string;
-    mode: AnalysisMode;
-    analysisTime: number;
-    analyzer: "content";
-    cacheHit: boolean;
-    fallbackUsed?: boolean;
-    llmUsed?: boolean;
-    hooksUsed?: boolean;
-  };
-}
-
-/**
- * LLM client interface for semantic analysis
- */
-export interface LLMClient {
-  classify(request: {
-    text: string;
-    task: string;
-    categories: string[];
-    methodologies: string[];
-  }): Promise<{
-    executionType: string;
-    confidence: number;
-    reasoning: string[];
-    recommendedFramework?: string;
-    complexity: string;
-  }>;
-}
 
 
 /**
@@ -737,6 +646,8 @@ export class ContentAnalyzer {
     };
   }
 }
+
+export type { ContentAnalysisResult, LLMClient } from "./types.js";
 
 /**
  * Create content analyzer

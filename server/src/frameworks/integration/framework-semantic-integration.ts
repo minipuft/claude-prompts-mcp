@@ -20,10 +20,8 @@ import {
   FrameworkSwitchRecommendation,
   IntegratedAnalysisResult
 } from "../types/index.js";
-import {
-  ContentAnalyzer,
-  ContentAnalysisResult
-} from "../../semantic/configurable-semantic-analyzer.js";
+import { ContentAnalyzer } from "../../semantic/configurable-semantic-analyzer.js";
+import type { ContentAnalysisResult } from "../../semantic/types.js";
 import { FrameworkStateManager } from "../framework-state-manager.js";
 import { PromptGuidanceService } from "../prompt-guidance/service.js";
 

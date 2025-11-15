@@ -9,6 +9,7 @@
  */
 
 import path from "path";
+import { createHash } from "crypto";
 import { z } from "zod";
 import { ConfigManager } from "../../../config/index.js";
 import { Logger } from "../../../logging/index.js";
@@ -41,8 +42,11 @@ import { FrameworkStateManager } from "../../../frameworks/framework-state-manag
 import { ContentAnalyzer } from "../../../semantic/configurable-semantic-analyzer.js";
 import { ConversationManager } from "../../../text-references/conversation.js";
 import { TextReferenceManager } from "../../../text-references/index.js";
-import { ChainSessionManager, createChainSessionManager } from "../../../chain-session/manager.js";
-import { createExecutionResponse } from "../../shared/structured-response-builder.js";
+import {
+  ChainSessionManager,
+  createChainSessionManager,
+  type ChainSession,
+} from "../../../chain-session/manager.js";
 // Legacy gate system removed - using lightweight gates only
 // NEW: Lightweight gate system
 import {
@@ -89,77 +93,27 @@ import {
   type ExecutionContext,
   type ParsingSystem,
 } from "../../../execution/parsers/index.js";
+import { createSymbolicCommandParser } from "../../../execution/parsers/symbolic-command-parser.js";
+import type {
+  SymbolicCommandParseResult,
+  FrameworkOperator,
+  GateOperator,
+} from "../../../execution/parsers/types/operator-types.js";
+import {
+  ChainOperatorExecutor,
+  type ChainStepRenderResult,
+  GateOperatorExecutor,
+  FrameworkOperatorExecutor,
+} from "../../../execution/operators/index.js";
 // REMOVED: Dynamic template discovery - scaffolding system deprecated
 // Tool description manager
 import { ToolDescriptionManager } from "../../tool-description-manager.js";
 // Chain execution separation
 import { ChainExecutor } from "./executor.js";
-import { ChainExecutionContext, ChainExecutionOptions } from "./types.js";
+import { ChainExecutionContext, ChainExecutionOptions, FormatterExecutionContext } from "./types.js";
+// Response formatter
+import { ResponseFormatter } from "../processors/response-formatter.js";
 // Enhanced tool dependencies removed (Phase 1.3) - Core implementations
-// Simple core response handling without enhanced complexity
-interface SimpleResponseFormatter {
-  formatResponse(content: any): any;
-  formatPromptEngineResponse(response: any, ...args: any[]): any; // Required
-  formatErrorResponse(error: any, ...args: any[]): any; // Required
-  setAnalyticsService(service: any): void; // Required
-}
-
-function createSimpleResponseFormatter(): SimpleResponseFormatter {
-  return {
-    formatResponse: (content: any) => content,
-    formatPromptEngineResponse: (response: any, ...args: any[]) => {
-      // Create proper ToolResponse with structuredContent using shared builder
-      const executionContext = args[0] || {};
-      const options = args[1] || {};
-
-      // For template/prompt execution, return simple text so Claude Code can see instructions
-      // For chain execution, keep structured content for state tracking
-      const executionType = executionContext.executionType || "prompt";
-      const includeStructuredContent = executionType === "chain";
-
-      return createExecutionResponse(
-        String(response),
-        "execute",
-        {
-          executionType,
-          executionTime: executionContext.executionTime,
-          frameworkUsed: executionContext.frameworkUsed,
-          stepsExecuted: executionContext.stepsExecuted,
-          sessionId: executionContext.sessionId,
-          gateResults: executionContext.gateResults
-        },
-        includeStructuredContent
-      );
-    },
-    formatErrorResponse: (error: any, ...args: any[]) => {
-      return createExecutionResponse(
-        String(error),
-        "error",
-        {
-          executionType: "prompt",
-          executionTime: 0,
-          frameworkUsed: undefined,
-          stepsExecuted: 0,
-          sessionId: undefined
-        }
-      );
-    },
-    setAnalyticsService: (service: any) => {}, // No-op for now
-  };
-}
-
-// Simple output schema (minimal for Phase 1)
-const promptEngineOutputSchema = {
-  content: { type: "array" },
-  isError: { type: "boolean", optional: true },
-};
-
-// Type aliases for compatibility
-type ResponseFormatter = SimpleResponseFormatter;
-const createResponseFormatter = createSimpleResponseFormatter;
-type FormatterExecutionContext = {
-  [key: string]: any; // Completely flexible for Phase 1
-};
 // Analytics service
 import { ExecutionData, MetricsCollector } from "../../../metrics/index.js";
 
@@ -183,6 +137,87 @@ interface ToolRoutingResult {
   targetTool?: string;
   translatedParams?: Record<string, any>;
   originalCommand?: string;
+}
+
+interface SymbolicExecutionContext {
+  parseResult: SymbolicCommandParseResult;
+  stepPrompts: Array<{
+    stepNumber: number;
+    promptId: string;
+    promptData: PromptData;
+    convertedPrompt?: ConvertedPrompt;
+    args: string;
+  }>;
+}
+
+/**
+ * Session ID Generation & Chain Identification Utilities
+ * Phase 1: Step-by-step chain execution implementation
+ */
+
+/**
+ * Cryptographic hash utility for generating chain IDs
+ * Uses SHA-256 to drastically reduce collision risk compared to simple 32-bit hash
+ * @param str - String to hash
+ * @returns First 12 characters of SHA-256 hash (hex format)
+ */
+function hashString(str: string): string {
+  return createHash('sha256').update(str).digest('hex').slice(0, 12);
+}
+
+/**
+ * Normalizes argument string by parsing key=value pairs, sorting keys deterministically,
+ * and reassembling into canonical format for consistent hashing
+ * @param args - Raw argument string (e.g., 'key1="value1" key2="value2"')
+ * @returns Canonical argument string with sorted keys (e.g., 'key1=value1 key2=value2')
+ */
+function normalizeArgs(args: string): string {
+  if (!args || args.trim() === '') {
+    return '';
+  }
+
+  const parsedArgs: Record<string, string> = {};
+  
+  // Parse key=value pairs with proper quote handling
+  const pairs = args.match(/(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s]+(?:\s+(?!\w+\s*=)[^\s]*)*?))/g) || [];
+  
+  for (const pair of pairs) {
+    const match = pair.match(/(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)'|(.*))/);
+    if (match) {
+      const [, key, doubleQuoted, singleQuoted, unquoted] = match;
+      // Use the appropriate captured group - quoted strings take precedence
+      const value = doubleQuoted !== undefined ? doubleQuoted : 
+                   singleQuoted !== undefined ? singleQuoted : 
+                   unquoted || '';
+      parsedArgs[key] = value.trim();
+    }
+  }
+
+  // Sort keys deterministically and reassemble into canonical format
+  const sortedKeys = Object.keys(parsedArgs).sort();
+  return sortedKeys.map(key => `${key}=${parsedArgs[key]}`).join(' ');
+}
+
+/**
+ * Generates stable chain ID from step definitions
+ * Used for session discovery - same steps = same chain ID
+ * @param stepPrompts - Array of step prompt definitions
+ * @returns Chain ID in format: chain-{hash12chars}
+ */
+function generateChainId(stepPrompts: Array<{ promptId: string; args: string }>): string {
+  const chainDef = stepPrompts.map(s => {
+    const normalizedArgs = normalizeArgs(s.args);
+    return `${s.promptId}:${normalizedArgs}`;
+  }).join("|");
+  return `chain-${hashString(chainDef).slice(0, 12)}`;
+}
+
+/**
+ * Creates unique session ID with timestamp for chain execution tracking
+ * @returns Session ID in format: session-{timestamp}-{random}
+ */
+function generateSessionId(): string {
+  return `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 /**
@@ -215,6 +250,9 @@ export class ConsolidatedPromptEngine {
   private gateSelectionEngine?: GateSelectionEngine;
   // Chain execution delegation
   private chainExecutor?: ChainExecutor;
+  private chainOperatorExecutor?: ChainOperatorExecutor;
+  private gateOperatorExecutor: GateOperatorExecutor;
+  private frameworkOperatorExecutor?: FrameworkOperatorExecutor;
   // REMOVED: chainOrchestrator - modular chain system removed
   // Chain URI addressing system
   // REMOVED: chainAddressingSystem - deprecated with markdown-embedded chains
@@ -230,6 +268,7 @@ export class ConsolidatedPromptEngine {
 
   // New unified parsing system
   private parsingSystem: ParsingSystem;
+  private inlineGateParser: ReturnType<typeof createSymbolicCommandParser>;
 
   // Dynamic template discovery system
   // REMOVED: dynamicTemplateDiscovery - scaffolding system deprecated
@@ -326,20 +365,30 @@ export class ConsolidatedPromptEngine {
     // Initialize EngineValidator with gate system (Phase 1.1 fix)
     this.engineValidator = new EngineValidator(this.lightweightGateSystem);
 
+    // Initialize symbolic operator executors
+    this.gateOperatorExecutor = new GateOperatorExecutor(this.lightweightGateSystem, this.logger);
+    this.chainOperatorExecutor = new ChainOperatorExecutor(
+      this.logger,
+      this.promptsData,
+      this.convertedPrompts,
+      this.enhancePromptContent.bind(this)
+    );
+
     // Phase 4: Initialize clean architecture gate intelligence
-    this.gateSelectionEngine = createGateSelectionEngine(logger);
+    this.gateSelectionEngine = createGateSelectionEngine(logger, this.configManager);
 
     // Note: Performance analytics now handled separately through system control
     // No need to connect gate selection engine to other components
 
     // Initialize new parsing system
     this.parsingSystem = createParsingSystem(logger);
+    this.inlineGateParser = createSymbolicCommandParser(logger);
 
     // Initialize dynamic template discovery
     // REMOVED: Dynamic template discovery initialization - scaffolding system deprecated
 
     // Initialize response formatter
-    this.responseFormatter = createResponseFormatter();
+    this.responseFormatter = new ResponseFormatter();
 
     this.logger.info(
       "ConsolidatedPromptEngine initialized with new unified parsing system, dynamic template discovery, and response formatter"
@@ -362,6 +411,7 @@ export class ConsolidatedPromptEngine {
    */
   setFrameworkStateManager(frameworkStateManager: FrameworkStateManager): void {
     this.frameworkStateManager = frameworkStateManager;
+    this.frameworkOperatorExecutor = new FrameworkOperatorExecutor(frameworkStateManager, this.logger);
     this.initializeChainExecutor();
   }
 
@@ -490,6 +540,101 @@ export class ConsolidatedPromptEngine {
   }
 
   /**
+   * Cleanup method for proper resource management and preventing async handle leaks
+   * Follows the defensive cleanup pattern from Application.shutdown()
+   */
+  async cleanup(): Promise<void> {
+    try {
+      this.logger.debug("Starting ConsolidatedPromptEngine cleanup...");
+      
+      // Phase 1: Shutdown analytics service (has interval timers)
+      if (this.analyticsService && 'shutdown' in this.analyticsService && typeof this.analyticsService.shutdown === 'function') {
+        try {
+          await this.analyticsService.shutdown();
+          this.logger.debug("Analytics service shutdown completed");
+        } catch (error) {
+          this.logger.warn("Error shutting down analytics service:", error);
+        }
+      }
+
+      // Phase 2: Shutdown tool description manager (has file watchers, EventEmitter listeners)
+      if (this.toolDescriptionManager && 'shutdown' in this.toolDescriptionManager && typeof this.toolDescriptionManager.shutdown === 'function') {
+        try {
+          await this.toolDescriptionManager.shutdown();
+          this.logger.debug("Tool description manager shutdown completed");
+        } catch (error) {
+          this.logger.warn("Error shutting down tool description manager:", error);
+        }
+      }
+
+      // Phase 2.1: Shutdown config manager (file watcher, EventEmitter)
+      if (this.configManager && 'shutdown' in this.configManager && typeof this.configManager.shutdown === 'function') {
+        try {
+          this.configManager.shutdown();
+          this.logger.debug("Config manager shutdown completed");
+        } catch (error) {
+          this.logger.warn("Error shutting down config manager:", error);
+        }
+      }
+
+      // Phase 2.2: Shutdown prompt manager (HotReloadManager with FileObserver)
+      if (this.promptManager && 'shutdown' in this.promptManager && typeof this.promptManager.shutdown === 'function') {
+        try {
+          await this.promptManager.shutdown();
+          this.logger.debug("Prompt manager shutdown completed");
+        } catch (error) {
+          this.logger.warn("Error shutting down prompt manager:", error);
+        }
+      }
+
+      // Phase 3: Shutdown framework state manager (if it has shutdown method)
+      if (this.frameworkStateManager && 'shutdown' in this.frameworkStateManager && typeof this.frameworkStateManager.shutdown === 'function') {
+        try {
+          await this.frameworkStateManager.shutdown();
+          this.logger.debug("Framework state manager shutdown completed");
+        } catch (error) {
+          this.logger.warn("Error shutting down framework state manager:", error);
+        }
+      }
+
+      // Phase 4: Cleanup chain session manager (if it has cleanup method)
+      if (this.chainSessionManager && 'cleanup' in this.chainSessionManager && typeof this.chainSessionManager.cleanup === 'function') {
+        try {
+          await this.chainSessionManager.cleanup();
+          this.logger.debug("Chain session manager cleanup completed");
+        } catch (error) {
+          this.logger.warn("Error cleaning up chain session manager:", error);
+        }
+      }
+
+      // Phase 5: Cleanup lightweight gate system (if it has cleanup method)
+      if (this.lightweightGateSystem && 'cleanup' in this.lightweightGateSystem && typeof this.lightweightGateSystem.cleanup === 'function') {
+        try {
+          await this.lightweightGateSystem.cleanup();
+          this.logger.debug("Lightweight gate system cleanup completed");
+        } catch (error) {
+          this.logger.warn("Error cleaning up lightweight gate system:", error);
+        }
+      }
+
+      // Phase 6: Cleanup prompt guidance service (if it has cleanup method)
+      if (this.promptGuidanceService && 'cleanup' in this.promptGuidanceService && typeof this.promptGuidanceService.cleanup === 'function') {
+        try {
+          await this.promptGuidanceService.cleanup();
+          this.logger.debug("Prompt guidance service cleanup completed");
+        } catch (error) {
+          this.logger.warn("Error cleaning up prompt guidance service:", error);
+        }
+      }
+
+      this.logger.debug("ConsolidatedPromptEngine cleanup completed successfully");
+    } catch (error) {
+      this.logger.error("Error during ConsolidatedPromptEngine cleanup:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Get framework-enhanced system prompt injection
    */
   private async getFrameworkExecutionContext(
@@ -548,13 +693,8 @@ export class ConsolidatedPromptEngine {
       command: string;
       execution_mode?: "auto" | "prompt" | "template" | "chain";
       gate_validation?: boolean;
-      step_confirmation?: boolean;
-      llm_driven_execution?: boolean;
       force_restart?: boolean;
       session_id?: string;
-      chain_uri?: string;
-      timeout?: number;
-      options?: Record<string, any>;
       temporary_gates?: TemporaryGateDefinition[];
       gate_scope?: 'execution' | 'session' | 'chain' | 'step';
       inherit_chain_gates?: boolean;
@@ -568,13 +708,8 @@ export class ConsolidatedPromptEngine {
       command,
       execution_mode = "auto",
       gate_validation,
-      step_confirmation,
-      llm_driven_execution,
       force_restart,
       session_id,
-      chain_uri,
-      timeout,
-      options = {},
       temporary_gates,
       gate_scope = 'execution',
       inherit_chain_gates = true,
@@ -594,6 +729,21 @@ export class ConsolidatedPromptEngine {
       quality_gates,
       custom_checks,
     };
+
+    // Validate conflicting parameters before any processing
+    if (force_restart && session_id) {
+      this.logger.error(`[executePromptCommand] Conflicting parameters: force_restart=true and session_id provided`, {
+        sessionId: session_id,
+        command
+      });
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Error: Conflicting parameters detected.\n\n'force_restart=true' cannot be used together with 'session_id'.\n\n- Use 'force_restart=true' to start a new chain execution\n- Use 'session_id' to continue an existing chain execution\n- Remove one of these parameters and try again`
+        }],
+        isError: true
+      };
+    }
 
     this.logger.info(
       `🚀 [ENTRY] Prompt Engine: Executing "${command}" (mode: ${execution_mode})`
@@ -625,9 +775,24 @@ export class ConsolidatedPromptEngine {
       return await this.chainExecutor.executeChainManagement(
         executionContext.chainAction!,
         executionContext.chainParameters || {},
-        options
+        {}
       );
     }
+
+    if (executionContext.symbolicExecution) {
+      return await this.executeSymbolicCommand(
+        executionContext.symbolicExecution,
+        {
+          command,
+          gate_validation,
+          session_id,
+          force_restart,
+        },
+        extra
+      );
+    }
+
+    const inlineGateOp = this.detectInlineGateOperator(command);
 
     // Determine execution strategy
     const strategy = await this.determineExecutionStrategy(
@@ -651,13 +816,9 @@ export class ConsolidatedPromptEngine {
     return await this.executeWithStrategy(strategy, executionContext, {
       ...normalizedArgs,
       gate_validation,
-      step_confirmation,
-      llm_driven_execution,
       force_restart,
       session_id,
-      chain_uri,
-      timeout,
-      options,
+      inlineGateOp,
     });
   }
 
@@ -672,7 +833,22 @@ export class ConsolidatedPromptEngine {
       isChainManagement,
       chainAction,
       chainParameters,
+      symbolicExecution,
     } = await this.parseCommandUnified(command);
+
+    if (symbolicExecution) {
+      return {
+        promptId,
+        promptArgs,
+        convertedPrompt: undefined,
+        originalPrompt: undefined,
+        guidanceResult: undefined,
+        isChainManagement,
+        chainAction,
+        chainParameters,
+        symbolicExecution,
+      };
+    }
 
     // Apply prompt guidance if available and not a chain management command
     let enhancedPrompt = convertedPrompt;
@@ -727,9 +903,901 @@ export class ConsolidatedPromptEngine {
       isChainManagement,
       chainAction,
       chainParameters,
+      symbolicExecution: undefined,
     };
   }
 
+  private async executeSymbolicCommand(
+    symbolicExecution: SymbolicExecutionContext,
+    context: {
+      command: string;
+      gate_validation?: boolean;
+      session_id?: string;
+      force_restart?: boolean;
+    },
+    requestExtras?: any
+  ): Promise<ToolResponse> {
+    this.chainOperatorExecutor = new ChainOperatorExecutor(
+      this.logger,
+      this.promptsData,
+      this.convertedPrompts,
+      this.enhancePromptContent.bind(this)
+    );
+
+    const { parseResult, stepPrompts } = symbolicExecution;
+
+    this.logger.info(`[executeSymbolicCommand] Received symbolicExecution`, {
+      executionPlanSteps: parseResult.executionPlan.steps.length,
+      stepPromptsLength: stepPrompts.length,
+      stepPromptIds: stepPrompts.map((s) => s.promptId)
+    });
+
+    const operatorCollection = parseResult.operators?.operators ?? [];
+    const frameworkOp = operatorCollection.find((op): op is FrameworkOperator => op.type === "framework");
+    const gateOp = operatorCollection.find((op): op is GateOperator => op.type === "gate");
+
+    const chainId = generateChainId(stepPrompts.map((s) => ({
+      promptId: s.promptId,
+      args: s.args
+    })));
+
+    this.logger.debug(`[executeSymbolicCommand] Chain ID: ${chainId}`, {
+      sessionId: context.session_id,
+      forceRestart: context.force_restart
+    });
+
+    if (context.force_restart && context.session_id) {
+      this.logger.error(`[executeSymbolicCommand] Conflicting parameters: force_restart=true and session_id provided`, {
+        sessionId: context.session_id,
+        chainId
+      });
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Error: Conflicting parameters detected.
+
+'force_restart=true' cannot be used together with 'session_id'.
+
+- Use 'force_restart=true' to start a new chain execution
+- Use 'session_id' to continue an existing chain execution
+- Remove one of these parameters and try again`
+        }],
+        isError: true
+      };
+    }
+
+    const sessionOptions = {
+      command: context.command,
+      gate_validation: context.gate_validation,
+      gateOp,
+    };
+
+    const executeWithinSession = async (): Promise<ToolResponse> => {
+      if (context.force_restart) {
+        this.logger.info(`[executeSymbolicCommand] Force restart requested for chain ${chainId}`);
+        return await this.startNewChainExecution(
+          chainId,
+          stepPrompts,
+          sessionOptions,
+          requestExtras
+        );
+      }
+
+      if (context.session_id) {
+        const session = this.chainSessionManager.getSession(context.session_id);
+
+        if (!session) {
+          return {
+            content: [{
+              type: "text",
+              text: `❌ Error: Session ID '${context.session_id}' not found.
+
+The session may have expired or been cleared. To start a new chain execution, run the command again without specifying a session_id, or use force_restart=true.`
+            }],
+            isError: true
+          };
+        }
+
+        if (session.chainId !== chainId) {
+          return {
+            content: [{
+              type: "text",
+              text: `❌ Error: Session ID '${context.session_id}' belongs to a different chain.
+
+Session chain ID: ${session.chainId}
+Current chain ID: ${chainId}
+
+To start a new execution of this chain, run the command again without specifying a session_id.`
+            }],
+            isError: true
+          };
+        }
+
+        if (session.state.currentStep > session.state.totalSteps) {
+          this.logger.info(`[executeSymbolicCommand] Session ${context.session_id} completed, auto-resetting`);
+          this.chainSessionManager.clearSession(context.session_id);
+          return await this.startNewChainExecution(
+            chainId,
+            stepPrompts,
+            sessionOptions,
+            requestExtras
+          );
+        }
+
+        this.logger.info(`[executeSymbolicCommand] Continuing session ${context.session_id}`);
+        return await this.continueChainExecution(
+          context.session_id,
+          chainId,
+          stepPrompts,
+          sessionOptions,
+          requestExtras
+        );
+      }
+
+      const activeSession = this.chainSessionManager.getActiveSessionForChain(chainId);
+
+      if (activeSession) {
+        if (activeSession.state.currentStep > activeSession.state.totalSteps) {
+          this.logger.info(`[executeSymbolicCommand] Active session ${activeSession.sessionId} completed, auto-resetting`);
+          this.chainSessionManager.clearSession(activeSession.sessionId);
+          return await this.startNewChainExecution(
+            chainId,
+            stepPrompts,
+            sessionOptions,
+            requestExtras
+          );
+        }
+
+        this.logger.info(`[executeSymbolicCommand] Auto-detected active session ${activeSession.sessionId}`);
+        return await this.continueChainExecution(
+          activeSession.sessionId,
+          chainId,
+          stepPrompts,
+          sessionOptions,
+          requestExtras
+        );
+      }
+
+      this.logger.info(`[executeSymbolicCommand] No active session found for chain ${chainId}, starting new`);
+      return await this.startNewChainExecution(
+        chainId,
+        stepPrompts,
+        sessionOptions,
+        requestExtras
+      );
+    };
+
+    if (frameworkOp) {
+      if (this.frameworkOperatorExecutor) {
+        return await this.frameworkOperatorExecutor.executeWithFramework(frameworkOp, executeWithinSession);
+      }
+
+      this.logger.warn(
+        "Framework operator detected but framework state manager is unavailable; executing without override"
+      );
+    }
+
+    return await executeWithinSession();
+  }
+
+  private async startNewChainExecution(
+    chainId: string,
+    stepPrompts: Array<{
+      stepNumber: number;
+      promptId: string;
+      promptData: PromptData;
+      convertedPrompt?: ConvertedPrompt;
+      args: string;
+    }>,
+    options: {
+      command: string;
+      gate_validation?: boolean;
+      gateOp?: GateOperator;
+    },
+    requestExtras?: any
+  ): Promise<ToolResponse> {
+    const sessionId = generateSessionId();
+
+    this.logger.info(`[startNewChainExecution] Starting new chain execution`, {
+      chainId,
+      sessionId,
+      totalSteps: stepPrompts.length
+    });
+
+    this.chainSessionManager.createSession(
+      sessionId,
+      chainId,
+      stepPrompts.length,
+      {
+        command: options.command,
+        gateOperator: options.gateOp ? options.gateOp.criteria : undefined,
+      }
+    );
+
+    const firstStep = stepPrompts[0];
+    if (!firstStep) {
+      return {
+        content: [{
+          type: "text",
+          text: "❌ Error: No steps found in chain execution."
+        }],
+        isError: true
+      };
+    }
+
+    try {
+      const inlineGateIds = await this.preRegisterInlineGate(sessionId, options.gateOp);
+      if (inlineGateIds.length > 0) {
+        this.chainSessionManager.setInlineGateIds(sessionId, inlineGateIds);
+      }
+
+      // Generate inline guidance text (mirrors basic prompt behavior)
+      const inlineGuidanceText = options.gateOp && this.gateOperatorExecutor
+        ? this.gateOperatorExecutor.generateGuidance(options.gateOp.parsedCriteria)
+        : undefined;
+
+      const chainContext = this.chainSessionManager.getChainContext(sessionId);
+
+      if (!this.chainOperatorExecutor) {
+        throw new Error("ChainOperatorExecutor not initialized");
+      }
+
+      const renderResult = await this.chainOperatorExecutor.renderStep({
+        stepPrompts,
+        currentStepIndex: 0,
+        chainContext,
+        additionalGateIds: inlineGateIds,
+        inlineGuidanceText,
+      });
+
+      await this.chainSessionManager.updateSessionState(
+        sessionId,
+        firstStep.stepNumber,
+        renderResult.content,
+        {
+          timestamp: Date.now(),
+          isPlaceholder: true,
+          stepPromptId: firstStep.promptId,
+          phase: 'rendered_template',
+        }
+      );
+
+      const isComplete = firstStep.stepNumber >= stepPrompts.length;
+      let gateSummary: string | undefined;
+      let gateStructured: any | undefined;
+
+      if (isComplete) {
+        const finalContext = this.chainSessionManager.getChainContext(sessionId);
+        const aggregatedOutput = this.buildAggregatedChainOutput(finalContext);
+        const gateResult = await this.evaluateGateOnCompletion(
+          options.gateOp,
+          aggregatedOutput,
+          options.gate_validation,
+          requestExtras,
+          sessionId
+        );
+
+        if (gateResult) {
+          gateSummary = gateResult.summary;
+          gateStructured = gateResult.structuredContent;
+        }
+      }
+
+      return this.buildStepResponse(renderResult, {
+        sessionId,
+        chainId,
+        isComplete,
+        gateSummary,
+        gateValidation: gateStructured,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[startNewChainExecution] Error executing step 1:`, error);
+      this.chainSessionManager.clearSession(sessionId);
+
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Error executing step 1: ${message}`
+        }],
+        isError: true
+      };
+    }
+  }
+
+  private async continueChainExecution(
+    sessionId: string,
+    chainId: string,
+    stepPrompts: Array<{
+      stepNumber: number;
+      promptId: string;
+      promptData: PromptData;
+      convertedPrompt?: ConvertedPrompt;
+      args: string;
+    }>,
+    options: {
+      command: string;
+      gate_validation?: boolean;
+      gateOp?: GateOperator;
+    },
+    requestExtras?: any
+  ): Promise<ToolResponse> {
+    const session = this.chainSessionManager.getSession(sessionId);
+    if (!session) {
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Error: Session '${sessionId}' not found. It may have expired or been cleared.`
+        }],
+        isError: true
+      };
+    }
+
+    this.logger.info(`[continueChainExecution] Continuing chain execution`, {
+      sessionId,
+      chainId,
+      currentStep: session.state.currentStep,
+      totalSteps: session.state.totalSteps
+    });
+
+    const nextStepNumber = session.state.currentStep;
+
+    const previousStepNumber = nextStepNumber - 1;
+    await this.capturePreviousStepResult({
+      session,
+      sessionId,
+      chainId,
+      stepNumber: previousStepNumber,
+      requestExtras,
+    });
+
+    this.logger.debug(`[continueChainExecution] Step calculation`, {
+      currentStep: session.state.currentStep,
+      nextStepNumber,
+      totalSteps: session.state.totalSteps,
+      checkResult: nextStepNumber > session.state.totalSteps
+    });
+
+    if (nextStepNumber > session.state.totalSteps) {
+      return {
+        content: [{
+          type: "text",
+          text: `✅ Chain execution is already complete.
+
+Session: ${sessionId}
+Completed: ${session.state.currentStep}/${session.state.totalSteps} steps
+
+To restart this chain, use force_restart=true.`
+        }],
+        isError: false
+      };
+    }
+
+    const currentStep = stepPrompts[nextStepNumber - 1];
+    if (!currentStep) {
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Error: Step ${nextStepNumber} not found in chain definition.
+
+Chain has ${stepPrompts.length} steps but session expects ${session.state.totalSteps} steps.`
+        }],
+        isError: true
+      };
+    }
+
+    try {
+      if (!this.chainOperatorExecutor) {
+        throw new Error("ChainOperatorExecutor not initialized");
+      }
+
+      const inlineGateIds = await this.preRegisterInlineGate(sessionId, options.gateOp);
+      if (inlineGateIds.length > 0) {
+        this.chainSessionManager.setInlineGateIds(sessionId, inlineGateIds);
+      }
+
+      // Generate inline guidance text (mirrors basic prompt behavior)
+      const inlineGuidanceText = options.gateOp && this.gateOperatorExecutor
+        ? this.gateOperatorExecutor.generateGuidance(options.gateOp.parsedCriteria)
+        : undefined;
+
+      const chainContext = this.chainSessionManager.getChainContext(sessionId);
+
+      const renderResult = await this.chainOperatorExecutor.renderStep({
+        stepPrompts,
+        currentStepIndex: nextStepNumber - 1,
+        chainContext,
+        additionalGateIds: inlineGateIds,
+        inlineGuidanceText,
+      });
+
+      await this.chainSessionManager.updateSessionState(
+        sessionId,
+        nextStepNumber,
+        renderResult.content,
+        {
+          timestamp: Date.now(),
+          isPlaceholder: true,
+          stepPromptId: currentStep.promptId,
+          phase: 'rendered_template',
+        }
+      );
+
+      const isComplete = nextStepNumber >= session.state.totalSteps;
+      let gateSummary: string | undefined;
+      let gateStructured: any | undefined;
+
+      if (isComplete) {
+        const finalContext = this.chainSessionManager.getChainContext(sessionId);
+        const aggregatedOutput = this.buildAggregatedChainOutput(finalContext);
+        const gateResult = await this.evaluateGateOnCompletion(
+          options.gateOp,
+          aggregatedOutput,
+          options.gate_validation,
+          requestExtras,
+          sessionId
+        );
+
+        if (gateResult) {
+          gateSummary = gateResult.summary;
+          gateStructured = gateResult.structuredContent;
+        }
+      }
+
+      return this.buildStepResponse(renderResult, {
+        sessionId,
+        chainId,
+        isComplete,
+        gateSummary,
+        gateValidation: gateStructured,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`[continueChainExecution] Error executing step ${nextStepNumber}:`, error);
+
+      return {
+        content: [{
+          type: "text",
+          text: `❌ Error executing step ${nextStepNumber}: ${message}
+
+Session: ${sessionId}
+Chain: ${chainId}`
+        }],
+        isError: true
+      };
+    }
+  }
+
+  private async evaluateGateOnCompletion(
+    gateOp: GateOperator | undefined,
+    aggregatedOutput: string | null,
+    gateValidation?: boolean,
+    requestExtras?: any,
+    sessionId?: string
+  ): Promise<{ summary: string; structuredContent: any } | null> {
+    // Check prerequisites
+    if (!gateOp || !aggregatedOutput) {
+      this.logger.debug('[InlineGate] No gate operator or output to validate');
+      return null;
+    }
+
+    if (!this.gateOperatorExecutor) {
+      this.logger.warn('[InlineGate] GateOperatorExecutor not available');
+      return null;
+    }
+
+    if (!sessionId) {
+      this.logger.warn('[InlineGate] No session ID provided for gate validation');
+      return null;
+    }
+
+    // Get the inline gate IDs from the session
+    const inlineGateIds = this.chainSessionManager.getInlineGateIds(sessionId);
+
+    if (!inlineGateIds || inlineGateIds.length === 0) {
+      this.logger.debug('[InlineGate] No inline gates registered for validation');
+      return null;
+    }
+
+    try {
+      // Execute gate validation using the lightweight gate system
+      const executionId = sessionId || `exec_${Date.now()}`;
+      const gateResults = await this.lightweightGateSystem.validateContent(
+        inlineGateIds,
+        aggregatedOutput,
+        { metadata: { executionId } }
+      );
+
+      this.logger.debug('[InlineGate] Validation results:', {
+        totalGates: gateResults.length,
+        results: gateResults.map(r => ({ gateId: r.gateId, passed: r.passed, hints: r.retryHints }))
+      });
+
+      // Analyze results - check 'passed' field (which is what tests use)
+      const passed = gateResults.every(r => r.passed === true);
+      const failedGates = gateResults.filter(r => r.passed === false);
+      const retryHints = gateResults.flatMap(r => r.retryHints || []);
+
+      // Generate summary message
+      let summary: string;
+      if (passed) {
+        summary = 'Inline gate passed all criteria.';
+      } else {
+        const criterionText = failedGates.length === 1 ? 'criterion' : 'criteria';
+        const hintsText = retryHints.length > 0
+          ? ` Retry recommended: ${retryHints.join(', ')}`
+          : '';
+        summary = `❌ Inline gate failed ${failedGates.length} ${criterionText}.${hintsText}`;
+      }
+
+      // Build structured content matching test expectations
+      const structuredContent = {
+        passed,
+        retryRequired: !passed,
+        totalGates: gateResults.length,
+        passedGates: gateResults.filter(r => r.passed === true),
+        failedGates,
+        retryHints
+      };
+
+      this.logger.info('[InlineGate] Validation complete:', {
+        passed,
+        totalGates: gateResults.length,
+        failedGates: failedGates.length,
+        summary
+      });
+
+      return { summary, structuredContent };
+    } catch (error) {
+      this.logger.error('[InlineGate] Error during gate validation:', error);
+      return null;
+    }
+  }
+
+  private buildStepResponse(
+    renderResult: ChainStepRenderResult,
+    metadata: {
+      sessionId: string;
+      chainId: string;
+      isComplete: boolean;
+      gateSummary?: string;
+      gateValidation?: any;
+    }
+  ): ToolResponse {
+    const instructions = renderResult.content.trim();
+
+    const footerParts: string[] = [
+      `Session ID: ${metadata.sessionId}`,
+      metadata.isComplete
+        ? `✓ Chain complete (${renderResult.totalSteps}/${renderResult.totalSteps}).`
+        : `→ ${renderResult.callToAction}`,
+      `Chain ID: ${metadata.chainId}`,
+    ];
+
+    if (metadata.gateSummary) {
+      footerParts.push(metadata.gateSummary);
+    }
+
+    const footer = footerParts.filter(Boolean).join("\n");
+    const text = `${instructions}\n\n---\n${footer}`;
+
+    const structuredContent = metadata.gateValidation
+      ? { gateValidation: metadata.gateValidation }
+      : undefined;
+
+    return {
+      content: [{ type: "text" as const, text }],
+      isError: false,
+      structuredContent,
+    };
+  }
+
+  private buildAggregatedChainOutput(chainContext: Record<string, any>): string | null {
+    const stepResults = chainContext?.step_results as Record<string, string> | undefined;
+    if (!stepResults) {
+      return null;
+    }
+
+    const sortedSteps = Object.entries(stepResults)
+      .map(([key, value], idx) => {
+        const numeric = Number.parseInt(key, 10);
+        const indexValue = Number.isNaN(numeric) ? idx + 1 : numeric;
+        return {
+          index: indexValue,
+          content: value,
+        };
+      })
+      .sort((a, b) => a.index - b.index);
+
+    if (sortedSteps.length === 0) {
+      return null;
+    }
+
+    return sortedSteps
+      .map((step) => `Step ${step.index}:\n${step.content}`)
+      .join("\n\n");
+  }
+
+  private async preRegisterInlineGate(
+    sessionId: string,
+    gateOp: GateOperator | undefined,
+  ): Promise<string[]> {
+    if (!gateOp || !this.gateOperatorExecutor) {
+      return [];
+    }
+
+    const existing = this.chainSessionManager.getInlineGateIds(sessionId);
+    if (existing && existing.length > 0) {
+      return existing;
+    }
+
+    const definition = this.gateOperatorExecutor.createTemporaryGateDefinition(gateOp);
+
+    try {
+      const gateId = this.lightweightGateSystem.createTemporaryGate(
+        definition,
+        sessionId,
+      );
+
+      if (!gateId) {
+        this.logger.warn('[InlineGate] Failed to pre-register inline gate');
+        return [];
+      }
+
+      this.logger.debug('[InlineGate] Pre-registered inline gate', {
+        sessionId,
+        gateId,
+        criteria: gateOp.parsedCriteria,
+      });
+      return [gateId];
+    } catch (error) {
+      this.logger.error('[InlineGate] Error pre-registering inline gate', error);
+      return [];
+    }
+  }
+
+  private async preRegisterInlineGateForPrompt(
+    gateOp: GateOperator,
+    scopeId?: string,
+  ): Promise<string[]> {
+    if (!this.gateOperatorExecutor) {
+      return [];
+    }
+
+    const definition = this.gateOperatorExecutor.createTemporaryGateDefinition(gateOp);
+
+    try {
+      const gateId = this.lightweightGateSystem.createTemporaryGate(
+        definition,
+        scopeId,
+      );
+
+      if (!gateId) {
+        this.logger.warn('[InlineGate] Failed to pre-register prompt inline gate');
+        return [];
+      }
+
+      this.logger.debug('[InlineGate] Pre-registered prompt inline gate', {
+        gateId,
+        scopeId,
+        criteria: gateOp.parsedCriteria,
+      });
+
+      return [gateId];
+    } catch (error) {
+      this.logger.error('[InlineGate] Error pre-registering prompt inline gate', error);
+      return [];
+    }
+  }
+
+  private async capturePreviousStepResult({
+    session,
+    sessionId,
+    chainId,
+    stepNumber,
+    requestExtras,
+  }: {
+    session: ChainSession;
+    sessionId: string;
+    chainId: string;
+    stepNumber: number;
+    requestExtras?: any;
+  }): Promise<void> {
+    if (!session || stepNumber < 1) {
+      return;
+    }
+
+    const existingMetadata = this.textReferenceManager.getChainStepMetadata(
+      chainId,
+      stepNumber
+    );
+
+    if (existingMetadata && existingMetadata.isPlaceholder === false) {
+      return;
+    }
+
+    const captured = this.extractAssistantResponse(requestExtras);
+    if (!captured || !captured.content?.trim()) {
+      return;
+    }
+
+    const mergedMetadata = {
+      ...existingMetadata,
+      ...captured.metadata,
+      isPlaceholder: false,
+      capturedAt: Date.now(),
+    };
+
+    await this.chainSessionManager.updateStepResult(
+      sessionId,
+      stepNumber,
+      captured.content,
+      mergedMetadata
+    );
+
+    this.logger.debug("[ChainExecution] Captured assistant response for step", {
+      chainId,
+      stepNumber,
+      source: captured.metadata?.source,
+    });
+  }
+
+  private extractAssistantResponse(requestExtras?: any): {
+    content: string;
+    metadata?: Record<string, any>;
+  } | null {
+    const extraPayload = requestExtras?.extra ?? requestExtras;
+    if (extraPayload && typeof extraPayload === "object") {
+      const candidateKeys = [
+        "previous_step_output",
+        "previousStepOutput",
+        "last_response",
+        "lastResponse",
+        "assistantResponse",
+      ];
+
+      for (const key of candidateKeys) {
+        const value = extraPayload[key];
+        if (typeof value === "string" && value.trim().length > 0) {
+          return {
+            content: value,
+            metadata: {
+              source: "request_extra",
+              sourceKey: key,
+            },
+          };
+        }
+      }
+    }
+
+    const history = this.conversationManager.getConversationHistory?.();
+    if (Array.isArray(history)) {
+      for (let i = history.length - 1; i >= 0; i--) {
+        const item = history[i];
+        if (item.role === "assistant" && !item.isProcessedTemplate) {
+          return {
+            content: item.content,
+            metadata: {
+              source: "conversation_history",
+              timestamp: item.timestamp,
+            },
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private detectInlineGateOperator(command: string): GateOperator | undefined {
+    try {
+      const detection = this.inlineGateParser.detectOperators(command);
+      const gate = detection.operators.find((op): op is GateOperator => op.type === 'gate');
+      const hasChain = detection.operators.some((op) => op.type === 'chain');
+      if (gate && !hasChain) {
+        return gate;
+      }
+    } catch (error) {
+      this.logger.debug('[InlineGate] Failed to detect inline gate operator', {
+        error: error instanceof Error ? error.message : String(error),
+        command,
+      });
+    }
+    return undefined;
+  }
+
+  private extractGateFeedback(requestExtras?: any): {
+    text: string;
+    source: string;
+  } | null {
+    if (!requestExtras || typeof requestExtras !== "object") {
+      return null;
+    }
+
+    const payload = requestExtras.gate_validation_feedback ??
+      requestExtras.gateValidationFeedback ??
+      requestExtras.gate_feedback ??
+      requestExtras.gateFeedback;
+
+    if (!payload) {
+      return null;
+    }
+
+    if (typeof payload === "string") {
+      const trimmed = payload.trim();
+      if (trimmed.length === 0) {
+        return null;
+      }
+      return { text: trimmed, source: "request_extra" };
+    }
+
+    if (Array.isArray(payload)) {
+      const flattened = payload
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean)
+        .join("\n");
+      return flattened ? { text: flattened, source: "request_extra" } : null;
+    }
+
+    if (typeof payload === "object") {
+      const candidate = payload.text ?? payload.summary ?? payload.feedback;
+      if (typeof candidate === "string" && candidate.trim().length > 0) {
+        return { text: candidate.trim(), source: "request_extra" };
+      }
+    }
+
+    return null;
+  }
+
+  private parseGateFeedback(feedback: string, criteria: string[]): {
+    passed: boolean | null;
+    summary: string;
+    retryRequired: boolean;
+  } {
+    const normalized = feedback.toLowerCase();
+    let passed: boolean | null = null;
+
+    if (normalized.includes("fail")) {
+      passed = false;
+    } else if (normalized.includes("pass")) {
+      passed = true;
+    }
+
+    const summary = passed === true
+      ? "✅ Inline gate self-check passed."
+      : passed === false
+        ? "❌ Inline gate self-check reported failure."
+        : "ℹ️ Inline gate self-check feedback received.";
+
+    const retryRequired = passed === false;
+
+    return {
+      passed,
+      summary: `${summary}\n📝 Feedback: ${feedback}`,
+      retryRequired,
+    };
+  }
+
+  private buildGateValidationInstructions(criteria: string[]): string {
+    const criteriaSummary = criteria.length
+      ? `Criteria: ${criteria.join('; ')}`
+      : undefined;
+
+    const instructions = [
+      "📋 Inline Validation Reminder",
+      "Review the Inline Quality Criteria section above before finalizing your response.",
+    ];
+
+    if (criteriaSummary) {
+      instructions.push(criteriaSummary);
+    }
+
+    instructions.push(
+      "Respond with gate_validation_feedback indicating PASS or FAIL and include brief reasoning.",
+    );
+
+    return instructions.join("\n");
+  }
   /**
    * Determine the execution strategy based on mode and prompt type
    */
@@ -824,7 +1892,8 @@ export class ConsolidatedPromptEngine {
         const promptResult = await this.executePrompt(
           convertedPrompt,
           promptArgs,
-          this.getExecutionContext(executionScopeId, 'execution')
+          this.getExecutionContext(executionScopeId, 'execution'),
+          args.inlineGateOp
         );
         return promptResult;
 
@@ -846,9 +1915,7 @@ export class ConsolidatedPromptEngine {
         );
         if (!this.chainExecutor) {
           return this.responseFormatter.formatErrorResponse(
-            'ChainExecutor not initialized - framework managers required',
-            'ConsolidatedPromptEngine',
-            'executePromptCommand'
+            'ChainExecutor not initialized - framework managers required'
           );
         }
 
@@ -868,8 +1935,6 @@ export class ConsolidatedPromptEngine {
             enableGates: strategy.gateValidation,
             force_restart: args.force_restart,
             session_id: chainSessionId,
-            step_confirmation: args.step_confirmation,
-            llm_driven_execution: args.llm_driven_execution,
             chain_uri: args.chain_uri,
             timeout: args.timeout,
             temporary_gates: args.temporary_gates,
@@ -1217,20 +2282,11 @@ export class ConsolidatedPromptEngine {
       this.logger.error(`Tool routing failed for ${targetTool}:`, error);
 
       // Return formatted error response
-      return this.responseFormatter.formatErrorResponse(
+      const message =
         error instanceof Error
-          ? `Tool routing failed: ${error.message}`
-          : `Tool routing failed: ${String(error)}`,
-        {
-          tool: 'prompt_engine',
-          operation: 'routeToTool',
-          targetTool,
-          originalCommand
-        },
-        {
-          includeStructuredData: true
-        }
-      );
+          ? `Tool routing failed (${targetTool}): ${error.message}`
+          : `Tool routing failed (${targetTool}): ${String(error)}`;
+      return this.responseFormatter.formatErrorResponse(message);
     }
   }
 
@@ -1240,10 +2296,20 @@ export class ConsolidatedPromptEngine {
   private async parseCommandUnified(command: string): Promise<{
     promptId: string;
     arguments: Record<string, any>;
-    convertedPrompt: ConvertedPrompt;
+    convertedPrompt?: ConvertedPrompt;
     isChainManagement?: boolean;
     chainAction?: string;
     chainParameters?: Record<string, any>;
+    symbolicExecution?: {
+      parseResult: SymbolicCommandParseResult;
+      stepPrompts: Array<{
+        stepNumber: number;
+        promptId: string;
+        promptData: PromptData;
+        convertedPrompt?: ConvertedPrompt;
+        args: string;
+      }>;
+    };
   }> {
     // Phase 1: Smart chain management command detection
     if (this.chainExecutor) {
@@ -1266,9 +2332,92 @@ export class ConsolidatedPromptEngine {
       this.promptsData
     );
 
+    this.logger.info(`[ParseResult] Command parsed`, {
+      format: parseResult.format,
+      promptId: parseResult.promptId,
+      hasExecutionPlan: !!parseResult.executionPlan,
+      hasOperators: !!parseResult.operators,
+      executionPlanSteps: parseResult.executionPlan?.steps?.length,
+      operatorTypes: parseResult.operators?.operatorTypes
+    });
+
+    if (parseResult.format === 'symbolic' && parseResult.executionPlan && parseResult.operators) {
+      const symbolicParse = parseResult as SymbolicCommandParseResult;
+      this.logger.debug(`[SymbolicExecution] Entering symbolic execution branch`, {
+        format: parseResult.format,
+        executionPlanSteps: symbolicParse.executionPlan.steps.length,
+        operators: symbolicParse.operators?.operatorTypes,
+        availablePrompts: this.promptsData.length
+      });
+
+      const stepPrompts: Array<{
+        stepNumber: number;
+        promptId: string;
+        promptData: PromptData;
+        convertedPrompt?: ConvertedPrompt;
+        args: string;
+      }> = [];
+
+      for (const step of symbolicParse.executionPlan.steps) {
+        this.logger.debug(`[SymbolicExecution] Processing step ${step.stepNumber}`, {
+          promptId: step.promptId,
+          args: step.args
+        });
+
+        if (!step.promptId) {
+          this.logger.warn(`[SymbolicExecution] Skipping step ${step.stepNumber}: no promptId`);
+          continue;
+        }
+
+        const promptData = this.promptsData.find(
+          (p) =>
+            p.id.toLowerCase() === step.promptId!.toLowerCase() ||
+            (p.name && p.name.toLowerCase() === step.promptId!.toLowerCase())
+        );
+
+        if (!promptData) {
+          this.logger.error(`[SymbolicExecution] Prompt not found: "${step.promptId}"`, {
+            availablePromptIds: this.promptsData.map(p => p.id).slice(0, 10)
+          });
+          throw new PromptError(
+            `Unknown prompt referenced in symbolic command: "${step.promptId}"`
+          );
+        }
+
+        this.logger.debug(`[SymbolicExecution] Found promptData for "${step.promptId}"`);
+
+        const convertedPrompt = this.convertedPrompts.find(
+          (p) => p.id === promptData.id
+        );
+
+        stepPrompts.push({
+          stepNumber: step.stepNumber,
+          promptId: promptData.id,
+          promptData,
+          convertedPrompt,
+          args: step.args || '',
+        });
+      }
+
+      this.logger.info(`[SymbolicExecution] Built stepPrompts array`, {
+        stepCount: stepPrompts.length,
+        steps: stepPrompts.map(s => ({ stepNumber: s.stepNumber, promptId: s.promptId }))
+      });
+
+      return {
+        promptId: symbolicParse.promptId,
+        arguments: {},
+        convertedPrompt: undefined,
+        symbolicExecution: {
+          parseResult: symbolicParse,
+          stepPrompts,
+        },
+      };
+    }
+
     // Find the matching prompt data and converted prompt (case-insensitive lookup)
     const promptData = this.promptsData.find(
-      (p) => p.id.toLowerCase() === parseResult.promptId.toLowerCase() || 
+      (p) => p.id.toLowerCase() === parseResult.promptId.toLowerCase() ||
              (p.name && p.name.toLowerCase() === parseResult.promptId.toLowerCase())
     );
     if (!promptData) {
@@ -1494,6 +2643,82 @@ export class ConsolidatedPromptEngine {
   }
 
   /**
+   * Enhance prompt content with framework guidance and quality gates
+   * Shared by both standalone and chain execution
+   */
+  private async enhancePromptContent(
+    content: string,
+    prompt: ConvertedPrompt,
+    executionContext?: {
+      scopeId?: string;
+      scope?: 'execution' | 'session' | 'chain' | 'step';
+    },
+    additionalGateIds: string[] = [],
+    inlineGuidanceText?: string
+  ): Promise<string> {
+    let enhancedContent = "";
+
+    // Get framework context for system prompt display
+    const frameworkContext = await this.getFrameworkExecutionContext(prompt);
+
+    // Display framework system prompt prominently at the top (guides the approach)
+    // Only if enableSystemPromptInjection is true in config
+    const frameworksConfig = this.configManager.getFrameworksConfig();
+    if (frameworksConfig.enableSystemPromptInjection &&
+        frameworkContext &&
+        frameworkContext.systemPrompt) {
+      const frameworkGuidance = `---
+
+## 🎯 Framework Methodology Active
+
+**${frameworkContext.selectedFramework.name}:**
+
+${frameworkContext.systemPrompt}
+
+---
+
+`;
+      enhancedContent += frameworkGuidance;
+    }
+
+    // Add main content
+    enhancedContent += content;
+
+    // Add supplemental gate guidance at the bottom (post-execution review criteria)
+    const selectedGates = await this.getAdvancedGateSelection(prompt, 'prompt');
+    const combinedGateIds = Array.from(
+      new Set([...(selectedGates || []), ...additionalGateIds.filter(Boolean)]),
+    );
+
+    if (combinedGateIds.length > 0) {
+      const temporaryGates = this.getTemporaryGatesFromPrompt(prompt);
+      const supplementalGuidance = await this.getSupplementalGateGuidance(
+        combinedGateIds,
+        frameworkContext,
+        prompt,
+        temporaryGates,
+        executionContext,
+        inlineGuidanceText
+      );
+      if (supplementalGuidance) {
+        enhancedContent += supplementalGuidance;
+      }
+    } else if (inlineGuidanceText) {
+      const inlineSection = [
+        '\n\n---\n\n## 🎯 Quality Enhancement Gates',
+        '\n\n**Post-Execution Review Guidelines:**',
+        'Review your output against these quality standards before finalizing your response.',
+        '\n\n### 🎯 **Inline Quality Criteria** (PRIMARY VALIDATION)\n',
+        inlineGuidanceText,
+        '\n\n---',
+      ].join('');
+      enhancedContent += inlineSection;
+    }
+
+    return enhancedContent;
+  }
+
+  /**
    * NEW: Execute basic prompt with simple variable substitution (fastest)
    * No framework processing, minimal overhead
    */
@@ -1503,7 +2728,8 @@ export class ConsolidatedPromptEngine {
     executionContext?: {
       scopeId?: string;
       scope?: 'execution' | 'session' | 'chain' | 'step';
-    }
+    },
+    inlineGateOp?: GateOperator
   ): Promise<ToolResponse> {
     if (!this.currentExecutionState) {
       throw new PromptError("No execution state available");
@@ -1511,11 +2737,8 @@ export class ConsolidatedPromptEngine {
 
     this.currentExecutionState.status = "running";
 
-    // Simple template processing without framework enhancement
+    // Simple template processing - system message handled separately for visibility
     let content = prompt.userMessageTemplate;
-    if (prompt.systemMessage) {
-      content = `[System: ${prompt.systemMessage}]\n\n${content}`;
-    }
 
     // Phase 4: Enhanced args without gate injection (gates now appended at end)
     const enhancedArgs = args;
@@ -1525,6 +2748,17 @@ export class ConsolidatedPromptEngine {
 
     // Fast variable substitution using modern template processor
     content = processTemplate(content, sessionEnhancedArgs, {});
+
+    const inlineGateIds = inlineGateOp
+      ? await this.preRegisterInlineGateForPrompt(
+          inlineGateOp,
+          executionContext?.scopeId || prompt.id,
+        )
+      : [];
+
+    const inlineGuidanceText = inlineGateOp
+      ? this.gateOperatorExecutor.generateGuidance(inlineGateOp.parsedCriteria)
+      : undefined;
 
     // Phase 4: Enhanced gate validation for basic prompts (only when framework system is enabled)
     let gateResults: GateValidationResult | null = null;
@@ -1584,59 +2818,14 @@ export class ConsolidatedPromptEngine {
       success: true,
     };
 
-    // FIXED: Add supplemental gate guidance for prompt mode (same as template mode)
-    let enhancedContent = content;
-    this.logger.info(`🔍 [DEBUG] Gate conditional logic:`, {
-      hasGateResults: !!gateResults,
-      gateResultsValue: gateResults,
-      willExecuteIfBranch: !!gateResults,
-      willExecuteElseBranch: !gateResults
-    });
-
-    if (gateResults) {
-      this.logger.info(`🔀 [DEBUG] Taking IF branch (gateResults exists)`);
-
-      // Get selected gates from validation - basic prompts use 'prompt' mode gates
-      const selectedGates = await this.getAdvancedGateSelection(prompt, 'prompt');
-      const frameworkContext = await this.getFrameworkExecutionContext(prompt);
-
-      if (selectedGates.length > 0) {
-        const temporaryGates = this.getTemporaryGatesFromPrompt(prompt);
-        const supplementalGuidance = await this.getSupplementalGateGuidance(
-          selectedGates,
-          frameworkContext,
-          prompt,
-          temporaryGates,
-          executionContext
-        );
-        if (supplementalGuidance) {
-          enhancedContent = content + supplementalGuidance;
-        }
-      }
-    } else {
-      this.logger.info(`🔀 [DEBUG] Taking ELSE branch (no gateResults) - this should call our gate guidance renderer`);
-      // TEMP TEST: Force gate guidance even without validation results
-      const testGates = ['framework-compliance', 'educational-clarity'];
-      const frameworkContext = await this.getFrameworkExecutionContext(prompt);
-      const temporaryGates = this.getTemporaryGatesFromPrompt(prompt);
-
-      const supplementalGuidance = await this.getSupplementalGateGuidance(
-        testGates,
-        frameworkContext,
-        prompt,
-        temporaryGates,
-        executionContext
-      );
-      if (supplementalGuidance) {
-        enhancedContent = content + supplementalGuidance;
-      } else {
-        enhancedContent = content + "(Gate manager returned empty guidance)";
-      }
-    }
-
-    if (this.activeGateRequest) {
-      enhancedContent += this.formatGateStatus(gateResults);
-    }
+    // Build enhanced content with framework guidance and gate guidance using shared method
+    const enhancedContent = await this.enhancePromptContent(
+      content,
+      prompt,
+      executionContext,
+      inlineGateIds,
+      inlineGuidanceText
+    );
 
     // Format response with structured data
     const executionWarning = `⚠️ EXECUTION REQUIRED: The following content contains instructions that YOU must interpret and execute:\n\n`;
@@ -1813,7 +3002,7 @@ export class ConsolidatedPromptEngine {
     // Process template with framework-enhanced system prompt injection
     let content = prompt.userMessageTemplate;
 
-    // FIXED: Get framework execution context for enhanced system prompt
+    // Get framework execution context - will be displayed separately for visibility
     const frameworkContext = await this.getFrameworkExecutionContext(prompt);
     this.logger.debug(`[ENGINE DEBUG] Framework context result:`, {
       hasFrameworkContext: !!frameworkContext,
@@ -1821,29 +3010,6 @@ export class ConsolidatedPromptEngine {
       hasSystemPrompt: frameworkContext?.systemPrompt ? true : false,
       systemPromptLength: frameworkContext?.systemPrompt?.length || 0
     });
-
-    if (prompt.systemMessage || frameworkContext) {
-      let systemPrompt = prompt.systemMessage || "";
-
-      // FIXED: Enhance with framework-specific system prompt if available
-      if (frameworkContext) {
-        const frameworkSystemPrompt = frameworkContext.systemPrompt;
-        this.logger.debug(`[ENGINE DEBUG] Framework system prompt:`, {
-          hasFrameworkSystemPrompt: !!frameworkSystemPrompt,
-          frameworkSystemPromptLength: frameworkSystemPrompt?.length || 0,
-          frameworkSystemPromptPreview: frameworkSystemPrompt?.substring(0, 100) + '...'
-        });
-        if (frameworkSystemPrompt) {
-          systemPrompt = systemPrompt
-            ? `${frameworkSystemPrompt}\n\n${systemPrompt}`
-            : frameworkSystemPrompt;
-        }
-      }
-
-      if (systemPrompt) {
-        content = `[System: ${systemPrompt}]\n\n${content}`;
-      }
-    }
 
     // Phase 4: Enhanced args without gate injection (gates now appended at end)
     const enhancedArgs = args;
@@ -1940,10 +3106,34 @@ export class ConsolidatedPromptEngine {
       success: true,
     };
 
-    // Phase 4: Append supplemental gate guidance to content
-    let enhancedContent = content;
+    // Build enhanced content with framework guidance and gate guidance
+    let enhancedContent = "";
 
-    if (gateResults && selectedGates.length > 0) {
+    // Display framework system prompt prominently at the top (guides the approach)
+    // Only if enableSystemPromptInjection is true in config
+    const frameworksConfig = this.configManager.getFrameworksConfig();
+    if (frameworksConfig.enableSystemPromptInjection &&
+        frameworkContext &&
+        frameworkContext.systemPrompt) {
+      const frameworkGuidance = `---
+
+## 🎯 Framework Methodology Active
+
+**${frameworkContext.selectedFramework.name}:**
+
+${frameworkContext.systemPrompt}
+
+---
+
+`;
+      enhancedContent += frameworkGuidance;
+    }
+
+    // Add main content
+    enhancedContent += content;
+
+    // Add supplemental gate guidance at the bottom (post-execution review criteria)
+    if (selectedGates.length > 0) {
       const temporaryGates = this.getTemporaryGatesFromPrompt(prompt);
       const supplementalGuidance = await this.getSupplementalGateGuidance(
         selectedGates,
@@ -1953,28 +3143,8 @@ export class ConsolidatedPromptEngine {
         executionContext
       );
       if (supplementalGuidance) {
-        enhancedContent = content + supplementalGuidance;
+        enhancedContent += supplementalGuidance;
       }
-    } else {
-      // TEMP TEST: Force gate guidance even without validation results (same as executePrompt)
-      const testGates = ['framework-compliance', 'educational-clarity'];
-      const temporaryGates = this.getTemporaryGatesFromPrompt(prompt);
-      const supplementalGuidance = await this.getSupplementalGateGuidance(
-        testGates,
-        frameworkContext,
-        prompt,
-        temporaryGates,
-        executionContext
-      );
-      if (supplementalGuidance) {
-        enhancedContent = enhancedContent + supplementalGuidance;
-      } else {
-        enhancedContent = enhancedContent + `\n--- GATE MANAGER RETURNED EMPTY ---\n`;
-      }
-    }
-
-    if (this.activeGateRequest) {
-      enhancedContent += this.formatGateStatus(gateResults);
     }
 
     // Format response with structured data
@@ -2006,7 +3176,8 @@ export class ConsolidatedPromptEngine {
     executionContext?: {
       scopeId?: string;
       scope?: 'execution' | 'session' | 'chain' | 'step';
-    }
+    },
+    inlineGuidanceText?: string
   ): Promise<string> {
     // Phase 1: Enhanced category detection
     let categoryExtractionResult: CategoryExtractionResult;
@@ -2110,14 +3281,24 @@ export class ConsolidatedPromptEngine {
     }
 
     if (finalSelectedGates.length === 0) {
-      this.logger.debug(`[GATE MANAGER] No gates selected after intelligent selection, returning empty guidance`);
+      this.logger.debug(`[GATE MANAGER] No gates selected after intelligent selection`);
+      if (inlineGuidanceText) {
+        return [
+          '\n\n---\n\n## 🎯 Quality Enhancement Gates',
+          '\n\n**Post-Execution Review Guidelines:**',
+          'Review your output against these quality standards before finalizing your response.',
+          '\n\n### 🎯 **Inline Quality Criteria** (PRIMARY VALIDATION)\n',
+          inlineGuidanceText,
+          '\n\n---',
+        ].join('');
+      }
       return '';
     }
 
     try {
 
       // NEW: Use role-based gate guidance renderer with intelligent category detection and gate selection (Phase 1 & 2)
-      const supplementalGuidance = await this.gateGuidanceRenderer.renderGuidance(
+      let supplementalGuidance = await this.gateGuidanceRenderer.renderGuidance(
         finalSelectedGates, // Use intelligently selected gates
         {
           framework: frameworkContext?.selectedFramework?.methodology || 'CAGEERF',
@@ -2125,6 +3306,24 @@ export class ConsolidatedPromptEngine {
           promptId: frameworkContext?.promptId
         }
       );
+
+      if (inlineGuidanceText && !supplementalGuidance.includes('Inline Quality Criteria')) {
+        if (supplementalGuidance.trim().length === 0) {
+          supplementalGuidance = [
+            '\n\n---\n\n## 🎯 Quality Enhancement Gates',
+            '\n\n**Post-Execution Review Guidelines:**',
+            'Review your output against these quality standards before finalizing your response.',
+            '\n\n### 🎯 **Inline Quality Criteria** (PRIMARY VALIDATION)\n',
+            inlineGuidanceText,
+            '\n\n---',
+          ].join('');
+        } else {
+          supplementalGuidance = supplementalGuidance.replace(
+            '## 🎯 Quality Enhancement Gates',
+            `## 🎯 Quality Enhancement Gates\n\n### 🎯 **Inline Quality Criteria** (PRIMARY VALIDATION)\n${inlineGuidanceText}\n`,
+          );
+        }
+      }
 
       this.logger.debug(`[GATE GUIDANCE RENDERER] Gate guidance renderer returned guidance:`, {
         guidanceLength: supplementalGuidance.length,
@@ -2593,16 +3792,12 @@ export class ConsolidatedPromptEngine {
   private handleError(error: unknown, context: string): ToolResponse {
     utilsHandleError(error, context, this.logger);
 
-    return this.responseFormatter.formatErrorResponse(
-      error instanceof Error ? error : String(error),
-      {
-        tool: "prompt_engine",
-        operation: context,
-      },
-      {
-        includeStructuredData: true,
-      }
-    );
+    const message =
+      error instanceof Error
+        ? `Error in ${context}: ${error.message}`
+        : `Error in ${context}: ${String(error)}`;
+
+    return this.responseFormatter.formatErrorResponse(message);
   }
 
   // REMOVED: executeChainWithDualSupport - migrated to ChainExecutor
@@ -2675,4 +3870,19 @@ export function createConsolidatedPromptEngine(
   logger.info("- Backward compatibility with legacy parsing");
 
   return engine;
+}
+
+/**
+ * Cleanup helper function for test convenience
+ * Safely cleans up a ConsolidatedPromptEngine instance
+ */
+export async function cleanupPromptEngine(engine: ConsolidatedPromptEngine): Promise<void> {
+  if (engine && 'cleanup' in engine && typeof engine.cleanup === 'function') {
+    try {
+      await engine.cleanup();
+    } catch (error) {
+      // Log error but don't throw to prevent test failures
+      console.error('Error cleaning up prompt engine:', error);
+    }
+  }
 }

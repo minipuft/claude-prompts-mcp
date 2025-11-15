@@ -388,7 +388,9 @@ export class GateValidator {
     }
 
     // Add gate-specific guidance as a hint
-    if (gate.guidance) {
+    // Skip for inline gates - criteria already displayed prominently in "Inline Quality Criteria" section
+    const isInlineGate = gate.name?.includes('Inline Quality') || gate.id?.startsWith('temp_');
+    if (gate.guidance && !isInlineGate) {
       hints.push(`Remember the ${gate.name} guidelines:\n${gate.guidance}`);
     }
 

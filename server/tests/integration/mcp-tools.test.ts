@@ -65,7 +65,8 @@ describe('Consolidated MCP Tools Integration', () => {
       },
       setTextReferenceManager: (manager: any) => {
         // Mock implementation for text reference manager integration
-      }
+      },
+      setChainState: () => {}
     };
 
     const mockTextReferenceManager = {
@@ -78,7 +79,11 @@ describe('Consolidated MCP Tools Integration', () => {
       getStepResult: (stepId: string) => {
         // Mock implementation returns null for non-existent steps
         return null;
-      }
+      },
+      storeChainStepResult: () => {},
+      getChainStepResult: () => null,
+      getChainStepMetadata: () => null,
+      buildChainVariables: () => ({})
     };
 
     const mockMcpToolsManager = {
@@ -125,7 +130,12 @@ describe('Consolidated MCP Tools Integration', () => {
     mockMcpServer.tool('system_control', 'Framework and system management', { type: 'object' });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Cleanup prompt engine to prevent async handle leaks
+    if (promptEngine) {
+      await cleanupPromptEngine(promptEngine);
+    }
+    
     logger.clear();
     mockMcpServer.clear();
   });
@@ -216,9 +226,14 @@ describe('Consolidated MCP Tools Integration', () => {
         const minimalSemanticAnalyzer = { analyzePrompt: () => Promise.resolve({ executionType: 'prompt' }) };
         const minimalConversationManager = {
           setChainSessionManager: () => {},
-          setTextReferenceManager: () => {}
+          setTextReferenceManager: () => {},
+          setChainState: () => {}
         };
-        const minimalTextReferenceManager = { saveStepResult: () => {}, getStepResult: () => null };
+        const minimalTextReferenceManager = {
+          saveStepResult: () => {},
+          getStepResult: () => null,
+          getChainStepMetadata: () => null
+        };
 
         createConsolidatedPromptEngine(
           minimalLogger as any,
@@ -237,6 +252,22 @@ describe('Consolidated MCP Tools Integration', () => {
       expect(promptEngine).toBeDefined();
       expect(promptManager).toBeDefined();
       expect(systemControl).toBeDefined();
+    });
+
+    test('should reject conflicting force_restart and session_id parameters', async () => {
+      // Test the prompt engine with conflicting parameters
+      const result = await promptEngine.executePromptCommand({
+        command: '>>analyze_code test code',
+        force_restart: true,
+        session_id: 'test-session-123'
+      }, {});
+
+      expect(result.isError).toBe(true);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].type).toBe('text');
+      expect(result.content[0].text).toContain('Conflicting parameters detected');
+      expect(result.content[0].text).toContain('force_restart=true');
+      expect(result.content[0].text).toContain('session_id');
     });
   });
 

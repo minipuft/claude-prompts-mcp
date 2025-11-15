@@ -8,6 +8,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { Logger } from '../../logging/index.js';
 import type { LightweightGateDefinition, GateActivationResult } from '../types.js';
+import type { TemporaryGateRegistry } from './temporary-gate-registry.js';
 
 /**
  * Gate loader with caching and hot-reload support
@@ -17,13 +18,19 @@ export class GateLoader {
   private lastModified = new Map<string, number>();
   private logger: Logger;
   private gatesDirectory: string;
+  private temporaryGateRegistry?: TemporaryGateRegistry;
 
-  constructor(logger: Logger, gatesDirectory?: string) {
+  constructor(logger: Logger, gatesDirectory?: string, temporaryGateRegistry?: TemporaryGateRegistry) {
     this.logger = logger;
     // Use import.meta.url to get current directory in ES modules
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     this.gatesDirectory = gatesDirectory || path.join(__dirname, '../../gates/definitions');
+    this.temporaryGateRegistry = temporaryGateRegistry;
+  }
+
+  setTemporaryGateRegistry(temporaryGateRegistry?: TemporaryGateRegistry): void {
+    this.temporaryGateRegistry = temporaryGateRegistry;
   }
 
   /**
@@ -31,6 +38,15 @@ export class GateLoader {
    */
   async loadGate(gateId: string): Promise<LightweightGateDefinition | null> {
     try {
+      const tempGate = this.temporaryGateRegistry?.getTemporaryGate(gateId);
+      if (tempGate) {
+        const lightweight = this.temporaryGateRegistry?.convertToLightweightGate(tempGate);
+        if (lightweight) {
+          this.gateCache.set(gateId, lightweight);
+          return lightweight;
+        }
+      }
+
       const gateFile = await this.findGateFile(gateId);
       if (!gateFile) {
         this.logger.warn(`Gate definition not found: ${gateId}`);
@@ -255,6 +271,10 @@ export class GateLoader {
 /**
  * Create a gate loader instance
  */
-export function createGateLoader(logger: Logger, gatesDirectory?: string): GateLoader {
-  return new GateLoader(logger, gatesDirectory);
+export function createGateLoader(
+  logger: Logger,
+  gatesDirectory?: string,
+  temporaryGateRegistry?: TemporaryGateRegistry
+): GateLoader {
+  return new GateLoader(logger, gatesDirectory, temporaryGateRegistry);
 }
