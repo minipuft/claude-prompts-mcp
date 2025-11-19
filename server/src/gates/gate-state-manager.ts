@@ -1,3 +1,4 @@
+// @lifecycle canonical - Persists gate enable/disable state across runtime.
 /**
  * Gate System Manager - Runtime State Management
  *
@@ -6,8 +7,9 @@
  */
 
 import { EventEmitter } from 'events';
-import path from 'path';
-import fs from 'fs/promises';
+import * as path from 'node:path';
+import * as fs from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { Logger } from '../logging/index.js';
 
 /**
@@ -84,9 +86,16 @@ export class GateSystemManager extends EventEmitter {
       }
     };
 
-    // Set up state file path
-    const baseDir = stateDirectory || path.join(process.cwd(), 'runtime-state');
-    this.stateFilePath = path.join(baseDir, 'gate-system-state.json');
+    // Set up state file path (default to server runtime-state resolving from module location)
+    const resolvedBaseDir =
+      stateDirectory ||
+      path.join(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        'runtime-state'
+      );
+    this.stateFilePath = path.join(path.resolve(resolvedBaseDir), 'gate-system-state.json');
 
     this.logger.debug(`GateSystemManager initialized with state file: ${this.stateFilePath}`);
   }

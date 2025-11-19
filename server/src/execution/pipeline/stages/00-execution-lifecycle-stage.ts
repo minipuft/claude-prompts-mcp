@@ -1,0 +1,68 @@
+// @lifecycle canonical - Registers lifecycle cleanup handlers for each execution.
+import { randomUUID } from 'crypto';
+
+import { BasePipelineStage } from '../stage.js';
+
+import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
+import type { Logger } from '../../../logging/index.js';
+import type { ExecutionContext } from '../../context/execution-context.js';
+
+type CleanupHandler = () => void | Promise<void>;
+
+/**
+ * Canonical Pipeline Stage 0.3: Execution Lifecycle
+ *
+ * Establishes per-request scope identifiers and cleanup hooks so temporary
+ * gates, inline guidance, and other execution-scoped resources are removed
+ * once the pipeline completes.
+ */
+export class ExecutionLifecycleStage extends BasePipelineStage {
+  readonly name = 'ExecutionLifecycle';
+
+  constructor(
+    private readonly temporaryGateRegistry: TemporaryGateRegistry,
+    logger: Logger
+  ) {
+    super(logger);
+  }
+
+  async execute(context: ExecutionContext): Promise<void> {
+    this.logEntry(context);
+
+    const scopeId = this.resolveScopeId(context);
+    context.metadata['executionScopeId'] = scopeId;
+
+    const cleanupHandlers = this.ensureCleanupHandlers(context);
+    cleanupHandlers.push(async () => {
+      try {
+        this.temporaryGateRegistry.cleanupScope('execution', scopeId);
+      } catch (error) {
+        this.logger.warn('[ExecutionLifecycleStage] Failed to cleanup execution scope', {
+          scopeId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
+
+    context.metadata['executionStartTimestamp'] = Date.now();
+
+    this.logExit({ scopeId });
+  }
+
+  private ensureCleanupHandlers(context: ExecutionContext): CleanupHandler[] {
+    if (!Array.isArray(context.metadata['lifecycleCleanupHandlers'])) {
+      context.metadata['lifecycleCleanupHandlers'] = [];
+    }
+    return context.metadata['lifecycleCleanupHandlers'] as CleanupHandler[];
+  }
+
+  private resolveScopeId(context: ExecutionContext): string {
+    return (
+      (context.metadata['resumeSessionId'] as string | undefined) ??
+      context.mcpRequest.chain_id ??
+      (context.metadata['normalizedCommand'] as string | undefined) ??
+      context.mcpRequest.command ??
+      randomUUID()
+    );
+  }
+}

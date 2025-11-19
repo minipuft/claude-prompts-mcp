@@ -1,17 +1,19 @@
+// @lifecycle canonical - Collects performance metrics for MCP server.
 /**
  * Performance Monitoring System
- * 
+ *
  * Comprehensive performance tracking and optimization for the MCP server
  * Focuses on execution metrics, memory usage, and system health monitoring
  */
 
-import * as os from "os";
-import { Logger } from "../logging/index.js";
+import * as os from 'os';
+
+import { Logger } from '../logging/index.js';
 // REMOVED: ExecutionCoordinator - modular chain system removed
 
 export interface PerformanceMetrics {
   timestamp: number;
-  
+
   // Memory metrics
   memory: {
     heapUsed: number;
@@ -19,7 +21,7 @@ export interface PerformanceMetrics {
     external: number;
     rss: number;
   };
-  
+
   // Execution metrics
   execution: {
     totalExecutions: number;
@@ -27,14 +29,14 @@ export interface PerformanceMetrics {
     successRate: number;
     activeExecutions: number;
   };
-  
+
   // System metrics
   system: {
     uptime: number;
     cpuUsage: number[]; // [user percentage, system percentage]
     loadAverage: number[];
   };
-  
+
   // Chain-specific metrics
   chains: {
     activeChains: number;
@@ -66,21 +68,21 @@ export interface PerformanceAlert {
 export class PerformanceMonitor {
   private logger: Logger;
   // REMOVED: executionCoordinator - modular chain system removed
-  
+
   // Performance tracking
   private metricsHistory: PerformanceMetrics[] = [];
   private maxHistorySize = 1000; // Keep last 1000 measurements
   private monitoringInterval?: NodeJS.Timeout;
   private alertingCallbacks: ((alert: PerformanceAlert) => void)[] = [];
-  
+
   // Performance thresholds
   private thresholds: PerformanceThresholds = {
     memoryThreshold: 512, // MB
     executionTimeThreshold: 5000, // 5 seconds
     successRateThreshold: 95, // 95%
-    chainExecutionTimeThreshold: 30000 // 30 seconds
+    chainExecutionTimeThreshold: 30000, // 30 seconds
   };
-  
+
   // CPU tracking for delta calculation
   private previousCpuUsage: NodeJS.CpuUsage | null = null;
   private previousCpuTime = 0;
@@ -92,7 +94,7 @@ export class PerformanceMonitor {
 
   constructor(logger: Logger, thresholds?: Partial<PerformanceThresholds>) {
     this.logger = logger;
-    
+
     if (thresholds) {
       this.thresholds = { ...this.thresholds, ...thresholds };
     }
@@ -112,7 +114,9 @@ export class PerformanceMonitor {
       process.env.GITHUB_ACTIONS === 'true' ||
       process.env.CI === 'true' ||
       // Detect common test runner patterns
-      process.argv.some(arg => arg.includes('test') || arg.includes('jest') || arg.includes('mocha')) ||
+      process.argv.some(
+        (arg) => arg.includes('test') || arg.includes('jest') || arg.includes('mocha')
+      ) ||
       // Detect if called from integration test scripts
       process.argv[1]?.includes('tests/scripts/')
     );
@@ -122,14 +126,15 @@ export class PerformanceMonitor {
    * Start performance monitoring
    * SUPPRESSED in test environments to prevent hanging processes
    */
-  startMonitoring(intervalMs: number = 30000): void { // Default: 30 seconds
+  startMonitoring(intervalMs: number = 30000): void {
+    // Default: 30 seconds
     if (this.monitoringInterval) {
       this.stopMonitoring();
     }
 
     // Skip performance monitoring in test environments to prevent hanging processes
     if (this.isTestEnvironment()) {
-      this.logger.debug("Performance monitoring suppressed in test environment");
+      this.logger.debug('Performance monitoring suppressed in test environment');
       return;
     }
 
@@ -153,7 +158,7 @@ export class PerformanceMonitor {
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = undefined;
-      this.logger.info("Performance monitoring stopped");
+      this.logger.info('Performance monitoring stopped');
     }
   }
 
@@ -174,8 +179,8 @@ export class PerformanceMonitor {
 
       if (timeDelta > 0) {
         // Convert to percentages (microseconds to milliseconds, then percentage)
-        const userPercent = (userDelta / 1000) / timeDelta * 100;
-        const systemPercent = (systemDelta / 1000) / timeDelta * 100;
+        const userPercent = (userDelta / 1000 / timeDelta) * 100;
+        const systemPercent = (systemDelta / 1000 / timeDelta) * 100;
         cpuPercentage = [Math.min(userPercent, 100), Math.min(systemPercent, 100)];
       }
     }
@@ -189,10 +194,10 @@ export class PerformanceMonitor {
       totalExecutions: 0,
       averageExecutionTime: 0,
       successRate: 100,
-      activeExecutions: 0
+      activeExecutions: 0,
     };
-    
-    // REMOVED: ExecutionCoordinator metrics - execution handled by ConsolidatedPromptEngine
+
+    // REMOVED: ExecutionCoordinator metrics - execution handled by PromptExecutionService
     // Default execution metrics since ExecutionCoordinator removed
 
     const metrics: PerformanceMetrics = {
@@ -201,15 +206,15 @@ export class PerformanceMonitor {
         heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024), // MB
         heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024), // MB
         external: Math.round(memoryUsage.external / 1024 / 1024), // MB
-        rss: Math.round(memoryUsage.rss / 1024 / 1024) // MB
+        rss: Math.round(memoryUsage.rss / 1024 / 1024), // MB
       },
       execution: executionMetrics,
       system: {
         uptime: Math.round(process.uptime()),
         cpuUsage: cpuPercentage, // CPU percentage [user%, system%]
-        loadAverage: process.platform !== 'win32' ? os.loadavg() : [0, 0, 0]
+        loadAverage: process.platform !== 'win32' ? os.loadavg() : [0, 0, 0],
       },
-      chains: this.calculateChainMetrics()
+      chains: this.calculateChainMetrics(),
     };
 
     // Store metrics with history management
@@ -218,7 +223,9 @@ export class PerformanceMonitor {
       this.metricsHistory.shift();
     }
 
-    this.logger.debug(`Performance metrics collected - Memory: ${metrics.memory.heapUsed}MB, Executions: ${metrics.execution.totalExecutions}`);
+    this.logger.debug(
+      `Performance metrics collected - Memory: ${metrics.memory.heapUsed}MB, Executions: ${metrics.execution.totalExecutions}`
+    );
 
     return metrics;
   }
@@ -250,36 +257,41 @@ export class PerformanceMonitor {
   /**
    * Get performance summary over time period
    */
-  getPerformanceSummary(periodMs: number = 3600000): { // Default: 1 hour
-    averageMemory: number;
-    peakMemory: number;
-    averageExecutionTime: number;
-    totalExecutions: number;
-    successRate: number;
-    alertsGenerated: number;
-  } | undefined {
+  getPerformanceSummary(periodMs: number = 3600000):
+    | {
+        // Default: 1 hour
+        averageMemory: number;
+        peakMemory: number;
+        averageExecutionTime: number;
+        totalExecutions: number;
+        successRate: number;
+        alertsGenerated: number;
+      }
+    | undefined {
     const cutoffTime = Date.now() - periodMs;
-    const relevantMetrics = this.metricsHistory.filter(m => m.timestamp >= cutoffTime);
-    
+    const relevantMetrics = this.metricsHistory.filter((m) => m.timestamp >= cutoffTime);
+
     if (relevantMetrics.length === 0) {
       return undefined;
     }
 
-    const avgMemory = relevantMetrics.reduce((sum, m) => sum + m.memory.heapUsed, 0) / relevantMetrics.length;
-    const peakMemory = Math.max(...relevantMetrics.map(m => m.memory.heapUsed));
-    
+    const avgMemory =
+      relevantMetrics.reduce((sum, m) => sum + m.memory.heapUsed, 0) / relevantMetrics.length;
+    const peakMemory = Math.max(...relevantMetrics.map((m) => m.memory.heapUsed));
+
     const latestMetrics = relevantMetrics[relevantMetrics.length - 1];
     const earliestMetrics = relevantMetrics[0];
-    
-    const totalExecutions = latestMetrics.execution.totalExecutions - earliestMetrics.execution.totalExecutions;
-    
+
+    const totalExecutions =
+      latestMetrics.execution.totalExecutions - earliestMetrics.execution.totalExecutions;
+
     return {
       averageMemory: Math.round(avgMemory),
       peakMemory,
       averageExecutionTime: latestMetrics.execution.averageExecutionTime,
       totalExecutions,
       successRate: latestMetrics.execution.successRate,
-      alertsGenerated: 0 // Could be implemented with alert history
+      alertsGenerated: 0, // Could be implemented with alert history
     };
   }
 
@@ -293,12 +305,12 @@ export class PerformanceMonitor {
     const beforeMemory = process.memoryUsage().heapUsed;
     const optimizations: string[] = [];
 
-    this.logger.info("Starting performance optimization");
+    this.logger.info('Starting performance optimization');
 
     // 1. Trigger garbage collection if available
     if (global.gc) {
       global.gc();
-      optimizations.push("Garbage collection executed");
+      optimizations.push('Garbage collection executed');
     }
 
     // REMOVED: Execution history cleanup - ExecutionCoordinator removed
@@ -316,11 +328,13 @@ export class PerformanceMonitor {
     this.lastOptimization = Date.now();
     this.optimizationScheduled = false;
 
-    this.logger.info(`Performance optimization completed - ${optimizations.length} optimizations applied, ${Math.round(memoryFreed / 1024 / 1024)}MB freed`);
+    this.logger.info(
+      `Performance optimization completed - ${optimizations.length} optimizations applied, ${Math.round(memoryFreed / 1024 / 1024)}MB freed`
+    );
 
     return {
       memoryFreed: Math.round(memoryFreed / 1024 / 1024), // MB
-      optimizationsApplied: optimizations
+      optimizationsApplied: optimizations,
     };
   }
 
@@ -329,12 +343,12 @@ export class PerformanceMonitor {
    */
   private calculateChainMetrics(): PerformanceMetrics['chains'] {
     // REMOVED: ExecutionCoordinator chain metrics - using defaults
-    // Chain metrics now tracked by ConsolidatedPromptEngine if needed
+    // Chain metrics now tracked by PromptExecutionService if needed
     return {
       activeChains: 0,
       averageChainLength: 0,
       chainSuccessRate: 100,
-      averageChainExecutionTime: 0
+      averageChainExecutionTime: 0,
     };
   }
 
@@ -350,12 +364,14 @@ export class PerformanceMonitor {
     // Memory threshold check
     if (latest.memory.heapUsed > this.thresholds.memoryThreshold) {
       alerts.push({
-        level: latest.memory.heapUsed > this.thresholds.memoryThreshold * 1.5 ? 'critical' : 'warning',
+        level:
+          latest.memory.heapUsed > this.thresholds.memoryThreshold * 1.5 ? 'critical' : 'warning',
         category: 'memory',
         message: `High memory usage: ${latest.memory.heapUsed}MB (threshold: ${this.thresholds.memoryThreshold}MB)`,
         timestamp: latest.timestamp,
         metrics: { memory: latest.memory },
-        recommendation: 'Consider running performance optimization or reducing execution concurrency'
+        recommendation:
+          'Consider running performance optimization or reducing execution concurrency',
       });
     }
 
@@ -367,7 +383,7 @@ export class PerformanceMonitor {
         message: `Slow execution times: ${latest.execution.averageExecutionTime}ms average (threshold: ${this.thresholds.executionTimeThreshold}ms)`,
         timestamp: latest.timestamp,
         metrics: { execution: latest.execution },
-        recommendation: 'Review prompt complexity and chain configurations'
+        recommendation: 'Review prompt complexity and chain configurations',
       });
     }
 
@@ -379,7 +395,7 @@ export class PerformanceMonitor {
         message: `Low success rate: ${latest.execution.successRate.toFixed(1)}% (threshold: ${this.thresholds.successRateThreshold}%)`,
         timestamp: latest.timestamp,
         metrics: { execution: latest.execution },
-        recommendation: 'Investigate execution failures and improve error handling'
+        recommendation: 'Investigate execution failures and improve error handling',
       });
     }
 
@@ -391,14 +407,14 @@ export class PerformanceMonitor {
         message: `Slow chain execution: ${latest.chains.averageChainExecutionTime}ms average (threshold: ${this.thresholds.chainExecutionTimeThreshold}ms)`,
         timestamp: latest.timestamp,
         metrics: { chains: latest.chains },
-        recommendation: 'Optimize chain steps and reduce chain complexity'
+        recommendation: 'Optimize chain steps and reduce chain complexity',
       });
     }
 
     // Send alerts
-    alerts.forEach(alert => {
+    alerts.forEach((alert) => {
       this.logger.warn(`Performance alert [${alert.level}]: ${alert.message}`);
-      this.alertingCallbacks.forEach(callback => callback(alert));
+      this.alertingCallbacks.forEach((callback) => callback(alert));
     });
   }
 
@@ -407,29 +423,28 @@ export class PerformanceMonitor {
    */
   private scheduleOptimization(): void {
     if (this.optimizationScheduled) return;
-    
+
     const timeSinceLastOptimization = Date.now() - this.lastOptimization;
     const latest = this.getLatestMetrics();
-    
+
     if (!latest) return;
-    
+
     // Schedule optimization if:
     // 1. It's been long enough since last optimization
     // 2. Memory usage is high
     // 3. Execution history is large
-    const shouldOptimize = (
+    const shouldOptimize =
       timeSinceLastOptimization > this.optimizationInterval ||
-      latest.memory.heapUsed > this.thresholds.memoryThreshold * 0.8
-      // REMOVED: Execution history check - ExecutionCoordinator removed
-    );
-    
+      latest.memory.heapUsed > this.thresholds.memoryThreshold * 0.8;
+    // REMOVED: Execution history check - ExecutionCoordinator removed
+
     if (shouldOptimize) {
       this.optimizationScheduled = true;
-      
+
       // Schedule optimization in next tick to avoid blocking current operations
       setImmediate(() => {
-        this.optimizePerformance().catch(error => {
-          this.logger.error("Performance optimization failed:", error);
+        this.optimizePerformance().catch((error) => {
+          this.logger.error('Performance optimization failed:', error);
           this.optimizationScheduled = false;
         });
       });
@@ -441,7 +456,7 @@ export class PerformanceMonitor {
  * Factory function to create a performance monitor
  */
 export function createPerformanceMonitor(
-  logger: Logger, 
+  logger: Logger,
   thresholds?: Partial<PerformanceThresholds>
 ): PerformanceMonitor {
   return new PerformanceMonitor(logger, thresholds);

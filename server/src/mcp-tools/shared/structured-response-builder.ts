@@ -1,3 +1,4 @@
+// @lifecycle canonical - Builds structured MCP responses for tools.
 /**
  * Unified MCP Structured Response Builder
  *
@@ -8,8 +9,8 @@
  * when they declare an outputSchema, as required by MCP protocol.
  */
 
-import { ToolResponse } from "../../types/index.js";
-import { ErrorContext } from "../types/shared-types.js";
+import type { ToolResponse } from '../../types/index.js';
+import type { ErrorContext } from '../types/shared-types.js';
 
 /**
  * Metadata for creating structured responses
@@ -17,42 +18,34 @@ import { ErrorContext } from "../types/shared-types.js";
 export interface ResponseMetadata {
   /** Tool name (prompt_manager, prompt_engine, system_control) */
   tool: string;
-
   /** Operation being performed (create, update, delete, execute, etc.) */
   operation: string;
-
   /** Type of execution for this operation */
-  executionType?: "prompt" | "template" | "chain";
-
+  executionType?: 'prompt' | 'template' | 'chain';
   /** Execution time in milliseconds */
   executionTime?: number;
-
   /** Whether framework processing was enabled */
   frameworkEnabled?: boolean;
-
   /** Framework that was used (if any) */
   frameworkUsed?: string;
-
   /** Number of steps executed (for chain operations) */
   stepsExecuted?: number;
-
   /** Session ID for tracking related operations */
   sessionId?: string;
-
   /** Tool-specific operation data */
   operationData?: Record<string, any>;
-
   /** Analytics data to include */
-  analytics?: {
-    totalExecutions: number;
-    successRate: number;
-    averageExecutionTime: number;
-    frameworkSwitches?: number;
-    gateValidationCount?: number;
-    errorCount?: number;
-    uptime: number;
-  } | Record<string, any>;
-
+  analytics?:
+    | {
+        totalExecutions: number;
+        successRate: number;
+        averageExecutionTime: number;
+        frameworkSwitches?: number;
+        gateValidationCount?: number;
+        errorCount?: number;
+        uptime: number;
+      }
+    | Record<string, any>;
   /** Gate validation results */
   gateValidation?: {
     enabled: boolean;
@@ -81,41 +74,39 @@ export class StructuredResponseBuilder {
     const executionId = `${metadata.tool.toLowerCase()}-${metadata.operation}-${startTime}`;
 
     const response: ToolResponse = {
-      content: [{ type: "text", text: content }],
+      content: [{ type: 'text', text: content }],
       isError: false,
       structuredContent: {
         executionMetadata: {
           executionId,
-          executionType: metadata.executionType || "prompt",
+          executionType: metadata.executionType || 'prompt',
           startTime,
           endTime: startTime + (metadata.executionTime || 0),
           executionTime: metadata.executionTime || 0,
           frameworkEnabled: metadata.frameworkEnabled || false,
           frameworkUsed: metadata.frameworkUsed,
           stepsExecuted: metadata.stepsExecuted,
-          sessionId: metadata.sessionId
-        }
-      }
+          sessionId: metadata.sessionId,
+        },
+      },
     };
 
-    // Add optional structured content fields
     if (metadata.analytics) {
-      response.structuredContent!.analytics = metadata.analytics as any;
+      response.structuredContent!.analytics = metadata.analytics;
     }
 
     if (metadata.gateValidation) {
       response.structuredContent!.gateValidation = metadata.gateValidation;
     }
 
-    // Add tool-specific operation data
     if (metadata.operationData) {
       response.structuredContent = {
         ...response.structuredContent,
         operationData: {
           tool: metadata.tool,
           operation: metadata.operation,
-          ...metadata.operationData
-        }
+          ...metadata.operationData,
+        },
       };
     }
 
@@ -132,28 +123,28 @@ export class StructuredResponseBuilder {
     const errorMessage = error instanceof Error ? error.message : error;
 
     return {
-      content: [{ type: "text", text: `Error: ${errorMessage}` }],
+      content: [{ type: 'text', text: `Error: ${errorMessage}` }],
       isError: true,
       structuredContent: {
         executionMetadata: {
           executionId,
-          executionType: "prompt",
+          executionType: 'prompt',
           startTime: timestamp,
           endTime: timestamp,
           executionTime: 0,
-          frameworkEnabled: false
+          frameworkEnabled: false,
         },
         errorInfo: {
-          errorCode: toolName.toUpperCase() + "_ERROR",
-          errorType: context.errorType || "system",
+          errorCode: `${toolName.toUpperCase()}_ERROR`,
+          errorType: context.errorType || 'system',
           message: errorMessage,
           details: context.details,
           timestamp,
-          severity: context.severity || "medium",
+          severity: context.severity || 'medium',
           suggestedActions: context.suggestedActions,
-          relatedComponents: context.relatedComponents
-        }
-      }
+          relatedComponents: context.relatedComponents,
+        },
+      },
     };
   }
 
@@ -164,8 +155,8 @@ export class StructuredResponseBuilder {
     return this.createToolResponse(content, {
       tool,
       operation,
-      executionType: "prompt",
-      frameworkEnabled: false
+      executionType: 'prompt',
+      frameworkEnabled: false,
     });
   }
 
@@ -183,26 +174,24 @@ export class StructuredResponseBuilder {
     },
     includeStructuredContent: boolean = false
   ): ToolResponse {
-    // Return simple text response by default for Claude Code visibility
     if (!includeStructuredContent) {
       return {
-        content: [{ type: "text", text: content }],
-        isError: false
+        content: [{ type: 'text', text: content }],
+        isError: false,
       };
     }
 
-    // Include structured metadata when explicitly requested
     return this.createToolResponse(content, {
-      tool: "prompt_manager",
+      tool: 'prompt_manager',
       operation,
-      executionType: "prompt",
+      executionType: 'prompt',
       frameworkEnabled: false,
       operationData: {
         promptId: promptData?.promptId,
         category: promptData?.category,
         analysisResult: promptData?.analysisResult,
-        affectedFiles: promptData?.affectedFiles
-      }
+        affectedFiles: promptData?.affectedFiles,
+      },
     });
   }
 
@@ -213,7 +202,7 @@ export class StructuredResponseBuilder {
     content: string,
     operation: string,
     executionData?: {
-      executionType?: "prompt" | "template" | "chain";
+      executionType?: 'prompt' | 'template' | 'chain';
       executionTime?: number;
       frameworkUsed?: string;
       stepsExecuted?: number;
@@ -222,25 +211,23 @@ export class StructuredResponseBuilder {
     },
     includeStructuredContent: boolean = true
   ): ToolResponse {
-    // For template/prompt execution, return simple text response so Claude Code can see instructions
     if (!includeStructuredContent) {
       return {
-        content: [{ type: "text", text: content }],
-        isError: false
+        content: [{ type: 'text', text: content }],
+        isError: false,
       };
     }
 
-    // For other operations (chains, etc.), include full structured metadata
     return this.createToolResponse(content, {
-      tool: "prompt_engine",
+      tool: 'prompt_engine',
       operation,
-      executionType: executionData?.executionType || "prompt",
+      executionType: executionData?.executionType || 'prompt',
       executionTime: executionData?.executionTime,
       frameworkEnabled: !!executionData?.frameworkUsed,
       frameworkUsed: executionData?.frameworkUsed,
       stepsExecuted: executionData?.stepsExecuted,
       sessionId: executionData?.sessionId,
-      gateValidation: executionData?.gateResults
+      gateValidation: executionData?.gateResults,
     });
   }
 
@@ -258,31 +245,29 @@ export class StructuredResponseBuilder {
     },
     includeStructuredContent: boolean = false
   ): ToolResponse {
-    // Return simple text response by default for Claude Code visibility
     if (!includeStructuredContent) {
       return {
-        content: [{ type: "text", text: content }],
-        isError: false
+        content: [{ type: 'text', text: content }],
+        isError: false,
       };
     }
 
-    // Include structured metadata when explicitly requested
     return this.createToolResponse(content, {
-      tool: "system_control",
+      tool: 'system_control',
       operation,
-      executionType: "prompt",
+      executionType: 'prompt',
       frameworkEnabled: true,
       analytics: systemData?.analytics,
       operationData: {
         frameworkState: systemData?.frameworkState,
         systemHealth: systemData?.systemHealth,
-        configChanges: systemData?.configChanges
-      }
+        configChanges: systemData?.configChanges,
+      },
     });
   }
 }
 
-// Export convenience functions for easier usage (using function wrappers to avoid class reference timing issues)
+// Export convenience functions for easier usage (using wrappers to avoid class reference timing issues)
 export function createToolResponse(content: string, metadata: ResponseMetadata): ToolResponse {
   return StructuredResponseBuilder.createToolResponse(content, metadata);
 }
@@ -291,7 +276,11 @@ export function createErrorResponse(error: Error | string, context: ErrorContext
   return StructuredResponseBuilder.createErrorResponse(error, context);
 }
 
-export function createSimpleResponse(content: string, tool: string, operation: string): ToolResponse {
+export function createSimpleResponse(
+  content: string,
+  tool: string,
+  operation: string
+): ToolResponse {
   return StructuredResponseBuilder.createSimpleResponse(content, tool, operation);
 }
 
@@ -306,14 +295,19 @@ export function createPromptResponse(
   },
   includeStructuredContent: boolean = false
 ): ToolResponse {
-  return StructuredResponseBuilder.createPromptResponse(content, operation, promptData, includeStructuredContent);
+  return StructuredResponseBuilder.createPromptResponse(
+    content,
+    operation,
+    promptData,
+    includeStructuredContent
+  );
 }
 
 export function createExecutionResponse(
   content: string,
   operation: string,
   executionData?: {
-    executionType?: "prompt" | "template" | "chain";
+    executionType?: 'prompt' | 'template' | 'chain';
     executionTime?: number;
     frameworkUsed?: string;
     stepsExecuted?: number;
@@ -322,7 +316,12 @@ export function createExecutionResponse(
   },
   includeStructuredContent: boolean = true
 ): ToolResponse {
-  return StructuredResponseBuilder.createExecutionResponse(content, operation, executionData, includeStructuredContent);
+  return StructuredResponseBuilder.createExecutionResponse(
+    content,
+    operation,
+    executionData,
+    includeStructuredContent
+  );
 }
 
 export function createSystemResponse(
@@ -336,5 +335,10 @@ export function createSystemResponse(
   },
   includeStructuredContent: boolean = false
 ): ToolResponse {
-  return StructuredResponseBuilder.createSystemResponse(content, operation, systemData, includeStructuredContent);
+  return StructuredResponseBuilder.createSystemResponse(
+    content,
+    operation,
+    systemData,
+    includeStructuredContent
+  );
 }

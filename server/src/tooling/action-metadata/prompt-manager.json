@@ -1,0 +1,183 @@
+{
+  "tool": "prompt_manager",
+  "version": 2,
+  "notes": [
+    "Inventory generated automatically from action descriptors.",
+    "create/create_prompt/create_template share identical paths and are candidates for consolidation once guides are live.",
+    "modify/migrate_type/suggest_temporary_gates remain high-risk entry points pending guide instrumentation."
+  ],
+  "actions": [
+    {
+      "id": "create",
+      "displayName": "Create Prompt (auto)",
+      "category": "lifecycle",
+      "status": "working",
+      "requiredArgs": [
+        "id",
+        "name",
+        "description",
+        "user_message_template"
+      ],
+      "description": "Create or overwrite a prompt, allowing gate_configuration inline.",
+      "issues": []
+    },
+    {
+      "id": "create_prompt",
+      "displayName": "Create Prompt (explicit)",
+      "category": "lifecycle",
+      "status": "deprecated",
+      "requiredArgs": [
+        "id",
+        "name",
+        "description",
+        "user_message_template"
+      ],
+      "description": "Same as create but forces prompt tier.",
+      "issues": [
+        {
+          "severity": "info",
+          "summary": "Redundant with create",
+          "details": "Separate verb kept for backwards compatibility; candidate for consolidation."
+        }
+      ]
+    },
+    {
+      "id": "create_template",
+      "displayName": "Create Template",
+      "category": "lifecycle",
+      "status": "deprecated",
+      "requiredArgs": [
+        "id",
+        "name",
+        "description",
+        "user_message_template"
+      ],
+      "description": "Creates framework-heavy templates; duplicates create path.",
+      "issues": [
+        {
+          "severity": "info",
+          "summary": "Potentially redundant",
+          "details": "Should merge into create once guides steer authors toward template usage."
+        }
+      ]
+    },
+    {
+      "id": "update",
+      "displayName": "Update Prompt",
+      "category": "lifecycle",
+      "status": "working",
+      "requiredArgs": [
+        "id"
+      ],
+      "description": "Full metadata replacement including gate_configuration."
+    },
+    {
+      "id": "delete",
+      "displayName": "Delete Prompt",
+      "category": "lifecycle",
+      "status": "working",
+      "requiredArgs": [
+        "id"
+      ],
+      "description": "Removes prompt and cleans empty categories."
+    },
+    {
+      "id": "list",
+      "displayName": "List Prompts",
+      "category": "discovery",
+      "status": "working",
+      "requiredArgs": [],
+      "description": "Filter/search interface powered by semantic analyzer."
+    },
+    {
+      "id": "reload",
+      "displayName": "Reload Prompts",
+      "category": "operations",
+      "status": "working",
+      "requiredArgs": [],
+      "description": "Hot reload or full restart of prompt registry."
+    },
+    {
+      "id": "modify",
+      "displayName": "Modify Section",
+      "category": "editing",
+      "status": "needs-structure",
+      "requiredArgs": [
+        "id",
+        "section_name",
+        "new_content"
+      ],
+      "description": "Targets a single metadata section.",
+      "issues": [
+        {
+          "severity": "warning",
+          "summary": "Section editing errors",
+          "details": "Fails with 'Missing required fields' even when payload includes documented keys; schema requires clarification."
+        }
+      ]
+    },
+    {
+      "id": "analyze_type",
+      "displayName": "Analyze Prompt Type",
+      "category": "analysis",
+      "status": "working",
+      "requiredArgs": [
+        "id"
+      ],
+      "description": "Runs semantic analyzer to recommend prompt/template/chain tier."
+    },
+    {
+      "id": "migrate_type",
+      "displayName": "Migrate Prompt Type",
+      "category": "lifecycle",
+      "status": "needs-parameter",
+      "requiredArgs": [
+        "id",
+        "target_type"
+      ],
+      "description": "Intended to convert prompts between prompt/template/chain modes.",
+      "issues": [
+        {
+          "severity": "warning",
+          "summary": "Parameter validation failure",
+          "details": "Throws 'Parameter validation failed' even when target_type is provided."
+        }
+      ]
+    },
+    {
+      "id": "analyze_gates",
+      "displayName": "Analyze Gates",
+      "category": "analysis",
+      "status": "working",
+      "requiredArgs": [
+        "id"
+      ],
+      "description": "Suggests gate configurations via GateAnalyzer."
+    },
+    {
+      "id": "suggest_temporary_gates",
+      "displayName": "Suggest Temporary Gates",
+      "category": "analysis",
+      "status": "needs-context",
+      "requiredArgs": [
+        "execution_context"
+      ],
+      "description": "Generates inline gate suggestions for dynamic runs.",
+      "issues": [
+        {
+          "severity": "warning",
+          "summary": "Execution context payload complexity",
+          "details": "Fails fast when execution_context object is missing nested fields; no friendly errors."
+        }
+      ]
+    },
+    {
+      "id": "guide",
+      "displayName": "Guide",
+      "category": "discovery",
+      "status": "working",
+      "requiredArgs": [],
+      "description": "Explains available actions, expected arguments, and known risks using metadata-driven summaries."
+    }
+  ]
+}

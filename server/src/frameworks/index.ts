@@ -1,3 +1,4 @@
+// @lifecycle canonical - Barrel exports for framework orchestration modules.
 /**
  * Framework System (Phase 2: Methodology System Reorganization)
  * Streamlined framework system with consolidated type definitions,

@@ -1,9 +1,10 @@
+// @lifecycle canonical - Handles early startup diagnostics and rollback wiring.
 /**
  * Server Root Detection and Startup Utilities
  * Robust server root directory detection for different execution contexts
  */
 
-import path from "path";
+import * as path from "node:path";
 import { fileURLToPath } from "url";
 
 /**
@@ -31,7 +32,7 @@ export class ServerRootDetector {
       const envPath = path.resolve(process.env.MCP_SERVER_ROOT);
       try {
         const configPath = path.join(envPath, "config.json");
-        const fs = await import("fs/promises");
+        const fs = await import("node:fs/promises");
         await fs.access(configPath);
 
         if (shouldShowOutput) {
@@ -154,7 +155,7 @@ export class ServerRootDetector {
 
         // Check if config.json exists in this location
         const configPath = path.join(resolvedPath, "config.json");
-        const fs = await import("fs/promises");
+        const fs = await import("node:fs/promises");
         await fs.access(configPath);
 
         // Success! Only log in verbose mode

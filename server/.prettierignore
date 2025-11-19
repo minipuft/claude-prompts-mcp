@@ -1,0 +1,26 @@
+# Build outputs
+dist
+coverage
+
+# Dependencies
+node_modules
+
+# Logs
+*.log
+npm-debug.log*
+
+# Lock files
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Config files that should not be formatted
+*.config.js
+*.config.cjs
+*.config.mjs
+
+# Generated files
+.changelog
+
+# Runtime state
+runtime-state

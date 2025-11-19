@@ -1,3 +1,4 @@
+// @lifecycle canonical - Tracks active framework state and switching heuristics.
 /**
  * Stateful Framework State Manager
  * 
@@ -15,8 +16,8 @@ import {
   FrameworkExecutionContext,
   FrameworkSelectionCriteria
 } from "./types/index.js";
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 
 /**
  * Persisted framework state (saved to file)
@@ -545,10 +546,32 @@ export class FrameworkStateManager extends EventEmitter {
     
     // Update average response time for switching operations
     const totalOperations = this.switchingMetrics.successfulSwitches + this.switchingMetrics.failedSwitches;
-    this.switchingMetrics.averageResponseTime = 
+    this.switchingMetrics.averageResponseTime =
       (this.switchingMetrics.averageResponseTime * (totalOperations - 1) + responseTime) / totalOperations;
-    
+
     this.currentState.switchingMetrics.averageResponseTime = this.switchingMetrics.averageResponseTime;
+  }
+
+  /**
+   * Shutdown the framework state manager and cleanup resources
+   * Prevents async handle leaks by persisting state and removing event listeners
+   */
+  async shutdown(): Promise<void> {
+    this.logger.info("Shutting down FrameworkStateManager...");
+
+    try {
+      // Persist final state to disk
+      await this.saveStateToFile();
+      this.logger.debug("Framework state persisted during shutdown");
+    } catch (error) {
+      this.logger.warn("Error persisting state during shutdown:", error);
+    }
+
+    // Remove all event listeners
+    this.removeAllListeners();
+    this.logger.debug("Event listeners removed during shutdown");
+
+    this.logger.info("FrameworkStateManager shutdown complete");
   }
 }
 

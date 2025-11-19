@@ -1,0 +1,898 @@
+digraph G {
+	graph [bb="0,0,7912,4096.4",
+		bgcolor="#111111",
+		layout=dot,
+		overlap=false,
+		pad=0.3,
+		rankdir=LR
+	];
+	node [color="#c6c5fe",
+		fontcolor="#c6c5fe",
+		fontname=Arial,
+		fontsize="14px",
+		height=0,
+		label="\N",
+		shape=box,
+		style=rounded
+	];
+	edge [color="#757575"];
+	"src/chain-session/types.ts"	[height=0.31944,
+		pos="1248,2379.4",
+		width=2.375];
+	"src/execution/context/execution-context.ts"	[color="#ff6c60",
+		fontcolor="#ff6c60",
+		height=0.31944,
+		pos="1558.5,2379.4",
+		width=3.7083];
+	"src/chain-session/types.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1424.9,2379.4 1333.7,2379.4 1358.8,2379.4 1387,2379.4 1414.7,2379.4"];
+	"src/mcp-tools/prompt-engine/core/types.ts"	[height=0.31944,
+		pos="2316.5,3450.4",
+		width=3.7361];
+	"src/chain-session/types.ts" -> "src/mcp-tools/prompt-engine/core/types.ts"	[pos="e,2262.8,3438.9 1249.5,2391.3 1252.9,2458.5 1276.9,2793.9 1425,3007.4 1508.8,3128.1 1579,3108.4 1692,3202.4 1708.9,3216.5 1709.3,\
+3224.8 1728,3236.4 1903.3,3344.6 2141.5,3410 2253.1,3436.6"];
+	"src/execution/context/execution-context.ts" -> "src/mcp-tools/prompt-engine/core/types.ts"	[pos="e,2291.1,3438.9 1562.8,2390.9 1578.5,2446.3 1647.3,2691.1 1692,2894.4 1711.1,2981.3 1677.6,3018 1728,3091.4 1801,3197.7 2168.1,3379.7 \
+2281.9,3434.4"];
+	"src/types/index.ts"	[height=0.31944,
+		pos="6539.5,2166.4",
+		width=1.6806];
+	"src/execution/context/execution-context.ts" -> "src/types/index.ts"	[pos="e,6537.8,2178.1 1573,2390.9 1661.3,2465.6 2169.5,2876.4 2656,2876.4 2656,2876.4 2656,2876.4 3379.5,2876.4 4362.6,2876.4 4602.9,3092.1 \
+5585,3046.4 5760.3,3038.2 6241,3078.4 6370,2959.4 6488.1,2850.4 6529.6,2304.7 6537.2,2188.3"];
+	"src/execution/operators/chain-operator-executor.ts"	[color="#ff6c60",
+		fontcolor="#ff6c60",
+		height=0.31944,
+		pos="1923.5,1267.4",
+		width=4.4028];
+	"src/execution/context/execution-context.ts" -> "src/execution/operators/chain-operator-executor.ts"	[pos="e,1917.8,1279 1570,2367.9 1595.9,2345.3 1662.5,2294.8 1692,2234.4 1744.3,2127.1 1704.2,2085.3 1728,1968.4 1783.5,1695.8 1885.3,1373.4 \
+1914.5,1288.6"];
+	"src/execution/parsers/unified-command-parser.ts"	[height=0.31944,
+		pos="1923.5,2223.4",
+		width=4.3056];
+	"src/execution/context/execution-context.ts" -> "src/execution/parsers/unified-command-parser.ts"	[pos="e,1895.3,2235.1 1586.5,2367.8 1650.8,2340.2 1813.2,2270.4 1886.1,2239"];
+	"src/execution/validation/request-validator.ts"	[height=0.31944,
+		pos="1923.5,3071.4",
+		width=3.8194];
+	"src/execution/context/execution-context.ts" -> "src/execution/validation/request-validator.ts"	[pos="e,1895.6,3059.7 1560.3,2391.2 1564.8,2453.6 1593,2749.2 1728,2935.4 1769.5,2992.6 1842.6,3034.2 1886.4,3055.4"];
+	"src/frameworks/types/index.ts"	[height=0.31944,
+		pos="6806.5,573.39",
+		width=2.7083];
+	"src/execution/context/execution-context.ts" -> "src/frameworks/types/index.ts"	[pos="e,6800.8,561.81 1571.4,2367.6 1594.9,2344.2 1648.6,2290.3 1692,2243.4 1708.5,2225.6 1711.3,2219.9 1728,2202.4 2200.3,1707.7 2242.1,\
+1473.6 2836,1134.4 2970.2,1057.8 3070.7,1158.9 3171,1041.4 3262.8,933.9 3117.3,834.63 3207,725.39 3529.5,332.77 4953.4,345.39 5461.5,\
+345.39 5461.5,345.39 5461.5,345.39 5807.5,345.39 5903.9,345.39 6588,355.02 6673,400.39 6736.8,434.43 6779.1,514.01 6796.6,552.2"];
+	"src/mcp-tools/prompt-engine/core/types.ts" -> "src/types/index.ts"	[pos="e,6536.9,2178.1 2451.1,3450.4 2589.1,3450.4 2810.9,3450.4 3002.5,3450.4 3002.5,3450.4 3002.5,3450.4 3379.5,3450.4 3642.2,3450.4 \
+3708.2,3447.3 3970,3426.4 4111.9,3415.1 4146.9,3406.9 4288,3388.4 4648.1,3341.1 4735.1,3303.9 5097,3272.4 5167.5,3266.3 6316.9,3279.2 \
+6370,3232.4 6390.5,3214.3 6514.2,2339.3 6535.4,2188.4"];
+	"src/execution/types.ts"	[height=0.31944,
+		pos="7665,3246.4",
+		width=2.0278];
+	"src/mcp-tools/prompt-engine/core/types.ts" -> "src/execution/types.ts"	[pos="e,7663.7,3258 2394.2,3461.9 2691.4,3506.5 3794.9,3671.2 4705,3797.4 4863.1,3819.3 4902.8,3823.2 5061,3844.4 5185,3861 5215.4,3870.7 \
+5340,3882.4 5546.3,3901.7 5598.3,3906.4 5805.5,3906.4 5805.5,3906.4 5805.5,3906.4 6807.5,3906.4 7141.3,3906.4 7308.9,4068.8 7556,\
+3844.4 7643.5,3764.9 7660.6,3366.2 7663.5,3268.2"];
+	"src/execution/context/context-resolver.ts"	[height=0.31944,
+		pos="5806.5,2988.4",
+		width=3.5694];
+	"src/logging/index.ts"	[height=0.31944,
+		pos="6199,2106.4",
+		width=1.8333];
+	"src/execution/context/context-resolver.ts" -> "src/logging/index.ts"	[pos="e,6132.6,2111.5 5935.4,2993.4 5957,2988.3 5977.1,2978.8 5992,2962.4 6051.6,2896.8 5975,2236.4 6028,2165.4 6050.1,2135.8 6088.1,2120.9 \
+6122.6,2113.5"];
+	"src/execution/context/context-resolver.ts" -> "src/types/index.ts"	[pos="e,6537.5,2178 5896,2999.9 6019.5,3010.6 6242.8,3009.7 6370,2886.4 6474.6,2785 6526.2,2297.4 6536.5,2188.2"];
+	"src/logging/index.ts" -> "src/types/index.ts"	[pos="e,6484.7,2154.9 6265.1,2115.6 6296.8,2120.3 6335.5,2126.3 6370,2132.4 6404.7,2138.6 6443.3,2146.3 6474.8,2152.8"];
+	"src/types/index.ts" -> "src/frameworks/types/index.ts"	[pos="e,6803.6,584.97 6542.5,2154.5 6565,2019.3 6772,775.07 6801.9,595.06"];
+	"src/types/index.ts" -> "src/execution/types.ts"	[pos="e,7652.6,3234.5 6554.3,2178.1 6603,2219.5 6770.9,2363.4 6904,2488.4 7208.3,2774.2 7562,3140.2 7645.6,3227.2"];
+	"src/prompts/types.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="7843,2644.4",
+		width=1.9167];
+	"src/types/index.ts" -> "src/prompts/types.ts"	[pos="e,7838.3,2632.6 6600.3,2166.4 6701.2,2166.4 6911.8,2166.4 7090,2166.4 7090,2166.4 7090,2166.4 7418,2166.4 7665.6,2166.4 7803.7,2529.6 \
+7835.1,2622.8"];
+	"src/types/execution.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="6806.5,3964.4",
+		width=2.0278];
+	"src/types/index.ts" -> "src/types/execution.ts"	[pos="e,6803.8,3952.6 6542.3,2178.4 6563.7,2323.7 6773.7,3748.4 6802.3,3942.5"];
+	"src/gates/types.ts"	[height=0.31944,
+		pos="7091,3446.4",
+		width=1.6944];
+	"src/types/index.ts" -> "src/gates/types.ts"	[pos="e,7086.8,3434.8 6547.1,2178 6585.4,2245.2 6779.9,2591 6904,2889.4 6988.7,3093.1 7063.1,3350.3 7084.1,3425.1"];
+	"src/types.ts"	[height=0.31944,
+		pos="6806.5,2910.4",
+		width=1.1806];
+	"src/types/index.ts" -> "src/types.ts"	[pos="e,6801.3,2898.7 6544.7,2178.1 6574.7,2262.4 6758.4,2778 6798,2889.3"];
+	"src/execution/operators/chain-operator-executor.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1584.9,2367.8 1919.4,1279.1 1899.3,1347.3 1787.3,1695.2 1728,1986.4 1704.2,2103.3 1744.3,2145.1 1692,2252.4 1669.3,2299 1624.5,\
+2339.6 1593.3,2362"];
+	"src/execution/operators/chain-operator-executor.ts" -> "src/mcp-tools/prompt-engine/core/types.ts"	[pos="e,2308.4,3438.9 1927.7,1279.1 1949.1,1358 2071.6,1818.6 2119,2202.4 2143.2,2398.6 2109.8,2898.9 2155,3091.4 2187.1,3228.1 2271.2,\
+3376.9 2303.1,3430.1"];
+	"src/execution/operators/chain-operator-executor.ts" -> "src/logging/index.ts"	[pos="e,6192.2,2094.7 1990.8,1279 2099.9,1298 2324.1,1336.9 2514,1369.4 2974.3,1448.1 3090.9,1459.1 3550,1544.4 3895.1,1608.5 3976.9,1649.2 \
+4324,1701.4 4370,1708.3 5950.7,1844.9 5992,1866.4 6090.4,1917.6 6161.8,2037.5 6187.5,2085.8"];
+	"src/execution/operators/chain-operator-executor.ts" -> "src/types/index.ts"	[pos="e,6538.3,2154.9 1940.5,1255.6 2069.5,1161.4 2958.3,535.39 3777,535.39 3777,535.39 3777,535.39 4148,535.39 4687.6,535.39 4934.2,513.47 \
+5304,906.39 5348.3,953.49 5290.7,1005.5 5340,1047.4 5395.4,1094.5 5931.1,1064.6 5992,1104.4 6020,1122.7 6000.3,1151.8 6028,1170.4 \
+6091.5,1213 6314.2,1156.1 6370,1208.4 6512.2,1341.9 6535,2014.6 6538.1,2144.6"];
+	"src/execution/operators/chain-operator-executor.ts" -> "src/frameworks/types/index.ts"	[pos="e,6804.2,561.81 1946.8,1255.8 1988,1233.1 2075.8,1178.6 2119,1106.4 2160.6,1036.7 2096.2,983.29 2155,927.39 2260.2,827.42 2367,972.85 \
+2478,879.39 2517,846.54 2479.4,807.85 2514,770.39 2602.3,674.92 3212.6,469.34 3586,370.39 3830.5,305.61 3893.1,269.39 4146,269.39 \
+4146,269.39 4146,269.39 5463.5,269.39 5732.3,269.39 6447.3,146.29 6673,292.39 6766,352.59 6795,497.02 6802.9,551.82"];
+	"src/utils/jsonUtils.ts"	[height=0.31944,
+		pos="3003.5,1021.4",
+		width=1.8194];
+	"src/execution/operators/chain-operator-executor.ts" -> "src/utils/jsonUtils.ts"	[pos="e,2952.1,1032.9 1975,1255.9 2152.9,1215.3 2749.7,1079.1 2942.1,1035.2"];
+	"src/execution/parsers/unified-command-parser.ts" -> "src/logging/index.ts"	[pos="e,6133,2116.6 2078.5,2226.1 2459.4,2232.7 3475.9,2249.4 4324,2256.4 4775.5,2260.1 4888.4,2259.5 5340,2260.4 5412.5,2260.5 5931.6,\
+2279.4 5992,2239.4 6022.5,2219.2 6000.6,2189.7 6028,2165.4 6054.5,2141.9 6090.8,2127.6 6123.1,2119.1"];
+	"src/execution/parsers/unified-command-parser.ts" -> "src/types/index.ts"	[pos="e,6478.8,2163.7 1948.3,2211.7 1989.4,2192.3 2076.6,2154 2155,2138.4 2311.6,2107.3 2354.4,2127.5 2514,2124.4 3566.3,2103.9 3829.5,\
+2146.4 4882,2146.4 4882,2146.4 4882,2146.4 5807.5,2146.4 6050.4,2146.4 6338.5,2157.6 6468.6,2163.2"];
+	"src/utils/index.ts"	[height=0.31944,
+		pos="2657,2145.4",
+		width=1.5694];
+	"src/execution/parsers/unified-command-parser.ts" -> "src/utils/index.ts"	[pos="e,2600.4,2143.2 1958.4,2211.9 2002.9,2197.3 2083.7,2172.9 2155,2162.4 2309.7,2139.6 2494.1,2140.4 2590.3,2142.9"];
+	"src/execution/parsers/symbolic-command-parser.ts"	[height=0.31944,
+		pos="2316.5,2183.4",
+		width=4.4861];
+	"src/execution/parsers/unified-command-parser.ts" -> "src/execution/parsers/symbolic-command-parser.ts"	[pos="e,2203,2194.9 2037.1,2211.9 2085.8,2206.9 2143,2201 2192.9,2195.9"];
+	"src/execution/parsers/types/operator-types.ts"	[height=0.31944,
+		pos="2657,2301.4",
+		width=3.9722];
+	"src/execution/parsers/unified-command-parser.ts" -> "src/execution/parsers/types/operator-types.ts"	[pos="e,2550,2312.9 2070.7,2234.9 2087.3,2238.6 2103.7,2243.3 2119,2249.4 2137.3,2256.7 2136.4,2268.8 2155,2275.4 2281,2319.8 2435.9,2320.3 \
+2539.8,2313.6"];
+	"src/execution/parsers/types/command-parse-types.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="3003.5,2300.4",
+		width=4.6528];
+	"src/execution/parsers/unified-command-parser.ts" -> "src/execution/parsers/types/command-parse-types.ts"	[pos="e,2892.7,2288.9 2078.9,2232.8 2291.8,2245.9 2664.4,2269.3 2800,2280.4 2826.7,2282.6 2855.3,2285.2 2882.4,2287.9"];
+	"src/execution/validation/request-validator.ts" -> "src/types/execution.ts"	[pos="e,6733.3,3960.5 1958.6,3082.9 2190.2,3160.8 3558,3613.9 4705,3844.4 4715.4,3846.5 5450.9,3944.4 5461.5,3944.4 5461.5,3944.4 5461.5,\
+3944.4 6200,3944.4 6387.1,3944.4 6606.5,3954 6723,3959.9"];
+	"src/execution/validation/schemas.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="2316.5,3071.4",
+		width=3.1944];
+	"src/execution/validation/request-validator.ts" -> "src/execution/validation/schemas.ts"	[pos="e,2201.5,3071.4 2061.3,3071.4 2103.6,3071.4 2149.9,3071.4 2191.3,3071.4"];
+	"src/tooling/action-metadata/usage-tracker.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="2316.5,3030.4",
+		width=3.875];
+	"src/execution/validation/request-validator.ts" -> "src/tooling/action-metadata/usage-tracker.ts"	[pos="e,2205.6,3041.9 2034.2,3059.9 2084.4,3054.6 2144,3048.4 2195.4,3043"];
+	"src/frameworks/types/methodology-types.ts"	[height=0.31944,
+		pos="7417,1189.4",
+		width=3.8611];
+	"src/frameworks/types/index.ts" -> "src/frameworks/types/methodology-types.ts"	[pos="e,7292.7,1177.9 6810.3,585.03 6829.2,665.07 6939.3,1130.8 6940,1131.4 6952.8,1142.8 7146.3,1163.6 7282.6,1176.9"];
+	"src/frameworks/types/integration-types.ts"	[height=0.31944,
+		pos="7091,1111.4",
+		width=3.6528];
+	"src/frameworks/types/index.ts" -> "src/frameworks/types/integration-types.ts"	[pos="e,7083.9,1099.8 6813.7,585.13 6849.6,653.64 7032.5,1001.8 7079.1,1090.7"];
+	"src/frameworks/types/prompt-guidance-types.ts"	[height=0.31944,
+		pos="7091,1272.4",
+		width=4.1944];
+	"src/frameworks/types/index.ts" -> "src/frameworks/types/prompt-guidance-types.ts"	[pos="e,7063.2,1260.8 6807.2,585.05 6805.9,649.29 6806.7,964.41 6940,1165.4 6968.1,1207.8 7019.2,1238.8 7053.9,1256.2"];
+	"src/execution/context/index.ts"	[height=0.31944,
+		pos="5462.5,3026.4",
+		width=2.6944];
+	"src/execution/context/index.ts" -> "src/execution/context/context-resolver.ts"	[pos="e,5702,2999.9 5559.7,3015.7 5600.7,3011.1 5649,3005.8 5691.8,3001"];
+	"src/execution/index.ts"	[height=0.31944,
+		pos="6199,2186.4",
+		width=2.0278];
+	"src/execution/index.ts" -> "src/types/index.ts"	[pos="e,6478.8,2169.9 6272.2,2182.1 6330.3,2178.7 6411.3,2173.9 6468.8,2170.5"];
+	"src/utils/jsonUtils.ts" -> "src/types/index.ts"	[pos="e,6538,2154.7 3042.8,1009.8 3135.1,982.64 3377.8,915.2 3586,892.39 4237.7,820.98 4412.5,809.2 5061,905.39 5171.6,921.8 5223.3,893.02 \
+5304,970.39 5342.7,1007.5 5298.1,1052 5340,1085.4 5453.6,1176.1 5871.3,1056.5 5992,1137.4 6021.4,1157.1 6000.1,1186.7 6028,1208.4 \
+6151,1303.9 6261.6,1172.7 6370,1284.4 6494.8,1412.9 6531.3,2021.5 6537.5,2144.6"];
+	"src/execution/operators/index.ts"	[height=0.31944,
+		pos="1558.5,1227.4",
+		width=2.875];
+	"src/execution/operators/index.ts" -> "src/execution/operators/chain-operator-executor.ts"	[pos="e,1818,1255.9 1662.1,1238.7 1707.5,1243.7 1761.1,1249.6 1807.8,1254.8"];
+	"src/execution/parsers/argument-parser.ts"	[height=0.31944,
+		pos="2316.5,2415.4",
+		width=3.6528];
+	"src/execution/parsers/argument-parser.ts" -> "src/logging/index.ts"	[pos="e,6132.7,2114.7 2366.8,2403.9 2398.6,2396.3 2440.8,2386.1 2478,2376.4 2494.1,2372.2 2497.6,2368.9 2514,2366.4 2893.6,2308.8 2993.5,\
+2340.4 3377.5,2340.4 3377.5,2340.4 3377.5,2340.4 5201.5,2340.4 5245.6,2340.4 5957.7,2306 5992,2278.4 6033.1,2245.3 5991.2,2203.1 \
+6028,2165.4 6053,2139.7 6089.7,2125.2 6122.6,2117"];
+	"src/execution/parsers/argument-parser.ts" -> "src/types/index.ts"	[pos="e,6532.7,2178.3 2409.7,2426.9 2506.9,2439.3 2664.5,2460.1 2800,2481.4 3234.9,2549.6 3336.8,2644.4 3777,2644.4 3777,2644.4 3777,2644.4 \
+4148,2644.4 4558.8,2644.4 5616.7,2939.3 5992,2772.4 6280.8,2643.9 6481.4,2279 6528.1,2187.4"];
+	"src/execution/parsers/argument-parser.ts" -> "src/execution/types.ts"	[pos="e,7597.9,3257.9 2448,2419.5 2458.5,2422.5 2468.6,2426.4 2478,2431.4 2500.3,2443.3 2494.5,2459.3 2514,2475.4 3367.4,3179.6 3676.8,\
+3248.8 4705,3657.4 4872.6,3724 4920.8,3723.7 5097,3762.4 5408,3830.8 5487.1,3868.4 5805.5,3868.4 5805.5,3868.4 5805.5,3868.4 6540.5,\
+3868.4 6772.2,3868.4 7421.6,3821.1 7556,3632.4 7602,3567.8 7542.5,3343 7591.7,3266.1"];
+	"src/execution/parsers/argument-parser.ts" -> "src/utils/index.ts"	[pos="e,2641.5,2157 2332,2403.8 2385.2,2361.4 2569.3,2214.6 2633.6,2163.3"];
+	"src/execution/types.ts" -> "src/prompts/types.ts"	[pos="e,7838.6,2656 7669.4,3234.6 7691,3161 7807.3,2763.1 7835.7,2665.8"];
+	"src/utils/index.ts" -> "src/utils/jsonUtils.ts"	[pos="e,2972.7,1032.9 2658.8,2133.7 2665.9,2033.3 2720.8,1312.4 2836,1134.4 2866.5,1087.2 2924.4,1054.7 2963.3,1037.1"];
+	"src/utils/errorHandling.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="5806.5,2186.4",
+		width=2.25];
+	"src/utils/index.ts" -> "src/utils/errorHandling.ts"	[pos="e,5725.4,2186 2713.9,2147.1 2965.3,2154.6 4017.9,2184.4 4882,2184.4 4882,2184.4 4882,2184.4 5201.5,2184.4 5383.9,2184.4 5597.3,2185.3 \
+5715.3,2185.9"];
+	"src/frameworks/index.ts"	[height=0.31944,
+		pos="3003.5,1155.4",
+		width=2.2083];
+	"src/utils/index.ts" -> "src/frameworks/index.ts"	[pos="e,2998.5,1167 2662.1,2133.6 2697.4,2032.3 2948.7,1309.9 2995.1,1176.5"];
+	"src/gates/index.ts"	[height=0.31944,
+		pos="3378.5,2760.4",
+		width=1.6944];
+	"src/utils/index.ts" -> "src/gates/index.ts"	[pos="e,3361.2,2748.6 2670.9,2157 2696.2,2180 2754,2233.1 2800,2280.4 2816.7,2297.5 2818.7,2303.9 2836,2320.4 3023.2,2498.4 3274.3,2685.2 \
+3352.9,2742.6"];
+	"src/utils/chainUtils.ts"	[height=0.31944,
+		pos="5462.5,2224.4",
+		width=1.9306];
+	"src/utils/index.ts" -> "src/utils/chainUtils.ts"	[pos="e,5392.6,2224 2713.7,2150.8 2748.7,2154 2795,2157.9 2836,2160.4 3572.7,2205.2 3757.4,2222.4 4495.5,2222.4 4495.5,2222.4 4495.5,2222.4 \
+4884,2222.4 5062.2,2222.4 5271.2,2223.4 5382.5,2223.9"];
+	"src/execution/parsers/argument-schema.ts"	[height=0.31944,
+		pos="6199,3562.4",
+		width=3.7917];
+	"src/execution/parsers/argument-schema.ts" -> "src/types/index.ts"	[pos="e,6537.9,2178.1 6335.8,3558.7 6348.6,3553.6 6360.3,3546.4 6370,3536.4 6468.5,3434.9 6528.6,2355.6 6537.4,2188.2"];
+	"src/execution/parsers/argument-schema.ts" -> "src/prompts/types.ts"	[pos="e,7841.6,2656.2 6258.2,3573.9 6491.7,3616.3 7365.1,3737.7 7738,3267.4 7814.4,3171 7836.8,2765.1 7841.1,2666.2"];
+	"src/execution/parsers/index.ts"	[height=0.31944,
+		pos="1558.5,2223.4",
+		width=2.7083];
+	"src/execution/parsers/index.ts" -> "src/execution/context/context-resolver.ts"	[pos="e,5713.1,2976.9 1573.4,2235 1601,2257.6 1665.6,2307.5 1728,2334.4 1907.1,2411.7 1964.1,2395.4 2155,2435.4 2787.8,2567.8 2947.3,2596.2 \
+3586,2696.4 4005.2,2762.2 5324.4,2928.2 5703,2975.6"];
+	"src/execution/parsers/index.ts" -> "src/logging/index.ts"	[pos="e,6132.7,2106.7 1585,2211.8 1679.6,2170.1 2020.1,2029.4 2315.5,2029.4 2315.5,2029.4 2315.5,2029.4 3004.5,2029.4 3450.2,2029.4 3560.7,\
+2061.9 4006,2080.4 4395.2,2096.5 4492.5,2108.4 4882,2108.4 4882,2108.4 4882,2108.4 5463.5,2108.4 5704.3,2108.4 5989.5,2107.3 6122.6,\
+2106.7"];
+	"src/execution/parsers/index.ts" -> "src/types/index.ts"	[pos="e,6526.3,2154.8 1566.5,2211.8 1586.7,2179.3 1649.1,2087 1728,2046.4 2098.4,1855.9 2239.5,1915.4 2656,1915.4 2656,1915.4 2656,1915.4 \
+3379.5,1915.4 4541.4,1915.4 4876.3,1495.1 5992,1819.4 6224.3,1886.9 6452.3,2086.2 6519,2147.9"];
+	"src/execution/parsers/index.ts" -> "src/execution/parsers/unified-command-parser.ts"	[pos="e,1768.5,2223.4 1656.3,2223.4 1687.7,2223.4 1723.3,2223.4 1758.2,2223.4"];
+	"src/execution/parsers/index.ts" -> "src/execution/parsers/argument-parser.ts"	[pos="e,2273.8,2403.8 1592.5,2235 1626.3,2246.6 1680.4,2264.6 1728,2277.4 1899.8,2323.7 1946.1,2321.5 2119,2363.4 2168.5,2375.4 2224.6,\
+2390.4 2264.2,2401.2"];
+	"src/execution/parsers/index.ts" -> "src/execution/types.ts"	[pos="e,7663.8,3258.1 1578,2235.2 1608.4,2255.9 1668,2301.9 1692,2358.4 1720.4,2425.3 1679.3,3612.4 1728,3666.4 1782.2,3726.4 3090.8,3843.9 \
+3171,3854.4 3604.4,3911.1 3708.9,3982.4 4146,3982.4 4146,3982.4 4146,3982.4 4497.5,3982.4 4927.3,3982.4 5031.7,4058.4 5461.5,4058.4 \
+5461.5,4058.4 5461.5,4058.4 7092,4058.4 7307.5,4058.4 7414.3,4079.8 7556,3917.4 7643.5,3817.2 7660.7,3372.7 7663.5,3268.4"];
+	"src/execution/parsers/symbolic-command-parser.ts" -> "src/logging/index.ts"	[pos="e,6142.6,2117.9 2478.2,2189.3 2718.9,2198.1 3187.6,2214.5 3586,2225.4 4365.3,2246.6 4560.4,2241.5 5340,2244.4 5448.9,2244.8 5476.2,\
+2249.5 5585,2244.4 5675.7,2240.2 5911.1,2247.7 5992,2206.4 6013.6,2195.4 6007.9,2178.9 6028,2165.4 6059.5,2144.2 6099.3,2129.9 6132.6,\
+2120.6"];
+	"src/execution/parsers/symbolic-command-parser.ts" -> "src/utils/index.ts"	[pos="e,2600.1,2151.7 2420,2171.9 2475.2,2165.7 2541.7,2158.2 2590.1,2152.8"];
+	"src/execution/parsers/symbolic-command-parser.ts" -> "src/execution/parsers/types/operator-types.ts"	[pos="e,2622.8,2289.8 2350.6,2194.9 2412.3,2216.4 2544.8,2262.6 2613.2,2286.5"];
+	"src/execution/parsers/types/operator-types.ts" -> "src/execution/parsers/types/command-parse-types.ts"	[pos="e,2835.8,2300.9 2800.1,2301 2808.6,2301 2817.1,2300.9 2825.7,2300.9"];
+	"src/execution/pipeline/index.ts"	[height=0.31944,
+		pos="98.5,2376.4",
+		width=2.7361];
+	"src/execution/pipeline/prompt-execution-pipeline.ts"	[height=0.31944,
+		pos="867.5,2666.4",
+		width=4.4444];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/prompt-execution-pipeline.ts"	[pos="e,728.07,2654.9 107.33,2388 125.85,2414.4 175.18,2479.5 233,2512.4 384.94,2598.7 584.02,2636.9 718.12,2653.7"];
+	"src/execution/pipeline/stage.ts"	[height=0.31944,
+		pos="1248,2299.4",
+		width=2.7361];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1149.4,2298.9 180.62,2364.9 290.09,2349.8 491.3,2324.1 664,2312.4 829.63,2301.2 1022.3,2299 1139.4,2298.9"];
+	"src/execution/pipeline/stages/00-dependency-injection-stage.ts"	[height=0.31944,
+		pos="867.5,2579.4",
+		width=5.4444];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/00-dependency-injection-stage.ts"	[pos="e,763.81,2567.9 116.83,2388.1 141.56,2404.2 188.85,2433.2 233,2449.4 408.89,2513.9 624.62,2549.5 753.53,2566.5"];
+	"src/execution/pipeline/stages/00-execution-lifecycle-stage.ts"	[height=0.31944,
+		pos="867.5,2797.4",
+		width=5.2083];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/00-execution-lifecycle-stage.ts"	[pos="e,766,2785.9 103.52,2388.1 116.4,2423.7 160.14,2532.4 233,2589.4 389.3,2711.7 620.41,2763.5 756,2784.3"];
+	"src/execution/pipeline/stages/00-request-normalization-stage.ts"	[height=0.31944,
+		pos="430.5,3282.4",
+		width=5.4861];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/00-request-normalization-stage.ts"	[pos="e,419.28,3270.9 100.39,2388.2 105.56,2452.1 134.9,2761.8 233,2991.4 281.05,3103.8 374.43,3218.7 412.61,3263.2"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts"	[height=0.31944,
+		pos="867.5,2107.4",
+		width=4.2917];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/01-parsing-stage.ts"	[pos="e,712.92,2107.6 105.81,2364.9 122.37,2335.7 170.19,2259.1 233,2223.4 377.68,2141.1 568.32,2115.3 702.55,2108.1"];
+	"src/execution/pipeline/stages/02-inline-gate-stage.ts"	[height=0.31944,
+		pos="867.5,3091.4",
+		width=4.5417];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/02-inline-gate-stage.ts"	[pos="e,798.82,3079.9 99.771,2388 101.64,2442.3 116.43,2674.7 233,2806.4 383.55,2976.5 655.47,3050.6 788.69,3077.8"];
+	"src/execution/pipeline/stages/03-operator-validation-stage.ts"	[height=0.31944,
+		pos="867.5,1917.4",
+		width=5.2361];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/03-operator-validation-stage.ts"	[pos="e,769.2,1905.9 99.972,2364.6 102.67,2314.3 120.33,2115.9 233,2023.4 382.86,1900.3 621.44,1895.5 759.06,1905.1"];
+	"src/execution/pipeline/stages/04-planning-stage.ts"	[height=0.31944,
+		pos="867.5,1876.4",
+		width=4.3889];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/04-planning-stage.ts"	[pos="e,750.38,1864.9 100.95,2364.5 109.46,2296.9 155.31,1960.6 233,1899.4 308.85,1839.7 578.3,1851 740.34,1864.1"];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts"	[height=0.31944,
+		pos="867.5,2951.4",
+		width=5.25];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/05-gate-enhancement-stage.ts"	[pos="e,794.98,2939.9 101.26,2388.1 108.64,2433.1 141.06,2597.4 233,2688.4 390.18,2843.9 652.58,2912.2 784.91,2938"];
+	"src/execution/pipeline/stages/06-framework-stage.ts"	[height=0.31944,
+		pos="867.5,1324.4",
+		width=4.5694];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/06-framework-stage.ts"	[pos="e,831.47,1335.9 100.69,2364.7 108.81,2286.7 157.8,1843.1 233,1733.4 385.88,1510.5 704.27,1381.1 821.72,1339.4"];
+	"src/execution/pipeline/stages/06b-prompt-guidance-stage.ts"	[height=0.31944,
+		pos="867.5,751.39",
+		width=5.1944];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/06b-prompt-guidance-stage.ts"	[pos="e,849.46,763.02 100.16,2364.7 105.73,2267.8 146.95,1600.4 233,1421.4 385.35,1104.5 742.61,838.18 841.02,768.92"];
+	"src/execution/pipeline/stages/07-session-stage.ts"	[height=0.31944,
+		pos="867.5,2376.4",
+		width=4.3194];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/07-session-stage.ts"	[pos="e,711.66,2376.4 197.03,2376.4 324.06,2376.4 548.01,2376.4 701.64,2376.4"];
+	"src/execution/pipeline/stages/08-response-capture-stage.ts"	[height=0.31944,
+		pos="867.5,2417.4",
+		width=5.1389];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/08-response-capture-stage.ts"	[pos="e,682.33,2412.6 197.14,2387.3 209.21,2388.5 221.38,2389.5 233,2390.4 380.11,2401.2 546.78,2408.1 672.23,2412.2"];
+	"src/execution/pipeline/stages/09-execution-stage.ts"	[height=0.31944,
+		pos="867.5,1765.4",
+		width=4.4861];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/09-execution-stage.ts"	[pos="e,808.01,1753.8 100.7,2364.9 108.25,2294.4 151.58,1922.9 233,1850.4 392.32,1708.4 669.73,1731.8 797.93,1752.2"];
+	"src/execution/pipeline/stages/10-formatting-stage.ts"	[height=0.31944,
+		pos="867.5,3495.4",
+		width=4.5278];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/10-formatting-stage.ts"	[pos="e,704.45,3492.6 99.519,2387.9 99.912,2484.4 107.17,3156.9 233,3303.4 346.82,3435.9 548.76,3478.7 694.09,3491.7"];
+	"src/execution/pipeline/stages/10-gate-review-stage.ts"	[height=0.31944,
+		pos="867.5,2012.4",
+		width=4.6528];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/10-gate-review-stage.ts"	[pos="e,699.82,2021 101.49,2364.6 109.31,2322.3 142.16,2176.6 233,2110.4 303.98,2058.7 528.21,2033.5 689.76,2021.8"];
+	"src/execution/pipeline/stages/11-call-to-action-stage.ts"	[height=0.31944,
+		pos="867.5,2239.4",
+		width=4.7361];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/11-call-to-action-stage.ts"	[pos="e,707.26,2227.9 111.48,2364.7 133.44,2344.2 182.53,2302.1 233,2284.4 383.72,2231.6 566.7,2224.1 697.18,2227.6"];
+	"src/execution/pipeline/stages/12-post-formatting-cleanup-stage.ts"	[height=0.31944,
+		pos="867.5,2458.4",
+		width=5.6528];
+	"src/execution/pipeline/index.ts" -> "src/execution/pipeline/stages/12-post-formatting-cleanup-stage.ts"	[pos="e,663.65,2455.8 131.68,2387.9 158.43,2397 197.7,2409.1 233,2415.4 371.69,2440.1 529.76,2450.8 653.31,2455.4"];
+	"src/execution/pipeline/prompt-execution-pipeline.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1544.9,2391 926.34,2654.9 1025,2633.8 1230.6,2583.6 1389,2503.4 1447.3,2473.8 1507,2424.5 1537.2,2397.8"];
+	"src/execution/pipeline/prompt-execution-pipeline.ts" -> "src/logging/index.ts"	[pos="e,6132.8,2112.1 1000.3,2677.9 1314.4,2702.5 2131.1,2749.2 2800,2639.4 2816.3,2636.7 2819.8,2633.2 2836,2630.4 2999.3,2601.8 3041.7,\
+2604.3 3207,2592.4 3459.9,2574.1 3523.4,2568.4 3777,2568.4 3777,2568.4 3777,2568.4 5463.5,2568.4 5581.1,2568.4 5907,2622.7 5992,\
+2541.4 6052.7,2483.4 5976.1,2231.4 6028,2165.4 6050.8,2136.4 6088.6,2121.6 6122.8,2114.1"];
+	"src/execution/pipeline/prompt-execution-pipeline.ts" -> "src/types/index.ts"	[pos="e,6537,2178 916.25,2677.9 964.3,2692.2 1036.1,2721.8 1071,2776.4 1139.2,2883.2 1015.4,3257.8 1107,3345.4 1294.9,3525.1 1432,3352.2 \
+1692,3351.4 2349.3,3349.4 2513.9,3361.1 3171,3342.4 3193.2,3341.8 6353.4,3194.2 6370,3179.4 6408.8,3144.8 6516.7,2332.7 6535.6,2188.3"];
+	"src/execution/pipeline/prompt-execution-pipeline.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1185.5,2310.9 971.13,2654.9 1007.8,2645.6 1046.1,2629 1071,2599.4 1140.7,2516.5 1040.6,2443.9 1107,2358.4 1123.9,2336.6 1150.4,\
+2322.8 1175.8,2314"];
+	"src/metrics/index.ts"	[height=0.31944,
+		pos="1248,2991.4",
+		width=1.8472];
+	"src/execution/pipeline/prompt-execution-pipeline.ts" -> "src/metrics/index.ts"	[pos="e,1239.9,2979.8 897.81,2678 939.23,2695.3 1016,2730.9 1071,2776.4 1143.8,2836.6 1208.2,2930.4 1234.4,2971.3"];
+	"src/execution/pipeline/stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1468.4,2367.9 1345,2310.9 1360.1,2314.5 1375.2,2319.2 1389,2325.4 1407.5,2333.7 1406.6,2345 1425,2353.4 1435.6,2358.2 1447,2362.1 \
+1458.6,2365.3"];
+	"src/execution/pipeline/stage.ts" -> "src/logging/index.ts"	[pos="e,6132.8,2113.8 1346.6,2308.6 1467.8,2320.7 1662.4,2342.1 1692,2358.4 1713.8,2370.4 1705.9,2390 1728,2401.4 1897.2,2488.7 1964.8,\
+2427.8 2155,2435.4 2298.4,2441.1 2334.6,2442 2478,2435.4 2637.6,2428.1 2676.6,2413.3 2836,2402.4 3076.3,2386 3136.6,2378.4 3377.5,\
+2378.4 3377.5,2378.4 3377.5,2378.4 5201.5,2378.4 5377.8,2378.4 5858,2426.9 5992,2312.4 6043.1,2268.7 5982.7,2215.1 6028,2165.4 6052.4,\
+2138.6 6089.6,2124 6123,2116"];
+	"src/execution/pipeline/stages/00-dependency-injection-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1532.8,2391 926.68,2567.8 1023.7,2547.9 1224.3,2503.8 1389,2449.4 1436.6,2433.6 1489.8,2410.6 1523.5,2395.3"];
+	"src/execution/pipeline/stages/00-dependency-injection-stage.ts" -> "src/logging/index.ts"	[pos="e,6133,2112.6 1025.6,2567.9 1462,2537 2725.4,2454.4 3777,2454.4 3777,2454.4 3777,2454.4 5463.5,2454.4 5581.4,2454.4 5906.2,2488.3 \
+5992,2407.4 6071.1,2332.8 5958.6,2249.1 6028,2165.4 6051.4,2137.2 6089.1,2122.4 6123.1,2114.7"];
+	"src/execution/pipeline/stages/00-dependency-injection-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1190.8,2311 915.06,2567.9 961.1,2554.1 1030.4,2526.6 1071,2478.4 1106.9,2435.8 1069.8,2399.8 1107,2358.4 1126.4,2336.8 1155,2322.9 \
+1181.2,2314"];
+	"src/execution/pipeline/stages/00-dependency-injection-stage.ts" -> "src/metrics/index.ts"	[pos="e,1241.7,2979.7 950.18,2590.9 990.29,2600.1 1037.1,2616.4 1071,2645.4 1098.6,2669 1204.8,2898.9 1237.4,2970.3"];
+	"src/gates/core/temporary-gate-registry.ts"	[height=0.31944,
+		pos="5806.5,3406.4",
+		width=3.6111];
+	"src/execution/pipeline/stages/00-dependency-injection-stage.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,5784.4,3394.9 979.17,2590.9 1013.9,2600.2 1048.8,2616.6 1071,2645.4 1158,2758.5 1007.9,3183.8 1107,3286.4 1287.8,3473.6 1431.7,\
+3316.5 1692,3315.4 2618.7,3311.6 2850.3,3298.4 3777,3298.4 3777,3298.4 3777,3298.4 4497.5,3298.4 4764,3298.4 4830.5,3308.7 5097,\
+3313.4 5124.1,3313.9 5558.4,3313.1 5585,3318.4 5656.3,3332.5 5733.9,3368.9 5775.4,3390.2"];
+	"src/execution/pipeline/stages/00-execution-lifecycle-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1549.8,2391.3 910.84,2785.8 1003.9,2759 1230.4,2685.9 1389,2570.4 1457.5,2520.5 1517.9,2438.2 1543.9,2400"];
+	"src/execution/pipeline/stages/00-execution-lifecycle-stage.ts" -> "src/logging/index.ts"	[pos="e,6132.6,2111.9 1055.1,2798.3 1355.1,2799.1 1963.2,2797.3 2478,2775.4 3056.3,2750.8 3198.2,2682.4 3777,2682.4 3777,2682.4 3777,2682.4 \
+4148,2682.4 4615.6,2682.4 4731.9,2644.4 5199.5,2644.4 5199.5,2644.4 5199.5,2644.4 5463.5,2644.4 5522.3,2644.4 5949.7,2661.3 5992,\
+2620.4 6064.9,2549.9 5966,2245.7 6028,2165.4 6050.5,2136.3 6088.3,2121.4 6122.6,2113.9"];
+	"src/execution/pipeline/stages/00-execution-lifecycle-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1184,2310.9 914,2785.9 961.63,2771.2 1034.5,2741.1 1071,2686.4 1152.5,2564.5 1019.3,2476 1107,2358.4 1123.3,2336.5 1149.2,2322.7 \
+1174.4,2314"];
+	"src/execution/pipeline/stages/00-execution-lifecycle-stage.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,5676,3404.5 902.94,2808.9 950.11,2826.7 1033.3,2865.7 1071,2930.4 1131.7,3034.5 1028.7,3379.8 1107,3471.4 1201.2,3581.5 1281,3527.3 \
+1425,3543.4 2287.4,3639.8 2509.7,3526.4 3377.5,3526.4 3377.5,3526.4 3377.5,3526.4 3779,3526.4 3797.4,3526.4 5078.7,3424.7 5097,3423.4 \
+5205,3415.6 5231.8,3411.1 5340,3407.4 5449.4,3403.7 5573.3,3403.6 5665.8,3404.4"];
+	"src/execution/pipeline/stages/00-request-normalization-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1553.2,2391 435.63,3270.8 453.88,3221.4 532.23,3026.3 664,2930.4 815.81,2820 895.87,2885 1071,2817.4 1218.6,2760.4 1272.8,2764.8 \
+1389,2657.4 1473,2579.8 1529.6,2450.9 1549.5,2400.5"];
+	"src/execution/pipeline/stages/00-request-normalization-stage.ts" -> "src/logging/index.ts"	[pos="e,6132.9,2111.7 538.06,3270.9 715.54,3250.8 1082.5,3205.7 1389,3144.4 1525.4,3117.1 1580.3,3149.2 1692,3066.4 1716.7,3048.1 1701.7,\
+3023.2 1728,3007.4 1750.1,2994.1 2630.2,2952.4 2656,2952.4 2656,2952.4 2656,2952.4 3379.5,2952.4 3397.7,2952.4 5979.3,2745.4 5992,\
+2732.4 6080.4,2642.2 5951.6,2265.9 6028,2165.4 6050.4,2136 6088.4,2121.1 6122.8,2113.7"];
+	"src/execution/pipeline/stages/00-request-normalization-stage.ts" -> "src/types/index.ts"	[pos="e,6536.9,2178.1 432.36,3294.1 437.85,3359.8 474.21,3684.3 664,3820.4 987.12,4052 2385.9,3754.4 2656,3754.4 2656,3754.4 2656,3754.4 \
+3779,3754.4 4195.1,3754.4 4293.4,3677.3 4705,3616.4 4848,3595.2 5865.8,3497.9 5992,3427.4 6013.8,3415.2 6007.6,3398.7 6028,3384.4 \
+6160.4,3291.9 6267.3,3386.1 6370,3261.4 6387.9,3239.6 6514.3,2339.8 6535.5,2188"];
+	"src/execution/pipeline/stages/00-request-normalization-stage.ts" -> "src/execution/validation/request-validator.ts"	[pos="e,1911.4,3083.1 628.17,3293 933.36,3306.7 1505.3,3320.3 1692,3243.4 1781.3,3206.6 1867.2,3127.2 1903.9,3090.6"];
+	"src/execution/pipeline/stages/00-request-normalization-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1149.3,2307.3 432.6,3270.9 442.15,3173.3 514.47,2484 664,2355.4 672.91,2347.7 973.01,2321.9 1139.1,2308.2"];
+	"src/mcp-tools/prompt-engine/core/chain-management.ts"	[height=0.31944,
+		pos="867.5,3799.4",
+		width=4.9167];
+	"src/execution/pipeline/stages/00-request-normalization-stage.ts" -> "src/mcp-tools/prompt-engine/core/chain-management.ts"	[pos="e,856.8,3787.9 441.4,3294.2 497.89,3361.3 779.34,3695.8 850.26,3780.1"];
+	"src/mcp-tools/prompt-engine/utils/tool-routing.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="867.5,3383.4",
+		width=4.1944];
+	"src/execution/pipeline/stages/00-request-normalization-stage.ts" -> "src/mcp-tools/prompt-engine/utils/tool-routing.ts"	[pos="e,747.81,3371.9 461.11,3293.9 504.82,3310.4 589.49,3340.7 664,3357.4 687.64,3362.7 713.09,3367 737.69,3370.5"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/chain-session/types.ts"	[pos="e,1194,2367.8 906.74,2119 952,2134.6 1026.8,2166.5 1071,2218.4 1101.9,2254.7 1074.4,2284.7 1107,2319.4 1127.6,2341.3 1157.4,2355.6 \
+1184.3,2364.7"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1514.4,2367.9 983.07,2118.9 1117.4,2134.6 1329.3,2166.8 1389,2218.4 1423.8,2248.5 1394.1,2281.4 1425,2315.4 1446.2,2338.7 1477.7,\
+2354.4 1504.7,2364.4"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/logging/index.ts"	[pos="e,6160.9,2094.9 899,2095.8 944,2079 1031.1,2047.7 1107,2027.4 1544.8,1910 1666.3,1879.5 2119,1901.4 2358.5,1913 2416.2,1953.4 2656,\
+1953.4 2656,1953.4 2656,1953.4 3379.5,1953.4 3642.6,1953.4 3708.3,1967.2 3970,1994.4 3986.1,1996.1 3989.9,1998 4006,1999.4 4446,\
+2036.2 5554.4,1997.7 5992,2056.4 6047.4,2063.8 6109.6,2080.1 6151.1,2092"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/types/index.ts"	[pos="e,6538,2178 900,2118.9 945.51,2135.5 1032.4,2166.8 1107,2191.4 1231.5,2232.5 1308.3,2175 1389,2278.4 1479,2393.6 1334.9,2820.2 1425,\
+2935.4 1501.5,3033.2 1597.7,2936.7 1692,3017.4 1719.8,3041.2 1697,3071.9 1728,3091.4 1841.8,3162.8 4011.7,3100.4 4146,3100.4 4146,\
+3100.4 4146,3100.4 4884,3100.4 5049.4,3100.4 6248.6,3127.7 6370,3015.4 6496.5,2898.3 6531.6,2309.6 6537.5,2188.3"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/execution/operators/chain-operator-executor.ts"	[pos="e,1764.6,1274.1 961.63,2095.9 1001.8,2085.9 1045.4,2067.2 1071,2032.4 1117.3,1969.4 1052.4,1385.4 1107,1329.4 1129.3,1306.6 1522.1,\
+1285.2 1754.3,1274.5"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/execution/parsers/unified-command-parser.ts"	[pos="e,1896,2211.8 908.58,2095.9 955.62,2083 1036.2,2063 1107,2055.4 1231.6,2042 1265.1,2036.3 1389,2055.4 1582.4,2085.1 1801.9,2172.2 \
+1886.6,2207.8"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/execution/parsers/argument-parser.ts"	[pos="e,2184.8,2421.8 1010.2,2095.9 1144.3,2088.2 1333.2,2086.5 1389,2132.4 1440.3,2174.5 1376.5,2232 1425,2277.4 1513,2359.8 1581.9,2276.3 \
+1692,2325.4 1710.5,2333.6 1709.2,2345.8 1728,2353.4 1872.5,2411.6 2052.3,2422.6 2174.6,2421.9"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/utils/index.ts"	[pos="e,2600.2,2138.7 898.79,2095.8 943.52,2079.4 1030.2,2050.1 1107,2039.4 1231.1,2022 1263.7,2035.3 1389,2039.4 1850.1,2054.6 2402.9,\
+2115.6 2590.3,2137.5"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/execution/parsers/types/operator-types.ts"	[pos="e,2562.4,2312.9 928.51,2095.8 1050,2073.9 1319.4,2033.1 1389,2088.4 1444.4,2132.4 1372.5,2196 1425,2243.4 1469.4,2283.5 1632.8,2268.9 \
+1692,2277.4 1898.3,2307 1947.3,2334.9 2155,2351.4 2298.1,2362.8 2340.6,2393 2478,2351.4 2496.4,2345.8 2496.2,2334.6 2514,2327.4 \
+2526.1,2322.5 2539.2,2318.5 2552.4,2315.3"];
+	"src/execution/pipeline/stages/01-parsing-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1149.3,2291.8 899.93,2119 942.48,2135.8 1019,2170.4 1071,2218.4 1092.4,2238.2 1082.7,2257.2 1107,2273.4 1116.9,2280 1128,2285 \
+1139.5,2288.8"];
+	"src/execution/pipeline/stages/02-inline-gate-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1554.2,2390.9 945.36,3102.9 1073.6,3120.3 1323.8,3145.8 1389,3091.4 1423.2,3062.9 1415.4,2937.9 1425,2894.4 1467.4,2701.4 1531.5,\
+2471.1 1551.4,2400.8"];
+	"src/execution/pipeline/stages/02-inline-gate-stage.ts" -> "src/logging/index.ts"	[pos="e,6132.9,2111.7 918.98,3102.9 1012.7,3122.5 1219.3,3156.7 1389,3122.4 1549.3,3090 1569.5,3019.4 1728,2979.4 1912.8,2932.7 1964.8,\
+2952.1 2155,2938.4 2377.3,2922.4 2433.1,2914.4 2656,2914.4 2656,2914.4 2656,2914.4 3379.5,2914.4 3660.6,2914.4 3726.5,2857.4 4006,\
+2827.4 4489.5,2775.5 4611.8,2776.4 5097,2744.4 5196.4,2737.8 5921.1,2764.4 5992,2694.4 6075.8,2611.6 5956.5,2259 6028,2165.4 6050.4,\
+2136 6088.5,2121.2 6122.8,2113.7"];
+	"src/execution/pipeline/stages/02-inline-gate-stage.ts" -> "src/execution/operators/chain-operator-executor.ts"	[pos="e,1881.5,1279 910.68,3079.9 959.03,3064.2 1036.1,3031 1071,2971.4 1114,2897.9 1051.9,1503.4 1107,1438.4 1149.8,1387.9 1627.5,1341.9 \
+1692,1327.4 1754.2,1313.4 1825.1,1294.5 1871.6,1281.7"];
+	"src/execution/pipeline/stages/02-inline-gate-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1181.9,2310.9 909.89,3079.8 957.87,3064 1035,3030.5 1071,2971.4 1142,2854.9 1028.2,2469.8 1107,2358.4 1122.4,2336.6 1147.5,2322.8 \
+1172.2,2314.1"];
+	"src/execution/pipeline/stages/02-inline-gate-stage.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,5676.3,3417.2 880.58,3103 916.41,3138.4 1022.6,3249 1071,3363.4 1110,3455.4 1035.2,3515.8 1107,3585.4 1216.8,3691.8 2497.6,3716.4 \
+2656,3716.4 2656,3716.4 2656,3716.4 3004.5,3716.4 3939.1,3716.4 4174.6,3658.6 5097,3508.4 5329.9,3470.5 5386.9,3453.1 5621,3423.4 \
+5635.7,3421.5 5651,3419.8 5666.3,3418.2"];
+	"src/gates/services/gate-reference-resolver.ts"	[height=0.31944,
+		pos="1248,3071.4",
+		width=3.9167];
+	"src/execution/pipeline/stages/02-inline-gate-stage.ts" -> "src/gates/services/gate-reference-resolver.ts"	[pos="e,1106.7,3078.8 1031.2,3082.8 1052.9,3081.6 1075.1,3080.5 1096.6,3079.3"];
+	"src/execution/pipeline/stages/02-inline-gate-stage.ts" -> "src/types/execution.ts"	[pos="e,6733.3,3967.9 880.87,3102.9 917.51,3138 1025.7,3247.7 1071,3363.4 1098.4,3433.3 1053.8,3646.4 1107,3699.4 1229.4,3821.2 2483.3,\
+3830.4 2656,3830.4 2656,3830.4 2656,3830.4 3004.5,3830.4 3551.5,3830.4 4914.5,3982.4 5461.5,3982.4 5461.5,3982.4 5461.5,3982.4 6200,\
+3982.4 6387.1,3982.4 6606.5,3973.7 6723,3968.4"];
+	"src/execution/pipeline/stages/03-operator-validation-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1540.8,2367.8 958.94,1905.9 1075.7,1896.6 1277.1,1900.2 1389,2015.4 1460.5,2089 1379,2151.7 1425,2243.4 1450.5,2294.3 1501.9,2338.4 \
+1532.7,2361.8"];
+	"src/execution/pipeline/stages/03-operator-validation-stage.ts" -> "src/logging/index.ts"	[pos="e,6182.5,2094.8 1023,1905.9 1039.3,1903.3 1055.6,1900.2 1071,1896.4 1235.6,1855.7 1258.6,1786.5 1425,1754.4 1541.5,1731.9 1573.4,\
+1750.3 1692,1754.4 2722.3,1789.7 2976.7,1856.8 4006,1913.4 4116.3,1919.5 5885.5,1966.2 5992,1995.4 6063.2,2014.9 6137,2062.6 6173.9,\
+2088.7"];
+	"src/execution/pipeline/stages/03-operator-validation-stage.ts" -> "src/execution/parsers/types/operator-types.ts"	[pos="e,2513.7,2309.2 1028.8,1905.9 1169.4,1896.9 1356.3,1887.9 1389,1901.4 1564.5,1973.7 1562,2064.1 1692,2202.4 1708.6,2220.1 1706.4,\
+2232.4 1728,2243.4 1883.6,2322.2 1959.3,2207.2 2119,2277.4 2138.9,2286.1 2134.8,2302.5 2155,2310.4 2288.8,2362.4 2334.5,2314 2478,\
+2310.4 2486.3,2310.2 2494.9,2309.9 2503.5,2309.6"];
+	"src/execution/pipeline/stages/03-operator-validation-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1243.6,2287.7 933.22,1928.9 976.17,1939.3 1031.7,1958.2 1071,1991.4 1167.8,2073.1 1222.7,2222.5 1240.5,2277.9"];
+	"src/frameworks/framework-validator.ts"	[height=0.31944,
+		pos="5462.5,1574.4",
+		width=3.4028];
+	"src/execution/pipeline/stages/03-operator-validation-stage.ts" -> "src/frameworks/framework-validator.ts"	[pos="e,5427.1,1586 927.51,1928.9 972.82,1934 1033.8,1932.4 1071,1896.4 1154.6,1815.7 1019.3,1713.7 1107,1637.4 1201.5,1555.1 1269.7,1598.8 \
+1389,1637.4 1407.8,1643.5 1406.3,1657 1425,1663.4 1552.6,1706.7 1593.3,1670 1728,1672.4 2802.5,1691.7 3071.3,1687.4 4146,1687.4 \
+4146,1687.4 4146,1687.4 4884,1687.4 5086.5,1687.4 5321.7,1619.6 5417.5,1589.1"];
+	"src/execution/pipeline/stages/04-planning-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1540,2367.6 902.77,1864.9 995.33,1836.1 1252.5,1772.5 1389,1901.4 1444.6,1953.9 1392.5,2174.2 1425,2243.4 1449.1,2294.7 1500.5,\
+2338.4 1531.8,2361.6"];
+	"src/execution/pipeline/stages/04-planning-stage.ts" -> "src/logging/index.ts"	[pos="e,6185.8,2094.6 929.79,1864.8 975.74,1852.9 1036.4,1829.6 1071,1785.4 1126.1,1715 1038.3,1644.7 1107,1587.4 1203.2,1507.1 1266.7,\
+1560 1389,1587.4 1406.3,1591.3 1407.9,1599.8 1425,1604.4 1671,1669.9 5751.9,1882 5992,1966.4 6068.7,1993.3 6143.8,2056.2 6178.3,\
+2087.7"];
+	"src/execution/pipeline/stages/04-planning-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1246,2287.5 1025.7,1874.9 1041.9,1879.6 1057.4,1886.5 1071,1896.4 1202.6,1992.1 1237.1,2207.8 1244.9,2277.3"];
+	"src/execution/planning/execution-planner.ts"	[height=0.31944,
+		pos="1248,1459.4",
+		width=3.8194];
+	"src/execution/pipeline/stages/04-planning-stage.ts" -> "src/execution/planning/execution-planner.ts"	[pos="e,1125.4,1471 932.95,1864.8 978.99,1853 1038.4,1829.8 1071,1785.4 1150.5,1677.2 1015.1,1583.3 1107,1485.4 1110,1482.1 1113.4,1479.2 \
+1116.9,1476.6"];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1553.4,2391.3 1010.6,2939.9 1144.7,2926.3 1333.3,2899.2 1389,2851.4 1398.2,2843.5 1518.9,2492.2 1550.1,2400.9"];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/logging/index.ts"	[pos="e,6132.7,2112 1056.6,2942.6 1156,2935.9 1279.8,2924.3 1389,2904.4 1405.3,2901.4 1408.8,2898 1425,2894.4 1939.3,2781.4 3250.4,2606.4 \
+3777,2606.4 3777,2606.4 3777,2606.4 5463.5,2606.4 5522.3,2606.4 5949.7,2619.3 5992,2578.4 6058.2,2514.4 5971.4,2238.1 6028,2165.4 \
+6050.6,2136.3 6088.5,2121.5 6122.7,2114"];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/types/index.ts"	[pos="e,6538.1,2178.1 908.71,2962.9 955.88,2976.1 1036.6,2997.7 1107,3011.4 1231.2,3035.5 1264.1,3030.4 1389,3050.4 1524.2,3072 1561.2,\
+3065.1 1692,3105.4 1708.7,3110.5 1711,3117.4 1728,3121.4 1982.3,3181.7 2054.1,3149.4 2315.5,3149.4 2315.5,3149.4 2315.5,3149.4 2658,\
+3149.4 3474.7,3149.4 3678.8,3138.4 4495.5,3138.4 4495.5,3138.4 4495.5,3138.4 4884,3138.4 5049.3,3138.4 6249.2,3176.3 6370,3063.4 \
+6503.1,2938.9 6533.1,2313.7 6537.8,2188.3"];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/execution/operators/chain-operator-executor.ts"	[pos="e,1842.8,1278.9 903.72,2939.8 951.43,2922 1034.8,2882.9 1071,2817.4 1110,2746.9 1052.7,1426.9 1107,1367.4 1118,1355.3 1675.8,1301.5 \
+1692,1299.4 1738.5,1293.5 1790.1,1286.3 1832.8,1280.3"];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/execution/types.ts"	[pos="e,7664.1,3257.9 910.18,2963 958.06,2978.7 1034.7,3011.8 1071,3070.4 1130.6,3166.6 1032.4,3493.2 1107,3578.4 1199.8,3684.4 1589.5,\
+3680.6 1728,3706.4 3368.2,4011.7 3793.1,4096.4 5461.5,4096.4 5461.5,4096.4 5461.5,4096.4 7092,4096.4 7202,4096.4 7550.3,4007.6 7556,\
+4001.4 7658.2,3890.6 7664,3379.7 7664.1,3268"];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1182.5,2311 902.44,2939.8 949.43,2921.8 1032.8,2882.2 1071,2817.4 1122.9,2729.2 1047.1,2441.4 1107,2358.4 1122.7,2336.7 1147.9,\
+2322.9 1172.7,2314.2"];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/metrics/index.ts"	[pos="e,1181.5,2984.5 977.47,2962.9 1039.6,2969.5 1115.8,2977.5 1171.3,2983.4"];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,5676.4,3408.7 910.14,2963 957.97,2978.8 1034.5,3011.9 1071,3070.4 1127.2,3160.6 1033,3471.1 1107,3547.4 1156.5,3598.4 1354,3577.6 \
+1425,3581.4 2468.9,3637 2731.6,3564.4 3777,3564.4 3777,3564.4 3777,3564.4 4148,3564.4 4414.7,3564.4 5074.1,3445.1 5340,3424.4 5449.4,\
+3415.9 5573.6,3411.3 5666.1,3408.9"];
+	"src/gates/constants.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="1558.5,1775.4",
+		width=2.0417];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/gates/constants.ts"	[pos="e,1553.3,1787.1 890.9,2939.9 930.18,2918.9 1012.8,2871.8 1071,2817.4 1241.4,2657.9 1294.8,2613 1389,2399.4 1424.9,2318 1403.8,2288.8 \
+1425,2202.4 1463.8,2044.2 1528,1858.4 1549.9,1796.6"];
+	"src/gates/services/gate-service-interface.ts"	[height=0.31944,
+		pos="1248,3265.4",
+		width=3.7778];
+	"src/execution/pipeline/stages/05-gate-enhancement-stage.ts" -> "src/gates/services/gate-service-interface.ts"	[pos="e,1238.5,3253.7 893.42,2962.9 933.25,2982 1012.7,3022.9 1071,3070.4 1139.1,3125.9 1204.3,3208.2 1232.5,3245.6"];
+	"src/execution/pipeline/stages/06-framework-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1539.8,2367.7 876.82,1336.1 905.18,1375.4 1002.1,1504.2 1107,1583.4 1219,1667.9 1311.3,1608.5 1389,1725.4 1452.9,1821.5 1377.9,\
+2138.1 1425,2243.4 1448.1,2295.1 1499.9,2338.7 1531.5,2361.7"];
+	"src/execution/pipeline/stages/06-framework-stage.ts" -> "src/logging/index.ts"	[pos="e,6198.1,2094.6 872.75,1312.6 891.21,1263.5 969.85,1074 1107,1004.4 1338.8,886.67 1433.6,972.4 1692,1001.4 2210.2,1059.5 2323.1,\
+1167.3 2836,1261.4 2999.8,1291.4 3041.4,1295.6 3207,1313.4 3245.6,1317.5 5961.2,1497.8 5992,1521.4 6180.8,1665.9 6197.2,1996.4 6198.1,\
+2084.5"];
+	"src/execution/pipeline/stages/06-framework-stage.ts" -> "src/execution/operators/chain-operator-executor.ts"	[pos="e,1853,1255.8 875.75,1312.9 901.38,1273.3 992.35,1143.2 1107,1097.4 1348.4,1000.9 1478.3,949.3 1692,1097.4 1729.5,1123.3 1695.9,\
+1161.1 1728,1193.4 1758.9,1224.4 1804.1,1242.7 1843.2,1253.3"];
+	"src/execution/pipeline/stages/06-framework-stage.ts" -> "src/frameworks/types/index.ts"	[pos="e,6805.3,561.74 870.64,1312.6 882.33,1252 943.89,971.62 1107,827.39 1258.9,693.12 2636.7,282.12 2836,245.39 3409,139.82 3563.3,193.39 \
+4146,193.39 4146,193.39 4146,193.39 6200,193.39 6410.6,193.39 6503.6,98.254 6673,223.39 6782.9,304.59 6801.7,488.69 6804.9,551.74"];
+	"src/execution/pipeline/stages/06-framework-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1244,2287.9 874.93,1336.1 901.56,1385.1 1004.8,1577.8 1071,1744.4 1151.6,1947.2 1221.4,2202.7 1241.3,2277.8"];
+	"src/execution/pipeline/stages/06-framework-stage.ts" -> "src/gates/constants.ts"	[pos="e,1539.9,1763.9 886.22,1336 980.06,1397.4 1418.8,1684.6 1531.2,1758.2"];
+	"src/frameworks/framework-manager.ts"	[height=0.31944,
+		pos="4496.5,1144.4",
+		width=3.4444];
+	"src/execution/pipeline/stages/06-framework-stage.ts" -> "src/frameworks/framework-manager.ts"	[pos="e,4462.9,1132.8 872.28,1312.6 889.63,1260.4 966.87,1048.1 1107,945.39 1273.9,823.01 1350.5,827.39 1557.5,827.39 1557.5,827.39 1557.5,\
+827.39 1924.5,827.39 2981.1,827.39 3251.8,876.69 4288,1083.4 4346.3,1095 4411.8,1115.6 4453.4,1129.6"];
+	"src/execution/pipeline/stages/06b-prompt-guidance-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1539.7,2367.7 873.59,763.22 898.41,821.17 1008,1081.5 1071,1303.4 1092.8,1380.2 1055.5,1418.3 1107,1479.4 1193.7,1582.3 1310.1,\
+1480.4 1389,1589.4 1474.4,1707.3 1366.5,2110.1 1425,2243.4 1447.8,2295.3 1499.7,2338.8 1531.3,2361.8"];
+	"src/execution/pipeline/stages/06b-prompt-guidance-stage.ts" -> "src/logging/index.ts"	[pos="e,6198.4,2094.8 1054.6,751.39 1193.2,751.39 1387.2,751.39 1557.5,751.39 1557.5,751.39 1557.5,751.39 1924.5,751.39 2371.3,751.39 \
+2410.8,1038.1 2836,1175.4 2995.8,1227 3040.7,1223.5 3207,1246.4 3211.8,1247.1 5988.2,1478.4 5992,1481.4 6191.1,1638.6 6199.8,1993.2 \
+6198.6,2084.6"];
+	"src/execution/pipeline/stages/06b-prompt-guidance-stage.ts" -> "src/types/index.ts"	[pos="e,6538.3,2154.8 877.52,739.52 932.3,668.91 1228.8,307.39 1557.5,307.39 1557.5,307.39 1557.5,307.39 4497.5,307.39 4873.4,307.39 5068.9,\
+269.08 5304,562.39 5361.6,634.27 5275.3,909.8 5340,975.39 5365.6,1001.3 5957.1,1030.9 5992,1041.4 6009.3,1046.6 6011,1054.2 6028,\
+1060.4 6174.1,1113.2 6262.7,1020.1 6370,1132.4 6515.6,1284.8 6535.7,2008.6 6538.2,2144.4"];
+	"src/execution/pipeline/stages/06b-prompt-guidance-stage.ts" -> "src/frameworks/types/index.ts"	[pos="e,6805.6,561.72 872.81,739.66 907.58,647.35 1151.3,41.393 1557.5,41.393 1557.5,41.393 1557.5,41.393 5807.5,41.393 6197,41.393 6375.6,\
+-72.215 6673,179.39 6789.9,278.32 6804,484 6805.5,551.45"];
+	"src/execution/pipeline/stages/06b-prompt-guidance-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1244.4,2287.7 873.95,763.12 900.41,820.65 1016.5,1079.2 1071,1303.4 1101.3,1427.9 1086.6,1462.9 1107,1589.4 1151.1,1862.7 1223,\
+2191.5 1242.2,2277.8"];
+	"src/frameworks/prompt-guidance/index.ts"	[height=0.31944,
+		pos="3778,913.39",
+		width=3.6806];
+	"src/execution/pipeline/stages/06b-prompt-guidance-stage.ts" -> "src/frameworks/prompt-guidance/index.ts"	[pos="e,3758.4,901.88 914.11,739.89 1024,713.22 1312.6,649.39 1557.5,649.39 1557.5,649.39 1557.5,649.39 3004.5,649.39 3311.7,649.39 3652.5,\
+838.66 3749.8,896.69"];
+	"src/execution/pipeline/stages/07-session-stage.ts" -> "src/chain-session/types.ts"	[pos="e,1162.2,2378.7 1023.3,2377.6 1066.9,2378 1113,2378.3 1152,2378.6"];
+	"src/execution/pipeline/stages/07-session-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1481.4,2367.9 997.44,2364.9 1032.9,2362.2 1071.4,2359.7 1107,2358.4 1232.2,2353.7 1263.9,2350.6 1389,2358.4 1415.9,2360.1 1445,\
+2363.2 1471.4,2366.6"];
+	"src/execution/pipeline/stages/07-session-stage.ts" -> "src/logging/index.ts"	[pos="e,6132.9,2113 980.36,2387.9 1020.3,2391.8 1065.6,2396.1 1107,2399.4 1382.7,2421.6 1451.7,2426.3 1728,2439.4 1917.7,2448.4 1965.2,\
+2449.5 2155,2452.4 2298.5,2454.6 2334.5,2455.3 2478,2452.4 2878,2444.4 2977.4,2416.4 3377.5,2416.4 3377.5,2416.4 3377.5,2416.4 5463.5,\
+2416.4 5581.5,2416.4 5905.2,2444.4 5992,2364.4 6058.1,2303.5 5969.6,2233.7 6028,2165.4 6051.8,2137.6 6089.3,2122.9 6123.1,2115.1"];
+	"src/execution/pipeline/stages/07-session-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1153.9,2311 1021.1,2364.8 1038.3,2361.2 1055.2,2356.5 1071,2350.4 1089.2,2343.4 1089,2332.9 1107,2325.4 1118.7,2320.5 1131.4,2316.5 \
+1144.1,2313.3"];
+	"src/execution/pipeline/stages/08-response-capture-stage.ts" -> "src/chain-session/types.ts"	[pos="e,1162.3,2387.9 983.09,2405.9 1037.1,2400.5 1100.9,2394.1 1152.2,2388.9"];
+	"src/execution/pipeline/stages/08-response-capture-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1472.3,2390.9 1052.7,2414.8 1152.4,2412.4 1277.5,2407.9 1389,2399.4 1412.8,2397.6 1438.4,2394.9 1462.2,2392.1"];
+	"src/execution/pipeline/stages/08-response-capture-stage.ts" -> "src/mcp-tools/prompt-engine/core/types.ts"	[pos="e,2181.8,3441.8 919.73,2405.8 966.22,2398.7 1033.1,2397.3 1071,2437.4 1135.9,2506 1043.4,3216.6 1107,3286.4 1177.8,3364.1 1866.6,\
+3420 2171.5,3441.1"];
+	"src/execution/pipeline/stages/08-response-capture-stage.ts" -> "src/logging/index.ts"	[pos="e,6132.6,2112.4 1052.9,2428.4 1226.8,2438.4 1495.1,2452.7 1728,2460.4 2080.3,2472 2566.9,2492.4 3777,2492.4 3777,2492.4 3777,2492.4 \
+5463.5,2492.4 5581.1,2492.4 5905.9,2548.4 5992,2468.4 6091.3,2376.1 5943,2271.1 6028,2165.4 6051,2136.8 6088.7,2122 6122.7,2114.4"];
+	"src/execution/pipeline/stages/08-response-capture-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1208,2311 1048,2405.9 1055.9,2403.2 1063.6,2400 1071,2396.4 1091.9,2386.1 1087.9,2371.6 1107,2358.4 1134.9,2339.1 1170.2,2324.2 \
+1198.4,2314.3"];
+	"src/execution/pipeline/stages/09-execution-stage.ts" -> "src/chain-session/types.ts"	[pos="e,1184.3,2367.9 936.41,1777 982.28,1788.6 1039.9,1811.4 1071,1855.4 1130.7,1939.9 1046.8,2235.3 1107,2319.4 1123,2341.8 1149.2,2355.9 \
+1174.6,2364.7"];
+	"src/execution/pipeline/stages/09-execution-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1539.9,2367.6 912.55,1753.9 1013.2,1730.4 1261.2,1689.9 1389,1820.4 1455,1887.8 1385.8,2157.6 1425,2243.4 1448.5,2294.9 1500.2,\
+2338.5 1531.6,2361.7"];
+	"src/execution/pipeline/stages/09-execution-stage.ts" -> "src/logging/index.ts"	[pos="e,6198,2094.6 872.52,1753.7 890.36,1704 967.63,1509.2 1107,1438.4 1218.7,1381.6 1263.7,1437.8 1389,1438.4 1952.1,1440.8 2092.9,1449.4 \
+2656,1449.4 2656,1449.4 2656,1449.4 3004.5,1449.4 3046,1449.4 5958.3,1522.1 5992,1546.4 6176.9,1679.9 6196.1,1997.8 6197.9,2084.3"];
+	"src/execution/pipeline/stages/09-execution-stage.ts" -> "src/execution/operators/chain-operator-executor.ts"	[pos="e,1888.3,1255.8 874.45,1753.8 899.54,1704.8 998.81,1509.3 1071,1344.4 1088.4,1304.5 1074.3,1282 1107,1253.4 1304.5,1080.6 1437.3,\
+1111.3 1692,1174.4 1709.6,1178.7 1711.5,1185.9 1728,1193.4 1778.7,1216.3 1838.7,1238.4 1878.6,1252.4"];
+	"src/execution/pipeline/stages/09-execution-stage.ts" -> "src/utils/jsonUtils.ts"	[pos="e,2937.8,1017.6 875.61,1753.9 904.9,1705.8 1017.2,1515.8 1071,1344.4 1101.1,1248.6 1035.7,1192.1 1107,1121.4 1367.4,863.35 1555.9,\
+997.39 1922.5,997.39 1922.5,997.39 1922.5,997.39 2317.5,997.39 2539.4,997.39 2801.6,1010.1 2927.5,1017"];
+	"src/execution/pipeline/stages/09-execution-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1245.6,2287.7 921.56,1777 966.71,1789.4 1030.5,1813.2 1071,1855.4 1193.7,1983.2 1234.2,2206.8 1244.2,2277.4"];
+	"src/execution/pipeline/stages/10-formatting-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1554.1,2390.9 927.88,3483.8 973.71,3471.8 1035.2,3448.3 1071,3404.4 1117.1,3347.9 1060.5,3300.5 1107,3244.4 1194.1,3139.2 1305.3,\
+3230.3 1389,3122.4 1451.9,3041.3 1404.2,2994.9 1425,2894.4 1465.1,2700.9 1530.8,2470.9 1551.2,2400.8"];
+	"src/execution/pipeline/stages/10-formatting-stage.ts" -> "src/mcp-tools/prompt-engine/core/types.ts"	[pos="e,2181.8,3454.7 1030.7,3506.2 1056.2,3507.5 1082.3,3508.7 1107,3509.4 1232.3,3513.1 1263.8,3515.3 1389,3509.4 1540.2,3502.3 1577,\
+3488 1728,3477.4 1879.2,3466.8 2052.5,3459.4 2171.5,3455.1"];
+	"src/execution/pipeline/stages/10-formatting-stage.ts" -> "src/logging/index.ts"	[pos="e,6132.8,2111.7 1030.9,3493.2 1218.7,3481.3 1523.7,3431.8 1692,3243.4 1750.1,3178.3 1663.6,3109.3 1728,3050.4 1798.3,2986 2059.8,\
+3015.1 2155,3009.4 3101.8,2952.8 3343.1,3025 4288,2943.4 4289.5,2943.3 5991,2773.5 5992,2772.4 6085.6,2674.9 5946.4,2273.1 6028,\
+2165.4 6050.3,2135.9 6088.3,2121.1 6122.7,2113.7"];
+	"src/execution/pipeline/stages/10-formatting-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1180.9,2311 937.02,3483.9 983.17,3472.2 1040.9,3449.2 1071,3404.4 1135.8,3307.9 1041,2454.2 1107,2358.4 1122,2336.6 1146.7,2322.9 \
+1171.2,2314.2"];
+	"src/execution/pipeline/stages/10-formatting-stage.ts" -> "src/types/execution.ts"	[pos="e,6766.2,3975.9 882.08,3507 917.09,3536.2 1014.2,3614.1 1107,3658.4 1613,3899.9 1754.8,4020.4 2315.5,4020.4 2315.5,4020.4 2315.5,\
+4020.4 6200,4020.4 6410.5,4020.4 6464.7,4026.6 6673,3996.4 6700.9,3992.4 6731.5,3985.1 6756.3,3978.6"];
+	"src/mcp-tools/prompt-engine/processors/response-formatter.ts"	[height=0.31944,
+		pos="1923.5,3645.4",
+		width=5.4306];
+	"src/execution/pipeline/stages/10-formatting-stage.ts" -> "src/mcp-tools/prompt-engine/processors/response-formatter.ts"	[pos="e,1826.3,3656.9 883.88,3507 920.27,3533.7 1015.5,3599.1 1107,3623.4 1354.1,3689.1 1658.3,3673.1 1816.1,3657.9"];
+	"src/execution/pipeline/stages/10-gate-review-stage.ts" -> "src/chain-session/types.ts"	[pos="e,1186.9,2367.8 957.18,2023.9 997.78,2033.9 1043,2052.2 1071,2086.4 1137.4,2167.4 1042.8,2236.6 1107,2319.4 1124.2,2341.6 1151.3,\
+2355.7 1177.1,2364.7"];
+	"src/execution/pipeline/stages/10-gate-review-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1542.1,2367.6 1035.1,2010.1 1148.2,2017.3 1293.8,2045.1 1389,2132.4 1427.2,2167.4 1398.2,2199 1425,2243.4 1454.5,2292.2 1504.6,\
+2337.1 1534,2361.1"];
+	"src/execution/pipeline/stages/10-gate-review-stage.ts" -> "src/logging/index.ts"	[pos="e,6175.6,2094.8 910.05,2000.8 957.45,1987.9 1037.4,1966.9 1107,1952.4 1548.1,1860.3 1668.4,1889.3 2119,1891.4 2586.6,1893.6 2703.8,\
+1883.8 3171,1901.4 3263.9,1904.9 3913.1,1951.7 4006,1956.4 4226.5,1967.5 5775.7,1981.9 5992,2026.4 6056.3,2039.6 6126.6,2070.9 6166.2,\
+2090.2"];
+	"src/execution/pipeline/stages/10-gate-review-stage.ts" -> "src/execution/operators/chain-operator-executor.ts"	[pos="e,1764.9,1260.8 961.56,2000.8 1001.7,1990.8 1045.3,1972.2 1071,1937.4 1113.7,1879.6 1055.5,1341.6 1107,1291.4 1152.2,1247.4 1529.4,\
+1253 1754.6,1260.5"];
+	"src/execution/pipeline/stages/10-gate-review-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1240.5,2287.9 922.93,2023.9 965.97,2034.9 1026.1,2054.6 1071,2086.4 1148,2140.9 1210.6,2237.4 1235.4,2279.2"];
+	"src/execution/pipeline/stages/11-call-to-action-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1526.1,2367.9 954.7,2227.9 1061.9,2217.5 1248,2212.5 1389,2278.4 1409.8,2288.1 1406.4,2302 1425,2315.4 1453.3,2335.8 1489.2,2352.7 \
+1516.5,2364"];
+	"src/execution/pipeline/stages/11-call-to-action-stage.ts" -> "src/logging/index.ts"	[pos="e,6132.7,2101 909.22,2227.8 1031.8,2193.3 1408.5,2091.4 1728,2046.4 2137.1,1988.7 2242.8,1991.4 2656,1991.4 2656,1991.4 2656,1991.4 \
+3004.5,1991.4 3839.7,1991.4 4046.8,2070.4 4882,2070.4 4882,2070.4 4882,2070.4 5463.5,2070.4 5704.6,2070.4 5989.6,2090 6122.6,2100.3"];
+	"src/execution/pipeline/stages/11-call-to-action-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1174.2,2287.9 941.48,2251 1005.2,2261.1 1097.7,2275.7 1164.2,2286.3"];
+	"src/execution/pipeline/stages/12-post-formatting-cleanup-stage.ts" -> "src/chain-session/types.ts"	[pos="e,1218.3,2391 1015.9,2446.9 1034.6,2444.3 1053.3,2441.2 1071,2437.4 1119.6,2427 1173.6,2408 1208.8,2394.6"];
+	"src/execution/pipeline/stages/12-post-formatting-cleanup-stage.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1518,2391 1071.1,2451.4 1167.8,2446.1 1284.8,2436.8 1389,2420.4 1429.6,2414 1474.7,2402.8 1508.1,2393.7"];
+	"src/execution/pipeline/stages/12-post-formatting-cleanup-stage.ts" -> "src/logging/index.ts"	[pos="e,6132.9,2112.2 892.26,2469.9 979.01,2511 1287.7,2647.4 1557.5,2647.4 1557.5,2647.4 1557.5,2647.4 1924.5,2647.4 2314.1,2647.4 2417.1,\
+2676.2 2800,2604.4 2816.6,2601.3 2819.5,2595.9 2836,2592.4 2998,2557.5 3041.7,2566.3 3207,2554.4 3459.9,2536.1 3523.4,2530.4 3777,\
+2530.4 3777,2530.4 3777,2530.4 5463.5,2530.4 5581.1,2530.4 5906.5,2585.2 5992,2504.4 6047.1,2452.4 5980.9,2224.7 6028,2165.4 6050.9,\
+2136.6 6088.8,2121.8 6122.9,2114.2"];
+	"src/execution/pipeline/stages/12-post-formatting-cleanup-stage.ts" -> "src/execution/pipeline/stage.ts"	[pos="e,1196.2,2310.9 1055.7,2446.8 1061,2444 1066.1,2440.9 1071,2437.4 1102.3,2414.9 1079.3,2385.3 1107,2358.4 1128.8,2337.2 1159.4,2323.1 \
+1186.4,2314.1"];
+	"src/execution/pipeline/stages/12-post-formatting-cleanup-stage.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,5676.4,3401.6 925.93,2469.9 973.54,2482.8 1038.5,2508.7 1071,2558.4 1118.4,2630.9 1050.2,3272 1107,3337.4 1261,3514.6 1920.4,3461.5 \
+2155,3471.4 3461.7,3526.4 3789.7,3445.1 5097,3404.4 5313.8,3397.6 5368.1,3396 5585,3399.4 5611.2,3399.8 5639.2,3400.5 5666.1,3401.3"];
+	"src/metrics/analytics-service.ts"	[height=0.31944,
+		pos="1558.5,2915.4",
+		width=2.7778];
+	"src/metrics/index.ts" -> "src/metrics/analytics-service.ts"	[pos="e,1472.3,2927 1314.7,2984.8 1338.7,2980.9 1365.6,2974.9 1389,2965.4 1406.8,2958.2 1407.2,2948.7 1425,2941.4 1436.8,2936.5 1449.6,\
+2932.5 1462.5,2929.3"];
+	"src/metrics/types.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="1923.5,2915.4",
+		width=1.8472];
+	"src/metrics/index.ts" -> "src/metrics/types.ts"	[pos="e,1856.9,2922.8 1314.8,2984 1440.5,2969.8 1713.8,2938.9 1846.8,2923.9"];
+	"src/gates/core/temporary-gate-registry.ts" -> "src/logging/index.ts"	[pos="e,6132.6,2111.5 5815.1,3394.7 5844.6,3348.1 5952.4,3171.2 5992,3008.4 6014.1,2917.3 5972,2240.6 6028,2165.4 6050.1,2135.7 6088.1,\
+2120.9 6122.5,2113.5"];
+	"src/gates/core/temporary-gate-registry.ts" -> "src/gates/types.ts"	[pos="e,7029.7,3444.5 5936.6,3410.4 6204.5,3418.8 6812.7,3437.7 7019.6,3444.2"];
+	"src/mcp-tools/prompt-engine/core/chain-management.ts" -> "src/chain-session/types.ts"	[pos="e,1243.5,2390.9 880.57,3787.9 917.3,3751.9 1027.9,3637 1071,3516.4 1111.9,3401.9 1088.9,3090.6 1107,2970.4 1141,2744.3 1217.8,2477.2 \
+1240.6,2400.8"];
+	"src/mcp-tools/prompt-engine/core/chain-management.ts" -> "src/mcp-tools/prompt-engine/core/types.ts"	[pos="e,2265.3,3461.9 911.95,3787.8 959.7,3775.1 1038.7,3754.4 1107,3737.4 1546.8,3628 2079,3504.8 2255.5,3464.2"];
+	"src/mcp-tools/prompt-engine/core/chain-management.ts" -> "src/types/index.ts"	[pos="e,6538.7,2178.1 908.64,3810.9 955.74,3824 1036.4,3845 1107,3856.4 1380.4,3900.4 1451.5,3892.6 1728,3907.4 2347.1,3940.6 3099.2,3944.4 \
+4146,3944.4 4146,3944.4 4146,3944.4 4497.5,3944.4 4995.1,3944.4 5102.1,3798.5 5585,3678.4 5766.1,3633.3 5827.8,3664 5992,3575.4 \
+6011.1,3565.1 6009,3552.8 6028,3542.4 6166,3466.6 6266.3,3568.8 6370,3450.4 6543.6,3252.2 6540.6,2340.6 6538.8,2188.1"];
+	"src/mcp-tools/prompt-engine/core/chain-management.ts" -> "src/mcp-tools/prompt-engine/processors/response-formatter.ts"	[pos="e,1855.2,3656.9 955.15,3787.9 1105.3,3767.7 1423.7,3724.4 1692,3683.4 1743.2,3675.6 1800.6,3666.1 1845.3,3658.6"];
+	"src/gates/core/index.ts"	[height=0.31944,
+		pos="4883,3636.4",
+		width=2.1111];
+	"src/mcp-tools/prompt-engine/core/chain-management.ts" -> "src/gates/core/index.ts"	[pos="e,4867.3,3648 960.17,3810.9 1188.6,3838.5 1801.9,3906.4 2315.5,3906.4 2315.5,3906.4 2315.5,3906.4 3004.5,3906.4 3747.2,3906.4 3960.8,\
+3983 4669,3759.4 4744.2,3735.6 4821.8,3682.1 4859.1,3654.2"];
+	"src/gates/services/gate-reference-resolver.ts" -> "src/gates/constants.ts"	[pos="e,1552.7,1787 1313.2,3059.8 1341.2,3051.3 1371.5,3036.6 1389,3011.4 1440.2,2937.4 1409.5,2291 1425,2202.4 1453,2041.9 1524.1,1857.6 \
+1548.9,1796.4"];
+	"src/gates/core/gate-loader.ts"	[height=0.31944,
+		pos="5462.5,3562.4",
+		width=2.5972];
+	"src/gates/services/gate-reference-resolver.ts" -> "src/gates/core/gate-loader.ts"	[pos="e,5368.8,3555.3 1301.2,3082.9 1389,3101.9 1571.8,3140.1 1728,3163.4 3160.9,3377.2 4919.8,3520.5 5358.7,3554.6"];
+	"src/frameworks/framework-validator.ts" -> "src/logging/index.ts"	[pos="e,6196.9,2094.8 5569.6,1585.9 5721.4,1602.6 5983.6,1632.1 5992,1638.4 6146.3,1752.9 6186.9,2008.2 6195.8,2084.5"];
+	"src/frameworks/framework-validator.ts" -> "src/frameworks/types/index.ts"	[pos="e,6800.1,585.24 5465.7,1562.8 5482.6,1472.6 5593.3,887.46 5621,862.39 5970.3,546.81 6261.4,967.87 6673,739.39 6734,705.53 6777.2,\
+631.04 6795.6,594.48"];
+	"src/frameworks/methodology/framework-registry.ts"	[height=0.31944,
+		pos="5806.5,1384.4",
+		width=4.4444];
+	"src/frameworks/framework-validator.ts" -> "src/frameworks/methodology/framework-registry.ts"	[pos="e,5784.5,1396.1 5484.4,1562.8 5542.7,1530.4 5707.5,1438.9 5775.5,1401"];
+	"src/frameworks/framework-validator.ts" -> "src/utils/errorHandling.ts"	[pos="e,5798.9,2174.6 5470,1586.1 5511.6,1660.5 5739.8,2068.8 5794,2165.7"];
+	"src/execution/planning/execution-planner.ts" -> "src/execution/context/execution-context.ts"	[pos="e,1539.7,2367.7 1277.5,1471 1310.9,1486.2 1364.6,1516.5 1389,1561.4 1461.4,1694.8 1364.1,2104.4 1425,2243.4 1447.7,2295.3 1499.6,\
+2338.8 1531.3,2361.8"];
+	"src/execution/planning/execution-planner.ts" -> "src/logging/index.ts"	[pos="e,6185.4,2094.6 1364.4,1470.9 1373.2,1474.7 1381.6,1479.4 1389,1485.4 1421,1511.1 1391.5,1546.7 1425,1570.4 1515.4,1634.4 1811.7,\
+1601.4 1922.5,1601.4 1922.5,1601.4 1922.5,1601.4 2317.5,1601.4 2368.7,1601.4 5945.8,1882.2 5992,1904.4 6013,1914.5 6011.6,1925.9 \
+6028,1942.4 6081.2,1996.1 6146,2057.5 6178,2087.7"];
+	"src/execution/planning/execution-planner.ts" -> "src/types/index.ts"	[pos="e,6538.4,2154.8 1253,1447.7 1268.1,1404.8 1326.6,1254.3 1425,1174.4 1679.6,967.82 1852.3,1115.1 2119,924.39 2139.8,909.49 2133.3,\
+893.08 2155,879.39 2279.7,800.61 2347.6,872.35 2478,803.39 2497.2,793.25 2495.7,782.1 2514,770.39 2644.7,686.72 2688.3,683.09 2836,\
+635.39 3612.5,384.62 3853.7,497.82 4669,531.39 4843.3,538.57 4895.7,497.46 5061,553.39 5184.7,595.24 5235.9,607.01 5304,718.39 5338,\
+773.99 5293.4,963.87 5340,1009.4 5392.1,1060.3 5930.2,1035.9 5992,1074.4 6017.7,1090.4 6002.3,1116.2 6028,1132.4 6092.7,1173.2 6314.4,\
+1117.9 6370,1170.4 6517.6,1309.8 6536,2011.6 6538.2,2144.6"];
+	"src/execution/planning/execution-planner.ts" -> "src/execution/operators/chain-operator-executor.ts"	[pos="e,1889.8,1255.9 1252.7,1447.6 1266.9,1405.2 1321.9,1260.3 1425,1206.4 1530.2,1151.4 1574.3,1191.1 1692,1206.4 1759.1,1215.1 1834.5,\
+1237.6 1880.3,1252.7"];
+	"src/execution/planning/execution-planner.ts" -> "src/gates/constants.ts"	[pos="e,1547.1,1763.7 1269.3,1471 1298.1,1488.2 1351.7,1522.5 1389,1561.4 1409,1582.2 1407.8,1592.3 1425,1615.4 1464.2,1668 1514.6,1726.6 \
+1540.5,1756.2"];
+	"src/execution/planning/execution-planner.ts" -> "src/frameworks/framework-manager.ts"	[pos="e,4421.4,1132.9 1312.1,1447.9 1336.2,1443.4 1363.9,1438.2 1389,1433.4 1713.9,1370.7 1795,1354.4 2119,1287.4 2674.3,1172.6 2810.4,\
+1077.4 3377.5,1077.4 3377.5,1077.4 3377.5,1077.4 3779,1077.4 4008.5,1077.4 4277.6,1111.9 4411.3,1131.4"];
+	"src/mcp-tools/prompt-engine/utils/category-extractor.ts"	[height=0.31944,
+		pos="3378.5,1565.4",
+		width=4.7639];
+	"src/execution/planning/execution-planner.ts" -> "src/mcp-tools/prompt-engine/utils/category-extractor.ts"	[pos="e,3206.7,1564.7 1359,1470.9 1369.6,1474.6 1379.8,1479.3 1389,1485.4 1413.1,1501.3 1399.9,1525.2 1425,1539.4 1521.3,1594 1811.8,1563.4 \
+1922.5,1563.4 1922.5,1563.4 1922.5,1563.4 2658,1563.4 2841.3,1563.4 3050.8,1564.1 3196.3,1564.6"];
+	"src/semantic/configurable-semantic-analyzer.ts"	[height=0.31944,
+		pos="5806.5,1343.4",
+		width=4.1528];
+	"src/execution/planning/execution-planner.ts" -> "src/semantic/configurable-semantic-analyzer.ts"	[pos="e,5684.2,1354.9 1320.1,1471 1442.6,1489.9 1701.9,1525.4 1922.5,1525.4 1922.5,1525.4 1922.5,1525.4 3379.5,1525.4 3833.7,1525.4 5236.8,\
+1397 5674,1355.9"];
+	"src/semantic/types.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="7665,896.39",
+		width=1.9861];
+	"src/execution/planning/execution-planner.ts" -> "src/semantic/types.ts"	[pos="e,7663.4,884.72 1250.7,1447.9 1259.3,1394.9 1301.5,1172.4 1425,1050.4 1542.7,934.15 831.89,1141.1 3207,378.39 3373.3,324.99 3414,\
+305.02 3586,274.39 4092.4,184.2 6509.4,41.393 6805.5,41.393 6805.5,41.393 6805.5,41.393 7092,41.393 7298.7,41.393 7405.3,-69.031 \
+7556,72.393 7616.5,129.18 7655.5,749.41 7662.8,874.49"];
+	"src/gates/services/gate-service-interface.ts" -> "src/types/index.ts"	[pos="e,6537.4,2178 1384.3,3259.8 1678.5,3248.2 2398.8,3222.4 3002.5,3222.4 3002.5,3222.4 3002.5,3222.4 3379.5,3222.4 3421,3222.4 6338.6,\
+3183.5 6370,3156.4 6446.7,3090.2 6523,2327.9 6536.4,2188.3"];
+	"src/gates/core/gate-definitions.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="1558.5,3223.4",
+		width=2.9306];
+	"src/gates/services/gate-service-interface.ts" -> "src/gates/core/gate-definitions.ts"	[pos="e,1473,3234.9 1333.7,3253.9 1373.8,3248.4 1421.7,3241.9 1462.9,3236.3"];
+	"src/frameworks/framework-manager.ts" -> "src/logging/index.ts"	[pos="e,6195.2,2094.6 4523.3,1155.9 4632,1204.6 5048.4,1391.3 5061,1399.4 5181.7,1477.2 5209.4,1504.4 5304,1612.4 5323,1634.1 5315.5,1651.1 \
+5340,1666.4 5463.9,1743.9 5870.3,1671.5 5992,1752.4 6116.9,1835.3 6175.8,2021.7 6192.7,2084.9"];
+	"src/frameworks/framework-manager.ts" -> "src/types/index.ts"	[pos="e,6537.7,2154.7 4620.8,1152.3 4976.1,1175.3 5978.5,1240.9 5992,1251.4 6032.3,1282.7 5988.8,1327.7 6028,1360.4 6145.8,1458.8 6257.2,\
+1304.2 6370,1408.4 6482.7,1512.5 6528.2,2031 6536.9,2144.4"];
+	"src/frameworks/framework-manager.ts" -> "src/frameworks/types/index.ts"	[pos="e,6765.6,584.91 4590.1,1132.9 4726.8,1115.2 4975.6,1080.5 5061,1051.4 5194.3,1006 5207.4,948.79 5340,901.39 5444.5,864.04 5506.2,\
+931.53 5585,853.39 5641.7,797.17 5560.9,729.96 5621,677.39 5665.1,638.82 6615.1,614.3 6673,605.39 6700.6,601.14 6731,593.99 6755.7,\
+587.53"];
+	"src/frameworks/methodology/index.ts"	[height=0.31944,
+		pos="5462.5,955.39",
+		width=3.3472];
+	"src/frameworks/framework-manager.ts" -> "src/frameworks/methodology/index.ts"	[pos="e,5441.1,967.1 4620.6,1152.4 4735.8,1156.9 4912.1,1156.3 5061,1123.4 5207.3,1091.1 5367.8,1007.7 5432.3,972.01"];
+	"src/frameworks/prompt-guidance/index.ts" -> "src/frameworks/types/index.ts"	[pos="e,6798,561.54 3791.9,901.63 3825,871.8 3917.1,792.26 4006,745.39 4138.3,675.66 4178.7,670.83 4324,635.39 4890,497.34 5039.9,487.73 \
+5621,445.39 5854.2,428.41 6456.3,357.8 6673,445.39 6727,467.22 6771.2,522.79 6792.3,553.04"];
+	"src/frameworks/prompt-guidance/service.ts"	[height=0.31944,
+		pos="4147,953.39",
+		width=3.8194];
+	"src/frameworks/prompt-guidance/index.ts" -> "src/frameworks/prompt-guidance/service.ts"	[pos="e,4040.5,941.89 3884.7,924.91 3930.2,929.88 3983.7,935.7 4030.3,940.78"];
+	"src/frameworks/prompt-guidance/methodology-tracker.ts"	[height=0.31944,
+		pos="4883,1031.4",
+		width=4.9444];
+	"src/frameworks/prompt-guidance/index.ts" -> "src/frameworks/prompt-guidance/methodology-tracker.ts"	[pos="e,4704.8,1031.2 3815.5,925.01 3860.1,938.7 3937.8,961.14 4006,973.39 4241,1015.6 4516.5,1027.9 4694.8,1031"];
+	"src/frameworks/prompt-guidance/system-prompt-injector.ts"	[height=0.31944,
+		pos="5806.5,537.39",
+		width=5.1528];
+	"src/frameworks/prompt-guidance/index.ts" -> "src/frameworks/prompt-guidance/system-prompt-injector.ts"	[pos="e,5694,548.93 3804.1,901.78 3894.9,860.79 4216.1,725.39 4495.5,725.39 4495.5,725.39 4495.5,725.39 5201.5,725.39 5401.4,725.39 5427.6,\
+613.67 5621,563.39 5641.1,558.16 5662.8,553.92 5684,550.49"];
+	"src/frameworks/prompt-guidance/template-enhancer.ts"	[height=0.31944,
+		pos="4496.5,913.39",
+		width=4.7917];
+	"src/frameworks/prompt-guidance/index.ts" -> "src/frameworks/prompt-guidance/template-enhancer.ts"	[pos="e,4323.9,913.39 3910.8,913.39 4024,913.39 4188.2,913.39 4313.8,913.39"];
+	"src/mcp-tools/prompt-engine/processors/response-formatter.ts" -> "src/mcp-tools/prompt-engine/core/types.ts"	[pos="e,2292.3,3461.9 1947.8,3633.8 2014.5,3600.5 2206.3,3504.8 2283.1,3466.5"];
+	"src/mcp-tools/prompt-engine/processors/response-formatter.ts" -> "src/logging/index.ts"	[pos="e,6132.8,2111.6 1981,3633.9 2290.9,3570.5 3815.9,3258.4 5061,2996.4 5169.1,2973.6 5216.9,3012.3 5304,2944.4 5332.5,2922.2 5310.2,\
+2891.9 5340,2871.4 5399.9,2830.1 5941.5,2862.8 5992,2810.4 6091.6,2707 5941.6,2280 6028,2165.4 6050.3,2135.9 6088.3,2121 6122.7,\
+2113.6"];
+	"src/mcp-tools/prompt-engine/processors/response-formatter.ts" -> "src/types/index.ts"	[pos="e,6538.6,2178.1 2086.7,3656.9 2234.9,3666.4 2460.1,3678.4 2656,3678.4 2656,3678.4 2656,3678.4 3779,3678.4 4456.8,3678.4 4632.9,3792.5 \
+5304,3697.4 5619.2,3652.7 5686.7,3588.6 5992,3498.4 6160.3,3448.7 6255.9,3517.7 6370,3384.4 6532.1,3194.9 6538.7,2336.6 6538.6,2188.3"];
+	"src/mcp-tools/prompt-engine/utils/category-extractor.ts" -> "src/logging/index.ts"	[pos="e,6197.5,2094.8 3550.4,1565.4 3705.7,1565.4 3941.2,1565.4 4146,1565.4 4146,1565.4 4146,1565.4 4884,1565.4 5007.1,1565.4 5893.3,1516.8 \
+5992,1590.4 6161.1,1716.5 6191.6,2003.8 6196.9,2084.8"];
+	"src/semantic/configurable-semantic-analyzer.ts" -> "src/logging/index.ts"	[pos="e,6195.2,2094.9 5956.2,1343.3 5969.2,1347.9 5981.4,1354.4 5992,1363.4 6021.3,1388.3 6163.7,1966.1 6192.8,2085.1"];
+	"src/semantic/configurable-semantic-analyzer.ts" -> "src/execution/types.ts"	[pos="e,7662.7,3234.6 5952.3,1355 5965.8,1357.3 5979.2,1360.1 5992,1363.4 6168.7,1409.5 6221.8,1417.7 6370,1524.4 7014.5,1988.1 7175.8,\
+2163.4 7556,2860.4 7625.5,2987.8 7653.4,3163.7 7661.4,3224.6"];
+	"src/semantic/configurable-semantic-analyzer.ts" -> "src/semantic/types.ts"	[pos="e,7593.1,892.53 5809,1331.6 5817.3,1272.1 5863.1,1003.2 6028,896.39 6075.6,865.53 6481.7,877.39 6538.5,877.39 6538.5,877.39 6538.5,\
+877.39 7092,877.39 7267.1,877.39 7472.2,886.4 7583,892.01"];
+	"src/semantic/configurable-semantic-analyzer.ts" -> "src/types.ts"	[pos="e,6782.8,2898.8 5866.5,1331.8 5907.8,1327.5 5960.8,1330.1 5992,1363.4 6056.1,1431.8 5988.2,2121.5 6028,2206.4 6198.2,2569.1 6650.1,\
+2828.4 6773.8,2894.1"];
+	"src/frameworks/methodology/guides/5w1h-guide.ts"	[height=0.31944,
+		pos="6199,917.39",
+		width=4.4722];
+	"src/frameworks/methodology/index.ts" -> "src/frameworks/methodology/guides/5w1h-guide.ts"	[pos="e,6184.7,905.88 5563.7,943.8 5571.5,940.06 5578.7,935.34 5585,929.39 5630,886.59 5571.8,832.22 5621,794.39 5686.4,744.17 5912.5,\
+772.47 5992,794.39 6066.7,815 6141.7,870.64 6177,899.49"];
+	"src/frameworks/methodology/interfaces.ts"	[height=0.31944,
+		pos="6539.5,993.39",
+		width=3.7083];
+	"src/frameworks/methodology/index.ts" -> "src/frameworks/methodology/interfaces.ts"	[pos="e,6520.9,981.81 5564.6,943.83 5572.1,940.07 5579,935.34 5585,929.39 5638.7,875.75 5561.9,810.09 5621,762.39 5749.3,658.81 5829.5,\
+734.44 5992,762.39 6167.7,792.61 6208.1,821.84 6370,896.39 6422.4,920.52 6480,955.68 6512.4,976.37"];
+	"src/frameworks/methodology/guides/cageerf-guide.ts"	[height=0.31944,
+		pos="6199,999.39",
+		width=4.6528];
+	"src/frameworks/methodology/index.ts" -> "src/frameworks/methodology/guides/cageerf-guide.ts"	[pos="e,6054,987.77 5583,948.69 5595.8,948.16 5608.7,947.71 5621,947.39 5785.8,943.21 5837.4,890.01 5992,947.39 6011.8,954.74 6008.7,969.84 \
+6028,978.39 6033.3,980.75 6038.8,982.86 6044.4,984.76"];
+	"src/frameworks/methodology/guides/react-guide.ts"	[height=0.31944,
+		pos="6199,958.39",
+		width=4.4444];
+	"src/frameworks/methodology/index.ts" -> "src/frameworks/methodology/guides/react-guide.ts"	[pos="e,6043.7,946.81 5558,943.88 5567.7,940.21 5576.9,935.48 5585,929.39 5612,909.09 5592,879.74 5621,862.39 5762.5,777.78 5852.4,774.58 \
+5992,862.39 6023.3,882.09 5998,915.82 6028,937.39 6030.2,938.95 6032.4,940.42 6034.7,941.82"];
+	"src/frameworks/methodology/guides/scamper-guide.ts"	[height=0.31944,
+		pos="6199,1040.4",
+		width=4.75];
+	"src/frameworks/methodology/index.ts" -> "src/frameworks/methodology/guides/scamper-guide.ts"	[pos="e,6052.5,1028.8 5583.1,952.76 5716,951.48 5921.2,954.87 5992,985.39 6012.2,994.1 6008.1,1010 6028,1019.4 6032.8,1021.6 6037.7,1023.7 \
+6042.7,1025.5"];
+	"src/frameworks/methodology/registry.ts"	[height=0.31944,
+		pos="5806.5,883.39",
+		width=3.5];
+	"src/frameworks/methodology/index.ts" -> "src/frameworks/methodology/registry.ts"	[pos="e,5680.5,894.66 5534.5,943.88 5551.4,940.15 5569,935.38 5585,929.39 5602.1,922.96 5603.6,915.21 5621,909.39 5636.8,904.11 5653.6,\
+899.89 5670.5,896.54"];
+	"src/frameworks/framework-state-manager.ts"	[height=0.31944,
+		pos="4147,1259.4",
+		width=3.9167];
+	"src/frameworks/framework-state-manager.ts" -> "src/logging/index.ts"	[pos="e,6194.4,2094.6 4183.6,1270.9 4268.2,1298.5 4487.8,1370.8 4669,1437.4 4969.8,1547.9 5030.6,1618 5340,1701.4 5462,1734.3 5495.9,1727.1 \
+5621,1744.4 5703.3,1755.8 5921.5,1746.4 5992,1790.4 6107.6,1862.6 6171.4,2026.1 6191.2,2084.9"];
+	"src/frameworks/framework-state-manager.ts" -> "src/frameworks/types/index.ts"	[pos="e,6782.7,584.99 4265,1247.9 4440.8,1228.5 4782,1183.1 5061,1098.4 5173.9,1064.1 5214.6,1068.4 5304,991.39 5326.7,971.84 5315.1,951.08 \
+5340,934.39 5431.8,872.83 5506.1,968.84 5585,891.39 5644.8,832.71 5558.4,762.08 5621,706.39 5631.9,696.65 6658.7,629.71 6673,626.39 \
+6708.7,618.11 6747.3,601.71 6773.6,589.34"];
+	"src/frameworks/framework-state-manager.ts" -> "src/frameworks/framework-manager.ts"	[pos="e,4377.9,1156 4176.8,1247.8 4205.6,1235.9 4250.8,1216.1 4288,1195.4 4304.8,1186 4306.1,1178.4 4324,1171.4 4337.9,1166 4352.9,1161.6 \
+4368,1158.1"];
+	"src/frameworks/methodology/framework-registry.ts" -> "src/logging/index.ts"	[pos="e,6196.3,2094.8 5966.5,1394 5975.7,1398.3 5984.3,1403.7 5992,1410.4 6100.2,1503.7 6178.3,1977.7 6194.8,2084.8"];
+	"src/frameworks/methodology/framework-registry.ts" -> "src/frameworks/types/methodology-types.ts"	[pos="e,7314.9,1200.9 5927.9,1372.8 5949.3,1370.2 5971.4,1367 5992,1363.4 6238,1320.1 6288.7,1232.4 6538.5,1232.4 6538.5,1232.4 6538.5,\
+1232.4 6807.5,1232.4 6981.6,1232.4 7183,1214.7 7304.9,1202"];
+	"src/frameworks/index.ts" -> "src/frameworks/types/index.ts"	[pos="e,6801.8,561.62 3083.3,1162.6 3114.9,1161.1 3148.9,1153 3171,1129.4 3232.6,1063.6 3150.7,795.74 3207,725.39 3525.5,327.69 4952,307.39 \
+5461.5,307.39 5461.5,307.39 5461.5,307.39 6200,307.39 6412,307.39 6493.7,256.31 6673,369.39 6742.8,413.41 6783.3,509.12 6798.5,551.93"];
+	"src/frameworks/index.ts" -> "src/frameworks/framework-manager.ts"	[pos="e,4372.2,1145.3 3083.1,1154.8 3324.7,1153 4058.7,1147.6 4362.1,1145.4"];
+	"src/frameworks/index.ts" -> "src/frameworks/prompt-guidance/index.ts"	[pos="e,3750.4,924.92 3083,1146.2 3111,1142.1 3142.6,1136.6 3171,1129.4 3393.2,1073 3648.6,968.19 3741.2,928.85"];
+	"src/frameworks/index.ts" -> "src/frameworks/methodology/index.ts"	[pos="e,5461.6,943.58 3083.4,1160.4 3114,1158.2 3147.3,1150.3 3171,1129.4 3214.9,1090.5 3169.7,1047.7 3207,1002.4 3460.1,695.07 3622.2,\
+703.33 4006,597.39 4284.5,520.51 5067.4,355.55 5304,521.39 5445.1,620.31 5460.3,859.19 5461.5,933.17"];
+	"src/frameworks/index.ts" -> "src/frameworks/framework-state-manager.ts"	[pos="e,4005.7,1262.5 3036.2,1167 3075.7,1180.7 3145.3,1203.2 3207,1213.4 3482.5,1259 3809.2,1264.2 3995.6,1262.6"];
+	"src/frameworks/integration/index.ts"	[height=0.31944,
+		pos="3378.5,1193.4",
+		width=3.1389];
+	"src/frameworks/index.ts" -> "src/frameworks/integration/index.ts"	[pos="e,3265.4,1182 3083.1,1163.4 3133.1,1168.5 3198.7,1175.2 3255.3,1180.9"];
+	"src/frameworks/integration/framework-semantic-integration.ts"	[height=0.31944,
+		pos="3778,1193.4",
+		width=5.3333];
+	"src/frameworks/integration/index.ts" -> "src/frameworks/integration/framework-semantic-integration.ts"	[pos="e,3585.7,1193.4 3491.5,1193.4 3517.8,1193.4 3546.6,1193.4 3575.5,1193.4"];
+	"src/frameworks/integration/framework-semantic-integration.ts" -> "src/logging/index.ts"	[pos="e,6193.4,2094.8 3798.8,1205 3837.7,1227.3 3926.9,1277.1 4006,1310.4 4695.2,1600.3 4881.1,1674 5621,1781.4 5785.5,1805.3 5848.6,1744.4 \
+5992,1828.4 6098.4,1890.7 6166.7,2031.9 6189.5,2085.3"];
+	"src/frameworks/integration/framework-semantic-integration.ts" -> "src/types/index.ts"	[pos="e,6536.9,2154.7 3970.2,1199.3 4492.3,1216 5908.8,1266.3 5992,1322.4 6023,1343.3 6000.4,1373.2 6028,1398.4 6147.5,1507.7 6261.1,1404.5 \
+6370,1524.4 6457.2,1620.4 6521.3,2043.8 6535.5,2144.7"];
+	"src/frameworks/integration/framework-semantic-integration.ts" -> "src/frameworks/types/index.ts"	[pos="e,6785.2,561.74 3786.5,1181.7 3829.2,1116.4 4049.5,794.78 4324,673.39 4390.6,643.92 5548.3,483.83 5621,478.39 5785.4,466.1 5827.2,\
+473.92 5992,478.39 6295,486.62 6378.1,445.27 6673,515.39 6710.2,524.24 6750,543.09 6776.2,556.91"];
+	"src/frameworks/integration/framework-semantic-integration.ts" -> "src/frameworks/framework-manager.ts"	[pos="e,4372.4,1152.8 3947.4,1181.9 4074.1,1173.2 4245.2,1161.5 4362.3,1153.5"];
+	"src/frameworks/integration/framework-semantic-integration.ts" -> "src/semantic/configurable-semantic-analyzer.ts"	[pos="e,5656.7,1344.6 3802.1,1205 3842.4,1224.4 3928.4,1263.2 4006,1279.4 4316.8,1344.1 5267,1346.4 5646.5,1344.6"];
+	"src/frameworks/integration/framework-semantic-integration.ts" -> "src/semantic/types.ts"	[pos="e,7664.2,884.76 3791,1181.8 3825.4,1147.5 3925.3,1042.2 3970,933.39 4011.8,831.59 3934,771.6 4006,688.39 4067.3,617.62 5529.4,226.64 \
+5621,207.39 5799.4,169.91 5846.6,174.68 6028,156.39 6254.4,133.57 6310.9,117.39 6538.5,117.39 6538.5,117.39 6538.5,117.39 7092,117.39 \
+7298.6,117.39 7404.1,6.2927 7556,146.39 7666.1,247.94 7665.8,762.1 7664.4,874.62"];
+	"src/frameworks/integration/framework-semantic-integration.ts" -> "src/frameworks/framework-state-manager.ts"	[pos="e,4082,1247.9 3843.3,1205 3907.2,1216.4 4004.9,1234 4072,1246.1"];
+	"src/frameworks/integration/framework-semantic-integration.ts" -> "src/frameworks/prompt-guidance/service.ts"	[pos="e,4128,965.13 3796.7,1181.8 3856.2,1142.9 4048.9,1016.9 4119.7,970.62"];
+	"src/frameworks/prompt-guidance/service.ts" -> "src/logging/index.ts"	[pos="e,6196.2,2094.8 4187,964.97 4356.1,1015.3 5019.8,1213.2 5061,1234.4 5091.2,1249.9 5286.4,1390.4 5304,1419.4 5352.9,1500 5272.7,1562.4 \
+5340,1628.4 5342.8,1631.2 5617.1,1670.9 5621,1671.4 5703.2,1681.3 5923.4,1658.1 5992,1704.4 6130.9,1798 6181.4,2015.3 6194.4,2084.7"];
+	"src/frameworks/prompt-guidance/service.ts" -> "src/types/index.ts"	[pos="e,6537.9,2154.8 4284.7,954.42 4389.9,955.91 4538.8,959.56 4669,968.39 4843.8,980.26 4893.2,960.02 5061,1010.4 5194.7,1050.5 5206.1,\
+1115 5340,1154.4 5409.8,1175 5934.9,1172.3 5992,1217.4 6030.7,1248 5989.5,1291.5 6028,1322.4 6147.3,1418 6256.8,1257.5 6370,1360.4 \
+6490.9,1470.3 6530.3,2026.8 6537.3,2144.5"];
+	"src/frameworks/prompt-guidance/service.ts" -> "src/frameworks/types/index.ts"	[pos="e,6763.8,561.89 4164.6,941.69 4194.9,920.91 4261.7,877.51 4324,853.39 4859.8,645.89 5108.8,889.86 5585,568.39 5608.3,552.67 5596.1,\
+529.44 5621,516.39 5767.1,439.87 5827.1,513.13 5992,516.39 6294.8,522.39 6372.7,503.78 6673,543.39 6700,546.96 6729.7,553.42 6754,\
+559.43"];
+	"src/frameworks/prompt-guidance/service.ts" -> "src/frameworks/framework-manager.ts"	[pos="e,4428.7,1132.8 4182.6,964.98 4213.1,976.54 4257.4,996.71 4288,1025.4 4310.7,1046.7 4299.8,1065.8 4324,1085.4 4351.2,1107.4 4387,\
+1121.4 4418.9,1130.2"];
+	"src/frameworks/prompt-guidance/service.ts" -> "src/semantic/types.ts"	[pos="e,7663.7,884.82 4161.1,941.78 4186.7,918.7 4244.9,864.93 4288,814.39 4305.8,793.56 4301.8,780.39 4324,764.39 4454.3,670.62 4515.7,\
+705.02 4669,657.39 4843.2,603.26 4886.9,590 5061,535.39 5708,332.48 5860.5,155.39 6538.5,155.39 6538.5,155.39 6538.5,155.39 7092,\
+155.39 7303.9,155.39 7411,110.87 7556,265.39 7641.5,356.49 7660.1,774.29 7663.4,874.67"];
+	"src/frameworks/prompt-guidance/service.ts" -> "src/frameworks/prompt-guidance/methodology-tracker.ts"	[pos="e,4773.6,1019.9 4256.3,964.9 4391.8,979.3 4623,1003.9 4763.2,1018.8"];
+	"src/frameworks/prompt-guidance/service.ts" -> "src/frameworks/prompt-guidance/system-prompt-injector.ts"	[pos="e,5640.7,548.93 4175.2,941.89 4209.3,927.95 4269.9,904.78 4324,892.39 4392.8,876.63 5533.4,787.59 5585,739.39 5643.3,684.87 5562.8,\
+618.08 5621,563.39 5624.5,560.13 5628.2,557.15 5632,554.44"];
+	"src/frameworks/prompt-guidance/service.ts" -> "src/frameworks/prompt-guidance/template-enhancer.ts"	[pos="e,4395.6,924.9 4248,941.88 4291,936.93 4341.4,931.14 4385.4,926.07"];
+	"src/frameworks/types/methodology-types.ts" -> "src/execution/types.ts"	[pos="e,7664.1,3234.8 7422.2,1201.1 7441.5,1255.4 7522,1488.3 7556,1686.4 7662.6,2307.7 7664.7,3085.5 7664.1,3224.6"];
+	"src/frameworks/types/methodology-types.ts" -> "src/semantic/types.ts"	[pos="e,7661.5,907.95 7460.5,1177.8 7490.4,1167.8 7529.6,1150.8 7556,1124.4 7616.9,1063.6 7647.9,961.95 7659.1,917.86"];
+	"src/frameworks/methodology/guides/5w1h-guide.ts" -> "src/types/index.ts"	[pos="e,6537.8,2154.8 6359.9,928.9 6363.4,931.45 6366.8,934.27 6370,937.39 6460.3,1026 6526.7,1986.5 6537.1,2144.5"];
+	"src/frameworks/methodology/guides/5w1h-guide.ts" -> "src/semantic/types.ts"	[pos="e,7593.1,900.26 6360.3,916.58 6482.4,916.02 6654.5,915.39 6805.5,915.39 6805.5,915.39 6805.5,915.39 7092,915.39 7267.1,915.39 7472.2,\
+906.39 7583,900.78"];
+	"src/frameworks/methodology/guides/5w1h-guide.ts" -> "src/frameworks/methodology/interfaces.ts"	[pos="e,6509.8,981.85 6323.5,928.93 6339.3,931.27 6355.1,934.07 6370,937.39 6415.7,947.57 6466.6,965.41 6500.3,978.21"];
+	"src/frameworks/methodology/interfaces.ts" -> "src/frameworks/types/methodology-types.ts"	[pos="e,7277.8,1195.7 6560,1004.9 6616.4,1037.5 6785.8,1130.5 6940,1166.4 7047.7,1191.4 7172.6,1196.6 7267.5,1195.8"];
+	"src/frameworks/methodology/guides/cageerf-guide.ts" -> "src/types/index.ts"	[pos="e,6538.6,2154.8 6359.8,1010.9 6363.4,1013.5 6366.8,1016.3 6370,1019.4 6538.3,1182.9 6539.8,2000.2 6538.7,2144.6"];
+	"src/frameworks/methodology/guides/cageerf-guide.ts" -> "src/semantic/types.ts"	[pos="e,7645.6,907.9 6329.8,1010.9 6452.3,1020.8 6641.3,1033.4 6805.5,1033.4 6805.5,1033.4 6805.5,1033.4 7092,1033.4 7301.4,1033.4 7357.4,\
+1017.9 7556,951.39 7584.9,941.74 7615.6,925.44 7636.8,913.09"];
+	"src/frameworks/methodology/guides/cageerf-guide.ts" -> "src/frameworks/methodology/interfaces.ts"	[pos="e,6405.6,995.75 6366.8,996.44 6376.3,996.27 6385.9,996.1 6395.4,995.93"];
+	"src/frameworks/methodology/guides/react-guide.ts" -> "src/types/index.ts"	[pos="e,6538.7,2154.7 6359.1,969.41 6363,972.09 6366.6,975.07 6370,978.39 6544.1,1148.4 6540.8,1997.8 6538.9,2144.7"];
+	"src/frameworks/methodology/guides/react-guide.ts" -> "src/semantic/types.ts"	[pos="e,7623.3,907.92 6359,956.36 6481.2,954.98 6654,953.39 6805.5,953.39 6805.5,953.39 6805.5,953.39 7092,953.39 7298.7,953.39 7351.7,\
+953.58 7556,922.39 7575,919.5 7595.5,914.92 7613.6,910.41"];
+	"src/frameworks/methodology/guides/react-guide.ts" -> "src/frameworks/methodology/interfaces.ts"	[pos="e,6427.1,981.88 6311.3,969.9 6345.2,973.4 6382.5,977.27 6417,980.83"];
+	"src/frameworks/methodology/guides/scamper-guide.ts" -> "src/types/index.ts"	[pos="e,6538.2,2154.6 6277.9,1051.9 6311.1,1060.8 6347.3,1076.5 6370,1104.4 6506.8,1272.2 6534,2007.9 6537.9,2144.5"];
+	"src/frameworks/methodology/guides/scamper-guide.ts" -> "src/semantic/types.ts"	[pos="e,7656.1,908.04 6344,1051.9 6466.6,1060.7 6647.5,1071.4 6805.5,1071.4 6805.5,1071.4 6805.5,1071.4 7092,1071.4 7300.5,1071.4 7369.4,\
+1095.3 7556,1002.4 7596.6,982.17 7631.6,940.96 7650.1,916.3"];
+	"src/frameworks/methodology/guides/scamper-guide.ts" -> "src/frameworks/methodology/interfaces.ts"	[pos="e,6466.8,1004.9 6297.6,1028.8 6321.3,1025.9 6346.6,1022.6 6370,1019.4 6398.3,1015.5 6429.3,1010.8 6456.8,1006.5"];
+	"src/frameworks/methodology/registry.ts" -> "src/logging/index.ts"	[pos="e,6195.9,2094.6 5813.7,895.03 5839,942.66 5935.5,1127.9 5992,1289.4 6099.9,1597.5 6176.2,1989.3 6194,2084.7"];
+	"src/frameworks/methodology/registry.ts" -> "src/frameworks/types/index.ts"	[pos="e,6803.2,585.17 5930.5,871.88 5962.3,869.01 5996.4,866 6028,863.39 6099.6,857.48 6612.6,854.3 6673,815.39 6753.9,763.32 6789.4,644.03 \
+6801,595.02"];
+	"src/frameworks/methodology/registry.ts" -> "src/frameworks/methodology/guides/5w1h-guide.ts"	[pos="e,6065.8,905.88 5932.7,894.29 5971.8,897.7 6015.4,901.49 6055.6,905"];
+	"src/frameworks/methodology/registry.ts" -> "src/frameworks/methodology/guides/cageerf-guide.ts"	[pos="e,6044.2,987.79 5932.7,884.75 5953.9,889.38 5974.6,897.08 5992,909.39 6020.3,929.35 5999.6,958.68 6028,978.39 6030.3,980.01 6032.7,\
+981.53 6035.2,982.96"];
+	"src/frameworks/methodology/registry.ts" -> "src/frameworks/methodology/guides/react-guide.ts"	[pos="e,6056.4,946.88 5933,892.09 5953.2,896.02 5973.5,901.57 5992,909.39 6010.7,917.3 6009.3,929.65 6028,937.39 6034,939.85 6040.1,942.05 \
+6046.4,944"];
+	"src/frameworks/methodology/registry.ts" -> "src/frameworks/methodology/guides/scamper-guide.ts"	[pos="e,6043.7,1028.7 5879.8,894.99 5916.8,904.03 5960.7,919.88 5992,947.39 6018.9,971 5998.8,998.75 6028,1019.4 6030.2,1020.9 6032.4,\
+1022.4 6034.7,1023.8"];
+	"src/frameworks/prompt-guidance/methodology-tracker.ts" -> "src/logging/index.ts"	[pos="e,6196.4,2094.6 5040.6,1043.1 5047.9,1047.1 5054.8,1051.8 5061,1057.4 5109.3,1101 5054.4,1150.1 5097,1199.4 5162.1,1274.8 5244,1205.9 \
+5304,1285.4 5387.3,1395.8 5242.8,1496.1 5340,1594.4 5391.3,1646.3 5932.7,1633.7 5992,1676.4 6136.1,1780.1 6183.4,2012 6194.9,2084.4"];
+	"src/frameworks/prompt-guidance/methodology-tracker.ts" -> "src/frameworks/types/index.ts"	[pos="e,6708.9,584.23 4898.8,1019.8 4932,994.16 5016.3,932.82 5097,902.39 5122.8,892.68 5565.3,834.62 5585,815.39 5642.2,759.66 5560.4,\
+691.39 5621,639.39 5665.4,601.29 6614.7,591.91 6673,587.39 6681.4,586.74 6690,586 6698.7,585.2"];
+	"src/frameworks/prompt-guidance/system-prompt-injector.ts" -> "src/logging/index.ts"	[pos="e,6196.1,2094.8 5816.2,549.04 5846,589.74 5945.2,730.28 5992,862.39 6002.8,892.78 6168.2,1920.8 6194.5,2084.5"];
+	"src/frameworks/prompt-guidance/system-prompt-injector.ts" -> "src/types/index.ts"	[pos="e,6537.5,2154.6 5845.4,548.97 5949.4,582.93 6240.4,692.93 6370,896.39 6440.3,1006.6 6523.6,1985.6 6536.7,2144.6"];
+	"src/frameworks/prompt-guidance/system-prompt-injector.ts" -> "src/frameworks/types/index.ts"	[pos="e,6709,562.29 5992.1,537.82 6167.5,539.24 6438.5,544.05 6673,559.39 6681.4,559.94 6690,560.62 6698.7,561.37"];
+	"src/frameworks/prompt-guidance/system-prompt-injector.ts" -> "src/semantic/types.ts"	[pos="e,7659.2,884.88 5842,525.82 5968.6,484.3 6421.3,345.39 6805.5,345.39 6805.5,345.39 6805.5,345.39 7092,345.39 7403.6,345.39 7610.8,\
+774.83 7655.1,875.47"];
+	"src/frameworks/prompt-guidance/template-enhancer.ts" -> "src/logging/index.ts"	[pos="e,6195.1,2094.6 4593.4,924.92 4731.2,942.33 4977.8,976.87 5061,1010.4 5199.9,1066.4 5201.5,1142.3 5340,1199.4 5408.2,1227.5 5938.1,\
+1272.1 5992,1322.4 6006.8,1336.2 6161.7,1959.7 6192.6,2084.7"];
+	"src/frameworks/prompt-guidance/template-enhancer.ts" -> "src/types/index.ts"	[pos="e,6537.9,2154.7 4669.1,909.14 4808.3,907.93 4992.2,912.05 5061,939.39 5080.6,947.2 5078.2,960.8 5097,970.39 5181.2,1013.4 5233.9,\
+955.99 5304,1019.4 5340.3,1052.2 5301.3,1093.5 5340,1123.4 5455,1212.3 5877.7,1085.6 5992,1175.4 6032.1,1206.9 5988.8,1251.7 6028,\
+1284.4 6145.8,1382.8 6258.3,1227.2 6370,1332.4 6493.2,1448.4 6530.8,2024.8 6537.4,2144.6"];
+	"src/frameworks/prompt-guidance/template-enhancer.ts" -> "src/frameworks/types/index.ts"	[pos="e,6708.8,575.51 4608.5,901.88 4722.3,889.87 4904.1,870.09 5061,850.39 5075.6,848.56 5574.3,787.44 5585,777.39 5642.9,723.08 5560.1,\
+653.39 5621,602.39 5690.3,544.28 5937.6,593.66 6028,591.39 6267.6,585.38 6548.9,579.05 6698.7,575.73"];
+	"src/frameworks/prompt-guidance/template-enhancer.ts" -> "src/semantic/types.ts"	[pos="e,7663.1,884.79 4531.9,901.84 4681.8,851.4 5272,651.83 5304,625.39 5328.3,605.35 5315.3,583.88 5340,564.39 5442.6,483.56 5494.8,\
+512.03 5621,478.39 6025.1,370.68 6120.3,269.39 6538.5,269.39 6538.5,269.39 6538.5,269.39 7092,269.39 7306.2,269.39 7409.1,243.54 \
+7556,399.39 7622.8,470.27 7654.7,788.03 7662.2,874.57"];
+	"src/frameworks/prompt-guidance/template-enhancer.ts" -> "src/gates/core/index.ts"	[pos="e,4882,3624.6 4511.6,925.06 4545.9,954.28 4633.1,1034.6 4669,1123.4 4866.3,1610.8 4880.9,3396 4881.9,3614.4"];
+	"src/gates/core/index.ts" -> "src/execution/types.ts"	[pos="e,7598,3258 4905.7,3648 4943.5,3667.7 5024.3,3707.6 5097,3729.4 5240.1,3772.3 5799.7,3830.4 5805.5,3830.4 5805.5,3830.4 5805.5,3830.4 \
+6540.5,3830.4 6698,3830.4 7094.8,3786.4 7242,3730.4 7398.5,3670.9 7466.8,3664 7556,3522.4 7616.2,3426.8 7519.5,3353.6 7591.3,3265.7"];
+	"src/gates/core/index.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,5676.3,3406.6 4959.3,3626.5 4990.9,3621.8 5027.9,3615.7 5061,3608.4 5120.1,3595.4 5533,3491.4 5585,3460.4 5604.7,3448.7 5600.3,\
+3433.3 5621,3423.4 5635.2,3416.6 5650.7,3411.8 5666.5,3408.5"];
+	"src/gates/core/index.ts" -> "src/gates/core/gate-loader.ts"	[pos="e,5385.9,3573.9 4959,3643.7 5044.8,3649.5 5188.3,3651.1 5304,3612.4 5322.2,3606.3 5322.3,3595.9 5340,3588.4 5351.4,3583.6 5363.7,\
+3579.6 5376.1,3576.4"];
+	"src/gates/core/index.ts" -> "src/gates/types.ts"	[pos="e,7080.9,3457.9 4918.7,3648 4960.5,3661.6 5033.2,3684.1 5097,3697.4 5252.5,3729.9 5646.6,3792.4 5805.5,3792.4 5805.5,3792.4 5805.5,\
+3792.4 6540.5,3792.4 6787.5,3792.4 7014.2,3539 7074.4,3465.9"];
+	"src/gates/core/gate-validator.ts"	[height=0.31944,
+		pos="5200.5,3676.4",
+		width=2.7778];
+	"src/gates/core/index.ts" -> "src/gates/core/gate-validator.ts"	[pos="e,5108.6,3664.9 4959.2,3645.9 5000.9,3651.2 5053.3,3657.9 5098.5,3663.6"];
+	"src/gates/gate-state-manager.ts"	[height=0.31944,
+		pos="5200.5,3292.4",
+		width=2.875];
+	"src/gates/core/index.ts" -> "src/gates/gate-state-manager.ts"	[pos="e,5188.7,3304.2 4894.9,3624.6 4941.3,3573.9 5123.6,3375.2 5181.6,3311.9"];
+	"src/frameworks/types/integration-types.ts" -> "src/execution/types.ts"	[pos="e,7663.8,3234.7 7222.6,1118.9 7351.9,1127.7 7533.6,1144.1 7556,1168.4 7629.7,1248 7660.2,3007.7 7663.7,3224.5"];
+	"src/frameworks/types/integration-types.ts" -> "src/semantic/types.ts"	[pos="e,7661.4,907.97 7222.6,1117.7 7340.1,1120.9 7502.2,1118.7 7556,1085.4 7618.3,1046.9 7648.1,958.46 7659,917.69"];
+	"src/frameworks/types/integration-types.ts" -> "src/frameworks/types/methodology-types.ts"	[pos="e,7328.2,1177.9 7194.1,1122.9 7210.5,1126.5 7227,1131.2 7242,1137.4 7260,1144.8 7260.1,1154.8 7278,1162.4 7290.7,1167.7 7304.4,1172.1 \
+7318.2,1175.5"];
+	"src/frameworks/types/prompt-guidance-types.ts" -> "src/execution/types.ts"	[pos="e,7664.3,3234.8 7099.7,1284.1 7150.4,1362.2 7437.7,1815.1 7556,2228.4 7666.9,2615.8 7666.1,3115.5 7664.4,3224.7"];
+	"src/frameworks/types/prompt-guidance-types.ts" -> "src/frameworks/types/methodology-types.ts"	[pos="e,7385.3,1201 7171.5,1260.8 7194.4,1256.9 7219.3,1252 7242,1246.4 7288.5,1234.8 7340.5,1217.1 7375.4,1204.5"];
+	"src/gates/core/gate-loader.ts" -> "src/logging/index.ts"	[pos="e,6132.9,2111.3 5541.9,3550.8 5556.6,3547.2 5571.6,3542.5 5585,3536.4 5603.2,3528.1 5602.8,3517.7 5621,3509.4 5774.5,3438.9 5884.4,\
+3557.5 5992,3427.4 6081.4,3319.3 5945.1,2278.5 6028,2165.4 6049.9,2135.5 6088.1,2120.6 6122.7,2113.3"];
+	"src/gates/core/gate-loader.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,5676.3,3406.2 5556.3,3553.2 5566.8,3549.2 5576.7,3543.8 5585,3536.4 5621.6,3504 5583.2,3463.5 5621,3432.4 5634.3,3421.5 5649.9,\
+3414 5666.5,3408.9"];
+	"src/gates/core/gate-loader.ts" -> "src/gates/types.ts"	[pos="e,7066.8,3458 5556.2,3570.7 5695.4,3582.4 5966.9,3602.4 6198,3602.4 6198,3602.4 6198,3602.4 6540.5,3602.4 6743.9,3602.4 6974.2,3502.2 \
+7057.6,3462.4"];
+	"src/gates/types.ts" -> "src/execution/types.ts"	[pos="e,7631,3257.9 7125.2,3434.8 7223.4,3400.5 7512,3299.5 7621.3,3261.3"];
+	"src/gates/core/gate-validator.ts" -> "src/logging/index.ts"	[pos="e,6132.7,2111.6 5205.6,3664.7 5220.9,3619.7 5276.1,3454.1 5304,3313.4 5317.4,3245.8 5292.3,3055.1 5340,3005.4 5441.6,2899.6 5894,\
+3011.6 5992,2902.4 6046.8,2841.4 5978.9,2231 6028,2165.4 6050.2,2135.8 6088.1,2121 6122.6,2113.6"];
+	"src/gates/core/gate-validator.ts" -> "src/execution/types.ts"	[pos="e,7600,3257.9 5300.5,3680.6 5551.9,3690.8 6235.5,3716.4 6805.5,3716.4 6805.5,3716.4 6805.5,3716.4 7092,3716.4 7356.6,3716.4 7394.1,\
+3552.7 7556,3343.4 7578.1,3314.8 7564.4,3291.9 7592.4,3264.6"];
+	"src/gates/core/gate-validator.ts" -> "src/gates/core/gate-loader.ts"	[pos="e,5368.7,3573.6 5276.7,3664.8 5286.4,3661.2 5295.9,3656.5 5304,3650.4 5329.4,3631.2 5314.2,3607.1 5340,3588.4 5345.9,3584.1 5352.5,\
+3580.5 5359.3,3577.4"];
+	"src/gates/core/gate-validator.ts" -> "src/gates/types.ts"	[pos="e,7076.6,3458 5300.5,3666.9 5420.1,3656.2 5627.3,3640.4 5805.5,3640.4 5805.5,3640.4 5805.5,3640.4 6540.5,3640.4 6591.4,3640.4 6869.9,\
+3583.5 6904,3569.4 6969,3542.5 7035.5,3491.8 7068.5,3464.6"];
+	"src/gates/core/gate-validator.ts" -> "src/types.ts"	[pos="e,6798.3,2922.1 5239.3,3664.8 5258.8,3658.6 5282.8,3650.6 5304,3642.4 5320.3,3636.1 5323.3,3631.5 5340,3626.4 5445.7,3594.1 5476.4,\
+3604.3 5585,3583.4 5938.5,3515.5 6065.1,3575.7 6370,3384.4 6575.7,3255.4 6745.9,3004 6792.7,2930.8"];
+	"src/types.ts" -> "src/prompts/types.ts"	[pos="e,7797,2656 6849,2899.7 7011.4,2858 7603.6,2705.7 7787.3,2658.5"];
+	"src/types.ts" -> "src/gates/types.ts"	[pos="e,7083.9,3434.9 6813.7,2922.1 6849.6,2990.3 7032.5,3337.3 7079.1,3425.8"];
+	"src/gates/gate-state-manager.ts" -> "src/logging/index.ts"	[pos="e,6132.7,2111.6 5205.8,3280.7 5228.5,3219.6 5332.5,2940.3 5340,2934.4 5569.8,2753.7 5793.6,3063 5992,2848.4 6043.6,2792.6 5982.3,\
+2226.1 6028,2165.4 6050.2,2135.8 6088.2,2121 6122.7,2113.6"];
+	"src/gates/index.ts" -> "src/gates/core/index.ts"	[pos="e,4867.9,3624.9 3439.7,2763.7 3473.1,2767 3514.7,2773.5 3550,2786.4 4098.2,2987.3 4187.4,3144.4 4669,3474.4 4741,3523.7 4822,3587.9 \
+4860,3618.5"];
+	"src/metrics/analytics-service.ts" -> "src/logging/index.ts"	[pos="e,6133,2111.8 1643.4,2903.9 1670.4,2900.5 1700.4,2896.9 1728,2894.4 2139.4,2856.4 2242.8,2838.4 2656,2838.4 2656,2838.4 2656,2838.4 \
+3004.5,2838.4 3982.5,2838.4 4221.5,2682.4 5199.5,2682.4 5199.5,2682.4 5199.5,2682.4 5463.5,2682.4 5581.1,2682.4 5907.7,2740.4 5992,\
+2658.4 6070.7,2581.8 5961.1,2252.5 6028,2165.4 6050.5,2136.1 6088.5,2121.3 6122.9,2113.8"];
+	"src/metrics/analytics-service.ts" -> "src/metrics/types.ts"	[pos="e,1856.9,2915.4 1658.7,2915.4 1718,2915.4 1792.1,2915.4 1846.6,2915.4"];
+	"src/utils/chainUtils.ts" -> "src/execution/types.ts"	[pos="e,7623.1,3234.8 5471.5,2236.1 5545.9,2343.4 6128.7,3151.4 6805.5,3151.4 6805.5,3151.4 6805.5,3151.4 7092,3151.4 7286.9,3151.4 7514.1,\
+3205.7 7613.4,3232.2"];
+	"src/utils/chainUtils.ts" -> "src/utils/errorHandling.ts"	[pos="e,5725.4,2195.3 5532.3,2216.7 5584.9,2210.9 5658,2202.8 5715.3,2196.4"];
+}

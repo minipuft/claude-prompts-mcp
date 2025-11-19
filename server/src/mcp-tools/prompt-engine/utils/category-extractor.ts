@@ -1,3 +1,4 @@
+// @lifecycle canonical - Extracts categories for prompts.
 /**
  * Category Extraction Utility
  *
@@ -9,8 +10,9 @@
  * Part of Gate System Intelligent Selection Upgrade - Phase 1
  */
 
+import * as path from 'node:path';
+
 import type { Logger } from '../../../logging/index.js';
-import path from 'path';
 
 /**
  * Template gate configuration
@@ -65,7 +67,7 @@ export class CategoryExtractor {
       promptId: prompt?.id,
       promptCategory: prompt?.category,
       promptFile: prompt?.file,
-      hasGateConfiguration: !!prompt?.gateConfiguration
+      hasGateConfiguration: !!prompt?.gateConfiguration,
     });
 
     // Strategy 1: Use prompt metadata category (highest priority)
@@ -80,8 +82,8 @@ export class CategoryExtractor {
           sourceData: {
             metadata: prompt.category,
             filePath: prompt.file,
-            promptId: prompt.id
-          }
+            promptId: prompt.id,
+          },
         };
       }
     }
@@ -97,8 +99,8 @@ export class CategoryExtractor {
           gateConfiguration: prompt.gateConfiguration,
           sourceData: {
             filePath: prompt.file,
-            promptId: prompt.id
-          }
+            promptId: prompt.id,
+          },
         };
       }
     }
@@ -114,8 +116,8 @@ export class CategoryExtractor {
           gateConfiguration: prompt.gateConfiguration,
           sourceData: {
             promptId: prompt.id,
-            filePath: prompt.file
-          }
+            filePath: prompt.file,
+          },
         };
       }
     }
@@ -129,8 +131,8 @@ export class CategoryExtractor {
       gateConfiguration: prompt?.gateConfiguration,
       sourceData: {
         promptId: prompt?.id,
-        filePath: prompt?.file
-      }
+        filePath: prompt?.file,
+      },
     };
   }
 
@@ -147,10 +149,10 @@ export class CategoryExtractor {
       const normalizedPath = filePath.replace(/\\/g, '/');
 
       // Split path and look for category indicators
-      const pathSegments = normalizedPath.split('/').filter(segment => segment.length > 0);
+      const pathSegments = normalizedPath.split('/').filter((segment) => segment.length > 0);
 
       // Look for prompts directory structure: /prompts/{category}/
-      const promptsIndex = pathSegments.findIndex(segment => segment === 'prompts');
+      const promptsIndex = pathSegments.findIndex((segment) => segment === 'prompts');
       if (promptsIndex !== -1 && promptsIndex + 1 < pathSegments.length) {
         const categoryCandidate = pathSegments[promptsIndex + 1];
         if (this.isValidCategory(categoryCandidate)) {
@@ -187,7 +189,7 @@ export class CategoryExtractor {
       { pattern: /^research_|_research$|investigate/i, category: 'research' },
       { pattern: /^debug_|_debug$|troubleshoot/i, category: 'debugging' },
       { pattern: /^doc_|_doc$|documentation|readme/i, category: 'documentation' },
-      { pattern: /^content_|_content$|process|format/i, category: 'content_processing' }
+      { pattern: /^content_|_content$|process|format/i, category: 'content_processing' },
     ];
 
     for (const { pattern, category } of patterns) {
@@ -211,7 +213,7 @@ export class CategoryExtractor {
       'debugging',
       'documentation',
       'content_processing',
-      'general'
+      'general',
     ];
 
     return validCategories.includes(category.toLowerCase());
@@ -243,7 +245,7 @@ export class CategoryExtractor {
       templateGates: gateConfiguration,
       categoryGates,
       frameworkGates,
-      fallbackGates
+      fallbackGates,
     });
 
     let selectedGates: string[] = [];
@@ -260,7 +262,9 @@ export class CategoryExtractor {
 
       // Phase 2: Add category gates if framework_gates is true (default)
       if (gateConfiguration.framework_gates !== false) {
-        const additionalCategoryGates = categoryGates.filter(gate => !selectedGates.includes(gate));
+        const additionalCategoryGates = categoryGates.filter(
+          (gate) => !selectedGates.includes(gate)
+        );
         selectedGates.push(...additionalCategoryGates);
         if (additionalCategoryGates.length > 0) {
           precedenceUsed.push('category-gates');
@@ -268,7 +272,9 @@ export class CategoryExtractor {
         }
 
         // Phase 3: Add framework gates
-        const additionalFrameworkGates = frameworkGates.filter(gate => !selectedGates.includes(gate));
+        const additionalFrameworkGates = frameworkGates.filter(
+          (gate) => !selectedGates.includes(gate)
+        );
         selectedGates.push(...additionalFrameworkGates);
         if (additionalFrameworkGates.length > 0) {
           precedenceUsed.push('framework-gates');
@@ -279,7 +285,7 @@ export class CategoryExtractor {
       // Phase 4: Apply exclusions
       if (gateConfiguration.exclude && gateConfiguration.exclude.length > 0) {
         const originalCount = selectedGates.length;
-        selectedGates = selectedGates.filter(gate => !gateConfiguration.exclude!.includes(gate));
+        selectedGates = selectedGates.filter((gate) => !gateConfiguration.exclude!.includes(gate));
         if (selectedGates.length < originalCount) {
           precedenceUsed.push('template-exclude');
           reasoning += `Template excludes: [${gateConfiguration.exclude.join(', ')}]. `;
@@ -296,7 +302,9 @@ export class CategoryExtractor {
       }
 
       // Phase 3: Framework gates
-      const additionalFrameworkGates = frameworkGates.filter(gate => !selectedGates.includes(gate));
+      const additionalFrameworkGates = frameworkGates.filter(
+        (gate) => !selectedGates.includes(gate)
+      );
       selectedGates.push(...additionalFrameworkGates);
       if (additionalFrameworkGates.length > 0) {
         precedenceUsed.push('framework-gates');
@@ -318,13 +326,13 @@ export class CategoryExtractor {
       category,
       selectedGates,
       precedenceUsed,
-      reasoning: reasoning.trim()
+      reasoning: reasoning.trim(),
     });
 
     return {
       selectedGates,
       precedenceUsed,
-      reasoning: reasoning.trim()
+      reasoning: reasoning.trim(),
     };
   }
 
@@ -333,14 +341,14 @@ export class CategoryExtractor {
    */
   public static getCategoryGateMapping(): Record<string, string[]> {
     return {
-      'analysis': ['research-quality', 'technical-accuracy'],
-      'education': ['educational-clarity', 'content-structure'],
-      'development': ['code-quality', 'security-awareness'],
-      'research': ['research-quality', 'fact-checking'],
-      'debugging': ['technical-accuracy', 'problem-solving'],
-      'documentation': ['content-structure', 'clarity'],
-      'content_processing': ['content-structure', 'format-consistency'],
-      'general': ['content-structure']
+      analysis: ['research-quality', 'technical-accuracy'],
+      education: ['educational-clarity', 'content-structure'],
+      development: ['code-quality', 'security-awareness'],
+      research: ['research-quality', 'fact-checking'],
+      debugging: ['technical-accuracy', 'problem-solving'],
+      documentation: ['content-structure', 'clarity'],
+      content_processing: ['content-structure', 'format-consistency'],
+      general: ['content-structure'],
     };
   }
 
@@ -376,7 +384,7 @@ export class CategoryExtractor {
       frameworkGates,
       fallbackGates,
       temporaryGates,
-      enhancedConfig
+      enhancedConfig,
     });
 
     let selectedGates: string[] = [];
@@ -395,7 +403,9 @@ export class CategoryExtractor {
     // Phase 2: Add template gates if specified
     if (gateConfiguration) {
       if (gateConfiguration.include && gateConfiguration.include.length > 0) {
-        const additionalTemplateGates = gateConfiguration.include.filter(gate => !selectedGates.includes(gate));
+        const additionalTemplateGates = gateConfiguration.include.filter(
+          (gate) => !selectedGates.includes(gate)
+        );
         selectedGates.push(...additionalTemplateGates);
         if (additionalTemplateGates.length > 0) {
           precedenceUsed.push('template-include');
@@ -405,7 +415,9 @@ export class CategoryExtractor {
 
       // Phase 3: Add category gates if framework_gates is true (default)
       if (gateConfiguration.framework_gates !== false) {
-        const additionalCategoryGates = categoryGates.filter(gate => !selectedGates.includes(gate));
+        const additionalCategoryGates = categoryGates.filter(
+          (gate) => !selectedGates.includes(gate)
+        );
         selectedGates.push(...additionalCategoryGates);
         if (additionalCategoryGates.length > 0) {
           precedenceUsed.push('category-gates');
@@ -413,7 +425,9 @@ export class CategoryExtractor {
         }
 
         // Phase 4: Add framework gates
-        const additionalFrameworkGates = frameworkGates.filter(gate => !selectedGates.includes(gate));
+        const additionalFrameworkGates = frameworkGates.filter(
+          (gate) => !selectedGates.includes(gate)
+        );
         selectedGates.push(...additionalFrameworkGates);
         if (additionalFrameworkGates.length > 0) {
           precedenceUsed.push('framework-gates');
@@ -424,10 +438,12 @@ export class CategoryExtractor {
       // Phase 5: Apply exclusions (can remove temporary, template, category, or framework gates)
       if (gateConfiguration.exclude && gateConfiguration.exclude.length > 0) {
         const originalCount = selectedGates.length;
-        selectedGates = selectedGates.filter(gate => !gateConfiguration.exclude!.includes(gate));
+        selectedGates = selectedGates.filter((gate) => !gateConfiguration.exclude!.includes(gate));
 
         // Update temporary gates applied if they were excluded
-        temporaryGatesApplied = temporaryGatesApplied.filter(gate => !gateConfiguration.exclude!.includes(gate));
+        temporaryGatesApplied = temporaryGatesApplied.filter(
+          (gate) => !gateConfiguration.exclude!.includes(gate)
+        );
 
         if (selectedGates.length < originalCount) {
           precedenceUsed.push('template-exclude');
@@ -438,7 +454,7 @@ export class CategoryExtractor {
       // No template configuration - use standard precedence (skip template level)
 
       // Phase 3: Category gates
-      const additionalCategoryGates = categoryGates.filter(gate => !selectedGates.includes(gate));
+      const additionalCategoryGates = categoryGates.filter((gate) => !selectedGates.includes(gate));
       selectedGates.push(...additionalCategoryGates);
       if (additionalCategoryGates.length > 0) {
         precedenceUsed.push('category-gates');
@@ -446,7 +462,9 @@ export class CategoryExtractor {
       }
 
       // Phase 4: Framework gates
-      const additionalFrameworkGates = frameworkGates.filter(gate => !selectedGates.includes(gate));
+      const additionalFrameworkGates = frameworkGates.filter(
+        (gate) => !selectedGates.includes(gate)
+      );
       selectedGates.push(...additionalFrameworkGates);
       if (additionalFrameworkGates.length > 0) {
         precedenceUsed.push('framework-gates');
@@ -470,14 +488,14 @@ export class CategoryExtractor {
       selectedGates,
       precedenceUsed,
       temporaryGatesApplied,
-      reasoning: reasoning.trim()
+      reasoning: reasoning.trim(),
     });
 
     return {
       selectedGates,
       precedenceUsed,
       reasoning: reasoning.trim(),
-      temporaryGatesApplied
+      temporaryGatesApplied,
     };
   }
 }

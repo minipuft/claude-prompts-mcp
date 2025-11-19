@@ -1,3 +1,4 @@
+// @lifecycle canonical - Bootstraps runtime modules and orchestrates startup lifecycle.
 /**
  * Application Runtime Management
  * Manages application lifecycle, module coordination, and system health
@@ -7,8 +8,8 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { promises as fs } from "fs";
-import path from "path";
+import { promises as fs } from "node:fs";
+import * as path from "node:path";
 import { fileURLToPath } from "url";
 
 // Import all module managers
@@ -25,7 +26,9 @@ import {
 } from "../logging/index.js";
 import { createMcpToolsManager, McpToolsManager } from "../mcp-tools/index.js";
 import { createToolDescriptionManager, ToolDescriptionManager } from "../mcp-tools/tool-description-manager.js";
-import { PromptManager } from "../prompts/index.js";
+import { PromptAssetManager } from "../prompts/index.js";
+import type { HotReloadEvent } from "../prompts/hot-reload-manager.js";
+import { reloadPromptData } from "../prompts/prompt-refresh-service.js";
 import {
   ServerManager,
   startMcpServer,
@@ -46,9 +49,13 @@ import {
 
 // Import startup management
 import { ServerRootDetector } from "./startup.js";
+import {
+  RuntimeLaunchOptions,
+  resolveRuntimeLaunchOptions,
+} from "./options.js";
 
 // Import types
-import { Category, ConvertedPrompt, PromptData } from "../types/index.js";
+import { Category, ConvertedPrompt, PromptData, FrameworksConfig } from "../types/index.js";
 // Import chain utilities
 import { isChainPrompt } from "../utils/chainUtils.js";
 
@@ -61,7 +68,7 @@ export class Application {
   private configManager: ConfigManager;
   private textReferenceManager: TextReferenceManager;
   private conversationManager: ConversationManager;
-  private promptManager: PromptManager;
+  private promptManager: PromptAssetManager;
   // REMOVED: executionCoordinator - modular chain system removed
   // REMOVED: gateEvaluator - gate evaluation system removed
   private mcpToolsManager: McpToolsManager;
@@ -80,6 +87,9 @@ export class Application {
   private _promptsData: PromptData[] = [];
   private _categories: Category[] = [];
   private _convertedPrompts: ConvertedPrompt[] = [];
+  private promptsFilePath?: string;
+  private hotReloadInitialized = false;
+  private promptReloadInProgress?: Promise<void>;
 
   // Performance monitoring
   private memoryOptimizationInterval?: NodeJS.Timeout;
@@ -89,6 +99,10 @@ export class Application {
 
   // Debug output control
   private debugOutput: boolean;
+  private runtimeOptions: RuntimeLaunchOptions;
+
+  private frameworksConfigListener?: (newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void;
+  private pendingFrameworkSystemState?: boolean;
 
   /**
    * Conditional debug logging to prevent output flood during tests
@@ -99,9 +113,10 @@ export class Application {
     }
   }
 
-  constructor(logger?: Logger) {
+  constructor(logger?: Logger, runtimeOptions?: RuntimeLaunchOptions) {
     // Will be initialized in startup() if not provided
     this.logger = logger || (null as any);
+    this.runtimeOptions = runtimeOptions ?? resolveRuntimeLaunchOptions();
     this.configManager = null as any;
     this.textReferenceManager = null as any;
     this.conversationManager = null as any;
@@ -118,25 +133,7 @@ export class Application {
     this.serverRootDetector = new ServerRootDetector();
 
     // Initialize debug output control - suppress in test environments
-    this.debugOutput = !this.isTestEnvironment();
-  }
-
-  /**
-   * Detect if running in test environment to suppress debug output
-   */
-  private isTestEnvironment(): boolean {
-    return (
-      process.env.NODE_ENV === 'test' ||
-      process.argv.includes('--suppress-debug') ||
-      process.argv.includes('--test-mode') ||
-      // Detect GitHub Actions CI environment
-      process.env.GITHUB_ACTIONS === 'true' ||
-      process.env.CI === 'true' ||
-      // Detect common test runner patterns
-      process.argv.some(arg => arg.includes('test') || arg.includes('jest') || arg.includes('mocha')) ||
-      // Detect if called from integration test scripts
-      process.argv[1]?.includes('tests/scripts/')
-    );
+    this.debugOutput = !this.runtimeOptions.testEnvironment;
   }
 
   /**
@@ -161,10 +158,7 @@ export class Application {
 
       // Phase 4: Server Setup and Startup
       this.debugLog("Starting Phase 4 - Server Setup and Startup...");
-      // Check if this is a startup test mode
-      const args = process.argv.slice(2);
-      const isStartupTest = args.includes("--startup-test");
-      await this.startServer(isStartupTest);
+      await this.startServer();
       this.debugLog("Phase 4 completed successfully");
       console.error(
         "DEBUG: All startup phases completed, server should be running..."
@@ -243,8 +237,11 @@ export class Application {
       throw error;
     }
 
+    // Enable config hot-reload watching
+    this.configManager.startWatching();
+
     // Determine transport from command line arguments
-    const args = process.argv.slice(2);
+    const args = this.runtimeOptions.args;
     this.debugLog("Args:", args);
     const transport = TransportManager.determineTransport(
       args,
@@ -253,9 +250,8 @@ export class Application {
     this.debugLog("Transport determined:", transport);
 
     // Check verbosity flags for conditional logging
-    const isVerbose =
-      args.includes("--verbose") || args.includes("--debug-startup");
-    const isQuiet = args.includes("--quiet");
+    const isVerbose = this.runtimeOptions.verbose;
+    const isQuiet = this.runtimeOptions.quiet;
     this.debugLog("Verbose:", isVerbose, "Quiet:", isQuiet);
 
     // Initialize enhanced logger with config-based settings
@@ -289,6 +285,9 @@ export class Application {
     // Initialize log file
     await (this.logger as any).initLogFile();
     this.debugLog("Enhanced logger created and initialized");
+
+    // Monitor framework feature toggles and log state changes
+    this.setupFrameworkConfigListener();
 
     // Only show startup messages if not in quiet mode
     if (!isQuiet) {
@@ -354,40 +353,24 @@ export class Application {
    */
   private async loadAndProcessData(): Promise<void> {
     // Check verbosity flags for conditional logging
-    const args = process.argv.slice(2);
-    const isVerbose =
-      args.includes("--verbose") || args.includes("--debug-startup");
-    const isQuiet = args.includes("--quiet");
+    const isVerbose = this.runtimeOptions.verbose;
+    const isQuiet = this.runtimeOptions.quiet;
 
-    // Initialize prompt manager
-    this.promptManager = new PromptManager(
-      this.logger,
-      this.textReferenceManager,
-      this.configManager,
-      this.mcpServer
-    );
+    // Initialize prompt manager once; reuse existing instance during hot reloads
+    if (!this.promptManager) {
+      this.promptManager = new PromptAssetManager(
+        this.logger,
+        this.textReferenceManager,
+        this.conversationManager,
+        this.configManager,
+        this.mcpServer
+      );
+    }
 
     // Load and convert prompts with enhanced path resolution
     const config = this.configManager.getConfig();
 
-    // ENHANCED: Allow direct prompts config path override via environment variable
-    // This bypasses server root detection issues entirely and is perfect for Claude Desktop
-    let PROMPTS_FILE: string;
-
-    if (process.env.MCP_PROMPTS_CONFIG_PATH) {
-      PROMPTS_FILE = process.env.MCP_PROMPTS_CONFIG_PATH;
-      if (isVerbose) {
-        this.logger.info(
-          "🎯 Using MCP_PROMPTS_CONFIG_PATH environment variable override"
-        );
-      }
-    } else {
-      // Fallback to ConfigManager's getPromptsFilePath() method
-      PROMPTS_FILE = this.configManager.getPromptsFilePath();
-      if (isVerbose) {
-        this.logger.info("📁 Using config-based prompts file path resolution");
-      }
-    }
+    let promptsFilePath = this.configManager.getResolvedPromptsFilePath();
 
     // Enhanced logging for prompt loading pipeline (verbose mode only)
     if (isVerbose) {
@@ -404,7 +387,7 @@ export class Application {
           )}"`
         );
       }
-      this.logger.info(`✅ Final PROMPTS_FILE path: "${PROMPTS_FILE}"`);
+      this.logger.info(`✅ Final PROMPTS_FILE path: "${promptsFilePath}"`);
 
       // Add additional diagnostic information
       this.logger.info("=== PATH RESOLUTION DIAGNOSTICS ===");
@@ -426,18 +409,18 @@ export class Application {
         `MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || "undefined"}`
       );
       this.logger.info(
-        `PROMPTS_FILE is absolute: ${path.isAbsolute(PROMPTS_FILE)}`
+        `PROMPTS_FILE is absolute: ${path.isAbsolute(promptsFilePath)}`
       );
       this.logger.info(
-        `PROMPTS_FILE normalized: ${path.normalize(PROMPTS_FILE)}`
+        `PROMPTS_FILE normalized: ${path.normalize(promptsFilePath)}`
       );
     }
 
     // Validate that we're using absolute paths (critical for Claude Desktop)
-    if (!path.isAbsolute(PROMPTS_FILE)) {
+    if (!path.isAbsolute(promptsFilePath)) {
       if (isVerbose) {
         this.logger.error(
-          `⚠️  CRITICAL: PROMPTS_FILE is not absolute: ${PROMPTS_FILE}`
+          `⚠️  CRITICAL: PROMPTS_FILE is not absolute: ${promptsFilePath}`
         );
         this.logger.error(
           `This will cause issues with Claude Desktop execution!`
@@ -446,47 +429,49 @@ export class Application {
       // Convert to absolute path as fallback
       // Use serverRoot which is determined earlier and more reliable for constructing the absolute path
       const serverRoot = await this.serverRootDetector.determineServerRoot(); // Ensure serverRoot is available
-      const absolutePromptsFile = path.resolve(serverRoot, PROMPTS_FILE);
+      const absolutePromptsFile = path.resolve(serverRoot, promptsFilePath);
       if (isVerbose) {
         this.logger.info(
           `🔧 Converting to absolute path: ${absolutePromptsFile}`
         );
       }
-      PROMPTS_FILE = absolutePromptsFile;
+      promptsFilePath = absolutePromptsFile;
     }
+
+    this.promptsFilePath = promptsFilePath;
 
     // Verify the file exists before attempting to load
     try {
-      const fs = await import("fs/promises");
-      await fs.access(PROMPTS_FILE);
+      const fs = await import("node:fs/promises");
+      await fs.access(promptsFilePath);
       if (isVerbose) {
         this.logger.info(
-          `✓ Prompts configuration file exists: ${PROMPTS_FILE}`
+          `✓ Prompts configuration file exists: ${promptsFilePath}`
         );
       }
     } catch (error) {
       this.logger.error(
-        `✗ Prompts configuration file NOT FOUND: ${PROMPTS_FILE}`
+        `✗ Prompts configuration file NOT FOUND: ${promptsFilePath}`
       );
       if (isVerbose) {
         this.logger.error(`File access error:`, error);
 
         // Provide additional troubleshooting information
         this.logger.error("=== TROUBLESHOOTING INFORMATION ===");
-        this.logger.error(`Is path absolute? ${path.isAbsolute(PROMPTS_FILE)}`);
-        this.logger.error(`Normalized path: ${path.normalize(PROMPTS_FILE)}`);
-        this.logger.error(`Path exists check: ${PROMPTS_FILE}`);
+        this.logger.error(`Is path absolute? ${path.isAbsolute(promptsFilePath)}`);
+        this.logger.error(`Normalized path: ${path.normalize(promptsFilePath)}`);
+        this.logger.error(`Path exists check: ${promptsFilePath}`);
       }
 
-      throw new Error(`Prompts configuration file not found: ${PROMPTS_FILE}`);
+      throw new Error(`Prompts configuration file not found: ${promptsFilePath}`);
     }
 
     try {
       this.logger.info("Initiating prompt loading and conversion...");
       // Pass path.dirname(PROMPTS_FILE) as the basePath for resolving relative prompt file paths
       const result = await this.promptManager.loadAndConvertPrompts(
-        PROMPTS_FILE,
-        path.dirname(PROMPTS_FILE)
+        promptsFilePath,
+        path.dirname(promptsFilePath)
       );
 
       this._promptsData = result.promptsData;
@@ -568,9 +553,7 @@ export class Application {
    */
   private async initializeModulesPrivate(): Promise<void> {
     // Check verbosity flags for conditional logging
-    const args = process.argv.slice(2);
-    const isVerbose =
-      args.includes("--verbose") || args.includes("--debug-startup");
+    const isVerbose = this.runtimeOptions.verbose;
 
     // REMOVED: Gate evaluator and ExecutionCoordinator initialization - modular systems removed
 
@@ -594,6 +577,12 @@ export class Application {
     }
     if (isVerbose)
       this.logger.info("✅ FrameworkStateManager initialized successfully");
+
+    const currentFrameworkConfig = this.configManager.getFrameworksConfig();
+    this.syncFrameworkSystemStateFromConfig(
+      currentFrameworkConfig,
+      'Framework configuration synchronized during initialization'
+    );
 
     // Debug: Log chain prompt availability
     const chainCount = this._convertedPrompts.filter((p) =>
@@ -620,6 +609,8 @@ export class Application {
       this.mcpServer,
       this.promptManager,
       this.configManager,
+      this.conversationManager,
+      this.textReferenceManager,
       () => this.fullServerRefresh(),
       (reason: string) => this.restartServer(reason)
       // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution
@@ -650,7 +641,7 @@ export class Application {
     if (isVerbose) this.logger.info("🔄 Connecting Tool Description Manager to MCP Tools...");
     this.mcpToolsManager.setToolDescriptionManager(this.toolDescriptionManager);
 
-    // REMOVED: ConsolidatedPromptEngine to ExecutionCoordinator wiring - ExecutionCoordinator removed
+    // REMOVED: PromptExecutionService to ExecutionCoordinator wiring - ExecutionCoordinator removed
 
     // Register all MCP tools
     if (isVerbose) this.logger.info("🔄 Registering all MCP tools...");
@@ -659,6 +650,8 @@ export class Application {
     // Register all prompts
     if (isVerbose) this.logger.info("🔄 Registering all prompts...");
     await this.promptManager.registerAllPrompts(this._convertedPrompts);
+
+    await this.ensurePromptHotReload();
 
     this.logger.info("All modules initialized successfully");
 
@@ -670,10 +663,10 @@ export class Application {
   /**
    * Phase 4: Setup and start the server
    */
-  private async startServer(isStartupTest: boolean = false): Promise<void> {
+  private async startServer(): Promise<void> {
     console.error("DEBUG: startServer() - Determining transport...");
     // Determine transport
-    const args = process.argv.slice(2);
+    const args = this.runtimeOptions.args;
     const transport = TransportManager.determineTransport(
       args,
       this.configManager
@@ -721,7 +714,7 @@ export class Application {
       "DEBUG: startServer() - Framework capabilities integrated into base components"
     );
 
-    if (isStartupTest) {
+    if (this.runtimeOptions.startupTest) {
       console.error(
         "DEBUG: startServer() - Skipping MCP server startup (test mode)"
       );
@@ -917,6 +910,14 @@ export class Application {
       }
 
       // Phase 6: Clean up internal timers
+      if (this.configManager) {
+        if (this.frameworksConfigListener) {
+          this.configManager.removeListener('frameworksConfigChanged', this.frameworksConfigListener);
+          this.frameworksConfigListener = undefined;
+        }
+        this.configManager.stopWatching();
+      }
+
       this.cleanup();
 
       if (this.logger) {
@@ -1003,6 +1004,79 @@ export class Application {
       // Re-throw the error so the caller can handle it appropriately.
       throw error;
     }
+  }
+
+  private async ensurePromptHotReload(): Promise<void> {
+    if (this.hotReloadInitialized) {
+      return;
+    }
+
+    if (!this.promptManager || !this.promptsFilePath || !this.mcpToolsManager) {
+      return;
+    }
+
+    try {
+      await this.promptManager.startHotReload(this.promptsFilePath, (event) =>
+        this.handlePromptHotReload(event)
+      );
+      this.hotReloadInitialized = true;
+      this.logger.info("🔄 Prompt hot reload monitoring activated");
+    } catch (error) {
+      this.logger.error("Failed to start prompt hot reload monitoring:", error);
+    }
+  }
+
+  private async handlePromptHotReload(event: HotReloadEvent): Promise<void> {
+    if (!this.promptManager || !this.mcpToolsManager) {
+      this.logger.warn("Hot reload triggered before prompt systems initialized; ignoring event.");
+      return;
+    }
+
+    if (this.promptReloadInProgress) {
+      this.logger.warn(`Hot reload already running; skipping event: ${event.reason}`);
+      return;
+    }
+
+    this.promptReloadInProgress = (async () => {
+      try {
+        this.logger.info(
+          `🔥 Hot reload event received (${event.type}): ${event.reason} [${event.affectedFiles.join(", ")}]`
+        );
+
+        const result = await reloadPromptData({
+          configManager: this.configManager,
+          promptManager: this.promptManager,
+          mcpToolsManager: this.mcpToolsManager,
+        });
+
+        this._promptsData = result.promptsData;
+        this._convertedPrompts = result.convertedPrompts;
+        this._categories = result.categories;
+        this.promptsFilePath = result.promptsFilePath;
+
+        if (this.apiManager) {
+          this.apiManager.updateData(
+            this._promptsData,
+            this._categories,
+            this._convertedPrompts
+          );
+        }
+
+        if (this.mcpServer) {
+          const count = await this.promptManager.registerAllPrompts(this._convertedPrompts);
+          this.logger.info(`🔁 Re-registered ${count} prompts after hot reload.`);
+          await this.promptManager.notifyPromptsListChanged();
+        }
+
+        this.logger.info("✅ Prompt data refreshed from filesystem changes.");
+      } catch (error) {
+        this.logger.error("❌ Prompt hot reload failed:", error);
+      } finally {
+        this.promptReloadInProgress = undefined;
+      }
+    })();
+
+    await this.promptReloadInProgress;
   }
 
   /**
@@ -1230,6 +1304,73 @@ export class Application {
     }
   }
 
+  private setupFrameworkConfigListener(): void {
+    if (!this.configManager || this.frameworksConfigListener) {
+      return;
+    }
+
+    this.frameworksConfigListener = (newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => {
+      this.handleFrameworkConfigChange(newConfig, previousConfig);
+    };
+
+    this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
+    this.handleFrameworkConfigChange(this.configManager.getFrameworksConfig());
+  }
+
+  private handleFrameworkConfigChange(newConfig: FrameworksConfig, previousConfig?: FrameworksConfig): void {
+    if (!this.logger) {
+      return;
+    }
+
+    const disabled = this.describeDisabledFrameworkFeatures(newConfig);
+    if (disabled.length > 0) {
+      this.logger.warn(`⚠️ Framework features disabled via config: ${disabled.join(', ')}`);
+    }
+
+    this.syncFrameworkSystemStateFromConfig(newConfig);
+
+    if (previousConfig) {
+      const previouslyDisabled = this.describeDisabledFrameworkFeatures(previousConfig);
+      if (previouslyDisabled.length > 0 && disabled.length === 0) {
+        this.logger.info('✅ Framework features re-enabled; all toggles active');
+      }
+    }
+  }
+
+  private syncFrameworkSystemStateFromConfig(config: FrameworksConfig, reason?: string): void {
+    const shouldEnable =
+      config.enableSystemPromptInjection ||
+      config.enableMethodologyGates ||
+      config.enableDynamicToolDescriptions;
+
+    if (!this.frameworkStateManager) {
+      this.pendingFrameworkSystemState = shouldEnable;
+      return;
+    }
+
+    const resolvedReason =
+      reason ??
+      (shouldEnable
+        ? 'Framework system enabled via configuration toggles'
+        : 'Framework system disabled via configuration toggles');
+    this.frameworkStateManager.setFrameworkSystemEnabled(shouldEnable, resolvedReason);
+    this.pendingFrameworkSystemState = undefined;
+  }
+
+  private describeDisabledFrameworkFeatures(config: FrameworksConfig): string[] {
+    const disabled: string[] = [];
+    if (!config.enableSystemPromptInjection) {
+      disabled.push('system prompt injection');
+    }
+    if (!config.enableMethodologyGates) {
+      disabled.push('methodology gates');
+    }
+    if (!config.enableDynamicToolDescriptions) {
+      disabled.push('dynamic tool descriptions');
+    }
+    return disabled;
+  }
+
   /**
    * Emergency diagnostic information for troubleshooting
    */
@@ -1313,15 +1454,20 @@ export class Application {
 /**
  * Create and configure an application runtime
  */
-export function createApplication(): Application {
-  return new Application();
+export function createApplication(
+  logger?: Logger,
+  runtimeOptions?: RuntimeLaunchOptions
+): Application {
+  return new Application(logger, runtimeOptions);
 }
 
 /**
  * Main application entry point
  */
-export async function startApplication(): Promise<Application> {
-  const application = createApplication();
+export async function startApplication(
+  runtimeOptions?: RuntimeLaunchOptions
+): Promise<Application> {
+  const application = createApplication(undefined, runtimeOptions);
   await application.startup();
   return application;
 }

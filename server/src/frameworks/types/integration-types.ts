@@ -1,3 +1,4 @@
+// @lifecycle canonical - Type definitions for framework-semantic integration contracts.
 /**
  * Integration Layer Type Definitions
  *
@@ -7,7 +8,7 @@
  */
 
 import type { ConvertedPrompt } from '../../execution/types.js';
-import type { ContentAnalysisResult } from '../../semantic/configurable-semantic-analyzer.js';
+import type { ContentAnalysisResult } from '../../semantic/types.js';
 import type { FrameworkDefinition, FrameworkExecutionContext } from './methodology-types.js';
 
 /**

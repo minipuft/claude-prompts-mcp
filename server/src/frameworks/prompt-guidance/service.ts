@@ -1,3 +1,4 @@
+// @lifecycle canonical - Orchestrates prompt guidance components for framework-aware prompts.
 /**
  * Prompt Guidance Service - Phase 3 Implementation
  *
@@ -7,7 +8,7 @@
 
 import { Logger } from "../../logging/index.js";
 import { ConvertedPrompt } from "../../types/index.js";
-import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
+import type { ContentAnalysisResult } from "../../semantic/types.js";
 import {
   SystemPromptInjector,
   createSystemPromptInjector

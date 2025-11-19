@@ -21,9 +21,8 @@ module.exports = {
     }]
   },
   collectCoverageFrom: [
-    'dist/**/*.js',
-    '!dist/**/*.d.ts',
-    '!dist/tests/**'
+    'src/**/*.ts',
+    '!src/tests/**'
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov'],
@@ -34,6 +33,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'mjs'],
   // Handle ES module imports properly - map .js imports to TypeScript files and preserve ES modules
   moduleNameMapper: {
+    '^(?:\\.{1,2}/)+dist/(.*)\\.js$': '<rootDir>/src/$1',
     '^(\\.{1,2}/.*)\\.js$': '$1'
   },
   // Transform ES modules from node_modules if needed

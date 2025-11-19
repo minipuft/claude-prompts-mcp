@@ -1,3 +1,4 @@
+// @lifecycle canonical - Tracks framework methodology state for prompt guidance orchestration.
 /**
  * Methodology Tracker - Phase 3 Implementation
  *
@@ -14,8 +15,8 @@ import {
   MethodologyHealth,
   PersistedMethodologyState
 } from "../types/index.js";
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 
 /**
  * Methodology tracking configuration
@@ -292,6 +293,10 @@ export class MethodologyTracker extends EventEmitter {
     if (this.config.persistStateToDisk) {
       await this.persistState();
     }
+
+    // Remove all event listeners to prevent memory leaks
+    this.removeAllListeners();
+    this.logger.debug("Event listeners removed during shutdown");
 
     this.logger.info("MethodologyTracker shutdown complete");
   }

@@ -1,3 +1,4 @@
+// @lifecycle canonical - Execution-level shared type definitions.
 /**
  * Execution System Type Definitions
  *
@@ -352,8 +353,6 @@ export interface EnhancedGateConfiguration {
   temporary_gates?: TemporaryGateDefinition[];
   /** Scope for temporary gates */
   gate_scope?: 'execution' | 'session' | 'chain' | 'step';
-  /** Whether to inherit gates from parent chain (default: true) */
-  inherit_chain_gates?: boolean;
 }
 
 /**
@@ -380,4 +379,32 @@ export interface TemporaryGateDefinition {
   source?: 'manual' | 'automatic' | 'analysis';
   /** Additional context for gate creation */
   context?: Record<string, any>;
+}
+
+/**
+ * Captures execution context supplied to gate review prompts so reviewers
+ * can reference original arguments and prior results without relying on history.
+ */
+export interface GateReviewExecutionContext {
+  originalArgs: Record<string, unknown>;
+  previousResults: Record<number, string>;
+  currentStep?: number;
+  totalSteps?: number;
+  chainId?: string;
+  sessionId?: string;
+}
+
+/**
+ * Structured review prompt emitted by gate validation when a manual review is required.
+ */
+export interface GateReviewPrompt {
+  gateId?: string;
+  gateName?: string;
+  criteriaSummary: string;
+  promptTemplate?: string;
+  explicitInstructions?: string[];
+  retryHints?: string[];
+  previousResponse?: string;
+  executionContext?: GateReviewExecutionContext;
+  metadata?: Record<string, unknown>;
 }

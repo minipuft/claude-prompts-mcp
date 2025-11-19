@@ -1,3 +1,4 @@
+// @lifecycle canonical - Barrel exports for methodology registry and guides.
 /**
  * Methodology System Index - Phase 2 Implementation
  *

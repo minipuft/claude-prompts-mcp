@@ -1,3 +1,4 @@
+// @lifecycle migrating - Coordinating semantic analysis with framework switching is still stabilizing.
 /**
  * Framework-Semantic Integration - Phase 2 Implementation
  * Intelligent framework switching and consensus mechanisms
@@ -20,10 +21,8 @@ import {
   FrameworkSwitchRecommendation,
   IntegratedAnalysisResult
 } from "../types/index.js";
-import {
-  ContentAnalyzer,
-  ContentAnalysisResult
-} from "../../semantic/configurable-semantic-analyzer.js";
+import { ContentAnalyzer } from "../../semantic/configurable-semantic-analyzer.js";
+import type { ContentAnalysisResult } from "../../semantic/types.js";
 import { FrameworkStateManager } from "../framework-state-manager.js";
 import { PromptGuidanceService } from "../prompt-guidance/service.js";
 

@@ -1,3 +1,4 @@
+// @lifecycle canonical - Utility barrel plus compatibility exports for frameworks and gates.
 /**
  * Utility Functions Module
  * Consolidates all utility functions used across the application

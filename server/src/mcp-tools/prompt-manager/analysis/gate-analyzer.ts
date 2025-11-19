@@ -1,3 +1,4 @@
+// @lifecycle canonical - Analyzes gate metadata within prompts.
 /**
  * Gate Analyzer Module
  *
@@ -6,8 +7,8 @@
  */
 
 import { Logger } from '../../../logging/index.js';
-import type { ConvertedPrompt } from '../../../execution/types.js';
-import type { TemporaryGateDefinition } from '../../../execution/types.js';
+
+import type { ConvertedPrompt, TemporaryGateDefinition } from '../../../execution/types.js';
 import type { PromptManagerDependencies } from '../core/types.js';
 
 /**
@@ -66,8 +67,8 @@ export class GateAnalyzer {
     this.logger.debug('[GATE ANALYZER] Analyzing prompt for gate recommendations:', {
       promptId: prompt.id,
       category: prompt.category,
-      hasChainSteps: !!(prompt.chainSteps?.length),
-      argumentsCount: prompt.arguments?.length || 0
+      hasChainSteps: !!prompt.chainSteps?.length,
+      argumentsCount: prompt.arguments?.length || 0,
     });
 
     // Extract context from prompt
@@ -83,27 +84,39 @@ export class GateAnalyzer {
     const temporaryGates = this.generateTemporaryGateSuggestions(context, contentAnalysis);
 
     // Calculate confidence based on analysis depth
-    const confidence = this.calculateConfidence(context, contentAnalysis, recommendedGates.length + temporaryGates.length);
+    const confidence = this.calculateConfidence(
+      context,
+      contentAnalysis,
+      recommendedGates.length + temporaryGates.length
+    );
 
     // Create reasoning
-    const reasoning = this.generateReasoning(context, contentAnalysis, recommendedGates, temporaryGates);
+    const reasoning = this.generateReasoning(
+      context,
+      contentAnalysis,
+      recommendedGates,
+      temporaryGates
+    );
 
     // Generate gate configuration preview
-    const gateConfigurationPreview = this.generateGateConfigurationPreview(recommendedGates, temporaryGates);
+    const gateConfigurationPreview = this.generateGateConfigurationPreview(
+      recommendedGates,
+      temporaryGates
+    );
 
     const result: GateAnalysisResult = {
       recommendedGates,
       suggestedTemporaryGates: temporaryGates,
       reasoning,
       confidence,
-      gateConfigurationPreview
+      gateConfigurationPreview,
     };
 
     this.logger.debug('[GATE ANALYZER] Analysis complete:', {
       promptId: prompt.id,
       recommendedGatesCount: recommendedGates.length,
       temporaryGatesCount: temporaryGates.length,
-      confidence
+      confidence,
     });
 
     return result;
@@ -165,7 +178,7 @@ export class GateAnalyzer {
     const complexityIndicators = [
       prompt.arguments?.length || 0,
       prompt.chainSteps?.length || 0,
-      prompt.userMessageTemplate.length / 100
+      prompt.userMessageTemplate.length / 100,
     ];
     const complexityScore = complexityIndicators.reduce((a, b) => a + b, 0);
 
@@ -183,7 +196,7 @@ export class GateAnalyzer {
       category: prompt.category,
       framework: this.dependencies.frameworkStateManager?.getActiveFramework()?.methodology,
       intentKeywords,
-      complexity
+      complexity,
     };
   }
 
@@ -208,7 +221,7 @@ export class GateAnalyzer {
       hasEducationalContent: /learn|teach|explain|understand|clarify/.test(content),
       hasTechnicalContent: /technical|specification|implementation|architecture/.test(content),
       requiresAccuracy: /accurate|precise|correct|verify|validate/.test(content),
-      requiresStructure: /structure|organize|format|outline|steps/.test(content)
+      requiresStructure: /structure|organize|format|outline|steps/.test(content),
     };
   }
 
@@ -262,15 +275,16 @@ export class GateAnalyzer {
         type: 'validation',
         scope: 'execution',
         description: 'Verify all statistical claims and data sources',
-        guidance: 'Ensure all numerical data includes proper citations and verification of accuracy',
+        guidance:
+          'Ensure all numerical data includes proper citations and verification of accuracy',
         pass_criteria: [
           {
             type: 'content_check',
             message: 'Data sources must be cited',
-            passed: false
-          }
+            passed: false,
+          },
         ],
-        source: 'automatic'
+        source: 'automatic',
       });
     }
 
@@ -281,15 +295,16 @@ export class GateAnalyzer {
         type: 'validation',
         scope: 'execution',
         description: 'Enhanced code quality validation for complex implementations',
-        guidance: 'Apply rigorous code review standards including performance, security, and maintainability',
+        guidance:
+          'Apply rigorous code review standards including performance, security, and maintainability',
         pass_criteria: [
           {
             type: 'pattern_check',
             message: 'Code must include error handling',
-            passed: false
-          }
+            passed: false,
+          },
         ],
-        source: 'automatic'
+        source: 'automatic',
       });
     }
 
@@ -301,7 +316,7 @@ export class GateAnalyzer {
         scope: 'chain',
         description: 'Ensure comprehensive research across all chain steps',
         guidance: 'Each research step must provide multiple perspectives and credible sources',
-        source: 'automatic'
+        source: 'automatic',
       });
     }
 
@@ -320,7 +335,7 @@ export class GateAnalyzer {
 
     // Increase confidence for clear indicators
     const indicators = Object.values(contentAnalysis).filter(Boolean).length;
-    confidence += (indicators * 0.05);
+    confidence += indicators * 0.05;
 
     // Adjust for context clarity
     if (context.category !== 'general') confidence += 0.1;
@@ -345,7 +360,9 @@ export class GateAnalyzer {
   ): string[] {
     const reasoning: string[] = [];
 
-    reasoning.push(`Analyzed ${context.executionType} with ${context.complexity} complexity in ${context.category} category`);
+    reasoning.push(
+      `Analyzed ${context.executionType} with ${context.complexity} complexity in ${context.category} category`
+    );
 
     if (contentAnalysis.hasCodeRequirements) {
       reasoning.push('Detected code requirements - recommended code quality gates');
@@ -358,7 +375,9 @@ export class GateAnalyzer {
     }
 
     if (temporaryGates.length > 0) {
-      reasoning.push(`Suggested ${temporaryGates.length} temporary gates for execution-specific quality control`);
+      reasoning.push(
+        `Suggested ${temporaryGates.length} temporary gates for execution-specific quality control`
+      );
     }
 
     if (recommendedGates.length === 0 && temporaryGates.length === 0) {
@@ -397,11 +416,11 @@ export class GateAnalyzer {
   private extractIntentKeywords(content: string): string[] {
     const keywords: string[] = [];
     const intentPatterns = {
-      'analysis': /analyz|investigat|examin|study/gi,
-      'creation': /creat|generat|build|develop/gi,
-      'explanation': /explain|clarify|describe|detail/gi,
-      'validation': /validat|verify|check|confirm/gi,
-      'optimization': /optim|improv|enhanc|refin/gi
+      analysis: /analyz|investigat|examin|study/gi,
+      creation: /creat|generat|build|develop/gi,
+      explanation: /explain|clarify|describe|detail/gi,
+      validation: /validat|verify|check|confirm/gi,
+      optimization: /optim|improv|enhanc|refin/gi,
     };
 
     for (const [intent, pattern] of Object.entries(intentPatterns)) {
@@ -418,11 +437,11 @@ export class GateAnalyzer {
    */
   private getIntentBasedGates(intentKeywords: string[]): string[] {
     const intentGateMapping: Record<string, string[]> = {
-      'analysis': ['research-quality', 'technical-accuracy'],
-      'creation': ['content-structure', 'code-quality'],
-      'explanation': ['educational-clarity', 'content-structure'],
-      'validation': ['technical-accuracy'],
-      'optimization': ['code-quality', 'technical-accuracy']
+      analysis: ['research-quality', 'technical-accuracy'],
+      creation: ['content-structure', 'code-quality'],
+      explanation: ['educational-clarity', 'content-structure'],
+      validation: ['technical-accuracy'],
+      optimization: ['code-quality', 'technical-accuracy'],
     };
 
     const gates: string[] = [];
@@ -439,14 +458,14 @@ export class GateAnalyzer {
    */
   private getCategoryGateMapping(): Record<string, string[]> {
     return {
-      'analysis': ['research-quality', 'technical-accuracy'],
-      'education': ['educational-clarity', 'content-structure'],
-      'development': ['code-quality', 'security-awareness'],
-      'research': ['research-quality', 'technical-accuracy'],
-      'debugging': ['technical-accuracy', 'code-quality'],
-      'documentation': ['content-structure', 'educational-clarity'],
-      'content_processing': ['content-structure'],
-      'general': ['content-structure']
+      analysis: ['research-quality', 'technical-accuracy'],
+      education: ['educational-clarity', 'content-structure'],
+      development: ['code-quality', 'security-awareness'],
+      research: ['research-quality', 'technical-accuracy'],
+      debugging: ['technical-accuracy', 'code-quality'],
+      documentation: ['content-structure', 'educational-clarity'],
+      content_processing: ['content-structure'],
+      general: ['content-structure'],
     };
   }
 
@@ -455,10 +474,10 @@ export class GateAnalyzer {
    */
   private getFrameworkGates(framework: string): string[] {
     const frameworkGateMapping: Record<string, string[]> = {
-      'CAGEERF': ['framework-compliance', 'content-structure'],
-      'ReACT': ['technical-accuracy', 'research-quality'],
+      CAGEERF: ['framework-compliance', 'content-structure'],
+      ReACT: ['technical-accuracy', 'research-quality'],
       '5W1H': ['content-structure', 'research-quality'],
-      'SCAMPER': ['educational-clarity']
+      SCAMPER: ['educational-clarity'],
     };
 
     return frameworkGateMapping[framework] || ['framework-compliance'];

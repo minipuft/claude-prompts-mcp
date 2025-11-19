@@ -1,3 +1,4 @@
+// @lifecycle canonical - Shared error helpers that surface structured MCP responses.
 /**
  * Consolidated Error Handling System
  * Combines basic error classes with MCP structured response capabilities

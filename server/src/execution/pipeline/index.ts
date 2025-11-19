@@ -1,0 +1,20 @@
+// @lifecycle canonical - Barrel exports for execution pipeline and stages.
+export { RequestNormalizationStage } from './stages/00-request-normalization-stage.js';
+export { DependencyInjectionStage } from './stages/00-dependency-injection-stage.js';
+export { ExecutionLifecycleStage } from './stages/00-execution-lifecycle-stage.js';
+export { PromptExecutionPipeline } from './prompt-execution-pipeline.js';
+export { BasePipelineStage, type PipelineStage } from './stage.js';
+export { CommandParsingStage } from './stages/01-parsing-stage.js';
+export { InlineGateExtractionStage } from './stages/02-inline-gate-stage.js';
+export { OperatorValidationStage } from './stages/03-operator-validation-stage.js';
+export { ExecutionPlanningStage } from './stages/04-planning-stage.js';
+export { GateEnhancementStage } from './stages/05-gate-enhancement-stage.js';
+export { FrameworkResolutionStage } from './stages/06-framework-stage.js';
+export { PromptGuidanceStage } from './stages/06b-prompt-guidance-stage.js';
+export { SessionManagementStage } from './stages/07-session-stage.js';
+export { StepResponseCaptureStage } from './stages/08-response-capture-stage.js';
+export { StepExecutionStage } from './stages/09-execution-stage.js';
+export { GateReviewStage } from './stages/10-gate-review-stage.js';
+export { CallToActionStage } from './stages/11-call-to-action-stage.js';
+export { ResponseFormattingStage } from './stages/10-formatting-stage.js';
+export { PostFormattingCleanupStage } from './stages/12-post-formatting-cleanup-stage.js';

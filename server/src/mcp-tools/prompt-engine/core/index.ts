@@ -1,3 +1,4 @@
+// @lifecycle canonical - Core prompt engine orchestrator exports.
 /**
  * Prompt Engine Core Module Exports
  *
@@ -5,14 +6,12 @@
  * to resolve module resolution issues in CI/CD environments.
  */
 
-// Re-export the main execution engine (excluding conflicting types)
+// Re-export the main execution service (excluding conflicting types)
 export {
-  ConsolidatedPromptEngine,
-  createConsolidatedPromptEngine
-} from './engine.js';
-
-// Re-export the prompt executor
-export * from './executor.js';
+  PromptExecutionService,
+  createPromptExecutionService,
+  cleanupPromptExecutionService,
+} from './prompt-execution-service.js';
 
 // Re-export all core types and interfaces (primary source for PromptClassification)
 export * from './types.js';

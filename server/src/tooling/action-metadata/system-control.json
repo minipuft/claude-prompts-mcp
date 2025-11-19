@@ -1,0 +1,128 @@
+{
+  "tool": "system_control",
+  "version": 2,
+  "notes": [
+    "Actions pulled from ConsolidatedSystemControl.getActionHandler.",
+    "Planned items highlight where handler scaffolding exists without public parameters."
+  ],
+  "operations": [
+    {
+      "id": "status",
+      "displayName": "System Status",
+      "category": "status",
+      "status": "working",
+      "requiredArgs": [],
+      "description": "Reports framework enablement, uptime, and execution metrics."
+    },
+    {
+      "id": "framework:list",
+      "displayName": "List Frameworks",
+      "category": "framework",
+      "status": "working",
+      "requiredArgs": [],
+      "description": "Enumerates available frameworks with optional details."
+    },
+    {
+      "id": "framework:switch",
+      "displayName": "Switch Framework",
+      "category": "framework",
+      "status": "working",
+      "requiredArgs": [
+        "framework"
+      ],
+      "description": "Changes active methodology via framework manager."
+    },
+    {
+      "id": "framework:enable",
+      "displayName": "Enable Framework System",
+      "category": "framework",
+      "status": "working",
+      "requiredArgs": [],
+      "description": "Turns on methodology injection globally."
+    },
+    {
+      "id": "framework:disable",
+      "displayName": "Disable Framework System",
+      "category": "framework",
+      "status": "working",
+      "requiredArgs": [],
+      "description": "Turns off methodology injection globally."
+    },
+    {
+      "id": "gates:list",
+      "displayName": "List Gates",
+      "category": "gates",
+      "status": "working",
+      "requiredArgs": [],
+      "description": "Displays registered quality gates via GateSystemManager."
+    },
+    {
+      "id": "analytics:view",
+      "displayName": "View Analytics",
+      "category": "analytics",
+      "status": "planned",
+      "requiredArgs": [],
+      "description": "Expose execution analytics currently tracked in MetricsCollector.",
+      "issues": [
+        {
+          "severity": "info",
+          "summary": "Pending implementation",
+          "details": "Telemetry exists but no action routes to a formatter yet."
+        }
+      ]
+    },
+    {
+      "id": "analytics:history",
+      "displayName": "Analytics History",
+      "category": "analytics",
+      "status": "planned",
+      "requiredArgs": [],
+      "description": "Return framework switch history and performance trends.",
+      "issues": [
+        {
+          "severity": "info",
+          "summary": "Not wired",
+          "details": "Action handler reserved but not exposed to clients."
+        }
+      ]
+    },
+    {
+      "id": "config",
+      "displayName": "Config Operations",
+      "category": "config",
+      "status": "planned",
+      "requiredArgs": [],
+      "description": "Safe config writer hooks for server/config.json updates.",
+      "issues": [
+        {
+          "severity": "info",
+          "summary": "Schema TBD",
+          "details": "Need explicit list of allowed keys before exposing publicly."
+        }
+      ]
+    },
+    {
+      "id": "maintenance",
+      "displayName": "Maintenance",
+      "category": "maintenance",
+      "status": "planned",
+      "requiredArgs": [],
+      "description": "Server maintenance tasks (restart, cleanup, diagnostics).",
+      "issues": [
+        {
+          "severity": "info",
+          "summary": "Pending feature",
+          "details": "Action handler exists but does not perform any side effects yet."
+        }
+      ]
+    },
+    {
+      "id": "guide",
+      "displayName": "Guide",
+      "category": "discovery",
+      "status": "working",
+      "requiredArgs": [],
+      "description": "Summarizes available operations (status/framework/gates/analytics/config/maintenance) with lifecycle cues."
+    }
+  ]
+}

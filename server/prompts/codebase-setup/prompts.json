@@ -1,0 +1,33 @@
+{
+  "prompts": [
+    {
+      "id": "codebase_protocol_init",
+      "name": "Codebase Protocol Initialization",
+      "category": "codebase-setup",
+      "description": "Bootstrap a T3-style project with full protocol setup, tooling, and documentation updates.",
+      "file": "codebase_protocol_init.md",
+      "arguments": [
+        {
+          "name": "repo_path",
+          "type": "string",
+          "description": "Absolute path to the target workspace"
+        },
+        {
+          "name": "tech_stack",
+          "type": "string",
+          "description": "Short description of the expected stack"
+        },
+        {
+          "name": "additional_dependencies",
+          "type": "string",
+          "description": "Comma-separated extra packages to install"
+        },
+        {
+          "name": "notes",
+          "type": "string",
+          "description": "Additional execution reminders or constraints"
+        }
+      ]
+    }
+  ]
+}

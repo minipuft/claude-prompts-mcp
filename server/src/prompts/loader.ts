@@ -1,11 +1,12 @@
+// @lifecycle canonical - Loads prompt and category definitions from disk into structured data.
 /**
  * Prompt Loader Module
  * Handles loading prompts from category-specific configuration files and markdown templates
  */
 
-import * as fs from "fs/promises";
-import { readFile } from "fs/promises";
-import path from "path";
+import * as fs from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import * as path from "node:path";
 import { Logger } from "../logging/index.js";
 import {
   CategoryPromptsResult,
@@ -353,7 +354,6 @@ export class PromptLoader {
         context?: Record<string, any>;
       }>;
       gate_scope?: 'execution' | 'session' | 'chain' | 'step';
-      inherit_chain_gates?: boolean;
     };
     chainSteps?: Array<{
       promptId: string;
@@ -400,7 +400,6 @@ export class PromptLoader {
           context?: Record<string, any>;
         }>;
         gate_scope?: 'execution' | 'session' | 'chain' | 'step';
-        inherit_chain_gates?: boolean;
       } | undefined;
 
       const gateConfigMatch = content.match(
@@ -427,7 +426,6 @@ export class PromptLoader {
               framework_gates: typeof parsedConfig.framework_gates === 'boolean' ? parsedConfig.framework_gates : true,
               temporary_gates: Array.isArray(parsedConfig.temporary_gates) ? parsedConfig.temporary_gates : undefined,
               gate_scope: typeof parsedConfig.gate_scope === 'string' ? parsedConfig.gate_scope : undefined,
-              inherit_chain_gates: typeof parsedConfig.inherit_chain_gates === 'boolean' ? parsedConfig.inherit_chain_gates : undefined
             };
           }
 

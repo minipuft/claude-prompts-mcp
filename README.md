@@ -19,6 +19,15 @@ Production-ready MCP server with intelligent prompt orchestration, hot-reload ca
 
 </div>
 
+## At a Glance
+
+- **What**: A Model Context Protocol (MCP) server that hot-reloads prompts/templates/chains and layers methodology frameworks (CAGEERF, ReACT, 5W1H, SCAMPER) on demand.
+- **Who it’s for**: Developers and prompt engineers who want to evolve AI workflows inside Claude Desktop, Cursor/Windsurf, Claude Code CLI, or any MCP-compatible client.
+- **Why it’s different**: Three consolidated tools (`prompt_engine`, `prompt_manager`, `system_control`) keep authoring, execution, and runtime controls inside your MCP conversation—no manual file edits or restarts.
+- **Docs & diagrams**: Start with the [Documentation Map](docs/README.md) for architecture, operations, and prompt authoring guides.
+
+> Looking for a deeper dive? Scroll to [Rapid Customization Workflow](#rapid-customization-workflow) to see how templates move from Markdown to live MCP prompts in seconds.
+
 ## Core Features
 
 **Three-Tier Execution Architecture**
@@ -73,7 +82,7 @@ prompt_engine >>code_review_optimization_chain target_code="..." language_framew
 
 ## Framework System
 
-The server implements a sophisticated methodology system that applies structured thinking frameworks to AI interactions:
+The server implements a methodology system that applies structured thinking frameworks to AI interactions. Framework selection is **manual by design** today: structural analysis auto-detects execution tiers (prompt/template/chain), but the server does **not** infer tone or “theme” automatically. Choose a framework explicitly whenever you want to change reasoning behavior.
 
 ### Available Methodologies
 
@@ -90,7 +99,7 @@ The server implements a sophisticated methodology system that applies structured
 - **Performance Monitoring**: Track framework switching mechanics and usage
 
 ```bash
-# Switch methodology for different approaches
+# Switch methodology for different approaches (manual step)
 system_control switch_framework framework="ReACT" reason="Problem-solving focus"
 
 # Monitor framework performance and usage
@@ -157,6 +166,27 @@ system_control switch_framework framework="ReACT" reason="Problem-solving focus"
 - **Performance Analytics**: Three-tier execution monitoring with framework switching tracking
 - **Smart Argument Parsing**: JSON objects, single arguments, or conversational context
 
+## Rapid Customization Workflow
+
+The Claude Prompts MCP server was built for fast iteration: pick a thinking framework, tweak a prompt, hot-reload it, and immediately exercise it inside the same MCP conversation. A typical loop looks like this:
+
+1. **Select a methodology** to guide the tone or reasoning style:
+   ```bash
+   system_control switch_framework framework="CAGEERF" reason="Structured analysis"
+   ```
+2. **Create or update prompts via `prompt_manager`**—the tool keeps metadata, Markdown, and schemas synchronized with the registry. Everything you edit becomes a context-aware prompt template rendered via Nunjucks before reaching the LLM:
+   ```bash
+   prompt_manager create id="gap_analysis" category="analysis" \
+     description="Identify blockers" user_message_template="Assess {{context}}"
+   ```
+3. **Rely on hot reload** (or `prompt_manager(action:"reload")`) to publish changes instantly—no server restarts or client reconnects.
+4. **Execute and iterate** inside the same session using `prompt_engine` with structural execution detection plus inline gate validation:
+   ```bash
+   prompt_engine >>gap_analysis context="Upgrade migration blockers"
+   ```
+
+Because transports (STDIO + SSE), sessions, and the PromptExecutionPipeline stay running, you can refine prompts, chains, and gates in seconds instead of redeploying. See the [Architecture Overview](docs/architecture.md) for how the runtime orchestrates this flow and the [MCP Tooling Guide](docs/mcp-tooling-guide.md) for every command involved.
+
 ## Quick Start
 
 Get the server running in under a minute:
@@ -199,6 +229,23 @@ Configure your MCP client to connect via STDIO transport:
 
 For Claude Code CLI users:
 
+## Contributor Quick Start
+
+Want to modify prompts, tweak the runtime, or contribute fixes?
+
+```bash
+git clone https://github.com/minipuft/claude-prompts-mcp.git
+cd claude-prompts-mcp/server
+npm install
+npm run typecheck
+npm test
+npm run validate:all   # optional full CI parity
+```
+
+- Launch the dev server with `npm run start:stdio` (STDIO) or `npm run start:sse` (HTTP/SSE).
+- Edit prompts via MCP tools; code changes live under `server/src/**`. The [CONTRIBUTING.md](CONTRIBUTING.md) file details coding standards and review expectations.
+- For documentation-only updates, see the [docs index](docs/README.md) to find the canonical file before editing.
+
 ```bash
 claude mcp add-json claude-prompts-mcp '{"type":"stdio","command":"node","args":["path/to/claude-prompts-mcp/server/dist/index.js"],"env":{}}'
 ```
@@ -233,7 +280,7 @@ system_control analytics include_history=true
 # Example chains available: code_review_optimization_chain, create_docs_chain, video_notes_enhanced
 
 # Manual control when needed
-prompt_engine >>content_analysis input="sensitive data" step_confirmation=true gate_validation=true
+prompt_engine >>content_analysis input="sensitive data" step_confirmation=true api_validation=true
 ```
 
 The system provides a structured approach to prompt management through systematic methodology application.
@@ -309,6 +356,7 @@ Chains are defined directly in markdown files using step headers that guide Clau
 This chain performs a systematic 6-step code review:
 
 ## Step 1: Structure & Organization Analysis
+
 Analyze code architecture, organization, patterns, naming conventions...
 
 **Output Required**: Structural assessment with identified patterns.
@@ -316,6 +364,7 @@ Analyze code architecture, organization, patterns, naming conventions...
 ---
 
 ## Step 2: Functionality & Logic Review
+
 Examine business logic correctness, edge cases, error handling...
 
 **Output Required**: Logic validation with edge case analysis.
@@ -323,12 +372,14 @@ Examine business logic correctness, edge cases, error handling...
 ---
 
 ## Step 3: Security & Best Practices Audit
+
 Review for security vulnerabilities: input validation, authentication...
 
 **Output Required**: Security assessment with vulnerability identification.
 ```
 
 **Key Features:**
+
 - **LLM-Driven Execution**: Claude follows step-by-step instructions embedded in the template
 - **Context Preservation**: Each step builds on previous outputs naturally
 - **Flexible Structure**: Steps can include conditional logic and branching
@@ -344,25 +395,27 @@ For chains that orchestrate multiple reusable prompts, use the markdown-embedded
 1. promptId: extract_key_points
    stepName: Extract Key Points
    inputMapping:
-     content: original_content
+   content: original_content
    outputMapping:
-     key_points: extracted_points
+   key_points: extracted_points
 
 2. promptId: sentiment_analysis
    stepName: Analyze Sentiment
    inputMapping:
-     text: extracted_points
+   text: extracted_points
    outputMapping:
-     sentiment: analysis_result
+   sentiment: analysis_result
 ```
 
 **Capabilities:**
+
 - **Prompt Reuse**: Chain together existing prompts
 - **Data Flow Mapping**: Explicit input/output variable mapping
 - **Gate Integration**: Apply quality gates at each step
 - **Error Recovery**: Graceful handling of failed steps
 
 **Real Examples**: See working chain implementations:
+
 - `server/prompts/development/code_review_optimization_chain.md` - 6-step code review workflow
 - `server/prompts/documentation/create_docs_chain.md` - Documentation generation chain
 - `server/prompts/content_processing/video_notes_enhanced.md` - Video analysis workflow
@@ -435,6 +488,24 @@ Fine-tune your server's behavior:
 }
 ```
 
+#### Toggling Framework Enhancements
+
+Set these flags inside `server/config.json` when you want a lean prompt server without methodology scaffolding:
+
+```json
+"frameworks": {
+  "enableSystemPromptInjection": true,
+  "enableMethodologyGates": true,
+  "enableDynamicToolDescriptions": true
+}
+```
+
+- `enableSystemPromptInjection=false` keeps the pipeline from inserting framework-specific context into your prompt templates.
+- `enableMethodologyGates=false` disables framework-derived gate checks while preserving inline gates you configure manually.
+- `enableDynamicToolDescriptions=false` stops the server from rewriting MCP tool descriptions with framework hints (useful when clients already provide custom descriptions).
+
+You can flip these switches independently—restart the server (or trigger hot reload) to apply changes.
+
 ### Prompt Organization (`promptsConfig.json`)
 
 Structure your AI command library:
@@ -484,6 +555,7 @@ The primary method uses step-by-step instructions embedded directly in markdown 
 Research {{topic}} and provide {{analysis_type}} analysis.
 
 ## Step 1: Initial Research
+
 Gather comprehensive information about {{topic}} from available sources.
 Focus on {{analysis_type}} perspectives.
 
@@ -492,6 +564,7 @@ Focus on {{analysis_type}} perspectives.
 ---
 
 ## Step 2: Extract Key Insights
+
 From the research findings, identify the most relevant insights.
 Organize by importance and relevance to {{analysis_type}} analysis.
 
@@ -500,6 +573,7 @@ Organize by importance and relevance to {{analysis_type}} analysis.
 ---
 
 ## Step 3: Analyze Patterns
+
 Examine the extracted insights for patterns, trends, and relationships.
 Consider multiple analytical frameworks.
 
@@ -508,12 +582,14 @@ Consider multiple analytical frameworks.
 ---
 
 ## Step 4: Synthesize Report
+
 Create comprehensive report combining all findings.
 
 **Output Required**: Structured report with executive summary.
 ```
 
 **Benefits:**
+
 - **Natural Flow**: Claude maintains context automatically across steps
 - **Flexible Logic**: Steps can include conditional branching and decision points
 - **Framework Enhanced**: Automatically augmented with active methodology (CAGEERF/ReACT)
@@ -529,31 +605,31 @@ For orchestrating multiple reusable prompts with explicit data flow:
 1. promptId: research_topic
    stepName: Initial Research
    inputMapping:
-     query: topic
+   query: topic
    outputMapping:
-     findings: research_data
+   findings: research_data
 
 2. promptId: extract_insights
    stepName: Extract Key Insights
    inputMapping:
-     content: research_data
+   content: research_data
    outputMapping:
-     insights: key_findings
+   insights: key_findings
 
 3. promptId: analyze_patterns
    stepName: Analyze Patterns
    inputMapping:
-     data: key_findings
+   data: key_findings
    outputMapping:
-     analysis: pattern_results
+   analysis: pattern_results
 
 4. promptId: generate_report
    stepName: Synthesize Report
    inputMapping:
-     insights: key_findings
-     patterns: pattern_results
+   insights: key_findings
+   patterns: pattern_results
    outputMapping:
-     report: final_output
+   report: final_output
 ```
 
 **Capabilities:**
@@ -564,6 +640,7 @@ For orchestrating multiple reusable prompts with explicit data flow:
 - **Gate Validation**: Apply quality gates at each step for validation
 
 **Real Examples**: View production chain implementations:
+
 - `server/prompts/content_processing/noteIntegration.md` - Note processing with modular steps
 - Review the `## Chain Steps` section in any chain prompt for complete syntax
 
@@ -657,25 +734,27 @@ Built-in monitoring and diagnostics for production environments:
 
 ## Documentation
 
-| Guide                                                  | Description                                                     |
-| ------------------------------------------------------ | --------------------------------------------------------------- |
-| [Installation Guide](docs/installation-guide.md)       | Complete setup walkthrough with troubleshooting                 |
-| [Troubleshooting Guide](docs/troubleshooting.md)       | Common issues, diagnostic tools, and solutions                  |
-| [Architecture Overview](docs/architecture.md)          | Deep dive into the orchestration engine, modules, and data flow |
-| [Prompt Format Guide](docs/prompt-format-guide.md)     | Master prompt creation including chain workflows                |
-| [Prompt Management](docs/prompt-management.md)         | Dynamic management and hot-reload features                      |
-| [MCP Tools Reference](docs/mcp-tools-reference.md)     | Complete MCP tools documentation                                |
-| [Roadmap & TODO](docs/TODO.md)                         | Planned features and development roadmap                        |
-| [Contributing](docs/contributing.md)                   | Join our development community                                  |
+All canonical docs live under [`docs/`](docs/README.md). Start with the index for status/lifecycle info, then dive into the guide you need:
 
-## Contributing
+| Guide | What You’ll Learn |
+| --- | --- |
+| [Architecture Overview](docs/architecture.md) | Runtime map, transports, PromptExecutionPipeline, methodology system |
+| [Operations & Deployment](docs/operations-guide.md) | Installation, transports, supervisor mode, diagnostics |
+| [MCP Tooling Guide](docs/mcp-tooling-guide.md) | Command reference for `prompt_manager`, `prompt_engine`, `system_control` |
+| [Prompt & Template Authoring](docs/prompt-authoring-guide.md) | Markdown structure, schema metadata, context engineering tips |
+| [Chain Workflows](docs/chain-workflows.md) | Chain schema, session handling, inline gates |
+| [Enhanced Gate System](docs/enhanced-gate-system.md) | Gate precedence, inline vs. framework gates, guidance renderer |
+| [Release Notes](docs/release-notes.md) | Version-by-version highlights |
+| [Plans & TODO](plans/) | Long-running migrations, lifecycle cleanups, roadmap sketches |
 
-Join our development community:
+Need a single link? Bookmark the [Documentation Index](docs/README.md) for the learning path and lifecycle statuses.
+
+## Community & Support
 
 - **Found a bug?** [Open an issue](https://github.com/minipuft/claude-prompts-mcp/issues)
 - **Have an idea?** [Start a discussion](https://github.com/minipuft/claude-prompts-mcp/discussions)
-- **Want to contribute?** Check our [Contributing Guide](docs/contributing.md)
-- **Need help?** Visit our [Documentation](docs/README.md)
+- **Want to contribute?** Read [CONTRIBUTING.md](CONTRIBUTING.md) for coding standards, testing requirements, and review expectations.
+- **Need help fast?** Mention the docs page you followed in your issue so we can improve it together.
 
 ## License
 
@@ -692,3 +771,4 @@ Released under the [MIT License](LICENSE) - see the file for details.
 _Built for the AI development community_
 
 </div>
+;

@@ -1,3 +1,4 @@
+// @lifecycle canonical - Aggregated type definitions used across the server (config, prompts, gates).
 /**
  * Type definitions for the prompt management system
  */
@@ -115,8 +116,29 @@ export interface ToolDescriptionsOptions {
 }
 
 /**
+ * Configuration toggles for framework-driven features
+ */
+export interface FrameworksConfig {
+  /** Enable system prompt injection from frameworks */
+  enableSystemPromptInjection: boolean;
+  /** Enable methodology-specific gate behavior */
+  enableMethodologyGates: boolean;
+  /** Enable dynamic tool descriptions per methodology */
+  enableDynamicToolDescriptions: boolean;
+}
+
+/**
  * Complete application configuration
  */
+export interface ChainSessionConfig {
+  /** Minutes before idle chain sessions expire */
+  sessionTimeoutMinutes: number;
+  /** Minutes before pending gate reviews expire */
+  reviewTimeoutMinutes: number;
+  /** Minutes between background cleanup sweeps */
+  cleanupIntervalMinutes: number;
+}
+
 /**
  * Configuration for gates subsystem
  */
@@ -136,6 +158,10 @@ export interface Config {
   analysis?: AnalysisConfig;
   /** Gates system configuration */
   gates?: GatesConfig;
+  /** Framework feature configuration */
+  frameworks?: FrameworksConfig;
+  /** Chain session lifecycle configuration */
+  chainSessions?: ChainSessionConfig;
   /** Transports configuration */
   transports: TransportsConfig;
   /** Logging configuration */

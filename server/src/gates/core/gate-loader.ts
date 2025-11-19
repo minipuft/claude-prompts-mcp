@@ -1,13 +1,15 @@
+// @lifecycle canonical - Loads gate definitions from disk with hot reload support.
 /**
  * Gate Loader - Loads gate definitions from YAML/JSON files
  * Provides hot-reloading capabilities similar to prompt system
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { fileURLToPath } from 'url';
 import { Logger } from '../../logging/index.js';
 import type { LightweightGateDefinition, GateActivationResult } from '../types.js';
+import type { TemporaryGateRegistry } from './temporary-gate-registry.js';
 
 /**
  * Gate loader with caching and hot-reload support
@@ -17,13 +19,33 @@ export class GateLoader {
   private lastModified = new Map<string, number>();
   private logger: Logger;
   private gatesDirectory: string;
+  private temporaryGateRegistry?: TemporaryGateRegistry;
 
-  constructor(logger: Logger, gatesDirectory?: string) {
+  constructor(logger: Logger, gatesDirectory?: string, temporaryGateRegistry?: TemporaryGateRegistry) {
     this.logger = logger;
-    // Use import.meta.url to get current directory in ES modules
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    this.gatesDirectory = gatesDirectory || path.join(__dirname, '../../gates/definitions');
+
+    // If gatesDirectory not provided, try to resolve from import.meta.url
+    if (gatesDirectory) {
+      this.gatesDirectory = gatesDirectory;
+    } else {
+      // Try import.meta.url resolution (works in production ES modules)
+      try {
+        const __filename = fileURLToPath(eval('import.meta.url') as string);
+        const __dirname = path.dirname(__filename);
+        this.gatesDirectory = path.join(__dirname, '../../gates/definitions');
+      } catch (error) {
+        // Fallback for Jest/test environments where import.meta is unavailable
+        // Use process.cwd() as fallback
+        this.gatesDirectory = path.join(process.cwd(), 'src/gates/definitions');
+        this.logger.debug('[GateLoader] Using fallback gates directory:', this.gatesDirectory);
+      }
+    }
+
+    this.temporaryGateRegistry = temporaryGateRegistry;
+  }
+
+  setTemporaryGateRegistry(temporaryGateRegistry?: TemporaryGateRegistry): void {
+    this.temporaryGateRegistry = temporaryGateRegistry;
   }
 
   /**
@@ -31,6 +53,15 @@ export class GateLoader {
    */
   async loadGate(gateId: string): Promise<LightweightGateDefinition | null> {
     try {
+      const tempGate = this.temporaryGateRegistry?.getTemporaryGate(gateId);
+      if (tempGate) {
+        const lightweight = this.temporaryGateRegistry?.convertToLightweightGate(tempGate);
+        if (lightweight) {
+          this.gateCache.set(gateId, lightweight);
+          return lightweight;
+        }
+      }
+
       const gateFile = await this.findGateFile(gateId);
       if (!gateFile) {
         this.logger.warn(`Gate definition not found: ${gateId}`);
@@ -95,7 +126,7 @@ export class GateLoader {
     const validationGates: LightweightGateDefinition[] = [];
 
     for (const gate of allGates) {
-      if (this.shouldActivateGate(gate, context)) {
+      if (this.isGateActive(gate, context)) {
         activeGates.push(gate);
 
         // Collect guidance text
@@ -200,7 +231,12 @@ export class GateLoader {
   /**
    * Check if a gate should be activated based on context
    */
-  private shouldActivateGate(
+  /**
+   * Determine if a gate should be active for the provided context.
+   * Exposed so other systems (e.g., guidance rendering) can reuse the
+   * canonical activation logic instead of duplicating it.
+   */
+  public isGateActive(
     gate: LightweightGateDefinition,
     context: {
       promptCategory?: string;
@@ -255,6 +291,10 @@ export class GateLoader {
 /**
  * Create a gate loader instance
  */
-export function createGateLoader(logger: Logger, gatesDirectory?: string): GateLoader {
-  return new GateLoader(logger, gatesDirectory);
+export function createGateLoader(
+  logger: Logger,
+  gatesDirectory?: string,
+  temporaryGateRegistry?: TemporaryGateRegistry
+): GateLoader {
+  return new GateLoader(logger, gatesDirectory, temporaryGateRegistry);
 }

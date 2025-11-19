@@ -1,0 +1,15 @@
+{
+  "name": "claude-prompts-mcp-root",
+  "version": "1.3.0",
+  "private": true,
+  "description": "Root package for git hooks and workspace management",
+  "scripts": {
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  },
+  "dependencies": {
+    "graphviz": "^0.0.9"
+  }
+}

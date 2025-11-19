@@ -1,3 +1,4 @@
+// @lifecycle canonical - Type definitions for prompt metadata, categories, and files.
 /**
  * Prompt System Type Definitions
  *

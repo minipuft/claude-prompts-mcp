@@ -1,3 +1,4 @@
+// @lifecycle canonical - Injects methodology-specific guidance into system prompts.
 /**
  * System Prompt Injector - Phase 3 Implementation
  *
@@ -13,7 +14,7 @@ import {
   SystemPromptInjectionResult,
   PromptGuidanceConfig
 } from "../types/index.js";
-import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
+import type { ContentAnalysisResult } from "../../semantic/types.js";
 
 /**
  * System prompt injection configuration

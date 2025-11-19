@@ -20,6 +20,22 @@
           "description": "Reported symptoms or problems (e.g., 'slow build times', 'memory leaks', 'failing tests')"
         }
       ]
+    },
+    {
+      "id": "test_prompt_creation",
+      "name": "Test Prompt Creation",
+      "category": "general",
+      "description": "Testing API analysis message on prompt creation",
+      "file": "test_prompt_creation.md",
+      "arguments": []
+    },
+    {
+      "id": "test_api_message_v2",
+      "name": "Test API Message V2",
+      "category": "general",
+      "description": "Testing that API analysis message displays correctly",
+      "file": "test_api_message_v2.md",
+      "arguments": []
     }
   ]
 }

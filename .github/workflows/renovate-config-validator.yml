@@ -1,0 +1,44 @@
+name: Renovate Config Validation
+
+on:
+  push:
+    paths:
+      - '.github/renovate.json5'
+      - '.github/workflows/renovate-config-validator.yml'
+  pull_request:
+    paths:
+      - '.github/renovate.json5'
+      - '.github/workflows/renovate-config-validator.yml'
+
+jobs:
+  validate-config:
+    name: Validate Renovate Configuration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Renovate
+        run: npm install -g renovate
+
+      - name: Validate Renovate config
+        run: |
+          echo "🔍 Validating Renovate configuration..."
+          renovate-config-validator .github/renovate.json5
+
+      - name: Check config syntax
+        run: |
+          echo "✅ Renovate configuration is valid!"
+          echo ""
+          echo "Configuration highlights:"
+          echo "- Auto-merge: Enabled for patch/minor updates"
+          echo "- Security updates: Immediate processing"
+          echo "- Major updates: Manual review required"
+          echo "- Schedule: Weekly (Mondays at 3am UTC)"
+          echo "- Lockfile maintenance: Monthly"

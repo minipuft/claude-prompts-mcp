@@ -1,11 +1,12 @@
+// @lifecycle canonical - Watches prompt/config directories and emits change events for hot reload.
 /**
  * File Observer Module
  * Handles file system watching for automatic change detection and hot reload triggers
  */
 
-import * as fs from "fs";
-import { FSWatcher } from "fs";
-import path from "path";
+import * as fs from "node:fs";
+import { FSWatcher } from "node:fs";
+import * as path from "node:path";
 import { Logger } from "../logging/index.js";
 import { EventEmitter } from "events";
 import { ConfigManager } from "../config/index.js";

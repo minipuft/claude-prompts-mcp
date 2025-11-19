@@ -1,3 +1,4 @@
+// @lifecycle canonical - In-memory registry for temporary/inline gates.
 /**
  * Temporary Gate Registry
  *
@@ -6,7 +7,7 @@
  */
 
 import { Logger } from '../../logging/index.js';
-import type { GateDefinition } from '../types.js';
+import type { GateDefinition, GatePassCriteria, LightweightGateDefinition } from '../types.js';
 
 /**
  * Temporary gate definition with lifecycle management
@@ -181,6 +182,25 @@ export class TemporaryGateRegistry {
       failureAction: 'retry',
       guidance: tempGate.guidance,
       pass_criteria: tempGate.pass_criteria,
+      retry_config: {
+        max_attempts: 3,
+        improvement_hints: true,
+        preserve_context: true
+      },
+      activation: {
+        explicit_request: true
+      }
+    };
+  }
+
+  convertToLightweightGate(tempGate: TemporaryGateDefinition): LightweightGateDefinition {
+    return {
+      id: tempGate.id,
+      name: tempGate.name,
+      type: tempGate.type === 'guidance' ? 'guidance' : 'validation',
+      description: tempGate.description,
+      guidance: tempGate.guidance,
+      pass_criteria: tempGate.pass_criteria as GatePassCriteria[] | undefined,
       retry_config: {
         max_attempts: 3,
         improvement_hints: true,

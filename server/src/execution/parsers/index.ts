@@ -1,3 +1,4 @@
+// @lifecycle canonical - Barrel exports for execution parsers.
 /**
  * Execution Parsers Export Module
  * 

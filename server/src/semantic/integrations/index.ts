@@ -1,3 +1,4 @@
+// @lifecycle canonical - Registers semantic analyzer integrations.
 /**
  * Semantic Integrations Module
  *
@@ -5,16 +6,10 @@
  * Handles LLM clients for content analysis
  */
 
-import { Logger } from "../../logging/index.js";
-import { SemanticAnalysisConfig } from "../../types/index.js";
-import {
-  ContentAnalyzer,
-  createContentAnalyzer
-} from "../configurable-semantic-analyzer.js";
-import { 
-  LLMClientFactory,
-  loadLLMConfigFromEnv 
-} from "./llm-clients.js";
+import { Logger } from '../../logging/index.js';
+import { SemanticAnalysisConfig } from '../../types/index.js';
+import { ContentAnalyzer, createContentAnalyzer } from '../configurable-semantic-analyzer.js';
+import { LLMClientFactory, loadLLMConfigFromEnv } from './llm-clients.js';
 
 /**
  * Integration factory for content analyzer
@@ -31,30 +26,34 @@ export class SemanticIntegrationFactory {
    */
   async createConfiguredAnalyzer(config: SemanticAnalysisConfig): Promise<ContentAnalyzer> {
     const analyzer = createContentAnalyzer(this.logger, config);
-    
+
     // Setup LLM integration if enabled
     if (config.llmIntegration.enabled && config.llmIntegration.endpoint) {
       try {
         const llmClient = LLMClientFactory.create(this.logger, config.llmIntegration);
         analyzer.setLLMClient(llmClient);
         // Auto-detect provider from endpoint
-        const provider = config.llmIntegration.endpoint?.includes('api.openai.com') ? 'openai' :
-                        config.llmIntegration.endpoint?.includes('api.anthropic.com') ? 'anthropic' : 'custom';
-        this.logger.info(`LLM integration configured: ${provider} (auto-detected from ${config.llmIntegration.endpoint})`);
-        
+        const provider = config.llmIntegration.endpoint?.includes('api.openai.com')
+          ? 'openai'
+          : config.llmIntegration.endpoint?.includes('api.anthropic.com')
+            ? 'anthropic'
+            : 'custom';
+        this.logger.info(
+          `LLM integration configured: ${provider} (auto-detected from ${config.llmIntegration.endpoint})`
+        );
+
         // Test the client
         const testResult = await LLMClientFactory.testClient(this.logger, config.llmIntegration);
         if (!testResult) {
-          this.logger.warn("LLM client test failed - integration may not work correctly");
+          this.logger.warn('LLM client test failed - integration may not work correctly');
         }
       } catch (error) {
-        this.logger.error("Failed to setup LLM integration:", error);
+        this.logger.error('Failed to setup LLM integration:', error);
         if (config.mode === 'semantic') {
-          this.logger.warn("Semantic mode requested but LLM integration failed");
+          this.logger.warn('Semantic mode requested but LLM integration failed');
         }
       }
     }
-
 
     return analyzer;
   }
@@ -65,13 +64,13 @@ export class SemanticIntegrationFactory {
   async createFromEnvironment(baseConfig: SemanticAnalysisConfig): Promise<ContentAnalyzer> {
     // Merge with environment variables
     const envLLMConfig = loadLLMConfigFromEnv();
-    
+
     const mergedConfig: SemanticAnalysisConfig = {
       ...baseConfig,
       llmIntegration: {
         ...baseConfig.llmIntegration,
-        ...envLLMConfig
-      }
+        ...envLLMConfig,
+      },
     };
 
     // Override mode if environment variable is set
@@ -101,43 +100,59 @@ export class SemanticIntegrationFactory {
     // Check semantic mode requirements
     if (config.mode === 'semantic') {
       if (!config.llmIntegration.enabled) {
-        warnings.push("Semantic mode enabled but LLM integration not configured");
-        recommendations.push("Enable LLM integration with endpoint and API key for semantic analysis");
-        
+        warnings.push('Semantic mode enabled but LLM integration not configured');
+        recommendations.push(
+          'Enable LLM integration with endpoint and API key for semantic analysis'
+        );
+
         // Always fallback to structural analysis - no failure case
       } else if (!config.llmIntegration.endpoint) {
-        warnings.push("Semantic mode enabled but no LLM endpoint configured");
-        recommendations.push("Set LLM endpoint URL (e.g., https://api.openai.com/v1/chat/completions)");
+        warnings.push('Semantic mode enabled but no LLM endpoint configured');
+        recommendations.push(
+          'Set LLM endpoint URL (e.g., https://api.openai.com/v1/chat/completions)'
+        );
       }
     }
 
     // Check LLM integration configuration
     if (config.llmIntegration.enabled) {
       if (!config.llmIntegration.endpoint) {
-        warnings.push("LLM integration enabled but no endpoint specified");
-        recommendations.push("Set endpoint URL (provider will be auto-detected): 'https://api.openai.com/v1/chat/completions', 'https://api.anthropic.com/v1/messages', or custom endpoint");
+        warnings.push('LLM integration enabled but no endpoint specified');
+        recommendations.push(
+          "Set endpoint URL (provider will be auto-detected): 'https://api.openai.com/v1/chat/completions', 'https://api.anthropic.com/v1/messages', or custom endpoint"
+        );
       }
 
-      if (!config.llmIntegration.apiKey && config.llmIntegration.endpoint && !config.llmIntegration.endpoint.includes('localhost')) {
-        warnings.push("LLM integration missing API key");
-        recommendations.push("Set API key for LLM provider or use environment variables");
+      if (
+        !config.llmIntegration.apiKey &&
+        config.llmIntegration.endpoint &&
+        !config.llmIntegration.endpoint.includes('localhost')
+      ) {
+        warnings.push('LLM integration missing API key');
+        recommendations.push('Set API key for LLM provider or use environment variables');
       }
 
       if (config.llmIntegration.maxTokens < 100) {
-        warnings.push("LLM max tokens is very low, may cause truncated responses");
-        recommendations.push("Consider increasing max tokens to at least 500");
+        warnings.push('LLM max tokens is very low, may cause truncated responses');
+        recommendations.push('Consider increasing max tokens to at least 500');
       }
     }
-
 
     // General recommendations
     if (config.mode === 'structural') {
       // Recommend semantic mode if LLM is properly configured
-      if (config.llmIntegration.enabled && config.llmIntegration.endpoint && 
-          (config.llmIntegration.endpoint.includes('localhost') || config.llmIntegration.endpoint.includes('127.0.0.1') || config.llmIntegration.apiKey)) {
-        recommendations.push("LLM integration is configured - consider using semantic mode for better analysis");
+      if (
+        config.llmIntegration.enabled &&
+        config.llmIntegration.endpoint &&
+        (config.llmIntegration.endpoint.includes('localhost') ||
+          config.llmIntegration.endpoint.includes('127.0.0.1') ||
+          config.llmIntegration.apiKey)
+      ) {
+        recommendations.push(
+          'LLM integration is configured - consider using semantic mode for better analysis'
+        );
       }
-      
+
       // Always warn on limitations for better user experience
     }
 
@@ -262,5 +277,5 @@ export function createSemanticIntegrationFactory(logger: Logger): SemanticIntegr
 }
 
 // Re-export integration components
-export { LLMClientFactory, loadLLMConfigFromEnv } from "./llm-clients.js";
-export type { LLMClient } from "../configurable-semantic-analyzer.js";
+export { LLMClientFactory, loadLLMConfigFromEnv } from './llm-clients.js';
+export type { LLMClient } from '../types.js';

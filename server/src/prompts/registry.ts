@@ -1,28 +1,31 @@
+// @lifecycle canonical - Registers prompts with the MCP server and manages conversation integration.
 /**
  * Prompt Registry Module
  * Handles registering prompts with MCP server using proper MCP protocol and managing conversation history
  */
 
 import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ConfigManager } from "../config/index.js";
 import { Logger } from "../logging/index.js";
-import {
-  ConversationHistoryItem,
-  ConvertedPrompt,
-} from "../types/index.js";
+import { ConvertedPrompt } from "../types/index.js";
 import { isChainPrompt } from "../utils/chainUtils.js";
+import { ConversationManager } from "../text-references/conversation.js";
 // TemplateProcessor functionality consolidated into UnifiedPromptProcessor
 
 /**
  * Prompt Registry class
  */
+type PromptRegistryServer = Pick<McpServer, "registerPrompt"> & {
+  notification?: (notification: { method: string; params?: unknown }) => void;
+};
+
 export class PromptRegistry {
   private logger: Logger;
-  private mcpServer: any;
+  private mcpServer: PromptRegistryServer;
   private configManager: ConfigManager;
+  private conversationManager: ConversationManager;
   // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
-  private conversationHistory: ConversationHistoryItem[] = [];
-  private readonly MAX_HISTORY_SIZE = 100;
   private registeredPromptNames = new Set<string>(); // Track registered prompts to prevent duplicates
 
   /**
@@ -49,12 +52,14 @@ export class PromptRegistry {
 
   constructor(
     logger: Logger,
-    mcpServer: any,
-    configManager: ConfigManager
+    mcpServer: PromptRegistryServer,
+    configManager: ConfigManager,
+    conversationManager: ConversationManager
   ) {
     this.logger = logger;
     this.mcpServer = mcpServer;
     this.configManager = configManager;
+    this.conversationManager = conversationManager;
     // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
   }
 
@@ -199,17 +204,19 @@ export class PromptRegistry {
         userMessageText = `[System Info: ${promptData.systemMessage}]\n\n${userMessageText}`;
       }
 
+      const previousMessageContext = this.conversationManager.getPreviousMessage();
+
       // Process the template with special context
       // Using direct processing since TemplateProcessor was consolidated
       userMessageText = await this.processTemplateDirect(
         userMessageText,
         args,
-        { previous_message: this.getPreviousMessage() },
+        { previous_message: previousMessageContext },
         promptData.tools || false
       );
 
       // Store in conversation history for future reference
-      this.addToConversationHistory({
+      this.conversationManager.addToConversationHistory({
         role: "user",
         content: userMessageText,
         timestamp: Date.now(),
@@ -317,103 +324,6 @@ export class PromptRegistry {
 
 
   /**
-   * Add item to conversation history with size management
-   */
-  addToConversationHistory(item: ConversationHistoryItem): void {
-    this.conversationHistory.push(item);
-
-    // Trim history if it exceeds maximum size
-    if (this.conversationHistory.length > this.MAX_HISTORY_SIZE) {
-      // Remove oldest entries, keeping recent ones
-      this.conversationHistory.splice(
-        0,
-        this.conversationHistory.length - this.MAX_HISTORY_SIZE
-      );
-      this.logger.debug(
-        `Trimmed conversation history to ${this.MAX_HISTORY_SIZE} entries to prevent memory leaks`
-      );
-    }
-  }
-
-  /**
-   * Get the previous message from conversation history
-   */
-  getPreviousMessage(): string {
-    // Try to find the last user message in conversation history
-    if (this.conversationHistory.length > 0) {
-      // Start from the end and find the first non-template user message
-      for (let i = this.conversationHistory.length - 1; i >= 0; i--) {
-        const historyItem = this.conversationHistory[i];
-        // Only consider user messages that aren't processed templates
-        if (historyItem.role === "user" && !historyItem.isProcessedTemplate) {
-          this.logger.debug(
-            `Found previous user message for context: ${historyItem.content.substring(
-              0,
-              50
-            )}...`
-          );
-          return historyItem.content;
-        }
-      }
-    }
-
-    // Return a default prompt if no suitable history item is found
-    return "[Please check previous messages in the conversation for context]";
-  }
-
-  /**
-   * Get conversation history
-   */
-  getConversationHistory(): ConversationHistoryItem[] {
-    return [...this.conversationHistory];
-  }
-
-  /**
-   * Clear conversation history
-   */
-  clearConversationHistory(): void {
-    this.conversationHistory = [];
-    this.logger.info("Conversation history cleared");
-  }
-
-  /**
-   * Get conversation history statistics
-   */
-  getConversationStats(): {
-    totalMessages: number;
-    userMessages: number;
-    assistantMessages: number;
-    processedTemplates: number;
-    oldestMessage?: number;
-    newestMessage?: number;
-  } {
-    const userMessages = this.conversationHistory.filter(
-      (item) => item.role === "user"
-    ).length;
-    const assistantMessages = this.conversationHistory.filter(
-      (item) => item.role === "assistant"
-    ).length;
-    const processedTemplates = this.conversationHistory.filter(
-      (item) => item.isProcessedTemplate
-    ).length;
-
-    const timestamps = this.conversationHistory.map((item) => item.timestamp);
-    const oldestMessage =
-      timestamps.length > 0 ? Math.min(...timestamps) : undefined;
-    const newestMessage =
-      timestamps.length > 0 ? Math.max(...timestamps) : undefined;
-
-    return {
-      totalMessages: this.conversationHistory.length,
-      userMessages,
-      assistantMessages,
-      processedTemplates,
-      oldestMessage,
-      newestMessage,
-    };
-  }
-
-  /**
    * Execute a prompt directly (for testing or internal use)
    */
   async executePromptDirectly(
@@ -455,12 +365,12 @@ export class PromptRegistry {
       const userMessageText = await this.processTemplateDirect(
         convertedPrompt.userMessageTemplate,
         args,
-        { previous_message: this.getPreviousMessage() },
+        { previous_message: this.conversationManager.getPreviousMessage() },
         convertedPrompt.tools || false
       );
 
       // Add the message to conversation history
-      this.addToConversationHistory({
+      this.conversationManager.addToConversationHistory({
         role: "user",
         content: userMessageText,
         timestamp: Date.now(),
@@ -471,7 +381,7 @@ export class PromptRegistry {
       const response = `Processed prompt: ${promptId}\nWith message: ${userMessageText}`;
 
       // Store the response in conversation history
-      this.addToConversationHistory({
+      this.conversationManager.addToConversationHistory({
         role: "assistant",
         content: response,
         timestamp: Date.now(),

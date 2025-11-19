@@ -1,9 +1,11 @@
+// @lifecycle canonical - JSON escaping/unescaping helpers for prompt templates.
 // JSON utility functions
 
 import nunjucks from "nunjucks";
-import path from "path"; // Import path module
+import * as path from "node:path"; // Import path module
 import { fileURLToPath } from "url"; // For ES module __dirname equivalent
-import { PromptData } from "../types.js";
+import type { PromptArgument } from "../types/index.js";
+type PromptDefinition = { arguments: PromptArgument[] };
 // JSON escaping utilities (moved here to avoid circular dependency)
 function escapeJsonForNunjucks(jsonStr: string): string {
   return jsonStr
@@ -25,29 +27,58 @@ function unescapeJsonFromNunjucks(escapedStr: string): string {
     .replace(/\\#\\}/g, '#}');  // Unescape Nunjucks comment syntax
 }
 
-// ES module equivalent of __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Lazy initialization to avoid Jest import.meta.url issues
+let nunjucksEnv: nunjucks.Environment | null = null;
 
-// Define the base path for prompt templates
-// This assumes jsonUtils.ts is in server/src/utils/ and prompts are in server/prompts/
-const promptTemplatesPath = path.resolve(__dirname, "../../prompts");
+// Get prompt templates path (Jest-compatible version)
+// Uses __dirname in Jest/CommonJS, import.meta.url in ES modules
+function getPromptTemplatesPath(): string {
+  // Check for test environment override first
+  if (process.env.PROMPTS_PATH) {
+    return process.env.PROMPTS_PATH;
+  }
 
-// Configure Nunjucks environment with a FileSystemLoader
-const nunjucksEnv = nunjucks.configure(promptTemplatesPath, {
-  autoescape: false, // We're generating plain text prompts for LLM, not HTML
-  throwOnUndefined: false, // Renders undefined variables as empty string for better compatibility
-  watch: false, // Set to true for development to auto-reload templates; false for production
-  noCache: process.env.NODE_ENV === "development", // Disable cache in development, enable in production
-  tags: {
-    blockStart: "{%",
-    blockEnd: "%}",
-    variableStart: "{{",
-    variableEnd: "}}",
-    commentStart: "{#",
-    commentEnd: "#}",
-  },
-});
+  if (typeof __dirname !== 'undefined') {
+    // Jest/CommonJS environment - __dirname is available
+    return path.resolve(__dirname, "../../prompts");
+  }
+
+  // ES modules environment - use import.meta.url
+  // This code path only runs in real ES modules (not Jest)
+  try {
+    // Using eval to prevent Jest from parsing import.meta at compile time
+    const metaUrl = eval('import.meta.url');
+    const currentFileUrl = fileURLToPath(metaUrl);
+    const currentDirPath = path.dirname(currentFileUrl);
+    return path.resolve(currentDirPath, "../../prompts");
+  } catch (error) {
+    // Fallback for any environment where import.meta is not available
+    // Use process.cwd() as last resort
+    return path.resolve(process.cwd(), "server/prompts");
+  }
+}
+
+// Initialize Nunjucks environment (called lazily)
+function getNunjucksEnv(): nunjucks.Environment {
+  if (!nunjucksEnv) {
+    const promptTemplatesPath = getPromptTemplatesPath();
+    nunjucksEnv = nunjucks.configure(promptTemplatesPath, {
+      autoescape: false, // We're generating plain text prompts for LLM, not HTML
+      throwOnUndefined: false, // Renders undefined variables as empty string for better compatibility
+      watch: false, // Set to true for development to auto-reload templates; false for production
+      noCache: process.env.NODE_ENV === "development", // Disable cache in development, enable in production
+      tags: {
+        blockStart: "{%",
+        blockEnd: "%}",
+        variableStart: "{{",
+        variableEnd: "}}",
+        commentStart: "{#",
+        commentEnd: "#}",
+      },
+    });
+  }
+  return nunjucksEnv;
+}
 
 /**
  * Validates JSON arguments against the prompt's expected arguments
@@ -57,7 +88,7 @@ const nunjucksEnv = nunjucks.configure(promptTemplatesPath, {
  */
 export function validateJsonArguments(
   jsonArgs: any,
-  prompt: PromptData
+  prompt: PromptDefinition
 ): {
   valid: boolean;
   errors?: string[];
@@ -143,7 +174,8 @@ export function processTemplate(
 
   try {
     // Use Nunjucks to render the template with the combined context
-    const rendered = nunjucksEnv.renderString(template, context);
+    const env = getNunjucksEnv();
+    const rendered = env.renderString(template, context);
     
     // Unescape any values that were escaped for Nunjucks
     let unescapedResult = rendered;

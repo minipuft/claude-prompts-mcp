@@ -1,3 +1,4 @@
+// @lifecycle canonical - Enhances templates with methodology-specific guidance blocks.
 /**
  * Template Enhancer - Phase 3 Implementation
  *
@@ -14,7 +15,7 @@ import {
   ProcessingGuidance,
   TemplateEnhancementConfig
 } from "../types/index.js";
-import { ContentAnalysisResult } from "../../semantic/configurable-semantic-analyzer.js";
+import type { ContentAnalysisResult } from "../../semantic/types.js";
 import { LightweightGateSystem } from "../../gates/core/index.js";
 
 /**
