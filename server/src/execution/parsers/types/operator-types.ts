@@ -1,3 +1,4 @@
+// @lifecycle canonical - Type definitions for execution operators.
 import type { CommandParseResultBase } from "./command-parse-types.js";
 
 /**
@@ -88,6 +89,7 @@ export interface SymbolicCommandParseResult
 
 export interface ExecutionPlan {
   steps: ExecutionStep[];
+  argumentInputs?: Array<string | undefined>;
   frameworkOverride?: string;
   finalValidation?: GateOperator;
   estimatedComplexity: number;
@@ -99,6 +101,8 @@ export interface ExecutionStep {
   type: "prompt" | "gate" | "framework_switch" | "parallel_group";
   promptId?: string;
   args?: string;
+  inlineGateCriteria?: string[];
+  inlineGateIds?: string[];
   dependencies: number[];
   outputVariable: string;
 }

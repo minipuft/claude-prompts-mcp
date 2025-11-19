@@ -1,3 +1,4 @@
+// @lifecycle canonical - Barrel exports for execution context utilities.
 /**
  * Context System Export Module
  * 

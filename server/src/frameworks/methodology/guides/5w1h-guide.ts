@@ -1,3 +1,4 @@
+// @lifecycle canonical - 5W1H methodology guide definition.
 /**
  * 5W1H Methodology Guide
  * Provides guidance for applying 5W1H (Who, What, When, Where, Why, How) methodology to prompt creation,
@@ -524,21 +525,27 @@ Use systematic questioning to ensure comprehensive coverage and uncover hidden r
   getToolDescriptions(): MethodologyToolDescriptions {
     return {
       prompt_engine: {
-        description: "🚀 PROMPT TEMPLATE ENGINE [5W1H-ENHANCED]: Processes prompt templates with systematic 5W1H questioning methodology for comprehensive analysis. Guides thorough exploration through Who (stakeholders), What (objectives), When (timing), Where (context), Why (motivation), and How (methods). WARNING: You are responsible for interpreting and executing the returned content, which contains systematic questioning instructions.",
+        description:
+          "🚀 PROMPT ENGINE [5W1H GUIDE]: Executes prompts with Who/What/When/Where/Why/How scaffolding plus metadata-driven `>>guide` instructions. Ask `>>guide who focus` to see stakeholder-oriented parameters or `>>guide why` for motivation-driven gates.",
         parameters: {
-          execution_mode: "Override intelligent auto-detection with 5W1H-aware selection (default: auto, systematic questioning-enhanced)"
+          execution_mode:
+            "Override intelligent auto-detection with 5W1H-aware selection (default: auto, methodology-enhanced)"
         }
       },
       prompt_manager: {
-        description: "📝 INTELLIGENT PROMPT MANAGER [5W1H-ENHANCED]: Complete lifecycle management with systematic 5W1H questioning methodology integration. Creates comprehensive analysis templates that guide systematic exploration through Who, What, When, Where, Why, and How dimensions. Optimized for thorough requirement analysis and complete solution development.",
+        description:
+          "📝 PROMPT MANAGER [5W1H GUIDE]: Lifecycle actions surface Who/What/When/Where/Why/How cues, and `action:\"guide\"` ranks verbs based on the question you need to tackle.",
         parameters: {
-          action: "Management action with 5W1H systematic approach: 'create_template' (comprehensive questioning templates), 'analyze_type' (stakeholder analysis), 'migrate_type' (systematic conversion), etc."
+          action:
+            "Use the guide goal text (e.g., `goal:\"who\"`) to bias recommendations toward stakeholder discovery verbs."
         }
       },
       system_control: {
-        description: "⚙️ INTELLIGENT SYSTEM CONTROL [5W1H-ENHANCED]: System administration with 5W1H systematic questioning methodology. Guides comprehensive exploration through Who (users), What (objectives), When (timing), Where (environments), Why (purposes), and How (methods) for thorough system management and decision-making.",
+        description:
+          "⚙️ SYSTEM CONTROL [5W1H-ENHANCED]: `>>help` highlights Who/What/When/Where/Why/How considerations for framework switches, gate management, and analytics access.",
         parameters: {
-          action: "System action with 5W1H methodology: 'switch_framework' (systematic framework selection), 'analytics' (comprehensive questioning-based metrics), 'health' (thorough system analysis), etc."
+          action:
+            "Guide topic filters (e.g., `topic:\"why\"`) explain why a specific system operation matters before running it."
         }
       }
     };

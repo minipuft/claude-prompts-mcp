@@ -1,3 +1,4 @@
+// @lifecycle canonical - Barrel exports for metrics services.
 /**
  * Metrics Module Exports
  *
@@ -6,15 +7,14 @@
  */
 
 // Metrics collector
-export {
-  MetricsCollector,
-  createMetricsCollector
-} from './analytics-service.js';
+export { MetricsCollector, createMetricsCollector } from './analytics-service.js';
 
 // Types
 export type {
   ExecutionData,
   GateValidationData,
+  GateUsageMetric,
+  GateValidationResult,
   FrameworkSwitchData,
   ExecutionStats,
   SystemMetrics,
@@ -22,5 +22,12 @@ export type {
   AnalyticsEvent,
   AnalyticsQueryOptions,
   AnalyticsSummary,
-  PerformanceTrend
+  PerformanceTrend,
+  PipelineStageType,
+  PipelineStageStatus,
+  PipelineStageMetric,
+  PipelineStageMetadata,
+  MetricStatus,
+  CommandExecutionMode,
+  CommandExecutionMetric,
 } from './types.js';

@@ -1,9 +1,11 @@
+// @lifecycle canonical - Primary logger implementation and console adapters.
 /**
  * Logging Module
  * Handles file logging and transport-aware console logging
  */
 
-import { appendFile, writeFile } from "fs/promises";
+import { appendFile, writeFile } from "node:fs/promises";
+import * as path from "node:path";
 import { LogLevel, TransportType } from "../types/index.js";
 
 /**
@@ -246,6 +248,24 @@ export class EnhancedLogger implements Logger {
  */
 export function createLogger(config: EnhancedLoggingConfig): EnhancedLogger {
   return new EnhancedLogger(config);
+}
+
+/**
+ * Helper to build a logger configuration with sensible defaults.
+ * Allows subsystems to opt into lightweight logging without duplicating paths.
+ */
+export function getDefaultLoggerConfig(
+  overrides: Partial<EnhancedLoggingConfig> = {}
+): EnhancedLoggingConfig {
+  const defaultLogDir = path.join(process.cwd(), 'logs');
+  const defaultLogFile = overrides.logFile ?? path.join(defaultLogDir, 'mcp-server.log');
+
+  return {
+    logFile: defaultLogFile,
+    transport: overrides.transport ?? TransportType.SSE,
+    enableDebug: overrides.enableDebug ?? false,
+    configuredLevel: overrides.configuredLevel ?? 'info',
+  };
 }
 
 /**

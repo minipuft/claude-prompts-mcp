@@ -250,10 +250,10 @@ export class MockFrameworkStateManager {
 }
 
 /**
- * Cleanup helper for ConsolidatedPromptEngine instances
- * Safely cleans up prompt engines to prevent async handle leaks
+ * Cleanup helper for PromptExecutionService instances
+ * Safely cleans up prompt execution services to prevent async handle leaks
  */
-export async function cleanupPromptEngine(engine) {
+export async function cleanupPromptExecutionService(engine) {
   if (!engine) return;
 
   if (typeof engine.cleanup === 'function') {
@@ -261,7 +261,7 @@ export async function cleanupPromptEngine(engine) {
       await engine.cleanup();
     } catch (error) {
       // Log error but don't throw to prevent test failures
-      console.error('Error cleaning up prompt engine:', error);
+      console.error('Error cleaning up prompt execution service:', error);
     }
   }
 
@@ -289,7 +289,7 @@ export async function cleanupPromptEngine(engine) {
  * Usage:
  * ```typescript
  * const mockGuidance = new MockPromptGuidanceService(logger);
- * const engine = createConsolidatedPromptEngine(
+ * const engine = createPromptExecutionService(
  *   // ... other params,
  *   mockGuidance  // Inject mock instead of creating real service
  * );

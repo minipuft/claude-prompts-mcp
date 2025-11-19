@@ -1,3 +1,4 @@
+// @lifecycle canonical - Type definitions for semantic services.
 /**
  * Semantic analysis shared types
  *
@@ -7,7 +8,7 @@
  */
 
 export interface ContentAnalysisResult {
-  executionType: "prompt" | "template" | "chain";
+  executionType: 'prompt' | 'template' | 'chain';
   requiresExecution: boolean;
   requiresFramework: boolean;
   confidence: number;
@@ -42,7 +43,7 @@ export interface ContentAnalysisResult {
       complexityScore: number;
     };
   };
-  complexity: "low" | "medium" | "high";
+  complexity: 'low' | 'medium' | 'high';
   suggestedGates: string[];
   frameworkRecommendation: {
     shouldUseFramework: boolean;
@@ -53,9 +54,9 @@ export interface ContentAnalysisResult {
   };
   analysisMetadata: {
     version: string;
-    mode: "structural" | "semantic";
+    mode: 'structural' | 'semantic';
     analysisTime: number;
-    analyzer: "content";
+    analyzer: 'content';
     cacheHit: boolean;
     fallbackUsed?: boolean;
     llmUsed?: boolean;

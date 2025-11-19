@@ -1,3 +1,4 @@
+// @lifecycle canonical - Gate system constants shared across loaders/validators.
 /**
  * Gate System Constants
  *
@@ -28,3 +29,16 @@ export const GATE_SYSTEM_DEFAULTS = {
   enableGuidanceInjection: ENABLE_GUIDANCE_INJECTION,
   enableValidation: ENABLE_VALIDATION,
 } as const;
+
+/**
+ * Canonical methodology gate identifiers that should not be duplicated across templates.
+ */
+export const METHODOLOGY_GATES = new Set<string>([
+  'framework-compliance',
+  'educational-clarity',
+  'research-quality',
+  'technical-accuracy',
+  'content-structure',
+  'code-quality',
+  'security-awareness',
+]);

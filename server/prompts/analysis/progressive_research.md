@@ -66,4 +66,30 @@ The objective is to function as a researcher gathering insights and preparing th
    
 2. This step-by-step progression can continue until there's sufficient information on each key aspect of `{{notes}}`. The goal is to cover fundamental points as well as nuanced topics that add helpful detail, allowing an easy transition into structured Markdown content in a subsequent step.
 
-3. List additional open threads and related questions that might require attention to ensure completeness. 
+3. List additional open threads and related questions that might require attention to ensure completeness.
+
+## Gate Configuration
+
+```json
+{
+  "include": [
+    "research-quality",
+    "technical-accuracy"
+  ],
+  "temporary_gates": [
+    {
+      "name": "Progressive Research Completeness",
+      "type": "quality",
+      "scope": "execution",
+      "description": "Ensure each iteration includes clarifying questions, expanded notes, and explicit next investigations tailored to the provided notes.",
+      "guidance": "- Ask at least one follow-up question for every major gap you discover.\n- Summarize expanded findings with concrete evidence or examples.\n- List open research threads plus recommended next sources.",
+      "pass_criteria": [
+        "Each research cycle documents clarifying questions.",
+        "Expanded notes tie back to the provided notes context.",
+        "Open questions highlight concrete next research paths."
+      ]
+    }
+  ],
+  "framework_gates": true
+}
+```

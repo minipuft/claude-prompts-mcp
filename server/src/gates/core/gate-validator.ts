@@ -1,3 +1,4 @@
+// @lifecycle canonical - Validates gate definitions before execution.
 /**
  * Core Gate Validator
  * Provides validation capabilities with practical checks for prompt execution

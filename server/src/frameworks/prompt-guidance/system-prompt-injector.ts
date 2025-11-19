@@ -1,3 +1,4 @@
+// @lifecycle canonical - Injects methodology-specific guidance into system prompts.
 /**
  * System Prompt Injector - Phase 3 Implementation
  *

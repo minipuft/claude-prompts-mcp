@@ -1,3 +1,4 @@
+// @lifecycle canonical - Types for system prompt injection and template guidance flows.
 /**
  * Prompt Guidance Type Definitions
  *

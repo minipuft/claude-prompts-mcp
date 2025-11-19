@@ -1,3 +1,4 @@
+// @lifecycle canonical - Core framework and methodology type definitions.
 /**
  * Methodology Guide Type Definitions
  *
@@ -115,6 +116,17 @@ export interface StepGuidance {
 
   // Quality gates for each step
   stepValidation: Record<string, string[]>;
+}
+
+/**
+ * Metadata tracked for registered frameworks.
+ */
+export interface FrameworkRegistryMetadata {
+  registeredAt: Date;
+  isBuiltIn: boolean;
+  loadTime: number;
+  validationStatus: 'not_validated' | 'validated' | 'failed';
+  lastUsed?: Date;
 }
 
 /**

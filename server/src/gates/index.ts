@@ -1,3 +1,4 @@
+// @lifecycle canonical - Top-level gate system exports.
 /**
  * Gate System - Core Implementation
  *

@@ -1,3 +1,4 @@
+// @lifecycle canonical - Barrel exports for framework and methodology type contracts.
 /**
  * Framework Types Index
  *

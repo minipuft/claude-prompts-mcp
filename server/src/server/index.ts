@@ -1,3 +1,4 @@
+// @lifecycle canonical - HTTP server bootstrap and orchestration entrypoint.
 /**
  * Server Management Module
  * Handles HTTP server lifecycle, process management, and orchestration
@@ -49,8 +50,7 @@ export class ServerManager {
         `Starting server with ${this.transportManager.getTransportType()} transport`
       );
 
-      // Setup process event handlers
-      this.setupProcessEventHandlers();
+      this.logSystemInfo();
 
       if (this.transportManager.isStdio()) {
         await this.startStdioServer();
@@ -142,37 +142,6 @@ export class ServerManager {
     this.httpServer.on("close", () => {
       this.logger.info("HTTP server closed");
     });
-  }
-
-  /**
-   * Setup process event handlers
-   */
-  private setupProcessEventHandlers(): void {
-    // Handle graceful shutdown
-    process.on("SIGINT", () => {
-      this.logger.info("Received SIGINT, shutting down server...");
-      this.shutdown();
-    });
-
-    process.on("SIGTERM", () => {
-      this.logger.info("Received SIGTERM, shutting down server...");
-      this.shutdown();
-    });
-
-    // Handle uncaught exceptions
-    process.on("uncaughtException", (error) => {
-      this.logger.error("Uncaught exception:", error);
-      this.shutdown(1);
-    });
-
-    // Handle unhandled promise rejections
-    process.on("unhandledRejection", (reason, promise) => {
-      this.logger.error("Unhandled Rejection at:", promise, "reason:", reason);
-      this.shutdown(1);
-    });
-
-    // Log system info for debugging
-    this.logSystemInfo();
   }
 
   /**

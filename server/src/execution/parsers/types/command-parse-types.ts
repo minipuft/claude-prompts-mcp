@@ -1,3 +1,4 @@
+// @lifecycle canonical - Type definitions for command parsing results.
 /**
  * Shared command parsing result types used across parser modules.
  *
@@ -11,6 +12,7 @@ export interface CommandParseResultBase<TOperators = unknown, TPlan = unknown> {
   rawArgs: string;
   format: 'simple' | 'json' | 'structured' | 'legacy' | 'symbolic';
   confidence: number;
+  commandType?: 'single' | 'chain';
   metadata: {
     originalCommand: string;
     parseStrategy: string;

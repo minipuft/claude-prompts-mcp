@@ -1,104 +1,89 @@
 {
-  "version": "1.1.0",
-  "lastUpdated": "2025-01-14T00:00:00Z",
+  "version": "1.2.0",
+  "lastUpdated": "2025-02-15T00:00:00Z",
   "tools": {
     "prompt_engine": {
-      "description": "\ud83d\ude80 PROMPT ENGINE: Executes prompts with optional quality validation.\n\n\ud83d\udccb QUALITY GATE SYSTEM:\nQuality gates validate output before returning results. Use 'quality_gates' to apply validation rules, or 'custom_checks' for ad-hoc criteria.\n\n**Discover available gates**: Use `system_control({ action: 'gates', operation: 'list' })` to see all configured gates.\n\nGate modes:\n\u2022 enforce (default): Validates output, retries on failure with improvement hints (max 2 retries)\n\u2022 advise: Provides quality guidance without blocking\n\u2022 report: Validates and includes pass/fail status in response\n\nExample usage:\n{\n  \"command\": \">>code_review code='...'\",\n  \"quality_gates\": [\"gate-name-1\", \"gate-name-2\"],\n  \"gate_mode\": \"enforce\"\n}",
-      "shortDescription": "\ud83d\udd25 DYNAMICALLY UPDATED: Process prompt templates and return executable instructions",
+      "description": "🚀 PROMPT ENGINE — Metadata-driven execution surface tuned for LLM clients.\n\n**Operators (always available):**\n• Chain `-->` composes steps while preserving `chain_id`\n• Framework `@` temporarily injects a methodology (e.g., `@ReACT`)\n• Gate `::` adds inline validation criteria\n\n**Gate review answers:** When Stage 5 pauses for human validation, resume with `gate_verdict: \"GATE_REVIEW: PASS|FAIL - reason\"` plus the original `chain_id`.\n\n**Guides-on-demand:** Type `>>guide <topic>` (or `prompt_engine({\"command\": \">>guide gate controls\"})`) to surface usage patterns, temporary gate schemas, and full parameter catalogs without memorizing payloads.\n\nResponses echo gate scope and requested quality gates so you can reason about validation at a glance.",
+      "shortDescription": "🔥 Guide-aware execution of prompts, templates, and chains",
       "category": "execution",
       "parameters": {
-        "command": "Prompt name and arguments to process. WARNING: Will return instructions for YOU to execute, not just information. SIMPLE: >>prompt_name arguments (case-insensitive, hyphens converted to underscores). MULTI-LINE / RICH FORMATTING: {\"command\": \">>prompt_name\", \"args\": {\"content\": \"...\", \"execution_mode\": \"template\"}} keeps payload intact. ADVANCED: JSON with execution options",
-        "execution_mode": "Override intelligent auto-detection (default: auto)",
-        "gate_validation": "Quality gate validation (MANDATORY for chains, auto-detected by default, see metadata sections for gate details)",
+        "command": "Prompt or chain command. Supports symbolic operators (`-->`, `@`, `::`). Use JSON when arguments span multiple lines.",
+        "chain_id": "Resume token returned in responses (e.g., `chain-demo#2`). Reuse with the same command to continue a chain.",
+        "user_response": "Result for the previous step; required when advancing chains.",
+        "gate_verdict": "Answer to a pending gate review in the format `GATE_REVIEW: PASS|FAIL - reason`. Use this field instead of stuffing the verdict into `user_response`.",
+        "execution_mode": "Force how the pipeline executes when semantic detection guesses wrong: `prompt`, `template`, `chain`, or `auto`.",
+        "api_validation": "Manual gate-review handshake (defaults off). Set true only when you plan to send `gate_verdict` so the chain pauses without forcing retries.",
+        "gate_scope": "Where validation applies: `execution`, `session`, `chain`, or `step`.",
         "quality_gates": {
           "type": "array",
-          "description": "Array of quality gate names to apply. Discover available gates using system_control with action='gates', operation='list'. Gates validate output quality and provide improvement guidance."
+          "description": "List of gate IDs to enforce. Combine with `>>guide gate controls` for the latest catalog."
         },
         "custom_checks": {
           "type": "array",
-          "description": "Array of custom quality checks (each with 'name' and 'description'). Creates simple validation gates based on your criteria. Example: [{name: 'production-ready', description: 'Include error handling'}]"
+          "description": "Inline validation definitions: [{\"name\": \"production-ready\", \"description\": \"Include tests\"}, …]"
         },
-        "gate_mode": {
-          "type": "string",
-          "enum": [
-            "enforce",
-            "advise",
-            "report"
-          ],
-          "description": "How to apply quality gates: 'enforce' (block on failure, retry with hints), 'advise' (guidance only), 'report' (validate and report). Default: 'enforce' when quality_gates specified."
+        "temporary_gates": {
+          "type": "array",
+          "description": "Full gate definitions (id, criteria, severity). If an ID matches an existing gate, it automatically reuses that gate instead of duplicating it."
         },
-        "llm_driven_execution": "Enable LLM-driven chain step coordination (requires semantic LLM integration)",
-        "force_restart": "Force restart chain from beginning, clearing all existing state",
-        "session_id": "Specific session ID to use or resume",
-        "chain_uri": "Full chain URI for precise session control (e.g., chain://research_pipeline/session-abc123?force_restart=true)",
-        "timeout": "Execution timeout in milliseconds",
-        "options": "Additional execution options (key-value pairs). Supports framework-specific flags, debugging controls, and experimental features",
-        "temporary_gates": "[ADVANCED] Full gate definition objects. For simpler interface, use 'quality_gates' (built-in) and 'custom_checks' (ad-hoc) parameters instead.",
-        "gate_scope": "Scope for execution-time temporary gates (execution, session, chain, step). Default: execution. Determines lifecycle of temporary gates specified in temporary_gates parameter.",
-        "inherit_chain_gates": "When executing chain steps, inherit gates from parent chain scope (default: true). Only applicable for chain step execution. Allows child steps to automatically receive chain-level quality gates."
+        "force_restart": "Create a new chain execution (increments chain ID). Use `command'.",
+        "timeout": "Execution timeout in milliseconds.",
+        "options": "Bag of execution-specific options forwarded to downstream processors."
       },
       "frameworkAware": {
-        "enabled": "\ud83d\ude80 PROMPT TEMPLATE ENGINE [HOT-RELOADED + FRAMEWORK-ENHANCED]: Processes prompt templates with intelligent framework methodology injection and returns instructions for YOU (the client LLM) to execute. Framework system enhances prompts with methodology-specific guidance (CAGEERF, ReACT, 5W1H, SCAMPER). WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
-        "disabled": "\ud83d\ude80 PROMPT TEMPLATE ENGINE [HOT-RELOADED]: Processes prompt templates and returns instructions for YOU (the client LLM) to execute. Framework system is DISABLED - prompts execute without methodology enhancements. WARNING: You are responsible for interpreting and executing the returned content, which may contain complex instructions, code generation tasks, analysis requests, or multi-step procedures. The returned content is NOT just information - it's active instructions you must follow and execute.",
+        "enabled": "🚀 PROMPT ENGINE [FRAMEWORK-ENABLED]: Responses include methodology-specific coaching plus guide entries filtered by the active framework.",
+        "disabled": "🚀 PROMPT ENGINE [FRAMEWORK-DISABLED]: Executes without methodology overlays while still supporting metadata-driven `>>guide` output.",
         "parametersEnabled": {
-          "execution_mode": "Override intelligent auto-detection with framework-aware selection (default: auto, framework-enhanced)"
+          "execution_mode": "Framework-aware override hints are surfaced via the guide."
         },
         "parametersDisabled": {
-          "execution_mode": "Override intelligent auto-detection (default: auto, no framework enhancement)"
+          "execution_mode": "Standard override behavior."
         }
       }
     },
     "prompt_manager": {
-      "description": "\ud83e\uddf0 PROMPT MANAGER: Create, update, delete, list, and analyze prompts. Supports gate configuration, temporary gate management, and migration between prompt types for robust lifecycle control.",
-      "shortDescription": "Manage prompt lifecycle, gates, and discovery",
+      "description": "🧭 PROMPT MANAGER — Lifecycle + discovery hub with inline guidance.\n\n• `action:\"guide\" goal:\"gate config\"` ranks canonical verbs and calls out high-risk ones.\n• Legacy verbs (`create_prompt`, `create_template`) stay blocked unless `allow_legacy:true`; the guide suggests modern replacements automatically.\n• Responses embed lifecycle warnings, issue summaries, and telemetry-backed hints so an LLM can correct requests without doc hunting.",
+      "shortDescription": "Manage prompts with guide-backed lifecycle cues",
       "category": "management",
       "parameters": {
-        "action": "Action to perform. Supported: create, create_prompt, create_template, update, delete, modify, reload, list, analyze_type, migrate_type, analyze_gates, suggest_temporary_gates.",
-        "id": "Prompt identifier. Required for create*, update, delete, modify, analyze_type, migrate_type, analyze_gates. Use letters, numbers, underscores, or hyphens.",
-        "name": "Friendly prompt name. Required for create*.",
-        "description": "Short description of the prompt purpose. Required for create*.",
-        "user_message_template": "Prompt body with Nunjucks placeholders (e.g. 'Analyze {{input}}'). Required for create*.",
-        "system_message": "Optional system message to store with the prompt.",
-        "content": "Full prompt content for create/update operations when not using templates.",
-        "category": "Category label used for filtering and organization.",
-        "arguments": "Array of argument definitions ({name, type, description}) for prompts with structured inputs.",
-        "gate_configuration": "Explicit gate configuration (include/exclude lists, temporary gates, framework_gates flag).",
-        "search_query": "Search expression for list (e.g. 'category:code type:chain')."
+        "action": "Supported: create, update, delete, list, reload, analyze_type, migrate_type, analyze_gates, suggest_temporary_gates, guide.",
+        "allow_legacy": "Set true to temporarily unlock deprecated verbs (not recommended).",
+        "goal": "Optional goal text consumed by the guide action for targeting suggestions.",
+        "include_legacy": "When true, guide output includes deprecated or high-risk verbs.",
+        "id": "Prompt identifier required for lifecycle and analysis actions.",
+        "name": "Friendly name for create/update paths.",
+        "description": "Human-readable summary stored with the prompt.",
+        "user_message_template": "Main prompt body (Nunjucks friendly). Required for create.",
+        "system_message": "Optional system message injected at run time.",
+        "content": "Full JSON payload for advanced create/update scenarios.",
+        "category": "Label for organization and list filtering.",
+        "arguments": "Structured argument definitions for prompts that expect typed inputs.",
+        "gate_configuration": "Explicit gate configuration applied to the prompt.",
+        "search_query": "Filter syntax for the list action."
       },
       "frameworkAware": {
-        "enabled": "\ud83e\uddf0 PROMPT MANAGER [FRAMEWORK-ENABLED]: Same functionality with framework-aware metadata exposed. Use when methodology switching is active.",
-        "disabled": "\ud83e\uddf0 PROMPT MANAGER [FRAMEWORK-DISABLED]: Operates without applying methodology metadata or guidance.",
-        "parametersEnabled": {
-          "action": "Same as base mode; framework context is available for downstream processing"
-        },
-        "parametersDisabled": {
-          "action": "Same as base mode"
-        }
+        "enabled": "🧭 PROMPT MANAGER [FRAMEWORK-ENABLED]: Guide messaging and validations reflect the active methodology.",
+        "disabled": "🧭 PROMPT MANAGER [FRAMEWORK-DISABLED]: Standard lifecycle handling with metadata-backed guides."
       }
     },
     "system_control": {
-      "description": "\u2699\ufe0f SYSTEM CONTROL: Framework management, gate discovery, analytics, and system operations.\n\n**Discover quality gates**: Use `action='gates', operation='list'` to see all available validation gates.\n**Discover frameworks**: Use `action='framework', operation='list'` to see available methodologies.",
-      "shortDescription": "Manage framework state, metrics, and maintenance",
+      "description": "⚙️ SYSTEM CONTROL — Framework, gate, and diagnostics cockpit.\n\n• `>>help` routes here and renders the same metadata-driven guide as `system_control action:\"guide\"`.\n• Use `action:\"framework\"` for switch/list/enable/disable, `action:\"gates\"` for discovery, `action:\"analytics\"` for planned telemetry surfaces.\n• Responses reiterate the active methodology and gate state so downstream LLMs stay aware of context.",
+      "shortDescription": "Manage frameworks, gates, analytics, and maintenance",
       "category": "system",
       "parameters": {
-        "action": "Top-level command. Supported values: status, framework, gates, analytics, config, maintenance.",
-        "operation": "Sub-command for the selected action (e.g. framework: switch|list|enable|disable, analytics: view|reset|history).",
+        "action": "Top-level command: status, framework, gates, analytics, config, maintenance, guide.",
+        "operation": "Sub-command for the selected action (e.g., framework switch/list).",
         "framework": "Framework identifier when switching (CAGEERF, ReACT, 5W1H, SCAMPER).",
-        "reason": "Audit-friendly explanation for switches, gate toggles, or maintenance actions.",
-        "confirm": "Set true to acknowledge confirmation-required operations (e.g. reset, restore, restart).",
-        "include_history": "Include historical entries (where supported).",
-        "include_metrics": "Include detailed metrics output (where supported).",
-        "show_details": "Request an expanded response for list/status style commands."
+        "topic": "Guide focus filter (e.g., \"gates\" or \"analytics\").",
+        "reason": "Audit-friendly explanation for sensitive operations.",
+        "confirm": "Boolean acknowledgment for destructive actions.",
+        "include_history": "Include recorded history when supported.",
+        "include_metrics": "Request detailed analytics in status responses.",
+        "show_details": "Expand verbose payloads for list/status commands."
       },
       "frameworkAware": {
-        "enabled": "\u2699\ufe0f SYSTEM CONTROL [FRAMEWORK-ENABLED]: Framework switching and gate orchestration available.",
-        "disabled": "\u2699\ufe0f SYSTEM CONTROL [FRAMEWORK-DISABLED]: Limited to status, analytics, config, and maintenance.",
-        "parametersEnabled": {
-          "action": "Same as base mode; framework operations succeed"
-        },
-        "parametersDisabled": {
-          "action": "Same as base mode; framework operations return informative errors"
-        }
+        "enabled": "⚙️ SYSTEM CONTROL [FRAMEWORK-ENABLED]: Guide + routing automatically reflect the active methodology catalog.",
+        "disabled": "⚙️ SYSTEM CONTROL [FRAMEWORK-DISABLED]: Outputs omit methodology guidance but keep gate/system summaries."
       }
     }
   }

@@ -1,23 +1,25 @@
+// @lifecycle canonical - Builds execution context for prompt engine.
 /**
  * Context Builder - Handles execution context building
  *
- * Extracted from ConsolidatedPromptEngine to provide focused
+ * Extracted from PromptExecutionService to provide focused
  * context building capabilities with clear separation of concerns.
  */
 
-import { createLogger } from "../../../logging/index.js";
-import { FrameworkManager } from "../../../frameworks/framework-manager.js";
-import { FrameworkExecutionContext } from "../../../frameworks/types/index.js";
-import { FrameworkStateManager } from "../../../frameworks/framework-state-manager.js";
-import { ConvertedPrompt } from "../../../types/index.js";
-import { ExecutionContext } from "../../../execution/parsers/index.js";
+import { ExecutionContext } from '../../../execution/parsers/index.js';
+import { FrameworkManager } from '../../../frameworks/framework-manager.js';
+import { FrameworkStateManager } from '../../../frameworks/framework-state-manager.js';
+import { FrameworkExecutionContext } from '../../../frameworks/types/index.js';
+import { createLogger, getDefaultLoggerConfig } from '../../../logging/index.js';
+import { ConvertedPrompt } from '../../../types/index.js';
 
-const logger = createLogger({
-  logFile: '/tmp/context-builder.log',
-  transport: 'stdio',
-  enableDebug: false,
-  configuredLevel: 'info'
-});
+const logger = createLogger(
+  getDefaultLoggerConfig({
+    logFile: '/tmp/context-builder.log',
+    transport: 'stdio',
+    enableDebug: false,
+  })
+);
 
 export interface EnhancedExecutionContext extends ExecutionContext {
   promptId: string;
@@ -49,10 +51,7 @@ export class ContextBuilder {
   private frameworkManager?: FrameworkManager;
   private frameworkStateManager?: FrameworkStateManager;
 
-  constructor(
-    frameworkManager?: FrameworkManager,
-    frameworkStateManager?: FrameworkStateManager
-  ) {
+  constructor(frameworkManager?: FrameworkManager, frameworkStateManager?: FrameworkStateManager) {
     this.frameworkManager = frameworkManager;
     this.frameworkStateManager = frameworkStateManager;
   }
@@ -70,7 +69,7 @@ export class ContextBuilder {
       logger.debug('🔧 [ContextBuilder] Building execution context', {
         promptId,
         argsCount: Object.keys(promptArgs).length,
-        hasFrameworkManager: !!this.frameworkManager
+        hasFrameworkManager: !!this.frameworkManager,
       });
 
       const startTime = Date.now();
@@ -78,11 +77,11 @@ export class ContextBuilder {
 
       // Build base context - properly typed for execution parsers
       const baseExecutionContext: ExecutionContext = {
-        conversationHistory: options.conversationHistory,
-        environmentVars: options.environmentVars,
-        promptDefaults: options.promptDefaults,
-        userSession: options.userSession,
-        systemContext: options.systemContext
+        conversationHistory: options['conversationHistory'],
+        environmentVars: options['environmentVars'],
+        promptDefaults: options['promptDefaults'],
+        userSession: options['userSession'],
+        systemContext: options['systemContext'],
       };
 
       // Build enhanced context
@@ -90,17 +89,17 @@ export class ContextBuilder {
         ...baseExecutionContext,
         promptId,
         promptArgs,
-        executionMode: options.executionMode || 'auto',
-        sessionId: options.sessionId || this.generateSessionId(),
-        forceRestart: options.forceRestart || false,
-        enableGates: options.enableGates !== false,
-        frameworkId: options.frameworkId,
-        contextData: options.contextData || {},
+        executionMode: options['executionMode'] || 'auto',
+        sessionId: options['sessionId'] || this.generateSessionId(),
+        forceRestart: options['forceRestart'] || false,
+        enableGates: options['enableGates'] !== false,
+        frameworkId: options['frameworkId'],
+        contextData: options['contextData'] || {},
         metadata: this.buildMetadata(convertedPrompt, options),
         performance: {
           startTime,
-          memoryUsage
-        }
+          memoryUsage,
+        },
       };
 
       // Add framework context if available
@@ -115,14 +114,14 @@ export class ContextBuilder {
       logger.debug('✅ [ContextBuilder] Execution context built successfully', {
         promptId,
         hasFrameworkContext: !!enhancedContext.frameworkContext,
-        sessionId: enhancedContext.sessionId
+        sessionId: enhancedContext.sessionId,
       });
 
       return enhancedContext;
     } catch (error) {
       logger.error('❌ [ContextBuilder] Context building failed', {
         promptId,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
 
       // Return minimal context on error
@@ -135,7 +134,7 @@ export class ContextBuilder {
         enableGates: true,
         contextData: {},
         metadata: { error: error instanceof Error ? error.message : String(error) },
-        performance: { startTime: Date.now() }
+        performance: { startTime: Date.now() },
       };
     }
   }
@@ -156,31 +155,28 @@ export class ContextBuilder {
       logger.debug('🎯 [ContextBuilder] Building framework context');
 
       const activeFramework = this.frameworkStateManager.getActiveFramework();
-      const frameworkId = options.frameworkId || activeFramework;
+      const frameworkId = options['frameworkId'] || activeFramework;
 
       if (!frameworkId) {
         logger.debug('No framework specified, skipping framework context');
         return undefined;
       }
 
-      const frameworkContext = this.frameworkManager.generateExecutionContext(
-        convertedPrompt,
-        {
-          promptType: options.executionType || 'prompt',
-          complexity: 'medium',
-          userPreference: frameworkId as any
-        }
-      );
+      const frameworkContext = this.frameworkManager.generateExecutionContext(convertedPrompt, {
+        promptType: options['executionType'] || 'prompt',
+        complexity: 'medium',
+        userPreference: frameworkId,
+      });
 
       logger.debug('✅ [ContextBuilder] Framework context built', {
         frameworkId,
-        hasSystemPrompt: !!frameworkContext.systemPrompt
+        hasSystemPrompt: !!frameworkContext.systemPrompt,
       });
 
       return frameworkContext;
     } catch (error) {
       logger.warn('⚠️ [ContextBuilder] Framework context building failed', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       return undefined;
     }
@@ -200,11 +196,11 @@ export class ContextBuilder {
       promptVersion: '1.0', // ConvertedPrompt doesn't have version property
       executionId: this.generateExecutionId(),
       timestamp: new Date().toISOString(),
-      userAgent: options.userAgent,
-      clientInfo: options.clientInfo,
-      environment: process.env.NODE_ENV || 'development',
+      userAgent: options['userAgent'],
+      clientInfo: options['clientInfo'],
+      environment: process.env['NODE_ENV'] || 'development',
       nodeVersion: process.version,
-      platform: process.platform
+      platform: process.platform,
     };
   }
 
@@ -230,7 +226,7 @@ export class ContextBuilder {
       return process.memoryUsage().heapUsed;
     } catch (error) {
       logger.warn('⚠️ [ContextBuilder] Failed to get memory usage', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       return 0;
     }
@@ -250,31 +246,31 @@ export class ContextBuilder {
     try {
       // Required fields validation
       if (!context.promptId) {
-        errors.push("Prompt ID is required");
+        errors.push('Prompt ID is required');
       }
 
       if (!context.sessionId) {
-        errors.push("Session ID is required");
+        errors.push('Session ID is required');
       }
 
       if (!context.promptArgs) {
-        warnings.push("No prompt arguments provided");
+        warnings.push('No prompt arguments provided');
       }
 
       // Context data validation
       if (context.contextData && typeof context.contextData !== 'object') {
-        errors.push("Context data must be an object");
+        errors.push('Context data must be an object');
       }
 
       // Performance data validation
       if (context.performance && !context.performance.startTime) {
-        warnings.push("Performance tracking missing start time");
+        warnings.push('Performance tracking missing start time');
       }
 
       // Framework context validation
       if (context.frameworkContext) {
         if (!context.frameworkContext.selectedFramework) {
-          warnings.push("Framework context missing selected framework");
+          warnings.push('Framework context missing selected framework');
         }
       }
 
@@ -283,19 +279,19 @@ export class ContextBuilder {
       logger.debug('🔍 [ContextBuilder] Context validation completed', {
         isValid,
         errorsCount: errors.length,
-        warningsCount: warnings.length
+        warningsCount: warnings.length,
       });
 
       return { isValid, errors, warnings };
     } catch (error) {
       logger.error('❌ [ContextBuilder] Context validation failed', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
 
       return {
         isValid: false,
         errors: [`Validation error: ${error instanceof Error ? error.message : String(error)}`],
-        warnings
+        warnings,
       };
     }
   }
@@ -317,25 +313,25 @@ export class ContextBuilder {
         performance: {
           startTime: context.performance?.startTime || Date.now(),
           memoryUsage: context.performance?.memoryUsage,
-          ...(overrides.performance || {})
-        }
+          ...(overrides.performance || {}),
+        },
       };
 
       // Update execution tracking
       if (clonedContext.metadata) {
-        clonedContext.metadata.clonedFrom = context.metadata?.executionId;
-        clonedContext.metadata.executionId = this.generateExecutionId();
+        clonedContext.metadata['clonedFrom'] = context.metadata?.['executionId'];
+        clonedContext.metadata['executionId'] = this.generateExecutionId();
       }
 
       logger.debug('🔄 [ContextBuilder] Context cloned successfully', {
-        originalId: context.metadata?.executionId,
-        clonedId: clonedContext.metadata?.executionId
+        originalId: context.metadata?.['executionId'],
+        clonedId: clonedContext.metadata?.['executionId'],
       });
 
       return clonedContext;
     } catch (error) {
       logger.error('❌ [ContextBuilder] Context cloning failed', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

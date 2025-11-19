@@ -1,19 +1,20 @@
+// @lifecycle canonical - Validation helpers for prompt engine inputs.
 /**
  * Engine Validator - Handles engine-specific validation
  *
- * Extracted from ConsolidatedPromptEngine to provide focused
+ * Extracted from PromptExecutionService to provide focused
  * validation capabilities with clear separation of concerns.
  */
 
-import { createLogger } from "../../../logging/index.js";
-import { ConvertedPrompt } from "../../../types/index.js";
-import { LightweightGateSystem } from "../../../gates/core/index.js";
+import { LightweightGateSystem } from '../../../gates/core/index.js';
+import { createLogger } from '../../../logging/index.js';
+import { ConvertedPrompt } from '../../../types/index.js';
 
 const logger = createLogger({
   logFile: '/tmp/engine-validator.log',
   transport: 'stdio',
   enableDebug: false,
-  configuredLevel: 'info'
+  configuredLevel: 'info',
 });
 
 export interface ValidationResult {
@@ -59,7 +60,7 @@ export class EngineValidator {
     try {
       logger.debug('🔍 [EngineValidator] Validating prompt', {
         promptId: convertedPrompt.id,
-        hasArgs: Object.keys(promptArgs).length > 0
+        hasArgs: Object.keys(promptArgs).length > 0,
       });
 
       const errors: string[] = [];
@@ -68,12 +69,15 @@ export class EngineValidator {
 
       // Basic prompt validation
       if (!convertedPrompt.id) {
-        errors.push("Prompt ID is missing");
+        errors.push('Prompt ID is missing');
         score -= 50;
       }
 
-      if (!convertedPrompt.userMessageTemplate || convertedPrompt.userMessageTemplate.trim().length === 0) {
-        errors.push("Prompt content is empty");
+      if (
+        !convertedPrompt.userMessageTemplate ||
+        convertedPrompt.userMessageTemplate.trim().length === 0
+      ) {
+        errors.push('Prompt content is empty');
         score -= 50;
       }
 
@@ -96,21 +100,21 @@ export class EngineValidator {
         isValid,
         score,
         errorsCount: errors.length,
-        warningsCount: warnings.length
+        warningsCount: warnings.length,
       });
 
       return { isValid, errors, warnings, score };
     } catch (error) {
       logger.error('❌ [EngineValidator] Prompt validation failed', {
         promptId: convertedPrompt.id,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
 
       return {
         isValid: false,
         errors: [`Validation error: ${error instanceof Error ? error.message : String(error)}`],
         warnings: [],
-        score: 0
+        score: 0,
       };
     }
   }
@@ -125,18 +129,18 @@ export class EngineValidator {
 
     // Handle undefined content
     if (!content) {
-      errors.push("Content is undefined or missing");
+      errors.push('Content is undefined or missing');
       return { isValid: false, errors, warnings, score: 0 };
     }
 
     // Length validation
     if (content.length < 10) {
-      errors.push("Content is too short (minimum 10 characters)");
+      errors.push('Content is too short (minimum 10 characters)');
       score -= 30;
     }
 
     if (content.length > 50000) {
-      warnings.push("Content is very long, may impact performance");
+      warnings.push('Content is very long, may impact performance');
       score -= 10;
     }
 
@@ -200,7 +204,7 @@ export class EngineValidator {
 
     // Check for potential infinite loops
     if (content.includes('{% for') && !content.includes('{% endfor %}')) {
-      warnings.push("Potential incomplete for loop detected");
+      warnings.push('Potential incomplete for loop detected');
     }
 
     // Check for missing variable fallbacks
@@ -262,7 +266,9 @@ export class EngineValidator {
       if (promptArgs.hasOwnProperty(arg.name)) {
         const value = promptArgs[arg.name];
         if (!this.isValidArgumentType(value, arg.type || 'string')) {
-          errors.push(`Argument '${arg.name}' should be of type '${arg.type}', got '${typeof value}'`);
+          errors.push(
+            `Argument '${arg.name}' should be of type '${arg.type}', got '${typeof value}'`
+          );
           score -= 10;
         }
       }
@@ -313,7 +319,7 @@ export class EngineValidator {
       logger.debug('🚪 [EngineValidator] Validating with gates', {
         promptId: convertedPrompt.id,
         gatesCount: suggestedGates.length,
-        hasProcessedContent: !!processedContent
+        hasProcessedContent: !!processedContent,
       });
 
       if (!this.gateSystem || suggestedGates.length === 0) {
@@ -328,23 +334,28 @@ export class EngineValidator {
 
       for (const gateName of suggestedGates) {
         try {
-          const gateResults = await this.gateSystem.validateContent(
-            [gateName],
-            contentToValidate,
-            {
-              promptId: convertedPrompt.id,
-              stepId: gateName,
-              attemptNumber: 1,
-              previousAttempts: []
-            }
-          );
-          const gateResult = gateResults[0] || { valid: false, errors: [{ field: 'gate', message: 'Gate validation failed', code: 'VALIDATION_ERROR' }] };
+          const gateResults = await this.gateSystem.validateContent([gateName], contentToValidate, {
+            promptId: convertedPrompt.id,
+            stepId: gateName,
+            attemptNumber: 1,
+            previousAttempts: [],
+          });
+          const gateResult = gateResults[0] || {
+            valid: false,
+            errors: [
+              { field: 'gate', message: 'Gate validation failed', code: 'VALIDATION_ERROR' },
+            ],
+          };
 
           results.push({
             gate: gateName,
             passed: gateResult.valid || gateResult.passed || false,
-            message: gateResult.errors?.length ? gateResult.errors[0].message : (gateResult.valid ? 'Gate passed' : 'Gate failed'),
-            score: 85 // Default validation score
+            message: gateResult.errors?.length
+              ? gateResult.errors[0].message
+              : gateResult.valid
+                ? 'Gate passed'
+                : 'Gate failed',
+            score: 85, // Default validation score
           });
 
           if (!gateResult.valid && !gateResult.passed) {
@@ -354,7 +365,7 @@ export class EngineValidator {
           results.push({
             gate: gateName,
             passed: false,
-            message: `Gate validation error: ${error instanceof Error ? error.message : String(error)}`
+            message: `Gate validation error: ${error instanceof Error ? error.message : String(error)}`,
           });
           allPassed = false;
         }
@@ -363,23 +374,25 @@ export class EngineValidator {
       logger.debug('✅ [EngineValidator] Gate validation completed', {
         promptId: convertedPrompt.id,
         allPassed,
-        resultsCount: results.length
+        resultsCount: results.length,
       });
 
       return { passed: allPassed, results };
     } catch (error) {
       logger.error('❌ [EngineValidator] Gate validation failed', {
         promptId: convertedPrompt.id,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
 
       return {
         passed: false,
-        results: [{
-          gate: 'system',
-          passed: false,
-          message: `Gate system error: ${error instanceof Error ? error.message : String(error)}`
-        }]
+        results: [
+          {
+            gate: 'system',
+            passed: false,
+            message: `Gate system error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
       };
     }
   }

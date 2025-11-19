@@ -1,3 +1,4 @@
+// @lifecycle canonical - Interface exports for methodology guides and registry contracts.
 /**
  * Methodology Interfaces - Phase 2 Implementation
  *

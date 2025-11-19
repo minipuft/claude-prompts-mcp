@@ -1,5 +1,7 @@
-import fs from "fs/promises";
-import path from "path";
+// @lifecycle canonical - Shared filesystem utilities for prompt discovery and safe writes.
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import type { Dirent } from "node:fs";
 import { PromptData, PromptsConfigFile } from "../types.js";
 
 // Create a simple logger since we can't import from index.ts
@@ -482,7 +484,7 @@ export async function findPromptFile(
 }> {
   try {
     // Get all category directories
-    const categoryDirs = await fs.readdir(baseDir, { withFileTypes: true });
+    const categoryDirs = (await fs.readdir(baseDir, { withFileTypes: true })) as Dirent[];
 
     // Filter for directories only
     const categories = categoryDirs

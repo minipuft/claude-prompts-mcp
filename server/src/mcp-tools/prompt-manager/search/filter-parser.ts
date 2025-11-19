@@ -1,10 +1,11 @@
+// @lifecycle canonical - Parses filter expressions for prompt searches.
 /**
  * Intelligent filter parsing for prompt discovery
  */
 
-import { Logger } from "../../../logging/index.js";
-import { SmartFilters } from "../core/types.js";
-import { validateFilterSyntax } from "../utils/validation.js";
+import { Logger } from '../../../logging/index.js';
+import { SmartFilters } from '../core/types.js';
+import { validateFilterSyntax } from '../utils/validation.js';
 
 /**
  * Filter parsing engine for intelligent prompt discovery
@@ -42,9 +43,10 @@ export class FilterParser {
       }
 
       this.logger.info(`Parsed filters for "${filterText}":`, filters);
-
     } catch (error) {
-      this.logger.warn(`Filter parsing error: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(
+        `Filter parsing error: ${error instanceof Error ? error.message : String(error)}`
+      );
       // Return text-only filter as fallback
       filters.text = filterText;
     }
@@ -168,7 +170,7 @@ export class FilterParser {
       'execution:required - Show prompts that require execution',
       'gates:yes - Show prompts with quality gates',
       'react component - Text search for "react component"',
-      'type:chain category:development - Combined filters'
+      'type:chain category:development - Combined filters',
     ];
   }
 
@@ -236,21 +238,23 @@ export class FilterParser {
     if (filters.intent && filters.category) {
       // Check if intent and category are compatible
       const categoryIntentMap: Record<string, string[]> = {
-        'development': ['debugging', 'testing', 'optimization'],
-        'analysis': ['research', 'investigation', 'review'],
-        'content': ['writing', 'editing', 'creation']
+        development: ['debugging', 'testing', 'optimization'],
+        analysis: ['research', 'investigation', 'review'],
+        content: ['writing', 'editing', 'creation'],
       };
 
       const compatibleIntents = categoryIntentMap[filters.category] || [];
-      if (compatibleIntents.length > 0 && !compatibleIntents.some(intent =>
-        filters.intent?.includes(intent))) {
+      if (
+        compatibleIntents.length > 0 &&
+        !compatibleIntents.some((intent) => filters.intent?.includes(intent))
+      ) {
         warnings.push(`Intent "${filters.intent}" may not match category "${filters.category}"`);
       }
     }
 
     return {
       valid: warnings.length === 0,
-      warnings
+      warnings,
     };
   }
 }

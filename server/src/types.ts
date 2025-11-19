@@ -1,3 +1,4 @@
+// @lifecycle canonical - Aggregated type definitions used across the server (config, prompts, gates).
 /**
  * Type definitions for the prompt management system
  */
@@ -129,6 +130,15 @@ export interface FrameworksConfig {
 /**
  * Complete application configuration
  */
+export interface ChainSessionConfig {
+  /** Minutes before idle chain sessions expire */
+  sessionTimeoutMinutes: number;
+  /** Minutes before pending gate reviews expire */
+  reviewTimeoutMinutes: number;
+  /** Minutes between background cleanup sweeps */
+  cleanupIntervalMinutes: number;
+}
+
 /**
  * Configuration for gates subsystem
  */
@@ -150,6 +160,8 @@ export interface Config {
   gates?: GatesConfig;
   /** Framework feature configuration */
   frameworks?: FrameworksConfig;
+  /** Chain session lifecycle configuration */
+  chainSessions?: ChainSessionConfig;
   /** Transports configuration */
   transports: TransportsConfig;
   /** Logging configuration */

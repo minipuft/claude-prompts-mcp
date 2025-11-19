@@ -1,0 +1,97 @@
+{
+  "category": "Semantic + Analysis Stack",
+  "description": "Semantic analyzers, telemetry, performance monitors, and reference trackers.",
+  "nodes": {
+    "src/execution/types.ts": [
+      "src/prompts/types.ts"
+    ],
+    "src/frameworks/types/index.ts": [
+      "src/frameworks/types/integration-types.ts",
+      "src/frameworks/types/methodology-types.ts",
+      "src/frameworks/types/prompt-guidance-types.ts"
+    ],
+    "src/frameworks/types/integration-types.ts": [
+      "src/execution/types.ts",
+      "src/frameworks/types/methodology-types.ts",
+      "src/semantic/types.ts"
+    ],
+    "src/frameworks/types/methodology-types.ts": [
+      "src/execution/types.ts",
+      "src/semantic/types.ts"
+    ],
+    "src/frameworks/types/prompt-guidance-types.ts": [
+      "src/execution/types.ts",
+      "src/frameworks/types/methodology-types.ts"
+    ],
+    "src/gates/types.ts": [
+      "src/execution/types.ts"
+    ],
+    "src/logging/index.ts": [
+      "src/types/index.ts"
+    ],
+    "src/metrics/analytics-service.ts": [
+      "src/logging/index.ts",
+      "src/metrics/types.ts"
+    ],
+    "src/metrics/index.ts": [
+      "src/metrics/analytics-service.ts",
+      "src/metrics/types.ts"
+    ],
+    "src/metrics/types.ts": [],
+    "src/performance/index.ts": [
+      "src/performance/monitor.ts"
+    ],
+    "src/performance/monitor.ts": [
+      "src/logging/index.ts"
+    ],
+    "src/prompts/types.ts": [],
+    "src/semantic/configurable-semantic-analyzer.ts": [
+      "src/execution/types.ts",
+      "src/logging/index.ts",
+      "src/semantic/types.ts",
+      "src/types.ts"
+    ],
+    "src/semantic/integrations/index.ts": [
+      "src/logging/index.ts",
+      "src/semantic/configurable-semantic-analyzer.ts",
+      "src/semantic/integrations/llm-clients.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/semantic/integrations/llm-clients.ts": [
+      "src/logging/index.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/semantic/types.ts": [],
+    "src/text-references/argument-history-tracker.ts": [
+      "src/logging/index.ts",
+      "src/text-references/types.ts"
+    ],
+    "src/text-references/conversation.ts": [
+      "src/logging/index.ts",
+      "src/types/index.ts"
+    ],
+    "src/text-references/index.ts": [
+      "src/logging/index.ts",
+      "src/text-references/argument-history-tracker.ts",
+      "src/text-references/types.ts"
+    ],
+    "src/text-references/types.ts": [],
+    "src/types.ts": [
+      "src/gates/types.ts",
+      "src/prompts/types.ts"
+    ],
+    "src/types/execution.ts": [],
+    "src/types/index.ts": [
+      "src/execution/types.ts",
+      "src/frameworks/types/index.ts",
+      "src/gates/types.ts",
+      "src/prompts/types.ts",
+      "src/types.ts",
+      "src/types/execution.ts"
+    ]
+  },
+  "circularDependencies": [],
+  "generatedAt": "2025-11-18T23:12:06.764Z"
+}

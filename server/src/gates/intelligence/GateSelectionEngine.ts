@@ -1,3 +1,4 @@
+// @lifecycle canonical - Selects applicable gates based on context.
 /**
  * Gate Selection Engine - Intelligent Gate Selection
  *

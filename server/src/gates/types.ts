@@ -1,3 +1,4 @@
+// @lifecycle canonical - Top-level gate type definitions.
 /**
  * Gate System Type Definitions
  *

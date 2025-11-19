@@ -1,3 +1,4 @@
+// @lifecycle canonical - CAGEERF methodology guide definition.
 /**
  * CAGEERF Methodology Guide
  * Provides guidance for applying C.A.G.E.E.R.F methodology to prompt creation,
@@ -616,21 +617,27 @@ Ensure each phase builds logically on the previous phases while maintaining focu
   getToolDescriptions(): MethodologyToolDescriptions {
     return {
       prompt_engine: {
-        description: "🚀 PROMPT TEMPLATE ENGINE [CAGEERF-ENHANCED]: Processes prompt templates with systematic C.A.G.E.E.R.F methodology injection for comprehensive structured analysis. Context → Analysis → Goals → Execution → Evaluation → Refinement → Framework approach ensures systematic problem-solving and decision-making. WARNING: You are responsible for interpreting and executing the returned content, which contains structured analytical instructions.",
+        description:
+          "🚀 PROMPT ENGINE [CAGEERF + GUIDE]: Executes prompts with C.A.G.E.E.R.F scaffolding and metadata-driven guides. Use `>>guide context` or `>>guide execution` to surface phase-specific parameters and gate combinations. Gate review prompts require a `gate_verdict` response (`GATE_REVIEW: PASS - Context satisfied`).",
         parameters: {
-          execution_mode: "Override intelligent auto-detection with CAGEERF-aware selection (default: auto, systematic analysis-enhanced)"
+          execution_mode:
+            "Override intelligent auto-detection with CAGEERF-aware selection (default: auto, methodology-enhanced)"
         }
       },
       prompt_manager: {
-        description: "📝 INTELLIGENT PROMPT MANAGER [CAGEERF-ENHANCED]: Complete lifecycle management with systematic C.A.G.E.E.R.F methodology integration. Creates comprehensive analysis templates that guide structured thinking through Context establishment, Analysis phases, Goal definition, Execution planning, Evaluation criteria, and Refinement processes. Optimized for complex analytical and strategic thinking tasks.",
+        description:
+          "📝 PROMPT MANAGER [CAGEERF GUIDE]: Lifecycle operations emit Context→Analysis→Goals cues and use the metadata-driven `action:\"guide\"` to direct authors toward the right verb. Deprecated verbs remain blocked unless `allow_legacy:true` is set explicitly.",
         parameters: {
-          action: "Management action: 'create_template' creates CAGEERF-enhanced templates for systematic analysis, strategic planning, and comprehensive problem-solving"
+          action:
+            "Use `guide` to see which lifecycle action best fits the current phase (e.g., Context research vs. Execution updates)."
         }
       },
       system_control: {
-        description: "⚙️ INTELLIGENT SYSTEM CONTROL [CAGEERF-ACTIVE]: Framework management with C.A.G.E.E.R.F methodology active for systematic, comprehensive analytical approach. Supports switching between methodologies, with CAGEERF optimized for complex analysis, strategic thinking, and multi-phase problem solving requiring structured evaluation.",
+        description:
+          "⚙️ SYSTEM CONTROL [CAGEERF-ACTIVE]: `>>help` routes here for methodology-aware guidance. Summaries highlight which C.A.G.E.E.R.F phase is currently enforced across the server plus pending analytics work.",
         parameters: {
-          action: "System action: Active CAGEERF methodology provides systematic Context → Analysis → Goals → Execution → Evaluation → Refinement → Framework approach for comprehensive problem-solving"
+          action:
+            "Use `guide` with `topic:\"framework\"` to view phase-specific operations before switching."
         }
       }
     };

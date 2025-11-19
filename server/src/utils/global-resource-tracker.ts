@@ -1,3 +1,4 @@
+// @lifecycle canonical - Tracks Node.js timers/handles to prevent resource leaks.
 /**
  * Global Resource Tracker
  *

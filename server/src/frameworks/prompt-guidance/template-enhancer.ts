@@ -1,3 +1,4 @@
+// @lifecycle canonical - Enhances templates with methodology-specific guidance blocks.
 /**
  * Template Enhancer - Phase 3 Implementation
  *

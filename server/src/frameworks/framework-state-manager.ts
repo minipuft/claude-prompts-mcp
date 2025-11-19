@@ -1,3 +1,4 @@
+// @lifecycle canonical - Tracks active framework state and switching heuristics.
 /**
  * Stateful Framework State Manager
  * 
@@ -15,8 +16,8 @@ import {
   FrameworkExecutionContext,
   FrameworkSelectionCriteria
 } from "./types/index.js";
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 
 /**
  * Persisted framework state (saved to file)

@@ -1,23 +1,22 @@
+// @lifecycle canonical - Formats prompt execution responses.
 /**
  * Response Formatter - Handles response formatting and coordination
  *
- * Extracted from ConsolidatedPromptEngine to provide focused
+ * Extracted from PromptExecutionService to provide focused
  * response formatting capabilities with clear separation of concerns.
  */
 
-import { createLogger } from "../../../logging/index.js";
-import {
-  FormatterExecutionContext,
-  SimpleResponseFormatter,
-} from "../core/types.js";
-import type { ToolResponse } from "../../../types/index.js";
+import { FormatterExecutionContext, SimpleResponseFormatter } from '../core/types.js';
 
-const logger = createLogger({
-  logFile: "/tmp/response-formatter.log",
-  transport: "stdio",
-  enableDebug: false,
-  configuredLevel: "info",
-});
+import type { Logger } from '../../../logging/index.js';
+import type { ToolResponse } from '../../../types/index.js';
+
+const fallbackLogger: Logger = {
+  info: () => {},
+  debug: () => {},
+  warn: (...args: any[]) => console.warn('[ResponseFormatter]', ...args),
+  error: (...args: any[]) => console.error('[ResponseFormatter]', ...args),
+};
 
 /**
  * ResponseFormatter handles all response-related formatting and coordination
@@ -28,11 +27,8 @@ const logger = createLogger({
  * - Analytics integration and tracking
  * - Structured response building
  */
-function normalizeToolResponse(
-  payload: any,
-  defaultIsError = false
-): ToolResponse {
-  if (payload && typeof payload === "object") {
+function normalizeToolResponse(payload: any, defaultIsError = false): ToolResponse {
+  if (payload && typeof payload === 'object') {
     if (Array.isArray(payload.content)) {
       const normalized: ToolResponse = {
         content: payload.content,
@@ -47,51 +43,53 @@ function normalizeToolResponse(
       return normalized;
     }
 
-    if (typeof payload.content === "string") {
+    if (typeof payload.content === 'string') {
       return {
-        content: [{ type: "text" as const, text: payload.content }],
+        content: [{ type: 'text' as const, text: payload.content }],
         isError: payload.isError ?? defaultIsError,
         structuredContent: payload.structuredContent,
       };
     }
 
-    if (typeof payload.text === "string") {
+    if (typeof payload.text === 'string') {
       return {
-        content: [{ type: "text" as const, text: payload.text }],
+        content: [{ type: 'text' as const, text: payload.text }],
         isError: payload.isError ?? defaultIsError,
         structuredContent: payload.structuredContent,
       };
     }
 
-    if (typeof payload.message === "string") {
+    if (typeof payload.message === 'string') {
       return {
-        content: [{ type: "text" as const, text: payload.message }],
+        content: [{ type: 'text' as const, text: payload.message }],
         isError: payload.isError ?? defaultIsError,
         structuredContent: payload.structuredContent,
       };
     }
   }
 
-  const text =
-    typeof payload === "string"
-      ? payload
-      : JSON.stringify(payload, null, 2);
+  const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
 
   return {
-    content: [{ type: "text" as const, text }],
+    content: [{ type: 'text' as const, text }],
     isError: defaultIsError,
   };
 }
 
 export class ResponseFormatter implements SimpleResponseFormatter {
   private analyticsService?: any;
+  private readonly logger: Logger;
+
+  constructor(logger: Logger = fallbackLogger) {
+    this.logger = logger;
+  }
 
   /**
    * Set analytics service for tracking
    */
   public setAnalyticsService(service: any): void {
     this.analyticsService = service;
-    logger.debug("📊 [ResponseFormatter] Analytics service set");
+    this.logger.debug('📊 [ResponseFormatter] Analytics service set');
   }
 
   /**
@@ -99,15 +97,12 @@ export class ResponseFormatter implements SimpleResponseFormatter {
    */
   public formatResponse(content: any): ToolResponse {
     try {
-      logger.debug("🔧 [ResponseFormatter] Formatting general response");
+      this.logger.debug('🔧 [ResponseFormatter] Formatting general response');
       return normalizeToolResponse(content, false);
     } catch (error) {
-      logger.error(
-        "❌ [ResponseFormatter] General response formatting failed",
-        {
-          error: error instanceof Error ? error.message : String(error),
-        }
-      );
+      this.logger.error('❌ [ResponseFormatter] General response formatting failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return normalizeToolResponse(content, false);
     }
   }
@@ -119,7 +114,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
     response: any,
     executionContext: FormatterExecutionContext = {
       executionId: `exec_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-      executionType: "prompt",
+      executionType: 'prompt',
       startTime: Date.now(),
       endTime: Date.now(),
       frameworkEnabled: false,
@@ -133,7 +128,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
     // see bookkeeping data. Only add structured blocks when a chain execution explicitly
     // needs them.
     try {
-      logger.debug("🎯 [ResponseFormatter] Formatting prompt engine response", {
+      this.logger.debug('🎯 [ResponseFormatter] Formatting prompt engine response', {
         executionType: executionContext?.executionType,
         frameworkUsed: executionContext?.frameworkUsed,
         stepsExecuted: executionContext?.stepsExecuted,
@@ -146,7 +141,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
 
       if (
         response &&
-        typeof response === "object" &&
+        typeof response === 'object' &&
         Array.isArray((response as ToolResponse).content)
       ) {
         return response as ToolResponse;
@@ -157,58 +152,71 @@ export class ResponseFormatter implements SimpleResponseFormatter {
       // Only include structuredContent for chains (step tracking metadata)
       // Prompts and templates should return clean content without metadata clutter
       const includeStructuredContent =
-        executionContext.executionType === "chain" &&
-        options?.includeStructuredContent !== false;
+        executionContext.executionType === 'chain' && options?.includeStructuredContent !== false;
 
       if (includeStructuredContent) {
-        toolResponse.structuredContent = {
-          executionMetadata: {
-            executionId: executionContext.executionId,
-            executionType: executionContext.executionType,
-            startTime: executionContext.startTime,
-            endTime: executionContext.endTime,
-            executionTime:
-              executionContext.endTime - executionContext.startTime,
-            frameworkEnabled: executionContext.frameworkEnabled,
-            frameworkUsed: executionContext.frameworkUsed,
-            stepsExecuted: executionContext.stepsExecuted,
-            sessionId: executionContext.sessionId,
+        const executionDuration = executionContext.endTime - executionContext.startTime;
+        const structuredContent: Record<string, any> = {
+          execution: {
+            id: executionContext.executionId,
+            type: executionContext.executionType,
+            duration_ms: executionDuration,
+            framework: executionContext.frameworkUsed ?? null,
+            steps: executionContext.stepsExecuted ?? null,
           },
         };
 
-        if (gateResults) {
-          (toolResponse.structuredContent as any).gateValidation = {
-            enabled: true,
-            passed: gateResults.passed,
-            totalGates: gateResults.gateResults?.length ?? 0,
-            failedGates: gateResults.gateResults?.filter((g: any) => !g.passed) ?? [],
-            passedGates: gateResults.gateResults?.filter((g: any) => g.passed) ?? [],
-            executionTime: gateResults.executionTime ?? 0,
-            retryCount: gateResults.retryRequired ? 1 : 0,
+        if (executionContext.chainId) {
+          structuredContent.chain = {
+            id: executionContext.chainId,
+            status: executionContext.chainProgress?.status ?? 'in_progress',
+            current_step: executionContext.chainProgress?.currentStep ?? null,
+            total_steps: executionContext.chainProgress?.totalSteps ?? null,
           };
         }
+
+        if (gateResults) {
+          structuredContent.gates = {
+            enabled: true,
+            passed: gateResults.passed,
+            total: gateResults.gateResults?.length ?? 0,
+            failed: gateResults.gateResults?.filter((g: any) => !g.passed) ?? [],
+            execution_ms: gateResults.executionTime ?? 0,
+            retries: gateResults.retryRequired ? 1 : 0,
+          };
+        }
+
+        toolResponse.structuredContent = structuredContent;
       }
 
-      if (options?.includeMetadata) {
-        (toolResponse as any).metadata = {
+      if (options?.includeMetadata || options?.metadata) {
+        const defaultMetadata: Record<string, any> = {
           executionType: executionContext.executionType,
           frameworkUsed: executionContext.frameworkUsed,
-          stepsExecuted: executionContext.stepsExecuted,
-          sessionId: executionContext.sessionId,
+        };
+        if (executionContext.chainId) {
+          defaultMetadata.chainId = executionContext.chainId;
+        }
+        if (executionContext.chainProgress) {
+          if (typeof executionContext.chainProgress.currentStep === 'number') {
+            defaultMetadata.currentStep = executionContext.chainProgress.currentStep;
+          }
+          if (typeof executionContext.chainProgress.totalSteps === 'number') {
+            defaultMetadata.totalSteps = executionContext.chainProgress.totalSteps;
+          }
+        }
+        (toolResponse as any).metadata = {
+          ...defaultMetadata,
+          ...(options?.metadata ?? {}),
         };
       }
 
-      logger.debug(
-        "✅ [ResponseFormatter] Prompt engine response formatted successfully"
-      );
+      this.logger.debug('✅ [ResponseFormatter] Prompt engine response formatted successfully');
       return toolResponse;
     } catch (error) {
-      logger.error(
-        "❌ [ResponseFormatter] Prompt engine response formatting failed",
-        {
-          error: error instanceof Error ? error.message : String(error),
-        }
-      );
+      this.logger.error('❌ [ResponseFormatter] Prompt engine response formatting failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
 
       // Return error response
       return this.formatErrorResponse(error, executionContext, options);
@@ -224,9 +232,8 @@ export class ResponseFormatter implements SimpleResponseFormatter {
     _options?: Record<string, any>
   ): ToolResponse {
     try {
-      logger.debug("🚨 [ResponseFormatter] Formatting error response", {
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
+      this.logger.debug('🚨 [ResponseFormatter] Formatting error response', {
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
       });
 
       // Track error analytics if service is available
@@ -234,39 +241,38 @@ export class ResponseFormatter implements SimpleResponseFormatter {
         this.trackError(error, executionContext);
       }
 
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
 
       const toolResponse = normalizeToolResponse(`Error: ${errorMessage}`, true);
 
-      if (executionContext && executionContext.executionType === "chain") {
+      if (executionContext?.executionType === 'chain') {
+        const executionDuration = executionContext.endTime - executionContext.startTime;
         toolResponse.structuredContent = {
-          executionMetadata: {
-            executionId: executionContext.executionId,
-            executionType: executionContext.executionType,
-            startTime: executionContext.startTime,
-            endTime: executionContext.endTime,
-            executionTime:
-              executionContext.endTime - executionContext.startTime,
-            frameworkEnabled: executionContext.frameworkEnabled,
-            frameworkUsed: executionContext.frameworkUsed,
-            stepsExecuted: executionContext.stepsExecuted,
-            sessionId: executionContext.sessionId,
+          execution: {
+            id: executionContext.executionId,
+            type: executionContext.executionType,
+            duration_ms: executionDuration,
+            framework: executionContext.frameworkUsed ?? null,
+            steps: executionContext.stepsExecuted ?? null,
           },
+          chain: executionContext.chainId
+            ? {
+                id: executionContext.chainId,
+                status: executionContext.chainProgress?.status ?? 'in_progress',
+                current_step: executionContext.chainProgress?.currentStep ?? null,
+                total_steps: executionContext.chainProgress?.totalSteps ?? null,
+              }
+            : undefined,
         };
       }
 
-      logger.debug(
-        "✅ [ResponseFormatter] Error response formatted successfully"
-      );
+      this.logger.debug('✅ [ResponseFormatter] Error response formatted successfully');
       return toolResponse;
     } catch (formattingError) {
-      logger.error("❌ [ResponseFormatter] Error response formatting failed", {
+      this.logger.error('❌ [ResponseFormatter] Error response formatting failed', {
         originalError: error instanceof Error ? error.message : String(error),
         formattingError:
-          formattingError instanceof Error
-            ? formattingError.message
-            : String(formattingError),
+          formattingError instanceof Error ? formattingError.message : String(formattingError),
       });
 
       // Fallback to minimal response
@@ -288,7 +294,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
     executionContext?: FormatterExecutionContext
   ): ToolResponse {
     try {
-      logger.debug("🔗 [ResponseFormatter] Formatting chain response", {
+      this.logger.debug('🔗 [ResponseFormatter] Formatting chain response', {
         chainId,
         currentStep,
         totalSteps,
@@ -297,12 +303,10 @@ export class ResponseFormatter implements SimpleResponseFormatter {
 
       const toolResponse = normalizeToolResponse(response, false);
 
-      logger.debug(
-        "✅ [ResponseFormatter] Chain response formatted successfully"
-      );
+      this.logger.debug('✅ [ResponseFormatter] Chain response formatted successfully');
       return toolResponse;
     } catch (error) {
-      logger.error("❌ [ResponseFormatter] Chain response formatting failed", {
+      this.logger.error('❌ [ResponseFormatter] Chain response formatting failed', {
         chainId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -316,7 +320,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
    */
   private trackExecution(executionContext: FormatterExecutionContext): void {
     try {
-      if (this.analyticsService && this.analyticsService.trackExecution) {
+      if (this.analyticsService?.trackExecution) {
         this.analyticsService.trackExecution({
           executionId: executionContext.executionId,
           executionType: executionContext.executionType,
@@ -328,7 +332,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
         });
       }
     } catch (error) {
-      logger.warn("⚠️ [ResponseFormatter] Analytics tracking failed", {
+      this.logger.warn('⚠️ [ResponseFormatter] Analytics tracking failed', {
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -337,27 +341,20 @@ export class ResponseFormatter implements SimpleResponseFormatter {
   /**
    * Track error for analytics
    */
-  private trackError(
-    error: any,
-    executionContext: FormatterExecutionContext
-  ): void {
+  private trackError(error: any, executionContext: FormatterExecutionContext): void {
     try {
-      if (this.analyticsService && this.analyticsService.trackError) {
+      if (this.analyticsService?.trackError) {
         this.analyticsService.trackError({
           executionId: executionContext.executionId,
           executionType: executionContext.executionType,
-          errorType:
-            error instanceof Error ? error.constructor.name : "Unknown",
+          errorType: error instanceof Error ? error.constructor.name : 'Unknown',
           errorMessage: error instanceof Error ? error.message : String(error),
           sessionId: executionContext.sessionId,
         });
       }
     } catch (trackingError) {
-      logger.warn("⚠️ [ResponseFormatter] Error analytics tracking failed", {
-        error:
-          trackingError instanceof Error
-            ? trackingError.message
-            : String(trackingError),
+      this.logger.warn('⚠️ [ResponseFormatter] Error analytics tracking failed', {
+        error: trackingError instanceof Error ? trackingError.message : String(trackingError),
       });
     }
   }

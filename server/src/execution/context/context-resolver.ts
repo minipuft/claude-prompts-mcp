@@ -1,3 +1,4 @@
+// @lifecycle canonical - Resolves dependencies and merges execution context state.
 /**
  * Context Resolution System
  * 

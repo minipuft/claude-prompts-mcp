@@ -1,3 +1,4 @@
+// @lifecycle canonical - Barrel exports for gate core helpers.
 /**
  * Core Gate System - Main Exports
  * Provides guidance and validation capabilities for prompt execution

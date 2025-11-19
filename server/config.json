@@ -24,7 +24,7 @@
     "templatesDirectory": "src/gates/templates"
   },
   "frameworks": {
-    "enableSystemPromptInjection": false,
+    "enableSystemPromptInjection": true,
     "enableMethodologyGates": true,
     "enableDynamicToolDescriptions": true
   },

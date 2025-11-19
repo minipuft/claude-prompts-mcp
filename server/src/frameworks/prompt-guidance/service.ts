@@ -1,3 +1,4 @@
+// @lifecycle canonical - Orchestrates prompt guidance components for framework-aware prompts.
 /**
  * Prompt Guidance Service - Phase 3 Implementation
  *

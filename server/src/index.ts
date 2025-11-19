@@ -1,3 +1,4 @@
+// @lifecycle canonical - Main MCP server entrypoint.
 /**
  * MCP Claude Prompts Server - Main Entry Point
  * Minimal entry point with comprehensive error handling, health checks, and validation
@@ -6,6 +7,10 @@
 import { Logger } from "./logging/index.js";
 import { startApplication } from "./runtime/application.js";
 import { ConfigManager } from "./config/index.js";
+import {
+  RuntimeLaunchOptions,
+  resolveRuntimeLaunchOptions,
+} from "./runtime/options.js";
 
 /**
  * Health check and validation state
@@ -96,32 +101,14 @@ async function rollbackStartup(error: Error): Promise<void> {
 }
 
 /**
- * Check if we're running in a test environment
- */
-function isTestEnvironment(): boolean {
-  return (
-    process.env.NODE_ENV === 'test' ||
-    process.argv.includes('--suppress-debug') ||
-    process.argv.includes('--test-mode') ||
-    // Detect GitHub Actions CI environment
-    process.env.GITHUB_ACTIONS === 'true' ||
-    process.env.CI === 'true' ||
-    // Detect common test runner patterns
-    process.argv.some(arg => arg.includes('test') || arg.includes('jest') || arg.includes('mocha')) ||
-    // Detect if called from integration test scripts
-    process.argv[1]?.includes('tests/scripts/')
-  );
-}
-
-/**
  * Setup periodic health checks
  * SUPPRESSED in test environments to prevent hanging processes
  */
-function setupHealthMonitoring(): void {
+function setupHealthMonitoring(runtimeOptions: RuntimeLaunchOptions): void {
   if (!logger) return;
 
   // Skip health monitoring in test environments to prevent hanging processes
-  if (isTestEnvironment()) {
+  if (runtimeOptions.testEnvironment) {
     logger.debug("Health monitoring suppressed in test environment");
     return;
   }
@@ -421,10 +408,12 @@ async function main(): Promise<void> {
     }
 
     // Check for startup validation mode (for GitHub Actions)
-    const args = process.argv.slice(2);
-    const isStartupTest = args.includes('--startup-test');
+    const fullArgv = process.argv;
+    const args = fullArgv.slice(2);
+    const runtimeOptions = resolveRuntimeLaunchOptions(args, fullArgv);
+    const isStartupTest = runtimeOptions.startupTest;
     const isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
-    const isVerbose = args.includes('--verbose') || args.includes('--debug-startup');
+    const isVerbose = runtimeOptions.verbose;
 
     if (isStartupTest && isVerbose) {
       // In CI mode, use console.log for debug to avoid stderr issues
@@ -452,7 +441,7 @@ async function main(): Promise<void> {
       debugLog("DEBUG: About to call startApplication()...");
     }
     try {
-      orchestrator = await startApplication();
+      orchestrator = await startApplication(runtimeOptions);
       if (isVerbose) {
         debugLog("DEBUG: startApplication() completed successfully");
       }
@@ -558,7 +547,7 @@ async function main(): Promise<void> {
       });
 
       // Setup health monitoring
-      setupHealthMonitoring();
+      setupHealthMonitoring(runtimeOptions);
 
       // Log successful complete initialization
       logger.info(

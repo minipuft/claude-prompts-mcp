@@ -1,9 +1,11 @@
+// @lifecycle canonical - JSON escaping/unescaping helpers for prompt templates.
 // JSON utility functions
 
 import nunjucks from "nunjucks";
-import path from "path"; // Import path module
+import * as path from "node:path"; // Import path module
 import { fileURLToPath } from "url"; // For ES module __dirname equivalent
-import { PromptData } from "../types.js";
+import type { PromptArgument } from "../types/index.js";
+type PromptDefinition = { arguments: PromptArgument[] };
 // JSON escaping utilities (moved here to avoid circular dependency)
 function escapeJsonForNunjucks(jsonStr: string): string {
   return jsonStr
@@ -86,7 +88,7 @@ function getNunjucksEnv(): nunjucks.Environment {
  */
 export function validateJsonArguments(
   jsonArgs: any,
-  prompt: PromptData
+  prompt: PromptDefinition
 ): {
   valid: boolean;
   errors?: string[];

@@ -3,7 +3,9 @@ name: PR Validation
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main, develop]
+    branches:
+      - main
+      - develop
 
 env:
   NODE_ENV: test
@@ -18,6 +20,10 @@ jobs:
   pr-quality-gates:
     name: Pull Request Quality Gates
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: server
 
     steps:
       - name: Checkout repository
@@ -28,67 +34,35 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
-          cache: "npm"
+          node-version: 18
+          cache: npm
           cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
-        working-directory: server
         run: npm ci --prefer-offline --no-audit
 
       - name: Core validation
-        working-directory: server
-        run: |
-          echo "Running core validation pipeline..."
-          npm run typecheck
-          npm run build
-          npm run test:integration
-          npm run test:functional-mcp
-        timeout-minutes: 10
-
-      - name: Server functionality validation
-        working-directory: server
-        run: |
-          echo "Testing complete server functionality..."
-
-          # Test server startup functionality (includes build artifact validation)
-          npm run test:ci-startup
-
-          echo "✅ Server functionality validation completed"
+        run: npm run test:ci
+        timeout-minutes: 15
 
       - name: Changed files analysis
+        working-directory: .
         run: |
           echo "Analyzing changed files in this PR..."
-
-          # Robust file diff with error handling
           if git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt 2>/dev/null; then
             echo "✅ Successfully analyzed changed files"
           else
             echo "⚠️  Could not determine changed files, using fallback"
-            # Fallback: get files changed in current commit
             git diff --name-only HEAD~1 HEAD > changed_files.txt 2>/dev/null || echo "No changes detected" > changed_files.txt
           fi
 
           echo "Files changed in this PR:"
           cat changed_files.txt || echo "No changed files detected"
 
-          # Check if TypeScript files were modified
-          if grep -q "\.ts$" changed_files.txt; then echo "✅ TypeScript files modified - validation completed"; fi
-
-          # Check if methodology guides were modified
-          if grep -q "frameworks/adapters.*methodology-guide" changed_files.txt; then echo "⚠️  Methodology guides modified - ensure all 4 methodologies remain compatible"; fi
-
-          # Check if consolidated MCP tools were modified
-          if grep -q "mcp-tools/\(prompt-engine\|prompt-manager\|system-control\)" changed_files.txt; then echo "⚠️  Consolidated MCP tools modified - ensure protocol compliance and backwards compatibility"; fi
-
-          # Check if framework system core was modified
-          if grep -q "frameworks/\(framework-manager\|framework-state-manager\)" changed_files.txt; then echo "⚠️  Framework system core modified - validate methodology switching functionality"; fi
-
-          # Check if runtime system was modified
-          if grep -q "runtime/\(application\|startup\)" changed_files.txt; then echo "⚠️  Runtime system modified - validate server startup and orchestration"; fi
-
-          # Check if analysis system was modified
-          if grep -q "analysis/configurable-semantic-analyzer" changed_files.txt; then echo "⚠️  Analysis system modified - validate prompt classification and framework integration"; fi
+          if grep -q "\\.ts$" changed_files.txt; then echo "✅ TypeScript files modified - validation completed"; fi
+          if grep -q "frameworks/" changed_files.txt; then echo "⚠️  Framework modules changed - confirm methodology switching"; fi
+          if grep -q "mcp-tools/" changed_files.txt; then echo "⚠️  MCP tools changed - ensure protocol compliance"; fi
+          if grep -q "runtime/" changed_files.txt; then echo "⚠️  Runtime changed - run startup smoke tests locally"; fi
 
       - name: Comment PR with validation results
         uses: actions/github-script@v7
@@ -104,61 +78,66 @@ jobs:
               }
             } catch (e) {
               console.log(`Warning: Could not read changed_files.txt: ${e.message}`);
-              changedFiles = 'Unable to read changed files (this is normal for some PR types)';
+              changedFiles = 'Unable to read changed files (this can happen on force-pushes)';
             }
             const status = '${{ job.status }}';
             const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
             let message;
             if (status === 'success') {
-              const lines = [
-                '## ✅ PR Validation Passed!',
+              message = [
+                '## ✅ PR Validation Passed',
                 '',
-                '**All quality gates have passed for this pull request.**',
+                'The automated gates completed successfully.',
                 '',
-                '### Validation Summary:',
-                '- ✅ TypeScript compilation successful',
-                '- ✅ Build process completed',
-                '- ✅ All tests passed',
-                '- ✅ Functional MCP validation passed (intelligent routing, framework system, transport layer)',
-                '- ✅ Server startup validation completed',
+                '### Checks executed',
+                '- `npm run test:ci`',
                 '',
-                '### Files Changed:',
+                '### Files changed',
                 '```',
                 changedFiles,
                 '```',
                 '',
-                `[View detailed results](${runUrl})`
-              ];
-              message = lines.join('\n');
+                `[View workflow run](${runUrl})`
+              ].join('\n');
             } else {
-              const lines = [
+              message = [
                 '## ❌ PR Validation Failed',
                 '',
-                '**Quality gates failed for this pull request.**',
+                'At least one automated gate failed. Review the logs and fix the issues before merging.',
                 '',
-                `Please check the [detailed logs](${runUrl}) and fix the issues before merging.`,
+                '### Checks executed',
+                '- `npm run test:ci`',
                 '',
-                '### Files Changed:',
+                '### Files changed',
                 '```',
                 changedFiles,
                 '```',
                 '',
-                '**Common fixes:**',
-                '- Run `cd server && npm run typecheck` locally',
-                '- Run `cd server && npm run build` locally',
-                '- Run `cd server && npm test` locally',
-                '- Ensure functional MCP validation passes (intelligent routing + framework system)'
-              ];
-              message = lines.join('\n');
-            }
-            // Check if a comment already exists
-            const comments = await github.rest.issues.listComments({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number });
-            const botComment = comments.data.find(comment => comment.user.type === 'Bot' && comment.body.includes('PR Validation'));
-            if (botComment) {
-              // Update existing comment
-              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: botComment.id, body: message });
-            } else {
-              // Create new comment
-              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: message });
+                `[View workflow run](${runUrl})`,
+                '',
+                '**Common fixes**',
+                '- Run `cd server && npm run test:ci`'
+              ].join('\n');
             }
 
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            const botComment = comments.data.find(comment => comment.user.type === 'Bot' && comment.body.includes('PR Validation'));
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: message
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: message
+              });
+            }

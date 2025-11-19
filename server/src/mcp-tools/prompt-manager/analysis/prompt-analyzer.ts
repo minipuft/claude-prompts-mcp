@@ -1,16 +1,14 @@
+// @lifecycle canonical - Analyzes prompts for lifecycle and metadata.
 /**
  * Semantic analysis and classification engine
  */
 
-import { Logger } from "../../../logging/index.js";
-import { ContentAnalyzer } from "../../../semantic/configurable-semantic-analyzer.js";
-import type { ContentAnalysisResult } from "../../../semantic/types.js";
-import { ConvertedPrompt } from "../../../types/index.js";
-import {
-  PromptClassification,
-  AnalysisResult,
-  PromptManagerDependencies
-} from "../core/types.js";
+import { Logger } from '../../../logging/index.js';
+import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
+import { ConvertedPrompt } from '../../../types/index.js';
+import { PromptClassification, AnalysisResult, PromptManagerDependencies } from '../core/types.js';
+
+import type { ContentAnalysisResult } from '../../../semantic/types.js';
 
 /**
  * Prompt analysis engine for semantic classification and intelligence feedback
@@ -37,7 +35,7 @@ export class PromptAnalyzer {
       systemMessage: promptData.systemMessage,
       userMessageTemplate: promptData.userMessageTemplate,
       arguments: promptData.arguments || [],
-      chainSteps: promptData.chainSteps || []
+      chainSteps: promptData.chainSteps || [],
     };
 
     const classification = await this.analyzePrompt(tempPrompt);
@@ -47,12 +45,14 @@ export class PromptAnalyzer {
       return {
         classification,
         feedback: `⚠️ API Analysis Disabled\n`,
-        suggestions: []
+        suggestions: [],
       };
     }
 
     // Normal mode: show concise single-line format with type and suggested gates
-    const analysisIcon = this.getAnalysisIcon(classification.analysisMode || classification.framework);
+    const analysisIcon = this.getAnalysisIcon(
+      classification.analysisMode || classification.framework
+    );
     let feedback = `${analysisIcon} ${classification.executionType}`;
 
     // Add suggested gates if present
@@ -85,7 +85,7 @@ export class PromptAnalyzer {
         analysisMode: analysis.analysisMetadata.mode,
         capabilities: analysis.capabilities,
         limitations: analysis.limitations,
-        warnings: analysis.warnings
+        warnings: analysis.warnings,
       };
     } catch (error) {
       this.logger.error(`Configurable semantic analysis failed for ${prompt.id}:`, error);
@@ -110,10 +110,10 @@ export class PromptAnalyzer {
         canDetectStructure: false,
         canAnalyzeComplexity: false,
         canRecommendFramework: false,
-        hasSemanticUnderstanding: false
+        hasSemanticUnderstanding: false,
       },
       limitations: ['Analysis failed - using minimal fallback'],
-      warnings: ['⚠️ Analysis error occurred', '🚨 Using minimal fallback analysis']
+      warnings: ['⚠️ Analysis error occurred', '🚨 Using minimal fallback analysis'],
     };
   }
 
@@ -139,9 +139,9 @@ export class PromptAnalyzer {
       requiresFramework: false, // Conservative - don't assume framework needed
       confidence: 0.7, // High confidence in basic structural facts
       reasoning: [
-        "Semantic analysis unavailable - using basic structural detection",
+        'Semantic analysis unavailable - using basic structural detection',
         `Detected ${executionType} type from file structure`,
-        "Framework recommendation unavailable"
+        'Framework recommendation unavailable',
       ],
       suggestedGates: ['basic_validation'],
       framework: 'disabled',
@@ -151,18 +151,18 @@ export class PromptAnalyzer {
         canDetectStructure: true,
         canAnalyzeComplexity: false,
         canRecommendFramework: false,
-        hasSemanticUnderstanding: false
+        hasSemanticUnderstanding: false,
       },
       limitations: [
-        "Semantic analysis unavailable (no LLM integration)",
-        "No intelligent framework recommendations available",
-        "Limited complexity analysis capabilities"
+        'Semantic analysis unavailable (no LLM integration)',
+        'No intelligent framework recommendations available',
+        'Limited complexity analysis capabilities',
       ],
       warnings: [
-        "⚠️ Semantic analysis unavailable",
-        "💡 Configure LLM integration in config for semantic analysis",
-        "🔧 Using basic structural detection only"
-      ]
+        '⚠️ Semantic analysis unavailable',
+        '💡 Configure LLM integration in config for semantic analysis',
+        '🔧 Using basic structural detection only',
+      ],
     };
   }
 
@@ -171,13 +171,20 @@ export class PromptAnalyzer {
    */
   private getAnalysisIcon(mode: string | undefined): string {
     switch (mode) {
-      case 'disabled': return '🔧'; // Basic structural detection
-      case 'structural': return '🔬'; // Structural analysis
-      case 'hybrid': return '🔍'; // Enhanced structural
-      case 'semantic': return '🧠'; // Full semantic analysis
-      case 'fallback': return '🚨'; // Error fallback
-      case 'configurable': return '🧠'; // Configured semantic analysis
-      default: return '🧠'; // Default intelligent analysis
+      case 'disabled':
+        return '🔧'; // Basic structural detection
+      case 'structural':
+        return '🔬'; // Structural analysis
+      case 'hybrid':
+        return '🔍'; // Enhanced structural
+      case 'semantic':
+        return '🧠'; // Full semantic analysis
+      case 'fallback':
+        return '🚨'; // Error fallback
+      case 'configurable':
+        return '🧠'; // Configured semantic analysis
+      default:
+        return '🧠'; // Default intelligent analysis
     }
   }
 
@@ -188,16 +195,19 @@ export class PromptAnalyzer {
     const suggestions: string[] = [];
 
     if (!this.semanticAnalyzer.isLLMEnabled()) {
-      suggestions.push("💡 Enable semantic analysis for enhanced capabilities");
-      suggestions.push("🎯 Framework recommendation unavailable");
+      suggestions.push('💡 Enable semantic analysis for enhanced capabilities');
+      suggestions.push('🎯 Framework recommendation unavailable');
     } else if (classification.analysisMode === 'structural') {
-      suggestions.push("💡 Configure LLM integration for intelligent analysis");
-    } else if (classification.analysisMode === 'fallback' || classification.framework === 'fallback') {
-      suggestions.push("🚨 Fix analysis configuration");
+      suggestions.push('💡 Configure LLM integration for intelligent analysis');
+    } else if (
+      classification.analysisMode === 'fallback' ||
+      classification.framework === 'fallback'
+    ) {
+      suggestions.push('🚨 Fix analysis configuration');
     }
 
     if (!classification.capabilities?.canRecommendFramework) {
-      suggestions.push("🎯 Framework recommendation unavailable");
+      suggestions.push('🎯 Framework recommendation unavailable');
     }
 
     return suggestions;

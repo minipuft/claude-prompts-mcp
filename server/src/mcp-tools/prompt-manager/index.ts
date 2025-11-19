@@ -1,3 +1,4 @@
+// @lifecycle canonical - Barrel exports for the prompt manager MCP tool.
 /**
  * Prompt Manager - Modular Architecture Entry Point
  *
@@ -6,18 +7,14 @@
  */
 
 // Export the main class and factory function with exact same API
-export { ConsolidatedPromptManager } from "./core/manager.js";
-export { createConsolidatedPromptManager } from "./core/manager.js";
+export { ConsolidatedPromptManager } from './core/manager.js';
+export { createConsolidatedPromptManager } from './core/manager.js';
 
 // Export types for external use
-export type {
-  PromptClassification,
-  AnalysisResult,
-  SmartFilters
-} from "./core/types.js";
+export type { PromptClassification, AnalysisResult, SmartFilters } from './core/types.js';
 
 // Backwards compatibility exports
-export type { PromptManagerDependencies } from "./core/types.js";
+export type { PromptManagerDependencies } from './core/types.js';
 
 /**
  * Re-export all original interfaces to maintain API compatibility
@@ -30,5 +27,5 @@ export type {
   FileOperationResult,
   DependencyAnalysis,
   MigrationResult,
-  ValidationContext
-} from "./core/types.js";
+  ValidationContext,
+} from './core/types.js';

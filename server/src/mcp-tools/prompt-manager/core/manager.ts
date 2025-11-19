@@ -1,3 +1,4 @@
+// @lifecycle canonical - Main prompt manager implementation for MCP.
 /**
  * Consolidated Prompt Manager - Modular Architecture Orchestration Layer
  *
@@ -5,36 +6,58 @@
  * while delegating operations to specialized modules for improved maintainability.
  */
 
-import { Logger } from "../../../logging/index.js";
-import { ConfigManager } from "../../../config/index.js";
-import {
-  ToolResponse,
-  ConvertedPrompt,
-  PromptData,
-  Category
-} from "../../../types/index.js";
+import { PromptManagerDependencies, PromptManagerData, PromptClassification } from './types.js';
+import { ConfigManager } from '../../../config/index.js';
+import { FrameworkManager } from '../../../frameworks/framework-manager.js';
+import { FrameworkStateManager } from '../../../frameworks/framework-state-manager.js';
+import { Logger } from '../../../logging/index.js';
+import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
+import { promptManagerMetadata } from '../../../tooling/action-metadata/definitions/prompt-manager.js';
+import { recordActionInvocation } from '../../../tooling/action-metadata/usage-tracker.js';
+import { ToolResponse, ConvertedPrompt, PromptData, Category } from '../../../types/index.js';
 import {
   ValidationError,
   PromptError,
-  handleError as utilsHandleError
-} from "../../../utils/index.js";
-import { ContentAnalyzer } from "../../../semantic/configurable-semantic-analyzer.js";
-import { FrameworkStateManager } from "../../../frameworks/framework-state-manager.js";
-import { FrameworkManager } from "../../../frameworks/framework-manager.js";
+  handleError as utilsHandleError,
+} from '../../../utils/index.js';
 
 // Modular components
-import {
-  PromptManagerDependencies,
-  PromptManagerData,
-  PromptClassification
-} from "./types.js";
-import { validateRequiredFields } from "../utils/validation.js";
-import { PromptAnalyzer } from "../analysis/prompt-analyzer.js";
-import { ComparisonEngine } from "../analysis/comparison-engine.js";
-import { GateAnalyzer } from "../analysis/gate-analyzer.js";
-import { FilterParser } from "../search/filter-parser.js";
-import { PromptMatcher } from "../search/prompt-matcher.js";
-import { FileOperations } from "../operations/file-operations.js";
+import { ComparisonEngine } from '../analysis/comparison-engine.js';
+import { GateAnalyzer } from '../analysis/gate-analyzer.js';
+import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
+import { FileOperations } from '../operations/file-operations.js';
+import { FilterParser } from '../search/filter-parser.js';
+import { PromptMatcher } from '../search/prompt-matcher.js';
+import { validateRequiredFields } from '../utils/validation.js';
+
+import type { PromptManagerActionId } from '../../../tooling/action-metadata/definitions/prompt-manager.js';
+import type { ActionDescriptor } from '../../../tooling/action-metadata/definitions/types.js';
+
+const PROMPT_MANAGER_ACTIONS = promptManagerMetadata.data.actions;
+const PROMPT_MANAGER_ACTION_MAP = new Map<PromptManagerActionId, ActionDescriptor>(
+  PROMPT_MANAGER_ACTIONS.map((action) => [action.id as PromptManagerActionId, action])
+);
+
+const LEGACY_ACTION_ALIASES: Record<string, string> = {
+  create_prompt: 'create',
+  create_template: 'create',
+};
+
+const BLOCKED_DEPRECATED_ACTIONS = new Set<PromptManagerActionId>(['create_prompt', 'create_template']);
+
+const GOAL_KEYWORDS: Array<{ keywords: RegExp; actions: PromptManagerActionId[] }> = [
+  {
+    keywords: /gate|quality|review/i,
+    actions: ['analyze_gates', 'suggest_temporary_gates', 'update'],
+  },
+  { keywords: /temporary/i, actions: ['suggest_temporary_gates'] },
+  { keywords: /create|add|new/i, actions: ['create', 'create_prompt', 'create_template'] },
+  { keywords: /list|discover|catalog|show/i, actions: ['list'] },
+  { keywords: /modify|edit|section/i, actions: ['modify', 'update'] },
+  { keywords: /delete|remove/i, actions: ['delete'] },
+  { keywords: /migrate|convert/i, actions: ['migrate_type'] },
+  { keywords: /reload|refresh/i, actions: ['reload'] },
+];
 
 /**
  * Consolidated Prompt Manager - Modular Architecture
@@ -90,7 +113,7 @@ export class ConsolidatedPromptManager {
       frameworkStateManager,
       frameworkManager,
       onRefresh,
-      onRestart
+      onRestart,
     };
 
     this.promptAnalyzer = new PromptAnalyzer(dependencies);
@@ -100,7 +123,7 @@ export class ConsolidatedPromptManager {
     this.promptMatcher = new PromptMatcher(logger);
     this.fileOperations = new FileOperations(dependencies);
 
-    this.logger.debug("ConsolidatedPromptManager initialized with modular architecture");
+    this.logger.debug('ConsolidatedPromptManager initialized with modular architecture');
   }
 
   /**
@@ -119,11 +142,13 @@ export class ConsolidatedPromptManager {
     const data: PromptManagerData = {
       promptsData,
       convertedPrompts,
-      categories
+      categories,
     };
 
     // Components handle their own data updates if needed
-    this.logger.debug(`Updated data references: ${promptsData.length} prompts, ${categories.length} categories`);
+    this.logger.debug(
+      `Updated data references: ${promptsData.length} prompts, ${categories.length} categories`
+    );
   }
 
   /**
@@ -131,7 +156,7 @@ export class ConsolidatedPromptManager {
    */
   setFrameworkStateManager(frameworkStateManager: FrameworkStateManager): void {
     this.frameworkStateManager = frameworkStateManager;
-    this.logger.debug("Framework state manager set in PromptManager");
+    this.logger.debug('Framework state manager set in PromptManager');
   }
 
   /**
@@ -139,65 +164,104 @@ export class ConsolidatedPromptManager {
    */
   setFrameworkManager(frameworkManager: FrameworkManager): void {
     this.frameworkManager = frameworkManager;
-    this.logger.debug("Framework manager set in PromptManager");
+    this.logger.debug('Framework manager set in PromptManager');
   }
 
   /**
    * Main action handler - Routes to appropriate modules
    */
-  public async handleAction(args: {
-    action: "create" | "create_prompt" | "create_template" | "analyze_type" | "migrate_type" | "update" | "delete" | "modify" | "reload" | "list" | "analyze_gates" | "suggest_temporary_gates";
-    [key: string]: any;
-  }, extra: any): Promise<ToolResponse> {
-
+  public async handleAction(
+    args: {
+      action: PromptManagerActionId;
+      [key: string]: any;
+    },
+    extra: any
+  ): Promise<ToolResponse> {
     const { action } = args;
     // USING ERROR LEVEL FOR GUARANTEED VISIBILITY IN LOGS
     this.logger.error(`[GATE-TRACE] 🚀 ENTRY POINT: handleAction called with action "${action}"`);
-    this.logger.error(`[GATE-TRACE] Gate config present: ${!!args.gate_configuration}, Type: ${typeof args.gate_configuration}`);
+    this.logger.error(
+      `[GATE-TRACE] Gate config present: ${!!args.gate_configuration}, Type: ${typeof args.gate_configuration}`
+    );
     this.logger.info(`📝 Prompt Manager: Executing action "${action}"`);
 
+    recordActionInvocation('prompt_manager', action, 'received');
+
     try {
+      if (BLOCKED_DEPRECATED_ACTIONS.has(action) && args.allow_legacy !== true) {
+        const canonical = LEGACY_ACTION_ALIASES[action] ?? 'guide';
+        throw new ValidationError(
+          `❌ The action "${action}" has been retired.\n\nUse action="${canonical}" instead or run action:"guide" for assistance.\nSet allow_legacy:true only if you must temporarily call this legacy path.`
+        );
+      }
+
+      let response: ToolResponse;
+
       switch (action) {
-        case "create":
-          return await this.createPrompt(args);
+        case 'create':
+          response = await this.createPrompt(args);
+          break;
 
-        case "create_prompt":
-          return await this.createBasicPrompt(args);
+        case 'create_prompt':
+          response = await this.createBasicPrompt(args);
+          break;
 
-        case "create_template":
-          return await this.createFrameworkTemplate(args);
+        case 'create_template':
+          response = await this.createFrameworkTemplate(args);
+          break;
 
-        case "analyze_type":
-          return await this.analyzePromptType(args);
+        case 'analyze_type':
+          response = await this.analyzePromptType(args);
+          break;
 
-        case "migrate_type":
-          return await this.migratePromptType(args);
+        case 'migrate_type':
+          response = await this.migratePromptType(args);
+          break;
 
-        case "update":
-          return await this.updatePrompt(args);
+        case 'update':
+          response = await this.updatePrompt(args);
+          break;
 
-        case "delete":
-          return await this.deletePrompt(args);
+        case 'delete':
+          response = await this.deletePrompt(args);
+          break;
 
-        case "modify":
-          return await this.modifyPrompt(args);
+        case 'modify':
+          response = await this.modifyPrompt(args);
+          break;
 
-        case "reload":
-          return await this.reloadPrompts(args);
+        case 'reload':
+          response = await this.reloadPrompts(args);
+          break;
 
-        case "list":
-          return await this.listPrompts(args);
+        case 'list':
+          response = await this.listPrompts(args);
+          break;
 
-        case "analyze_gates":
-          return await this.analyzePromptGates(args);
+        case 'analyze_gates':
+          response = await this.analyzePromptGates(args);
+          break;
 
-        case "suggest_temporary_gates":
-          return await this.suggestTemporaryGates(args);
+        case 'suggest_temporary_gates':
+          response = await this.suggestTemporaryGates(args);
+          break;
+
+        case 'guide':
+          response = await this.guidePromptActions(args);
+          break;
 
         default:
+          recordActionInvocation('prompt_manager', action, 'unknown');
           throw new ValidationError(`Unknown action: ${action}`);
       }
+
+      response = this.appendActionWarnings(response, action);
+      recordActionInvocation('prompt_manager', action, 'success');
+      return response;
     } catch (error) {
+      recordActionInvocation('prompt_manager', action, 'failure', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return this.handleError(error, action);
     }
   }
@@ -219,7 +283,7 @@ export class ConsolidatedPromptManager {
       arguments: args.arguments || [],
       isChain: args.is_chain || false,
       chainSteps: args.chain_steps || [],
-      gateConfiguration: args.gate_configuration || args.gates
+      gateConfiguration: args.gate_configuration || args.gates,
     };
 
     // USING ERROR LEVEL FOR GUARANTEED VISIBILITY
@@ -230,10 +294,12 @@ export class ConsolidatedPromptManager {
       gateConfigType: typeof promptData.gateConfiguration,
       gateConfigValue: promptData.gateConfiguration,
       argsGateConfig: args.gate_configuration,
-      argsGates: args.gates
+      argsGates: args.gates,
     });
 
-    this.logger.error(`[GATE-TRACE] 📁 Calling fileOperations.updatePromptImplementation for ${args.id}`);
+    this.logger.error(
+      `[GATE-TRACE] 📁 Calling fileOperations.updatePromptImplementation for ${args.id}`
+    );
     const result = await this.fileOperations.updatePromptImplementation(promptData);
 
     // Perform intelligent analysis
@@ -266,12 +332,12 @@ export class ConsolidatedPromptManager {
           description: promptData.description,
           userMessageTemplate: promptData.userMessageTemplate,
           systemMessage: promptData.systemMessage,
-          arguments: promptData.arguments || []
+          arguments: promptData.arguments || [],
         });
 
         if (gateAnalysis.recommendedGates.length > 0) {
           response += `\n💡 **Suggested Gates**: Consider adding these gates:\n`;
-          gateAnalysis.recommendedGates.slice(0, 3).forEach(gate => {
+          gateAnalysis.recommendedGates.slice(0, 3).forEach((gate) => {
             response += `- ${gate}\n`;
           });
           response += `Use \`update\` action with \`gate_configuration\` parameter to add gates.\n`;
@@ -284,8 +350,8 @@ export class ConsolidatedPromptManager {
     await this.handleSystemRefresh(args.full_restart, `Prompt created: ${args.id}`);
 
     return {
-      content: [{ type: "text" as const, text: response }],
-      isError: false
+      content: [{ type: 'text' as const, text: response }],
+      isError: false,
     };
   }
 
@@ -296,7 +362,7 @@ export class ConsolidatedPromptManager {
     validateRequiredFields(args, ['id']);
 
     // Get current prompt for comparison
-    const currentPrompt = this.convertedPrompts.find(p => p.id === args.id);
+    const currentPrompt = this.convertedPrompts.find((p) => p.id === args.id);
     let beforeAnalysis: PromptClassification | null = null;
 
     if (currentPrompt) {
@@ -313,7 +379,7 @@ export class ConsolidatedPromptManager {
       userMessageTemplate: args.user_message_template || currentPrompt?.userMessageTemplate || '',
       arguments: args.arguments || currentPrompt?.arguments || [],
       chainSteps: args.chain_steps || currentPrompt?.chainSteps || [],
-      gateConfiguration: args.gate_configuration || args.gates || currentPrompt?.gateConfiguration
+      gateConfiguration: args.gate_configuration || args.gates || currentPrompt?.gateConfiguration,
     };
 
     const result = await this.fileOperations.updatePromptImplementation(promptData);
@@ -327,7 +393,11 @@ export class ConsolidatedPromptManager {
 
     // Add comparison if we have before analysis
     if (beforeAnalysis) {
-      const comparison = this.comparisonEngine.compareAnalyses(beforeAnalysis, afterAnalysis.classification, args.id);
+      const comparison = this.comparisonEngine.compareAnalyses(
+        beforeAnalysis,
+        afterAnalysis.classification,
+        args.id
+      );
       const displaySummary = this.comparisonEngine.generateDisplaySummary(comparison);
       if (displaySummary) {
         response += `\n${displaySummary}\n`;
@@ -344,8 +414,8 @@ export class ConsolidatedPromptManager {
     await this.handleSystemRefresh(args.full_restart, `Prompt updated: ${args.id}`);
 
     return {
-      content: [{ type: "text" as const, text: response }],
-      isError: false
+      content: [{ type: 'text' as const, text: response }],
+      isError: false,
     };
   }
 
@@ -355,7 +425,7 @@ export class ConsolidatedPromptManager {
   private async deletePrompt(args: any): Promise<ToolResponse> {
     validateRequiredFields(args, ['id']);
 
-    const promptToDelete = this.promptsData.find(p => p.id === args.id);
+    const promptToDelete = this.promptsData.find((p) => p.id === args.id);
     if (!promptToDelete) {
       throw new PromptError(`Prompt not found: ${args.id}`);
     }
@@ -367,7 +437,7 @@ export class ConsolidatedPromptManager {
 
     if (dependencies.length > 0) {
       response += `⚠️ **Warning**: This prompt is referenced by ${dependencies.length} other prompts:\n`;
-      dependencies.forEach(dep => {
+      dependencies.forEach((dep) => {
         response += `- ${dep.name} (${dep.id})\n`;
       });
       response += `\nDeleting will break these chain references.\n\n`;
@@ -380,8 +450,8 @@ export class ConsolidatedPromptManager {
     await this.handleSystemRefresh(args.full_restart, `Prompt deleted: ${args.id}`);
 
     return {
-      content: [{ type: "text" as const, text: response }],
-      isError: false
+      content: [{ type: 'text' as const, text: response }],
+      isError: false,
     };
   }
 
@@ -389,24 +459,28 @@ export class ConsolidatedPromptManager {
    * List prompts with intelligent filtering (delegates to search modules)
    */
   private async listPrompts(args: any): Promise<ToolResponse> {
-    console.log(`[DEBUG] List prompts called with search_query: "${args.search_query || ''}"`);
+    this.logger.debug(
+      `[PromptManager] List prompts called with search_query: "${args.search_query || ''}"`
+    );
     const filters = this.filterParser.parseIntelligentFilters(args.search_query || '');
-    console.log(`[DEBUG] Parsed filters:`, filters);
+    this.logger.debug('[PromptManager] Parsed filters', filters);
     const matchingPrompts: Array<{
       prompt: any;
       classification: any;
     }> = [];
 
     // Process all prompts using matcher
-    console.log(`[DEBUG] Processing ${this.convertedPrompts.length} prompts`);
+    this.logger.debug(`[PromptManager] Processing ${this.convertedPrompts.length} prompts`);
     for (const prompt of this.convertedPrompts) {
       try {
         const classification = await this.promptAnalyzer.analyzePrompt(prompt);
-        console.log(`[DEBUG] Analyzing prompt ${prompt.id}, type: ${classification.executionType}`);
+        this.logger.debug(
+          `[PromptManager] Analyzing prompt ${prompt.id}, type: ${classification.executionType}`
+        );
 
         // Apply filters using matcher
         const matches = await this.promptMatcher.matchesFilters(prompt, filters, classification);
-        console.log(`[DEBUG] Prompt ${prompt.id} matches: ${matches}`);
+        this.logger.debug(`[PromptManager] Prompt ${prompt.id} matches filters: ${matches}`);
         if (matches) {
           matchingPrompts.push({ prompt, classification });
         }
@@ -417,15 +491,28 @@ export class ConsolidatedPromptManager {
 
     // Sort by relevance
     matchingPrompts.sort((a, b) => {
-      const scoreA = this.promptMatcher.calculateRelevanceScore(a.prompt, a.classification, filters);
-      const scoreB = this.promptMatcher.calculateRelevanceScore(b.prompt, b.classification, filters);
+      const scoreA = this.promptMatcher.calculateRelevanceScore(
+        a.prompt,
+        a.classification,
+        filters
+      );
+      const scoreB = this.promptMatcher.calculateRelevanceScore(
+        b.prompt,
+        b.classification,
+        filters
+      );
       return scoreB - scoreA; // Higher scores first
     });
 
     if (matchingPrompts.length === 0) {
       return {
-        content: [{ type: "text" as const, text: `📭 No prompts found matching filter: "${args.search_query || 'all'}"\n\n💡 Try broader search terms or use filters like 'type:template', 'category:analysis'` }],
-        isError: false
+        content: [
+          {
+            type: 'text' as const,
+            text: `📭 No prompts found matching filter: "${args.search_query || 'all'}"\n\n💡 Try broader search terms or use filters like 'type:template', 'category:analysis'`,
+          },
+        ],
+        isError: false,
       };
     }
 
@@ -433,12 +520,15 @@ export class ConsolidatedPromptManager {
     let result = `📚 **Prompt Library** (${matchingPrompts.length} prompts)\n\n`;
 
     // Group by category for better organization
-    const groupedByCategory = matchingPrompts.reduce((acc, item) => {
-      const category = item.prompt.category || 'uncategorized';
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(item);
-      return acc;
-    }, {} as Record<string, typeof matchingPrompts>);
+    const groupedByCategory = matchingPrompts.reduce(
+      (acc, item) => {
+        const category = item.prompt.category || 'uncategorized';
+        if (!acc[category]) acc[category] = [];
+        acc[category].push(item);
+        return acc;
+      },
+      {} as Record<string, typeof matchingPrompts>
+    );
 
     for (const [category, prompts] of Object.entries(groupedByCategory)) {
       result += `\n## 📁 ${category.toUpperCase()}\n`;
@@ -451,9 +541,10 @@ export class ConsolidatedPromptManager {
         result += `   ${frameworkIcon} **Type**: ${classification.executionType}\n`;
 
         if (prompt.description) {
-          const shortDesc = prompt.description.length > 80
-            ? prompt.description.substring(0, 80) + '...'
-            : prompt.description;
+          const shortDesc =
+            prompt.description.length > 80
+              ? prompt.description.substring(0, 80) + '...'
+              : prompt.description;
           result += `   📝 ${shortDesc}\n`;
         }
 
@@ -468,7 +559,7 @@ export class ConsolidatedPromptManager {
       const filterDescriptions = this.filterParser.buildFilterDescription(filters);
       if (filterDescriptions.length > 0) {
         result += `\n\n🔍 **Applied Filters**:\n`;
-        filterDescriptions.forEach(desc => {
+        filterDescriptions.forEach((desc) => {
           result += `- ${desc}\n`;
         });
       }
@@ -480,8 +571,8 @@ export class ConsolidatedPromptManager {
     result += `• Use \`migrate_type\` to convert between prompt/template\n`;
 
     return {
-      content: [{ type: "text" as const, text: result }],
-      isError: false
+      content: [{ type: 'text' as const, text: result }],
+      isError: false,
     };
   }
 
@@ -491,11 +582,11 @@ export class ConsolidatedPromptManager {
   private async analyzePromptType(args: any): Promise<ToolResponse> {
     validateRequiredFields(args, ['id']);
 
-    const prompt = this.convertedPrompts.find(p => p.id === args.id);
+    const prompt = this.convertedPrompts.find((p) => p.id === args.id);
     if (!prompt) {
       return {
-        content: [{ type: "text" as const, text: `Prompt not found: ${args.id}` }],
-        isError: true
+        content: [{ type: 'text' as const, text: `Prompt not found: ${args.id}` }],
+        isError: true,
       };
     }
 
@@ -527,8 +618,8 @@ export class ConsolidatedPromptManager {
     }
 
     return {
-      content: [{ type: "text" as const, text: recommendation }],
-      isError: false
+      content: [{ type: 'text' as const, text: recommendation }],
+      isError: false,
     };
   }
 
@@ -537,7 +628,7 @@ export class ConsolidatedPromptManager {
     // Implementation delegated to createPrompt with specific mode
     return this.createPrompt({
       ...args,
-      executionMode: 'prompt'
+      executionMode: 'prompt',
     });
   }
 
@@ -545,7 +636,7 @@ export class ConsolidatedPromptManager {
     // Implementation delegated to createPrompt with framework context
     return this.createPrompt({
       ...args,
-      executionMode: 'template'
+      executionMode: 'template',
     });
   }
 
@@ -553,14 +644,22 @@ export class ConsolidatedPromptManager {
     // Simplified implementation - could be expanded with migration module
     validateRequiredFields(args, ['id', 'target_type']);
 
-    const prompt = this.convertedPrompts.find(p => p.id === args.id);
+    const prompt = this.convertedPrompts.find((p) => p.id === args.id);
     if (!prompt) {
-      return { content: [{ type: "text" as const, text: `Prompt not found: ${args.id}` }], isError: true };
+      return {
+        content: [{ type: 'text' as const, text: `Prompt not found: ${args.id}` }],
+        isError: true,
+      };
     }
 
     return {
-      content: [{ type: "text" as const, text: `🔄 Migration from ${prompt.id} to ${args.target_type} would be implemented here` }],
-      isError: false
+      content: [
+        {
+          type: 'text' as const,
+          text: `🔄 Migration from ${prompt.id} to ${args.target_type} would be implemented here`,
+        },
+      ],
+      isError: false,
     };
   }
 
@@ -569,13 +668,18 @@ export class ConsolidatedPromptManager {
     validateRequiredFields(args, ['id', 'section_name', 'new_content']);
 
     return {
-      content: [{ type: "text" as const, text: `✏️ **Section Modified**: ${args.section_name} in ${args.id}` }],
-      isError: false
+      content: [
+        {
+          type: 'text' as const,
+          text: `✏️ **Section Modified**: ${args.section_name} in ${args.id}`,
+        },
+      ],
+      isError: false,
     };
   }
 
   private async reloadPrompts(args: any): Promise<ToolResponse> {
-    const reason = args.reason || "Manual reload requested";
+    const reason = args.reason || 'Manual reload requested';
 
     let response = `🔄 **Reloading Prompts System**\n\n`;
     response += `**Reason**: ${reason}\n`;
@@ -589,12 +693,12 @@ export class ConsolidatedPromptManager {
       response += `✅ **Hot reload completed** - All prompts refreshed from disk.\n`;
     }
 
-    return { content: [{ type: "text" as const, text: response }], isError: false };
+    return { content: [{ type: 'text' as const, text: response }], isError: false };
   }
 
   // Helper methods
   private findPromptDependencies(promptId: string): ConvertedPrompt[] {
-    return this.convertedPrompts.filter(prompt => {
+    return this.convertedPrompts.filter((prompt) => {
       if (!prompt.chainSteps || prompt.chainSteps.length === 0) return false;
       return prompt.chainSteps.some((step: any) => step.promptId === promptId);
     });
@@ -602,10 +706,14 @@ export class ConsolidatedPromptManager {
 
   private getExecutionTypeIcon(executionType: string): string {
     switch (executionType) {
-      case 'prompt': return '⚡';
-      case 'template': return '🧠';
-      case 'chain': return '🔗';
-      default: return '❓';
+      case 'prompt':
+        return '⚡';
+      case 'template':
+        return '🧠';
+      case 'chain':
+        return '🔗';
+      default:
+        return '❓';
     }
   }
 
@@ -623,9 +731,12 @@ export class ConsolidatedPromptManager {
   private async analyzePromptGates(args: any): Promise<ToolResponse> {
     validateRequiredFields(args, ['id']);
 
-    const prompt = this.convertedPrompts.find(p => p.id === args.id);
+    const prompt = this.convertedPrompts.find((p) => p.id === args.id);
     if (!prompt) {
-      return { content: [{ type: "text" as const, text: `Prompt not found: ${args.id}` }], isError: true };
+      return {
+        content: [{ type: 'text' as const, text: `Prompt not found: ${args.id}` }],
+        isError: true,
+      };
     }
 
     const analysis = await this.gateAnalyzer.analyzePromptForGates(prompt);
@@ -638,7 +749,7 @@ export class ConsolidatedPromptManager {
 
     if (analysis.recommendedGates.length > 0) {
       response += `🎯 **Recommended Persistent Gates**:\n`;
-      analysis.recommendedGates.forEach(gate => {
+      analysis.recommendedGates.forEach((gate) => {
         response += `- ${gate}\n`;
       });
       response += `\n`;
@@ -646,7 +757,7 @@ export class ConsolidatedPromptManager {
 
     if (analysis.suggestedTemporaryGates.length > 0) {
       response += `⚡ **Suggested Temporary Gates**:\n`;
-      analysis.suggestedTemporaryGates.forEach(gate => {
+      analysis.suggestedTemporaryGates.forEach((gate) => {
         response += `- **${gate.name}** (${gate.type}, ${gate.scope})\n`;
         response += `  ${gate.description}\n`;
       });
@@ -664,7 +775,7 @@ export class ConsolidatedPromptManager {
     response += `📋 **Suggested Gate Configuration**:\n`;
     response += `\`\`\`json\n${JSON.stringify(analysis.gateConfigurationPreview, null, 2)}\n\`\`\`\n`;
 
-    return { content: [{ type: "text" as const, text: response }], isError: false };
+    return { content: [{ type: 'text' as const, text: response }], isError: false };
   }
 
   /**
@@ -692,14 +803,188 @@ export class ConsolidatedPromptManager {
     response += `\n💡 **Usage**: Use these suggestions when creating or updating prompts to ensure appropriate quality gates are applied.\n`;
 
     return {
-      content: [{ type: "text" as const, text: response }],
-      isError: false
+      content: [{ type: 'text' as const, text: response }],
+      isError: false,
+    };
+  }
+
+  private async guidePromptActions(args: any): Promise<ToolResponse> {
+    const goal = typeof args.goal === 'string' ? args.goal.trim() : '';
+    const includeLegacy = args.include_legacy === true;
+    const rankedActions = this.rankActionsForGuide(goal, includeLegacy);
+    const recommended = rankedActions.slice(0, Math.min(4, rankedActions.length));
+    const quickReference = rankedActions.slice(0, Math.min(8, rankedActions.length));
+    const highRisk = PROMPT_MANAGER_ACTIONS.filter(
+      (action) => action.status !== 'working' && action.id !== 'guide'
+    );
+
+    const sections: string[] = [];
+    sections.push('🧭 **Prompt Manager Guide**');
+    sections.push(
+      goal
+        ? `🎯 **Goal**: ${goal}`
+        : '🎯 **Goal**: Provide authoring/lifecycle assistance using canonical actions.'
+    );
+
+    if (recommended.length > 0) {
+      sections.push('### Recommended Actions');
+      recommended.forEach((action) => {
+        sections.push(this.formatActionSummary(action));
+      });
+    }
+
+    if (quickReference.length > 0) {
+      sections.push('### Quick Reference');
+      quickReference.forEach((action) => {
+        const argsText = action.requiredArgs.length > 0 ? action.requiredArgs.join(', ') : 'None';
+        sections.push(
+          `- \`${action.id}\` (${this.describeActionStatus(action)}) — Required: ${argsText}`
+        );
+      });
+    }
+
+    if (highRisk.length > 0 && !includeLegacy) {
+      sections.push('### Heads-Up (Advanced or Unstable Actions)');
+      highRisk.slice(0, 3).forEach((action) => {
+        const issueText =
+          action.issues && action.issues.length > 0
+            ? `Issues: ${action.issues.map((issue) => issue.summary).join(', ')}`
+            : 'Advanced workflow.';
+        sections.push(`- \`${action.id}\`: ${issueText}`);
+      });
+      sections.push('Set `include_legacy:true` to see full details on advanced actions.');
+    }
+
+    sections.push('💡 Use `prompt_manager(action:"<id>", ...)` with the required arguments above.');
+
+    return {
+      content: [{ type: 'text' as const, text: sections.join('\n\n') }],
+      isError: false,
+    };
+  }
+
+  private rankActionsForGuide(goal: string, includeLegacy: boolean): ActionDescriptor[] {
+    const normalizedGoal = goal.toLowerCase();
+    const candidates = PROMPT_MANAGER_ACTIONS.filter(
+      (action) =>
+        action.id !== 'guide' &&
+        (includeLegacy || action.status === 'working' || action.id === 'list')
+    );
+
+    const scored = candidates.map((action) => ({
+      action,
+      score: this.computeGuideScore(action, normalizedGoal),
+    }));
+
+    return scored.sort((a, b) => b.score - a.score).map((entry) => entry.action);
+  }
+
+  private computeGuideScore(action: ActionDescriptor, normalizedGoal: string): number {
+    let score = action.status === 'working' ? 5 : 2;
+    if (!normalizedGoal) {
+      if (action.category === 'lifecycle') {
+        score += 1;
+      }
+      if (action.id === 'list') {
+        score += 1;
+      }
+      return score;
+    }
+
+    if (action.description.toLowerCase().includes(normalizedGoal)) {
+      score += 3;
+    }
+
+    if (normalizedGoal.includes(action.id.replace(/_/g, ' '))) {
+      score += 2;
+    }
+
+    for (const matcher of GOAL_KEYWORDS) {
+      if (
+        matcher.keywords.test(normalizedGoal) &&
+        matcher.actions.includes(action.id as PromptManagerActionId)
+      ) {
+        score += 6;
+      }
+    }
+
+    return score;
+  }
+
+  private formatActionSummary(action: ActionDescriptor): string {
+    const argsText = action.requiredArgs.length > 0 ? action.requiredArgs.join(', ') : 'None';
+    const status = this.describeActionStatus(action);
+    let summary = `- \`${action.id}\` (${status}) — ${action.description}\n  Required: ${argsText}`;
+    if (action.issues && action.issues.length > 0) {
+      const issueList = action.issues
+        .map((issue) => `${issue.severity === 'high' ? '❗' : '⚠️'} ${issue.summary}`)
+        .join(' • ');
+      summary += `\n  Issues: ${issueList}`;
+    }
+    if (LEGACY_ACTION_ALIASES[action.id]) {
+      summary += `\n  ➡️ Prefer action="${LEGACY_ACTION_ALIASES[action.id]}" for canonical workflows.`;
+    }
+    return summary;
+  }
+
+  private describeActionStatus(action: ActionDescriptor): string {
+    switch (action.status) {
+      case 'working':
+        return '✅ Working';
+      case 'planned':
+        return '🗺️ Planned';
+      case 'untested':
+        return '🧪 Untested';
+      case 'deprecated':
+        return '🛑 Deprecated';
+      default:
+        return `⚠️ ${action.status}`;
+    }
+  }
+
+  private appendActionWarnings(
+    response: ToolResponse,
+    actionId: PromptManagerActionId
+  ): ToolResponse {
+    const descriptor = PROMPT_MANAGER_ACTION_MAP.get(actionId);
+    if (!descriptor) {
+      return response;
+    }
+
+    const warnings: string[] = [];
+    if (descriptor.status !== 'working') {
+      warnings.push(`Status: ${this.describeActionStatus(descriptor)}`);
+    }
+
+    if (descriptor.issues && descriptor.issues.length > 0) {
+      descriptor.issues.forEach((issue) => {
+        warnings.push(`${issue.severity === 'high' ? '❗' : '⚠️'} ${issue.summary}`);
+      });
+    }
+
+    if (LEGACY_ACTION_ALIASES[actionId]) {
+      warnings.push(`Prefer action="${LEGACY_ACTION_ALIASES[actionId]}" for canonical workflows.`);
+    }
+
+    if (warnings.length === 0) {
+      return response;
+    }
+
+    const originalText = response.content?.[0]?.text ?? '';
+    const note = `\n\n---\n⚠️ **Action Notes (${descriptor.displayName})**\n${warnings
+      .map((warning) => `- ${warning}`)
+      .join('\n')}`;
+
+    return {
+      ...response,
+      content: [{ type: 'text' as const, text: `${originalText}${note}` }],
+      isError: response.isError,
     };
   }
 
   private handleError(error: unknown, context: string): ToolResponse {
     const { message, isError } = utilsHandleError(error, context, this.logger);
-    return { content: [{ type: "text" as const, text: message }], isError: true };
+    return { content: [{ type: 'text' as const, text: message }], isError: true };
   }
 }
 

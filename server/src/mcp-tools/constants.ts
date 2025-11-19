@@ -1,3 +1,4 @@
+// @lifecycle canonical - Shared constants for MCP tools and prompts.
 /**
  * Constants for MCP Tools
  *
@@ -10,7 +11,7 @@
 export const TOOL_NAMES = {
   PROMPT_ENGINE: 'prompt_engine',
   PROMPT_MANAGER: 'prompt_manager',
-  SYSTEM_CONTROL: 'system_control'
+  SYSTEM_CONTROL: 'system_control',
 } as const;
 
 /**
@@ -25,15 +26,15 @@ export const ACTIONS = {
     DELETE: 'delete',
     RELOAD: 'reload',
     LIST: 'list',
-    INSPECT: 'inspect'
+    INSPECT: 'inspect',
   },
   SYSTEM_CONTROL: {
     STATUS: 'status',
     FRAMEWORK: 'framework',
     ANALYTICS: 'analytics',
     CONFIG: 'config',
-    MAINTENANCE: 'maintenance'
-  }
+    MAINTENANCE: 'maintenance',
+  },
 } as const;
 
 /**
@@ -44,29 +45,29 @@ export const SYSTEM_OPERATIONS = {
     OVERVIEW: 'overview',
     HEALTH: 'health',
     DIAGNOSTICS: 'diagnostics',
-    FRAMEWORK_STATUS: 'framework_status'
+    FRAMEWORK_STATUS: 'framework_status',
   },
   FRAMEWORK: {
     SWITCH: 'switch',
     LIST: 'list',
     ENABLE: 'enable',
-    DISABLE: 'disable'
+    DISABLE: 'disable',
   },
   ANALYTICS: {
     VIEW: 'view',
     RESET: 'reset',
-    HISTORY: 'history'
+    HISTORY: 'history',
   },
   CONFIG: {
     GET: 'get',
     SET: 'set',
     LIST: 'list',
     VALIDATE: 'validate',
-    RESTORE: 'restore'
+    RESTORE: 'restore',
   },
   MAINTENANCE: {
-    RESTART: 'restart'
-  }
+    RESTART: 'restart',
+  },
 } as const;
 
 /**
@@ -76,7 +77,7 @@ export const EXECUTION_MODES = {
   AUTO: 'auto',
   PROMPT: 'prompt',
   TEMPLATE: 'template',
-  CHAIN: 'chain'
+  CHAIN: 'chain',
 } as const;
 
 /**
@@ -86,7 +87,7 @@ export const OUTPUT_FORMATS = {
   COMPACT: 'compact',
   DETAILED: 'detailed',
   JSON: 'json',
-  MARKDOWN: 'markdown'
+  MARKDOWN: 'markdown',
 } as const;
 
 /**
@@ -100,7 +101,7 @@ export const DETAIL_LEVELS = {
   FLOW: 'flow',
   ANALYSIS: 'analysis',
   RAW: 'raw',
-  FULL: 'full'
+  FULL: 'full',
 } as const;
 
 /**
@@ -116,7 +117,7 @@ export const FILTER_OPERATORS = {
   REGEX: '/',
   AND: 'AND',
   OR: 'OR',
-  NOT: 'NOT'
+  NOT: 'NOT',
 } as const;
 
 /**
@@ -127,7 +128,7 @@ export const VALIDATION_PATTERNS = {
   SESSION_ID: /^[a-zA-Z0-9_-]+$/,
   ARGUMENT_NAME: /^[a-zA-Z_][a-zA-Z0-9_]*$/,
   EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-  URL: /^https?:\/\/.+/
+  URL: /^https?:\/\/.+/,
 } as const;
 
 /**
@@ -141,7 +142,7 @@ export const ERROR_CODES = {
   NOT_FOUND: 'NOT_FOUND',
   PERMISSION_DENIED: 'PERMISSION_DENIED',
   TIMEOUT: 'TIMEOUT',
-  UNKNOWN_ERROR: 'UNKNOWN_ERROR'
+  UNKNOWN_ERROR: 'UNKNOWN_ERROR',
 } as const;
 
 /**
@@ -157,7 +158,7 @@ export const LIMITS = {
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,
   EXECUTION_TIMEOUT: 30000, // 30 seconds
-  CACHE_TTL: 300000 // 5 minutes
+  CACHE_TTL: 300000, // 5 minutes
 } as const;
 
 /**
@@ -167,7 +168,7 @@ export const FRAMEWORKS = {
   CAGEERF: 'CAGEERF',
   REACT: 'ReACT',
   FIVE_W_ONE_H: '5W1H',
-  SCAMPER: 'SCAMPER'
+  SCAMPER: 'SCAMPER',
 } as const;
 
 /**
@@ -181,7 +182,7 @@ export const CATEGORIES = {
   DOCUMENTATION: 'documentation',
   EDUCATION: 'education',
   RESEARCH: 'research',
-  SYSTEM: 'system'
+  SYSTEM: 'system',
 } as const;
 
 /**
@@ -189,7 +190,8 @@ export const CATEGORIES = {
  */
 export const ERROR_MESSAGES = {
   REQUIRED_FIELD: (field: string) => `Field '${field}' is required but was not provided`,
-  INVALID_FORMAT: (field: string, format: string) => `Field '${field}' must match format: ${format}`,
+  INVALID_FORMAT: (field: string, format: string) =>
+    `Field '${field}' must match format: ${format}`,
   LENGTH_CONSTRAINT: (field: string, min: number, max: number) =>
     `Field '${field}' must be between ${min} and ${max} characters`,
   UNKNOWN_ACTION: (action: string, validActions: string[]) =>
@@ -197,7 +199,7 @@ export const ERROR_MESSAGES = {
   UNKNOWN_OPERATION: (operation: string, validOperations: string[]) =>
     `Unknown operation: ${operation}. Valid operations: ${validOperations.join(', ')}`,
   NOT_FOUND: (type: string, id: string) => `${type} not found: ${id}`,
-  ALREADY_EXISTS: (type: string, id: string) => `${type} already exists: ${id}`
+  ALREADY_EXISTS: (type: string, id: string) => `${type} already exists: ${id}`,
 } as const;
 
 /**
@@ -207,7 +209,7 @@ export const SUCCESS_MESSAGES = {
   CREATED: (type: string, id: string) => `${type} created successfully: ${id}`,
   UPDATED: (type: string, id: string) => `${type} updated successfully: ${id}`,
   DELETED: (type: string, id: string) => `${type} deleted successfully: ${id}`,
-  OPERATION_COMPLETE: (operation: string) => `${operation} completed successfully`
+  OPERATION_COMPLETE: (operation: string) => `${operation} completed successfully`,
 } as const;
 
 /**
@@ -218,5 +220,5 @@ export const DOCUMENTATION = {
   CHAIN_CREATION: '/docs/prompts/chains',
   FILTERING: '/docs/prompts/filtering',
   FRAMEWORKS: '/docs/frameworks',
-  TROUBLESHOOTING: '/docs/troubleshooting'
+  TROUBLESHOOTING: '/docs/troubleshooting',
 } as const;

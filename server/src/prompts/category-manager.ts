@@ -1,3 +1,4 @@
+// @lifecycle canonical - Manages prompt category metadata, validation, and analytics.
 /**
  * Category Manager Module
  * Handles category management logic with validation, organization, and relationship tracking

@@ -1,21 +1,18 @@
+// @lifecycle canonical - Loads methodology guides and tracks their registration state.
 /**
- * Methodology Registry - Phase 2 Implementation
+ * Methodology Registry
  *
  * Centralized registry for loading and managing methodology guides.
  * Extracted from FrameworkManager to provide clear separation of concerns
  * and enable better methodology guide management.
  */
 
-import { Logger } from "../../logging/index.js";
-import {
-  IMethodologyGuide,
-  FrameworkDefinition,
-  FrameworkMethodology
-} from "../types/index.js";
-import { CAGEERFMethodologyGuide } from "./guides/cageerf-guide.js";
-import { ReACTMethodologyGuide } from "./guides/react-guide.js";
-import { FiveW1HMethodologyGuide } from "./guides/5w1h-guide.js";
-import { SCAMPERMethodologyGuide } from "./guides/scamper-guide.js";
+import { Logger } from '../../logging/index.js';
+import { IMethodologyGuide } from '../types/index.js';
+import { FiveW1HMethodologyGuide } from './guides/5w1h-guide.js';
+import { CAGEERFMethodologyGuide } from './guides/cageerf-guide.js';
+import { ReACTMethodologyGuide } from './guides/react-guide.js';
+import { SCAMPERMethodologyGuide } from './guides/scamper-guide.js';
 
 /**
  * Methodology registry configuration
@@ -61,7 +58,7 @@ export class MethodologyRegistry {
     this.config = {
       autoLoadBuiltIn: config.autoLoadBuiltIn ?? true,
       customGuides: config.customGuides ?? [],
-      validateOnRegistration: config.validateOnRegistration ?? true
+      validateOnRegistration: config.validateOnRegistration ?? true,
     };
   }
 
@@ -70,11 +67,11 @@ export class MethodologyRegistry {
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
-      this.logger.debug("MethodologyRegistry already initialized");
+      this.logger.debug('MethodologyRegistry already initialized');
       return;
     }
 
-    this.logger.info("Initializing MethodologyRegistry...");
+    this.logger.info('Initializing MethodologyRegistry...');
     const startTime = performance.now();
 
     try {
@@ -95,7 +92,7 @@ export class MethodologyRegistry {
         `MethodologyRegistry initialized with ${this.guides.size} guides in ${loadTime.toFixed(1)}ms`
       );
     } catch (error) {
-      this.logger.error("Failed to initialize MethodologyRegistry:", error);
+      this.logger.error('Failed to initialize MethodologyRegistry:', error);
       throw error;
     }
   }
@@ -103,10 +100,7 @@ export class MethodologyRegistry {
   /**
    * Register a methodology guide
    */
-  async registerGuide(
-    guide: IMethodologyGuide,
-    isBuiltIn: boolean = false
-  ): Promise<boolean> {
+  async registerGuide(guide: IMethodologyGuide, isBuiltIn: boolean = false): Promise<boolean> {
     const startTime = performance.now();
 
     try {
@@ -134,8 +128,8 @@ export class MethodologyRegistry {
         enabled: true,
         metadata: {
           loadTime: performance.now() - startTime,
-          validationStatus: this.config.validateOnRegistration ? 'passed' : 'not_validated'
-        }
+          validationStatus: this.config.validateOnRegistration ? 'passed' : 'not_validated',
+        },
       };
 
       this.guides.set(guide.frameworkId, entry);
@@ -231,16 +225,17 @@ export class MethodologyRegistry {
     this.ensureInitialized();
 
     const entries = Array.from(this.guides.values());
-    const enabledCount = entries.filter(e => e.enabled).length;
-    const builtInCount = entries.filter(e => e.isBuiltIn).length;
+    const enabledCount = entries.filter((e) => e.enabled).length;
+    const builtInCount = entries.filter((e) => e.isBuiltIn).length;
 
     return {
       totalGuides: entries.length,
       enabledGuides: enabledCount,
       builtInGuides: builtInCount,
       customGuides: entries.length - builtInCount,
-      averageLoadTime: entries.reduce((sum, e) => sum + e.metadata.loadTime, 0) / entries.length || 0,
-      initialized: this.initialized
+      averageLoadTime:
+        entries.reduce((sum, e) => sum + e.metadata.loadTime, 0) / entries.length || 0,
+      initialized: this.initialized,
     };
   }
 
@@ -250,13 +245,13 @@ export class MethodologyRegistry {
    * Load built-in methodology guides
    */
   private async loadBuiltInGuides(): Promise<void> {
-    this.logger.debug("Loading built-in methodology guides...");
+    this.logger.debug('Loading built-in methodology guides...');
 
     const builtInGuides = [
       new CAGEERFMethodologyGuide(),
       new ReACTMethodologyGuide(),
       new FiveW1HMethodologyGuide(),
-      new SCAMPERMethodologyGuide()
+      new SCAMPERMethodologyGuide(),
     ];
 
     for (const guide of builtInGuides) {
@@ -315,7 +310,7 @@ export class MethodologyRegistry {
       'guideExecutionSteps',
       'enhanceWithMethodology',
       'validateMethodologyCompliance',
-      'getSystemPromptGuidance'
+      'getSystemPromptGuidance',
     ];
 
     for (const method of requiredMethods) {
@@ -326,7 +321,7 @@ export class MethodologyRegistry {
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
     };
   }
 
@@ -335,7 +330,7 @@ export class MethodologyRegistry {
    */
   private ensureInitialized(): void {
     if (!this.initialized) {
-      throw new Error("MethodologyRegistry not initialized. Call initialize() first.");
+      throw new Error('MethodologyRegistry not initialized. Call initialize() first.');
     }
   }
 

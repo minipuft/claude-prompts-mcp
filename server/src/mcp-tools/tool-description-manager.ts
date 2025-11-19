@@ -1,3 +1,4 @@
+// @lifecycle canonical - Manages MCP tool descriptions and discovery metadata.
 /**
  * Tool Description Manager
  *
@@ -5,33 +6,32 @@
  * Follows established ConfigManager pattern for consistency with existing architecture.
  */
 
-import { Logger } from '../logging/index.js';
-import { ConfigManager } from '../config/index.js';
-import type { ToolDescription, ToolDescriptionsConfig, FrameworksConfig } from '../types/index.js';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { watch, FSWatcher } from 'fs';
 import { EventEmitter } from 'events';
+import { watch, FSWatcher } from 'node:fs';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+
+import { ConfigManager } from '../config/index.js';
 import {
   CAGEERFMethodologyGuide,
   ReACTMethodologyGuide,
   FiveW1HMethodologyGuide,
-  SCAMPERMethodologyGuide
+  SCAMPERMethodologyGuide,
 } from '../frameworks/methodology/index.js';
 import { MethodologyToolDescriptions } from '../frameworks/types/index.js';
+import { Logger } from '../logging/index.js';
 
-const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[
-  string,
-  ToolDescription
-]> = [
+import type { ToolDescription, ToolDescriptionsConfig, FrameworksConfig } from '../types/index.js';
+
+const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[string, ToolDescription]> = [
   [
     'prompt_engine',
     {
       description:
         '🚀 PROMPT ENGINE [HOT-RELOAD]: Processes Nunjucks templates, returns executable instructions. WARNING: Output contains instructions YOU must execute (code gen, analysis, multi-step tasks) - not just information. IMPORTANT: Prompt names are case-insensitive and hyphens are converted to underscores. When your arguments include newlines or multi-line payloads, wrap the call in JSON so the parser receives a single-line command shell.',
       shortDescription: 'Execute prompts, templates, and chains',
-      category: 'execution'
-    }
+      category: 'execution',
+    },
   ],
   [
     'prompt_manager',
@@ -39,8 +39,8 @@ const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[
       description:
         '🧰 PROMPT MANAGER: Create, update, delete, list, and analyze prompts. Supports gate configuration, temporary gates, and prompt-type migration for full lifecycle control.',
       shortDescription: 'Manage prompt lifecycle, gates, and discovery',
-      category: 'management'
-    }
+      category: 'management',
+    },
   ],
   [
     'system_control',
@@ -48,17 +48,15 @@ const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[
       description:
         '⚙️ SYSTEM CONTROL: Unified interface for status reporting, framework and gate controls, analytics, configuration management, and maintenance operations.',
       shortDescription: 'Manage framework state, metrics, and maintenance',
-      category: 'system'
-    }
-  ]
+      category: 'system',
+    },
+  ],
 ];
 
 function cloneToolDescription(description: ToolDescription): ToolDescription {
   return {
     ...description,
-    parameters: description.parameters
-      ? { ...description.parameters }
-      : undefined,
+    parameters: description.parameters ? { ...description.parameters } : undefined,
     frameworkAware: description.frameworkAware
       ? {
           ...description.frameworkAware,
@@ -73,9 +71,9 @@ function cloneToolDescription(description: ToolDescription): ToolDescription {
             : undefined,
           methodologyParameters: description.frameworkAware.methodologyParameters
             ? { ...description.frameworkAware.methodologyParameters }
-            : undefined
+            : undefined,
         }
-      : undefined
+      : undefined,
   };
 }
 
@@ -83,14 +81,12 @@ function createDefaultToolDescriptionMap(): Map<string, ToolDescription> {
   return new Map(
     DEFAULT_TOOL_DESCRIPTION_ENTRIES.map(([name, description]) => [
       name,
-      cloneToolDescription(description)
+      cloneToolDescription(description),
     ])
   );
 }
 
-export function getDefaultToolDescription(
-  toolName: string
-): ToolDescription | undefined {
+export function getDefaultToolDescription(toolName: string): ToolDescription | undefined {
   const entry = DEFAULT_TOOL_DESCRIPTION_ENTRIES.find(([name]) => name === toolName);
   return entry ? cloneToolDescription(entry[1]) : undefined;
 }
@@ -110,7 +106,10 @@ export class ToolDescriptionManager extends EventEmitter {
   private reloadDebounceTimer?: NodeJS.Timeout;
   private configManager: ConfigManager;
   private frameworksConfig: FrameworksConfig;
-  private frameworksConfigListener: (newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void;
+  private frameworksConfigListener: (
+    newConfig: FrameworksConfig,
+    previousConfig: FrameworksConfig
+  ) => void;
 
   constructor(logger: Logger, configManager: ConfigManager) {
     super();
@@ -157,7 +156,7 @@ export class ToolDescriptionManager extends EventEmitter {
         new CAGEERFMethodologyGuide(),
         new ReACTMethodologyGuide(),
         new FiveW1HMethodologyGuide(),
-        new SCAMPERMethodologyGuide()
+        new SCAMPERMethodologyGuide(),
       ];
 
       // Pre-load tool descriptions for each methodology using normalized keys
@@ -175,9 +174,13 @@ export class ToolDescriptionManager extends EventEmitter {
         }
       }
 
-      this.logger.info(`✅ Pre-loaded tool descriptions for ${this.methodologyDescriptions.size} methodologies`);
+      this.logger.info(
+        `✅ Pre-loaded tool descriptions for ${this.methodologyDescriptions.size} methodologies`
+      );
     } catch (error) {
-      this.logger.error(`Failed to pre-load methodology descriptions: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Failed to pre-load methodology descriptions: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -202,13 +205,16 @@ export class ToolDescriptionManager extends EventEmitter {
       }
 
       this.isInitialized = true;
-      this.logger.info(`✅ Loaded ${this.descriptions.size} tool descriptions from external config (version: ${config.version})`);
+      this.logger.info(
+        `✅ Loaded ${this.descriptions.size} tool descriptions from external config (version: ${config.version})`
+      );
 
       // Pre-load methodology descriptions for dynamic switching
       this.preloadMethodologyDescriptions();
-
     } catch (error) {
-      this.logger.warn(`⚠️ Failed to load tool descriptions from ${this.configPath}: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.warn(
+        `⚠️ Failed to load tool descriptions from ${this.configPath}: ${error instanceof Error ? error.message : String(error)}`
+      );
       this.logger.info('🔄 Using hardcoded default descriptions as fallback');
 
       // Use defaults as fallback
@@ -236,12 +242,16 @@ export class ToolDescriptionManager extends EventEmitter {
     }
 
     if (!this.frameworksConfig.enableDynamicToolDescriptions) {
-      this.logger.debug(`Dynamic tool descriptions disabled; using base description for ${toolName}`);
+      this.logger.debug(
+        `Dynamic tool descriptions disabled; using base description for ${toolName}`
+      );
       return toolDesc.description;
     }
 
     const applyMethodologyOverride = options?.applyMethodologyOverride ?? true;
-    this.logger.debug(`Getting description for ${toolName} (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`);
+    this.logger.debug(
+      `Getting description for ${toolName} (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
+    );
     const methodologyKey = this.normalizeMethodologyKey(activeMethodology);
     const methodologyLogName = activeMethodology ?? methodologyKey;
 
@@ -249,20 +259,29 @@ export class ToolDescriptionManager extends EventEmitter {
     if (applyMethodologyOverride && methodologyKey) {
       const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
       if (methodologyDescs?.[toolName as keyof MethodologyToolDescriptions]?.description) {
-        const methodologyDesc = methodologyDescs[toolName as keyof MethodologyToolDescriptions]!.description!;
-        this.logger.debug(`✅ Using methodology-specific description from ${methodologyLogName} guide for ${toolName}`);
+        const methodologyDesc =
+          methodologyDescs[toolName as keyof MethodologyToolDescriptions]!.description!;
+        this.logger.debug(
+          `✅ Using methodology-specific description from ${methodologyLogName} guide for ${toolName}`
+        );
         return methodologyDesc;
       }
-      this.logger.debug(`⚠️ No methodology-specific description found for ${toolName} in ${methodologyLogName} guide`);
+      this.logger.debug(
+        `⚠️ No methodology-specific description found for ${toolName} in ${methodologyLogName} guide`
+      );
     }
 
     // PRIORITY 2: Framework-aware descriptions from config (if methodology desc not available)
     if (frameworkEnabled !== undefined && toolDesc.frameworkAware) {
       if (frameworkEnabled && toolDesc.frameworkAware.enabled) {
-        this.logger.debug(`✅ Using framework-aware enabled description from config for ${toolName}`);
+        this.logger.debug(
+          `✅ Using framework-aware enabled description from config for ${toolName}`
+        );
         return toolDesc.frameworkAware.enabled;
       } else if (!frameworkEnabled && toolDesc.frameworkAware.disabled) {
-        this.logger.debug(`✅ Using framework-aware disabled description from config for ${toolName}`);
+        this.logger.debug(
+          `✅ Using framework-aware disabled description from config for ${toolName}`
+        );
         return toolDesc.frameworkAware.disabled;
       }
 
@@ -320,7 +339,8 @@ export class ToolDescriptionManager extends EventEmitter {
       }
       // Fallback to static config if available
       const methodologyParameters = toolDesc.frameworkAware?.methodologyParameters;
-      const methodologyParamConfig = methodologyParameters?.[methodologyKey] ??
+      const methodologyParamConfig =
+        methodologyParameters?.[methodologyKey] ??
         (activeMethodology ? methodologyParameters?.[activeMethodology] : undefined);
       if (methodologyParamConfig?.[paramName]) {
         const param = methodologyParamConfig[paramName];
@@ -384,7 +404,7 @@ export class ToolDescriptionManager extends EventEmitter {
       loadedFromFile: loadedFromFile > defaultCount ? loadedFromFile : 0,
       usingDefaults: loadedFromFile <= defaultCount ? defaultCount : 0,
       configPath: this.configPath,
-      isInitialized: this.isInitialized
+      isInitialized: this.isInitialized,
     };
   }
 
@@ -414,7 +434,9 @@ export class ToolDescriptionManager extends EventEmitter {
       this.isWatching = true;
       this.logger.info('✅ Tool description hot-reload watcher started successfully');
     } catch (error) {
-      this.logger.error(`Failed to start tool description file watcher: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Failed to start tool description file watcher: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -454,7 +476,9 @@ export class ToolDescriptionManager extends EventEmitter {
         this.emit('descriptions-changed', this.getStats());
         this.logger.info('✅ Tool descriptions reloaded successfully');
       } catch (error) {
-        this.logger.error(`Failed to reload tool descriptions: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger.error(
+          `Failed to reload tool descriptions: ${error instanceof Error ? error.message : String(error)}`
+        );
         this.emit('descriptions-error', error);
       }
     }, 500);

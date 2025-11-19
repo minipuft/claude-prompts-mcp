@@ -1,3 +1,4 @@
+// @lifecycle migrating - Coordinating semantic analysis with framework switching is still stabilizing.
 /**
  * Framework-Semantic Integration - Phase 2 Implementation
  * Intelligent framework switching and consensus mechanisms

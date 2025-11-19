@@ -1,21 +1,22 @@
+// @lifecycle canonical - Classification helpers for prompt engine routing.
 /**
  * Prompt Classifier - Handles prompt classification and analysis
  *
- * Extracted from ConsolidatedPromptEngine to provide focused
+ * Extracted from PromptExecutionService to provide focused
  * classification capabilities with clear separation of concerns.
  */
 
-import { createLogger } from "../../../logging/index.js";
-import { ContentAnalyzer } from "../../../semantic/configurable-semantic-analyzer.js";
-import { PromptClassification } from "../core/types.js";
-import { ConvertedPrompt } from "../../../types/index.js";
-import { isChainPrompt } from "../../../utils/chainUtils.js";
+import { createLogger } from '../../../logging/index.js';
+import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
+import { ConvertedPrompt } from '../../../types/index.js';
+import { isChainPrompt } from '../../../utils/chainUtils.js';
+import { PromptClassification } from '../core/types.js';
 
 const logger = createLogger({
   logFile: '/tmp/prompt-classifier.log',
   transport: 'stdio',
   enableDebug: false,
-  configuredLevel: 'info'
+  configuredLevel: 'info',
 });
 
 /**
@@ -45,7 +46,7 @@ export class PromptClassifier {
     try {
       logger.debug('🔍 [PromptClassifier] Classifying prompt', {
         promptId: convertedPrompt.id,
-        hasArgs: Object.keys(promptArgs).length > 0
+        hasArgs: Object.keys(promptArgs).length > 0,
       });
 
       const classification = this.performClassification(convertedPrompt, promptArgs);
@@ -54,24 +55,26 @@ export class PromptClassifier {
         promptId: convertedPrompt.id,
         executionType: classification.executionType,
         confidence: classification.confidence,
-        framework: classification.framework
+        framework: classification.framework,
       });
 
       return classification;
     } catch (error) {
       logger.error('❌ [PromptClassifier] Prompt classification failed', {
         promptId: convertedPrompt.id,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       });
 
       // Return fallback classification
       return {
-        executionType: "prompt",
+        executionType: 'prompt',
         requiresExecution: true,
         confidence: 50,
-        reasoning: [`Classification failed: ${error instanceof Error ? error.message : String(error)}`],
+        reasoning: [
+          `Classification failed: ${error instanceof Error ? error.message : String(error)}`,
+        ],
         suggestedGates: [],
-        framework: undefined
+        framework: undefined,
       };
     }
   }
@@ -85,32 +88,32 @@ export class PromptClassifier {
   ): PromptClassification {
     const reasoning: string[] = [];
     let confidence = 100;
-    let executionType: "prompt" | "template" | "chain" = "prompt";
+    let executionType: 'prompt' | 'template' | 'chain' = 'prompt';
     let requiresExecution = true;
     const suggestedGates: string[] = [];
     let framework: string | undefined;
 
     // Check if it's a chain prompt
     if (isChainPrompt(convertedPrompt)) {
-      executionType = "chain";
-      reasoning.push("Detected chain structure in prompt content");
-      suggestedGates.push("chain_validation", "step_validation");
+      executionType = 'chain';
+      reasoning.push('Detected chain structure in prompt content');
+      suggestedGates.push('chain_validation', 'step_validation');
       confidence = 95;
     }
     // Check if it has template variables
     else if (this.hasTemplateVariables(convertedPrompt.userMessageTemplate)) {
-      executionType = "template";
-      reasoning.push("Detected template variables in content");
+      executionType = 'template';
+      reasoning.push('Detected template variables in content');
       if (Object.keys(promptArgs).length === 0) {
         requiresExecution = false;
-        reasoning.push("No arguments provided for template");
+        reasoning.push('No arguments provided for template');
         confidence = 80;
       }
     }
     // Default to prompt
     else {
-      executionType = "prompt";
-      reasoning.push("Standard prompt execution");
+      executionType = 'prompt';
+      reasoning.push('Standard prompt execution');
       confidence = 90;
     }
 
@@ -123,8 +126,8 @@ export class PromptClassifier {
     // Add complexity-based gates
     const complexity = this.assessComplexity(convertedPrompt);
     if (complexity > 0.7) {
-      suggestedGates.push("complexity_validation");
-      reasoning.push("High complexity detected, added validation gates");
+      suggestedGates.push('complexity_validation');
+      reasoning.push('High complexity detected, added validation gates');
     }
 
     // Use semantic analyzer if available
@@ -135,11 +138,11 @@ export class PromptClassifier {
         const semanticResult = { confidence: 0.8 };
         if (semanticResult && semanticResult.confidence > confidence) {
           confidence = Math.min(confidence, semanticResult.confidence * 100);
-          reasoning.push("Semantic analysis applied");
+          reasoning.push('Semantic analysis applied');
         }
       } catch (error) {
         logger.warn('⚠️ [PromptClassifier] Semantic analysis failed', {
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     }
@@ -150,7 +153,7 @@ export class PromptClassifier {
       confidence,
       reasoning,
       suggestedGates,
-      framework
+      framework,
     };
   }
 
@@ -165,7 +168,7 @@ export class PromptClassifier {
       /\{\w+\}/, // Simple {variable}
     ];
 
-    return patterns.some(pattern => pattern.test(content));
+    return patterns.some((pattern) => pattern.test(content));
   }
 
   /**
@@ -187,7 +190,11 @@ export class PromptClassifier {
       return '5W1H';
     }
 
-    if (content.includes('substitute') || content.includes('combine') || content.includes('adapt')) {
+    if (
+      content.includes('substitute') ||
+      content.includes('combine') ||
+      content.includes('adapt')
+    ) {
       return 'SCAMPER';
     }
 
@@ -219,7 +226,9 @@ export class PromptClassifier {
     }
 
     // Conditional logic complexity
-    const conditionals = (convertedPrompt.userMessageTemplate.match(/\{%\s*(if|for|while)\s/g) || []).length;
+    const conditionals = (
+      convertedPrompt.userMessageTemplate.match(/\{%\s*(if|for|while)\s/g) || []
+    ).length;
     complexity += conditionals * 0.1;
 
     return Math.min(complexity, 1.0);
@@ -246,16 +255,16 @@ export class PromptClassifier {
       strategy: classification.executionType,
       timeout: 30000, // 30 seconds default
       retries: 1,
-      enableGates: classification.suggestedGates.length > 0
+      enableGates: classification.suggestedGates.length > 0,
     };
 
     // Adjust based on execution type
     switch (classification.executionType) {
-      case "chain":
+      case 'chain':
         recommendations.timeout = 120000; // 2 minutes for chains
         recommendations.retries = 2;
         break;
-      case "template":
+      case 'template':
         recommendations.timeout = 15000; // 15 seconds for templates
         recommendations.retries = 0;
         break;

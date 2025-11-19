@@ -1,3 +1,4 @@
+// @lifecycle canonical - Builds operator arguments from parsed command tokens.
 /**
  * Argument Processing Pipeline
  * 
@@ -13,9 +14,11 @@
  */
 
 import { Logger } from "../../logging/index.js";
-import type { PromptData, PromptArgument } from "../../prompts/types.js";
+import type { ConvertedPrompt, PromptArgument } from "../../types/index.js";
 import { safeJsonParse, validateJsonArguments } from "../../utils/index.js";
 import type { ValidationResult, ValidationError, ValidationWarning } from "../types.js";
+
+type PromptDefinition = Pick<ConvertedPrompt, 'id' | 'arguments'>;
 
 /**
  * Processing result with detailed metadata
@@ -50,8 +53,8 @@ export interface ExecutionContext {
  */
 interface ProcessingStrategy {
   name: string;
-  canHandle: (rawArgs: string, promptData: PromptData) => boolean;
-  process: (rawArgs: string, promptData: PromptData, context: ExecutionContext) => ArgumentParsingResult;
+  canHandle: (rawArgs: string, promptData: PromptDefinition) => boolean;
+  process: (rawArgs: string, promptData: PromptDefinition, context: ExecutionContext) => ArgumentParsingResult;
 }
 
 /**
@@ -82,7 +85,7 @@ export class ArgumentParser {
    */
   async parseArguments(
     rawArgs: string,
-    promptData: PromptData,
+    promptData: PromptDefinition,
     context: ExecutionContext = {}
   ): Promise<ArgumentParsingResult> {
     this.stats.totalProcessed++;
@@ -126,7 +129,7 @@ export class ArgumentParser {
   /**
    * Select best processing strategy for the given arguments
    */
-  private selectStrategy(rawArgs: string, promptData: PromptData): ProcessingStrategy {
+  private selectStrategy(rawArgs: string, promptData: PromptDefinition): ProcessingStrategy {
     for (const strategy of this.strategies) {
       if (strategy.canHandle(rawArgs, promptData)) {
         return strategy;
@@ -148,7 +151,7 @@ export class ArgumentParser {
         return (trimmed.startsWith('{') && trimmed.endsWith('}')) || 
                (trimmed.startsWith('[') && trimmed.endsWith(']'));
       },
-      process: (rawArgs: string, promptData: PromptData, context: ExecutionContext): ArgumentParsingResult => {
+      process: (rawArgs: string, promptData: PromptDefinition, context: ExecutionContext): ArgumentParsingResult => {
         const parseResult = safeJsonParse(rawArgs);
         if (!parseResult.success || !parseResult.data) {
           throw new Error(`Invalid JSON arguments: ${parseResult.error || 'Unknown parsing error'}`);
@@ -196,7 +199,7 @@ export class ArgumentParser {
       canHandle: (rawArgs: string) => {
         return /\w+\s*=\s*/.test(rawArgs);
       },
-      process: (rawArgs: string, promptData: PromptData, context: ExecutionContext): ArgumentParsingResult => {
+      process: (rawArgs: string, promptData: PromptDefinition, context: ExecutionContext): ArgumentParsingResult => {
         const processedArgs: Record<string, string | number | boolean | null> = {};
         const typeCoercions: Array<{ arg: string; from: string; to: string }> = [];
         
@@ -255,10 +258,10 @@ export class ArgumentParser {
   private createSimpleTextStrategy(): ProcessingStrategy {
     return {
       name: 'simple',
-      canHandle: (rawArgs: string, promptData: PromptData) => {
+      canHandle: (rawArgs: string, promptData: PromptDefinition) => {
         return rawArgs.trim().length > 0 && promptData.arguments.length > 0;
       },
-      process: (rawArgs: string, promptData: PromptData, context: ExecutionContext): ArgumentParsingResult => {
+      process: (rawArgs: string, promptData: PromptDefinition, context: ExecutionContext): ArgumentParsingResult => {
         const processedArgs: Record<string, string | number | boolean | null> = {};
         const appliedDefaults: string[] = [];
         const contextSources: Record<string, string> = {};
@@ -305,7 +308,7 @@ export class ArgumentParser {
     return {
       name: 'fallback',
       canHandle: () => true, // Always handles as last resort
-      process: (rawArgs: string, promptData: PromptData, context: ExecutionContext): ArgumentParsingResult => {
+      process: (rawArgs: string, promptData: PromptDefinition, context: ExecutionContext): ArgumentParsingResult => {
         const processedArgs: Record<string, string | number | boolean | null> = {};
         const appliedDefaults: string[] = [];
         const contextSources: Record<string, string> = {};
@@ -358,7 +361,7 @@ export class ArgumentParser {
    */
   private applyIntelligentDefaults(
     userContent: string,
-    promptData: PromptData,
+    promptData: PromptDefinition,
     processedArgs: Record<string, string | number | boolean | null>,
     appliedDefaults: string[],
     contextSources: Record<string, string>,
@@ -468,7 +471,7 @@ export class ArgumentParser {
     arg: PromptArgument,
     context: ExecutionContext,
     userContent: string,
-    promptData: PromptData
+    promptData: PromptDefinition
   ): { value: any; source: string } {
     // Enhanced strategies with content-aware defaults
     const strategies = [
@@ -497,7 +500,7 @@ export class ArgumentParser {
   private generateContentAwareDefault(
     arg: PromptArgument,
     userContent: string,
-    promptData: PromptData
+    promptData: PromptDefinition
   ): { value: any; source: string } {
     const argName = arg.name.toLowerCase();
     const userLower = userContent.toLowerCase();
@@ -763,7 +766,7 @@ export class ArgumentParser {
    */
   private createValidationResults(
     processedArgs: Record<string, string | number | boolean | null>,
-    promptData: PromptData,
+    promptData: PromptDefinition,
     existingValidation?: any
   ): ValidationResult[] {
     const results: ValidationResult[] = [];
@@ -780,8 +783,10 @@ export class ArgumentParser {
         errors: []
       };
       
+      const isMissingValue = this.isMissingArgumentValue(value);
+
       // Check if argument is required but missing
-      if (arg.required && (value === undefined || value === null || value === '')) {
+      if (arg.required && isMissingValue) {
         result.valid = false;
         result.errors = result.errors || [];
         result.errors.push({
@@ -806,11 +811,36 @@ export class ArgumentParser {
   }
 
   /**
+   * Determine whether an argument value should be treated as missing.
+   * Placeholder strings such as "[value to be provided]" are considered missing.
+   */
+  private isMissingArgumentValue(value: unknown): boolean {
+    if (value === undefined || value === null) {
+      return true;
+    }
+
+    if (typeof value !== 'string') {
+      return false;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return true;
+    }
+
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      return /\b(to be provided|will be provided|will be specified|please specify)\b/i.test(trimmed);
+    }
+
+    return false;
+  }
+
+  /**
    * Enrich processing result with additional validation and context
    */
   private async enrichResult(
     result: ArgumentParsingResult,
-    promptData: PromptData,
+    promptData: PromptDefinition,
     context: ExecutionContext
   ): Promise<ArgumentParsingResult> {
     // Add any additional enrichment logic here

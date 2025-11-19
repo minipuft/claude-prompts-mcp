@@ -1,3 +1,4 @@
+// @lifecycle canonical - Analyzes gate performance metrics for diagnostics.
 /**
  * Gate Performance Analyzer - Performance Metrics & Optimization
  *

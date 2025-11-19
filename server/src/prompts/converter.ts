@@ -1,9 +1,10 @@
+// @lifecycle canonical - Converts prompt markdown files into structured prompt data.
 /**
  * Prompt Converter Module
  * Handles converting markdown prompts to JSON structure with validation
  */
 
-import path from "path";
+import * as path from "node:path";
 import { Logger } from "../logging/index.js";
 import type { ConvertedPrompt } from "../execution/types.js";
 import type { PromptData } from "./types.js";

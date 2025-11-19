@@ -1,3 +1,4 @@
+// @lifecycle canonical - Parses symbolic command expressions into operators.
 import { Logger } from "../../logging/index.js";
 import { ValidationError } from "../../utils/index.js";
 import {

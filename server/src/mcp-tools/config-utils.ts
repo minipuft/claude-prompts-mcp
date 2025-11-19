@@ -1,3 +1,4 @@
+// @lifecycle canonical - Utility helpers for reading MCP tool configuration.
 /**
  * Configuration Utilities for Safe Config Management
  *
@@ -5,87 +6,85 @@
  * for secure configuration management in system_control tool.
  */
 
-import { access, copyFile, readFile, writeFile } from "fs/promises";
-import { ConfigManager } from "../config/index.js";
-import { Logger } from "../logging/index.js";
-import { Config } from "../types/index.js";
+import { access, copyFile, readFile, writeFile } from 'node:fs/promises';
+
+import { ConfigManager } from '../config/index.js';
+import { Logger } from '../logging/index.js';
+import { Config } from '../types/index.js';
 
 export const CONFIG_VALID_KEYS = [
-  "server.name",
-  "server.version",
-  "server.port",
-  "transports.default",
-  "transports.stdio.enabled",
-  "transports.sse.enabled",
-  "logging.level",
-  "logging.directory",
-  "analysis.semanticAnalysis.llmIntegration.enabled",
-  "analysis.semanticAnalysis.llmIntegration.model",
-  "analysis.semanticAnalysis.llmIntegration.maxTokens",
-  "analysis.semanticAnalysis.llmIntegration.temperature",
+  'server.name',
+  'server.version',
+  'server.port',
+  'transports.default',
+  'transports.stdio.enabled',
+  'transports.sse.enabled',
+  'logging.level',
+  'logging.directory',
+  'analysis.semanticAnalysis.llmIntegration.enabled',
+  'analysis.semanticAnalysis.llmIntegration.model',
+  'analysis.semanticAnalysis.llmIntegration.maxTokens',
+  'analysis.semanticAnalysis.llmIntegration.temperature',
 ] as const;
 
 export type ConfigKey = (typeof CONFIG_VALID_KEYS)[number];
 
 export const CONFIG_RESTART_REQUIRED_KEYS: ConfigKey[] = [
-  "server.port",
-  "transports.default",
-  "transports.stdio.enabled",
-  "transports.sse.enabled",
-  "analysis.semanticAnalysis.llmIntegration.enabled",
+  'server.port',
+  'transports.default',
+  'transports.stdio.enabled',
+  'transports.sse.enabled',
+  'analysis.semanticAnalysis.llmIntegration.enabled',
 ];
 
 export interface ConfigInputValidationResult {
   valid: boolean;
   error?: string;
   convertedValue?: any;
-  valueType?: "string" | "number" | "boolean";
+  valueType?: 'string' | 'number' | 'boolean';
 }
 
-export function validateConfigInput(
-  key: string,
-  value: string
-): ConfigInputValidationResult {
+export function validateConfigInput(key: string, value: string): ConfigInputValidationResult {
   switch (key) {
-    case "server.port": {
+    case 'server.port': {
       const port = parseInt(value, 10);
       if (isNaN(port) || port < 1024 || port > 65535) {
         return {
           valid: false,
-          error: "Port must be a number between 1024-65535",
+          error: 'Port must be a number between 1024-65535',
         };
       }
-      return { valid: true, convertedValue: port, valueType: "number" };
+      return { valid: true, convertedValue: port, valueType: 'number' };
     }
 
-    case "server.name":
-    case "server.version":
-    case "logging.directory": {
+    case 'server.name':
+    case 'server.version':
+    case 'logging.directory': {
       const trimmed = value?.trim();
       if (!trimmed) {
         return {
           valid: false,
-          error: "Value cannot be empty",
+          error: 'Value cannot be empty',
         };
       }
-      return { valid: true, convertedValue: trimmed, valueType: "string" };
+      return { valid: true, convertedValue: trimmed, valueType: 'string' };
     }
 
-    case "transports.default": {
+    case 'transports.default': {
       const normalized = value.trim();
-      if (!["stdio", "sse"].includes(normalized)) {
+      if (!['stdio', 'sse'].includes(normalized)) {
         return {
           valid: false,
           error: "Transport must be 'stdio' or 'sse'",
         };
       }
-      return { valid: true, convertedValue: normalized, valueType: "string" };
+      return { valid: true, convertedValue: normalized, valueType: 'string' };
     }
 
-    case "transports.stdio.enabled":
-    case "transports.sse.enabled": {
+    case 'transports.stdio.enabled':
+    case 'transports.sse.enabled': {
       const boolValue = value.trim().toLowerCase();
-      if (!["true", "false"].includes(boolValue)) {
+      if (!['true', 'false'].includes(boolValue)) {
         return {
           valid: false,
           error: "Value must be 'true' or 'false'",
@@ -93,25 +92,25 @@ export function validateConfigInput(
       }
       return {
         valid: true,
-        convertedValue: boolValue === "true",
-        valueType: "boolean",
+        convertedValue: boolValue === 'true',
+        valueType: 'boolean',
       };
     }
 
-    case "logging.level": {
+    case 'logging.level': {
       const normalized = value.trim();
-      if (!["debug", "info", "warn", "error"].includes(normalized)) {
+      if (!['debug', 'info', 'warn', 'error'].includes(normalized)) {
         return {
           valid: false,
-          error: "Log level must be: debug, info, warn, or error",
+          error: 'Log level must be: debug, info, warn, or error',
         };
       }
-      return { valid: true, convertedValue: normalized, valueType: "string" };
+      return { valid: true, convertedValue: normalized, valueType: 'string' };
     }
 
-    case "analysis.semanticAnalysis.llmIntegration.enabled": {
+    case 'analysis.semanticAnalysis.llmIntegration.enabled': {
       const boolValue = value.trim().toLowerCase();
-      if (!["true", "false"].includes(boolValue)) {
+      if (!['true', 'false'].includes(boolValue)) {
         return {
           valid: false,
           error: "Value must be 'true' or 'false'",
@@ -119,42 +118,42 @@ export function validateConfigInput(
       }
       return {
         valid: true,
-        convertedValue: boolValue === "true",
-        valueType: "boolean",
+        convertedValue: boolValue === 'true',
+        valueType: 'boolean',
       };
     }
 
-    case "analysis.semanticAnalysis.llmIntegration.model": {
+    case 'analysis.semanticAnalysis.llmIntegration.model': {
       const trimmed = value?.trim();
       if (!trimmed) {
         return {
           valid: false,
-          error: "Model name cannot be empty",
+          error: 'Model name cannot be empty',
         };
       }
-      return { valid: true, convertedValue: trimmed, valueType: "string" };
+      return { valid: true, convertedValue: trimmed, valueType: 'string' };
     }
 
-    case "analysis.semanticAnalysis.llmIntegration.maxTokens": {
+    case 'analysis.semanticAnalysis.llmIntegration.maxTokens': {
       const tokens = parseInt(value, 10);
       if (isNaN(tokens) || tokens < 1 || tokens > 4000) {
         return {
           valid: false,
-          error: "Max tokens must be a number between 1-4000",
+          error: 'Max tokens must be a number between 1-4000',
         };
       }
-      return { valid: true, convertedValue: tokens, valueType: "number" };
+      return { valid: true, convertedValue: tokens, valueType: 'number' };
     }
 
-    case "analysis.semanticAnalysis.llmIntegration.temperature": {
+    case 'analysis.semanticAnalysis.llmIntegration.temperature': {
       const temp = parseFloat(value);
       if (isNaN(temp) || temp < 0 || temp > 2) {
         return {
           valid: false,
-          error: "Temperature must be a number between 0-2",
+          error: 'Temperature must be a number between 0-2',
         };
       }
-      return { valid: true, convertedValue: temp, valueType: "number" };
+      return { valid: true, convertedValue: temp, valueType: 'number' };
     }
 
     default:
@@ -194,11 +193,7 @@ export class SafeConfigWriter {
   private configManager: ConfigManager;
   private configPath: string;
 
-  constructor(
-    logger: Logger,
-    configManager: ConfigManager,
-    configPath: string
-  ) {
+  constructor(logger: Logger, configManager: ConfigManager, configPath: string) {
     this.logger = logger;
     this.configManager = configManager;
     this.configPath = configPath;
@@ -207,10 +202,7 @@ export class SafeConfigWriter {
   /**
    * Safely update a configuration value with atomic operations
    */
-  async updateConfigValue(
-    key: string,
-    value: string
-  ): Promise<ConfigWriteResult> {
+  async updateConfigValue(key: string, value: string): Promise<ConfigWriteResult> {
     try {
       // Step 1: Validate the operation
       const validation = validateConfigInput(key, value);
@@ -228,11 +220,7 @@ export class SafeConfigWriter {
 
       // Step 3: Load current config and apply changes
       const currentConfig = this.configManager.getConfig();
-      const updatedConfig = this.applyConfigChange(
-        currentConfig,
-        key,
-        validation.convertedValue
-      );
+      const updatedConfig = this.applyConfigChange(currentConfig, key, validation.convertedValue);
 
       // Step 4: Validate the entire updated configuration
       const configValidation = this.validateFullConfig(updatedConfig);
@@ -329,29 +317,26 @@ export class SafeConfigWriter {
     try {
       // Write to temporary file first
       const configJson = JSON.stringify(config, null, 2);
-      await writeFile(tempPath, configJson, "utf8");
+      await writeFile(tempPath, configJson, 'utf8');
 
       // Validate the written file can be parsed
-      const testContent = await readFile(tempPath, "utf8");
+      const testContent = await readFile(tempPath, 'utf8');
       JSON.parse(testContent); // Will throw if invalid
 
       // Atomic rename (this is the atomic operation)
-      const fs = await import("fs");
+      const fs = await import('fs');
       fs.renameSync(tempPath, this.configPath);
 
-      this.logger.debug("Configuration written atomically");
+      this.logger.debug('Configuration written atomically');
     } catch (error) {
       // Clean up temp file if it exists
       try {
-        const fs = await import("fs");
+        const fs = await import('fs');
         if (fs.existsSync(tempPath)) {
           fs.unlinkSync(tempPath);
         }
       } catch (cleanupError) {
-        this.logger.warn(
-          `Failed to clean up temp file ${tempPath}:`,
-          cleanupError
-        );
+        this.logger.warn(`Failed to clean up temp file ${tempPath}:`, cleanupError);
       }
       throw error;
     }
@@ -365,7 +350,7 @@ export class SafeConfigWriter {
     const newConfig = JSON.parse(JSON.stringify(config));
 
     // Apply the change using dot notation
-    const parts = key.split(".");
+    const parts = key.split('.');
     let current: any = newConfig;
 
     // Navigate to the parent object
@@ -396,35 +381,31 @@ export class SafeConfigWriter {
       if (!config.server || !config.transports) {
         return {
           valid: false,
-          error: "Missing required configuration sections",
+          error: 'Missing required configuration sections',
         };
       }
 
       // Server validation
-      if (
-        !config.server.name ||
-        !config.server.version ||
-        !config.server.port
-      ) {
-        return { valid: false, error: "Missing required server configuration" };
+      if (!config.server.name || !config.server.version || !config.server.port) {
+        return { valid: false, error: 'Missing required server configuration' };
       }
 
       if (config.server.port < 1024 || config.server.port > 65535) {
-        return { valid: false, error: "Invalid server port range" };
+        return { valid: false, error: 'Invalid server port range' };
       }
 
       // Transports validation
-      if (!["stdio", "sse"].includes(config.transports.default)) {
-        return { valid: false, error: "Invalid default transport" };
+      if (!['stdio', 'sse'].includes(config.transports.default)) {
+        return { valid: false, error: 'Invalid default transport' };
       }
 
       if (
-        typeof config.transports.stdio?.enabled !== "boolean" ||
-        typeof config.transports.sse?.enabled !== "boolean"
+        typeof config.transports.stdio?.enabled !== 'boolean' ||
+        typeof config.transports.sse?.enabled !== 'boolean'
       ) {
         return {
           valid: false,
-          error: "Transport enabled flags must be boolean",
+          error: 'Transport enabled flags must be boolean',
         };
       }
 
@@ -433,14 +414,12 @@ export class SafeConfigWriter {
         if (!config.logging.directory || !config.logging.level) {
           return {
             valid: false,
-            error: "Missing required logging configuration",
+            error: 'Missing required logging configuration',
           };
         }
 
-        if (
-          !["debug", "info", "warn", "error"].includes(config.logging.level)
-        ) {
-          return { valid: false, error: "Invalid logging level" };
+        if (!['debug', 'info', 'warn', 'error'].includes(config.logging.level)) {
+          return { valid: false, error: 'Invalid logging level' };
         }
       }
 

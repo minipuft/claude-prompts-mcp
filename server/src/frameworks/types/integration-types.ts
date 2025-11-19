@@ -1,3 +1,4 @@
+// @lifecycle canonical - Type definitions for framework-semantic integration contracts.
 /**
  * Integration Layer Type Definitions
  *

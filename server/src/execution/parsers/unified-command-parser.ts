@@ -1,3 +1,4 @@
+// @lifecycle canonical - Parses the unified operator command format.
 /**
  * Unified Command Parser
  * 
@@ -12,7 +13,7 @@
  */
 
 import { Logger } from "../../logging/index.js";
-import { PromptData } from "../../types/index.js";
+import type { ConvertedPrompt } from "../../types/index.js";
 import { ValidationError, PromptError, safeJsonParse } from "../../utils/index.js";
 import { SymbolicCommandParser, createSymbolicCommandParser } from "./symbolic-command-parser.js";
 import type {
@@ -64,7 +65,7 @@ export class UnifiedCommandParser {
   /**
    * Parse command string using multi-strategy approach
    */
-  async parseCommand(command: string, availablePrompts: PromptData[]): Promise<CommandParseResult> {
+  async parseCommand(command: string, availablePrompts: ConvertedPrompt[]): Promise<CommandParseResult> {
     this.stats.totalParses++;
     
     if (!command || command.trim().length === 0) {
@@ -92,7 +93,7 @@ export class UnifiedCommandParser {
             this.updateConfidenceStats(result.confidence);
             
             this.logger.debug(`Command parsed successfully using strategy: ${strategy.name} (confidence: ${result.confidence})`);
-            return result;
+            return this.applyCommandType(result, normalizedCommand);
           }
         } catch (error) {
           this.logger.debug(`Strategy ${strategy.name} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -105,6 +106,19 @@ export class UnifiedCommandParser {
     this.stats.failedParses++;
     const errorMessage = this.generateHelpfulError(normalizedCommand, availablePrompts);
     throw new ValidationError(errorMessage);
+  }
+  
+  private applyCommandType(result: CommandParseResult, originalCommand: string): CommandParseResult {
+    if (result.commandType) {
+      return result;
+    }
+    
+    const hasChainOperator =
+      (result.operators as OperatorDetectionResult | undefined)?.operatorTypes?.includes('chain') ||
+      /-->/i.test(originalCommand);
+
+    result.commandType = hasChainOperator ? 'chain' : 'single';
+    return result;
   }
 
   /**
@@ -257,7 +271,7 @@ export class UnifiedCommandParser {
   /**
    * Validate that the prompt ID exists in available prompts
    */
-  private async validatePromptExists(promptId: string, availablePrompts: PromptData[]): Promise<void> {
+  private async validatePromptExists(promptId: string, availablePrompts: ConvertedPrompt[]): Promise<void> {
     // Check if this is a built-in command that should be routed (handled by prompt engine)
     if (this.isBuiltinCommand(promptId)) {
       return; // Built-in commands are valid and will be routed by the prompt engine
@@ -313,7 +327,7 @@ export class UnifiedCommandParser {
   /**
    * Generate helpful prompt suggestions for typos
    */
-  private generatePromptSuggestions(promptId: string, availablePrompts: PromptData[]): string {
+  private generatePromptSuggestions(promptId: string, availablePrompts: ConvertedPrompt[]): string {
     // Simple Levenshtein distance for suggestions
     const suggestions = availablePrompts
       .map(prompt => ({
@@ -358,15 +372,15 @@ export class UnifiedCommandParser {
   /**
    * Generate helpful error message for parsing failures
    */
-  private generateHelpfulError(command: string, availablePrompts: PromptData[]): string {
+  private generateHelpfulError(command: string, availablePrompts: ConvertedPrompt[]): string {
     let message = `Could not parse command: "${command}"\n\n`;
-    
+
     message += 'Supported command formats:\n';
     message += '• Simple: >>prompt_name arguments\n';
     message += '• Simple: /prompt_name arguments\n';
     message += '• JSON: {"command": ">>prompt_name", "args": "arguments"}\n';
     message += '• JSON: {"command": ">>prompt_name", "args": {"key": "value"}}\n\n';
-    
+
     // Try to give specific suggestions based on command analysis
     if (command.includes('>>') || command.includes('/')) {
       const promptMatch = command.match(/^(>>|\/)([a-zA-Z0-9_\-]+)/);
@@ -374,7 +388,7 @@ export class UnifiedCommandParser {
         const promptName = promptMatch[2];
         message += `Prompt name "${promptName}" not found. `;
         message += 'Prompt names are case-insensitive.\n\n';
-        
+
         // Show some available prompts as examples
         const examplePrompts = availablePrompts.slice(0, 5).map(p => p.id).join(', ');
         message += `Available prompts include: ${examplePrompts}...\n\n`;
@@ -383,12 +397,32 @@ export class UnifiedCommandParser {
       }
     } else if (command.startsWith('{')) {
       message += 'JSON format detected but could not parse. Check JSON syntax and structure.\n\n';
+    } else if (command.startsWith('>')) {
+      // Detect likely >> prefix that got stripped to single >
+      message += '⚠️  Detected single ">" prefix - this suggests the ">>" prefix was partially stripped.\n';
+      message += 'This is a known limitation when calling MCP tools via XML-based clients.\n\n';
+      message += 'Workarounds:\n';
+      message += `• Use symbolic operators: "${command.slice(1)} --> " (makes >> optional)\n`;
+      message += `• Use JSON format: {"command": "${command.slice(1).split(' ')[0]}", "args": {...}}\n`;
+      message += `• Add framework operator: "@CAGEERF ${command.slice(1)}"\n\n`;
     } else {
-      message += 'Command format not recognized. Use >>prompt_name or /prompt_name format.\n\n';
+      // Bare prompt name without >> or operators
+      const barePromptMatch = command.match(/^([a-zA-Z0-9_\-]+)(?:\s|$)/);
+      if (barePromptMatch) {
+        const promptName = barePromptMatch[1];
+        message += `⚠️  Bare prompt name detected: "${promptName}"\n`;
+        message += 'The >> prefix is required for simple commands, but may not work via MCP tools.\n\n';
+        message += 'Recommended alternatives:\n';
+        message += `• Add chain operator: "${command} --> " (even for single prompts)\n`;
+        message += `• Add framework operator: "@CAGEERF ${command}"\n`;
+        message += `• Use JSON format: {"command": "${promptName}", "args": {...}}\n\n`;
+      } else {
+        message += 'Command format not recognized. Use >>prompt_name or /prompt_name format.\n\n';
+      }
     }
-    
+
     message += 'Use >>listprompts to see all available prompts, or >>help for assistance.';
-    
+
     return message;
   }
 

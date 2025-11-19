@@ -1,3 +1,4 @@
+// @lifecycle canonical - Tracks framework methodology state for prompt guidance orchestration.
 /**
  * Methodology Tracker - Phase 3 Implementation
  *
@@ -14,8 +15,8 @@ import {
   MethodologyHealth,
   PersistedMethodologyState
 } from "../types/index.js";
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 
 /**
  * Methodology tracking configuration

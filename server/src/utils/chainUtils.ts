@@ -1,3 +1,4 @@
+// @lifecycle canonical - Utility helpers for identifying and validating chain prompts.
 /**
  * Chain Utility Functions
  *
@@ -8,8 +9,8 @@
  * Phase 2 of Chain System Migration (2025-01-30)
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 
 import { ValidationError } from './errorHandling.js';
 // REMOVED: All types from deleted chain-scaffolding.ts

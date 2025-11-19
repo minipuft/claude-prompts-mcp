@@ -1,3 +1,4 @@
+// @lifecycle canonical - Coordinates prompt hot reload workflows using the file observer + category manager.
 /**
  * Hot Reload Manager Module
  * Orchestrates file system monitoring and reload workflows with event-driven architecture
@@ -7,8 +8,8 @@ import { Logger } from "../logging/index.js";
 import { FileObserver, FileChangeEvent, FileObserverConfig, createFileObserver } from "./file-observer.js";
 import { CategoryManager } from "./category-manager.js";
 import { ConfigManager } from "../config/index.js";
-import path from "path";
-import * as fs from "fs/promises";
+import * as path from "node:path";
+import * as fs from "node:fs/promises";
 
 /**
  * Hot reload event types

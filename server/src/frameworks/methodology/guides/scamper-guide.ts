@@ -1,3 +1,4 @@
+// @lifecycle canonical - SCAMPER methodology guide definition.
 /**
  * SCAMPER Methodology Guide
  * Provides guidance for applying SCAMPER (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)
@@ -547,21 +548,27 @@ Use these creative techniques to generate innovative solutions and explore uncon
   getToolDescriptions(): MethodologyToolDescriptions {
     return {
       prompt_engine: {
-        description: "🚀 PROMPT TEMPLATE ENGINE [SCAMPER-ENHANCED]: Processes prompt templates with systematic SCAMPER creative methodology for innovative problem-solving. Guides creative exploration through Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, and Reverse techniques. WARNING: You are responsible for interpreting and executing the returned content, which contains creative innovation instructions.",
+        description:
+          "🚀 PROMPT ENGINE [SCAMPER GUIDE]: Responses highlight Substitute/Combine/Adapt/Modify/Put to other uses/Eliminate/Reverse tactics and the `>>guide` command can drill into each technique (e.g., `>>guide substitute`). Gate review responses remain the same (`gate_verdict: \"GATE_REVIEW: PASS - substitute satisfied\"`).",
         parameters: {
-          execution_mode: "Override intelligent auto-detection with SCAMPER-aware selection (default: auto, creative innovation-enhanced)"
+          execution_mode:
+            "Override intelligent auto-detection with SCAMPER-aware selection (default: auto, methodology-enhanced)"
         }
       },
       prompt_manager: {
-        description: "📝 INTELLIGENT PROMPT MANAGER [SCAMPER-ENHANCED]: Complete lifecycle management with systematic SCAMPER creative methodology integration. Creates innovative analysis templates that guide creative exploration through Substitution, Combination, Adaptation, Modification, alternative Uses, Elimination, and Reversal. Optimized for creative problem-solving and breakthrough innovation tasks.",
+        description:
+          "📝 PROMPT MANAGER [SCAMPER GUIDE]: The guide action maps lifecycle verbs to SCAMPER stages so LLM clients can pick the right creative lever without memorizing docs.",
         parameters: {
-          action: "Management action with SCAMPER creative approach: 'create_template' (creative innovation templates), 'analyze_type' (creative pattern analysis), 'migrate_type' (innovative conversion), etc."
+          action:
+            "Use `goal:\"combine\"` or similar to bias guide recommendations toward combination workflows."
         }
       },
       system_control: {
-        description: "⚙️ INTELLIGENT SYSTEM CONTROL [SCAMPER-ENHANCED]: System administration with SCAMPER creative methodology for innovative system management. Guides systematic creative exploration through Substitute (alternatives), Combine (integrations), Adapt (learning), Modify (improvements), alternative Uses, Eliminate (simplification), and Reverse (rearrangement) for breakthrough system optimization.",
+        description:
+          "⚙️ SYSTEM CONTROL [SCAMPER-ENHANCED]: `>>help` describes how each SCAMPER lever affects frameworks, gates, and planned analytics before you run the command.",
         parameters: {
-          action: "System action with SCAMPER methodology: 'switch_framework' (creative framework selection), 'analytics' (innovative analysis), 'health' (creative system optimization), etc."
+          action:
+            "Guide topics such as `topic:\"reverse\"` explain the reverse/rollback options prior to maintenance requests."
         }
       }
     };

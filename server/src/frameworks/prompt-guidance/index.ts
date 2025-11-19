@@ -1,3 +1,4 @@
+// @lifecycle canonical - Barrel exports for the prompt guidance subsystem.
 /**
  * Prompt Guidance System Index - Phase 3 Implementation
  *

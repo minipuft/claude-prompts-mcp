@@ -1,10 +1,11 @@
+// @lifecycle canonical - Loads gate definitions from disk with hot reload support.
 /**
  * Gate Loader - Loads gate definitions from YAML/JSON files
  * Provides hot-reloading capabilities similar to prompt system
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { fileURLToPath } from 'url';
 import { Logger } from '../../logging/index.js';
 import type { LightweightGateDefinition, GateActivationResult } from '../types.js';
@@ -125,7 +126,7 @@ export class GateLoader {
     const validationGates: LightweightGateDefinition[] = [];
 
     for (const gate of allGates) {
-      if (this.shouldActivateGate(gate, context)) {
+      if (this.isGateActive(gate, context)) {
         activeGates.push(gate);
 
         // Collect guidance text
@@ -230,7 +231,12 @@ export class GateLoader {
   /**
    * Check if a gate should be activated based on context
    */
-  private shouldActivateGate(
+  /**
+   * Determine if a gate should be active for the provided context.
+   * Exposed so other systems (e.g., guidance rendering) can reuse the
+   * canonical activation logic instead of duplicating it.
+   */
+  public isGateActive(
     gate: LightweightGateDefinition,
     context: {
       promptCategory?: string;

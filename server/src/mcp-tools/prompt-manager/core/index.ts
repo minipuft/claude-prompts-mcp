@@ -1,3 +1,4 @@
+// @lifecycle canonical - Core prompt manager types and factories.
 /**
  * Prompt Manager Core Module Exports
  *

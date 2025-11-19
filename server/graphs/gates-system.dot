@@ -1,0 +1,260 @@
+digraph G {
+	graph [bb="0,0,4173,1119.3",
+		bgcolor="#111111",
+		layout=dot,
+		overlap=false,
+		pad=0.3,
+		rankdir=LR
+	];
+	node [color="#c6c5fe",
+		fontcolor="#c6c5fe",
+		fontname=Arial,
+		fontsize="14px",
+		height=0,
+		label="\N",
+		shape=box,
+		style=rounded
+	];
+	edge [color="#757575"];
+	"src/config/index.ts"	[height=0.31944,
+		pos="2402,461.58",
+		width=1.7361];
+	"src/logging/index.ts"	[height=0.31944,
+		pos="2634,529.58",
+		width=1.8333];
+	"src/config/index.ts" -> "src/logging/index.ts"	[pos="e,2609,518.04 2464.6,471.47 2486.2,475.59 2510.4,480.97 2532,487.58 2555.1,494.65 2580.3,505.1 2599.7,513.8"];
+	"src/types/index.ts"	[height=0.31944,
+		pos="2796.5,529.58",
+		width=1.6806];
+	"src/config/index.ts" -> "src/types/index.ts"	[pos="e,2742.5,518.04 2464.6,470.68 2524.7,479.78 2618.9,494.54 2700,509.58 2710.6,511.54 2721.8,513.76 2732.7,515.99"];
+	"src/logging/index.ts" -> "src/types/index.ts"	[pos="e,2736,529.58 2700.3,529.58 2708.7,529.58 2717.3,529.58 2725.7,529.58"];
+	"src/execution/types.ts"	[height=0.31944,
+		pos="3887.5,379.58",
+		width=2.0278];
+	"src/types/index.ts" -> "src/execution/types.ts"	[pos="e,3814.4,388.9 2857,520.59 2922.5,510.77 3030.7,494.68 3124,481.58 3371.4,446.85 3664.4,408.41 3804.2,390.23"];
+	"src/prompts/types.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="4104,152.58",
+		width=1.9167];
+	"src/types/index.ts" -> "src/prompts/types.ts"	[pos="e,4035,150.36 2802.7,517.93 2814.8,492.6 2846.9,432.39 2893,402.58 2967.6,354.34 3001.7,379.67 3088,358.58 3238.9,321.7 3311.1,374.11 \
+3426,269.58 3460.3,238.36 3424.3,198.7 3462,171.58 3506.6,139.47 3863.6,145.58 4024.7,150.07"];
+	"src/frameworks/types/index.ts"	[height=0.31944,
+		pos="2990.5,541.58",
+		width=2.7083];
+	"src/types/index.ts" -> "src/frameworks/types/index.ts"	[pos="e,2892.8,535.54 2857.2,533.31 2865.3,533.82 2873.9,534.36 2882.6,534.9"];
+	"src/gates/types.ts"	[height=0.31944,
+		pos="3275,249.58",
+		width=1.6944];
+	"src/types/index.ts" -> "src/gates/types.ts"	[pos="e,3247,261.12 2801,517.69 2810.4,487.64 2839.5,408.28 2893,368.58 2964.7,315.4 3002.8,347.21 3088,320.58 3140.8,304.06 3200.4,280.42 \
+3237.5,265.03"];
+	"src/types.ts"	[height=0.31944,
+		pos="2990.5,114.58",
+		width=1.1806];
+	"src/types/index.ts" -> "src/types.ts"	[pos="e,2984.1,126.26 2802.8,518.05 2829.2,461.16 2945.3,210.19 2979.8,135.58"];
+	"src/types/execution.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="2990.5,422.58",
+		width=2.0278];
+	"src/types/index.ts" -> "src/types/execution.ts"	[pos="e,2930.3,434.13 2808,517.8 2824.5,500.15 2858,466.97 2893,448.58 2901.6,444.05 2911.1,440.25 2920.7,437.08"];
+	"src/execution/types.ts" -> "src/prompts/types.ts"	[pos="e,4092.1,164.13 3899.4,368.01 3934.1,331.28 4042.1,217.03 4085.1,171.55"];
+	"src/frameworks/prompt-guidance/gate-instruction-injector.ts"	[height=0.31944,
+		pos="1366,731.58",
+		width=5.1667];
+	"src/frameworks/prompt-guidance/gate-instruction-injector.ts" -> "src/logging/index.ts"	[pos="e,2628.6,541.2 1520,720.07 1542.8,718.49 1566,716.94 1588,715.58 1692.8,709.12 2439.6,717.46 2532,667.58 2579.9,641.75 2610.9,582.23 \
+2624.7,550.46"];
+	"src/frameworks/prompt-guidance/gate-instruction-injector.ts" -> "src/types/index.ts"	[pos="e,2783.5,541.2 1552.2,730.77 1695.1,730.22 1897.5,729.58 2075,729.58 2075,729.58 2075,729.58 2403,729.58 2561.9,729.58 2721.5,597.76 \
+2775.9,548.16"];
+	"src/gates/core/gate-definitions.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="2402,997.58",
+		width=2.9306];
+	"src/frameworks/prompt-guidance/gate-instruction-injector.ts" -> "src/gates/core/gate-definitions.ts"	[pos="e,2365.6,986.01 1397.5,743.12 1479.8,773.88 1714.3,858.63 1916,904.58 2056.1,936.5 2095.5,920.61 2236,950.58 2277.1,959.34 2322.9,\
+972.7 2355.8,982.94"];
+	"src/gates/guidance/GateGuidanceRenderer.ts"	[height=0.31944,
+		pos="1734,557.58",
+		width=4.0556];
+	"src/frameworks/prompt-guidance/gate-instruction-injector.ts" -> "src/gates/guidance/GateGuidanceRenderer.ts"	[pos="e,1716.7,569.14 1408.4,720.02 1446.6,708.73 1504.3,690 1552,667.58 1610.6,640 1674.3,598.26 1708.3,574.93"];
+	"src/gates/guidance/GateGuidanceRenderer.ts" -> "src/logging/index.ts"	[pos="e,2567.9,531.61 1880.3,553.05 2073.6,547.02 2408.3,536.59 2557.4,531.94"];
+	"src/gates/guidance/GateGuidanceRenderer.ts" -> "src/gates/core/gate-definitions.ts"	[pos="e,2383.6,986.02 1746.1,569.45 1772.7,598.6 1841.2,676.93 1880,753.58 1904.4,801.74 1874.8,834.73 1916,869.58 2025.6,962.22 2099.1,\
+869.54 2236,912.58 2288,928.94 2343.4,960.84 2374.9,980.56"];
+	"src/gates/core/gate-loader.ts"	[height=0.31944,
+		pos="2076,305.58",
+		width=2.5972];
+	"src/gates/guidance/GateGuidanceRenderer.ts" -> "src/gates/core/gate-loader.ts"	[pos="e,2033.1,317.1 1745,545.99 1776.8,509.32 1875.9,396.63 1916,369.58 1949,347.34 1990.9,330.87 2023.4,320.22"];
+	"src/gates/core/temporary-gate-registry.ts"	[height=0.31944,
+		pos="2402,305.58",
+		width=3.6111];
+	"src/gates/guidance/GateGuidanceRenderer.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,2323.9,317.13 1745.1,546.02 1770.6,517.58 1841.1,443.88 1916,407.58 1985.2,374.06 2194.2,337.63 2314,318.69"];
+	"src/gates/guidance/GateGuidanceRenderer.ts" -> "src/gates/types.ts"	[pos="e,3213.6,251.41 1786.8,546.03 1882.5,524.77 2093.6,478.24 2272,441.58 2272,441.58 3088,282.58 3088,282.58 3104.8,277.07 3107,270.36 \
+3124,265.58 3149.4,258.46 3178,254.46 3203.4,252.24"];
+	"src/gates/guidance/FrameworkGuidanceFilter.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="2076,575.58",
+		width=4.2222];
+	"src/gates/guidance/GateGuidanceRenderer.ts" -> "src/gates/guidance/FrameworkGuidanceFilter.ts"	[pos="e,1923.8,567.58 1880.2,565.27 1891.2,565.85 1902.4,566.45 1913.6,567.04"];
+	"src/frameworks/types/integration-types.ts"	[height=0.31944,
+		pos="3275,581.58",
+		width=3.6528];
+	"src/frameworks/types/index.ts" -> "src/frameworks/types/integration-types.ts"	[pos="e,3192.8,570.08 3072.8,553.1 3107.1,557.95 3147.1,563.62 3182.4,568.62"];
+	"src/frameworks/types/methodology-types.ts"	[height=0.31944,
+		pos="3601,541.58",
+		width=3.8611];
+	"src/frameworks/types/index.ts" -> "src/frameworks/types/methodology-types.ts"	[pos="e,3461.8,541.58 3088.3,541.58 3186.1,541.58 3338.5,541.58 3451.6,541.58"];
+	"src/frameworks/types/prompt-guidance-types.ts"	[height=0.31944,
+		pos="3275,501.58",
+		width=4.1944];
+	"src/frameworks/types/index.ts" -> "src/frameworks/types/prompt-guidance-types.ts"	[pos="e,3192.8,513.09 3072.8,530.07 3107.1,525.21 3147.1,519.54 3182.4,514.54"];
+	"src/frameworks/types/integration-types.ts" -> "src/execution/types.ts"	[pos="e,3881.4,391.45 3406.6,588.12 3523.1,591.82 3683.8,591.04 3740,562.58 3810.3,527.02 3858.1,440.59 3877.2,400.56"];
+	"src/frameworks/types/integration-types.ts" -> "src/frameworks/types/methodology-types.ts"	[pos="e,3506.8,553.09 3369.3,570.07 3409.2,565.14 3455.9,559.37 3496.8,554.32"];
+	"src/semantic/types.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="3887.5,619.58",
+		width=1.9861];
+	"src/frameworks/types/integration-types.ts" -> "src/semantic/types.ts"	[pos="e,3815.9,615.99 3406.6,591.72 3425.2,593.07 3444.1,594.4 3462,595.58 3581.6,603.46 3720.3,611 3805.7,615.46"];
+	"src/frameworks/types/methodology-types.ts" -> "src/execution/types.ts"	[pos="e,3878.6,391.24 3718.8,530.06 3726.1,527.69 3733.3,524.89 3740,521.58 3798.7,492.71 3849,431.55 3872.4,399.74"];
+	"src/frameworks/types/methodology-types.ts" -> "src/semantic/types.ts"	[pos="e,3844.3,608.03 3644,553.09 3694.6,566.97 3779.7,590.31 3834.5,605.32"];
+	"src/frameworks/types/prompt-guidance-types.ts" -> "src/execution/types.ts"	[pos="e,3861.9,391.17 3378.3,490.05 3493.6,476.56 3673.7,453.88 3740,436.58 3779.7,426.22 3823.4,408.34 3852.6,395.37"];
+	"src/frameworks/types/prompt-guidance-types.ts" -> "src/frameworks/types/methodology-types.ts"	[pos="e,3506.8,530.08 3369.3,513.1 3409.2,518.02 3455.9,523.79 3496.8,528.84"];
+	"src/gates/constants.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="666.5,343.58",
+		width=2.0417];
+	"src/gates/core/gate-loader.ts" -> "src/logging/index.ts"	[pos="e,2626.7,517.75 2158.6,317.11 2272.2,334.27 2470.7,368.72 2532,407.58 2572.9,433.54 2605.4,481.57 2621.6,508.98"];
+	"src/gates/core/gate-loader.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,2271.9,305.58 2169.8,305.58 2198.5,305.58 2230.8,305.58 2261.9,305.58"];
+	"src/gates/core/gate-loader.ts" -> "src/gates/types.ts"	[pos="e,3213.8,250.02 2169.6,294.35 2202,290.76 2238.6,287.08 2272,284.58 2620.8,258.52 3039.5,251.81 3203.3,250.13"];
+	"src/gates/core/temporary-gate-registry.ts" -> "src/logging/index.ts"	[pos="e,2628.3,518.02 2438.4,317.12 2466.2,327.51 2504.7,344.96 2532,369.58 2577.1,410.27 2609.7,475.63 2624.4,508.81"];
+	"src/gates/core/temporary-gate-registry.ts" -> "src/gates/types.ts"	[pos="e,3214,253.44 2532.5,297.26 2719.2,285.25 3057.7,263.49 3203.8,254.1"];
+	"src/gates/types.ts" -> "src/execution/types.ts"	[pos="e,3832.4,368.07 3330.2,261.12 3442.9,285.11 3702,340.3 3822.6,365.98"];
+	"src/gates/core/gate-validator.ts"	[height=0.31944,
+		pos="1734,187.58",
+		width=2.7778];
+	"src/gates/core/gate-validator.ts" -> "src/logging/index.ts"	[pos="e,2632.2,517.91 1834,187.49 2022.7,189.24 2424.5,202.76 2532,284.58 2605.4,340.41 2625.8,458.96 2631.2,507.83"];
+	"src/gates/core/gate-validator.ts" -> "src/execution/types.ts"	[pos="e,3872.2,367.85 1755.1,176.07 1787.7,158.04 1854.6,123.67 1916,108.58 2125.9,57.057 2184.9,74.582 2401,74.582 2401,74.582 2401,74.582 \
+2797.5,74.582 2926.9,74.582 2961.8,65.011 3088,93.582 3245.8,129.3 3278.4,162.35 3426,228.58 3442.3,235.91 3444.9,241.18 3462,246.58 \
+3581.1,284.32 3622.7,245.4 3740,288.58 3787.7,306.14 3836.5,340.39 3864,361.49"];
+	"src/gates/core/gate-validator.ts" -> "src/gates/core/gate-loader.ts"	[pos="e,2041.6,294.01 1768.2,199.11 1830.2,220.61 1963.3,266.81 2032,290.65"];
+	"src/gates/core/gate-validator.ts" -> "src/gates/types.ts"	[pos="e,3220,238.02 1834.4,178.84 2105.9,156.23 2855.5,102.7 3088,178.58 3106.8,184.7 3106.3,195.85 3124,204.58 3151,217.92 3182.8,228.15 \
+3210.1,235.46"];
+	"src/gates/core/gate-validator.ts" -> "src/types.ts"	[pos="e,2947.8,114.39 1768.2,176.03 1804.1,164.09 1863.4,146.05 1916,137.58 2129.1,103.31 2185.2,113.58 2401,113.58 2401,113.58 2401,113.58 \
+2635,113.58 2742.6,113.58 2868.5,114.05 2937.6,114.34"];
+	"src/types.ts" -> "src/prompts/types.ts"	[pos="e,4034.9,142.32 3033.3,113.93 3171.4,112.15 3625.3,109.07 3999,138.58 4007.4,139.24 4016.1,140.12 4024.7,141.11"];
+	"src/types.ts" -> "src/gates/types.ts"	[pos="e,3213.9,242.31 3033.2,118.5 3051.5,121.96 3072.4,128.44 3088,140.58 3113.8,160.61 3098.5,184.19 3124,204.58 3146.8,222.81 3176.8,\
+233.67 3204,240.13"];
+	"src/gates/core/index.ts"	[height=0.31944,
+		pos="1366,303.58",
+		width=2.1111];
+	"src/gates/core/index.ts" -> "src/execution/types.ts"	[pos="e,3877.8,367.78 1382.5,291.91 1417.5,266.09 1505.9,203.52 1588,166.58 1792.3,74.695 1851,36.582 2075,36.582 2075,36.582 2075,36.582 \
+2797.5,36.582 3078.2,36.582 3207.9,-77.19 3426,99.582 3466.9,132.77 3421.4,178.95 3462,212.58 3557.8,292.01 3626.8,194.76 3740,246.58 \
+3797.1,272.75 3847.4,329.44 3871.5,359.66"];
+	"src/gates/core/index.ts" -> "src/gates/core/gate-loader.ts"	[pos="e,1982.3,305.32 1442.1,303.79 1569.5,304.15 1828,304.88 1972.1,305.29"];
+	"src/gates/core/index.ts" -> "src/gates/core/temporary-gate-registry.ts"	[pos="e,2326.4,294.06 1442.1,297.65 1592.7,286.68 1942.7,265.99 2236,284.58 2262.2,286.24 2290.6,289.37 2316.3,292.72"];
+	"src/gates/core/index.ts" -> "src/gates/types.ts"	[pos="e,3213.9,248.96 1439.5,292.02 1482.5,285.67 1538.2,278.33 1588,274.58 2166.5,231 2312.9,254.36 2893,248.58 3001.3,247.5 3127,248.21 \
+3203.5,248.87"];
+	"src/gates/core/index.ts" -> "src/gates/core/gate-validator.ts"	[pos="e,1633.9,193.32 1442.3,307.89 1478.3,306.43 1520.3,299.25 1552,277.58 1579,259.18 1561.4,232.49 1588,213.58 1598.8,205.91 1611.2,\
+200.27 1624,196.17"];
+	"src/gates/gate-state-manager.ts"	[height=0.31944,
+		pos="1734,343.58",
+		width=2.875];
+	"src/gates/core/index.ts" -> "src/gates/gate-state-manager.ts"	[pos="e,1630.3,332.36 1442.4,311.82 1493.6,317.42 1562.3,324.93 1620,331.23"];
+	"src/gates/gate-state-manager.ts" -> "src/logging/index.ts"	[pos="e,2623.9,518.02 1837.8,352.84 2038.9,371.42 2469.9,413.86 2532,441.58 2567.1,457.23 2599,489.34 2617.1,510.14"];
+	"src/gates/core/llm-review-parser.ts"	[color="#cfffac",
+		fontcolor="#cfffac",
+		height=0.31944,
+		pos="3887.5,192.58",
+		width=3.0972];
+	"src/gates/core/review-utils.ts"	[height=0.31944,
+		pos="3601,192.58",
+		width=2.5972];
+	"src/gates/core/review-utils.ts" -> "src/execution/types.ts"	[pos="e,3879.7,367.9 3694.7,201.5 3710.5,205.37 3726.2,210.85 3740,218.58 3802.1,253.28 3852.1,324.04 3874.2,359.04"];
+	"src/gates/core/review-utils.ts" -> "src/gates/core/llm-review-parser.ts"	[pos="e,3775.8,192.58 3694.8,192.58 3717.4,192.58 3741.9,192.58 3765.7,192.58"];
+	"src/gates/core/types.ts"	[height=0.31944,
+		pos="3601,500.58",
+		width=2.1111];
+	"src/gates/core/types.ts" -> "src/execution/types.ts"	[pos="e,3872.6,391.32 3677.3,491.85 3698.1,487.99 3720.3,482.46 3740,474.58 3788,455.37 3837.1,419.59 3864.5,397.85"];
+	"src/gates/index.ts"	[height=0.31944,
+		pos="992,303.58",
+		width=1.6944];
+	"src/gates/index.ts" -> "src/gates/core/index.ts"	[pos="e,1289.8,303.58 1053.2,303.58 1114.6,303.58 1210.6,303.58 1279.8,303.58"];
+	"src/gates/intelligence/GatePerformanceAnalyzer.ts"	[height=0.31944,
+		pos="2076,848.58",
+		width=4.4444];
+	"src/gates/intelligence/GatePerformanceAnalyzer.ts" -> "src/logging/index.ts"	[pos="e,2631.8,541.12 2236.2,856.4 2331.7,852.85 2450.1,832.89 2532,765.58 2600.5,709.25 2623.5,597.85 2630.4,551.06"];
+	"src/gates/intelligence/GatePerformanceAnalyzer.ts" -> "src/gates/core/gate-definitions.ts"	[pos="e,2296.3,986.38 2212.9,860.22 2221.2,864.07 2229,868.8 2236,874.58 2271.5,903.81 2237,941.71 2272,971.58 2276.6,975.53 2281.7,978.93 \
+2287,981.87"];
+	"src/gates/intelligence/GateSelectionEngine.ts"	[height=0.31944,
+		pos="2076,807.58",
+		width=4];
+	"src/gates/intelligence/GateSelectionEngine.ts" -> "src/config/index.ts"	[pos="e,2390.2,473.14 2087.8,796.07 2135,745.68 2323.6,544.27 2383,480.82"];
+	"src/gates/intelligence/GateSelectionEngine.ts" -> "src/logging/index.ts"	[pos="e,2629.9,541.24 2220.1,804.84 2316.4,796.41 2441.9,771.98 2532,705.58 2585.7,666.01 2615.2,588.72 2626.9,551.13"];
+	"src/gates/intelligence/GateSelectionEngine.ts" -> "src/types/index.ts"	[pos="e,2795.3,541.21 2217.2,819.09 2377,829.27 2625.7,835.23 2700,781.58 2776.5,726.35 2791.8,601.67 2794.8,551.3"];
+	"src/gates/intelligence/GateSelectionEngine.ts" -> "src/gates/core/gate-definitions.ts"	[pos="e,2359.2,986.06 2220.1,818.02 2225.7,821.03 2231,824.53 2236,828.58 2274.2,859.83 2239.5,896.5 2272,933.58 2292.4,956.84 2323.3,\
+972.57 2349.7,982.62"];
+	"src/gates/intelligence/GateSelectionEngine.ts" -> "src/frameworks/types/index.ts"	[pos="e,2981.4,553.18 2177.8,819.13 2197.2,821.85 2217.3,825.01 2236,828.58 2252.2,831.67 2255.6,835.57 2272,837.58 2386.7,851.7 2416.7,\
+845.77 2532,837.58 2607.2,832.23 2632,846.26 2700,813.58 2828.1,752 2937.6,613.25 2975.4,561.52"];
+	"src/gates/intelligence/GateSelectionEngine.ts" -> "src/semantic/types.ts"	[pos="e,3873.9,631.34 2207.3,819.17 2217.2,821.75 2226.8,824.85 2236,828.58 2254.5,836.14 2253.7,847.62 2272,855.58 2421.5,920.46 2470.1,\
+919.58 2633,919.58 2633,919.58 2633,919.58 3276,919.58 3532.4,919.58 3793.1,703.76 3866.3,638.23"];
+	"src/gates/services/compositional-gate-service.ts"	[height=0.31944,
+		pos="992,731.58",
+		width=4.2222];
+	"src/gates/services/compositional-gate-service.ts" -> "src/logging/index.ts"	[pos="e,2625.6,541.24 1092.9,720.04 1121,717.02 1151.7,713.95 1180,711.58 1330,699.02 2394.6,691.02 2532,629.58 2570.5,612.34 2602.7,573.46 \
+2619.8,549.58"];
+	"src/gates/services/compositional-gate-service.ts" -> "src/types/index.ts"	[pos="e,2789.7,541.39 1095.3,743.1 1138.6,747.97 1179.4,752.55 1180,752.58 1345.1,761.82 1386.7,753.34 1552,752.58 1769.8,751.58 2319.9,\
+793.07 2532,743.58 2612.7,724.75 2636.5,715.9 2700,662.58 2738.6,630.2 2769.5,578.96 2784.9,550.46"];
+	"src/gates/services/compositional-gate-service.ts" -> "src/frameworks/prompt-guidance/gate-instruction-injector.ts"	[pos="e,1179.7,731.58 1144,731.58 1152.5,731.58 1161.1,731.58 1169.7,731.58"];
+	"src/gates/services/compositional-gate-service.ts" -> "src/gates/core/gate-definitions.ts"	[pos="e,2296.2,986.58 1012.7,743.12 1046.1,762.07 1116.1,799.68 1180,819.58 1385.9,883.73 2023,957.06 2285.8,985.46"];
+	"src/gates/services/compositional-gate-service.ts" -> "src/gates/guidance/GateGuidanceRenderer.ts"	[pos="e,1673.4,569.15 1030.1,720.08 1067.6,708.61 1127.6,690.82 1180,677.58 1352.8,633.94 1558.4,591.9 1663.5,571.1"];
+	"src/gates/services/gate-service-interface.ts"	[height=0.31944,
+		pos="1366,1059.6",
+		width=3.7778];
+	"src/gates/services/compositional-gate-service.ts" -> "src/gates/services/gate-service-interface.ts"	[pos="e,1323.2,1048 999.01,743.32 1019.3,782.01 1089.4,907.14 1180,978.58 1220,1010.1 1274.1,1031.9 1313.5,1044.9"];
+	"src/gates/services/gate-service-interface.ts" -> "src/types/index.ts"	[pos="e,2793.9,541.35 1502,1069.1 1769.6,1085.6 2356.5,1109.8 2532,1018.6 2719.2,921.33 2778.9,633.33 2792.3,551.49"];
+	"src/gates/services/gate-service-interface.ts" -> "src/gates/core/gate-definitions.ts"	[pos="e,2310.3,1009.1 1502.3,1055.6 1673.4,1050 1976.9,1037.9 2236,1016.6 2256.8,1014.9 2279.1,1012.6 2300.3,1010.2"];
+	"src/gates/services/gate-reference-resolver.ts"	[height=0.31944,
+		pos="352,383.58",
+		width=3.9167];
+	"src/gates/services/gate-reference-resolver.ts" -> "src/gates/constants.ts"	[pos="e,592.95,352.87 442.97,372.07 487.04,366.42 539.74,359.68 582.79,354.17"];
+	"src/gates/services/gate-reference-resolver.ts" -> "src/gates/core/gate-loader.ts"	[pos="e,1982.4,308.88 493.02,383.58 622.28,383.58 819.59,383.58 991,383.58 991,383.58 991,383.58 1367,383.58 1595.2,383.58 1670.9,455.78 \
+1880,364.58 1900.7,355.54 1895.8,338.72 1916,328.58 1933.3,319.91 1952.9,314.25 1972.3,310.6"];
+	"src/gates/services/gate-service-factory.ts"	[height=0.31944,
+		pos="352,587.58",
+		width=3.6111];
+	"src/gates/services/gate-service-factory.ts" -> "src/config/index.ts"	[pos="e,2339.5,461.27 367.37,575.73 396,552.93 463.08,503.46 529,483.58 725.86,424.23 785.39,459.58 991,459.58 991,459.58 991,459.58 1735,\
+459.58 1951.3,459.58 2207.1,460.65 2329.2,461.22"];
+	"src/gates/services/gate-service-factory.ts" -> "src/logging/index.ts"	[pos="e,2568,525.67 401.5,576 507.67,551.69 768.96,497.58 991,497.58 991,497.58 991,497.58 1735,497.58 2040.2,497.58 2403.3,516.27 2557.7,\
+525.08"];
+	"src/gates/services/gate-service-factory.ts" -> "src/gates/guidance/GateGuidanceRenderer.ts"	[pos="e,1587.8,554.96 482.19,582.18 580.34,578.09 718.67,572.39 840,567.58 991.1,561.59 1028.8,557.47 1180,554.58 1345.3,551.42 1386.7,\
+553.21 1552,554.58 1560.4,554.65 1568.9,554.74 1577.6,554.84"];
+	"src/gates/services/gate-service-factory.ts" -> "src/gates/core/gate-validator.ts"	[pos="e,1692.3,175.96 364.2,575.81 390.47,548.86 459.1,482.21 529,445.58 641.86,386.44 713.26,454.02 804,364.58 842.45,326.69 797.66,282.06 \
+840,248.58 1096.5,45.78 1534.6,135.15 1682.5,173.4"];
+	"src/gates/services/gate-service-factory.ts" -> "src/gates/services/compositional-gate-service.ts"	[pos="e,968.03,719.98 482.05,598.34 573.19,607.97 697.55,625.23 804,654.58 860.24,670.09 922.25,697.9 958.85,715.52"];
+	"src/gates/services/gate-service-factory.ts" -> "src/gates/services/gate-service-interface.ts"	[pos="e,1272.2,1071.1 361.18,599.28 403.25,658.29 602.38,924.41 840,1024.6 977.34,1082.5 1152.9,1080.8 1262.1,1072"];
+	"src/gates/services/semantic-gate-service.ts"	[height=0.31944,
+		pos="666.5,674.58",
+		width=3.8194];
+	"src/gates/services/gate-service-factory.ts" -> "src/gates/services/semantic-gate-service.ts"	[pos="e,594.21,663.03 382.18,599.16 416.76,612.55 476.35,634.52 529,648.58 546.7,653.31 565.91,657.52 584.18,661.1"];
+	"src/gates/services/semantic-gate-service.ts" -> "src/logging/index.ts"	[pos="e,2589,541.09 749.98,663.07 880.32,645.9 1142,615.58 1365,615.58 1365,615.58 1365,615.58 2077,615.58 2263.3,615.58 2480.6,567.86 \
+2579.3,543.51"];
+	"src/gates/services/semantic-gate-service.ts" -> "src/types/index.ts"	[pos="e,2795.5,541.14 669.37,686.38 678.01,736.69 718.93,934.8 840,1024.6 999.85,1143.1 1637.4,1116.6 2075,1116.6 2075,1116.6 2075,1116.6 \
+2403,1116.6 2559,1116.6 2615.4,1060.6 2700,929.58 2781.5,803.4 2793.5,614.49 2795.2,551.15"];
+	"src/gates/services/semantic-gate-service.ts" -> "src/gates/core/gate-definitions.ts"	[pos="e,2296.3,995.12 691.19,686.17 724.15,702.09 785.9,731.18 840,752.58 1294.1,932.21 1429.6,931.24 1916,974.58 2042.3,985.84 2187.6,\
+991.81 2286,994.82"];
+	"src/gates/services/semantic-gate-service.ts" -> "src/gates/guidance/GateGuidanceRenderer.ts"	[pos="e,1587.7,558.58 688.21,662.98 719.8,645.93 782.46,614.74 840,601.58 975.73,570.55 1359.8,561.4 1577.5,558.71"];
+	"src/gates/services/semantic-gate-service.ts" -> "src/gates/core/gate-validator.ts"	[pos="e,1634.2,199.16 675.91,662.77 699.59,629 767.42,528.51 804,435.58 829.59,370.58 786.57,327.59 840,282.58 900.62,231.52 1477.4,266.23 \
+1552,239.58 1570.6,232.95 1569.8,221.29 1588,213.58 1599.4,208.73 1611.7,204.79 1624.2,201.58"];
+	"src/gates/services/semantic-gate-service.ts" -> "src/gates/services/compositional-gate-service.ts"	[pos="e,925.63,720.06 732.97,686.12 785.8,695.43 860.19,708.53 915.53,718.28"];
+	"src/gates/services/semantic-gate-service.ts" -> "src/gates/services/gate-service-interface.ts"	[pos="e,1263.7,1048.1 669.95,686.18 680.53,733.09 726.96,909.97 840,987.58 856.89,999.18 1104.5,1029.5 1253.6,1046.9"];
+	"src/gates/services/index.ts"	[height=0.31944,
+		pos="87.5,674.58",
+		width=2.4306];
+	"src/gates/services/index.ts" -> "src/gates/services/compositional-gate-service.ts"	[pos="e,839.83,725.88 175.1,685.12 187.15,686.4 199.38,687.6 211,688.58 424.56,706.66 671.69,718.8 829.56,725.45"];
+	"src/gates/services/index.ts" -> "src/gates/services/gate-service-interface.ts"	[pos="e,1292.8,1071.1 103.75,686.12 178.7,742 517.4,985.04 840,1063.6 992.77,1100.8 1178,1086 1282.6,1072.5"];
+	"src/gates/services/index.ts" -> "src/gates/services/gate-reference-resolver.ts"	[pos="e,340.54,395.18 99.115,662.81 139.44,618.11 283.38,458.55 333.58,402.9"];
+	"src/gates/services/index.ts" -> "src/gates/services/gate-service-factory.ts"	[pos="e,316,599.18 123.36,663.03 170.52,647.4 254.71,619.5 306.42,602.36"];
+	"src/gates/services/index.ts" -> "src/gates/services/semantic-gate-service.ts"	[pos="e,529,674.58 175.19,674.58 266.03,674.58 410.35,674.58 518.93,674.58"];
+}

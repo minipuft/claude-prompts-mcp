@@ -1,3 +1,4 @@
+// @lifecycle canonical - Central hub that re-exports domain-specific type modules.
 /**
  * Consolidated Type Index for MCP Prompts Server
  *
@@ -10,6 +11,8 @@
 
 // ===== Import Domain-Specific Types =====
 
+export type { McpToolRequest } from './execution.js';
+
 // Core configuration and protocol types
 export type {
   Config,
@@ -17,6 +20,7 @@ export type {
   TransportConfig,
   TransportsConfig,
   LoggingConfig,
+  ChainSessionConfig,
   AnalysisMode,
   LLMProvider,
   LLMIntegrationConfig,
@@ -107,21 +111,6 @@ export type {
 } from '../frameworks/types/index.js';
 
 // ===== Additional System Types =====
-
-// Text Reference System Types
-export interface TextReference {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: number;
-  lastUsed: number;
-}
-
-export interface TextReferenceStore {
-  references: TextReference[];
-  maxAge: number; // Maximum age in milliseconds before cleanup
-  maxSize: number; // Maximum number of references to store
-}
 
 // Conversation History Types
 export interface ConversationHistoryItem {

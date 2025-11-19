@@ -1,3 +1,4 @@
+// @lifecycle canonical - In-memory registry for temporary/inline gates.
 /**
  * Temporary Gate Registry
  *

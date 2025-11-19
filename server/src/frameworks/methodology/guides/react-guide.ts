@@ -1,3 +1,4 @@
+// @lifecycle canonical - ReACT methodology guide definition.
 /**
  * ReACT Methodology Guide
  * Provides guidance for applying ReACT (Reasoning and Acting) methodology to prompt creation,
@@ -468,21 +469,27 @@ Focus on explicit reasoning, measurable actions, systematic observation, and con
   getToolDescriptions(): MethodologyToolDescriptions {
     return {
       prompt_engine: {
-        description: "🚀 PROMPT TEMPLATE ENGINE [REACT-ENHANCED]: Processes prompt templates with systematic ReACT (Reasoning-Acting) methodology for iterative problem-solving. Guides systematic Reason → Act → Observe → Adjust cycles for continuous improvement and adaptive execution. WARNING: You are responsible for interpreting and executing the returned content, which contains iterative analytical instructions.",
+        description:
+          "🚀 PROMPT ENGINE [ReACT GUIDE]: Responses are Reason→Act→Observe→Adjust aware and the metadata-driven `>>guide` call can spotlight reasoning vs. action-heavy parameters. Use `>>guide observe` to learn how to resume with `gate_verdict` or provide observation notes.",
         parameters: {
-          execution_mode: "Override intelligent auto-detection with ReACT-aware selection (default: auto, iterative reasoning-enhanced)"
+          execution_mode:
+            "Override intelligent auto-detection with ReACT-aware selection (default: auto, methodology-enhanced)"
         }
       },
       prompt_manager: {
-        description: "📝 INTELLIGENT PROMPT MANAGER [REACT-ENHANCED]: Complete lifecycle management with systematic ReACT methodology integration. Creates iterative analysis templates that guide reasoning-action cycles through explicit Reasoning, purposeful Acting, systematic Observation, and continuous Adjustment. Optimized for adaptive problem-solving and iterative improvement tasks.",
+        description:
+          "📝 PROMPT MANAGER [ReACT GUIDE]: Lifecycle operations emphasize Reason/Act/Observe/Adjust metadata, and the `guide` action recommends verbs that match the current phase.",
         parameters: {
-          action: "Management action with ReACT iterative approach: 'create_template' (reasoning-action cycle templates), 'analyze_type' (reasoning pattern analysis), 'migrate_type' (adaptive conversion), etc."
+          action:
+            "Provide `goal:\"observe\"` or similar to have the guide favor verbs that gather evidence before acting."
         }
       },
       system_control: {
-        description: "⚙️ INTELLIGENT SYSTEM CONTROL [REACT-ENHANCED]: System administration with ReACT iterative improvement methodology. Guides systematic Reason-Act-Observe-Adjust cycles for framework management, performance monitoring, and adaptive system optimization. Supports continuous improvement through reasoning-based decision making.",
+        description:
+          "⚙️ SYSTEM CONTROL [ReACT-ENHANCED]: `>>help` narrates Reason→Act→Observe→Adjust intent for framework switches, gate health checks, and upcoming analytics operations.",
         parameters: {
-          action: "System action with ReACT methodology: 'switch_framework' (reasoning-based framework selection), 'analytics' (observation-based metrics), 'health' (systematic health reasoning), etc."
+          action:
+            "Use `action:\"guide\" topic:\"observe\"` to surface observation/telemetry operations before acting."
         }
       }
     };
