@@ -91,7 +91,7 @@ jobs:
           if grep -q "analysis/configurable-semantic-analyzer" changed_files.txt; then echo "⚠️  Analysis system modified - validate prompt classification and framework integration"; fi
 
       - name: Comment PR with validation results
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         if: always()
         with:
           script: |
