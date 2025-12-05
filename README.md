@@ -121,7 +121,7 @@ flowchart LR
     classDef endpoint fill:#f4d0ff,stroke:#a855f7,stroke-width:1.6px,color:#2e1065;
     classDef container fill:#111827,stroke:#94a3b8,stroke-width:1.2px,stroke-dasharray:7 4,color:#e2e8f0;
 
-    linkStyle default stroke:#94a3b8,stroke-width:2px,color:#e2e8f0;
+    linkStyle default stroke:#94a3b8,stroke-width:2px
 
     User["User Command"]:::process --> Parser["Symbolic Parser"]:::parser
     Parser --> Plan{"Execution Plan"}:::decision
