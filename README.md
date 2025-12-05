@@ -110,23 +110,33 @@ This isn't a static file reader. It's a **render pipeline**:
 `Command` -> `Parser` -> `Plan` -> `Framework Injection` -> `Gate Validation` -> `Template Render` -> `LLM`
 
 ```mermaid
+%%{init: {'theme': 'neutral', 'themeVariables': {'background':'#0b1224','primaryColor':'#e2e8f0','primaryBorderColor':'#1f2937','primaryTextColor':'#0f172a','lineColor':'#94a3b8','fontFamily':'"DM Sans","Segoe UI",sans-serif','fontSize':'14px','edgeLabelBackground':'#0b1224'}}}%%
 flowchart LR
-    User[User Command] --> Parser(Symbolic Parser)
-    Parser --> Plan{Execution Plan}
-    
-    subgraph Pipeline [Render Pipeline]
+    classDef actor fill:#0f172a,stroke:#cbd5e1,stroke-width:1.5px,color:#f8fafc;
+    classDef parser fill:#111827,stroke:#fbbf24,stroke-width:1.8px,color:#f8fafc;
+    classDef decision fill:#fff7ed,stroke:#fb923c,stroke-width:1.8px,color:#9a3412;
+    classDef process fill:#e2e8f0,stroke:#1f2937,stroke-width:1.6px,color:#0f172a;
+    classDef success fill:#e0f2fe,stroke:#0284c7,stroke-width:1.6px,color:#0f172a;
+    classDef failure fill:#fee2e2,stroke:#ef4444,stroke-width:1.6px,color:#7f1d1d;
+    classDef endpoint fill:#f4d0ff,stroke:#a855f7,stroke-width:1.6px,color:#2e1065;
+    classDef container fill:#111827,stroke:#94a3b8,stroke-width:1.2px,stroke-dasharray:7 4,color:#e2e8f0;
+
+    linkStyle default stroke:#94a3b8,stroke-width:2px,color:#e2e8f0;
+
+    User["User Command"]:::process --> Parser["Symbolic Parser"]:::parser
+    Parser --> Plan{"Execution Plan"}:::decision
+
+    subgraph Pipeline["Render Pipeline"]
         direction TB
-        Plan --> Framework[Inject Framework]
-        Framework --> Gate{Gate Validation}
-        Gate -- Pass --> Render[Render Template]
-        Gate -- Fail --> Retry([Retry/Abort])
+        Plan --> Framework["Inject Framework"]:::process
+        Framework --> Gate{"Gate Validation"}:::decision
+        Gate -- Pass --> Render["Render Template"]:::success
+        Gate -- Fail --> Retry["Retry / Abort"]:::failure
     end
-    
-    Render --> LLM((LLM API))
-    
-    style User fill:#fff,stroke:#333,stroke-width:2px
-    style Pipeline fill:#f9f9f9,stroke:#bbb,stroke-width:2px,stroke-dasharray: 5 5
-    style LLM fill:#d4a5a5,stroke:#333,stroke-width:2px
+
+    class Pipeline container
+
+    Render --> LLM["LLM API"]:::endpoint
 ```
 
 - **Templates**: Markdown files with Nunjucks (`{{var}}`).
