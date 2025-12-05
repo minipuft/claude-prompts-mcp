@@ -1,14 +1,18 @@
 // @lifecycle canonical - Normalizes incoming execution requests before parsing.
+import { detectToolRoutingCommand } from '../../../mcp-tools/prompt-engine/utils/tool-routing.js';
+import { McpToolRequestValidator } from '../../validation/request-validator.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { ToolResponse } from '../../../types/index.js';
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
-import { McpToolRequestValidator } from '../../validation/request-validator.js';
-import { detectToolRoutingCommand } from '../../../mcp-tools/prompt-engine/utils/tool-routing.js';
 import type { ChainManagementService } from '../../../mcp-tools/prompt-engine/core/chain-management.js';
+import type { ToolResponse } from '../../../types/index.js';
+import type { ExecutionContext } from '../../context/execution-context.js';
 
-type ToolRouter = (targetTool: string, params: Record<string, any>, originalCommand: string) => Promise<ToolResponse>;
+type ToolRouter = (
+  targetTool: string,
+  params: Record<string, any>,
+  originalCommand: string
+) => Promise<ToolResponse>;
 
 /**
  * Canonical Pipeline Stage 0.1: Request Normalization
@@ -92,13 +96,13 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
       return;
     }
 
-    context.metadata['normalizedCommand'] = command || undefined;
-    context.metadata['requestNormalizationComplete'] = true;
+    context.state.normalization.normalizedCommand = command || undefined;
+    context.state.normalization.completed = true;
 
     this.logExit({
       normalizedCommand: command || '<resume-only>',
-      resumeSessionId: context.metadata['resumeSessionId'],
-      resumeChainId: context.metadata['resumeChainId'],
+      resumeSessionId: context.state.session.resumeSessionId,
+      resumeChainId: context.state.session.resumeChainId,
     });
   }
 
@@ -121,33 +125,30 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
   }
 
   private captureRequestMetadata(context: ExecutionContext): boolean {
-    context.metadata['canonicalPipeline'] = true;
+    context.state.normalization.isCanonical = true;
 
     if (context.mcpRequest.chain_id) {
-      context.metadata['resumeChainId'] = context.mcpRequest.chain_id;
-      context.metadata['explicitChainResume'] = true;
+      context.state.session.resumeChainId = context.mcpRequest.chain_id;
+      context.state.session.isExplicitChainResume = true;
     }
 
-    context.metadata['requestedGateOverrides'] = {
-      apiValidation: context.mcpRequest.api_validation === true,
-      qualityGates: context.mcpRequest.quality_gates,
-      customChecks: context.mcpRequest.custom_checks,
-      temporaryGateCount: context.mcpRequest.temporary_gates?.length ?? 0,
-      gateScope: context.mcpRequest.gate_scope,
+    // Store gate overrides from request
+    context.state.gates.requestedOverrides = {
+      llmValidation: context.mcpRequest.llm_validation === true,
+      gates: context.mcpRequest.gates ? [...context.mcpRequest.gates] : undefined,
     };
 
-    if (typeof context.mcpRequest.timeout === 'number') {
-      context.metadata['requestedTimeoutMs'] = context.mcpRequest.timeout;
-    }
-
     if (context.mcpRequest.options) {
-      context.metadata['requestOptions'] = { ...context.mcpRequest.options };
+      context.state.normalization.requestOptions = { ...context.mcpRequest.options };
     }
 
     return true;
   }
 
-  private async tryHandleChainCommand(command: string, context: ExecutionContext): Promise<boolean> {
+  private async tryHandleChainCommand(
+    command: string,
+    context: ExecutionContext
+  ): Promise<boolean> {
     if (!this.chainManagementService) {
       return false;
     }

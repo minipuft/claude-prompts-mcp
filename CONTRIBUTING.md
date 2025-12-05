@@ -90,6 +90,48 @@ Only bypass hooks to unblock CI or for emergency hotfixes. Use `HUSKY=0 git comm
 - **Chains**: Define/edit steps via `prompt_manager`. Reference `docs/chain-workflows.md` for schema details.
 - **Gates**: Add definitions under `server/src/gates/definitions/*.json` and update `docs/enhanced-gate-system.md` when behavior changes.
 
+### Pipeline State Management Patterns
+
+When modifying pipeline stages (`server/src/execution/pipeline/stages/`), use the centralized state management:
+
+**For Gates**: Use `context.gates` accumulator instead of direct array manipulation:
+```typescript
+// ✅ Correct: Use accumulator with source tracking
+context.gates.add('research-quality', 'category-auto');
+context.gates.addAll(methodologyGates, 'methodology');
+const finalGates = context.gates.getAll();
+
+// ❌ Wrong: Direct array mutation
+gateIds.push(...newGates);
+```
+
+**For Framework Decisions**: Use `context.frameworkAuthority` instead of resolving framework ID manually:
+```typescript
+// ✅ Correct: Use authority for consistent resolution
+const decisionInput = {
+  modifiers: context.executionPlan?.modifiers,
+  operatorOverride: context.parsedCommand?.executionPlan?.frameworkOverride,
+  clientOverride: context.state.framework.clientOverride,
+  globalActiveFramework: context.frameworkContext?.selectedFramework?.id,
+};
+const decision = context.frameworkAuthority.decide(decisionInput);
+if (decision.shouldApply) {
+  const frameworkId = decision.frameworkId; // lowercase
+}
+
+// ❌ Wrong: Manual resolution in each stage
+const frameworkId = context.state.framework.clientOverride ??
+  context.parsedCommand?.executionPlan?.frameworkOverride;
+```
+
+**For Diagnostics**: Use `context.diagnostics` for audit trail:
+```typescript
+context.diagnostics.info(this.name, 'Stage completed', { key: value });
+context.diagnostics.warn(this.name, 'Potential issue', { details });
+```
+
+See `docs/architecture.md#pipeline-state-management` for detailed documentation.
+
 ## 7. Testing Expectations
 
 - **Server code**: `npm run typecheck && npm test && npm run validate:all`.
@@ -105,7 +147,7 @@ Only bypass hooks to unblock CI or for emergency hotfixes. Use `HUSKY=0 git comm
 
 ## 9. Prompt & Template Contributions
 
-- Use `prompt_manager` (`create`, `update`, `modify`, `delete`, `reload`) for every change.
+- Use `prompt_manager` (`create`, `update`, `delete`, `reload`) for every change.
 - Document complex prompts/chains inside Markdown files and cross-reference the relevant doc (authoring guide or chain workflows).
 - Provide argument metadata (types + validation) so the runtime schema remains accurate.
 

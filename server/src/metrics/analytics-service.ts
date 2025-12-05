@@ -68,8 +68,7 @@ export class MetricsCollector extends EventEmitter {
       failedExecutions: 0,
       averageExecutionTime: 0,
       executionsByMode: {
-        prompt: 0,
-        template: 0,
+        single: 0,
         chain: 0,
       },
       executionsByTool: {
@@ -356,7 +355,6 @@ export class MetricsCollector extends EventEmitter {
         : Boolean(frameworkUsed);
     const stepsExecuted =
       typeof metadata['stepsExecuted'] === 'number' ? metadata['stepsExecuted'] : undefined;
-
     return {
       executionId: metric.commandId,
       executionType: this.mapExecutionModeToExecutionType(metric.executionMode),
@@ -379,10 +377,10 @@ export class MetricsCollector extends EventEmitter {
     switch (mode) {
       case 'chain':
         return 'chain';
-      case 'template':
-        return 'template';
+      case 'single':
+        return 'single';
       default:
-        return 'prompt';
+        return 'single';
     }
   }
 
@@ -470,8 +468,7 @@ export class MetricsCollector extends EventEmitter {
       failedExecutions: 0,
       averageExecutionTime: 0,
       executionsByMode: {
-        prompt: 0,
-        template: 0,
+        single: 0,
         chain: 0,
       },
       executionsByTool: {

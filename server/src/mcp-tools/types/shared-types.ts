@@ -97,7 +97,7 @@ export interface ResponseContext {
 }
 
 // ============================================================================
-// PROPER ERROR TYPES (Phase 1: Replace error: any)
+// PROPER ERROR TYPES ( Replace error: any)
 // ============================================================================
 
 /**
@@ -199,7 +199,8 @@ export interface ExecutionData {
   action: string;
   success: boolean;
   duration: number;
-  executionType: 'prompt' | 'template' | 'chain';
+  executionType: 'single' | 'chain';
+  legacyExecutionType?: 'prompt' | 'template';
   startTime: number;
   endTime: number;
   framework?: string;
@@ -269,7 +270,8 @@ export interface GateValidationData {
   requirements: string[];
   context: {
     promptId: string;
-    executionType: 'prompt' | 'template' | 'chain';
+    executionType: 'single' | 'chain';
+    legacyExecutionType?: 'prompt' | 'template';
     framework?: string;
   };
 }
@@ -284,7 +286,7 @@ export interface ConfigObject {
 export interface ConfigArray extends Array<ConfigValue> {}
 
 // ============================================================================
-// SPECIFIC ARGUMENT TYPES (Phase 1: Replace any types)
+// SPECIFIC ARGUMENT TYPES ( Replace any types)
 // ============================================================================
 
 /**
@@ -342,20 +344,7 @@ export type PromptManagerAction =
       name: string;
       user_message_template: string;
     } & BasePromptManagerArgs)
-  | ({
-      action: 'create_prompt';
-      id: string;
-      name: string;
-      user_message_template: string;
-    } & BasePromptManagerArgs)
-  | ({
-      action: 'create_template';
-      id: string;
-      name: string;
-      user_message_template: string;
-    } & BasePromptManagerArgs)
   | ({ action: 'update'; id: string } & BasePromptManagerArgs & {
-        migrate_to?: 'prompt' | 'template';
         section?:
           | 'name'
           | 'description'
@@ -375,7 +364,6 @@ export type PromptManagerAction =
  */
 export interface PromptEngineArgs {
   command: string;
-  execution_mode?: 'auto' | 'prompt' | 'template' | 'chain';
   force_restart?: boolean;
   session_id?: never;
   options?: ExecutionOptions;
@@ -386,7 +374,7 @@ export interface PromptEngineArgs {
  */
 export interface ExecutionOptions {
   framework?: 'CAGEERF' | 'ReACT' | '5W1H' | 'SCAMPER';
-  apiValidation?: boolean;
+  llmValidation?: boolean;
   timeout?: number;
   retryCount?: number;
   debugMode?: boolean;

@@ -8,8 +8,18 @@
 
 /**
  * Default retry limit for failed validations
+ * @remarks Changed from 3 to 2 per gate-retry-enforcement.md plan
  */
-export const DEFAULT_RETRY_LIMIT = 3;
+export const DEFAULT_RETRY_LIMIT = 2;
+
+/**
+ * Default retry configuration for gates that don't specify their own
+ */
+export const DEFAULT_GATE_RETRY_CONFIG = {
+  max_attempts: DEFAULT_RETRY_LIMIT,
+  improvement_hints: true,
+  preserve_context: true,
+} as const;
 
 /**
  * Whether to inject gate guidance into prompts by default
@@ -28,6 +38,7 @@ export const GATE_SYSTEM_DEFAULTS = {
   defaultRetryLimit: DEFAULT_RETRY_LIMIT,
   enableGuidanceInjection: ENABLE_GUIDANCE_INJECTION,
   enableValidation: ENABLE_VALIDATION,
+  defaultRetryConfig: DEFAULT_GATE_RETRY_CONFIG,
 } as const;
 
 /**
@@ -35,6 +46,7 @@ export const GATE_SYSTEM_DEFAULTS = {
  */
 export const METHODOLOGY_GATES = new Set<string>([
   'framework-compliance',
+  'methodology-validation',
   'educational-clarity',
   'research-quality',
   'technical-accuracy',

@@ -5,36 +5,38 @@
  */
 
 // Import the individual modules
-export * from "./converter.js";
-export * from "./loader.js";
-export * from "./registry.js";
+export * from './converter.js';
+export * from './loader.js';
+export * from './registry.js';
 // Template processor moved to /execution/processor/template-processor.js for better organization
-export * from "./category-manager.js";
-export * from "./file-observer.js";
-export * from "./hot-reload-manager.js";
-// Framework-aware components removed in Phase 3 simplification
+export * from './category-manager.js';
+export * from './file-observer.js';
+export * from './hot-reload-manager.js';
+// Framework-aware components removed in simplification
 
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ConfigManager } from "../config/index.js";
-import { Logger } from "../logging/index.js";
-import { TextReferenceManager } from "../text-references/index.js";
-import { ConversationManager } from "../text-references/conversation.js";
-import * as path from "node:path";
+import * as path from 'node:path';
+
+import { ConfigManager } from '../config/index.js';
+import { Logger } from '../logging/index.js';
+import { ConversationManager } from '../text-references/conversation.js';
+import { TextReferenceManager } from '../text-references/index.js';
+import { Category, CategoryPromptsResult, ConvertedPrompt, PromptData } from '../types/index.js';
+import { PromptConverter } from './converter.js';
 import {
-  Category,
-  CategoryPromptsResult,
-  ConvertedPrompt,
-  PromptData,
-} from "../types/index.js";
+  HotReloadManager,
+  createHotReloadManager,
+  type AuxiliaryReloadConfig,
+  type HotReloadEvent as PromptHotReloadEvent,
+} from './hot-reload-manager.js';
+import { PromptLoader } from './loader.js';
+import { PromptRegistry } from './registry.js';
 
 // Import the actual modules
-import { PromptConverter } from "./converter.js";
-import { PromptLoader } from "./loader.js";
-import { PromptRegistry } from "./registry.js";
 // TemplateProcessor functionality consolidated into UnifiedPromptProcessor
-import { HotReloadManager, createHotReloadManager } from "./hot-reload-manager.js";
-import type { HotReloadEvent } from "./hot-reload-manager.js";
-// Phase 1: Framework capabilities integrated into enhanced HotReloadManager
+
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { HotReloadEvent } from './hot-reload-manager.js';
+//  Framework capabilities integrated into enhanced HotReloadManager
 
 /**
  * Main Prompt Manager class that coordinates all prompt operations
@@ -52,26 +54,31 @@ export class PromptAssetManager {
   private registry?: PromptRegistry;
   // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
   private hotReloadManager?: HotReloadManager;
-  // Framework-aware components removed in Phase 3 simplification
+  // Framework-aware components removed in simplification
 
   constructor(
     logger: Logger,
     textReferenceManager: TextReferenceManager,
     conversationManager: ConversationManager,
     configManager: ConfigManager,
-    mcpServer?: McpServer,
+    mcpServer?: McpServer
   ) {
     this.logger = logger;
     this.textReferenceManager = textReferenceManager;
     this.conversationManager = conversationManager;
     this.configManager = configManager;
     this.mcpServer = mcpServer;
-    // Framework initialization removed in Phase 3 simplification
+    // Framework initialization removed in simplification
 
     // Initialize individual modules
     this.loader = new PromptLoader(logger);
     // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
-    this.converter = new PromptConverter(logger, this.loader);
+    // Pass global registerWithMcp from config (undefined if not set, allowing downstream defaults)
+    this.converter = new PromptConverter(
+      logger,
+      this.loader,
+      configManager.getPromptsRegisterWithMcp()
+    );
 
     if (mcpServer) {
       this.registry = new PromptRegistry(
@@ -80,11 +87,11 @@ export class PromptAssetManager {
         configManager,
         this.conversationManager
       );
-      
+
       // Initialize HotReloadManager with CategoryManager integration
       const categoryManager = this.loader.getCategoryManager();
-      
-      // Phase 1: Enhanced HotReloadManager with framework capabilities
+
+      //  Enhanced HotReloadManager with framework capabilities
       this.hotReloadManager = createHotReloadManager(
         logger,
         categoryManager,
@@ -99,12 +106,12 @@ export class PromptAssetManager {
             frameworkAnalysis: true,
             performanceMonitoring: true,
             preWarmAnalysis: true,
-            invalidateFrameworkCaches: true
-          }
+            invalidateFrameworkCaches: true,
+          },
         },
         this.configManager
       );
-      
+
       this.logger.info('🔄 Hot reload manager initialized');
     }
   }
@@ -112,9 +119,7 @@ export class PromptAssetManager {
   /**
    * Load prompts from category-specific configuration files
    */
-  async loadCategoryPrompts(
-    configPath: string
-  ): Promise<CategoryPromptsResult> {
+  async loadCategoryPrompts(configPath: string): Promise<CategoryPromptsResult> {
     return this.loader.loadCategoryPrompts(configPath);
   }
 
@@ -136,7 +141,7 @@ export class PromptAssetManager {
    */
   async registerAllPrompts(prompts: ConvertedPrompt[]): Promise<number> {
     if (!this.registry) {
-      throw new Error("MCP server not provided - cannot register prompts");
+      throw new Error('MCP server not provided - cannot register prompts');
     }
     return this.registry.registerAllPrompts(prompts);
   }
@@ -146,7 +151,7 @@ export class PromptAssetManager {
    */
   async notifyPromptsListChanged(): Promise<void> {
     if (!this.registry) {
-      throw new Error("MCP server not provided - cannot send notifications");
+      throw new Error('MCP server not provided - cannot send notifications');
     }
     await this.registry.notifyPromptsListChanged();
   }
@@ -167,46 +172,34 @@ export class PromptAssetManager {
 
       await this.logConfigFileDiagnostics(configPath);
 
-      this.logger.info("🔄 Calling PromptLoader.loadCategoryPrompts()...");
+      this.logger.info('🔄 Calling PromptLoader.loadCategoryPrompts()...');
 
       // Load the raw prompt data
-      const { promptsData, categories } = await this.loadCategoryPrompts(
-        configPath
-      );
+      const { promptsData, categories } = await this.loadCategoryPrompts(configPath);
 
-      this.logger.info(
-        "✅ PromptLoader.loadCategoryPrompts() completed successfully"
-      );
+      this.logger.info('✅ PromptLoader.loadCategoryPrompts() completed successfully');
       this.logger.info(
         `📊 Raw data loaded: ${promptsData.length} prompts from ${categories.length} categories`
       );
 
       this.logCategoryBreakdown(categories, promptsData);
 
-      this.logger.info("🔄 Converting prompts to JSON structure...");
+      this.logger.info('🔄 Converting prompts to JSON structure...');
 
       // Convert to JSON structure
-      const convertedPrompts = await this.convertMarkdownPromptsToJson(
-        promptsData,
-        basePath
-      );
+      const convertedPrompts = await this.convertMarkdownPromptsToJson(promptsData, basePath);
 
       this.logConversionSummary(promptsData, convertedPrompts);
 
-      this.logger.info(
-        "🎉 PromptAssetManager.loadAndConvertPrompts() completed successfully"
-      );
+      this.logger.info('🎉 PromptAssetManager.loadAndConvertPrompts() completed successfully');
       return { promptsData, categories, convertedPrompts };
     } catch (error) {
-      this.logger.error("❌ PromptAssetManager.loadAndConvertPrompts() FAILED:");
-      this.logger.error("Error type:", error?.constructor?.name);
+      this.logger.error('❌ PromptAssetManager.loadAndConvertPrompts() FAILED:');
+      this.logger.error('Error type:', error?.constructor?.name);
+      this.logger.error('Error message:', error instanceof Error ? error.message : String(error));
       this.logger.error(
-        "Error message:",
-        error instanceof Error ? error.message : String(error)
-      );
-      this.logger.error(
-        "Stack trace:",
-        error instanceof Error ? error.stack : "No stack trace available"
+        'Stack trace:',
+        error instanceof Error ? error.stack : 'No stack trace available'
       );
       throw error;
     }
@@ -231,18 +224,14 @@ export class PromptAssetManager {
       // Register with MCP server if available
       let registeredCount = 0;
       if (this.registry) {
-        registeredCount = await this.registerAllPrompts(
-          result.convertedPrompts
-        );
+        registeredCount = await this.registerAllPrompts(result.convertedPrompts);
       } else {
-        this.logger.warn(
-          "MCP server not available - skipping prompt registration"
-        );
+        this.logger.warn('MCP server not available - skipping prompt registration');
       }
 
       return { ...result, registeredCount };
     } catch (error) {
-      this.logger.error("Error initializing prompt system:", error);
+      this.logger.error('Error initializing prompt system:', error);
       throw error;
     }
   }
@@ -259,13 +248,13 @@ export class PromptAssetManager {
     convertedPrompts: ConvertedPrompt[];
     registeredCount: number;
   }> {
-    this.logger.info("Reloading prompt system...");
+    this.logger.info('Reloading prompt system...');
 
     // Note: MCP protocol doesn't support unregistering prompts
     // Hot-reload will be handled via list_changed notifications
 
     // Reinitialize the system
-    return this.initializePromptSystem(configPath, basePath);
+   return this.initializePromptSystem(configPath, basePath);
   }
 
   /**
@@ -273,10 +262,17 @@ export class PromptAssetManager {
    */
   async startHotReload(
     promptsConfigPath: string,
-    onReloadCallback?: (event: HotReloadEvent) => Promise<void>
+    onReloadCallback?: (event: PromptHotReloadEvent) => Promise<void>,
+    options?: {
+      methodologyHotReload?: {
+        handler: (event: PromptHotReloadEvent) => Promise<void>;
+        directories?: string[];
+      };
+      auxiliaryReloads?: AuxiliaryReloadConfig[];
+    }
   ): Promise<void> {
     if (!this.hotReloadManager) {
-      this.logger.warn("HotReloadManager not available - hot reload not started");
+      this.logger.warn('HotReloadManager not available - hot reload not started');
       return;
     }
 
@@ -287,9 +283,18 @@ export class PromptAssetManager {
         try {
           await onReloadCallback(event);
         } catch (error) {
-          this.logger.error("Hot reload callback failed:", error);
+          this.logger.error('Hot reload callback failed:', error);
         }
       });
+    }
+
+    // Register methodology-specific reload callback (keeps manager generic)
+    if (options?.methodologyHotReload?.handler) {
+      this.hotReloadManager.setMethodologyReloadCallback(options.methodologyHotReload.handler);
+    }
+
+    if (options?.auxiliaryReloads) {
+      this.hotReloadManager.setAuxiliaryReloads(options.auxiliaryReloads);
     }
 
     // Start monitoring
@@ -299,12 +304,36 @@ export class PromptAssetManager {
     const promptsDir = path.dirname(promptsConfigPath);
     const promptsCategoryDirs = await this.discoverPromptDirectories(promptsDir);
 
-    await this.hotReloadManager.watchDirectories([
-      { path: promptsDir }, // Watch main prompts directory
-      ...promptsCategoryDirs.map(dir => ({ path: dir.path, category: dir.category }))
-    ]);
+    const watchTargets = new Map<string, { path: string; category?: string }>();
+    watchTargets.set(promptsDir, { path: promptsDir }); // Main prompts directory
 
-    this.logger.info(`🔄 Hot reload monitoring started for ${promptsCategoryDirs.length + 1} directories`);
+    for (const dir of promptsCategoryDirs) {
+      watchTargets.set(dir.path, { path: dir.path, category: dir.category });
+    }
+
+    if (options?.methodologyHotReload?.directories) {
+      for (const dir of options.methodologyHotReload.directories) {
+        if (dir) {
+          watchTargets.set(dir, { path: dir });
+        }
+      }
+    }
+
+    if (options?.auxiliaryReloads) {
+      for (const reload of options.auxiliaryReloads) {
+        for (const dir of reload.directories) {
+          if (dir) {
+            watchTargets.set(dir, { path: dir });
+          }
+        }
+      }
+    }
+
+    await this.hotReloadManager.watchDirectories([...watchTargets.values()]);
+
+    this.logger.info(
+      `🔄 Hot reload monitoring started for ${watchTargets.size} directories (including methodology sources when configured)`
+    );
   }
 
   /**
@@ -313,24 +342,26 @@ export class PromptAssetManager {
   async stopHotReload(): Promise<void> {
     if (this.hotReloadManager) {
       await this.hotReloadManager.stop();
-      this.logger.info("Hot reload monitoring stopped");
+      this.logger.info('Hot reload monitoring stopped');
     }
   }
 
   /**
    * Discover prompt directories for watching
    */
-  private async discoverPromptDirectories(promptsDir: string): Promise<Array<{ path: string; category?: string }>> {
+  private async discoverPromptDirectories(
+    promptsDir: string
+  ): Promise<Array<{ path: string; category?: string }>> {
     const directories: Array<{ path: string; category?: string }> = [];
 
     try {
-      const fs = await import("node:fs/promises");
+      const fs = await import('node:fs/promises');
       const entries = await fs.readdir(promptsDir, { withFileTypes: true });
 
       for (const entry of entries) {
         if (entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.')) {
           const fullPath = path.join(promptsDir, entry.name);
-          
+
           // Check if this directory contains prompts.json (indicating it's a category directory)
           try {
             const categoryPromptsPath = path.join(fullPath, 'prompts.json');
@@ -343,43 +374,46 @@ export class PromptAssetManager {
         }
       }
     } catch (error) {
-      this.logger.error("Failed to discover prompt directories:", error);
+      this.logger.error('Failed to discover prompt directories:', error);
     }
 
     return directories;
   }
 
   private async logConfigFileDiagnostics(configPath: string): Promise<void> {
-    const fs = await import("node:fs/promises");
+    const fs = await import('node:fs/promises');
     try {
       const stats = await fs.stat(configPath);
       this.logger.info(
         `✓ Config file found, size: ${stats.size} bytes, modified: ${stats.mtime.toISOString()}`
       );
     } catch (error) {
-      this.logger.error("✗ Config file access error:", error);
+      this.logger.error('✗ Config file access error:', error);
       throw error;
     }
   }
 
   private logCategoryBreakdown(categories: Category[], promptsData: PromptData[]): void {
     if (categories.length === 0) {
-      this.logger.warn("⚠️ No categories found in loaded data!");
+      this.logger.warn('⚠️ No categories found in loaded data!');
       return;
     }
 
-    this.logger.info("📋 Category breakdown:");
+    this.logger.info('📋 Category breakdown:');
     categories.forEach((category) => {
       const categoryPrompts = promptsData.filter((p) => p.category === category.id);
       this.logger.info(`   ${category.name} (${category.id}): ${categoryPrompts.length} prompts`);
     });
 
     if (promptsData.length === 0) {
-      this.logger.warn("⚠️ No prompts found in loaded data!");
+      this.logger.warn('⚠️ No prompts found in loaded data!');
     }
   }
 
-  private logConversionSummary(promptsData: PromptData[], convertedPrompts: ConvertedPrompt[]): void {
+  private logConversionSummary(
+    promptsData: PromptData[],
+    convertedPrompts: ConvertedPrompt[]
+  ): void {
     this.logger.info(`✅ Conversion completed: ${convertedPrompts.length} prompts converted`);
 
     if (convertedPrompts.length !== promptsData.length) {
@@ -389,11 +423,11 @@ export class PromptAssetManager {
     }
   }
 
-  // Phase 1: Framework capabilities integrated into enhanced HotReloadManager
+  //  Framework capabilities integrated into enhanced HotReloadManager
 
-  // Framework-specific reload functionality removed in Phase 3 simplification
+  // Framework-specific reload functionality removed in simplification
 
-  // Framework statistics functionality removed in Phase 3 simplification
+  // Framework statistics functionality removed in simplification
 
   /**
    * Get all individual module instances for external access
@@ -406,7 +440,7 @@ export class PromptAssetManager {
       // templateProcessor: removed - functionality consolidated into UnifiedPromptProcessor
       categoryManager: this.loader.getCategoryManager(),
       hotReloadManager: this.hotReloadManager,
-      // Framework-aware modules removed in Phase 3 simplification
+      // Framework-aware modules removed in simplification
     };
   }
 
@@ -432,10 +466,7 @@ export class PromptAssetManager {
     }
 
     if (prompts && this.converter) {
-      stats.conversion = this.converter.getConversionStats(
-        prompts.length,
-        prompts
-      );
+      stats.conversion = this.converter.getConversionStats(prompts.length, prompts);
     }
 
     return stats;

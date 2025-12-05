@@ -140,11 +140,34 @@ export default [
       'no-unused-vars': 'off',
       'no-undef': 'off',
 
-      // Lifecycle guardrails
+      // Lifecycle guardrails - deprecated import paths
       'claude/no-legacy-imports': [
         'error',
         {
-          patterns: ['legacy/', '/legacy/', '@legacy/', 'legacy-'],
+          patterns: [
+            // Generic legacy patterns
+            'legacy/',
+            '/legacy/',
+            '@legacy/',
+            'legacy-',
+            // Deleted parser files (now in command-parser.ts and symbolic-operator-parser.ts)
+            'symbolic-command-parser',
+            'unified-command-parser',
+            // Deleted TypeScript methodology guides (now YAML in /methodologies)
+            { type: 'regex', value: 'frameworks/methodology/guides/.*-guide' },
+          ],
+        },
+      ],
+      // Block legacy executor symbols that should no longer exist
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "Identifier[name='ChainExecutor']",
+          message: 'ChainExecutor is deprecated. Use PromptExecutionPipeline instead.',
+        },
+        {
+          selector: "Identifier[name='ConsolidatedPromptEngine']",
+          message: 'ConsolidatedPromptEngine is deprecated. Use PromptExecutionPipeline instead.',
         },
       ],
       'claude/no-session-id': [
@@ -275,10 +298,31 @@ export default [
       'no-unused-vars': 'off',
       'no-undef': 'off',
 
+      // Lifecycle guardrails - deprecated import paths (same as source files)
       'claude/no-legacy-imports': [
         'error',
         {
-          patterns: ['legacy/', '/legacy/', '@legacy/', 'legacy-'],
+          patterns: [
+            'legacy/',
+            '/legacy/',
+            '@legacy/',
+            'legacy-',
+            'symbolic-command-parser',
+            'unified-command-parser',
+            { type: 'regex', value: 'frameworks/methodology/guides/.*-guide' },
+          ],
+        },
+      ],
+      // Block legacy executor symbols
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "Identifier[name='ChainExecutor']",
+          message: 'ChainExecutor is deprecated. Use PromptExecutionPipeline instead.',
+        },
+        {
+          selector: "Identifier[name='ConsolidatedPromptEngine']",
+          message: 'ConsolidatedPromptEngine is deprecated. Use PromptExecutionPipeline instead.',
         },
       ],
       'claude/no-session-id': [

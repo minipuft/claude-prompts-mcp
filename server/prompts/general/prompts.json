@@ -22,20 +22,41 @@
       ]
     },
     {
-      "id": "test_prompt_creation",
-      "name": "Test Prompt Creation",
+      "id": "hiring_manager_code_eval",
+      "name": "Hiring Manager Codebase Evaluation",
       "category": "general",
-      "description": "Testing API analysis message on prompt creation",
-      "file": "test_prompt_creation.md",
+      "description": "A hiring manager prompt for evaluating a codebase against job listing requirements.",
+      "file": "hiring_manager_code_eval.md",
       "arguments": []
     },
     {
-      "id": "test_api_message_v2",
-      "name": "Test API Message V2",
+      "id": "create_docs_chain",
+      "name": "Documentation Generation Chain",
       "category": "general",
-      "description": "Testing that API analysis message displays correctly",
-      "file": "test_api_message_v2.md",
-      "arguments": []
+      "description": "A comprehensive chain for creating high-quality technical documentation with proper structure, formatting, and best practices",
+      "file": "create_docs_chain.md",
+      "arguments": [
+        {
+          "name": "project_info",
+          "type": "string",
+          "description": "Information about the project to document"
+        },
+        {
+          "name": "doc_type",
+          "type": "string",
+          "description": "Type of documentation to create (e.g., API Reference, User Guide)"
+        },
+        {
+          "name": "audience",
+          "type": "string",
+          "description": "Target audience for the documentation"
+        },
+        {
+          "name": "depth_level",
+          "type": "string",
+          "description": "Depth level of the documentation (default: intermediate)"
+        }
+      ]
     }
   ]
 }

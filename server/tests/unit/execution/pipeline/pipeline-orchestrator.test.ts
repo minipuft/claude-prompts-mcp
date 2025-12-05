@@ -1,10 +1,14 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { PromptExecutionPipeline } from '../../../../src/execution/pipeline/prompt-execution-pipeline.js';
-import type { PipelineStage } from '../../../../src/execution/pipeline/stage.js';
+
 import type { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
+import type { PipelineStage } from '../../../../src/execution/pipeline/stage.js';
 import type { Logger } from '../../../../src/logging/index.js';
 
+// Stage order matches registerStages() in prompt-execution-pipeline.ts
+// JudgeSelection runs BEFORE GateEnhancement and FrameworkResolution for two-phase judge flow
+// FrameworkInjectionControl runs AFTER SessionManagement to access currentStep
 const stageOrder = [
   'RequestNormalization',
   'DependencyInjection',
@@ -13,10 +17,12 @@ const stageOrder = [
   'InlineGateExtraction',
   'OperatorValidation',
   'ExecutionPlanning',
-  'FrameworkResolution',
-  'PromptGuidance',
-  'GateEnhancement',
+  'JudgeSelection',        // Moved before framework/gate stages
+  'GateEnhancement',       // Now runs after judge decision
+  'FrameworkResolution',   // Now uses clientFrameworkOverride from judge flow
   'SessionManagement',
+  'FrameworkInjectionControl', // Controls injection frequency after session provides currentStep
+  'PromptGuidance',
   'StepResponseCapture',
   'StepExecution',
   'GateReview',
@@ -65,9 +71,13 @@ const createPipeline = (
   });
 
   const stageInstances = stageOrder.map((name) =>
-    wrapStage(overrides[name] ?? (name === 'ResponseFormatting' ? defaultFormattingStage : createStage(name)))
+    wrapStage(
+      overrides[name] ??
+        (name === 'ResponseFormatting' ? defaultFormattingStage : createStage(name))
+    )
   );
 
+  // Destructuring order must match stageOrder array
   const [
     requestStage,
     dependencyStage,
@@ -76,16 +86,18 @@ const createPipeline = (
     inlineGateStage,
     operatorValidationStage,
     planningStage,
-    frameworkStage,
-    promptGuidanceStage,
-    gateStage,
-    sessionStage,
-    responseCaptureStage,
-    executionStage,
-    gateReviewStage,
-    callToActionStage,
-    formattingStage,
-    postFormattingStage,
+    judgeSelectionStage,     // position 8 (before gate/framework)
+    gateStage,               // position 9
+    frameworkStage,          // position 10
+    sessionStage,            // position 11
+    frameworkInjectionControlStage, // position 12
+    promptGuidanceStage,     // position 13
+    responseCaptureStage,    // position 14
+    executionStage,          // position 15
+    gateReviewStage,         // position 16
+    callToActionStage,       // position 17
+    formattingStage,         // position 18
+    postFormattingStage,     // position 19
   ] = stageInstances;
 
   const pipeline = new PromptExecutionPipeline(
@@ -97,9 +109,11 @@ const createPipeline = (
     operatorValidationStage,
     planningStage,
     frameworkStage,
+    judgeSelectionStage,
     promptGuidanceStage,
     gateStage,
     sessionStage,
+    frameworkInjectionControlStage,
     responseCaptureStage,
     executionStage,
     gateReviewStage,
@@ -178,7 +192,12 @@ describe('PromptExecutionPipeline orchestration', () => {
     expect(contentText(response)).toBe('chain output');
   });
 
-  test('framework stage executes before gate enhancement and response formatting sees framework context', async () => {
+  test('gate enhancement executes before framework resolution (for two-phase judge flow) and response formatting sees framework context', async () => {
+    const gateStage = {
+      name: 'GateEnhancement',
+      execute: jest.fn(),
+    };
+
     const frameworkStage = {
       name: 'FrameworkResolution',
       execute: jest.fn(async (context: ExecutionContext) => {
@@ -186,29 +205,27 @@ describe('PromptExecutionPipeline orchestration', () => {
       }),
     };
 
-    const gateStage = {
-      name: 'GateEnhancement',
-      execute: jest.fn(),
-    };
-
     const responseFormattingStage = createStage('ResponseFormatting', (context) => {
       context.setResponse({
-        content: [{ type: 'text', text: `framework:${context.frameworkContext?.methodology ?? 'none'}` }],
+        content: [
+          { type: 'text', text: `framework:${context.frameworkContext?.methodology ?? 'none'}` },
+        ],
       });
     });
 
     const { pipeline } = createPipeline({
-      FrameworkResolution: frameworkStage,
       GateEnhancement: gateStage,
+      FrameworkResolution: frameworkStage,
       ResponseFormatting: responseFormattingStage,
     });
 
     const response = await pipeline.execute({ command: '>>demo' });
 
-    expect(frameworkStage.execute).toHaveBeenCalledTimes(1);
     expect(gateStage.execute).toHaveBeenCalledTimes(1);
-    expect(frameworkStage.execute.mock.invocationCallOrder[0]).toBeLessThan(
-      gateStage.execute.mock.invocationCallOrder[0]
+    expect(frameworkStage.execute).toHaveBeenCalledTimes(1);
+    // Gate enhancement now runs BEFORE framework resolution for two-phase judge flow
+    expect(gateStage.execute.mock.invocationCallOrder[0]).toBeLessThan(
+      frameworkStage.execute.mock.invocationCallOrder[0]
     );
     expect(contentText(response)).toBe('framework:CAGEERF');
   });

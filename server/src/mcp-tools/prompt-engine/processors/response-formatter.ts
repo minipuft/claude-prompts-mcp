@@ -114,7 +114,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
     response: any,
     executionContext: FormatterExecutionContext = {
       executionId: `exec_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-      executionType: 'prompt',
+      executionType: 'single',
       startTime: Date.now(),
       endTime: Date.now(),
       frameworkEnabled: false,

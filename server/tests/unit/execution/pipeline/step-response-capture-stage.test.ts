@@ -3,6 +3,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
 import { StepResponseCaptureStage } from '../../../../src/execution/pipeline/stages/08-response-capture-stage.js';
 import { StepState } from '../../../../src/mcp-tools/prompt-engine/core/types.js';
+
 import type { ChainSessionService } from '../../../../src/chain-session/types.js';
 import type { Logger } from '../../../../src/logging/index.js';
 
@@ -19,6 +20,9 @@ const createSessionManager = () => {
   const getStepState = jest.fn();
   const updateSessionState = jest.fn().mockResolvedValue(true);
   const completeStep = jest.fn().mockResolvedValue(true);
+  const isRetryLimitExceeded = jest.fn().mockReturnValue(false);
+  const resetRetryCount = jest.fn().mockResolvedValue(true);
+  const clearPendingGateReview = jest.fn().mockResolvedValue(true);
   const recordGateReviewOutcome = jest.fn().mockResolvedValue('cleared');
   const getPendingGateReview = jest.fn();
 
@@ -29,6 +33,9 @@ const createSessionManager = () => {
       getStepState,
       updateSessionState,
       completeStep,
+      isRetryLimitExceeded,
+      resetRetryCount,
+      clearPendingGateReview,
       recordGateReviewOutcome,
       getPendingGateReview,
     } as unknown as ChainSessionService,
@@ -37,6 +44,9 @@ const createSessionManager = () => {
     getStepState,
     updateSessionState,
     completeStep,
+    isRetryLimitExceeded,
+    resetRetryCount,
+    clearPendingGateReview,
     recordGateReviewOutcome,
     getPendingGateReview,
   };
@@ -66,7 +76,13 @@ describe('StepResponseCaptureStage', () => {
       sessionId: 'sess-1',
       chainId: 'chain-1',
       state: { currentStep: 2, totalSteps: 3 },
-      pendingGateReview: { gateIds: ['accuracy'], attemptCount: 1, prompts: [], createdAt: Date.now(), maxAttempts: 3 },
+      pendingGateReview: {
+        gateIds: ['accuracy'],
+        attemptCount: 1,
+        prompts: [],
+        createdAt: Date.now(),
+        maxAttempts: 3,
+      },
     });
 
     const context = new ExecutionContext({
@@ -79,7 +95,13 @@ describe('StepResponseCaptureStage', () => {
       isChainExecution: true,
       currentStep: 2,
       totalSteps: 3,
-      pendingReview: { gateIds: ['accuracy'], attemptCount: 1, prompts: [], createdAt: Date.now(), maxAttempts: 3 },
+      pendingReview: {
+        gateIds: ['accuracy'],
+        attemptCount: 1,
+        prompts: [],
+        createdAt: Date.now(),
+        maxAttempts: 3,
+      },
     };
 
     await stage.execute(context);
@@ -105,7 +127,13 @@ describe('StepResponseCaptureStage', () => {
       sessionId: 'sess-1',
       chainId: 'chain-1',
       state: { currentStep: 2, totalSteps: 3 },
-      pendingGateReview: { gateIds: ['accuracy'], attemptCount: 1, prompts: [], createdAt: Date.now(), maxAttempts: 3 },
+      pendingGateReview: {
+        gateIds: ['accuracy'],
+        attemptCount: 1,
+        prompts: [],
+        createdAt: Date.now(),
+        maxAttempts: 3,
+      },
     });
 
     const context = new ExecutionContext({
@@ -118,7 +146,13 @@ describe('StepResponseCaptureStage', () => {
       isChainExecution: true,
       currentStep: 2,
       totalSteps: 3,
-      pendingReview: { gateIds: ['accuracy'], attemptCount: 1, prompts: [], createdAt: Date.now(), maxAttempts: 3 },
+      pendingReview: {
+        gateIds: ['accuracy'],
+        attemptCount: 1,
+        prompts: [],
+        createdAt: Date.now(),
+        maxAttempts: 3,
+      },
     };
 
     await stage.execute(context);
@@ -177,14 +211,8 @@ describe('StepResponseCaptureStage', () => {
   });
 
   test('captures real user response when placeholder state exists', async () => {
-    const {
-      manager,
-      getSession,
-      getStepState,
-      updateSessionState,
-      completeStep,
-      getChainContext,
-    } = createSessionManager();
+    const { manager, getSession, getStepState, updateSessionState, completeStep, getChainContext } =
+      createSessionManager();
     const stage = new StepResponseCaptureStage(manager, createLogger());
 
     getSession

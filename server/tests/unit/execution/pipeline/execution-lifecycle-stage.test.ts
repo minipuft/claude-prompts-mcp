@@ -19,13 +19,13 @@ describe('ExecutionLifecycleStage', () => {
 
     await stage.execute(context);
 
-    expect(context.metadata.executionScopeId).toBeDefined();
+    expect(context.state.session.executionScopeId).toBeDefined();
     const handlers = context.metadata.lifecycleCleanupHandlers as Array<() => Promise<void>>;
     expect(Array.isArray(handlers)).toBe(true);
     expect(handlers.length).toBe(1);
 
-    await handlers[0]!();
+    await handlers[0]();
 
-    expect(cleanupScope).toHaveBeenCalledWith('execution', context.metadata.executionScopeId);
+    expect(cleanupScope).toHaveBeenCalledWith('execution', context.state.session.executionScopeId);
   });
 });

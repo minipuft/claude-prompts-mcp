@@ -15,106 +15,106 @@ export type { McpToolRequest } from './execution.js';
 
 // Core configuration and protocol types
 export type {
-  Config,
-  ServerConfig,
-  TransportConfig,
-  TransportsConfig,
-  LoggingConfig,
-  ChainSessionConfig,
-  AnalysisMode,
-  LLMProvider,
-  LLMIntegrationConfig,
-  SemanticAnalysisConfig,
   AnalysisConfig,
-  ToolDescriptionsOptions,
+  AnalysisMode,
+  BaseMessageContent,
+  ChainSessionConfig,
+  Config,
   FrameworksConfig,
+  JudgeConfig,
+  LLMIntegrationConfig,
+  LLMProvider,
+  LoggingConfig,
   Message,
   MessageContent,
   MessageRole,
+  SemanticAnalysisConfig,
+  ServerConfig,
   TextMessageContent,
-  BaseMessageContent
+  ToolDescriptionsOptions,
+  TransportConfig,
+  TransportsConfig,
 } from '../types.js';
 
 // Prompt system types
 export type {
-  PromptArgument,
   Category,
+  CategoryPromptRelationship,
+  CategoryPromptsResult,
+  CategoryStatistics,
+  CategoryValidationResult,
+  PromptArgument,
   PromptData,
   PromptFile,
+  PromptFileContent,
   PromptsConfig,
   PromptsConfigFile,
   PromptsFile,
-  PromptFileContent,
-  CategoryPromptsResult,
-  CategoryValidationResult,
-  CategoryStatistics,
-  CategoryPromptRelationship
 } from '../prompts/types.js';
 
 // Execution system types
 export type {
-  ConvertedPrompt,
+  BaseExecutionContext,
+  ChainExecutionResult,
+  ChainExecutionState,
   ChainStep,
+  ChainStepResult,
+  ConvertedPrompt,
+  EnhancedChainExecutionOptions,
+  ExecutionModifier,
+  ExecutionModifiers,
+  ExecutionStats,
+  ExecutionStrategy,
   ExecutionStrategyType,
   ExecutionType,
-  BaseExecutionContext,
-  UnifiedExecutionResult,
-  ExecutionStrategy,
-  ChainExecutionResult,
-  ChainStepResult,
-  ChainExecutionState,
-  EnhancedChainExecutionOptions,
+  PerformanceMetrics,
   TemplateContext,
+  UnifiedExecutionResult,
   ValidationResult,
-  ExecutionStats,
-  PerformanceMetrics
 } from '../execution/types.js';
 
 // Import additional types needed for interfaces in this file
 import type {
   ChainStep,
+  ChainStepResult,
   EnhancedChainExecutionOptions,
-  ChainStepResult
 } from '../execution/types.js';
-import type {
-  GateStatus,
-  StepResult
-} from '../gates/types.js';
+import type { GateStatus, StepResult } from '../gates/types.js';
 
 // Gate system types
 export type {
+  GateActivationResult,
   GateDefinition,
+  GateEvaluationResult,
+  GatePassCriteria,
   GateRequirement,
   GateRequirementType,
-  GateStatus,
-  GateEvaluationResult,
-  ValidationContext,
-  GateActivationResult,
-  LightweightGateDefinition,
-  GatePassCriteria,
-  ValidationCheck,
   GatesConfig,
+  GateStatus,
+  GateType,
+  LightweightGateDefinition,
   StepResult,
-  GateType
+  ValidationCheck,
+  ValidationContext,
 } from '../gates/types.js';
 
-// Framework system types (consolidated in Phase 2)
+// Framework system types (consolidated in )
 export type {
   FrameworkDefinition,
   FrameworkExecutionContext,
-  FrameworkSelectionCriteria,
   FrameworkMethodology,
-  IMethodologyGuide,
+  FrameworkSelectionCriteria,
   FrameworkStateInfo,
+  FrameworkSwitchingConfig,
+  IMethodologyGuide,
   IntegratedAnalysisResult,
-  FrameworkSwitchingConfig
 } from '../frameworks/types/index.js';
 
 // ===== Additional System Types =====
 
 // Conversation History Types
 export interface ConversationHistoryItem {
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   timestamp: number;
   isProcessedTemplate?: boolean; // Flag to indicate if this is a processed template rather than original user input
@@ -128,22 +128,22 @@ export interface EnhancedChainExecutionContext {
   executionOptions: EnhancedChainExecutionOptions;
 
   // Enhanced step tracking
-  allSteps: ChainStep[];                 // All steps in the chain
-  completedSteps: Set<string>;           // Step IDs that have completed successfully
-  failedSteps: Set<string>;              // Step IDs that have failed
-  skippedSteps: Set<string>;             // Step IDs that were skipped due to dependencies/conditions
+  allSteps: ChainStep[]; // All steps in the chain
+  completedSteps: Set<string>; // Step IDs that have completed successfully
+  failedSteps: Set<string>; // Step IDs that have failed
+  skippedSteps: Set<string>; // Step IDs that were skipped due to dependencies/conditions
   stepResults: Record<string, StepResult>; // Detailed results from each step
 
   // Dependency management
   executionPlan?: {
-    executionOrder: string[];             // Topologically sorted step execution order
+    executionOrder: string[]; // Topologically sorted step execution order
     parallelGroups: Map<string, string[]>; // Parallel execution groups
   };
 
   // Advanced execution state
   currentPhase: 'planning' | 'executing' | 'completed' | 'failed';
   activeParallelGroups: Map<string, string[]>; // Currently executing parallel groups
-  retryCount: Record<string, number>;    // Retry attempts per step
+  retryCount: Record<string, number>; // Retry attempts per step
 
   // Gate validation tracking
   gateValidationResults: Record<string, GateStatus[]>; // Gate results per step
@@ -158,7 +158,7 @@ export interface ApiResponse {
 
 export interface ToolResponse {
   content: Array<{
-    type: "text";
+    type: 'text';
     text: string;
   }>;
   isError?: boolean;
@@ -190,6 +190,11 @@ export interface ToolDescriptionsConfig {
   version: string;
   lastUpdated?: string;
   tools: Record<string, ToolDescription>;
+  // Runtime metadata used when the active file is regenerated from framework state
+  activeFramework?: string;
+  activeMethodology?: string;
+  generatedFrom?: 'fallback' | 'legacy' | 'defaults' | string;
+  generatedAt?: string;
 }
 
 // Server Management Types
@@ -247,7 +252,6 @@ export interface ExecutionState {
   metadata: {
     startTime: number;
     endTime?: number;
-    executionMode?: 'prompt' | 'template' | 'chain';
     stepConfirmation?: boolean;
     gateValidation?: boolean;
     sessionId?: string; // For chain session management
@@ -310,29 +314,23 @@ export interface AutoExecutionConfig {
 export const MAX_HISTORY_SIZE = 100;
 
 export enum LogLevel {
-  DEBUG = "DEBUG",
-  INFO = "INFO",
-  WARN = "WARN",
-  ERROR = "ERROR",
+  DEBUG = 'DEBUG',
+  INFO = 'INFO',
+  WARN = 'WARN',
+  ERROR = 'ERROR',
 }
 
 export enum TransportType {
-  STDIO = "stdio",
-  SSE = "sse",
-}
-
-export enum ExecutionMode {
-  AUTO = "auto",
-  TEMPLATE = "template",
-  CHAIN = "chain",
+  STDIO = 'stdio',
+  SSE = 'sse',
 }
 
 export enum StepStatus {
-  PENDING = "pending",
-  RUNNING = "running",
-  COMPLETED = "completed",
-  FAILED = "failed",
-  SKIPPED = "skipped",
+  PENDING = 'pending',
+  RUNNING = 'running',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+  SKIPPED = 'skipped',
 }
 
 // ===== End of Consolidated Type Definitions =====

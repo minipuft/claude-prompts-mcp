@@ -13,8 +13,8 @@ import { ConfigManager } from '../config/index.js';
 import { Logger } from '../logging/index.js';
 import { McpToolsManager, PromptManagerActionArgs } from '../mcp-tools/index.js';
 import { PromptAssetManager } from '../prompts/index.js';
-import { modifyPromptSection, safeWriteFile } from '../prompts/promptUtils.js';
 import { reloadPromptData as reloadPromptDataFromDisk } from '../prompts/prompt-refresh-service.js';
+import { modifyPromptSection, safeWriteFile } from '../prompts/promptUtils.js';
 import { Category, PromptData, PromptsFile, ToolResponse } from '../types/index.js';
 
 /**
@@ -168,11 +168,6 @@ export class ApiManager {
     // Delete prompt endpoint
     app.delete('/api/v1/tools/prompts/:id', async (req: Request, res: Response) => {
       await this.handleDeletePrompt(req, res);
-    });
-
-    // Modify prompt section endpoint
-    app.post('/api/v1/tools/modify_prompt_section', async (req: Request, res: Response) => {
-      await this.handleModifyPromptSection(req, res);
     });
 
     // Reload prompts endpoint
@@ -349,61 +344,6 @@ export class ApiManager {
   }
 
   /**
-   * Handle modify prompt section API endpoint
-   */
-  private async handleModifyPromptSection(req: Request, res: Response): Promise<void> {
-    try {
-      this.logger.info('Received request to modify prompt section:', req.body);
-
-      const { id, section_name, new_content, restartServer } = req.body;
-
-      if (!id || !section_name || !new_content) {
-        res.status(400).json({
-          success: false,
-          message: 'Missing required fields: id, section_name, and new_content are required',
-        });
-        return;
-      }
-
-      // Use the modifyPromptSection function from promptUtils
-      const PROMPTS_FILE = this.configManager.getResolvedPromptsFilePath();
-      const result = await modifyPromptSection(id, section_name, new_content, PROMPTS_FILE);
-
-      if (!result.success) {
-        res.status(404).json({
-          success: false,
-          message: result.message,
-        });
-        return;
-      }
-
-      try {
-        await this.reloadPromptData();
-        this.logger.info(
-          `Triggered server refresh${restartServer ? ' with restart' : ''} after modifying section: ${section_name}`
-        );
-      } catch (refreshError) {
-        this.logger.error(
-          `Error refreshing server after modifying section: ${section_name}`,
-          refreshError
-        );
-      }
-
-      res.status(200).json({
-        success: true,
-        message: result.message,
-        restarting: restartServer || false,
-      });
-    } catch (error) {
-      this.logger.error('Error handling modify_prompt_section API request:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error',
-      });
-    }
-  }
-
-  /**
    * Handle reload prompts API endpoint
    */
   private async handleReloadPrompts(req: Request, res: Response): Promise<void> {
@@ -485,9 +425,11 @@ export class ApiManager {
       return response.isError ? 'Prompt manager reported an error' : 'Operation completed';
     }
 
-    return response.content.map((entry) => entry.text).join('\n').trim();
+    return response.content
+      .map((entry) => entry.text)
+      .join('\n')
+      .trim();
   }
-
 }
 
 /**

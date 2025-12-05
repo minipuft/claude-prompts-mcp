@@ -1,6 +1,10 @@
 // @lifecycle canonical - Prompt engine helper that exposes action metadata guide.
 import { promptEngineMetadata } from '../../../tooling/action-metadata/definitions/prompt-engine.js';
-import type { ParameterDescriptor, CommandDescriptor } from '../../../tooling/action-metadata/definitions/types.js';
+
+import type {
+  ParameterDescriptor,
+  CommandDescriptor,
+} from '../../../tooling/action-metadata/definitions/types.js';
 
 export function renderPromptEngineGuide(goal?: string): string {
   const normalizedGoal = typeof goal === 'string' ? goal.trim() : '';
@@ -54,7 +58,9 @@ export function renderPromptEngineGuide(goal?: string): string {
   if (promptEngineMetadata.issues && promptEngineMetadata.issues.length > 0) {
     sections.push('### Known Limitations');
     promptEngineMetadata.issues.forEach((issue) => {
-      sections.push(`${issue.severity === 'high' ? '❗' : '⚠️'} ${issue.summary}: ${issue.details}`);
+      sections.push(
+        `${issue.severity === 'high' ? '❗' : '⚠️'} ${issue.summary}: ${issue.details}`
+      );
     });
   }
 
@@ -68,7 +74,7 @@ export function renderPromptEngineGuide(goal?: string): string {
   }
 
   sections.push(
-    '💡 Tip: Opt into API validation (`api_validation:true`) when you plan to return `gate_verdict` alongside `quality_gates` or `custom_checks`. The response footer will then remind you which verdict to send.'
+    '💡 Tip: Use the unified `gates` parameter to specify validation criteria. When combined with `llm_validation:true`, you can return `gate_verdict` for gate reviews. The response footer will remind you which verdict format to use.'
   );
 
   return sections.join('\n\n');
@@ -151,7 +157,9 @@ function describePromptEngineStatus(status: string): string {
   }
 }
 
-function formatUsagePattern(pattern: (typeof promptEngineMetadata.data.usagePatterns)[number]): string {
+function formatUsagePattern(
+  pattern: (typeof promptEngineMetadata.data.usagePatterns)[number]
+): string {
   const header = `**${pattern.title}** — ${pattern.summary}`;
   const parameterList = pattern.parameters.length
     ? `Parameters: ${pattern.parameters.map((name) => `\`${name}\``).join(', ')}`
@@ -162,5 +170,7 @@ function formatUsagePattern(pattern: (typeof promptEngineMetadata.data.usagePatt
       ? `Notes: ${pattern.notes.map((note) => `- ${note}`).join('\n')}`
       : '';
 
-  return [header, parameterList, sampleBlock, notes].filter((segment) => segment.length > 0).join('\n\n');
+  return [header, parameterList, sampleBlock, notes]
+    .filter((segment) => segment.length > 0)
+    .join('\n\n');
 }

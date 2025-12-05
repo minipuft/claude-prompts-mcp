@@ -1,10 +1,33 @@
 // @lifecycle canonical - Holds runtime execution context data and helpers.
 import { McpToolRequestValidator } from '../validation/request-validator.js';
+import { GateAccumulator } from '../pipeline/state/accumulators/gate-accumulator.js';
+import { DiagnosticAccumulator } from '../pipeline/state/accumulators/diagnostic-accumulator.js';
+import { FrameworkDecisionAuthority } from '../pipeline/decisions/index.js';
+
+import type { GateEnforcementAuthority } from '../pipeline/decisions/index.js';
+
+import type { Logger } from '../../logging/index.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
 import type { ConvertedPrompt, ToolResponse, McpToolRequest } from '../../types/index.js';
-import type { ChainStepPrompt } from '../operators/chain-operator-executor.js';
-import type { CommandParseResult } from '../parsers/unified-command-parser.js';
+import type { ChainStepPrompt } from '../operators/types.js';
+import type { CommandParseResult } from '../parsers/command-parser.js';
+import type {
+  ExecutionModifier,
+  ExecutionModifiers,
+  ExecutionPlan,
+} from '../types.js';
+import type { PipelineInternalState } from './internal-state.js';
+
+/**
+ * No-op logger for tests and cases where logging isn't needed.
+ */
+const noopLogger: Logger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
 
 /**
  * Unified execution context that flows through the new pipeline
@@ -20,14 +43,52 @@ export class ExecutionContext {
   public executionResults?: ExecutionResults;
   public gateInstructions?: string; // Formatted gate footer from GateEnhancementStage
   public response?: ToolResponse;
+
+  /**
+   * Centralized gate accumulator for all pipeline stages.
+   * Handles automatic deduplication with priority-based conflict resolution.
+   * Stages should use this instead of direct array manipulation.
+   */
+  public readonly gates: GateAccumulator;
+
+  /**
+   * Diagnostic accumulator for collecting warnings/errors across stages.
+   * Useful for debugging, auditing, and user feedback.
+   */
+  public readonly diagnostics: DiagnosticAccumulator;
+
+  /**
+   * Framework decision authority - single source of truth for framework decisions.
+   * Caches the decision once made, ensuring consistency across all stages.
+   */
+  public readonly frameworkAuthority: FrameworkDecisionAuthority;
+
+  /**
+   * Gate enforcement authority - single source of truth for gate enforcement decisions.
+   * Handles verdict parsing, enforcement mode resolution, retry tracking, and gate actions.
+   * Initialized by DependencyInjectionStage (requires ChainSessionService).
+   */
+  public gateEnforcement?: GateEnforcementAuthority;
+
+  /**
+   * Typed internal state for pipeline coordination.
+   * Replaces ad-hoc metadata for structured properties.
+   */
+  public readonly state: PipelineInternalState;
+
+  /**
+   * Legacy metadata bag.
+   * @deprecated Use `state` for pipeline coordination properties.
+   */
   public metadata: Record<string, unknown> = {};
 
   /**
    * Creates a new ExecutionContext with validated request data
    *
    * @param mcpRequest - Validated MCP tool request (should be pre-validated)
+   * @param logger - Optional logger instance (defaults to no-op logger for tests)
    */
-  constructor(mcpRequest: McpToolRequest) {
+  constructor(mcpRequest: McpToolRequest, logger: Logger = noopLogger) {
     // Ensure immutability and validate command
     const normalizedCommand =
       mcpRequest.command !== undefined
@@ -38,6 +99,38 @@ export class ExecutionContext {
       ...mcpRequest,
       ...(normalizedCommand ? { command: normalizedCommand } : {}),
     });
+
+    // Initialize pipeline state accumulators and authorities
+    this.gates = new GateAccumulator(logger);
+    this.diagnostics = new DiagnosticAccumulator(logger);
+    this.frameworkAuthority = new FrameworkDecisionAuthority(logger);
+
+    // Initialize typed state with defaults
+    this.state = {
+      // Modular injection state - controlled by InjectionControlStage (07b)
+      injection: {},
+
+      // Framework state for judge selection and style guidance
+      framework: {
+        judgePhaseTriggered: false,
+        styleEnhancementApplied: false,
+        systemPromptApplied: false,
+      },
+      normalization: {
+        completed: false,
+        isCanonical: false,
+      },
+      session: {
+        isBlueprintRestored: false,
+        isExplicitChainResume: false,
+      },
+      gates: {
+        temporaryGateIds: [],
+        methodologyGateIds: [],
+        canonicalGateIdsFromTemporary: [],
+        registeredInlineGateIds: [],
+      },
+    };
   }
 
   /**
@@ -47,7 +140,7 @@ export class ExecutionContext {
    */
   getSessionId(): string | undefined {
     const sessionId =
-      (this.metadata.resumeSessionId as string | undefined) ?? this.sessionContext?.sessionId;
+      this.state.session.resumeSessionId ?? this.sessionContext?.sessionId;
     if (!sessionId) return undefined;
     return sessionId;
   }
@@ -55,7 +148,7 @@ export class ExecutionContext {
   getRequestedChainId(): string | undefined {
     const chainId =
       this.mcpRequest.chain_id ??
-      (this.metadata.resumeChainId as string | undefined) ??
+      this.state.session.resumeChainId ??
       this.sessionContext?.chainId;
     if (!chainId) {
       return undefined;
@@ -98,21 +191,25 @@ export class ExecutionContext {
   }
 
   /**
-   * Check if API validation is enabled
+   * Check if LLM validation hints are enabled
    *
-   * @returns True only when api_validation is explicitly true
+   * @returns True only when llm_validation is explicitly true
    */
-  hasApiValidation(): boolean {
-    return this.mcpRequest.api_validation === true;
+  hasLlmValidation(): boolean {
+    return this.mcpRequest.llm_validation === true;
   }
 
   /**
-   * Get the execution mode with fallback to 'auto'
-   *
-   * @returns Execution mode (defaults to 'auto')
+   * Returns execution modifiers resolved from parsing or planning.
    */
-  getExecutionMode(): 'auto' | 'prompt' | 'template' | 'chain' {
-    return this.mcpRequest.execution_mode ?? 'auto';
+  getExecutionModifiers(): ExecutionModifiers | undefined {
+    if (this.executionPlan?.modifiers) {
+      return this.executionPlan.modifiers;
+    }
+    if (this.parsedCommand?.modifiers) {
+      return this.parsedCommand.modifiers;
+    }
+    return undefined;
   }
 
   /**
@@ -133,7 +230,7 @@ export class ExecutionContext {
     if (typeof this.mcpRequest.chain_id === 'string' && this.mcpRequest.chain_id.length > 0) {
       return true;
     }
-    return this.metadata['explicitChainResume'] === true;
+    return this.state.session.isExplicitChainResume === true;
   }
 
   /**
@@ -259,21 +356,13 @@ export interface ParsedCommand extends CommandParseResult {
   inlineGateIds?: string[];
   chainId?: string;
   steps?: ChainStepPrompt[];
+  modifier?: ExecutionModifier;
+  modifiers?: ExecutionModifiers;
+  styleSelection?: string;
 }
 
-/**
- * Execution plan generated by the ExecutionPlanner (Phase ).
- */
-export interface ExecutionPlan {
-  strategy: ExecutionStrategy;
-  gates: string[];
-  requiresFramework: boolean;
-  requiresSession: boolean;
-  apiValidationEnabled?: boolean;
-  category?: string;
-}
-
-export type ExecutionStrategy = 'prompt' | 'template' | 'chain';
+// ExecutionPlan and ExecutionStrategyType are now imported from ../types.js
+// This eliminates the circular dependency with operators/types.ts
 
 /**
  * Session state propagated through the pipeline.
@@ -285,6 +374,10 @@ export interface SessionContext {
   currentStep?: number;
   totalSteps?: number;
   pendingReview?: PendingGateReview;
+  /** Result status from the previous step (for injection condition evaluation) */
+  previousStepResult?: 'success' | 'failure' | 'skipped';
+  /** Quality score from the previous step (0-100, if gate evaluation provided one) */
+  previousStepQualityScore?: number;
 }
 
 /**

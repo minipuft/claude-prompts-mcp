@@ -4,32 +4,39 @@
  * Minimal entry point with comprehensive error handling, health checks, and validation
  */
 
-import { Logger } from "./logging/index.js";
-import { startApplication } from "./runtime/application.js";
-import { ConfigManager } from "./config/index.js";
-import {
-  RuntimeLaunchOptions,
-  resolveRuntimeLaunchOptions,
-} from "./runtime/options.js";
+import { ConfigManager } from './config/index.js';
+import { Logger } from './logging/index.js';
+import { startApplication } from './runtime/application.js';
+import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
+import type { HealthReport } from './runtime/health.js';
 
-/**
- * Health check and validation state
- */
-interface ApplicationHealth {
-  startup: boolean;
-  modules: boolean;
-  server: boolean;
+const EMPTY_HEALTH_REPORT: HealthReport = {
+  healthy: false,
+  modules: {
+    foundation: false,
+    dataLoaded: false,
+    modulesInitialized: false,
+    serverRunning: false,
+  },
+  details: {
+    promptsLoaded: 0,
+    categoriesLoaded: 0,
+    moduleStatus: {},
+  },
+  issues: ['Health not yet evaluated'],
+};
+
+interface TrackedHealth {
   lastCheck: number;
+  report: HealthReport;
 }
 
 /**
  * Application state for health monitoring and rollback
  */
-let applicationHealth: ApplicationHealth = {
-  startup: false,
-  modules: false,
-  server: false,
+let applicationHealth: TrackedHealth = {
   lastCheck: Date.now(),
+  report: EMPTY_HEALTH_REPORT,
 };
 
 let orchestrator: any = null;
@@ -42,6 +49,10 @@ let isShuttingDown = false;
 async function validateApplicationHealth(): Promise<boolean> {
   try {
     if (!orchestrator) {
+      applicationHealth = {
+        lastCheck: Date.now(),
+        report: EMPTY_HEALTH_REPORT,
+      };
       return false;
     }
 
@@ -50,21 +61,19 @@ async function validateApplicationHealth(): Promise<boolean> {
 
     // Update health state with detailed information
     applicationHealth = {
-      startup: healthCheck.modules.foundation,
-      modules: healthCheck.modules.modulesInitialized,
-      server: healthCheck.modules.serverRunning,
+      report: healthCheck,
       lastCheck: Date.now(),
     };
 
     // Log health issues if any
     if (!healthCheck.healthy && logger && healthCheck.issues.length > 0) {
-      logger.warn("Health validation found issues:", healthCheck.issues);
+      logger.warn('Health validation found issues:', healthCheck.issues);
     }
 
     return healthCheck.healthy;
   } catch (error) {
     if (logger) {
-      logger.error("Health validation failed:", error);
+      logger.error('Health validation failed:', error);
     }
     return false;
   }
@@ -75,28 +84,24 @@ async function validateApplicationHealth(): Promise<boolean> {
  */
 async function rollbackStartup(error: Error): Promise<void> {
   // Use stderr for error output to avoid interfering with stdio transport
-  console.error("Critical startup failure, attempting rollback:", error);
+  console.error('Critical startup failure, attempting rollback:', error);
 
   try {
     if (orchestrator) {
-      console.error(
-        "Attempting graceful shutdown of partial initialization..."
-      );
+      console.error('Attempting graceful shutdown of partial initialization...');
       await orchestrator.shutdown();
       orchestrator = null;
     }
 
     // Reset health state
     applicationHealth = {
-      startup: false,
-      modules: false,
-      server: false,
       lastCheck: Date.now(),
+      report: EMPTY_HEALTH_REPORT,
     };
 
-    console.error("Rollback completed");
+    console.error('Rollback completed');
   } catch (rollbackError) {
-    console.error("Error during rollback:", rollbackError);
+    console.error('Error during rollback:', rollbackError);
   }
 }
 
@@ -109,7 +114,7 @@ function setupHealthMonitoring(runtimeOptions: RuntimeLaunchOptions): void {
 
   // Skip health monitoring in test environments to prevent hanging processes
   if (runtimeOptions.testEnvironment) {
-    logger.debug("Health monitoring suppressed in test environment");
+    logger.debug('Health monitoring suppressed in test environment');
     return;
   }
 
@@ -120,12 +125,12 @@ function setupHealthMonitoring(runtimeOptions: RuntimeLaunchOptions): void {
     try {
       const isHealthy = await validateApplicationHealth();
       if (!isHealthy) {
-        logger.warn("Health check failed - application may be degraded");
+        logger.warn('Health check failed - application may be degraded');
 
         // Log current status for debugging
         if (orchestrator) {
           const diagnostics = orchestrator.getDiagnosticInfo();
-          logger.warn("Diagnostic information:", {
+          logger.warn('Diagnostic information:', {
             health: diagnostics.health,
             performance: diagnostics.performance,
             errors: diagnostics.errors,
@@ -135,32 +140,28 @@ function setupHealthMonitoring(runtimeOptions: RuntimeLaunchOptions): void {
         // Periodic performance logging (every 5th health check = 2.5 minutes)
         if (Date.now() % (5 * 30000) < 30000) {
           const performance = orchestrator.getPerformanceMetrics();
-          logger.info("Performance metrics:", {
+          logger.info('Performance metrics:', {
             uptime: `${Math.floor(performance.uptime / 60)} minutes`,
-            memoryUsage: `${Math.round(
-              performance.memoryUsage.heapUsed / 1024 / 1024
-            )}MB`,
+            memoryUsage: `${Math.round(performance.memoryUsage.heapUsed / 1024 / 1024)}MB`,
             prompts: performance.application.promptsLoaded,
             categories: performance.application.categoriesLoaded,
           });
         }
       }
     } catch (error) {
-      logger.error("Error during health check:", error);
+      logger.error('Error during health check:', error);
 
       // Emergency diagnostic collection
       try {
         const emergency = getDetailedDiagnostics();
-        logger.error("Emergency diagnostics:", emergency);
+        logger.error('Emergency diagnostics:', emergency);
       } catch (diagError) {
-        logger.error("Failed to collect emergency diagnostics:", diagError);
+        logger.error('Failed to collect emergency diagnostics:', diagError);
       }
     }
   }, 30000);
 
-  logger.info(
-    "Health monitoring enabled (30-second intervals with performance tracking)"
-  );
+  logger.info('Health monitoring enabled (30-second intervals with performance tracking)');
 }
 
 /**
@@ -168,14 +169,11 @@ function setupHealthMonitoring(runtimeOptions: RuntimeLaunchOptions): void {
  */
 function setupErrorHandlers(): void {
   // Handle uncaught exceptions with rollback
-  process.on("uncaughtException", async (error) => {
-    console.error("Uncaught exception detected:", error);
+  process.on('uncaughtException', async (error) => {
+    console.error('Uncaught exception detected:', error);
 
     if (logger) {
-      logger.error(
-        "Uncaught exception - initiating emergency shutdown:",
-        error
-      );
+      logger.error('Uncaught exception - initiating emergency shutdown:', error);
     }
 
     isShuttingDown = true;
@@ -185,26 +183,21 @@ function setupErrorHandlers(): void {
         await orchestrator.shutdown();
       }
     } catch (shutdownError) {
-      console.error("Error during emergency shutdown:", shutdownError);
+      console.error('Error during emergency shutdown:', shutdownError);
     }
 
     process.exit(1);
   });
 
   // Handle unhandled promise rejections with rollback
-  process.on("unhandledRejection", async (reason, promise) => {
-    console.error(
-      "Unhandled promise rejection at:",
-      promise,
-      "reason:",
-      reason
-    );
+  process.on('unhandledRejection', async (reason, promise) => {
+    console.error('Unhandled promise rejection at:', promise, 'reason:', reason);
 
     if (logger) {
-      logger.error(
-        "Unhandled promise rejection - initiating emergency shutdown:",
-        { reason, promise }
-      );
+      logger.error('Unhandled promise rejection - initiating emergency shutdown:', {
+        reason,
+        promise,
+      });
     }
 
     isShuttingDown = true;
@@ -214,31 +207,29 @@ function setupErrorHandlers(): void {
         await orchestrator.shutdown();
       }
     } catch (shutdownError) {
-      console.error("Error during emergency shutdown:", shutdownError);
+      console.error('Error during emergency shutdown:', shutdownError);
     }
 
     process.exit(1);
   });
 
   // Handle SIGINT (Ctrl+C) gracefully
-  process.on("SIGINT", async () => {
+  process.on('SIGINT', async () => {
     if (logger) {
-      logger.info("Received SIGINT (Ctrl+C), initiating graceful shutdown...");
+      logger.info('Received SIGINT (Ctrl+C), initiating graceful shutdown...');
     } else {
-      console.error(
-        "Received SIGINT (Ctrl+C), initiating graceful shutdown..."
-      );
+      console.error('Received SIGINT (Ctrl+C), initiating graceful shutdown...');
     }
 
     await gracefulShutdown(0);
   });
 
   // Handle SIGTERM gracefully
-  process.on("SIGTERM", async () => {
+  process.on('SIGTERM', async () => {
     if (logger) {
-      logger.info("Received SIGTERM, initiating graceful shutdown...");
+      logger.info('Received SIGTERM, initiating graceful shutdown...');
     } else {
-      console.error("Received SIGTERM, initiating graceful shutdown...");
+      console.error('Received SIGTERM, initiating graceful shutdown...');
     }
 
     await gracefulShutdown(0);
@@ -257,42 +248,40 @@ async function gracefulShutdown(exitCode: number = 0): Promise<void> {
 
   try {
     if (logger) {
-      logger.info("Starting graceful shutdown sequence...");
+      logger.info('Starting graceful shutdown sequence...');
     }
 
     // Validate current state before shutdown
     if (orchestrator) {
       const status = orchestrator.getStatus();
       if (logger) {
-        logger.info("Application status before shutdown:", status);
+        logger.info('Application status before shutdown:', status);
       }
 
       // Perform graceful shutdown
       await orchestrator.shutdown();
 
       if (logger) {
-        logger.info("Orchestrator shutdown completed successfully");
+        logger.info('Orchestrator shutdown completed successfully');
       }
     }
 
     // Final health state update
     applicationHealth = {
-      startup: false,
-      modules: false,
-      server: false,
       lastCheck: Date.now(),
+      report: EMPTY_HEALTH_REPORT,
     };
 
     if (logger) {
-      logger.info("Graceful shutdown completed successfully");
+      logger.info('Graceful shutdown completed successfully');
     } else {
-      console.error("Graceful shutdown completed successfully");
+      console.error('Graceful shutdown completed successfully');
     }
   } catch (error) {
     if (logger) {
-      logger.error("Error during graceful shutdown:", error);
+      logger.error('Error during graceful shutdown:', error);
     } else {
-      console.error("Error during graceful shutdown:", error);
+      console.error('Error during graceful shutdown:', error);
     }
     exitCode = 1;
   }
@@ -364,32 +353,29 @@ function parseCommandLineArgs(): { shouldExit: boolean; exitCode: number } {
   const args = process.argv.slice(2);
 
   // Check for help flag
-  if (args.includes("--help") || args.includes("-h")) {
+  if (args.includes('--help') || args.includes('-h')) {
     showHelp();
     return { shouldExit: true, exitCode: 0 };
   }
 
   // Validate transport argument
-  const transportArg = args.find((arg) => arg.startsWith("--transport="));
+  const transportArg = args.find((arg) => arg.startsWith('--transport='));
   if (transportArg) {
-    const transport = transportArg.split("=")[1];
-    if (!["stdio", "sse"].includes(transport)) {
-      console.error(
-        `Error: Invalid transport '${transport}'. Supported: stdio, sse`
-      );
-      console.error("Use --help for usage information");
+    const transport = transportArg.split('=')[1];
+    if (!['stdio', 'sse'].includes(transport)) {
+      console.error(`Error: Invalid transport '${transport}'. Supported: stdio, sse`);
+      console.error('Use --help for usage information');
       return { shouldExit: true, exitCode: 1 };
     }
   }
 
   // Validate that conflicting flags aren't used together
-  const isQuiet = args.includes("--quiet");
-  const isVerbose =
-    args.includes("--verbose") || args.includes("--debug-startup");
+  const isQuiet = args.includes('--quiet');
+  const isVerbose = args.includes('--verbose') || args.includes('--debug-startup');
 
   if (isQuiet && isVerbose) {
-    console.error("Error: Cannot use --quiet and --verbose flags together");
-    console.error("Use --help for usage information");
+    console.error('Error: Cannot use --quiet and --verbose flags together');
+    console.error('Use --help for usage information');
     return { shouldExit: true, exitCode: 1 };
   }
 
@@ -418,12 +404,14 @@ async function main(): Promise<void> {
     if (isStartupTest && isVerbose) {
       // In CI mode, use console.log for debug to avoid stderr issues
       const debugLog = isCI ? console.log : console.error;
-      debugLog("DEBUG: Running in startup validation mode");
+      debugLog('DEBUG: Running in startup validation mode');
       debugLog(`DEBUG: Platform: ${process.platform}`);
       debugLog(`DEBUG: Node.js version: ${process.version}`);
       debugLog(`DEBUG: Working directory: ${process.cwd()}`);
       debugLog(`DEBUG: MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || 'not set'}`);
-      debugLog(`DEBUG: MCP_PROMPTS_CONFIG_PATH: ${process.env.MCP_PROMPTS_CONFIG_PATH || 'not set'}`);
+      debugLog(
+        `DEBUG: MCP_PROMPTS_CONFIG_PATH: ${process.env.MCP_PROMPTS_CONFIG_PATH || 'not set'}`
+      );
     }
 
     // Setup error handlers first
@@ -432,31 +420,35 @@ async function main(): Promise<void> {
     // Use appropriate output stream based on environment - only if verbose
     if (isVerbose) {
       const statusLog = isCI ? console.log : console.error;
-      statusLog("Starting MCP Claude Prompts Server...");
+      statusLog('Starting MCP Claude Prompts Server...');
     }
 
     // Initialize the application using the orchestrator
     const debugLog = isCI ? console.log : console.error;
     if (isVerbose) {
-      debugLog("DEBUG: About to call startApplication()...");
+      debugLog('DEBUG: About to call startApplication()...');
     }
     try {
       orchestrator = await startApplication(runtimeOptions);
       if (isVerbose) {
-        debugLog("DEBUG: startApplication() completed successfully");
+        debugLog('DEBUG: startApplication() completed successfully');
       }
     } catch (startupError) {
       const error = startupError instanceof Error ? startupError : new Error(String(startupError));
       if (isVerbose) {
-        debugLog("DEBUG: startApplication() failed with error:", error.message);
-        debugLog("DEBUG: Error stack:", error.stack);
+        debugLog('DEBUG: startApplication() failed with error:', error.message);
+        debugLog('DEBUG: Error stack:', error.stack);
       }
-      
+
       // Additional diagnostics for Windows
       if (isVerbose && process.platform === 'win32') {
-        debugLog("DEBUG: Windows-specific diagnostics:");
+        debugLog('DEBUG: Windows-specific diagnostics:');
         debugLog(`DEBUG: Process argv: ${JSON.stringify(process.argv)}`);
-        debugLog(`DEBUG: Environment keys: ${Object.keys(process.env).filter(k => k.startsWith('MCP_')).join(', ')}`);
+        debugLog(
+          `DEBUG: Environment keys: ${Object.keys(process.env)
+            .filter((k) => k.startsWith('MCP_'))
+            .join(', ')}`
+        );
 
         // Check if paths exist
         const fs = await import('fs');
@@ -481,39 +473,40 @@ async function main(): Promise<void> {
           debugLog(`DEBUG: Could not load config for path debugging: ${tempError}`);
         }
       }
-      
+
       throw error;
     }
 
     // Get logger reference for global error handling
     if (isVerbose) {
-      debugLog("DEBUG: Getting logger reference...");
+      debugLog('DEBUG: Getting logger reference...');
     }
     const modules = orchestrator.getModules();
     logger = modules.logger;
     if (isVerbose) {
-      debugLog("DEBUG: Logger reference obtained");
+      debugLog('DEBUG: Logger reference obtained');
     }
 
     // Validate initial startup with detailed diagnostics
     if (isVerbose) {
-      debugLog("DEBUG: About to validate application health...");
+      debugLog('DEBUG: About to validate application health...');
     }
     const initialHealth = await validateApplicationHealth();
     if (isVerbose) {
-      debugLog("DEBUG: Health validation result:", initialHealth);
+      debugLog('DEBUG: Health validation result:', initialHealth);
     }
-    
+
     if (!initialHealth) {
       // Get detailed health info for debugging
       const healthDetails = orchestrator.validateHealth();
       if (isVerbose) {
-        debugLog("DEBUG: Detailed health check results:", JSON.stringify(healthDetails, null, 2));
+        debugLog('DEBUG: Detailed health check results:', JSON.stringify(healthDetails, null, 2));
       }
-      
+
       throw new Error(
-        "Initial health validation failed - application may not be properly initialized. " +
-        "Health details: " + JSON.stringify(healthDetails.issues)
+        'Initial health validation failed - application may not be properly initialized. ' +
+          'Health details: ' +
+          JSON.stringify(healthDetails.issues)
       );
     }
 
@@ -521,9 +514,11 @@ async function main(): Promise<void> {
     if (isStartupTest) {
       if (isVerbose) {
         const successLog = isCI ? console.log : console.error;
-        successLog("✅ MCP Claude Prompts Server startup validation completed successfully");
-        successLog("✅ All phases completed: Foundation → Data Loading → Module Initialization → Server Setup");
-        successLog("✅ Health validation passed - server is ready for operation");
+        successLog('✅ MCP Claude Prompts Server startup validation completed successfully');
+        successLog(
+          '✅ All phases completed: Foundation → Data Loading → Module Initialization → Server Setup'
+        );
+        successLog('✅ Health validation passed - server is ready for operation');
       }
       await orchestrator.shutdown();
       process.exit(0);
@@ -531,11 +526,11 @@ async function main(): Promise<void> {
 
     // Log successful startup with details
     if (logger) {
-      logger.info("🚀 MCP Claude Prompts Server started successfully");
+      logger.info('🚀 MCP Claude Prompts Server started successfully');
 
       // Log comprehensive application status
       const status = orchestrator.getStatus();
-      logger.info("📊 Application status:", {
+      logger.info('📊 Application status:', {
         running: status.running,
         transport: status.transport,
         promptsLoaded: status.promptsLoaded,
@@ -550,22 +545,18 @@ async function main(): Promise<void> {
       setupHealthMonitoring(runtimeOptions);
 
       // Log successful complete initialization
-      logger.info(
-        "✅ Application initialization completed - all systems operational"
-      );
+      logger.info('✅ Application initialization completed - all systems operational');
     }
   } catch (error) {
     // Comprehensive error handling with rollback
-    console.error("❌ Failed to start MCP Claude Prompts Server:", error);
+    console.error('❌ Failed to start MCP Claude Prompts Server:', error);
 
     if (logger) {
-      logger.error("Fatal startup error:", error);
+      logger.error('Fatal startup error:', error);
     }
 
     // Attempt rollback
-    await rollbackStartup(
-      error instanceof Error ? error : new Error(String(error))
-    );
+    await rollbackStartup(error instanceof Error ? error : new Error(String(error)));
 
     // Exit with error code
     process.exit(1);
@@ -575,8 +566,8 @@ async function main(): Promise<void> {
 /**
  * Export health check function for external monitoring
  */
-export function getApplicationHealth(): ApplicationHealth {
-  return { ...applicationHealth };
+export function getApplicationHealth(): HealthReport & { lastCheck: number } {
+  return { ...applicationHealth.report, lastCheck: applicationHealth.lastCheck };
 }
 
 /**
@@ -586,7 +577,7 @@ export function getDetailedDiagnostics(): any {
   if (!orchestrator) {
     return {
       available: false,
-      reason: "Orchestrator not initialized",
+      reason: 'Orchestrator not initialized',
       timestamp: new Date().toISOString(),
     };
   }
@@ -613,13 +604,21 @@ export function getDetailedDiagnostics(): any {
  */
 export { gracefulShutdown };
 
-// Start the application with comprehensive error handling
-main().catch(async (error) => {
-  console.error("💥 Fatal error during startup:", error);
+/**
+ * Export main startup for opt-in execution (tests/custom runners).
+ */
+export { main as startServer };
 
-  // Final fallback - attempt rollback and exit
-  await rollbackStartup(
-    error instanceof Error ? error : new Error(String(error))
-  );
-  process.exit(1);
-});
+// Start the application with comprehensive error handling
+const isTestEnvironment =
+  process.env.NODE_ENV === 'test' || typeof process.env.JEST_WORKER_ID !== 'undefined';
+
+if (!isTestEnvironment) {
+  main().catch(async (error) => {
+    console.error('💥 Fatal error during startup:', error);
+
+    // Final fallback - attempt rollback and exit
+    await rollbackStartup(error instanceof Error ? error : new Error(String(error)));
+    process.exit(1);
+  });
+}

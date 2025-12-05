@@ -3,14 +3,18 @@ import { randomUUID } from 'crypto';
 
 import { BasePipelineStage } from '../stage.js';
 
-import type { ChainSession, ChainSessionService, SessionBlueprint } from '../../../chain-session/types.js';
+import type {
+  ChainSession,
+  ChainSessionService,
+  SessionBlueprint,
+} from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
 import type {
   ExecutionContext,
-  ExecutionPlan,
   ParsedCommand,
   SessionContext,
 } from '../../context/execution-context.js';
+import type { ExecutionPlan } from '../../types.js';
 
 /**
  * Pipeline Stage 7: Session Management
@@ -41,9 +45,7 @@ export class SessionManagementStage extends BasePipelineStage {
     }
 
     try {
-      const forceRestart = Boolean(
-        context.mcpRequest.force_restart || context.metadata['forceRestart'] === true
-      );
+      const forceRestart = Boolean(context.mcpRequest.force_restart);
       const baseChainId = this.getBaseChainId(context);
       const explicitChainResume = context.hasExplicitChainId();
       const requestedChainId = explicitChainResume ? context.getRequestedChainId() : undefined;
@@ -57,9 +59,12 @@ export class SessionManagementStage extends BasePipelineStage {
           : undefined;
 
       if (!existingSession && !forceRestart && requestedChainId) {
-        const chainSession = this.chainSessionManager.getSessionByChainIdentifier(requestedChainId, {
-          includeLegacy: explicitChainResume,
-        });
+        const chainSession = this.chainSessionManager.getSessionByChainIdentifier(
+          requestedChainId,
+          {
+            includeLegacy: explicitChainResume,
+          }
+        );
         if (chainSession) {
           existingSession = chainSession;
           resolvedSessionId = chainSession.sessionId;
@@ -91,8 +96,8 @@ export class SessionManagementStage extends BasePipelineStage {
           totalSteps: existingSession.state.totalSteps,
           pendingReview: this.chainSessionManager.getPendingGateReview(resolvedSessionId),
         };
-        context.metadata['resumeSessionId'] = resolvedSessionId;
-        context.metadata['resumeChainId'] = existingSession.chainId;
+        context.state.session.resumeSessionId = resolvedSessionId;
+        context.state.session.resumeChainId = existingSession.chainId;
         if (context.hasExplicitChainId()) {
           decision = 'resume-chain-id';
         } else {
@@ -121,7 +126,10 @@ export class SessionManagementStage extends BasePipelineStage {
       }
 
       context.sessionContext = sessionContext;
-      context.metadata['sessionLifecycleDecision'] = decision;
+      context.state.session.lifecycleDecision = decision;
+
+      // Create PendingGateReview if gates are present and no pending review exists
+      await this.createPendingGateReviewIfNeeded(context, sessionContext);
 
       this.logExit({
         sessionId: sessionContext.sessionId,
@@ -134,6 +142,53 @@ export class SessionManagementStage extends BasePipelineStage {
     }
   }
 
+  /**
+   * Creates a PendingGateReview for the current step if gates are present
+   * and no review already exists. Delegates to GateEnforcementAuthority.
+   */
+  private async createPendingGateReviewIfNeeded(
+    context: ExecutionContext,
+    sessionContext: SessionContext
+  ): Promise<void> {
+    // Skip if no blocking gates or review already exists
+    if (!context.state.gates.hasBlockingGates || sessionContext.pendingReview) {
+      return;
+    }
+
+    const gateIds = context.state.gates.accumulatedGateIds ?? [];
+    if (gateIds.length === 0) {
+      return;
+    }
+
+    // Delegate to GateEnforcementAuthority for consistent review creation
+    const authority = context.gateEnforcement;
+    if (!authority) {
+      this.logger.warn(
+        '[SessionManagement] GateEnforcementAuthority not available - cannot create pending review'
+      );
+      return;
+    }
+
+    const pendingReview = authority.createPendingReview({
+      gateIds,
+      instructions: context.gateInstructions ?? '',
+      metadata: {
+        sessionId: sessionContext.sessionId,
+        stepNumber: sessionContext.currentStep,
+      },
+    });
+
+    // Persist to session manager and update context via authority
+    await authority.setPendingReview(sessionContext.sessionId, pendingReview);
+    sessionContext.pendingReview = pendingReview;
+
+    context.diagnostics.info(this.name, 'Created PendingGateReview for step gates', {
+      gateIds,
+      maxAttempts: pendingReview.maxAttempts,
+      enforcementMode: context.state.gates.enforcementMode,
+    });
+  }
+
   private createSessionId(context: ExecutionContext): string {
     if (context.executionPlan?.gates.length) {
       return `review-${context.parsedCommand?.promptId}-${Date.now()}`;
@@ -142,7 +197,8 @@ export class SessionManagementStage extends BasePipelineStage {
   }
 
   private getBaseChainId(context: ExecutionContext): string {
-    const requestedChainId = context.mcpRequest.chain_id ?? (context.metadata['resumeChainId'] as string | undefined);
+    const requestedChainId =
+      context.mcpRequest.chain_id ?? context.state.session.resumeChainId;
     if (requestedChainId) {
       return this.stripRunCounter(requestedChainId);
     }

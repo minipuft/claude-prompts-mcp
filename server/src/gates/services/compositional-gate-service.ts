@@ -3,7 +3,7 @@ import {
   GateInstructionInjector,
   type GateInstructionEnhancedPrompt,
   type GateInstructionInjectorConfig,
-} from '../../frameworks/prompt-guidance/gate-instruction-injector.js';
+} from '../guidance/gate-instruction-injector.js';
 
 import type {
   IGateService,

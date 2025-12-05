@@ -10,11 +10,12 @@
 import * as path from 'node:path';
 
 import { ChainManagementService } from './chain-management.js';
+import { CHAIN_ID_PATTERN } from '../../../utils/index.js';
 import { createChainSessionManager } from '../../../chain-session/manager.js';
 import { ConfigManager } from '../../../config/index.js';
 import { ChainOperatorExecutor } from '../../../execution/operators/chain-operator-executor.js';
 import { createParsingSystem } from '../../../execution/parsers/index.js';
-import { createSymbolicCommandParser } from '../../../execution/parsers/symbolic-command-parser.js';
+import { createSymbolicCommandParser } from '../../../execution/parsers/symbolic-operator-parser.js';
 import { PromptExecutionPipeline } from '../../../execution/pipeline/prompt-execution-pipeline.js';
 import { DependencyInjectionStage } from '../../../execution/pipeline/stages/00-dependency-injection-stage.js';
 import { ExecutionLifecycleStage } from '../../../execution/pipeline/stages/00-execution-lifecycle-stage.js';
@@ -25,8 +26,10 @@ import { OperatorValidationStage } from '../../../execution/pipeline/stages/03-o
 import { ExecutionPlanningStage } from '../../../execution/pipeline/stages/04-planning-stage.js';
 import { GateEnhancementStage } from '../../../execution/pipeline/stages/05-gate-enhancement-stage.js';
 import { FrameworkResolutionStage } from '../../../execution/pipeline/stages/06-framework-stage.js';
+import { JudgeSelectionStage } from '../../../execution/pipeline/stages/06a-judge-selection-stage.js';
 import { PromptGuidanceStage } from '../../../execution/pipeline/stages/06b-prompt-guidance-stage.js';
 import { SessionManagementStage } from '../../../execution/pipeline/stages/07-session-stage.js';
+import { InjectionControlStage } from '../../../execution/pipeline/stages/07b-injection-control-stage.js';
 import { StepResponseCaptureStage } from '../../../execution/pipeline/stages/08-response-capture-stage.js';
 import { StepExecutionStage } from '../../../execution/pipeline/stages/09-execution-stage.js';
 import { ResponseFormattingStage } from '../../../execution/pipeline/stages/10-formatting-stage.js';
@@ -43,11 +46,7 @@ import {
   createPromptGuidanceService,
 } from '../../../frameworks/prompt-guidance/index.js';
 import { FrameworkExecutionContext } from '../../../frameworks/types/index.js';
-import {
-  LightweightGateSystem,
-  createLightweightGateSystem,
-  type TemporaryGateRegistryDefinition as TemporaryGateDefinition,
-} from '../../../gates/core/index.js';
+import { LightweightGateSystem, createLightweightGateSystem } from '../../../gates/core/index.js';
 import {
   GateGuidanceRenderer,
   createGateGuidanceRenderer,
@@ -59,17 +58,17 @@ import { PromptAssetManager } from '../../../prompts/index.js';
 import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
 import { ConversationManager } from '../../../text-references/conversation.js';
 import { TextReferenceManager, ArgumentHistoryTracker } from '../../../text-references/index.js';
-import { renderPromptEngineGuide } from '../utils/guide.js';
 import { ConvertedPrompt, PromptData, ToolResponse } from '../../../types/index.js';
 import { ToolDescriptionManager } from '../../tool-description-manager.js';
 import { ResponseFormatter } from '../processors/response-formatter.js';
+import { renderPromptEngineGuide } from '../utils/guide.js';
 
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { ParsingSystem } from '../../../execution/parsers/index.js';
 import type { PipelineStage } from '../../../execution/pipeline/stage.js';
 import type { IGateService } from '../../../gates/services/gate-service-interface.js';
 import type { MetricsCollector } from '../../../metrics/index.js';
-import type { McpToolRequest } from '../../../types/execution.js';
+import type { McpToolRequest, TemporaryGateInput } from '../../../types/execution.js';
 
 export class PromptExecutionService {
   public readonly inlineGateParser: ReturnType<typeof createSymbolicCommandParser>;
@@ -290,49 +289,66 @@ export class PromptExecutionService {
 
   async executePromptCommand(
     args: {
-      command: string;
-      execution_mode?: 'auto' | 'prompt' | 'template' | 'chain';
-      api_validation?: boolean;
-      gate_validation?: boolean;
+      command?: string; // Optional - not needed for chain resume (chain_id + user_response)
+      llm_validation?: boolean;
       force_restart?: boolean;
       chain_id?: string;
+      gate_verdict?: string;
+      gate_action?: 'retry' | 'skip' | 'abort';
       user_response?: string;
-      timeout?: number;
-      temporary_gates?: TemporaryGateDefinition[];
-      gate_scope?: 'execution' | 'session' | 'chain' | 'step';
-      quality_gates?: string[];
-      custom_checks?: Array<{ name: string; description: string }>;
+      /** Unified gate specifications (canonical in v3.0.0+). Accepts gate IDs, simple checks, or full definitions. */
+      gates?: import('../../../types/execution.js').GateSpecification[];
       options?: Record<string, unknown>;
     },
     extra: any
   ): Promise<ToolResponse> {
     void extra;
     const normalizedCommand = typeof args.command === 'string' ? args.command.trim() : '';
+    const chainIdFromCommand = this.extractChainId(normalizedCommand);
+    const hasResumePayload = Boolean(
+      (args.user_response && args.user_response.trim().length > 0) ||
+        (args.gate_verdict && args.gate_verdict.trim().length > 0)
+    );
+    const shouldTreatAsResumeOnly =
+      Boolean(chainIdFromCommand) && hasResumePayload && args.force_restart !== true;
+
+    if (shouldTreatAsResumeOnly && !args.chain_id) {
+      this.logger.debug('[PromptExecutionService] Normalizing chain resume command into chain_id', {
+        inferredChainId: chainIdFromCommand,
+      });
+    }
 
     const request: McpToolRequest = {
-      command: normalizedCommand || undefined,
-      chain_id: args.chain_id,
+      command: shouldTreatAsResumeOnly ? undefined : normalizedCommand || undefined,
+      chain_id: args.chain_id ?? (shouldTreatAsResumeOnly ? chainIdFromCommand : undefined),
+      gate_verdict: args.gate_verdict,
+      gate_action: args.gate_action,
       user_response: args.user_response,
       force_restart: args.force_restart,
-      execution_mode: args.execution_mode ?? 'auto',
-      api_validation:
-        args.api_validation ??
-        (typeof args.gate_validation === 'boolean' ? args.gate_validation : undefined),
-      quality_gates: args.quality_gates,
-      custom_checks: args.custom_checks,
-      temporary_gates: args.temporary_gates as McpToolRequest['temporary_gates'],
-      gate_scope: args.gate_scope,
-      timeout: args.timeout,
+      llm_validation: args.llm_validation,
+      gates: args.gates,
       options: args.options,
     };
 
     this.logger.info('[PromptExecutionService] Executing request', {
       command: request.command ?? '<resume>',
-      executionMode: request.execution_mode,
     });
 
     const pipeline = this.getPromptExecutionPipeline();
     return pipeline.execute(request);
+  }
+
+  /**
+   * Extracts a chain_id from a bare command string when users send chain resumes
+   * as the command value (common with LLM-generated calls). Only used for resume
+   * scenarios to avoid colliding with real commands.
+   */
+  private extractChainId(command?: string): string | undefined {
+    if (!command) {
+      return undefined;
+    }
+    const match = command.trim().match(CHAIN_ID_PATTERN);
+    return match ? match[0] : undefined;
   }
 
   private async routeToTool(
@@ -358,6 +374,10 @@ export class PromptExecutionService {
           break;
         case 'prompt_engine_guide':
           return this.generatePromptEngineGuide(params?.goal);
+        case 'prompt_engine_invalid_command':
+          return this.responseFormatter.formatErrorResponse(
+            'Commands must start with a real prompt id after `>>`. Use prompt_manager(action:"list") or inspect to find valid ids before executing.'
+          );
         default:
           break;
       }
@@ -585,6 +605,7 @@ export class PromptExecutionService {
 
     const dependencyStage = new DependencyInjectionStage(
       temporaryGateRegistry,
+      this.chainSessionManager,
       () => this.frameworkStateManager?.isFrameworkSystemEnabled() ?? false,
       () => this.analyticsService,
       'canonical-stage-0',
@@ -631,6 +652,13 @@ export class PromptExecutionService {
           },
         };
 
+    const judgeSelectionStage = new JudgeSelectionStage(
+      () => this.convertedPrompts,
+      this.lightweightGateSystem.gateLoader,
+      this.configManager,
+      this.logger
+    );
+
     const promptGuidanceStage = new PromptGuidanceStage(
       this.promptGuidanceService ?? null,
       this.logger
@@ -640,11 +668,19 @@ export class PromptExecutionService {
       this.createGateService(),
       temporaryGateRegistry,
       () => this.configManager.getFrameworksConfig(),
+      this.gateReferenceResolver,
+      () => this.frameworkManager,
       this.logger,
-      () => this.analyticsService
+      () => this.analyticsService,
+      () => this.configManager.getGatesConfig()
     );
 
     const sessionStage = new SessionManagementStage(this.chainSessionManager, this.logger);
+    // Use modular injection control stage for system-prompt/gate-guidance/style-guidance decisions
+    const injectionControlStage = new InjectionControlStage(
+      () => this.configManager.getInjectionConfig(),
+      this.logger
+    );
     const responseCaptureStage = new StepResponseCaptureStage(
       this.chainSessionManager,
       this.logger
@@ -676,9 +712,11 @@ export class PromptExecutionService {
       operatorValidationStage,
       planningStage,
       frameworkStage,
+      judgeSelectionStage,
       promptGuidanceStage,
       gateStage,
       sessionStage,
+      injectionControlStage,
       responseCaptureStage,
       executionStage,
       gateReviewStage,

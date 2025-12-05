@@ -12,6 +12,11 @@ const STATUS_PATTERN = /^(>>|\/)?status$/i;
 const FRAMEWORK_PATTERN = /^(>>|\/)?framework\s+(switch|change)\s+(.+)$/i;
 const ANALYTICS_PATTERN = /^(>>|\/)?analytics?$/i;
 const GUIDE_PATTERN = /^(>>|\/)?guide(?:\s+(.*))?$/i;
+const ALLOWED_PREFIX_TOKENS = ['@', '%judge', '%clean', '%lean'];
+
+function isPlausiblePromptId(token: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_\/-]*$/.test(token);
+}
 
 /**
  * Detects whether a raw command string should be routed to another MCP tool
@@ -25,7 +30,7 @@ export function detectToolRoutingCommand(command: string): ToolRoutingResult {
   }
 
   if (LIST_PROMPTS_PATTERN.test(trimmedCommand)) {
-    const args = trimmedCommand.replace(/^(?:>>|\/)?listprompts?\s/i, '').trim();
+    const args = trimmedCommand.replace(/^(?:>>|\/)?listprompts?\s?/i, '').trim();
     return {
       requiresRouting: true,
       targetTool: 'prompt_manager',
@@ -89,6 +94,25 @@ export function detectToolRoutingCommand(command: string): ToolRoutingResult {
       translatedParams: { action: 'analytics' },
       originalCommand: command,
     };
+  }
+
+  if (trimmedCommand.startsWith('>>')) {
+    const rest = trimmedCommand.slice(2).trimStart();
+    const firstToken = rest.split(/\s+/)[0] ?? '';
+    const isAllowedPrefix = ALLOWED_PREFIX_TOKENS.some((prefix) =>
+      rest.toLowerCase().startsWith(prefix)
+    );
+
+    if (!rest || (!isAllowedPrefix && !isPlausiblePromptId(firstToken))) {
+      return {
+        requiresRouting: true,
+        targetTool: 'prompt_engine_invalid_command',
+        translatedParams: {
+          reason: 'missing-or-invalid-prompt-id',
+        },
+        originalCommand: command,
+      };
+    }
   }
 
   return { requiresRouting: false };

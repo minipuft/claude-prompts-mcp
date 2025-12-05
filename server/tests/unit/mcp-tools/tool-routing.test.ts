@@ -11,14 +11,22 @@ function route(command: string): ToolRoutingResult {
 
 describe('tool routing detection', () => {
   test('routes listprompts variations to prompt_manager with optional filters', () => {
-    expect(route('>>listprompts').targetTool).toBe('prompt_manager');
+    // Bug fix regression test: >>listprompts without trailing space should not include search_query
+    const bareCommand = route('>>listprompts');
+    expect(bareCommand.targetTool).toBe('prompt_manager');
+    expect(bareCommand.translatedParams).toEqual({
+      action: 'list',
+    });
+
+    // With search filter
     expect(route('/listprompts category:analysis').translatedParams).toEqual({
       action: 'list',
       search_query: 'category:analysis',
     });
-    expect(route('listprompts  ')).toMatchObject({
-      requiresRouting: true,
-      targetTool: 'prompt_manager',
+
+    // Trailing whitespace should also not create search_query
+    expect(route('listprompts  ').translatedParams).toEqual({
+      action: 'list',
     });
   });
 
@@ -57,6 +65,22 @@ describe('tool routing detection', () => {
     expect(result.requiresRouting).toBe(true);
     expect(result.targetTool).toBe('system_control');
     expect(result.translatedParams).toEqual({ action: 'analytics' });
+  });
+
+  test('rejects leading >> without a plausible prompt id', () => {
+    // ">> " followed by nothing is rejected
+    const emptyResult = route('>> ');
+    expect(emptyResult.requiresRouting).toBe(true);
+    expect(emptyResult.targetTool).toBe('prompt_engine_invalid_command');
+
+    // ">> 123invalid" (starts with digit then invalid char) is rejected
+    const invalidResult = route('>> !@#$');
+    expect(invalidResult.requiresRouting).toBe(true);
+    expect(invalidResult.targetTool).toBe('prompt_engine_invalid_command');
+
+    // ">> what is mcp?" passes because "what" is a plausible prompt id
+    const plausibleResult = route('>> what is mcp?');
+    expect(plausibleResult.requiresRouting).toBe(false);
   });
 
   test('returns passthrough result when no routing is required', () => {

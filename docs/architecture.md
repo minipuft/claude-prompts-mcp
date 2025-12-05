@@ -146,6 +146,61 @@ server/src/
 - **Author prompts or chains**: Continue with the [Prompt & Template Authoring Guide](prompt-authoring-guide.md) and [Chain Workflows Guide](chain-workflows.md).
 - **Reason about gates**: If you’re tuning validation, read the [Enhanced Gate System](enhanced-gate-system.md) after grasping this architecture.
 
+### Framework Guidance Injection
+
+#### When and How Often
+
+Framework methodology guidance is injected **once per prompt execution**—not continuously, not on every message. When you execute a prompt via `prompt_engine`, the pipeline evaluates whether to include methodology guidance based on your settings and modifiers. If included, the guidance appears at the start of the rendered prompt as a structured reminder of the active methodology.
+
+**Key points:**
+- **Single injection**: Guidance is added once when the prompt is rendered, not repeatedly during the conversation
+- **Per-execution decision**: Each `prompt_engine` call independently evaluates whether to inject guidance
+- **User-controlled frequency**: You decide how often you want the methodology reminder by controlling when and how you execute prompts
+
+#### User Control Options
+
+You control framework injection at multiple levels:
+
+| Control Level | Method | Effect |
+|--------------|--------|--------|
+| **Per-execution** | `%clean` modifier | Skip framework guidance for this execution |
+| **Per-execution** | `%lean` modifier | Gates only, no framework guidance |
+| **Per-execution** | `%framework` modifier | Framework guidance only, no gates |
+| **Per-execution** | `%guided` modifier | Full guidance (framework + gates) |
+| **System-wide** | `system_control(action:"framework", operation:"disable")` | Disable all framework injection |
+| **Config** | `frameworks.enableSystemPromptInjection: false` | Disable injection at startup |
+
+**Example usage:**
+```bash
+# With methodology reminder (default when framework system is enabled)
+prompt_engine(command:"@CAGEERF analysis topic:'market trends'")
+
+# Without methodology reminder (clean execution)
+prompt_engine(command:"%clean analysis topic:'market trends'")
+
+# Check current framework state
+system_control(action:"framework", operation:"status")
+```
+
+#### Design Rationale
+
+The methodology guidance serves as a **structured thinking reminder** for the LLM. It's not meant to be injected on every conversational turn—that would be redundant and wasteful. Instead, inject it when:
+
+- Starting a new analysis or task that benefits from structured reasoning
+- Switching methodologies mid-conversation
+- Executing prompts where you want the LLM to follow a specific thinking pattern
+
+For chains, the injection decision is made per-step, with the `InjectionControlStage` using a 7-level hierarchical resolution (modifier → runtime → step → chain → category → global → system-default) to determine whether each step receives guidance.
+
+### Framework Guidance Data Flow
+
+- **Single source of truth**: Methodology definitions (including phases.yaml) are loaded at runtime from YAML via `RuntimeMethodologyLoader`; they back both framework system prompts and guidance.
+- **Guidance builder**: `frameworks/utils/step-generator.ts` converts phases.yaml into two guidance payloads: `templateProcessingGuidance` (authoring hints + template enhancements + flow hints) and `executionStepGuidance` (ordered execution steps + optional chain-specific enhancements). These are hints only—no execution logic runs them.
+- **Guide implementation**: `GenericMethodologyGuide` pulls the YAML definition and uses the guidance builder; `PromptGuidanceService` attaches the guidance to `PromptGuidanceResult` for the pipeline/prompt_engine to surface.
+- **Separation from gates**: Gate rendering/validation lives under `gates/` (e.g., `GateGuidanceRenderer`, gate instruction injector). Framework guidance remains in the framework domain; gates are handled independently.
+- **Methodology gate toggle**: `frameworks.enableMethodologyGates` controls whether framework/methodology gates (e.g., `methodology-validation`) are added and enforced. When set to `false`, methodology gates are filtered out entirely; this does not affect non-framework gates.
+- **Gate system toggle**: `gates.enabled` disables the gate subsystem end-to-end (GateEnhancementStage skips when false). Other features (framework guidance, execution) continue to run. Default is currently `false` in `server/config.json`.
+
 ```mermaid
 graph TB
     subgraph "Client Applications"
@@ -542,6 +597,8 @@ class ToolDescriptionManager {
 
 ### 5. Framework System (`src/frameworks/`)
 
+Methodology definitions are now loaded directly from YAML at runtime via `RuntimeMethodologyLoader`. No compiled `dist/methodologies/*.json` artifacts are produced, and the legacy `methodology-loader` wrapper has been removed.
+
 #### **Phase 1 Implementation - Basic Framework Support**
 
 The framework system implements a basic "Phase 1" architecture with methodology-driven design. The system provides structured approaches to prompt creation and processing through four methodology guides.
@@ -683,7 +740,7 @@ class PromptExecutionService {
 - Type-safe dependency propagation through all parser components
 - Backward compatibility maintained by keeping parser responsibilities narrow
 
-**Unified Command Parser** (`src/execution/parsers/unified-command-parser.ts`):
+**Command Parser (multi-format)** (`src/execution/parsers/command-parser.ts`):
 
 - Multi-strategy parsing system optimized for LLM interactions
 - Supports: Simple commands (`>>prompt_name`), JSON, Key=value, Symbolic operators
@@ -691,7 +748,7 @@ class PromptExecutionService {
 - **Note**: Framework operations use MCP tool syntax: `system_control({ action: "framework", operation: "list" })`
 - Parser no longer depends on framework manager injection; validation occurs downstream
 
-**Symbolic Command Parser** (`src/execution/parsers/symbolic-command-parser.ts`):
+**Symbolic Operator Parser** (`src/execution/parsers/symbolic-operator-parser.ts`):
 
 - Chain operator (`-->`) for sequential execution
 - Framework operator (`@`) for temporary framework switching with validation handled downstream
@@ -906,6 +963,7 @@ class ToolDescriptionManager {
 
 - Dynamic tool registration and deregistration
 - Hot-reload of tool descriptions
+- Methodology-specific overlays are sourced solely from methodology YAML (SOT); config/defaults apply only to baseline descriptions.
 - File watching for automatic updates
 - Validation of tool description schemas
 - Integration with MCP protocol layer
@@ -2736,16 +2794,20 @@ The pipeline executes stages in strict sequential order. Stage files are prefixe
 
 **Pipeline Execution Order:**
 
-1. **CommandParsingStage** (`01-parsing-stage.ts`) – Unified parsing and argument preparation
-2. **InlineGateExtractionStage** (`02-inline-gate-stage.ts`) – Registers inline gate criteria as temporary gates
-3. **OperatorValidationStage** (`03-operator-validation-stage.ts`) – Validates/normalizes symbolic operators (framework overrides)
-4. **ExecutionPlanningStage** (`04-planning-stage.ts`) – Determines execution strategy, gates, and session requirements
-5. **GateEnhancementStage** (`05-gate-enhancement-stage.ts`) – Renders gate guidance and footer instructions
-6. **FrameworkResolutionStage** (`06-framework-stage.ts`) – Injects methodology/system prompts when frameworks enabled
-7. **SessionManagementStage** (`07-session-stage.ts`) – Manages chain/session lifecycle and persistence
-8. **StepResponseCaptureStage** (`08-response-capture-stage.ts`) – Captures previous step results for STDIO compatibility
-9. **StepExecutionStage** (`09-execution-stage.ts`) – Executes prompts/templates/chains with rendering
-10. **ResponseFormattingStage** (`10-formatting-stage.ts`) – Assembles final ToolResponse payloads
+0. **DependencyInjectionStage** (`00-dependency-injection-stage.ts`) – Injects framework manager and other dependencies into context
+1. **RequestNormalizationStage** (`00-request-normalization-stage.ts`) – **Gate Parameter Consolidation**: Converts deprecated `quality_gates`, `custom_checks`, `temporary_gates` parameters into unified `gates` format. Stores normalized gates in `context.metadata['requestedGateOverrides']`. Ensures backward compatibility while preparing for v3.0.0 removal of deprecated parameters.
+2. **CommandParsingStage** (`01-parsing-stage.ts`) – Unified parsing and argument preparation
+3. **InlineGateExtractionStage** (`02-inline-gate-stage.ts`) – Registers inline gate criteria as temporary gates (only full TemporaryGateInput objects with `id` field)
+4. **OperatorValidationStage** (`03-operator-validation-stage.ts`) – Validates/normalizes symbolic operators (framework overrides)
+5. **ExecutionPlanningStage** (`04-planning-stage.ts`) – Determines execution strategy, gates, and session requirements
+6. **GateEnhancementStage** (`05-gate-enhancement-stage.ts`) – Processes all gate types (strings, CustomChecks, TemporaryGateInputs) from normalized metadata and renders gate guidance
+7. **FrameworkResolutionStage** (`06-framework-stage.ts`) – Injects methodology/system prompts when frameworks enabled
+8. **SessionManagementStage** (`07-session-stage.ts`) – Manages chain/session lifecycle and persistence
+9. **StepResponseCaptureStage** (`08-response-capture-stage.ts`) – Captures previous step results for STDIO compatibility
+10. **StepExecutionStage** (`09-execution-stage.ts`) – Executes prompts/templates/chains with rendering
+11. **GateReviewStage** (`10-gate-review-stage.ts`) – Validates gate review verdicts and manages gate-paused execution
+12. **ResponseFormattingStage** (`10-formatting-stage.ts`) – Assembles final ToolResponse payloads with deprecation warnings when legacy parameters used
+13. **CallToActionStage** (`11-call-to-action-stage.ts`) – Adds contextual next-step suggestions to responses
 
 **File Organization:**
 - Stage files located in `/server/src/execution/pipeline/stages/`
@@ -2759,3 +2821,211 @@ The pipeline executes stages in strict sequential order. Stage files are prefixe
 - Individual stages may no-op based on context state (e.g., frameworks disabled)
 - Pipeline is always enabled; legacy engine removed
 - Disable temporarily via DISABLE_PIPELINE=true if critical issues arise
+
+### Pipeline State Management
+
+The pipeline uses centralized state management through **Accumulators** and **Decision Authorities** to prevent bugs from distributed decision-making:
+
+**State Management Components** (`server/src/execution/pipeline/state/`):
+
+| Component | Purpose | Access via |
+|-----------|---------|------------|
+| `GateAccumulator` | Centralized gate collection with priority-based deduplication | `context.gates` |
+| `DiagnosticAccumulator` | Collects warnings/errors from all stages | `context.diagnostics` |
+| `FrameworkDecisionAuthority` | Single source of truth for framework decisions | `context.frameworkAuthority` |
+
+**GateAccumulator** prevents duplicate gates by tracking source priority:
+
+```typescript
+// Priority order (higher wins): inline-operator (100) > client-selection (90) >
+// temporary-request (80) > prompt-config (60) > methodology (40) > category-auto (20)
+
+context.gates.add('research-quality', 'category-auto');
+context.gates.addAll(methodologyGates, 'methodology');
+const finalGates = context.gates.getAll(); // Deduplicated list
+```
+
+**FrameworkDecisionAuthority** ensures consistent framework resolution:
+
+```typescript
+// Resolution priority: modifiers (%clean/%lean) > @ operator > client selection > global active
+const decisionInput = {
+  modifiers: context.executionPlan?.modifiers,
+  operatorOverride: context.parsedCommand?.executionPlan?.frameworkOverride,
+  clientOverride: context.state.framework.clientOverride,
+  globalActiveFramework: context.frameworkContext?.selectedFramework?.id,
+};
+const decision = context.frameworkAuthority.decide(decisionInput);
+if (decision.shouldApply) {
+  // Use decision.frameworkId (normalized to lowercase)
+}
+```
+
+**DiagnosticAccumulator** creates an audit trail:
+
+```typescript
+context.diagnostics.info(this.name, 'Gate enhancement complete', {
+  gateCount: context.gates.size,
+  sources: context.gates.getSourceCounts(),
+});
+```
+
+**Key Benefits:**
+- **Single Source of Truth**: Each concern has exactly one authoritative source
+- **Controlled Mutation**: Accumulators expose `add()`, not direct array access
+- **Decision Caching**: Authorities compute once, return same result
+- **Audit Trail**: All additions/decisions tracked with source metadata
+
+### Ephemeral vs Persistent State
+
+Understanding which state survives across MCP requests is critical when implementing cross-request features like gate retry enforcement, chain sessions, or multi-step workflows.
+
+#### State Lifecycle Categories
+
+| Category | Lifecycle | Storage | Access Pattern |
+|----------|-----------|---------|----------------|
+| **Ephemeral** | Dies after each request | `ExecutionContext` | `context.state.*`, `context.metadata` |
+| **Session-Persistent** | Survives across requests for same session | `ChainSessionManager` | `chainSessionManager.get*()` |
+| **Global-Persistent** | Survives server restarts | `runtime-state/*.json` | State managers with file persistence |
+
+#### Ephemeral State (Per-Request Only)
+
+These values are **recreated fresh** for every MCP tool call:
+
+```typescript
+// ❌ WRONG: These values don't persist across requests
+context.state.gates.retryLimitExceeded = true;  // Lost after response
+context.state.gates.enforcementMode = 'blocking';  // Lost after response
+context.state.session.aborted = true;  // Lost after response
+context.metadata['customFlag'] = 'value';  // Lost after response
+```
+
+**Common Pitfall**: Setting a flag in one request and expecting to read it in the next request:
+
+```typescript
+// Request 1: Gate fails, set flag
+context.state.gates.retryLimitExceeded = true;
+
+// Request 2: Try to read flag - IT'S UNDEFINED!
+if (context.state.gates.retryLimitExceeded) {  // Always false!
+  // This code never executes
+}
+```
+
+#### Session-Persistent State (Chain Sessions)
+
+These values survive across requests **for the same session**:
+
+```typescript
+// ✅ CORRECT: Use ChainSessionManager for cross-request state
+await chainSessionManager.setPendingGateReview(sessionId, review);
+const review = chainSessionManager.getPendingGateReview(sessionId);  // Works across requests!
+
+// Check retry limit by querying persistent state
+const isExceeded = chainSessionManager.isRetryLimitExceeded(sessionId);  // Works!
+
+// Session state persisted to runtime-state/chain-sessions.json
+const session = chainSessionManager.getSession(sessionId);
+session.pendingGateReview.attemptCount;  // Persists across requests
+```
+
+**Storage Location**: `runtime-state/chain-sessions.json`
+
+#### Global-Persistent State (Server Restarts)
+
+These values survive even when the server restarts:
+
+| State | Manager | File |
+|-------|---------|------|
+| Framework selection | `FrameworkStateManager` | `runtime-state/framework-state.json` |
+| Gate system enabled | `GateSystemManager` | `runtime-state/gate-system-state.json` |
+| Chain sessions | `ChainSessionManager` | `runtime-state/chain-sessions.json` |
+| Argument history | `ArgumentHistoryTracker` | `runtime-state/argument-history.json` |
+
+#### Design Guidelines for Cross-Request Features
+
+When implementing features that span multiple MCP requests:
+
+1. **Identify what state must persist** - If a value needs to be read in a future request, it cannot be ephemeral
+
+2. **Use session manager for session-scoped state**:
+   ```typescript
+   // ✅ Store in session manager
+   await chainSessionManager.setPendingGateReview(sessionId, {
+     attemptCount: 0,
+     maxAttempts: 2,
+     gateIds: ['gate-1'],
+   });
+
+   // ✅ Read from session manager in next request
+   const isExceeded = chainSessionManager.isRetryLimitExceeded(sessionId);
+   ```
+
+3. **Use context.state for request-scoped coordination**:
+   ```typescript
+   // ✅ Use ephemeral state for within-request coordination
+   context.state.gates.accumulatedGateIds = gateIds;  // Available to later stages in same request
+   ```
+
+4. **Never assume context.state persists**:
+   ```typescript
+   // ❌ WRONG: Checking ephemeral state for cross-request decision
+   if (context.state.gates.retryLimitExceeded) { ... }
+
+   // ✅ CORRECT: Check persistent state
+   if (chainSessionManager.isRetryLimitExceeded(sessionId)) { ... }
+   ```
+
+#### State Flow Diagram
+
+```
+Request 1                          Request 2
+─────────                          ─────────
+context.state = {}                 context.state = {}  ← Fresh!
+    │                                  │
+    ▼                                  ▼
+Set ephemeral flag                 Ephemeral flag is undefined
+context.state.X = true                 │
+    │                                  ▼
+    ▼                              Read from session manager
+Save to session manager            chainSessionManager.get*(sessionId)
+chainSessionManager.set*(...)          │
+    │                                  ▼
+    ▼                              State available! ✅
+Response sent
+(context.state discarded)
+```
+
+#### Common Anti-Patterns
+
+**Anti-Pattern 1**: Storing cross-request state in context
+```typescript
+// ❌ Request 1
+context.state.gates.retryLimitExceeded = true;
+
+// ❌ Request 2 - this is always undefined!
+if (context.state.gates.retryLimitExceeded) { ... }
+```
+
+**Anti-Pattern 2**: Forgetting to persist before response
+```typescript
+// ❌ Setting flag but not persisting to session manager
+context.state.session.aborted = true;
+// Request ends, flag is lost
+```
+
+**Anti-Pattern 3**: Mixing ephemeral and persistent reads
+```typescript
+// ❌ Inconsistent - one from ephemeral, one from persistent
+const fromContext = context.state.gates.enforcementMode;
+const fromSession = chainSessionManager.getPendingGateReview(sessionId);
+// These may be out of sync!
+```
+
+**Correct Pattern**: Single source of truth
+```typescript
+// ✅ Always read from the authoritative source
+const pendingReview = chainSessionManager.getPendingGateReview(sessionId);
+const isExceeded = chainSessionManager.isRetryLimitExceeded(sessionId);
+// Both read from persistent state
+```

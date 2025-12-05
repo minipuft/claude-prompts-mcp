@@ -44,7 +44,7 @@ const GRANDFATHERED_FILES = [
   'mcp-tools/prompt-manager/core/manager.ts', // 799 lines
   'semantic/configurable-semantic-analyzer.ts', // 792 lines
   'frameworks/methodology/guides/cageerf-guide.ts', // 764 lines
-  'execution/parsers/unified-command-parser.ts', // 750 lines
+  'execution/parsers/command-parser.ts', // 750 lines
   'frameworks/framework-state-manager.ts', // 744 lines
   'frameworks/methodology/guides/scamper-guide.ts', // 722 lines
   'frameworks/prompt-guidance/system-prompt-injector.ts', // 720 lines

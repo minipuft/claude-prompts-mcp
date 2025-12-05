@@ -3,8 +3,9 @@
  * Common utilities and fixtures for tests
  */
 
-import { jest } from '@jest/globals';
 import path from 'path';
+
+import { jest } from '@jest/globals';
 
 // Get project root for consistent paths
 // Using process.cwd() for Jest compatibility (avoids import.meta.url issues)
@@ -40,7 +41,7 @@ export class MockLogger {
   }
 
   getLogsByLevel(level) {
-    return this.logs.filter(log => log.level === level);
+    return this.logs.filter((log) => log.level === level);
   }
 }
 
@@ -66,9 +67,9 @@ export class MockMcpServer {
           return handler(args);
         }
         return {
-          content: [{ type: 'text', text: `Mock response for ${name}` }]
+          content: [{ type: 'text', text: `Mock response for ${name}` }],
         };
-      }
+      },
     };
   }
 
@@ -104,7 +105,7 @@ export class MockMcpServer {
   }
 
   getRegisteredToolNames() {
-    return this.registeredTools.map(tool => tool.name);
+    return this.registeredTools.map((tool) => tool.name);
   }
 
   clear() {
@@ -117,13 +118,11 @@ export class MockMcpServer {
    */
   validateInterfaceCompliance() {
     const requiredMethods = ['tool', 'registerTool'];
-    const missingMethods = requiredMethods.filter(method =>
-      typeof this[method] !== 'function'
-    );
+    const missingMethods = requiredMethods.filter((method) => typeof this[method] !== 'function');
 
     return {
       isCompliant: missingMethods.length === 0,
-      missingMethods
+      missingMethods,
     };
   }
 }
@@ -138,7 +137,7 @@ export const testPrompts = {
     userMessageTemplate: 'This is a simple test prompt',
     description: 'A basic prompt for testing',
     category: 'test',
-    arguments: []
+    arguments: [],
   },
   withArgs: {
     id: 'test-with-args',
@@ -148,9 +147,9 @@ export const testPrompts = {
     category: 'test',
     arguments: [
       { name: 'name', type: 'string', description: 'User name' },
-      { name: 'age', type: 'number', description: 'User age' }
-    ]
-  }
+      { name: 'age', type: 'number', description: 'User age' },
+    ],
+  },
 };
 
 /**
@@ -186,7 +185,10 @@ export class MockConfigManager {
   getConfig() {
     return {
       server: { name: 'test-server', version: '1.0.0' },
-      gates: { definitionsDirectory: 'src/gates/definitions', templatesDirectory: 'src/gates/templates' }
+      gates: {
+        definitionsDirectory: 'src/gates/definitions',
+        templatesDirectory: 'src/gates/templates',
+      },
     };
   }
 
@@ -198,7 +200,7 @@ export class MockConfigManager {
     return {
       enableSystemPromptInjection: true,
       enableMethodologyGates: false,
-      enableDynamicToolDescriptions: false
+      enableDynamicToolDescriptions: false,
     };
   }
 
@@ -351,8 +353,8 @@ export class MockPromptGuidanceService {
           confidenceScore: 0.9,
           semanticAware: options.semanticAnalysis !== undefined,
           semanticComplexity: options.semanticAnalysis?.complexity || 'low',
-          semanticConfidence: options.semanticAnalysis?.confidence || 0.8
-        }
+          semanticConfidence: options.semanticAnalysis?.confidence || 0.8,
+        },
       };
     });
 
@@ -374,8 +376,8 @@ export class MockPromptGuidanceService {
       switchingMetrics: {
         switchCount: 0,
         averageResponseTime: 0,
-        errorCount: 0
-      }
+        errorCount: 0,
+      },
     }));
 
     this.getSystemHealth = jest.fn(() => ({
@@ -387,9 +389,9 @@ export class MockPromptGuidanceService {
         totalSwitches: 0,
         successfulSwitches: 0,
         failedSwitches: 0,
-        averageResponseTime: 0
+        averageResponseTime: 0,
       },
-      issues: []
+      issues: [],
     }));
 
     this.setGuidanceEnabled = jest.fn((enabled: boolean) => {
@@ -411,19 +413,19 @@ export class MockPromptGuidanceService {
         enabled: true,
         injectionMethod: 'smart',
         enableTemplateVariables: true,
-        enableContextualEnhancement: true
+        enableContextualEnhancement: true,
       },
       templateEnhancement: {
         enabled: true,
         enhancementLevel: 'moderate',
         enableArgumentSuggestions: true,
-        enableStructureOptimization: true
+        enableStructureOptimization: true,
       },
       methodologyTracking: {
         enabled: true,
-        enableHealthMonitoring: false,  // KEY: Disabled in tests
-        persistStateToDisk: false         // KEY: Disabled in tests
-      }
+        enableHealthMonitoring: false, // KEY: Disabled in tests
+        persistStateToDisk: false, // KEY: Disabled in tests
+      },
     }));
 
     this.setFrameworkManager = jest.fn((frameworkManager: any) => {
@@ -439,7 +441,7 @@ export class MockPromptGuidanceService {
    * Call this in afterEach if you need to verify call counts
    */
   resetMock() {
-    Object.values(this).forEach(value => {
+    Object.values(this).forEach((value) => {
       if (typeof value === 'function' && 'mockClear' in value) {
         value.mockClear();
       }

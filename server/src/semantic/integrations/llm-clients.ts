@@ -79,7 +79,7 @@ Respond in JSON format only.`;
       const parsed = JSON.parse(response);
 
       return {
-        executionType: parsed.executionType || 'template',
+        executionType: parsed.executionType || 'single',
         confidence: Math.max(0.1, Math.min(1.0, parsed.confidence || 0.5)),
         reasoning: Array.isArray(parsed.reasoning) ? parsed.reasoning : ['LLM analysis performed'],
         recommendedFramework:

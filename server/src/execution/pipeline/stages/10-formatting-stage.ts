@@ -5,7 +5,6 @@ import type { Logger } from '../../../logging/index.js';
 import type { FormatterExecutionContext } from '../../../mcp-tools/prompt-engine/core/types.js';
 import type { ResponseFormatter } from '../../../mcp-tools/prompt-engine/processors/response-formatter.js';
 import type { ExecutionContext, SessionContext } from '../../context/execution-context.js';
-import type { CustomCheck as RequestCustomCheck } from '../../../types/execution.js';
 
 /**
  * Chain execution formatting context
@@ -19,40 +18,30 @@ interface ChainFormattingContext extends FormatterExecutionContext {
  * Single prompt execution formatting context
  */
 interface SinglePromptFormattingContext extends FormatterExecutionContext {
-  readonly executionType: 'prompt';
-}
-
-/**
- * Template execution formatting context
- */
-interface TemplateFormattingContext extends FormatterExecutionContext {
-  readonly executionType: 'template';
+  readonly executionType: 'single';
 }
 
 /**
  * Discriminated union for formatting contexts
  */
-type VariantFormattingContext = ChainFormattingContext | SinglePromptFormattingContext | TemplateFormattingContext;
+type VariantFormattingContext = ChainFormattingContext | SinglePromptFormattingContext;
 
 /**
  * Type guard for chain formatting context
  */
-function isChainFormattingContext(context: FormatterExecutionContext): context is ChainFormattingContext {
+function isChainFormattingContext(
+  context: FormatterExecutionContext
+): context is ChainFormattingContext {
   return context.executionType === 'chain';
 }
 
 /**
  * Type guard for single prompt formatting context
  */
-function isSinglePromptFormattingContext(context: FormatterExecutionContext): context is SinglePromptFormattingContext {
-  return context.executionType === 'prompt';
-}
-
-/**
- * Type guard for template formatting context
- */
-function isTemplateFormattingContext(context: FormatterExecutionContext): context is TemplateFormattingContext {
-  return context.executionType === 'template';
+function isSinglePromptFormattingContext(
+  context: FormatterExecutionContext
+): context is SinglePromptFormattingContext {
+  return context.executionType === 'single';
 }
 
 /**
@@ -88,7 +77,7 @@ export class ResponseFormattingStage extends BasePipelineStage {
     }
 
     try {
-      const executionType = context.executionPlan?.strategy ?? 'prompt';
+      const executionType = context.executionPlan?.strategy ?? 'single';
       const sessionContext = context.sessionContext;
       const formatterContext: FormatterExecutionContext = {
         executionId: `pipeline_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
@@ -120,13 +109,14 @@ export class ResponseFormattingStage extends BasePipelineStage {
       let responseContent: string;
       if (isChainFormattingContext(formatterContext) && context.sessionContext) {
         responseContent = this.formatChainResponse(context, formatterContext);
-      } else if (isTemplateFormattingContext(formatterContext)) {
-        responseContent = this.formatTemplateResponse(context, formatterContext);
       } else if (isSinglePromptFormattingContext(formatterContext)) {
         responseContent = this.formatSinglePromptResponse(context, formatterContext);
       } else {
         // Fallback for unknown execution types
-        responseContent = this.formatSinglePromptResponse(context, formatterContext as SinglePromptFormattingContext);
+        responseContent = this.formatSinglePromptResponse(
+          context,
+          formatterContext as SinglePromptFormattingContext
+        );
       }
 
       // Format with ResponseFormatter (adds structured metadata)
@@ -139,6 +129,16 @@ export class ResponseFormattingStage extends BasePipelineStage {
       );
 
       context.setResponse(response);
+
+      // Record diagnostic for response formatting
+      context.diagnostics.info(this.name, 'Response formatted', {
+        executionType,
+        hasGateInstructions: Boolean(context.gateInstructions),
+        hasSession: Boolean(sessionContext),
+        chainId: sessionContext?.chainId,
+        contentLength: responseContent.length,
+      });
+
       this.logExit({
         formatted: true,
         executionType,
@@ -151,8 +151,12 @@ export class ResponseFormattingStage extends BasePipelineStage {
   /**
    * Formats response for chain execution with session tracking
    */
-  private formatChainResponse(context: ExecutionContext, formatterContext: ChainFormattingContext): string {
+  private formatChainResponse(
+    context: ExecutionContext,
+    formatterContext: ChainFormattingContext
+  ): string {
     const sections: string[] = [];
+    const gateGuidanceEnabled = this.shouldInjectGateGuidance(context);
 
     // Add base content
     const baseContent =
@@ -161,47 +165,22 @@ export class ResponseFormattingStage extends BasePipelineStage {
         : JSON.stringify(context.executionResults!.content, null, 2);
     sections.push(baseContent);
 
-    const gateControls = this.buildGateControlsSection(context);
-    if (gateControls) {
-      sections.push(gateControls);
+    // Add gate instructions for chain execution
+    if (gateGuidanceEnabled && context.gateInstructions) {
+      sections.push(context.gateInstructions);
     }
 
-    // Add gate instructions for chain execution
-    if (context.gateInstructions) {
-      sections.push(context.gateInstructions);
+    // Add advisory warnings from non-blocking gate failures
+    const advisoryWarnings = context.state.gates.advisoryWarnings;
+    if (advisoryWarnings && advisoryWarnings.length > 0) {
+      sections.push('\n---\n**Advisory Gate Warnings:**');
+      advisoryWarnings.forEach((warning) => sections.push(`- ${warning}`));
     }
 
     // Add chain-specific footer with session tracking
     const footer = this.buildChainFooter(context, formatterContext);
     if (footer) {
-      sections.push('---');
       sections.push(footer);
-    }
-
-    return sections.join('\n\n');
-  }
-
-  /**
-   * Formats response for template execution
-   */
-  private formatTemplateResponse(context: ExecutionContext, formatterContext: TemplateFormattingContext): string {
-    const sections: string[] = [];
-
-    // Add base content
-    const baseContent =
-      typeof context.executionResults!.content === 'string'
-        ? context.executionResults!.content
-        : JSON.stringify(context.executionResults!.content, null, 2);
-    sections.push(baseContent);
-
-    const gateControls = this.buildGateControlsSection(context);
-    if (gateControls) {
-      sections.push(gateControls);
-    }
-
-    // Add gate instructions if present
-    if (context.gateInstructions) {
-      sections.push(context.gateInstructions);
     }
 
     return sections.join('\n\n');
@@ -210,8 +189,12 @@ export class ResponseFormattingStage extends BasePipelineStage {
   /**
    * Formats response for single prompt execution
    */
-  private formatSinglePromptResponse(context: ExecutionContext, formatterContext: SinglePromptFormattingContext): string {
+  private formatSinglePromptResponse(
+    context: ExecutionContext,
+    _formatterContext: SinglePromptFormattingContext
+  ): string {
     const sections: string[] = [];
+    const gateGuidanceEnabled = this.shouldInjectGateGuidance(context);
 
     // Add base content
     const baseContent =
@@ -220,72 +203,27 @@ export class ResponseFormattingStage extends BasePipelineStage {
         : JSON.stringify(context.executionResults!.content, null, 2);
     sections.push(baseContent);
 
-    const gateControls = this.buildGateControlsSection(context);
-    if (gateControls) {
-      sections.push(gateControls);
+    // Add gate instructions if present (for inline gates via ::)
+    if (gateGuidanceEnabled && context.gateInstructions) {
+      sections.push(context.gateInstructions);
     }
 
-    // Add gate instructions if present (for inline gates via ::)
-    if (context.gateInstructions) {
-      sections.push(context.gateInstructions);
+    // Add advisory warnings from non-blocking gate failures
+    const advisoryWarnings = context.state.gates.advisoryWarnings;
+    if (advisoryWarnings && advisoryWarnings.length > 0) {
+      sections.push('\n---\n**Advisory Gate Warnings:**');
+      advisoryWarnings.forEach((warning) => sections.push(`- ${warning}`));
     }
 
     return sections.join('\n\n');
   }
 
-  private buildGateControlsSection(context: ExecutionContext): string | null {
-    const request = context.mcpRequest;
-    const overrides = (context.metadata['requestedGateOverrides'] ?? {}) as Record<string, any>;
-
-    const apiValidationEnabled = Boolean(
-      request.api_validation ?? overrides['apiValidation']
-    );
-    const qualityGates: readonly string[] =
-      request.quality_gates ?? overrides['qualityGates'] ?? [];
-    const customChecks: readonly RequestCustomCheck[] =
-      request.custom_checks ?? overrides['customChecks'] ?? [];
-    const temporaryCount =
-      request.temporary_gates?.length ?? overrides['temporaryGateCount'] ?? 0;
-    const gateScope = request.gate_scope ?? overrides['gateScope'];
-
-    const hasControls =
-      apiValidationEnabled ||
-      qualityGates.length > 0 ||
-      customChecks.length > 0 ||
-      temporaryCount > 0 ||
-      gateScope;
-
-    if (!hasControls) {
-      return null;
-    }
-
-    const lines: string[] = [];
-    lines.push('### Validation Inputs Provided');
-    if (apiValidationEnabled) {
-      lines.push('- API Validation: Enabled — send gate_verdict to resume after reviews');
-    }
-
-    if (qualityGates.length > 0) {
-      lines.push(`- Requested Gates: ${qualityGates.join(', ')}`);
-    }
-
-    if (customChecks.length > 0) {
-      lines.push('- Custom Checks:');
-      customChecks.forEach((check) => {
-        const label = check.name ? `${check.name}: ` : '';
-        lines.push(`  - ${label}${check.description ?? 'No description provided.'}`);
-      });
-    }
-
-    if (temporaryCount > 0) {
-      lines.push(`- Temporary Gates Provided: ${temporaryCount}`);
-    }
-
-    if (gateScope) {
-      lines.push(`- Gate Scope Override: ${gateScope}`);
-    }
-
-    return lines.join('\n');
+  /**
+   * Whether gate guidance injection is enabled for the current execution.
+   * Defaults to true when no decision exists.
+   */
+  private shouldInjectGateGuidance(context: ExecutionContext): boolean {
+    return context.state.injection?.gateGuidance?.inject !== false;
   }
 
   /**
@@ -302,27 +240,22 @@ export class ResponseFormattingStage extends BasePipelineStage {
 
     // Chain progress
     if (sessionContext.currentStep && sessionContext.totalSteps) {
-      const progress = `${sessionContext.currentStep}/${sessionContext.totalSteps}`;
+      const normalizedStep = Math.min(sessionContext.currentStep, sessionContext.totalSteps);
+      const progress = `${normalizedStep}/${sessionContext.totalSteps}`;
       const isComplete = sessionContext.currentStep >= sessionContext.totalSteps;
-      lines.push(
-        isComplete ? `✓ Chain complete (${progress})` : `→ Progress ${progress}`
-      );
+      lines.push(isComplete ? `✓ Chain complete (${progress})` : `→ Progress ${progress}`);
     }
 
-    const gateResponseHint = context.hasPendingReview()
-      ? 'gate_verdict:"GATE_REVIEW: PASS - <why it meets the gates>"'
-      : 'user_response:"<latest step output>"';
-    lines.push(
-      `Resume Shortcut: \`${chainIdentifier} --> (optional input) --> ${gateResponseHint}\``
-    );
-    if (context.hasPendingReview()) {
-      lines.push(
-        `API Resume: call prompt_engine with \`chain_id: "${chainIdentifier}"\` and ${gateResponseHint}. Include a refreshed user_response only if you reran the prior step.`
-      );
-    } else {
-      lines.push(
-        `API Resume: call prompt_engine with \`chain_id: "${chainIdentifier}"\` plus your latest response — no need to resend the original command.`
-      );
+    const hasPendingReview = context.hasPendingReview();
+    if (hasPendingReview) {
+      lines.push(`Next: chain_id="${chainIdentifier}", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`);
+    } else if (sessionContext.currentStep && sessionContext.totalSteps) {
+      const isComplete = sessionContext.currentStep >= sessionContext.totalSteps;
+      if (isComplete) {
+        lines.push('Next: Chain complete. No user_response needed.');
+      } else {
+        lines.push(`Next: chain_id="${chainIdentifier}", user_response="<your step output>"`);
+      }
     }
 
     return lines.join('\n');
@@ -346,16 +279,14 @@ export class ResponseFormattingStage extends BasePipelineStage {
       lines.push(`Session: ${sessionContext.sessionId}`);
 
       // Chain ID (if different from session ID)
-      if (
-        sessionContext.chainId &&
-        sessionContext.chainId !== sessionContext.sessionId
-      ) {
+      if (sessionContext.chainId && sessionContext.chainId !== sessionContext.sessionId) {
         lines.push(`Chain: ${sessionContext.chainId}`);
       }
 
       // Chain progress
       if (sessionContext.currentStep && sessionContext.totalSteps) {
-        const progress = `${sessionContext.currentStep}/${sessionContext.totalSteps}`;
+        const normalizedStep = Math.min(sessionContext.currentStep, sessionContext.totalSteps);
+        const progress = `${normalizedStep}/${sessionContext.totalSteps}`;
         const isComplete = sessionContext.currentStep >= sessionContext.totalSteps;
         lines.push(
           isComplete ? `✓ Chain complete (${progress})` : `→ Continue with next step (${progress})`

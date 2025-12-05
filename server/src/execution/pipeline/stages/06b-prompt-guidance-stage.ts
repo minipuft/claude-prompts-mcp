@@ -1,11 +1,16 @@
 // @lifecycle canonical - Injects prompt guidance metadata into the execution context.
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../logging/index.js';
-import type { PromptGuidanceService, ServicePromptGuidanceResult } from '../../../frameworks/prompt-guidance/index.js';
+import type {
+  PromptGuidanceService,
+  ServicePromptGuidanceResult,
+} from '../../../frameworks/prompt-guidance/index.js';
 import type { FrameworkMethodology } from '../../../frameworks/types/index.js';
+import type { Logger } from '../../../logging/index.js';
+import type { ContentAnalysisResult } from '../../../semantic/types.js';
 import type { ConvertedPrompt } from '../../../types/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
+import type { FrameworkDecisionInput } from '../decisions/index.js';
 
 type GuidanceStore = Record<string, ServicePromptGuidanceResult>;
 
@@ -13,8 +18,13 @@ type GuidanceStore = Record<string, ServicePromptGuidanceResult>;
  * Pipeline Stage: Prompt Guidance
  *
  * Applies methodology-driven system prompt injection and template enhancement
- * using the centralized PromptGuidanceService. Ensures a single source of truth
- * for framework guidance before gate instructions are rendered.
+ * using the centralized PromptGuidanceService. In the two-phase client-driven
+ * judge flow, this stage applies style enhancement from client selections.
+ *
+ * Client selections (set by JudgeSelectionStage, checked by this stage):
+ * - clientFrameworkOverride: Override framework (used by FrameworkResolutionStage)
+ * - clientSelectedGates: Additional gates (used by GateEnhancementStage)
+ * - clientSelectedStyle: Response style enhancement (applied by this stage)
  */
 export class PromptGuidanceStage extends BasePipelineStage {
   readonly name = 'PromptGuidance';
@@ -29,9 +39,21 @@ export class PromptGuidanceStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    if (context.metadata['sessionBlueprintRestored']) {
+    // Skip if session blueprint restored (resuming a chain)
+    if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
       return;
+    }
+
+    // Skip if judge phase triggered (pipeline already returned with judge response)
+    if (context.state.framework.judgePhaseTriggered) {
+      this.logExit({ skipped: 'Judge phase triggered - pipeline returning early' });
+      return;
+    }
+
+    // Check for and apply client selections from two-phase judge flow
+    if (this.hasClientSelections(context)) {
+      this.applyClientSelections(context);
     }
 
     if (!this.promptGuidanceService?.isInitialized()) {
@@ -60,7 +82,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
       const prompt = context.requireConvertedPrompt();
       const result = await this.applyGuidance(prompt, context);
       if (result?.enhancedPrompt) {
-        context.parsedCommand!.convertedPrompt = result.enhancedPrompt;
+        context.parsedCommand.convertedPrompt = result.enhancedPrompt;
       }
 
       this.logExit({
@@ -72,12 +94,123 @@ export class PromptGuidanceStage extends BasePipelineStage {
     }
   }
 
+  /**
+   * Check if client has provided resource selections from judge phase.
+   * JudgeSelectionStage sets: clientFrameworkOverride, clientSelectedGates, clientSelectedStyle
+   */
+  private hasClientSelections(context: ExecutionContext): boolean {
+    return Boolean(
+      context.state.framework.clientOverride ||
+        context.state.framework.clientSelectedGates ||
+        context.state.framework.clientSelectedStyle
+    );
+  }
+
+  /**
+   * Apply client selections to the execution context.
+   * JudgeSelectionStage already set the metadata keys that downstream stages check.
+   * This stage only needs to apply style enhancement (not covered by other stages).
+   */
+  private applyClientSelections(context: ExecutionContext): void {
+    const selectedFramework = context.state.framework.clientOverride;
+    const selectedGates = context.state.framework.clientSelectedGates;
+    const selectedStyle = context.state.framework.clientSelectedStyle;
+
+    // Apply style enhancement if style selected (framework and gates handled by their respective stages)
+    if (selectedStyle) {
+      this.applyStyleEnhancement(context, selectedStyle);
+    }
+
+    this.logger.info('[PromptGuidanceStage] Client selections detected', {
+      framework: selectedFramework,
+      gates: selectedGates?.length ?? 0,
+      style: selectedStyle,
+    });
+  }
+
+  /**
+   * Apply style enhancement to the prompt based on selected style.
+   */
+  private applyStyleEnhancement(context: ExecutionContext, style: string): void {
+    const styleDecision = context.state.injection?.styleGuidance;
+    if (styleDecision?.inject === false) {
+      this.logger.debug('[PromptGuidanceStage] Style guidance injection suppressed by decision', {
+        style,
+        source: styleDecision.source,
+      });
+      return;
+    }
+
+    const styleGuidance = this.getStyleGuidance(style);
+    if (!styleGuidance) {
+      this.logger.warn('[PromptGuidanceStage] Unknown style selected:', style);
+      return;
+    }
+
+    // Store style metadata for downstream processing
+    context.state.framework.selectedStyleGuidance = styleGuidance;
+    context.state.framework.styleEnhancementApplied = true;
+
+    // Enhance single prompts
+    if (context.hasSinglePromptCommand()) {
+      const prompt = context.requireConvertedPrompt();
+      const enhancedSystemMessage = this.enhanceWithStyle(prompt.systemMessage, styleGuidance);
+      context.parsedCommand.convertedPrompt = {
+        ...prompt,
+        systemMessage: enhancedSystemMessage,
+      };
+    }
+
+    // Enhance chain steps
+    if (context.hasChainCommand()) {
+      const steps = context.requireChainSteps();
+      for (const step of steps) {
+        if (step.convertedPrompt) {
+          const enhancedSystemMessage = this.enhanceWithStyle(
+            step.convertedPrompt.systemMessage,
+            styleGuidance
+          );
+          step.convertedPrompt = {
+            ...step.convertedPrompt,
+            systemMessage: enhancedSystemMessage,
+          };
+        }
+      }
+    }
+
+    this.logger.debug('[PromptGuidanceStage] Style enhancement applied:', style);
+  }
+
+  /**
+   * Get guidance instructions for a style type.
+   */
+  private getStyleGuidance(style: string): string | null {
+    const styles: Record<string, string> = {
+      analytical: 'Structure your response with systematic analysis. Use data-driven reasoning, present evidence clearly, and organize findings logically with clear sections.',
+      procedural: 'Provide step-by-step instructions. Number each step, explain prerequisites, and include verification points. Focus on actionable guidance.',
+      creative: 'Approach this with innovative thinking. Explore unconventional solutions, brainstorm alternatives, and encourage novel perspectives.',
+      reasoning: 'Apply logical decomposition. Break down the problem, show your reasoning chain, identify assumptions, and evaluate conclusions systematically.',
+    };
+    return styles[style.toLowerCase()] ?? null;
+  }
+
+  /**
+   * Enhance a system message with style guidance.
+   */
+  private enhanceWithStyle(systemMessage: string | undefined, styleGuidance: string): string {
+    const base = systemMessage ?? '';
+    if (base.includes(styleGuidance)) {
+      return base; // Already contains guidance
+    }
+    return base ? `${base}\n\n**Response Style:** ${styleGuidance}` : `**Response Style:** ${styleGuidance}`;
+  }
+
   private async applyGuidanceToChain(context: ExecutionContext): Promise<number> {
     const steps = context.requireChainSteps();
     let applied = 0;
 
     for (const step of steps) {
-      if (step.executionPlan && step.executionPlan.requiresFramework === false) {
+      if (step.executionPlan?.requiresFramework === false) {
         continue;
       }
 
@@ -107,11 +240,44 @@ export class PromptGuidanceStage extends BasePipelineStage {
     promptId: string = prompt.id
   ): Promise<ServicePromptGuidanceResult | null> {
     try {
-      const guidance = await this.promptGuidanceService!.applyGuidance(prompt, {
-        includeSystemPromptInjection: true,
+      // Use injection decision from InjectionControlStage (now runs BEFORE this stage)
+      // InjectionControlStage populates context.state.injection with clear boolean semantics:
+      // inject=true means INJECT, inject=false means SKIP
+      const injectionDecision = context.state.injection?.systemPrompt;
+      const includeSystemPrompt =
+        (injectionDecision?.inject ?? true) && context.state.framework.systemPromptApplied !== true;
+
+      // Get semantic analysis and selected resources from Judge Selection Stage
+      const semanticAnalysis = context.metadata['semanticAnalysis'] as
+        | ContentAnalysisResult
+        | undefined;
+      const selectedResources = context.metadata['selectedResources'] as string[] | undefined;
+      const availableResources = context.metadata['availableGuidanceResources'] as
+        | ConvertedPrompt[]
+        | undefined;
+
+      const guidanceOptions: Parameters<
+        PromptGuidanceService['applyGuidance']
+      >[1] = {
+        includeSystemPromptInjection: includeSystemPrompt,
         includeTemplateEnhancement: true,
         frameworkOverride: this.getFrameworkOverride(context),
-      });
+      };
+
+      if (semanticAnalysis) {
+        guidanceOptions.semanticAnalysis = semanticAnalysis;
+      }
+      if (selectedResources) {
+        guidanceOptions.selectedResources = selectedResources;
+      }
+      if (availableResources) {
+        guidanceOptions.availableResources = availableResources;
+      }
+
+      const guidance = await this.promptGuidanceService!.applyGuidance(
+        prompt,
+        guidanceOptions
+      );
 
       this.recordGuidanceResult(context, promptId, guidance);
       return guidance;
@@ -141,8 +307,25 @@ export class PromptGuidanceStage extends BasePipelineStage {
     return context.metadata['promptGuidanceResults'] as GuidanceStore;
   }
 
+  /**
+   * Get framework override using the centralized FrameworkDecisionAuthority.
+   * This ensures consistent framework resolution across all pipeline stages.
+   */
   private getFrameworkOverride(context: ExecutionContext): FrameworkMethodology | undefined {
-    const override = context.parsedCommand?.executionPlan?.frameworkOverride;
-    return override ? (override as FrameworkMethodology) : undefined;
+    const decisionInput = this.buildDecisionInput(context);
+    const frameworkId = context.frameworkAuthority.getFrameworkId(decisionInput);
+    return frameworkId as FrameworkMethodology | undefined;
+  }
+
+  /**
+   * Build decision input from context for FrameworkDecisionAuthority.
+   */
+  private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
+    return {
+      modifiers: context.executionPlan?.modifiers,
+      operatorOverride: context.parsedCommand?.executionPlan?.frameworkOverride,
+      clientOverride: context.state.framework.clientOverride,
+      globalActiveFramework: context.frameworkContext?.selectedFramework?.id,
+    };
   }
 }

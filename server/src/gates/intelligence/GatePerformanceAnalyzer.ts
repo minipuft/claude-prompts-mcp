@@ -6,8 +6,9 @@
  * Clean dependencies: Only logger for performance tracking.
  */
 
-import type { Logger } from '../../logging/index.js';
 import { GatePerformanceMetrics, GateSystemAnalytics } from '../core/gate-definitions.js';
+
+import type { Logger } from '../../logging/index.js';
 
 /**
  * Performance trend data
@@ -45,7 +46,7 @@ export class GatePerformanceAnalyzer {
     this.logger.debug('[GATE PERFORMANCE ANALYZER] Recording execution:', {
       gateId,
       executionTime,
-      success
+      success,
     });
 
     let metrics = this.gateMetrics.get(gateId);
@@ -57,7 +58,7 @@ export class GatePerformanceAnalyzer {
         successRate: success ? 1.0 : 0.0,
         retryRate: success ? 0.0 : 1.0,
         lastUsed: new Date(),
-        usageCount: 1
+        usageCount: 1,
       };
     } else {
       // Update metrics with rolling average
@@ -95,13 +96,14 @@ export class GatePerformanceAnalyzer {
         overallSuccessRate: 0,
         topPerformingGates: [],
         underperformingGates: [],
-        recommendations: ['No gate performance data available yet']
+        recommendations: ['No gate performance data available yet'],
       };
     }
 
     // Calculate overall metrics
     const totalGates = allMetrics.length;
-    const avgExecutionTime = allMetrics.reduce((sum, m) => sum + m.avgExecutionTime, 0) / totalGates;
+    const avgExecutionTime =
+      allMetrics.reduce((sum, m) => sum + m.avgExecutionTime, 0) / totalGates;
     const overallSuccessRate = allMetrics.reduce((sum, m) => sum + m.successRate, 0) / totalGates;
 
     // Sort gates by performance
@@ -111,14 +113,12 @@ export class GatePerformanceAnalyzer {
       return scoreB - scoreA;
     });
 
-    const topPerformingGates = sortedByPerformance
-      .slice(0, 3)
-      .map(m => m.gateId);
+    const topPerformingGates = sortedByPerformance.slice(0, 3).map((m) => m.gateId);
 
     const underperformingGates = sortedByPerformance
       .slice(-3)
-      .filter(m => this.calculatePerformanceScore(m) < 0.7)
-      .map(m => m.gateId);
+      .filter((m) => this.calculatePerformanceScore(m) < 0.7)
+      .map((m) => m.gateId);
 
     const recommendations = this.generateOptimizationRecommendations(allMetrics);
 
@@ -128,7 +128,7 @@ export class GatePerformanceAnalyzer {
       overallSuccessRate: Math.round(overallSuccessRate * 100) / 100,
       topPerformingGates,
       underperformingGates,
-      recommendations
+      recommendations,
     };
   }
 
@@ -174,9 +174,7 @@ export class GatePerformanceAnalyzer {
     const usageScore = Math.min(1, Math.log10(metrics.usageCount + 1) / 2);
 
     return (
-      metrics.successRate * successWeight +
-      speedScore * speedWeight +
-      usageScore * usageWeight
+      metrics.successRate * successWeight + speedScore * speedWeight + usageScore * usageWeight
     );
   }
 
@@ -211,7 +209,7 @@ export class GatePerformanceAnalyzer {
       gateId: metrics.gateId,
       trend,
       changePercent,
-      recommendation
+      recommendation,
     };
   }
 
@@ -222,33 +220,36 @@ export class GatePerformanceAnalyzer {
     const recommendations: string[] = [];
 
     // Check for slow gates
-    const slowGates = allMetrics.filter(m => m.avgExecutionTime > 300);
+    const slowGates = allMetrics.filter((m) => m.avgExecutionTime > 300);
     if (slowGates.length > 0) {
       recommendations.push(
-        `Optimize slow gates: ${slowGates.map(g => g.gateId).join(', ')} (>${300}ms avg)`
+        `Optimize slow gates: ${slowGates.map((g) => g.gateId).join(', ')} (>${300}ms avg)`
       );
     }
 
     // Check for low success rates
-    const unreliableGates = allMetrics.filter(m => m.successRate < 0.8);
+    const unreliableGates = allMetrics.filter((m) => m.successRate < 0.8);
     if (unreliableGates.length > 0) {
       recommendations.push(
-        `Improve reliability of: ${unreliableGates.map(g => g.gateId).join(', ')} (<80% success)`
+        `Improve reliability of: ${unreliableGates.map((g) => g.gateId).join(', ')} (<80% success)`
       );
     }
 
     // Check for unused gates
-    const underusedGates = allMetrics.filter(m => m.usageCount < 5);
+    const underusedGates = allMetrics.filter((m) => m.usageCount < 5);
     if (underusedGates.length > 0) {
       recommendations.push(
-        `Review gate relevance: ${underusedGates.map(g => g.gateId).join(', ')} (low usage)`
+        `Review gate relevance: ${underusedGates.map((g) => g.gateId).join(', ')} (low usage)`
       );
     }
 
     // Overall system recommendations
-    const avgSuccessRate = allMetrics.reduce((sum, m) => sum + m.successRate, 0) / allMetrics.length;
+    const avgSuccessRate =
+      allMetrics.reduce((sum, m) => sum + m.successRate, 0) / allMetrics.length;
     if (avgSuccessRate < 0.85) {
-      recommendations.push('Overall system success rate is below optimal (85%), review gate criteria');
+      recommendations.push(
+        'Overall system success rate is below optimal (85%), review gate criteria'
+      );
     }
 
     if (recommendations.length === 0) {
@@ -280,7 +281,7 @@ export class GatePerformanceAnalyzer {
       totalExecutions: this.totalExecutions,
       avgExecutionsPerMinute: Math.round(avgExecutionsPerMinute * 10) / 10,
       uniqueGatesUsed: this.gateMetrics.size,
-      sessionStartTime: this.sessionStartTime.toISOString()
+      sessionStartTime: this.sessionStartTime.toISOString(),
     };
   }
 
@@ -290,7 +291,7 @@ export class GatePerformanceAnalyzer {
   exportMetrics(): { metrics: GatePerformanceMetrics[]; session: any } {
     return {
       metrics: Array.from(this.gateMetrics.values()),
-      session: this.getSessionStatistics()
+      session: this.getSessionStatistics(),
     };
   }
 }

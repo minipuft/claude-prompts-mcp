@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, jest } from '@jest/globals';
 
 import { ArgumentHistoryTracker } from '../../../src/text-references/argument-history-tracker.js';
+
 import type { Logger } from '../../../src/logging/index.js';
 
 const createLogger = (): Logger =>

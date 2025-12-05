@@ -31,23 +31,23 @@ global.testUtils = {
     console.error = () => {};
     console.warn = () => {};
   },
-  
+
   // Restore console output
   restoreConsole: () => {
     console.error = originalConsoleError;
     console.warn = originalConsoleWarn;
   },
-  
+
   // Wait for async operations
-  waitFor: (ms: number) => new Promise(resolve => setTimeout(resolve, ms)),
-  
+  waitFor: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+
   // Create mock logger - implementation will use jest mocks in individual tests
   createMockLogger: () => ({
     info: () => {},
     warn: () => {},
     error: () => {},
-    debug: () => {}
-  })
+    debug: () => {},
+  }),
 };
 
 // Extend Jest matchers if needed

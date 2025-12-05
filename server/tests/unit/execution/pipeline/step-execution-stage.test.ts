@@ -2,8 +2,12 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
 import { StepExecutionStage } from '../../../../src/execution/pipeline/stages/09-execution-stage.js';
-import type { ChainOperatorExecutor, ChainStepRenderResult } from '../../../../src/execution/operators/chain-operator-executor.js';
+
 import type { ChainSessionService } from '../../../../src/chain-session/types.js';
+import type {
+  ChainOperatorExecutor,
+  ChainStepRenderResult,
+} from '../../../../src/execution/operators/chain-operator-executor.js';
 import type { Logger } from '../../../../src/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/types/index.js';
 
@@ -59,7 +63,7 @@ describe('StepExecutionStage', () => {
       gates: ['quality'],
       requiresFramework: true,
       requiresSession: false,
-      apiValidationEnabled: false,
+      llmValidationEnabled: false,
     } as any;
     context.parsedCommand = {
       commandType: 'single',
@@ -72,7 +76,9 @@ describe('StepExecutionStage', () => {
 
     await stage.execute(context);
 
-    expect(context.executionResults?.content).toContain('Apply the C.A.G.E.E.R.F methodology systematically.');
+    expect(context.executionResults?.content).toContain(
+      'Apply the C.A.G.E.E.R.F methodology systematically.'
+    );
     expect(context.executionResults?.content).toContain('Process AI');
   });
 
@@ -92,7 +98,7 @@ describe('StepExecutionStage', () => {
       gates: [],
       requiresFramework: true,
       requiresSession: false,
-      apiValidationEnabled: false,
+      llmValidationEnabled: false,
     } as any;
     context.parsedCommand = {
       commandType: 'single',
@@ -120,7 +126,7 @@ describe('StepExecutionStage', () => {
       gates: ['quality'],
       requiresFramework: true,
       requiresSession: true,
-      apiValidationEnabled: false,
+      llmValidationEnabled: false,
     } as any;
     context.sessionContext = {
       sessionId: 'sess-1',
@@ -165,5 +171,60 @@ describe('StepExecutionStage', () => {
     expect(renderArgs.currentStepIndex).toBe(1);
     expect(renderArgs.additionalGateIds).toEqual(['quality']);
     expect(context.executionResults?.content).toBe('rendered chain step');
+  });
+
+  test('skips rendering and returns completion stub when chain is already complete', async () => {
+    const { executor: chainExecutor, renderStepMock } = createChainExecutor();
+    const { sessionManager } = createSessionManager();
+    const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
+
+    const context = new ExecutionContext({ command: '>>chain' });
+    context.executionPlan = {
+      strategy: 'chain',
+      gates: ['quality'],
+      requiresFramework: true,
+      requiresSession: true,
+      llmValidationEnabled: false,
+    } as any;
+    context.sessionContext = {
+      sessionId: 'sess-2',
+      chainId: 'chain-2',
+      isChainExecution: true,
+      currentStep: 4,
+      totalSteps: 3,
+    };
+    context.parsedCommand = {
+      commandType: 'chain',
+      steps: [
+        {
+          stepNumber: 1,
+          promptId: 'step_one',
+          args: { topic: 'first' },
+          convertedPrompt: { ...samplePrompt, id: 'step_one' },
+        },
+        {
+          stepNumber: 2,
+          promptId: 'step_two',
+          args: { topic: 'second' },
+          convertedPrompt: { ...samplePrompt, id: 'step_two' },
+        },
+        {
+          stepNumber: 3,
+          promptId: 'step_three',
+          args: { topic: 'third' },
+          convertedPrompt: { ...samplePrompt, id: 'step_three' },
+        },
+      ],
+    };
+
+    await stage.execute(context);
+
+    expect(renderStepMock).not.toHaveBeenCalled();
+    expect(context.state.session.chainComplete).toBe(true);
+    expect(typeof context.executionResults?.content).toBe('string');
+    expect(context.executionResults?.metadata).toMatchObject({
+      promptId: 'chain-complete',
+      totalSteps: 3,
+    });
   });
 });

@@ -16,7 +16,7 @@ export type { CategoryResult } from '../../../prompts/category-maintenance.js';
  * Prompt classification interface for management operations
  */
 export interface PromptClassification {
-  executionType: 'prompt' | 'template' | 'chain';
+  executionType: 'single' | 'chain';
   requiresExecution: boolean;
   requiresFramework: boolean;
   confidence: number;

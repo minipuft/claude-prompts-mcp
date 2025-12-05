@@ -434,7 +434,7 @@ echo "Progress: <calculate reduction>"
 1. `src/api/index.ts` - ~50 violations
 2. `src/chain-session/manager.ts` - ~48 violations
 3. `src/mcp-tools/prompt-engine/core/engine.ts` - ~45 violations
-4. `src/execution/parsers/unified-command-parser.ts` - ~40 violations
+4. `src/execution/parsers/command-parser.ts` - ~40 violations
 5. `src/frameworks/framework-manager.ts` - ~38 violations
 6. `src/gates/core/gate-validator.ts` - ~35 violations
 7. `src/prompts/loader.ts` - ~32 violations

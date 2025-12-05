@@ -5,12 +5,14 @@
  */
 
 // Re-export existing utilities
-export * from "./errorHandling.js";
-export * from "./jsonUtils.js";
-export * from "./chainUtils.js";
+export * from './errorHandling.js';
+export * from './jsonUtils.js';
+export * from './chainUtils.js';
+export * from './constants.js';
+export * from './yaml/index.js';
 
 // Re-export framework system from new locations (maintaining backward compatibility)
-export * from "../frameworks/index.js";
+export * from '../frameworks/index.js';
 
 // Re-export gate system from new locations (maintaining backward compatibility)
 // Note: Selective export to avoid ValidationResult conflicts
@@ -20,15 +22,15 @@ export {
   GateValidator,
   createGateValidator,
   LightweightGateSystem,
-  createLightweightGateSystem
-} from "../gates/index.js";
+  createLightweightGateSystem,
+} from '../gates/index.js';
 export type {
   LightweightGateDefinition,
   GatePassCriteria,
   ValidationCheck,
   ValidationContext,
-  GateActivationResult
-} from "../gates/index.js";
+  GateActivationResult,
+} from '../gates/index.js';
 
 // Template system removed - functionality moved to methodology guides
 
@@ -44,9 +46,9 @@ export function clearRequireCache(): void {
   // Filter for prompt files and configs
   const promptPaths = cachedModulePaths.filter(
     (modulePath) =>
-      modulePath.includes("prompts/") ||
-      modulePath.includes("prompts.json") ||
-      modulePath.endsWith(".md")
+      modulePath.includes('prompts/') ||
+      modulePath.includes('prompts.json') ||
+      modulePath.endsWith('.md')
   );
 
   // Clear them from cache
@@ -54,9 +56,7 @@ export function clearRequireCache(): void {
     delete require.cache[modulePath];
   });
 
-  console.log(
-    `Cleared ${promptPaths.length} prompt-related modules from require cache`
-  );
+  console.log(`Cleared ${promptPaths.length} prompt-related modules from require cache`);
 }
 
 /**
@@ -90,7 +90,7 @@ export function forceGarbageCollection(): boolean {
       global.gc();
       return true;
     } catch (gcError) {
-      console.warn("Could not force garbage collection:", gcError);
+      console.warn('Could not force garbage collection:', gcError);
       return false;
     }
   }
@@ -107,7 +107,7 @@ export function delay(ms: number): Promise<void> {
 /**
  * Create a unique identifier
  */
-export function createUniqueId(prefix: string = ""): string {
+export function createUniqueId(prefix: string = ''): string {
   const timestamp = Date.now();
   const random = Math.random().toString(36).substr(2, 9);
   return prefix ? `${prefix}_${timestamp}_${random}` : `${timestamp}_${random}`;
@@ -125,9 +125,9 @@ export function safeStringify(obj: any, indent: number = 0): string {
     return JSON.stringify(
       obj,
       (key, value) => {
-        if (typeof value === "object" && value !== null) {
+        if (typeof value === 'object' && value !== null) {
           if (seen.has(value)) {
-            return "[Circular]";
+            return '[Circular]';
           }
           seen.add(value);
         }
@@ -156,12 +156,12 @@ export function isValidJson(str: string): boolean {
  */
 export function escapeJsonForNunjucks(jsonStr: string): string {
   return jsonStr
-    .replace(/\{\{/g, '\\{\\{')  // Escape Nunjucks variable syntax
-    .replace(/\}\}/g, '\\}\\}')  // Escape Nunjucks variable syntax  
-    .replace(/\{%/g, '\\{\\%')   // Escape Nunjucks tag syntax
-    .replace(/%\}/g, '\\%\\}')   // Escape Nunjucks tag syntax
-    .replace(/\{#/g, '\\{\\#')   // Escape Nunjucks comment syntax
-    .replace(/#\}/g, '\\#\\}');  // Escape Nunjucks comment syntax
+    .replace(/\{\{/g, '\\{\\{') // Escape Nunjucks variable syntax
+    .replace(/\}\}/g, '\\}\\}') // Escape Nunjucks variable syntax
+    .replace(/\{%/g, '\\{\\%') // Escape Nunjucks tag syntax
+    .replace(/%\}/g, '\\%\\}') // Escape Nunjucks tag syntax
+    .replace(/\{#/g, '\\{\\#') // Escape Nunjucks comment syntax
+    .replace(/#\}/g, '\\#\\}'); // Escape Nunjucks comment syntax
 }
 
 /**
@@ -170,12 +170,12 @@ export function escapeJsonForNunjucks(jsonStr: string): string {
  */
 export function unescapeJsonFromNunjucks(escapedStr: string): string {
   return escapedStr
-    .replace(/\\{\\{/g, '{{')     // Restore Nunjucks variable syntax
-    .replace(/\\}\\}/g, '}}')     // Restore Nunjucks variable syntax
-    .replace(/\\{\\%/g, '{%')     // Restore Nunjucks tag syntax  
-    .replace(/\\%\\}/g, '%}')     // Restore Nunjucks tag syntax
-    .replace(/\\{\\#/g, '{#')     // Restore Nunjucks comment syntax
-    .replace(/\\#\\}/g, '#}');    // Restore Nunjucks comment syntax
+    .replace(/\\{\\{/g, '{{') // Restore Nunjucks variable syntax
+    .replace(/\\}\\}/g, '}}') // Restore Nunjucks variable syntax
+    .replace(/\\{\\%/g, '{%') // Restore Nunjucks tag syntax
+    .replace(/\\%\\}/g, '%}') // Restore Nunjucks tag syntax
+    .replace(/\\{\\#/g, '{#') // Restore Nunjucks comment syntax
+    .replace(/\\#\\}/g, '#}'); // Restore Nunjucks comment syntax
 }
 
 /**
@@ -194,9 +194,9 @@ export function safeJsonParse(jsonStr: string): { success: boolean; data?: any; 
       const data = JSON.parse(unescaped);
       return { success: true, data };
     } catch (unescapeError) {
-      return { 
-        success: false, 
-        error: `JSON parsing failed: ${directError instanceof Error ? directError.message : String(directError)}` 
+      return {
+        success: false,
+        error: `JSON parsing failed: ${directError instanceof Error ? directError.message : String(directError)}`,
       };
     }
   }
@@ -205,11 +205,7 @@ export function safeJsonParse(jsonStr: string): { success: boolean; data?: any; 
 /**
  * Truncate text to a maximum length
  */
-export function truncateText(
-  text: string,
-  maxLength: number,
-  suffix: string = "..."
-): string {
+export function truncateText(text: string, maxLength: number, suffix: string = '...'): string {
   if (text.length <= maxLength) {
     return text;
   }
@@ -220,7 +216,7 @@ export function truncateText(
  * Convert camelCase to kebab-case
  */
 export function camelToKebab(str: string): string {
-  return str.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, "$1-$2").toLowerCase();
+  return str.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
 }
 
 /**
@@ -246,15 +242,15 @@ export function parseArgs(args: string[]): Record<string, string> {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg.startsWith("--")) {
-      const [key, value] = arg.split("=");
+    if (arg.startsWith('--')) {
+      const [key, value] = arg.split('=');
       if (value !== undefined) {
         parsed[key.substring(2)] = value;
-      } else if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
+      } else if (i + 1 < args.length && !args[i + 1].startsWith('--')) {
         parsed[key.substring(2)] = args[i + 1];
         i++;
       } else {
-        parsed[key.substring(2)] = "true";
+        parsed[key.substring(2)] = 'true';
       }
     }
   }
@@ -292,7 +288,7 @@ export class MockLogger {
 
   logStartupInfo(transport: string, config: any): void {
     this.info(`Mock startup - Transport: ${transport}`);
-    this.debug("Mock config:", JSON.stringify(config, null, 2));
+    this.debug('Mock config:', JSON.stringify(config, null, 2));
   }
 
   logMemoryUsage(): void {

@@ -67,7 +67,7 @@ export class PromptClassifier {
 
       // Return fallback classification
       return {
-        executionType: 'prompt',
+        executionType: 'single',
         requiresExecution: true,
         confidence: 50,
         reasoning: [
@@ -88,7 +88,7 @@ export class PromptClassifier {
   ): PromptClassification {
     const reasoning: string[] = [];
     let confidence = 100;
-    let executionType: 'prompt' | 'template' | 'chain' = 'prompt';
+    let executionType: 'single' | 'chain' = 'single';
     let requiresExecution = true;
     const suggestedGates: string[] = [];
     let framework: string | undefined;
@@ -102,7 +102,7 @@ export class PromptClassifier {
     }
     // Check if it has template variables
     else if (this.hasTemplateVariables(convertedPrompt.userMessageTemplate)) {
-      executionType = 'template';
+      executionType = 'single';
       reasoning.push('Detected template variables in content');
       if (Object.keys(promptArgs).length === 0) {
         requiresExecution = false;
@@ -112,8 +112,8 @@ export class PromptClassifier {
     }
     // Default to prompt
     else {
-      executionType = 'prompt';
-      reasoning.push('Standard prompt execution');
+      executionType = 'single';
+      reasoning.push('Standard single execution');
       confidence = 90;
     }
 
@@ -264,13 +264,14 @@ export class PromptClassifier {
         recommendations.timeout = 120000; // 2 minutes for chains
         recommendations.retries = 2;
         break;
-      case 'template':
-        recommendations.timeout = 15000; // 15 seconds for templates
-        recommendations.retries = 0;
-        break;
       default:
         // Keep defaults for prompts
         break;
+    }
+
+    if (classification.legacyExecutionType === 'template') {
+      recommendations.timeout = 15000; // 15 seconds for template-style flows
+      recommendations.retries = 0;
     }
 
     // Adjust based on confidence

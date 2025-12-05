@@ -4,7 +4,7 @@ import { ExecutionContext } from '../../../../src/execution/context/execution-co
 import { CallToActionStage } from '../../../../src/execution/pipeline/stages/11-call-to-action-stage.js';
 
 describe('CallToActionStage', () => {
-  test('appends CTA footer with user_response hint for in-progress chains', async () => {
+  test('suppresses CTA footer when resume info already exists', async () => {
     const stage = new CallToActionStage({
       debug: jest.fn(),
       info: jest.fn(),
@@ -31,12 +31,11 @@ describe('CallToActionStage', () => {
     await stage.execute(context);
 
     const content = context.executionResults?.content ?? '';
-    expect(content).toContain('Rendered instructions');
-    expect(content).toContain('### Next Action - reply via `user_response`');
-    expect(content).toContain(ctaText);
+    expect(content).toBe('Rendered instructions');
+    expect(content).not.toContain('### Next Action');
   });
 
-  test('annotates heading with gate_verdict when pending review exists', async () => {
+  test('suppresses gate_verdict CTA when pending review exists', async () => {
     const stage = new CallToActionStage({
       debug: jest.fn(),
       info: jest.fn(),
@@ -65,16 +64,17 @@ describe('CallToActionStage', () => {
     };
     const gateCTA =
       'Use the resume shortcut below and respond via gate_verdict as `GATE_REVIEW: PASS` or `GATE_REVIEW: FAIL - reason` to resume the workflow.';
-    context.metadata['gateReviewCallToAction'] = gateCTA;
+    context.state.gates.reviewCallToAction = gateCTA;
 
     await stage.execute(context);
 
     const content = context.executionResults?.content ?? '';
-    expect(content).toContain('### Next Action - reply via `gate_verdict`');
-    expect(content).toContain('respond via gate_verdict as `GATE_REVIEW: PASS`');
+    expect(content).toBe('Gate review instructions');
+    expect(content).not.toContain('### Next Action');
+    expect(context.state.gates.reviewCallToAction).toBeUndefined();
   });
 
-  test('skips CTA footer for final response instructions', async () => {
+  test('appends CTA footer when template emits final response instructions', async () => {
     const stage = new CallToActionStage({
       debug: jest.fn(),
       info: jest.fn(),
@@ -83,6 +83,13 @@ describe('CallToActionStage', () => {
     } as any);
 
     const context = new ExecutionContext({ command: 'noop' });
+    context.sessionContext = {
+      sessionId: 'sess-3',
+      chainId: 'chain-3',
+      isChainExecution: true,
+      currentStep: 3,
+      totalSteps: 3,
+    };
     context.executionResults = {
       content: 'Rendered instructions',
       metadata: { callToAction: 'Deliver the final response to the user.' },
@@ -91,7 +98,8 @@ describe('CallToActionStage', () => {
 
     await stage.execute(context);
 
-    expect(context.executionResults?.content).toBe('Rendered instructions');
+    const content = context.executionResults?.content ?? '';
+    expect(content).toContain('Chain execution complete. You may now respond to the user.');
   });
 
   test('skips when no CTA exists', async () => {
@@ -112,5 +120,33 @@ describe('CallToActionStage', () => {
     await stage.execute(context);
 
     expect(context.executionResults?.content).toBe('Rendered instructions');
+  });
+
+  test('appends CTA when final chain step completes without template CTA', async () => {
+    const stage = new CallToActionStage({
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    } as any);
+
+    const context = new ExecutionContext({ command: 'noop' });
+    context.sessionContext = {
+      sessionId: 'sess-4',
+      chainId: 'chain-4',
+      isChainExecution: true,
+      currentStep: 4,
+      totalSteps: 4,
+    };
+    context.executionResults = {
+      content: 'Rendered instructions',
+      metadata: {},
+      generatedAt: Date.now(),
+    };
+
+    await stage.execute(context);
+
+    const content = context.executionResults?.content ?? '';
+    expect(content).toContain('Chain execution complete. You may now respond to the user.');
   });
 });

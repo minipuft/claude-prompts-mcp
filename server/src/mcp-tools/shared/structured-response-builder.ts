@@ -21,7 +21,7 @@ export interface ResponseMetadata {
   /** Operation being performed (create, update, delete, execute, etc.) */
   operation: string;
   /** Type of execution for this operation */
-  executionType?: 'prompt' | 'template' | 'chain';
+  executionType?: 'single' | 'chain';
   /** Execution time in milliseconds */
   executionTime?: number;
   /** Whether framework processing was enabled */
@@ -79,7 +79,7 @@ export class StructuredResponseBuilder {
       structuredContent: {
         executionMetadata: {
           executionId,
-          executionType: metadata.executionType || 'prompt',
+          executionType: metadata.executionType || 'single',
           startTime,
           endTime: startTime + (metadata.executionTime || 0),
           executionTime: metadata.executionTime || 0,
@@ -128,7 +128,7 @@ export class StructuredResponseBuilder {
       structuredContent: {
         executionMetadata: {
           executionId,
-          executionType: 'prompt',
+          executionType: 'single',
           startTime: timestamp,
           endTime: timestamp,
           executionTime: 0,
@@ -155,7 +155,7 @@ export class StructuredResponseBuilder {
     return this.createToolResponse(content, {
       tool,
       operation,
-      executionType: 'prompt',
+      executionType: 'single',
       frameworkEnabled: false,
     });
   }
@@ -184,7 +184,7 @@ export class StructuredResponseBuilder {
     return this.createToolResponse(content, {
       tool: 'prompt_manager',
       operation,
-      executionType: 'prompt',
+      executionType: 'single',
       frameworkEnabled: false,
       operationData: {
         promptId: promptData?.promptId,
@@ -202,7 +202,8 @@ export class StructuredResponseBuilder {
     content: string,
     operation: string,
     executionData?: {
-      executionType?: 'prompt' | 'template' | 'chain';
+      executionType?: 'single' | 'chain';
+      legacyExecutionType?: 'prompt' | 'template';
       executionTime?: number;
       frameworkUsed?: string;
       stepsExecuted?: number;
@@ -221,7 +222,7 @@ export class StructuredResponseBuilder {
     return this.createToolResponse(content, {
       tool: 'prompt_engine',
       operation,
-      executionType: executionData?.executionType || 'prompt',
+      executionType: executionData?.executionType || 'single',
       executionTime: executionData?.executionTime,
       frameworkEnabled: !!executionData?.frameworkUsed,
       frameworkUsed: executionData?.frameworkUsed,
@@ -255,7 +256,7 @@ export class StructuredResponseBuilder {
     return this.createToolResponse(content, {
       tool: 'system_control',
       operation,
-      executionType: 'prompt',
+      executionType: 'single',
       frameworkEnabled: true,
       analytics: systemData?.analytics,
       operationData: {
@@ -307,7 +308,8 @@ export function createExecutionResponse(
   content: string,
   operation: string,
   executionData?: {
-    executionType?: 'prompt' | 'template' | 'chain';
+    executionType?: 'single' | 'chain';
+    legacyExecutionType?: 'prompt' | 'template';
     executionTime?: number;
     frameworkUsed?: string;
     stepsExecuted?: number;

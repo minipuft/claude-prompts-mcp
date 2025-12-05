@@ -273,19 +273,16 @@ export class ChainManagementService {
       lines.push(`- Excluded Gates: ${exclude.join(', ')}`);
     }
 
-    if (enhanced?.temporary_gates && enhanced.temporary_gates.length > 0) {
+    // Show inline gate definitions from enhanced prompt
+    if (enhanced?.inline_gate_definitions && enhanced.inline_gate_definitions.length > 0) {
       lines.push(
-        `- Temporary Gates: ${enhanced.temporary_gates.map((gate) => gate.name).join(', ')}`
+        `- Inline Gate Definitions: ${enhanced.inline_gate_definitions.map((gate) => gate.name).join(', ')}`
       );
     }
 
     const frameworkGates = enhanced?.framework_gates ?? legacy?.framework_gates ?? true;
     if (frameworkGates === false) {
       lines.push('- Framework Gates: disabled');
-    }
-
-    if (enhanced?.gate_scope) {
-      lines.push(`- Temporary Gate Scope: ${enhanced.gate_scope}`);
     }
 
     return lines.length > 0 ? lines.join('\n') : null;

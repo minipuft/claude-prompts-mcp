@@ -12,8 +12,7 @@ import type {
   MetricStatus,
   CommandExecutionMetric,
 } from '../../metrics/index.js';
-import type { McpToolRequest } from '../../types/index.js';
-import type { ToolResponse } from '../../types/index.js';
+import type { McpToolRequest, ToolResponse } from '../../types/index.js';
 
 /**
  * Canonical Prompt Execution Pipeline orchestrator.
@@ -32,9 +31,11 @@ export class PromptExecutionPipeline {
     private readonly operatorValidationStage: PipelineStage,
     private readonly planningStage: PipelineStage,
     private readonly frameworkStage: PipelineStage,
+    private readonly judgeSelectionStage: PipelineStage,
     private readonly promptGuidanceStage: PipelineStage,
     private readonly gateStage: PipelineStage,
     private readonly sessionStage: PipelineStage,
+    private readonly frameworkInjectionControlStage: PipelineStage,
     private readonly responseCaptureStage: PipelineStage,
     private readonly executionStage: PipelineStage,
     private readonly gateReviewStage: PipelineStage,
@@ -53,7 +54,7 @@ export class PromptExecutionPipeline {
    * Execute the configured pipeline for the given MCP request.
    */
   async execute(mcpRequest: McpToolRequest): Promise<ToolResponse> {
-    const context = new ExecutionContext(mcpRequest);
+    const context = new ExecutionContext(mcpRequest, this.logger);
 
     this.logger.info('[Pipeline] Starting execution', {
       command: mcpRequest.command ?? '<response-only>',
@@ -179,6 +180,15 @@ export class PromptExecutionPipeline {
   }
 
   private registerStages(): void {
+    // Stage order is critical for the two-phase judge selection flow:
+    // JudgeSelectionStage must run BEFORE framework/gate stages so that:
+    // 1. Judge phase (guided: true) returns clean resource menu without framework/gate injection
+    // 2. Execution phase with selections has clientFrameworkOverride set before FrameworkResolutionStage
+    //
+    // Stage ordering for injection control:
+    // 1. SessionStage MUST run before InjectionControlStage (provides currentStep)
+    // 2. InjectionControlStage MUST run before PromptGuidanceStage (decisions control injection)
+    // 3. PromptGuidanceStage reads context.state.injection to decide what to inject
     this.stages = [
       this.requestStage,
       this.dependencyStage,
@@ -187,10 +197,12 @@ export class PromptExecutionPipeline {
       this.inlineGateStage,
       this.operatorValidationStage,
       this.planningStage,
-      this.frameworkStage,
-      this.promptGuidanceStage,
-      this.gateStage,
-      this.sessionStage,
+      this.judgeSelectionStage,    // Moved before framework/gate stages for two-phase flow
+      this.gateStage,              // Now runs after judge decision
+      this.frameworkStage,         // Now uses clientFrameworkOverride from judge flow
+      this.sessionStage,           // MOVED: Session management (populates currentStep)
+      this.frameworkInjectionControlStage, // MOVED: Injection decisions (needs currentStep, controls guidance)
+      this.promptGuidanceStage,    // NOW AFTER: Uses injection decisions from state.injection
       this.responseCaptureStage,
       this.executionStage,
       this.gateReviewStage,
@@ -356,28 +368,17 @@ export class PromptExecutionPipeline {
     }
 
     const strategy = context.executionPlan?.strategy;
-    if (strategy === 'prompt' || strategy === 'template' || strategy === 'chain') {
+    if (strategy === 'single' || strategy === 'chain') {
       return strategy;
     }
 
-    const requested = context.mcpRequest.execution_mode ?? 'auto';
-    if (
-      requested === 'chain' ||
-      requested === 'template' ||
-      requested === 'prompt' ||
-      requested === 'auto'
-    ) {
-      return requested;
-    }
-
-    return 'prompt';
+    // Default to 'single' for metrics when strategy is not yet determined
+    return 'single';
   }
 
   private buildCommandMetricMetadata(context: ExecutionContext): Record<string, unknown> {
     return {
       strategy: context.executionPlan?.strategy,
-      apiValidationEnabled:
-        context.executionPlan?.apiValidationEnabled ?? context.hasApiValidation(),
       category: context.executionPlan?.category,
       hasSessionContext: Boolean(context.sessionContext),
       isChainExecution: context.isChainExecution(),

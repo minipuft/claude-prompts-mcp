@@ -53,7 +53,10 @@ export class OperatorValidationStage extends BasePipelineStage {
     }
 
     try {
-      const normalizedFrameworkOperators = this.normalizeFrameworkOperators(parsedCommand, operatorSet);
+      const normalizedFrameworkOperators = this.normalizeFrameworkOperators(
+        parsedCommand,
+        operatorSet
+      );
 
       if (normalizedFrameworkOperators > 0) {
         context.metadata = {
@@ -82,17 +85,14 @@ export class OperatorValidationStage extends BasePipelineStage {
         continue;
       }
 
-      const { normalizedId } = this.frameworkValidator!.validateAndNormalize(
-        operator.frameworkId,
-        {
-          requireEnabled: true,
-          stage: this.name,
-          context: {
-            action: 'operator_validation',
-            userInput: { frameworkId: operator.frameworkId },
-          },
-        }
-      );
+      const { normalizedId } = this.frameworkValidator!.validateAndNormalize(operator.frameworkId, {
+        requireEnabled: true,
+        stage: this.name,
+        context: {
+          action: 'operator_validation',
+          userInput: { frameworkId: operator.frameworkId },
+        },
+      });
 
       operator.normalizedId = normalizedId;
       normalizedCount++;

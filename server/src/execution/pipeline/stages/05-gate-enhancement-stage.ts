@@ -1,8 +1,11 @@
 // @lifecycle canonical - Enriches prompts with gate instructions prior to execution.
 import { METHODOLOGY_GATES } from '../../../gates/constants.js';
+import { formatCriteriaAsGuidance } from '../../../gates/utils/gate-guidance-formatter.js';
 import { BasePipelineStage } from '../stage.js';
 
+import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
+import type { GateReferenceResolver } from '../../../gates/services/gate-reference-resolver.js';
 import type {
   IGateService,
   GateValidationResult as ServiceGateValidationResult,
@@ -13,12 +16,15 @@ import type {
   GateUsageMetric,
   GateValidationResult as MetricGateValidationResult,
 } from '../../../metrics/index.js';
-import type { FrameworksConfig, ConvertedPrompt } from '../../../types/index.js';
+import type { FrameworksConfig, GatesConfig, ConvertedPrompt } from '../../../types/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
-import type { ChainStepPrompt } from '../../operators/chain-operator-executor.js';
-import type { TemporaryGateDefinition } from '../../types.js';
+import type { GateSource } from '../state/types.js';
+import type { FrameworkDecisionInput } from '../decisions/index.js';
+import type { ChainStepPrompt } from '../../operators/types.js';
+import type { TemporaryGateInput, ExecutionModifiers } from '../../types.js';
 
 type FrameworksConfigProvider = () => FrameworksConfig;
+type GatesConfigProvider = () => GatesConfig | undefined;
 
 /**
  * Discriminated union for gate enhancement contexts
@@ -36,6 +42,11 @@ interface ChainStepGateContext {
 
 type GateEnhancementContext = SinglePromptGateContext | ChainStepGateContext;
 
+interface RegisteredGateResult {
+  readonly temporaryGateIds: string[];
+  readonly canonicalGateIds: string[];
+}
+
 /**
  * Normalized gate input structure for creating temporary gates
  */
@@ -49,6 +60,8 @@ interface NormalizedGateInput {
   pass_criteria?: string[];
   source: 'manual' | 'automatic' | 'analysis';
   context?: Record<string, unknown>;
+  target_step_number?: number;
+  apply_to_steps?: number[];
 }
 
 /**
@@ -65,7 +78,7 @@ interface CustomCheck {
  */
 type RawGateInput =
   | string
-  | TemporaryGateDefinition
+  | TemporaryGateInput
   | {
       id?: string;
       name?: string;
@@ -92,16 +105,21 @@ type RawGateInput =
 export class GateEnhancementStage extends BasePipelineStage {
   readonly name = 'GateEnhancement';
   private readonly metricsProvider?: () => MetricsCollector | undefined;
+  private readonly gatesConfigProvider?: GatesConfigProvider;
 
   constructor(
     private readonly gateService: IGateService | null,
     private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined,
     private readonly frameworksConfigProvider: FrameworksConfigProvider,
+    private readonly gateReferenceResolver: GateReferenceResolver | undefined,
+    private readonly frameworkManagerProvider: () => FrameworkManager | undefined,
     logger: Logger,
-    metricsProvider?: () => MetricsCollector | undefined
+    metricsProvider?: () => MetricsCollector | undefined,
+    gatesConfigProvider?: GatesConfigProvider
   ) {
     super(logger);
     this.metricsProvider = metricsProvider;
+    this.gatesConfigProvider = gatesConfigProvider;
   }
 
   /**
@@ -157,16 +175,159 @@ export class GateEnhancementStage extends BasePipelineStage {
     return null;
   }
 
+  /**
+   * Add gates to the context accumulator from a specific source.
+   * This replaces direct array manipulation with tracked provenance.
+   */
+  private addGatesToAccumulator(
+    context: ExecutionContext,
+    gateIds: readonly string[] | undefined,
+    source: GateSource
+  ): void {
+    if (!gateIds || gateIds.length === 0) {
+      return;
+    }
+    const added = context.gates.addAll(gateIds, source);
+    if (added > 0) {
+      this.logger.debug('[GateEnhancementStage] Added gates to accumulator', {
+        source,
+        added,
+        total: context.gates.size,
+      });
+    }
+  }
+
+  private shouldSkipGateEnhancement(modifiers?: ExecutionModifiers): boolean {
+    if (!modifiers) {
+      return false;
+    }
+    return modifiers.clean === true || modifiers.framework === true;
+  }
+
+  /**
+   * Get the active framework ID from context using FrameworkDecisionAuthority.
+   * This ensures consistent framework resolution across all pipeline stages.
+   *
+   * Priority (handled by authority):
+   * 1. Modifiers (%clean, %lean) - disable framework (returns undefined)
+   * 2. @ operator override - explicit user intent
+   * 3. Client selection from judge phase - user chose
+   * 4. Global active framework - system default
+   */
+  private getActiveFrameworkId(context: ExecutionContext): string | undefined {
+    const decisionInput = this.buildDecisionInput(context);
+    const frameworkId = context.frameworkAuthority.getFrameworkId(decisionInput);
+    const decision = context.frameworkAuthority.getCachedDecision();
+
+    this.logger.debug('[GateEnhancementStage] getActiveFrameworkId', {
+      frameworkId,
+      decision: decision
+        ? {
+            shouldApply: decision.shouldApply,
+            frameworkId: decision.frameworkId,
+            reason: decision.reason,
+            source: decision.source,
+          }
+        : null,
+    });
+
+    return frameworkId;
+  }
+
+  /**
+   * Ensure methodology validation gate is present when frameworks are active
+   */
+  private ensureDefaultMethodologyGate(
+    gateIds: string[],
+    frameworksConfig: FrameworksConfig | undefined,
+    activeFrameworkId: string | undefined
+  ): string[] {
+    this.logger.debug('[GateEnhancementStage] ensureDefaultMethodologyGate', {
+      inputGateCount: gateIds.length,
+      enableMethodologyGates: frameworksConfig?.enableMethodologyGates,
+      activeFrameworkId,
+    });
+
+    if (!frameworksConfig?.enableMethodologyGates || !activeFrameworkId) {
+      this.logger.debug('[GateEnhancementStage] ensureDefaultMethodologyGate - skipped', {
+        reason: !frameworksConfig?.enableMethodologyGates
+          ? 'enableMethodologyGates is false or undefined'
+          : 'activeFrameworkId is undefined',
+      });
+      return gateIds;
+    }
+    const hasMethodologyGate = gateIds.some((gate) => METHODOLOGY_GATES.has(gate));
+    if (hasMethodologyGate) {
+      this.logger.debug('[GateEnhancementStage] ensureDefaultMethodologyGate - already has', {
+        existingGate: gateIds.find((gate) => METHODOLOGY_GATES.has(gate)),
+      });
+      return gateIds;
+    }
+    this.logger.debug('[GateEnhancementStage] ensureDefaultMethodologyGate - adding methodology-validation');
+    return [...gateIds, 'methodology-validation'];
+  }
+
+  /**
+   * Build decision input from context for FrameworkDecisionAuthority.
+   * This extracts all relevant data for the centralized framework decision.
+   */
+  private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
+    // Get global active framework from multiple sources:
+    // 1. context.frameworkContext (set by FrameworkStage, may not exist yet)
+    // 2. frameworkManager.selectFramework() (direct query to framework state)
+    let globalActiveFramework = context.frameworkContext?.selectedFramework?.id;
+
+    this.logger.debug('[GateEnhancementStage] buildDecisionInput - initial', {
+      fromContext: globalActiveFramework,
+      hasFrameworkContext: Boolean(context.frameworkContext),
+    });
+
+    const frameworkManager = this.frameworkManagerProvider();
+    this.logger.debug('[GateEnhancementStage] buildDecisionInput - frameworkManager', {
+      hasFrameworkManager: Boolean(frameworkManager),
+      isInitialized: frameworkManager?.isInitialized,
+    });
+
+    if (!globalActiveFramework && frameworkManager) {
+      try {
+        // Query framework manager for the current active framework
+        const activeFramework = frameworkManager.selectFramework({});
+        globalActiveFramework = activeFramework?.id;
+        this.logger.debug('[GateEnhancementStage] buildDecisionInput - selected', {
+          selectedId: activeFramework?.id,
+          selectedName: activeFramework?.name,
+        });
+      } catch (error) {
+        // Framework manager may not be initialized, log the error
+        this.logger.warn('[GateEnhancementStage] buildDecisionInput - selectFramework failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const result = {
+      modifiers: context.executionPlan?.modifiers,
+      operatorOverride: context.parsedCommand?.executionPlan?.frameworkOverride,
+      clientOverride: context.state.framework.clientOverride,
+      globalActiveFramework,
+    };
+
+    this.logger.debug('[GateEnhancementStage] buildDecisionInput - result', result);
+
+    return result;
+  }
+
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    if (context.metadata['sessionBlueprintRestored']) {
-      this.logExit({ skipped: 'Session blueprint restored' });
+    if (this.gateService === null) {
+      this.logExit({ skipped: 'Gate service unavailable' });
       return;
     }
 
-    if (this.gateService === null) {
-      this.logExit({ skipped: 'Gate service unavailable' });
+    const gatesConfig = this.gatesConfigProvider?.();
+    if (gatesConfig && gatesConfig.enabled === false) {
+      this.logExit({ skipped: 'Gate system disabled by configuration' });
       return;
     }
 
@@ -176,8 +337,14 @@ export class GateEnhancementStage extends BasePipelineStage {
       return;
     }
 
+    if (this.shouldSkipGateEnhancement(executionPlan.modifiers)) {
+      this.logExit({ skipped: 'Gate enhancement disabled by execution modifier' });
+      return;
+    }
+
     const frameworksConfig = this.frameworksConfigProvider?.();
-    const registeredTempGates = this.registerTemporaryGates(context);
+
+    const registeredGates = await this.registerTemporaryGates(context);
 
     // Type-safe variant resolution
     const gateContext = this.resolveGateContext(context);
@@ -188,23 +355,24 @@ export class GateEnhancementStage extends BasePipelineStage {
 
     // Variant-specific processing
     if (gateContext.type === 'chain') {
-      await this.enhanceChainSteps(gateContext, context, registeredTempGates, frameworksConfig);
+      await this.enhanceChainSteps(gateContext, context, registeredGates, frameworksConfig);
       return;
     }
 
     if (gateContext.type === 'single') {
-      await this.enhanceSinglePrompt(gateContext, context, registeredTempGates, frameworksConfig);
+      await this.enhanceSinglePrompt(gateContext, context, registeredGates, frameworksConfig);
       return;
     }
   }
 
   /**
-   * Enhance a single prompt with gate instructions
+   * Enhance a single prompt with gate instructions.
+   * Uses GateAccumulator for centralized deduplication with priority-based conflict resolution.
    */
   private async enhanceSinglePrompt(
     gateContext: SinglePromptGateContext,
     context: ExecutionContext,
-    registeredTempGates: string[],
+    registeredGates: RegisteredGateResult,
     frameworksConfig: FrameworksConfig | undefined
   ): Promise<void> {
     const executionPlan = context.executionPlan;
@@ -214,26 +382,62 @@ export class GateEnhancementStage extends BasePipelineStage {
 
     const { prompt, inlineGateIds } = gateContext;
 
-    let gateIds = [...(executionPlan.gates ?? []), ...registeredTempGates, ...inlineGateIds];
-    if (frameworksConfig !== undefined && !frameworksConfig.enableMethodologyGates) {
-      gateIds = gateIds.filter((gate) => !METHODOLOGY_GATES.has(gate));
+    // Include client-selected gates from two-phase judge flow
+    const clientSelectedGates = context.state.framework.clientSelectedGates ?? [];
+
+    // Use accumulator for centralized deduplication with priority tracking
+    // Priority order (highest to lowest): inline-operator > client-selection > temporary-request > prompt-config > methodology > category-auto
+    this.addGatesToAccumulator(context, inlineGateIds, 'inline-operator');
+    this.addGatesToAccumulator(context, clientSelectedGates, 'client-selection');
+    this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
+    this.addGatesToAccumulator(context, executionPlan.gates, 'prompt-config');
+    this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'methodology');
+
+    // Auto-assign category gates (lowest priority)
+    if (prompt.category) {
+      const categoryGates = this.getCategoryGates(prompt.category);
+      this.addGatesToAccumulator(context, categoryGates, 'category-auto');
     }
 
-    gateIds = Array.from(new Set(gateIds));
+    // Get deduplicated gate list from accumulator
+    let gateIds = [...context.gates.getAll()];
+
+    const activeFrameworkId = this.getActiveFrameworkId(context);
+    gateIds = this.ensureDefaultMethodologyGate(gateIds, frameworksConfig, activeFrameworkId);
+
+    // Filter methodology gates if disabled
+    if (frameworksConfig !== undefined && !frameworksConfig.enableMethodologyGates) {
+      const beforeCount = gateIds.length;
+      gateIds = gateIds.filter((gate) => !METHODOLOGY_GATES.has(gate));
+      if (beforeCount !== gateIds.length) {
+        context.diagnostics.info(this.name, 'Methodology gates filtered by config', {
+          filtered: beforeCount - gateIds.length,
+          remaining: gateIds.length,
+        });
+      }
+    }
 
     if (gateIds.length === 0) {
+      context.diagnostics.info(this.name, 'Gate enhancement skipped - no gates to apply');
       this.logExit({ skipped: 'No gates to apply' });
       return;
     }
+
+    // Record diagnostic for gate accumulation
+    context.diagnostics.info(this.name, 'Gates accumulated for single prompt', {
+      totalGates: gateIds.length,
+      sourceCounts: context.gates.getSourceCounts(),
+    });
 
     try {
       const originalTemplate = prompt.userMessageTemplate ?? '';
       const gateService = this.requireGateService();
 
       const result = await gateService.enhancePrompt(prompt, gateIds, {
-        framework: context.frameworkContext?.selectedFramework?.id,
+        framework: activeFrameworkId,
         category: executionPlan.category,
         promptId: prompt.id,
+        explicitGateIds: inlineGateIds,
       });
 
       // Extract gate instructions by comparing original vs enhanced template
@@ -246,7 +450,7 @@ export class GateEnhancementStage extends BasePipelineStage {
       executionPlan.gates = gateIds;
 
       if (result.validationResults !== undefined && result.validationResults.length > 0) {
-        context.metadata['gateValidationResults'] = result.validationResults;
+        context.state.gates.validationResults = result.validationResults;
       }
 
       this.recordGateUsageMetrics(
@@ -256,10 +460,24 @@ export class GateEnhancementStage extends BasePipelineStage {
         result.validationResults
       );
 
+      // Store accumulated gate IDs for downstream stages
+      context.state.gates.accumulatedGateIds = gateIds;
+
+      // Single prompts use advisory mode (execute normally, append gate guidance)
+      // Chains use blocking mode (pause for gate review before execution)
+      const isSinglePrompt = !context.parsedCommand?.steps?.length;
+      context.state.gates.hasBlockingGates = !isSinglePrompt && gateIds.length > 0;
+
+      // Enforcement mode: advisory for single prompts, blocking for chains
+      if (!context.state.gates.enforcementMode && gateIds.length > 0) {
+        context.state.gates.enforcementMode = isSinglePrompt ? 'advisory' : 'blocking';
+      }
+
       this.logExit({
         gateCount: gateIds.length,
         serviceType: gateService.serviceType,
         gateInstructionsStored: Boolean(context.gateInstructions),
+        sourceCounts: context.gates.getSourceCounts(),
       });
     } catch (error) {
       this.logger.warn('[GateEnhancementStage] Gate enhancement failed', {
@@ -269,17 +487,25 @@ export class GateEnhancementStage extends BasePipelineStage {
   }
 
   /**
-   * Enhance gate instructions for each step in a multi-step command
+   * Enhance gate instructions for each step in a multi-step command.
+   * Uses GateAccumulator for global gates while handling step-specific gates per step.
    */
   private async enhanceChainSteps(
     gateContext: ChainStepGateContext,
     context: ExecutionContext,
-    registeredTempGates: string[],
+    registeredGates: RegisteredGateResult,
     frameworksConfig: FrameworksConfig | undefined
   ): Promise<void> {
     const gateService = this.requireGateService();
     const { steps } = gateContext;
     let totalGatesApplied = 0;
+
+    // Add globally applicable gates to the accumulator ONCE
+    // These apply to all steps (subject to step filtering)
+    const clientSelectedGates = context.state.framework.clientSelectedGates ?? [];
+    this.addGatesToAccumulator(context, clientSelectedGates, 'client-selection');
+    this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
+    this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'methodology');
 
     for (const step of steps) {
       // Each step should have a convertedPrompt (set during parsing)
@@ -291,6 +517,16 @@ export class GateEnhancementStage extends BasePipelineStage {
         continue;
       }
 
+      if (this.shouldSkipGateEnhancement(step.executionPlan?.modifiers)) {
+        this.logger.debug(
+          '[GateEnhancementStage] Skipping gate enhancement for step due to modifiers',
+          {
+            promptId: step.promptId,
+          }
+        );
+        continue;
+      }
+
       // Planned gates from ExecutionPlanningStage (auto-gates, overrides)
       const plannedGates =
         Array.isArray(step.executionPlan?.gates) && step.executionPlan.gates.length > 0
@@ -298,22 +534,32 @@ export class GateEnhancementStage extends BasePipelineStage {
           : [];
 
       // Use pre-registered inline gate IDs for this step (if any)
-      const stepGates = Array.isArray(step.inlineGateIds) ? step.inlineGateIds : [];
-
-      // Determine gates for this specific step based on its category
-      let gateIds = [...registeredTempGates, ...plannedGates, ...stepGates];
+      const stepInlineGates = Array.isArray(step.inlineGateIds) ? step.inlineGateIds : [];
 
       // Auto-assign gates based on step's category if available
-      if (prompt.category !== undefined && prompt.category.length > 0) {
-        const categoryGates = this.getCategoryGates(prompt.category);
-        gateIds.push(...categoryGates);
-      }
+      const categoryGates =
+        prompt.category !== undefined && prompt.category.length > 0
+          ? this.getCategoryGates(prompt.category)
+          : [];
+
+      // Add step-specific gates to accumulator (they'll be deduplicated against global gates)
+      this.addGatesToAccumulator(context, stepInlineGates, 'inline-operator');
+      this.addGatesToAccumulator(context, plannedGates, 'prompt-config');
+      this.addGatesToAccumulator(context, categoryGates, 'category-auto');
+
+      // Get all accumulated gates (global + step-specific, deduplicated)
+      let gateIds = [...context.gates.getAll()];
+
+      // Use getActiveFrameworkId to resolve framework from all sources for default methodology gate
+      const activeFrameworkId = this.getActiveFrameworkId(context);
+      gateIds = this.ensureDefaultMethodologyGate(gateIds, frameworksConfig, activeFrameworkId);
 
       if (frameworksConfig !== undefined && !frameworksConfig.enableMethodologyGates) {
         gateIds = gateIds.filter((gate) => !METHODOLOGY_GATES.has(gate));
       }
 
-      gateIds = Array.from(new Set(gateIds));
+      // Filter gates by step number (for step-specific targeting)
+      gateIds = this.filterGatesByStepNumber(gateIds, step.stepNumber);
 
       if (gateIds.length === 0) {
         continue; // Skip this step if no gates to apply
@@ -322,14 +568,16 @@ export class GateEnhancementStage extends BasePipelineStage {
       try {
         const originalTemplate = prompt.userMessageTemplate ?? '';
 
-        const frameworkId =
-          step.frameworkContext?.selectedFramework?.id ??
-          context.frameworkContext?.selectedFramework?.id;
+        // Use getActiveFrameworkId to resolve framework from all sources:
+        // @ operator > client selection from judge phase > global active framework
+        // For chain steps, also check step-level framework context
+        const frameworkId = step.frameworkContext?.selectedFramework?.id ?? activeFrameworkId;
 
         const result = await gateService.enhancePrompt(prompt, gateIds, {
           framework: frameworkId,
           category: prompt.category,
           promptId: prompt.id,
+          explicitGateIds: step.inlineGateIds,
         });
 
         // Extract gate instructions for this step
@@ -364,10 +612,22 @@ export class GateEnhancementStage extends BasePipelineStage {
       }
     }
 
+    // Store accumulated gate IDs for downstream stages (chain path)
+    const allGateIds = [...context.gates.getAll()];
+    context.state.gates.accumulatedGateIds = allGateIds;
+    context.state.gates.hasBlockingGates = totalGatesApplied > 0;
+
+    // Enforcement mode defaults to 'blocking' - can be overridden by response-capture-stage
+    // based on gate definitions when they're loaded via GateLoader
+    if (!context.state.gates.enforcementMode && allGateIds.length > 0) {
+      context.state.gates.enforcementMode = 'blocking';
+    }
+
     this.logExit({
       gateCount: totalGatesApplied,
       stepCount: steps.length,
       serviceType: gateService.serviceType,
+      sourceCounts: context.gates.getSourceCounts(),
     });
   }
 
@@ -398,6 +658,41 @@ export class GateEnhancementStage extends BasePipelineStage {
     return gates;
   }
 
+  /**
+   * Filter gates by step number for step-specific targeting
+   *
+   * @param gateIds - Array of gate IDs to filter
+   * @param stepNumber - Current step number (1-based)
+   * @returns Filtered array of gate IDs that apply to this step
+   */
+  private filterGatesByStepNumber(gateIds: string[], stepNumber: number): string[] {
+    if (!this.temporaryGateRegistry) {
+      return gateIds; // No filtering if registry unavailable
+    }
+
+    return gateIds.filter((gateId) => {
+      const tempGate = this.temporaryGateRegistry!.getTemporaryGate(gateId);
+
+      // If not a temporary gate, keep it (canonical gates always apply)
+      if (!tempGate) {
+        return true;
+      }
+
+      // If gate has target_step_number, only apply to that specific step
+      if (tempGate.target_step_number !== undefined) {
+        return tempGate.target_step_number === stepNumber;
+      }
+
+      // If gate has apply_to_steps, only apply to those specific steps
+      if (tempGate.apply_to_steps !== undefined && tempGate.apply_to_steps.length > 0) {
+        return tempGate.apply_to_steps.includes(stepNumber);
+      }
+
+      // No step targeting specified - apply to all steps
+      return true;
+    });
+  }
+
   private getMetricsCollector(): MetricsCollector | undefined {
     return this.metricsProvider?.();
   }
@@ -413,11 +708,7 @@ export class GateEnhancementStage extends BasePipelineStage {
       return;
     }
 
-    const temporaryIds = new Set<string>(
-      Array.isArray(context.metadata['temporaryGateIds'])
-        ? (context.metadata['temporaryGateIds'] as string[])
-        : []
-    );
+    const temporaryIds = new Set<string>(context.state.gates.temporaryGateIds ?? []);
 
     const validationMap = new Map<string, ServiceGateValidationResult>();
     validationResults?.forEach((result) => validationMap.set(result.gateId, result));
@@ -470,23 +761,17 @@ export class GateEnhancementStage extends BasePipelineStage {
   }
 
   /**
-   * Generate guidance text from criteria array (mirrors gate-operator-executor pattern)
-   */
-  private generateGuidanceFromCriteria(criteria: string[]): string {
-    if (criteria.length === 0) {
-      return 'Validate the output against the inline criteria.';
-    }
-
-    return [
-      'Evaluate the output against these criteria:',
-      ...criteria.map((item, index) => `${index + 1}. ${item}`),
-    ].join('\n');
-  }
-
-  /**
    * Normalize gate input to standard format, supporting multiple input styles
+   *
+   * @param gate - Raw gate input to normalize
+   * @param isChainExecution - Whether we're in a chain execution context
+   * @param currentStep - Current step number for smart defaults (default: 1)
    */
-  private normalizeGateInput(gate: RawGateInput): {
+  private normalizeGateInput(
+    gate: RawGateInput,
+    isChainExecution: boolean = false,
+    currentStep: number = 1
+  ): {
     normalized: NormalizedGateInput;
     isValid: boolean;
   } {
@@ -500,6 +785,8 @@ export class GateEnhancementStage extends BasePipelineStage {
           criteria: [gate],
           description: 'Inline quality criteria',
           source: 'automatic',
+          // Smart default: Apply to current step in chain executions
+          apply_to_steps: isChainExecution ? [currentStep] : undefined,
         },
         isValid: true,
       };
@@ -557,6 +844,24 @@ export class GateEnhancementStage extends BasePipelineStage {
     const extractedCriteria = 'criteria' in gate ? gate.criteria : undefined;
     const extractedPassCriteria = 'pass_criteria' in gate ? gate.pass_criteria : undefined;
 
+    // Extract step targeting
+    const targetStepNumber =
+      'target_step_number' in gate && typeof gate.target_step_number === 'number'
+        ? gate.target_step_number
+        : undefined;
+    const applyToSteps =
+      'apply_to_steps' in gate && Array.isArray(gate.apply_to_steps)
+        ? gate.apply_to_steps.filter((n): n is number => typeof n === 'number')
+        : undefined;
+
+    // Smart default: If in chain execution and no step-targeting specified, apply to current step
+    const effectiveApplyToSteps =
+      applyToSteps && applyToSteps.length > 0
+        ? applyToSteps
+        : targetStepNumber === undefined && isChainExecution
+          ? [currentStep]
+          : undefined;
+
     // Support object with criteria or other gate properties
     return {
       normalized: {
@@ -569,17 +874,18 @@ export class GateEnhancementStage extends BasePipelineStage {
         pass_criteria: normalizeCriteria(extractedPassCriteria ?? extractedCriteria),
         source: normalizeSource(gate.source),
         context: normalizeContext(gate.context),
+        target_step_number: targetStepNumber,
+        apply_to_steps: effectiveApplyToSteps,
       },
       isValid: true,
     };
   }
 
-  private registerTemporaryGates(context: ExecutionContext): string[] {
-    if (this.temporaryGateRegistry === undefined) {
-      this.logger.debug('[GateEnhancementStage] No temporary gate registry available');
-      return [];
-    }
-
+  /**
+   * Register temporary gates from normalized gate specifications.
+   * Uses unified 'gates' parameter (already normalized from legacy parameters).
+   */
+  private async registerTemporaryGates(context: ExecutionContext): Promise<RegisteredGateResult> {
     this.logger.debug('[GateEnhancementStage] registerTemporaryGates - parsedCommand structure', {
       hasOperators: Boolean(context.parsedCommand?.operators),
       operatorTypes:
@@ -593,28 +899,25 @@ export class GateEnhancementStage extends BasePipelineStage {
       format: context.parsedCommand?.format,
     });
 
-    const qualityGateSet = new Set(context.mcpRequest?.quality_gates ?? []);
-    const dedupedTemporaryGates =
-      context.mcpRequest?.temporary_gates?.filter((gate) => {
-        if (gate && typeof gate === 'object' && typeof gate.id === 'string') {
-          if (qualityGateSet.has(gate.id)) {
-            this.logger.debug(
-              '[GateEnhancementStage] Temporary gate matches requested quality gate; using canonical gate instead',
-              { gateId: gate.id }
-            );
-            return false;
-          }
-        }
-        return true;
-      }) ?? [];
+    // Use normalized gates from metadata (unified 'gates' parameter)
+    const overrides = context.state.gates.requestedOverrides as Record<string, any> | undefined;
+    const normalizedGates = overrides?.gates as
+      | import('../../../types/execution.js').GateSpecification[]
+      | undefined;
 
-    const tempGateInputs = [
-      ...dedupedTemporaryGates,
-      ...this.convertCustomChecks(context.mcpRequest?.custom_checks),
-    ];
+    // Build quality gate set from string gate references in normalized gates
+    const qualityGateArray = (normalizedGates ?? []).filter((g): g is string => typeof g === 'string');
+    const qualityGateSet = new Set<string>(qualityGateArray);
+    const canonicalGateIds = new Set<string>();
+    const createdIds: string[] = [];
 
+    // Use normalized gates from unified parameter
+    const tempGateInputs: RawGateInput[] = normalizedGates ?? [];
+
+    const registry = this.temporaryGateRegistry;
+    const registryAvailable = registry !== undefined;
     if (!tempGateInputs.length) {
-      return [];
+      return { temporaryGateIds: [], canonicalGateIds: [] };
     }
 
     const scopeId =
@@ -623,11 +926,29 @@ export class GateEnhancementStage extends BasePipelineStage {
       context.mcpRequest.command ||
       'execution';
 
-    const createdIds: string[] = [];
+    // Determine if we're in a chain execution and get current step for smart defaults
+    const isChainExecution =
+      context.hasChainCommand() ||
+      (context.parsedCommand?.steps !== undefined && context.parsedCommand.steps.length > 1);
+    const currentStep = context.sessionContext?.currentStep ?? 1;
 
     for (const rawGate of tempGateInputs) {
       try {
-        const { normalized: gate, isValid } = this.normalizeGateInput(rawGate);
+        const canonicalCandidate = await this.resolveCanonicalGateId(rawGate, qualityGateSet);
+        if (canonicalCandidate) {
+          canonicalGateIds.add(canonicalCandidate);
+          qualityGateSet.add(canonicalCandidate);
+          this.logger.debug('[GateEnhancementStage] Resolved canonical gate from temporary input', {
+            gateId: canonicalCandidate,
+          });
+          continue;
+        }
+
+        const { normalized: gate, isValid } = this.normalizeGateInput(
+          rawGate,
+          isChainExecution,
+          currentStep
+        );
 
         if (!isValid) {
           this.logger.warn('[GateEnhancementStage] Invalid gate format, skipping', {
@@ -636,17 +957,15 @@ export class GateEnhancementStage extends BasePipelineStage {
           continue;
         }
 
-        // Extract criteria from various possible locations
         const criteria = gate.criteria ?? gate.pass_criteria ?? [];
         const criteriaArray = Array.isArray(criteria)
           ? criteria.filter((c): c is string => typeof c === 'string')
           : [];
 
-        // Auto-generate guidance if empty, using available content
         let effectiveGuidance = gate.guidance || '';
 
         if (!effectiveGuidance && criteriaArray.length > 0) {
-          effectiveGuidance = this.generateGuidanceFromCriteria(criteriaArray);
+          effectiveGuidance = formatCriteriaAsGuidance(criteriaArray);
           this.logger.debug('[GateEnhancementStage] Auto-generated guidance from criteria', {
             criteriaCount: criteriaArray.length,
             guidanceLength: effectiveGuidance.length,
@@ -658,7 +977,6 @@ export class GateEnhancementStage extends BasePipelineStage {
           });
         }
 
-        // Skip gates with no usable content
         if (!effectiveGuidance && criteriaArray.length === 0 && !gate.description) {
           this.logger.warn(
             '[GateEnhancementStage] Skipping gate with no usable content (no guidance, criteria, or description)',
@@ -667,8 +985,31 @@ export class GateEnhancementStage extends BasePipelineStage {
           continue;
         }
 
-        const gateId = this.temporaryGateRegistry.createTemporaryGate(
+        if (!registryAvailable) {
+          continue;
+        }
+
+        // Check if gate already exists (registered by earlier stage with user-provided ID)
+        const gateIdCandidate =
+          typeof rawGate === 'object' &&
+          rawGate !== null &&
+          'id' in rawGate &&
+          typeof rawGate.id === 'string'
+            ? rawGate.id
+            : null;
+
+        if (gateIdCandidate && registry.getTemporaryGate(gateIdCandidate)) {
+          this.logger.debug('[GateEnhancementStage] Skipping gate already registered', {
+            gateId: gateIdCandidate,
+          });
+          // Still track it as a canonical gate if needed
+          createdIds.push(gateIdCandidate);
+          continue;
+        }
+
+        const gateId = registry.createTemporaryGate(
           {
+            id: gateIdCandidate || undefined, // Preserve user-provided ID if available
             name: gate.name,
             type: gate.type,
             scope: gate.scope,
@@ -677,6 +1018,8 @@ export class GateEnhancementStage extends BasePipelineStage {
             pass_criteria: criteriaArray.length > 0 ? criteriaArray : gate.pass_criteria,
             source: gate.source,
             context: gate.context,
+            target_step_number: gate.target_step_number,
+            apply_to_steps: gate.apply_to_steps,
           },
           scopeId
         );
@@ -699,11 +1042,9 @@ export class GateEnhancementStage extends BasePipelineStage {
       }
     }
 
-    if (createdIds.length) {
-      const existing = Array.isArray(context.metadata['temporaryGateIds'])
-        ? (context.metadata['temporaryGateIds'] as string[])
-        : [];
-      context.metadata['temporaryGateIds'] = [...existing, ...createdIds];
+    if (registryAvailable && createdIds.length) {
+      const existing = context.state.gates.temporaryGateIds ?? [];
+      context.state.gates.temporaryGateIds = [...existing, ...createdIds];
 
       this.logger.info('[GateEnhancementStage] Successfully registered temporary gates', {
         count: createdIds.length,
@@ -711,7 +1052,29 @@ export class GateEnhancementStage extends BasePipelineStage {
       });
     }
 
-    return createdIds;
+    if (canonicalGateIds.size > 0) {
+      const overrides = context.state.gates.requestedOverrides as
+        | Record<string, unknown>
+        | undefined;
+
+      // Merge canonical gate IDs back into gates array
+      const existingGates = (overrides?.['gates'] as any[]) ?? [];
+      const existingGateStrings = existingGates.filter((g): g is string => typeof g === 'string');
+      const merged = new Set<string>(existingGateStrings);
+      canonicalGateIds.forEach((gateId) => merged.add(gateId));
+
+      // Update gates with merged canonical IDs
+      if (overrides) {
+        const nonStringGates = existingGates.filter((g) => typeof g !== 'string');
+        overrides['gates'] = [...Array.from(merged), ...nonStringGates];
+      }
+      context.state.gates.canonicalGateIdsFromTemporary = Array.from(canonicalGateIds);
+    }
+
+    return {
+      temporaryGateIds: registryAvailable ? createdIds : [],
+      canonicalGateIds: Array.from(canonicalGateIds),
+    };
   }
 
   private trackTemporaryGateScope(
@@ -726,15 +1089,10 @@ export class GateEnhancementStage extends BasePipelineStage {
     const normalizedScope: 'execution' | 'session' | 'chain' | 'step' =
       scope === 'session' || scope === 'chain' || scope === 'step' ? scope : 'execution';
 
-    const scopes = Array.isArray(context.metadata['temporaryGateScopes'])
-      ? (context.metadata['temporaryGateScopes'] as Array<{
-          scope: 'execution' | 'session' | 'chain' | 'step';
-          scopeId: string;
-        }>)
-      : [];
+    const scopes = context.state.gates.temporaryGateScopes ?? [];
 
-    if (!Array.isArray(context.metadata['temporaryGateScopes'])) {
-      context.metadata['temporaryGateScopes'] = scopes;
+    if (!context.state.gates.temporaryGateScopes) {
+      context.state.gates.temporaryGateScopes = scopes;
     }
 
     const exists = scopes.some(
@@ -745,9 +1103,7 @@ export class GateEnhancementStage extends BasePipelineStage {
     }
   }
 
-  private convertCustomChecks(
-    customChecks?: ReadonlyArray<CustomCheck>
-  ): Array<{
+  private convertCustomChecks(customChecks?: ReadonlyArray<CustomCheck>): Array<{
     name: string;
     type: string;
     scope: string;
@@ -773,5 +1129,60 @@ export class GateEnhancementStage extends BasePipelineStage {
         pass_criteria: [],
         source: 'manual',
       }));
+  }
+
+  private async resolveCanonicalGateId(
+    gate: RawGateInput,
+    requestedQualityGates: Set<string>
+  ): Promise<string | undefined> {
+    const candidate = this.extractGateReferenceCandidate(gate);
+    if (!candidate || requestedQualityGates.has(candidate)) {
+      return undefined;
+    }
+
+    if (typeof gate === 'object' && gate !== null && this.gateInputContainsInlineContent(gate)) {
+      return undefined;
+    }
+
+    if (!this.gateReferenceResolver) {
+      return undefined;
+    }
+
+    const resolution = await this.gateReferenceResolver.resolve(candidate);
+    if (
+      resolution.referenceType === 'registered' &&
+      !requestedQualityGates.has(resolution.gateId)
+    ) {
+      return resolution.gateId;
+    }
+    return undefined;
+  }
+
+  private extractGateReferenceCandidate(gate: RawGateInput): string | undefined {
+    if (typeof gate === 'string') {
+      const trimmed = gate.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    }
+
+    if (gate && typeof gate === 'object') {
+      const template =
+        'template' in gate && typeof gate.template === 'string' ? gate.template : undefined;
+      const id = 'id' in gate && typeof gate.id === 'string' ? gate.id : undefined;
+      const value = template ?? id;
+      const trimmed = value?.trim();
+      return trimmed && trimmed.length > 0 ? trimmed : undefined;
+    }
+
+    return undefined;
+  }
+
+  private gateInputContainsInlineContent(gate: Record<string, unknown>): boolean {
+    const hasCriteria = Array.isArray(gate['criteria']) && gate['criteria'].length > 0;
+    const hasPassCriteria =
+      Array.isArray(gate['pass_criteria']) && gate['pass_criteria'].length > 0;
+    const hasGuidance = typeof gate['guidance'] === 'string' && gate['guidance'].trim().length > 0;
+    const hasDescription =
+      typeof gate['description'] === 'string' && gate['description'].trim().length > 0;
+    return hasCriteria || hasPassCriteria || hasGuidance || hasDescription;
   }
 }

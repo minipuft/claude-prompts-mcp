@@ -68,7 +68,7 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
   }
 
   private cleanupTemporaryGates(context: ExecutionContext): void {
-    const scopeId = context.metadata['executionScopeId'] as string | undefined;
+    const scopeId = context.state.session.executionScopeId;
     if (scopeId) {
       this.temporaryGateRegistry!.cleanupScope('execution', scopeId);
     }
@@ -87,7 +87,7 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
 
     const uniqueScopes: TrackedScope[] = [];
     for (const entry of scopesMetadata as TrackedScope[]) {
-      if (!entry || !entry.scope || !entry.scopeId) {
+      if (!entry?.scope || !entry.scopeId) {
         continue;
       }
 

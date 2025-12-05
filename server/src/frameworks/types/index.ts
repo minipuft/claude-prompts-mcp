@@ -9,76 +9,57 @@
 
 // Methodology guide types
 export type {
-  FrameworkMethodology,
+  ArgumentGuidance,
+  ExecutionStep,
   FrameworkDefinition,
   FrameworkExecutionContext,
+  FrameworkMethodology,
   FrameworkSelectionCriteria,
-  PromptCreationGuidance,
-  ProcessingGuidance,
-  StepGuidance,
+  IMethodologyGuide,
   MethodologyEnhancement,
-  ArgumentGuidance,
-  ProcessingStep,
-  ExecutionStep,
-  QualityGate,
-  TemplateEnhancement,
   MethodologyToolDescription,
   MethodologyToolDescriptions,
   MethodologyValidation,
-  IMethodologyGuide
+  ProcessingGuidance,
+  ProcessingStep,
+  PromptCreationGuidance,
+  QualityGate,
+  StepGuidance,
+  TemplateEnhancement,
 } from './methodology-types.js';
 
-export {
-  BaseMethodologyGuide
-} from './methodology-types.js';
+export { BaseMethodologyGuide } from './methodology-types.js';
 
 // Prompt guidance types
 export type {
-  SystemPromptInjectionConfig,
-  SystemPromptInjectionResult,
-  TemplateEnhancementConfig,
-  TemplateEnhancementType,
-  TemplateEnhancementResult,
-  AppliedEnhancement,
-  MethodologyTrackingState,
-  MethodologySwitchRecord,
-  MethodologyStateChangeEvent,
-  PromptGuidanceConfig,
-  PromptGuidanceResult,
-  PromptGuidanceAnalytics,
   FrameworkStateInfo,
   IPromptGuidanceService,
-  // Phase 3 additions
+  MethodologyHealth,
   MethodologyState,
   MethodologySwitchRequest,
-  MethodologyHealth,
   PersistedMethodologyState,
-  TemplateProcessingGuidance
+  PromptGuidanceAnalytics,
+  PromptGuidanceConfig,
+  PromptGuidanceResult,
+  SystemPromptInjectionConfig,
+  SystemPromptInjectionResult,
+  TemplateProcessingGuidance,
 } from './prompt-guidance-types.js';
 
 // Integration types
 export type {
-  IntegratedAnalysisResult,
-  FrameworkSwitchingConfig,
   FrameworkAlignmentResult,
+  FrameworkSwitchRecommendation,
+  FrameworkSwitchingConfig,
   FrameworkUsageInsights,
   FrameworkUsageMetrics,
-  FrameworkSwitchRecommendation,
-  MCPToolIntegrationContext,
-  MCPToolIntegrationResult,
-  SemanticIntegrationConfig,
-  CrossSystemIntegrationStatus,
-  IntegrationPerformanceMetrics,
-  IntegrationEvent,
-  IFrameworkSemanticIntegration,
-  IMCPToolIntegration,
-  SystemIntegrationConfig
-} from './integration-types.js';
+  IntegratedAnalysisResult,
+} from '../../semantic/semantic-integration-types.js';
 
 // Legacy type aliases for backward compatibility during migration
 // These will be removed in Phase 4
 export type {
   FrameworkDefinition as LegacyFrameworkDefinition,
   FrameworkExecutionContext as LegacyFrameworkExecutionContext,
-  FrameworkSelectionCriteria as LegacyFrameworkSelectionCriteria
+  FrameworkSelectionCriteria as LegacyFrameworkSelectionCriteria,
 } from './methodology-types.js';

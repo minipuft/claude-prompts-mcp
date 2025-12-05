@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "outDir": "temp/action-metadata",
-    "declaration": false,
-    "emitDeclarationOnly": false
-  },
-  "include": ["src/tooling/action-metadata/**/*.ts"]
-}

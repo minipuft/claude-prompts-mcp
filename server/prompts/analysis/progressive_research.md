@@ -76,7 +76,7 @@ The objective is to function as a researcher gathering insights and preparing th
     "research-quality",
     "technical-accuracy"
   ],
-  "temporary_gates": [
+  "inline_gate_definitions": [
     {
       "name": "Progressive Research Completeness",
       "type": "quality",

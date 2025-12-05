@@ -1,29 +1,59 @@
-FROM node:20-alpine
+# Stage 1: Builder
+FROM node:20-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files first for better layer caching
+# Install build dependencies
 COPY package*.json ./
-
-# Install all dependencies
 RUN npm ci
 
 # Copy source code
 COPY . .
 
-# Build the TypeScript project
+# Create dummy docs to satisfy build script
+RUN mkdir -p /docs && touch /docs/mcp-tooling-guide.md
+
+# Build the application
 RUN npm run build
 
-# Remove dev dependencies to reduce image size
-RUN npm ci --only=production && npm cache clean --force
+# Stage 2: Production Runtime
+FROM node:20-alpine
 
-# Set environment variables
+# Set working directory
+WORKDIR /app
+
+# Set production environment
 ENV NODE_ENV=production
 ENV MCP_SERVER_ROOT=/app
+ENV PORT=9090
 
-# Expose port
-EXPOSE 8000
+# Install production dependencies only
+COPY package*.json ./
+RUN npm ci --only=production && \
+    npm cache clean --force
 
-# Start the server
-CMD ["node", "dist/index.js", "--transport=stdio", "--quiet"]
+# Copy built artifacts from builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prompts ./prompts
+COPY --from=builder /app/methodologies ./methodologies
+# Copy config and potentially other static assets if needed
+COPY --from=builder /app/config.json ./config.json
+# Copy gate definitions if they are not in dist/
+COPY --from=builder /app/src/gates/definitions ./src/gates/definitions
+COPY --from=builder /app/src/gates/templates ./src/gates/templates
+
+# Create logs and runtime-state directories with correct permissions
+RUN mkdir -p logs runtime-state && chown -R node:node logs runtime-state dist prompts methodologies config.json src
+
+# Security: Run as non-root user
+USER node
+
+# Expose the SSE port
+EXPOSE 9090
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:9090/sse || exit 1
+
+# Start the server in SSE mode by default
+CMD ["node", "dist/index.js", "--transport=sse", "--quiet"]

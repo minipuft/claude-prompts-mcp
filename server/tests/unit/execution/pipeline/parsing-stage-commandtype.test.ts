@@ -6,10 +6,10 @@
  */
 import { describe, test, expect, beforeEach } from '@jest/globals';
 
-import { UnifiedCommandParser } from '../../../../src/execution/parsers/unified-command-parser.js';
-import { CommandParsingStage } from '../../../../src/execution/pipeline/stages/01-parsing-stage.js';
-import { ArgumentParser } from '../../../../src/execution/parsers/argument-parser.js';
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
+import { ArgumentParser } from '../../../../src/execution/parsers/argument-parser.js';
+import { UnifiedCommandParser } from '../../../../src/execution/parsers/command-parser.js';
+import { CommandParsingStage } from '../../../../src/execution/pipeline/stages/01-parsing-stage.js';
 import { createSimpleLogger } from '../../../../src/logging/index.js';
 
 import type { ConvertedPrompt } from '../../../../src/types/index.js';

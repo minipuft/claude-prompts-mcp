@@ -9,10 +9,11 @@
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    // TODO: Re-enable these settings after null safety refactor
-    // Phase 1 (completed): Fixed high-impact files with bracket notation
-    // Phase 2 (current): Temporarily disabled for remaining 324 errors
-    // Next: Systematic null safety improvements across all modules
+    // TODO: Re-enable these settings incrementally (Phased Null Safety Refactor)
+    // Current Status: ~424 total errors blocking strict mode
+    // Phase 3a: Enable noPropertyAccessFromIndexSignature (~107 errors) - Use bracket notation
+    // Phase 3b: Enable exactOptionalPropertyTypes (~147 errors) - Handle undefined vs missing keys
+    // Phase 3c: Enable noUncheckedIndexedAccess (~172 errors) - Add existence checks
     "noUncheckedIndexedAccess": false,
     "exactOptionalPropertyTypes": false,
     "noPropertyAccessFromIndexSignature": false,

@@ -30,7 +30,7 @@ export class ExecutionLifecycleStage extends BasePipelineStage {
     this.logEntry(context);
 
     const scopeId = this.resolveScopeId(context);
-    context.metadata['executionScopeId'] = scopeId;
+    context.state.session.executionScopeId = scopeId;
 
     const cleanupHandlers = this.ensureCleanupHandlers(context);
     cleanupHandlers.push(async () => {
@@ -58,9 +58,9 @@ export class ExecutionLifecycleStage extends BasePipelineStage {
 
   private resolveScopeId(context: ExecutionContext): string {
     return (
-      (context.metadata['resumeSessionId'] as string | undefined) ??
+      context.state.session.resumeSessionId ??
       context.mcpRequest.chain_id ??
-      (context.metadata['normalizedCommand'] as string | undefined) ??
+      context.state.normalization.normalizedCommand ??
       context.mcpRequest.command ??
       randomUUID()
     );

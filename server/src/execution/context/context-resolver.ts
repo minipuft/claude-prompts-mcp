@@ -1,10 +1,10 @@
 // @lifecycle canonical - Resolves dependencies and merges execution context state.
 /**
  * Context Resolution System
- * 
+ *
  * Intelligent context resolution with priority-based fallbacks that replaces
  * the hardcoded {{previous_message}} pattern with flexible, multi-source context aggregation.
- * 
+ *
  * Features:
  * - Priority-based context resolution strategies
  * - Multi-source context aggregation
@@ -13,13 +13,13 @@
  * - Context caching for performance
  */
 
-import { Logger } from "../../logging/index.js";
-import { PromptArgument } from "../../types/index.js";
+import { Logger } from '../../logging/index.js';
+import { PromptArgument } from '../../types/index.js';
 
 /**
  * Context source types
  */
-export type ContextSource = 
+export type ContextSource =
   | 'user_provided'
   | 'conversation_history'
   | 'environment_variables'
@@ -73,7 +73,7 @@ export class ContextResolver {
   private providers: Map<string, ContextProvider> = new Map();
   private cache: Map<string, ContextResolution> = new Map();
   private cacheTimeout: number = 30000; // 30 seconds
-  
+
   // Resolution statistics
   private stats = {
     totalResolutions: 0,
@@ -82,7 +82,7 @@ export class ContextResolver {
     cacheMisses: 0,
     providerUsage: new Map<string, number>(),
     averageConfidence: 0,
-    averageResolutionTime: 0
+    averageResolutionTime: 0,
   };
 
   constructor(logger: Logger) {
@@ -95,15 +95,15 @@ export class ContextResolver {
    * Resolve context value using priority-based strategy
    */
   async resolveContext(
-    key: string, 
-    hint?: any, 
+    key: string,
+    hint?: any,
     options: ContextAggregationOptions = {}
   ): Promise<ContextResolution> {
     const startTime = Date.now();
     this.stats.totalResolutions++;
-    
+
     this.logger.debug(`Resolving context for key: "${key}"`);
-    
+
     // Check cache first
     if (options.cacheResults !== false) {
       const cached = this.getCachedResolution(key);
@@ -113,41 +113,42 @@ export class ContextResolver {
         return cached;
       }
     }
-    
+
     this.stats.cacheMisses++;
-    
+
     // Get available providers sorted by priority
     const availableProviders = this.getAvailableProviders(options);
     const alternatives: Array<{ value: any; source: ContextSource; confidence: number }> = [];
-    
+
     // Try each provider in priority order
     for (const provider of availableProviders) {
       try {
         const resolution = await provider.resolve(key, hint);
         if (resolution && this.meetsMinimumConfidence(resolution, options)) {
-          
           // Collect alternatives if requested
           if (options.includeAlternatives) {
             // Continue trying other providers for alternatives
             await this.collectAlternatives(key, hint, availableProviders, provider, alternatives);
             resolution.metadata.alternativeValues = alternatives;
           }
-          
+
           // Cache the result
           if (options.cacheResults !== false) {
             this.cacheResolution(key, resolution);
           }
-          
+
           // Update statistics
           this.updateStats(provider.name, resolution, startTime);
-          
-          this.logger.debug(`Context resolved: ${key} -> ${resolution.source} (confidence: ${resolution.confidence})`);
+
+          this.logger.debug(
+            `Context resolved: ${key} -> ${resolution.source} (confidence: ${resolution.confidence})`
+          );
           return resolution;
         } else if (resolution) {
           alternatives.push({
             value: resolution.value,
             source: resolution.source,
-            confidence: resolution.confidence
+            confidence: resolution.confidence,
           });
         }
       } catch (error) {
@@ -155,18 +156,18 @@ export class ContextResolver {
         continue;
       }
     }
-    
+
     // If no provider succeeded, create a fallback resolution
     const fallbackResolution = this.createFallbackResolution(key, hint, alternatives);
-    
+
     // Cache fallback if enabled
     if (options.cacheResults !== false) {
       this.cacheResolution(key, fallbackResolution);
     }
-    
+
     this.updateStats('fallback', fallbackResolution, startTime);
     this.logger.debug(`Context resolved using fallback: ${key} -> ${fallbackResolution.source}`);
-    
+
     return fallbackResolution;
   }
 
@@ -176,7 +177,9 @@ export class ContextResolver {
   registerProvider(provider: ContextProvider): void {
     this.providers.set(provider.name, provider);
     this.stats.providerUsage.set(provider.name, 0);
-    this.logger.debug(`Registered context provider: ${provider.name} (priority: ${provider.priority})`);
+    this.logger.debug(
+      `Registered context provider: ${provider.name} (priority: ${provider.priority})`
+    );
   }
 
   /**
@@ -211,13 +214,13 @@ export class ContextResolver {
               metadata: {
                 resolvedAt: Date.now(),
                 strategy: 'last_message',
-                warnings: []
-              }
+                warnings: [],
+              },
             };
           }
         }
         return null;
-      }
+      },
     });
 
     // Environment variables provider
@@ -236,12 +239,12 @@ export class ContextResolver {
             metadata: {
               resolvedAt: Date.now(),
               strategy: 'env_var',
-              warnings: []
-            }
+              warnings: [],
+            },
           };
         }
         return null;
-      }
+      },
     });
 
     // Prompt defaults provider
@@ -250,7 +253,7 @@ export class ContextResolver {
       priority: 60,
       isAvailable: () => true,
       resolve: async (key: string, hint?: any): Promise<ContextResolution | null> => {
-        if (hint?.promptDefaults && hint.promptDefaults[key] !== undefined) {
+        if (hint?.promptDefaults?.[key] !== undefined) {
           return {
             value: hint.promptDefaults[key],
             source: 'prompt_defaults',
@@ -258,12 +261,12 @@ export class ContextResolver {
             metadata: {
               resolvedAt: Date.now(),
               strategy: 'prompt_specific',
-              warnings: []
-            }
+              warnings: [],
+            },
           };
         }
         return null;
-      }
+      },
     });
 
     // System context provider
@@ -272,7 +275,7 @@ export class ContextResolver {
       priority: 50,
       isAvailable: () => true,
       resolve: async (key: string, hint?: any): Promise<ContextResolution | null> => {
-        if (hint?.systemContext && hint.systemContext[key] !== undefined) {
+        if (hint?.systemContext?.[key] !== undefined) {
           return {
             value: hint.systemContext[key],
             source: 'system_context',
@@ -280,12 +283,12 @@ export class ContextResolver {
             metadata: {
               resolvedAt: Date.now(),
               strategy: 'system_provided',
-              warnings: []
-            }
+              warnings: [],
+            },
           };
         }
         return null;
-      }
+      },
     });
 
     // Smart placeholder generator
@@ -302,10 +305,10 @@ export class ContextResolver {
           metadata: {
             resolvedAt: Date.now(),
             strategy: 'smart_generation',
-            warnings: placeholder.warnings
-          }
+            warnings: placeholder.warnings,
+          },
         };
-      }
+      },
     });
   }
 
@@ -314,23 +317,23 @@ export class ContextResolver {
    */
   private getAvailableProviders(options: ContextAggregationOptions): ContextProvider[] {
     return Array.from(this.providers.values())
-      .filter(provider => {
+      .filter((provider) => {
         // Check if provider is available
         if (!provider.isAvailable()) return false;
-        
+
         // Check preferred sources
         if (options.preferredSources?.length) {
           // This is a simplistic check - in practice you'd map provider names to sources
           const providerSource = this.mapProviderToSource(provider.name);
           if (!options.preferredSources.includes(providerSource)) return false;
         }
-        
+
         // Check excluded sources
         if (options.excludedSources?.length) {
           const providerSource = this.mapProviderToSource(provider.name);
           if (options.excludedSources.includes(providerSource)) return false;
         }
-        
+
         return true;
       })
       .sort((a, b) => b.priority - a.priority); // Higher priority first
@@ -341,20 +344,23 @@ export class ContextResolver {
    */
   private mapProviderToSource(providerName: string): ContextSource {
     const mapping: Record<string, ContextSource> = {
-      'conversation_history': 'conversation_history',
-      'environment_variables': 'environment_variables',
-      'prompt_defaults': 'prompt_defaults',
-      'system_context': 'system_context',
-      'placeholder_generator': 'generated_placeholder'
+      conversation_history: 'conversation_history',
+      environment_variables: 'environment_variables',
+      prompt_defaults: 'prompt_defaults',
+      system_context: 'system_context',
+      placeholder_generator: 'generated_placeholder',
     };
-    
+
     return mapping[providerName] || 'system_context';
   }
 
   /**
    * Check if resolution meets minimum confidence
    */
-  private meetsMinimumConfidence(resolution: ContextResolution, options: ContextAggregationOptions): boolean {
+  private meetsMinimumConfidence(
+    resolution: ContextResolution,
+    options: ContextAggregationOptions
+  ): boolean {
     if (options.minimumConfidence === undefined) return true;
     return resolution.confidence >= options.minimumConfidence;
   }
@@ -369,16 +375,17 @@ export class ContextResolver {
     usedProvider: ContextProvider,
     alternatives: Array<{ value: any; source: ContextSource; confidence: number }>
   ): Promise<void> {
-    const remainingProviders = allProviders.filter(p => p !== usedProvider);
-    
-    for (const provider of remainingProviders.slice(0, 3)) { // Limit to 3 alternatives
+    const remainingProviders = allProviders.filter((p) => p !== usedProvider);
+
+    for (const provider of remainingProviders.slice(0, 3)) {
+      // Limit to 3 alternatives
       try {
         const resolution = await provider.resolve(key, hint);
         if (resolution) {
           alternatives.push({
             value: resolution.value,
             source: resolution.source,
-            confidence: resolution.confidence
+            confidence: resolution.confidence,
           });
         }
       } catch (error) {
@@ -392,57 +399,57 @@ export class ContextResolver {
    * Generate smart placeholder based on key characteristics
    */
   private generateSmartPlaceholder(
-    key: string, 
+    key: string,
     hint?: any
   ): { value: string; confidence: number; warnings: string[] } {
     const keyLower = key.toLowerCase();
     const warnings: string[] = [];
-    
+
     // Argument-specific placeholders
     if (hint?.argumentDef) {
       const arg = hint.argumentDef as PromptArgument;
       const description = (arg.description || '').toLowerCase();
-      
+
       if (description.includes('file') || keyLower.includes('file')) {
         return { value: '[File path required]', confidence: 0.4, warnings };
       }
-      
+
       if (description.includes('url') || keyLower.includes('url')) {
         return { value: '[URL required]', confidence: 0.4, warnings };
       }
-      
+
       if (description.includes('number') || keyLower.includes('count')) {
         return { value: '1', confidence: 0.5, warnings };
       }
     }
-    
+
     // Generic semantic placeholders
     if (keyLower.includes('content') || keyLower.includes('text') || keyLower.includes('input')) {
-      return { 
-        value: '[Content to be provided]', 
-        confidence: 0.3, 
-        warnings: ['Generic content placeholder - consider providing specific content']
+      return {
+        value: '[Content to be provided]',
+        confidence: 0.3,
+        warnings: ['Generic content placeholder - consider providing specific content'],
       };
     }
-    
+
     if (keyLower.includes('name') || keyLower.includes('title')) {
       return { value: `[${key} required]`, confidence: 0.3, warnings };
     }
-    
+
     if (keyLower.includes('format') || keyLower.includes('style')) {
       return { value: 'default', confidence: 0.4, warnings };
     }
-    
+
     if (keyLower.includes('language') || keyLower.includes('lang')) {
       return { value: 'en', confidence: 0.4, warnings };
     }
-    
+
     // Ultra-generic fallback
     warnings.push(`No semantic match found for "${key}" - using generic placeholder`);
-    return { 
-      value: `[${key.replace(/_/g, ' ')} to be specified]`, 
-      confidence: 0.2, 
-      warnings 
+    return {
+      value: `[${key.replace(/_/g, ' ')} to be specified]`,
+      confidence: 0.2,
+      warnings,
     };
   }
 
@@ -465,11 +472,11 @@ export class ContextResolver {
           resolvedAt: Date.now(),
           strategy: 'best_alternative',
           alternativeValues: alternatives,
-          warnings: ['Used alternative resolution after primary strategies failed']
-        }
+          warnings: ['Used alternative resolution after primary strategies failed'],
+        },
       };
     }
-    
+
     // Last resort: empty fallback
     return {
       value: '',
@@ -478,8 +485,8 @@ export class ContextResolver {
       metadata: {
         resolvedAt: Date.now(),
         strategy: 'empty_fallback',
-        warnings: [`No context available for "${key}" - using empty value`]
-      }
+        warnings: [`No context available for "${key}" - using empty value`],
+      },
     };
   }
 
@@ -488,7 +495,7 @@ export class ContextResolver {
    */
   private getCachedResolution(key: string): ContextResolution | null {
     const cached = this.cache.get(key);
-    if (cached && (Date.now() - cached.metadata.resolvedAt) < this.cacheTimeout) {
+    if (cached && Date.now() - cached.metadata.resolvedAt < this.cacheTimeout) {
       return cached;
     } else if (cached) {
       // Remove expired cache entry
@@ -502,7 +509,7 @@ export class ContextResolver {
    */
   private cacheResolution(key: string, resolution: ContextResolution): void {
     this.cache.set(key, resolution);
-    
+
     // Cleanup old entries periodically
     if (this.cache.size > 1000) {
       const cutoff = Date.now() - this.cacheTimeout;
@@ -517,17 +524,22 @@ export class ContextResolver {
   /**
    * Update resolution statistics
    */
-  private updateStats(providerName: string, resolution: ContextResolution, startTime: number): void {
+  private updateStats(
+    providerName: string,
+    resolution: ContextResolution,
+    startTime: number
+  ): void {
     this.stats.successfulResolutions++;
-    
+
     const current = this.stats.providerUsage.get(providerName) || 0;
     this.stats.providerUsage.set(providerName, current + 1);
-    
+
     // Update average confidence
     const totalSuccessful = this.stats.successfulResolutions;
-    this.stats.averageConfidence = 
-      (this.stats.averageConfidence * (totalSuccessful - 1) + resolution.confidence) / totalSuccessful;
-    
+    this.stats.averageConfidence =
+      (this.stats.averageConfidence * (totalSuccessful - 1) + resolution.confidence) /
+      totalSuccessful;
+
     // Update average resolution time
     const resolutionTime = Date.now() - startTime;
     this.stats.averageResolutionTime =
@@ -548,7 +560,7 @@ export class ContextResolver {
   getStats(): typeof this.stats {
     return {
       ...this.stats,
-      providerUsage: new Map(this.stats.providerUsage)
+      providerUsage: new Map(this.stats.providerUsage),
     };
   }
 
@@ -561,9 +573,9 @@ export class ContextResolver {
       successfulResolutions: 0,
       cacheHits: 0,
       cacheMisses: 0,
-      providerUsage: new Map(Array.from(this.providers.keys()).map(name => [name, 0])),
+      providerUsage: new Map(Array.from(this.providers.keys()).map((name) => [name, 0])),
       averageConfidence: 0,
-      averageResolutionTime: 0
+      averageResolutionTime: 0,
     };
   }
 }

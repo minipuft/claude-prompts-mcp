@@ -1,63 +1,20 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
+import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
+import { composeReviewPrompt } from '../../gates/core/review-utils.js';
 import { Logger } from '../../logging/index.js';
+import { safeJsonParse } from '../../utils/index.js';
 import { processTemplate } from '../../utils/jsonUtils.js';
 
+import type { PromptGuidanceService } from '../../frameworks/prompt-guidance/index.js';
 import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
 import type { ConvertedPrompt } from '../../types/index.js';
-import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
-import type { ExecutionPlan } from '../context/execution-context.js';
-
-export interface ChainStepPrompt {
-  readonly stepNumber: number;
-  readonly promptId: string;
-  readonly args: Record<string, unknown>;
-  readonly inlineGateCriteria?: readonly string[];
-  inlineGateIds?: string[];
-  convertedPrompt?: ConvertedPrompt; // Optional - looked up if not provided
-  metadata?: Record<string, unknown>; // For storing step-specific data like gate instructions
-  executionPlan?: ExecutionPlan;
-  frameworkContext?: FrameworkExecutionContext;
-}
-
-/**
- * Base interface for all chain step execution inputs
- */
-interface BaseChainStepExecutionInput {
-  readonly stepPrompts: readonly ChainStepPrompt[];
-  readonly chainContext?: Record<string, unknown>;
-  readonly additionalGateIds?: readonly string[];
-  readonly inlineGuidanceText?: string;
-}
-
-/**
- * Normal step execution (non-review)
- */
-export interface NormalStepInput extends BaseChainStepExecutionInput {
-  readonly executionType: 'normal';
-  readonly currentStepIndex: number;
-}
-
-/**
- * Gate review step execution
- */
-export interface GateReviewInput extends BaseChainStepExecutionInput {
-  readonly executionType: 'gate_review';
-  readonly pendingGateReview: PendingGateReview;
-}
-
-/**
- * Discriminated union for chain step execution inputs
- */
-export type ChainStepExecutionInput = NormalStepInput | GateReviewInput;
-
-export interface ChainStepRenderResult {
-  stepNumber: number;
-  totalSteps: number;
-  promptId: string;
-  promptName: string;
-  content: string;
-  callToAction: string;
-}
+import type {
+  ChainStepExecutionInput,
+  ChainStepPrompt,
+  ChainStepRenderResult,
+  GateReviewInput,
+  NormalStepInput,
+} from './types.js';
 
 /**
  * Type guard for gate review input
@@ -78,13 +35,12 @@ export class ChainOperatorExecutor {
     private readonly logger: Logger,
     private readonly convertedPrompts: ConvertedPrompt[],
     private readonly gateGuidanceRenderer?: any,
-    private readonly getFrameworkContext?: (
-      promptId: string
-    ) => Promise<{
+    private readonly getFrameworkContext?: (promptId: string) => Promise<{
       selectedFramework?: { methodology: string; name: string };
       category?: string;
       systemPrompt?: string;
-    } | null>
+    } | null>,
+    private readonly promptGuidanceService?: PromptGuidanceService
   ) {}
 
   async renderStep(input: ChainStepExecutionInput): Promise<ChainStepRenderResult> {
@@ -103,7 +59,13 @@ export class ChainOperatorExecutor {
 
     // Use discriminated union type guards for variant-specific logic
     if (isGateReviewInput(input)) {
-      return this.renderGateReviewStep(input, stepPrompts, chainContext, additionalGateIds, inlineGuidanceText);
+      return this.renderGateReviewStep(
+        input,
+        stepPrompts,
+        chainContext,
+        additionalGateIds,
+        inlineGuidanceText
+      );
     }
 
     // Normal step execution
@@ -121,76 +83,93 @@ export class ChainOperatorExecutor {
     inlineGuidanceText?: string
   ): Promise<ChainStepRenderResult> {
     const { pendingGateReview } = input;
+    const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
 
     this.logger.debug(`[SymbolicChain] Rendering synthetic gate review step`);
     const totalSteps = stepPrompts.length + 1;
     const stepNumber = totalSteps;
-    const gateIdsToRender =
-      (pendingGateReview?.gateIds?.length ? pendingGateReview.gateIds : additionalGateIds) || [];
+    const reviewStep = this.resolveReviewStep(stepPrompts, chainContext, pendingGateReview);
+    const { gateIds: gateIdsToRender, explicitGateIds } = this.collectReviewGateIds(
+      pendingGateReview,
+      additionalGateIds,
+      reviewStep
+    );
     const hasInlineGateFocus =
+      explicitGateIds.length > 0 ||
       gateIdsToRender.some((gateId) => this.isInlineGateId(gateId)) ||
       Boolean(inlineGuidanceText);
     const callToAction =
       'Use the resume shortcut below and respond via gate_verdict as `GATE_REVIEW: PASS` or `GATE_REVIEW: FAIL - reason` to resume the workflow.';
 
     // Get the last actual step that was executed
-    const lastStepIndex = stepPrompts.length - 1;
-    const lastStep = lastStepIndex >= 0 ? stepPrompts[lastStepIndex] : undefined;
+    const fallbackIndex = stepPrompts.length - 1;
+    const lastStepIndex = reviewStep
+      ? stepPrompts.findIndex((step) => step.stepNumber === reviewStep.stepNumber)
+      : fallbackIndex;
+    const targetStep =
+      reviewStep ??
+      (lastStepIndex >= 0 ? stepPrompts[lastStepIndex] : stepPrompts[fallbackIndex] ?? undefined);
 
     // Build concise PASS/FAIL warning at top
-    const gateWarning = `---
-
-## ⚠️ QUALITY GATE VALIDATION
-
-You MUST **execute** the task below, then **validate** your output against the quality gates.
-
-**Format:** Start response with \`GATE_REVIEW: PASS\` or \`GATE_REVIEW: FAIL\`, then explain why.
-
----
-`;
-    const reviewOrderNote = hasInlineGateFocus
-      ? '\n**Review Order:** Start with inline criteria, then verify framework standards before responding.\n'
-      : '';
+    const gateWarning = [
+      '---',
+      '',
+      '## ⚠️ QUALITY GATE VALIDATION',
+      '',
+      'You MUST **execute** the task below, then **validate** your output against the quality gates.',
+      '',
+      '**Format:** Start response with `GATE_REVIEW: PASS` or `GATE_REVIEW: FAIL`, then explain why.',
+      '',
+      '---',
+      '',
+    ].join('\n');
 
     // Get original content from last step if available
     let originalContent = '';
-    if (lastStep) {
+    if (targetStep) {
       // Look up convertedPrompt if not already set
       const convertedPrompt =
-        lastStep.convertedPrompt || this.convertedPrompts.find((p) => p.id === lastStep.promptId);
+        targetStep.convertedPrompt ||
+        this.convertedPrompts.find((p) => p.id === targetStep.promptId);
 
       if (convertedPrompt) {
         // Prioritize currentStepArgs from chainContext (pipeline integration)
-        // Fall back to lastStep.args for backward compatibility
-        const stepArgs = this.normalizeStepArgs((chainContext['currentStepArgs'] as Record<string, unknown> | undefined) ?? lastStep.args);
+        // Fall back to targetStep.args for backward compatibility
+        const stepArgs = this.normalizeStepArgs(
+          (chainContext['currentStepArgs'] as Record<string, unknown> | undefined) ??
+            targetStep?.args ??
+            {}
+        );
         const templateContext = { ...chainContext, ...stepArgs };
 
         const renderedTemplate = this.renderTemplate(
           convertedPrompt,
           templateContext,
-          lastStep.promptId
+          targetStep.promptId
         );
 
-        originalContent = `## Original Task Instructions
-
-${renderedTemplate}
-
----
-`;
+        originalContent = [
+          '## Original Task Instructions',
+          '',
+          renderedTemplate,
+          '',
+          '---',
+          '',
+        ].join('\n');
       }
     }
 
     // Build gate guidance using proper renderer for framework-aware, category-aware rendering
     let gateGuidance = '';
-    if (gateIdsToRender.length > 0) {
+    if (gateGuidanceEnabled && gateIdsToRender.length > 0) {
       // Get framework and category context if available
       let frameworkMethodology = 'CAGEERF';
       let category = 'general';
 
-      const lastStepContext = await this.resolveFrameworkContext(lastStep ?? undefined);
-      if (lastStepContext) {
-        frameworkMethodology = lastStepContext.selectedFramework?.methodology || 'CAGEERF';
-        category = lastStepContext.category || 'general';
+      const reviewStepContext = await this.resolveFrameworkContext(targetStep ?? undefined);
+      if (reviewStepContext) {
+        frameworkMethodology = reviewStepContext.selectedFramework?.methodology || 'CAGEERF';
+        category = reviewStepContext.category || 'general';
       }
 
       // Use GateGuidanceRenderer to properly render gates (handles temp gates, framework filtering, etc.)
@@ -199,7 +178,8 @@ ${renderedTemplate}
           gateGuidance = await this.gateGuidanceRenderer.renderGuidance(gateIdsToRender, {
             framework: frameworkMethodology,
             category,
-            promptId: lastStep?.promptId,
+            promptId: targetStep?.promptId,
+            explicitGateIds,
           });
         } catch (error) {
           this.logger.warn(
@@ -211,15 +191,18 @@ ${renderedTemplate}
       } else {
         gateGuidance = this.renderSimpleGateGuidance(gateIdsToRender, inlineGuidanceText);
       }
-    } else if (inlineGuidanceText) {
+    } else if (gateGuidanceEnabled && inlineGuidanceText) {
       gateGuidance = this.renderSimpleGateGuidance([], inlineGuidanceText);
+    } else if (!gateGuidanceEnabled) {
+      this.logger.debug('[SymbolicChain] Gate guidance injection suppressed by decision');
     }
 
     // Build attempt tracking and streamlined retry hints
+    // Use default from constants when not specified in pending review
     const attemptCount = pendingGateReview?.attemptCount ?? 0;
-    const maxAttempts = pendingGateReview?.maxAttempts ?? Math.max(1, attemptCount || 3);
+    const maxAttempts = pendingGateReview?.maxAttempts ?? DEFAULT_GATE_RETRY_CONFIG.max_attempts;
     const attemptSummary = `**Review Attempts:** ${Math.min(
-      attemptCount,
+      attemptCount + 1, // Display as 1-indexed (Attempt 1 of 2, not 0 of 2)
       maxAttempts
     )}/${maxAttempts}`;
 
@@ -254,14 +237,28 @@ ${renderedTemplate}
       supplementalSections.push(`**Last Review:** ${latestHistory.reasoning}`);
     }
 
+    // Check if retry limit is exceeded and add user choice prompt
+    const isLimitExceeded = attemptCount >= maxAttempts;
+    if (isLimitExceeded) {
+      const failedGates = pendingGateReview?.gateIds?.join(', ') ?? 'quality gates';
+      supplementalSections.push(
+        `\n## ⚠️ Retry Limit Reached\n\n` +
+          `The following gates failed after ${maxAttempts} attempts: **${failedGates}**\n\n` +
+          `### Choose an action:\n\n` +
+          `| Action | Description |\n` +
+          `|--------|-------------|\n` +
+          `| \`gate_action: "retry"\` | Reset retry count and try again with improvements |\n` +
+          `| \`gate_action: "skip"\` | Skip this gate check and continue the chain |\n` +
+          `| \`gate_action: "abort"\` | Stop chain execution entirely |\n\n` +
+          `**To continue**, include one of the above in your next call.`
+      );
+    }
+
     // Assemble in proper order: Warning → Content → Gates → Metadata
-    const contentParts = [
-      gateWarning,
-      reviewOrderNote,
-      originalContent,
-      gateGuidance,
-      supplementalSections.join('\n\n'),
-    ].filter((part) => part && part.trim().length > 0);
+    const reviewPrompt = this.buildManualReviewBody(pendingGateReview) ?? originalContent;
+
+    const contentParts = [gateWarning, reviewPrompt, gateGuidance, supplementalSections.join('\n\n')]
+      .filter((part) => part && part.trim().length > 0);
 
     const reviewContent = contentParts.join('\n\n');
 
@@ -306,7 +303,7 @@ ${renderedTemplate}
         totalSteps: stepPrompts.length,
         promptId: step.promptId,
         promptName: step.promptId,
-        content: `Execute the prompt "${step.promptId}"`,
+        content: `Execute the prompt "${step.promptId}"`, // Corrected escaping for quotes
         callToAction: 'Complete this step manually',
       };
     }
@@ -315,7 +312,9 @@ ${renderedTemplate}
 
     // Prioritize currentStepArgs from chainContext (pipeline integration)
     // Fall back to step-level args captured during parsing
-    const stepArgs = this.normalizeStepArgs((chainContext['currentStepArgs'] as Record<string, unknown> | undefined) ?? step.args);
+    const stepArgs = this.normalizeStepArgs(
+      (chainContext['currentStepArgs'] as Record<string, unknown> | undefined) ?? step?.args ?? {}
+    );
 
     const templateContext: Record<string, unknown> = {
       ...chainContext,
@@ -346,7 +345,42 @@ ${renderedTemplate}
       }
     }
 
-    const renderedTemplate = this.renderTemplate(convertedPrompt, templateContext, step.promptId);
+    // Runtime Semantic Enhancement (Self-Loop)
+    let templateToRender = convertedPrompt.userMessageTemplate;
+
+    if (this.promptGuidanceService && templateContext.previous_step_output) {
+      const previousOutputStr = String(templateContext.previous_step_output);
+      // Simple check to see if it looks like JSON
+      if (previousOutputStr.trim().startsWith('{')) {
+        const parseResult = safeJsonParse(previousOutputStr);
+        if (
+          parseResult.success &&
+          parseResult.data &&
+          (parseResult.data.complexity ||
+            parseResult.data.intent ||
+            parseResult.data.selected_resources)
+        ) {
+          this.logger.info(
+            `[SymbolicChain] Applying runtime enhancement based on Judge result for step ${step.stepNumber}`
+          );
+          try {
+            templateToRender = await this.promptGuidanceService.applyRuntimeEnhancement(
+              templateToRender,
+              parseResult.data,
+              this.convertedPrompts
+            );
+          } catch (error) {
+            this.logger.warn('[SymbolicChain] Runtime enhancement failed', error);
+          }
+        }
+      }
+    }
+
+    const renderedTemplate = this.renderTemplateString(
+      templateToRender,
+      templateContext,
+      step.promptId
+    );
 
     const lines: string[] = [];
     const stepNumber = currentStepIndex + 1;
@@ -360,7 +394,13 @@ ${renderedTemplate}
       }
     }
 
-    if (!this.hasFrameworkGuidance(convertedPrompt?.systemMessage)) {
+    // Use injection decision from InjectionControlStage (via chainContext.injectionState)
+    // inject=true means INJECT, inject=false means SKIP
+    const injectionState = chainContext['injectionState'] as { systemPrompt?: { inject: boolean } } | undefined;
+    const suppressFrameworkInjection = injectionState?.systemPrompt?.inject === false;
+    const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
+
+    if (!suppressFrameworkInjection && !this.hasFrameworkGuidance(convertedPrompt?.systemMessage)) {
       const frameworkGuidance = await this.buildFrameworkGuidance(step);
       if (frameworkGuidance) {
         lines.push(frameworkGuidance);
@@ -374,12 +414,22 @@ ${renderedTemplate}
     lines.push(renderedTemplate.trim());
 
     // Add gate instructions if stored in step metadata (from GateEnhancementStage)
-    if (step.metadata?.['gateInstructions'] && typeof step.metadata['gateInstructions'] === 'string') {
-      lines.push(step.metadata['gateInstructions'] as string);
+    if (
+      gateGuidanceEnabled &&
+      step.metadata?.['gateInstructions'] &&
+      typeof step.metadata['gateInstructions'] === 'string'
+    ) {
+      lines.push(step.metadata['gateInstructions']);
+    } else if (!gateGuidanceEnabled && step.metadata?.['gateInstructions']) {
+      this.logger.debug('[SymbolicChain] Skipped gate instructions (gate-guidance injection disabled)', {
+        step: step.stepNumber,
+      });
     }
 
     const callToAction = !isFinalStep
-      ? `Use the resume shortcut below to rerun prompt_engine and paste your latest answer into user_response so Step ${stepNumber + 1} can begin.`
+      ? `Use the resume shortcut below to rerun prompt_engine and paste your latest answer into user_response so Step ${
+          stepNumber + 1
+        } can begin.`
       : 'Deliver the final response to the user (no user_response needed once the chain completes).';
 
     const content = lines.filter(Boolean).join('\n\n').trimEnd();
@@ -394,7 +444,10 @@ ${renderedTemplate}
     };
   }
 
-  private renderSimpleGateGuidance(gateIds: readonly string[], inlineGuidanceText?: string): string {
+  private renderSimpleGateGuidance(
+    gateIds: readonly string[],
+    inlineGuidanceText?: string
+  ): string {
     const inlineGateIds = gateIds.filter((gateId) => this.isInlineGateId(gateId));
     const frameworkGateIds = gateIds.filter((gateId) => !this.isInlineGateId(gateId));
     const hasInlineGuidance =
@@ -406,7 +459,6 @@ ${renderedTemplate}
     const sections: string[] = ['\n\n---\n\n##  Quality Enhancement Gates'];
 
     if (inlineGateIds.length > 0 || (inlineGuidanceText && inlineGuidanceText.trim().length > 0)) {
-      sections.push('\n\n>  Start with inline criteria, then verify framework standards.\n');
       sections.push('\n\n###  Inline Quality Criteria (PRIMARY)\n');
       if (inlineGuidanceText && inlineGuidanceText.trim().length > 0) {
         sections.push(inlineGuidanceText.trim());
@@ -423,11 +475,22 @@ ${renderedTemplate}
 
     sections.push('\n\n**Post-Execution Review Guidelines:**');
     sections.push(
-      '\nReview your output against these quality standards before finalizing your response.'
+      'Review your output against these quality standards before finalizing your response.'
     );
-    sections.push('\n\n---\n');
+    sections.push('---');
 
     return sections.join('');
+  }
+
+  /**
+   * Determine whether gate guidance injection is enabled for the current chain context.
+   */
+  private isGateGuidanceEnabled(chainContext: Record<string, unknown>): boolean {
+    const injectionState = chainContext['injectionState'] as
+      | { gateGuidance?: { inject?: boolean } }
+      | undefined;
+
+    return injectionState?.gateGuidance?.inject !== false;
   }
 
   private async buildFrameworkGuidance(step: ChainStepPrompt): Promise<string | null> {
@@ -439,21 +502,21 @@ ${renderedTemplate}
       return null;
     }
 
-    return `---
-
-## 🎯 Framework Methodology Active
-
-**${frameworkName}**
-
-${systemPrompt}
-
----
-`;
+    return [
+      '---',
+      '',
+      '## 🎯 Framework Methodology Active',
+      '',
+      `**${frameworkName}**`,
+      '',
+      systemPrompt,
+      '',
+      '---',
+      '',
+    ].join('\n');
   }
 
-  private async resolveFrameworkContext(
-    step?: ChainStepPrompt
-  ): Promise<{
+  private async resolveFrameworkContext(step?: ChainStepPrompt): Promise<{
     selectedFramework?: { methodology: string; name: string };
     category?: string;
     systemPrompt?: string;
@@ -489,55 +552,8 @@ ${systemPrompt}
     chainContext: Record<string, unknown>,
     totalSteps: number
   ): string | null {
-    const metadata = chainContext['chain_metadata'];
-    if (!metadata || typeof metadata !== 'object') {
-      return null;
-    }
-
-    const chainMeta = metadata as Record<string, unknown>;
-    const {
-      chainId,
-      name,
-      description,
-      category,
-      framework,
-      gates,
-      inlineGateIds,
-      chainRunId,
-    } = chainMeta;
-
-    const lines: string[] = ['## 📊 Chain Metadata'];
-    lines.push(`**Chain**: ${name ?? chainId ?? 'unnamed'} (${chainId ?? 'n/a'})`);
-    if (description && typeof description === 'string' && description.trim().length > 0) {
-      lines.push(`**Description**: ${description.trim()}`);
-    }
-    if (category && typeof category === 'string') {
-      lines.push(`**Category**: ${category}`);
-    }
-    const total =
-      typeof chainMeta['totalSteps'] === 'number' ? (chainMeta['totalSteps'] as number) : totalSteps;
-    lines.push(`**Total Steps**: ${total}`);
-    if (framework && typeof framework === 'string') {
-      lines.push(`**Framework**: ${framework}`);
-    }
-    if (chainRunId && typeof chainRunId === 'string') {
-      lines.push(`**Archive Run ID**: ${chainRunId}`);
-    }
-
-    const gateSummaries: string[] = [];
-    if (Array.isArray(gates) && gates.length > 0) {
-      gateSummaries.push(`- Step Gates: ${gates.join(', ')}`);
-    }
-    if (Array.isArray(inlineGateIds) && inlineGateIds.length > 0) {
-      gateSummaries.push(`- Inline Gates: ${inlineGateIds.join(', ')}`);
-    }
-    if (gateSummaries.length > 0) {
-      lines.push('**Quality Gates**:');
-      lines.push(...gateSummaries);
-    }
-
-    lines.push('**Execution Notes:** Execute steps sequentially, maintain shared context, and validate each output before proceeding.');
-    return lines.join('\n');
+    // Chain metadata banner removed to reduce redundant instructions.
+    return null;
   }
 
   private isInlineGateId(gateId: string): boolean {
@@ -598,6 +614,27 @@ ${systemPrompt}
     return undefined;
   }
 
+  private buildManualReviewBody(pendingReview?: PendingGateReview): string | null {
+    if (!pendingReview) {
+      return null;
+    }
+
+    if (pendingReview.combinedPrompt && pendingReview.combinedPrompt.trim().length > 0) {
+      return pendingReview.combinedPrompt;
+    }
+
+    if (pendingReview.prompts && pendingReview.prompts.length > 0) {
+      const composed = composeReviewPrompt(
+        pendingReview.prompts,
+        pendingReview.previousResponse,
+        pendingReview.retryHints ?? []
+      );
+      return composed.combinedPrompt;
+    }
+
+    return null;
+  }
+
   private normalizeStepArgs(argsInput?: Record<string, unknown>): Record<string, unknown> {
     if (!argsInput || typeof argsInput !== 'object') {
       return {};
@@ -611,8 +648,20 @@ ${systemPrompt}
     templateContext: Record<string, unknown>,
     promptId: string
   ): string {
+    return this.renderTemplateString(
+      convertedPrompt.userMessageTemplate,
+      templateContext,
+      promptId
+    );
+  }
+
+  private renderTemplateString(
+    templateString: string,
+    templateContext: Record<string, unknown>,
+    promptId: string
+  ): string {
     try {
-      const rendered = processTemplate(convertedPrompt.userMessageTemplate, templateContext, {});
+      const rendered = processTemplate(templateString, templateContext, {});
 
       return rendered;
     } catch (error) {
@@ -631,5 +680,129 @@ ${systemPrompt}
     }
 
     return stepPrompts.map((step) => this.getPromptDisplayName(step)).join(' → ');
+  }
+
+  private resolveReviewStep(
+    stepPrompts: readonly ChainStepPrompt[],
+    chainContext: Record<string, unknown>,
+    pendingReview: PendingGateReview
+  ): ChainStepPrompt | undefined {
+    if (stepPrompts.length === 0) {
+      return undefined;
+    }
+
+    const metadataIndex = this.extractStepIndexFromMetadata(pendingReview.metadata);
+    if (typeof metadataIndex === 'number') {
+      return stepPrompts[this.clampStepIndex(metadataIndex, stepPrompts.length)];
+    }
+
+    const promptMetadataIndex =
+      pendingReview.prompts
+        ?.map((prompt) => this.extractStepIndexFromMetadata(prompt.metadata))
+        .find((idx) => typeof idx === 'number') ?? undefined;
+    if (typeof promptMetadataIndex === 'number') {
+      return stepPrompts[this.clampStepIndex(promptMetadataIndex, stepPrompts.length)];
+    }
+
+    const contextStep = this.extractStepIndexFromContext(chainContext);
+    if (typeof contextStep === 'number') {
+      return stepPrompts[this.clampStepIndex(contextStep, stepPrompts.length)];
+    }
+
+    return undefined;
+  }
+
+  private extractStepIndexFromContext(chainContext: Record<string, unknown>): number | undefined {
+    const raw = chainContext['current_step'];
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return raw > 0 ? raw - 1 : 0;
+    }
+    if (typeof raw === 'string') {
+      const parsed = Number.parseInt(raw, 10);
+      if (!Number.isNaN(parsed)) {
+        return parsed > 0 ? parsed - 1 : 0;
+      }
+    }
+    return undefined;
+  }
+
+  private extractStepIndexFromMetadata(metadata?: Record<string, unknown>): number | undefined {
+    if (!metadata || typeof metadata !== 'object') {
+      return undefined;
+    }
+
+    const directIndex = metadata['stepIndex'] ?? metadata['step_index'];
+    if (typeof directIndex === 'number' && Number.isFinite(directIndex)) {
+      return directIndex;
+    }
+
+    const stepNumber = metadata['stepNumber'] ?? metadata['step_number'];
+    if (typeof stepNumber === 'number' && Number.isFinite(stepNumber)) {
+      return stepNumber > 0 ? stepNumber - 1 : 0;
+    }
+
+    return undefined;
+  }
+
+  private clampStepIndex(index: number, totalSteps: number): number {
+    const normalizedIndex = Number.isFinite(index) ? Math.floor(index) : totalSteps - 1;
+    if (normalizedIndex < 0) {
+      return 0;
+    }
+    if (normalizedIndex >= totalSteps) {
+      return totalSteps - 1;
+    }
+    return normalizedIndex;
+  }
+
+  private collectReviewGateIds(
+    pendingReview: PendingGateReview,
+    additionalGateIds: readonly string[],
+    reviewStep?: ChainStepPrompt
+  ): { gateIds: string[]; explicitGateIds: string[] } {
+    const gateSet = new Set<string>();
+    const explicitSet = new Set<string>();
+    const addGate = (gateId: unknown, explicit = false) => {
+      if (typeof gateId !== 'string' || gateId.trim().length === 0) {
+        return;
+      }
+      gateSet.add(gateId);
+      if (explicit) {
+        explicitSet.add(gateId);
+      }
+    };
+
+    pendingReview.gateIds?.forEach((gateId) => addGate(gateId));
+    additionalGateIds?.forEach((gateId) => addGate(gateId));
+    reviewStep?.inlineGateIds?.forEach((gateId) => addGate(gateId, true));
+
+    pendingReview.prompts?.forEach((prompt) => {
+      addGate(prompt.gateId, true);
+      const inlineMetadata = this.extractInlineGateIdsFromMetadata(prompt.metadata);
+      inlineMetadata.forEach((gateId) => addGate(gateId, true));
+    });
+
+    if (pendingReview.metadata) {
+      const inlineMetadata = this.extractInlineGateIdsFromMetadata(pendingReview.metadata);
+      inlineMetadata.forEach((gateId) => addGate(gateId, true));
+    }
+
+    return {
+      gateIds: Array.from(gateSet),
+      explicitGateIds: Array.from(explicitSet),
+    };
+  }
+
+  private extractInlineGateIdsFromMetadata(metadata?: Record<string, unknown>): string[] {
+    if (!metadata || typeof metadata !== 'object') {
+      return [];
+    }
+    const value = metadata['inlineGateIds'] ?? metadata['inline_gate_ids'];
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter(
+      (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0
+    );
   }
 }

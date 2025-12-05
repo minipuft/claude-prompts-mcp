@@ -1,6 +1,6 @@
 import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 
-import { GateInstructionInjector } from '../../../../dist/frameworks/prompt-guidance/gate-instruction-injector.js';
+import { GateInstructionInjector } from '../../../../dist/gates/guidance/gate-instruction-injector.js';
 
 import type { ConvertedPrompt } from '../../../../dist/types/index.js';
 

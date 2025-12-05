@@ -14,16 +14,13 @@ import * as path from 'path';
 
 import { Logger } from '../logging/index.js';
 import {
-  ChainState,
   PendingGateReview,
   StepMetadata,
   StepState,
 } from '../mcp-tools/prompt-engine/core/types.js';
-import { TextReferenceManager, ArgumentHistoryTracker } from '../text-references/index.js';
-import {
-  FileBackedChainRunRegistry,
-  type ChainRunRegistry,
-} from './run-registry.js';
+import { ArgumentHistoryTracker, TextReferenceManager } from '../text-references/index.js';
+import { FileBackedChainRunRegistry, type ChainRunRegistry } from './run-registry.js';
+
 import type { ParsedCommand } from '../execution/context/execution-context.js';
 import type {
   ChainSession,
@@ -172,7 +169,7 @@ export class ChainSessionManager implements ChainSessionService {
 
       // Restore chainSessionMapping Map
       for (const [chainId, sessionIds] of Object.entries(persistedChainMapping)) {
-        this.chainSessionMapping.set(chainId, new Set(sessionIds as string[]));
+        this.chainSessionMapping.set(chainId, new Set(sessionIds));
       }
 
       this.baseChainMapping.clear();
@@ -197,7 +194,9 @@ export class ChainSessionManager implements ChainSessionService {
       );
     } catch (error) {
       this.logger?.warn(
-        `Failed to load persisted sessions: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to load persisted sessions: ${
+          error instanceof Error ? error.message : String(error)
+        }`
       );
     }
   }
@@ -317,7 +316,10 @@ export class ChainSessionManager implements ChainSessionService {
   getSession(sessionId: string): ChainSession | undefined {
     const session = this.activeSessions.get(sessionId);
     if (session) {
-      if (session.state.totalSteps > 0 && (!session.state.currentStep || session.state.currentStep < 1)) {
+      if (
+        session.state.totalSteps > 0 &&
+        (!session.state.currentStep || session.state.currentStep < 1)
+      ) {
         session.state.currentStep = 1;
       }
       session.lastActivity = Date.now();
@@ -399,7 +401,9 @@ export class ChainSessionManager implements ChainSessionService {
 
     // Log state transition
     this.logger?.debug(
-      `[StepLifecycle] Transitioning step ${stepNumber} from ${currentState || 'NONE'} to ${newState}`
+      `[StepLifecycle] Transitioning step ${stepNumber} from ${
+        currentState || 'NONE'
+      } to ${newState}`
     );
 
     // Set the new state
@@ -637,11 +641,22 @@ export class ChainSessionManager implements ChainSessionService {
     // Get chain variables from text reference manager (single source of truth)
     const chainVariables = this.textReferenceManager.buildChainVariables(session.chainId);
 
-    // Phase 4: Get original arguments from ArgumentHistoryTracker (with graceful fallback)
+    // Get original arguments + previous results from ArgumentHistoryTracker (with graceful fallback)
     let argumentContext = {};
+    let reviewContext:
+      | {
+          originalArgs: Record<string, unknown>;
+          previousResults: Record<number, string>;
+          currentStep?: number;
+          totalSteps?: number;
+        }
+      | undefined;
     if (this.argumentHistoryTracker) {
       try {
-        const reviewContext = this.argumentHistoryTracker.buildReviewContext(sessionId);
+        reviewContext = this.argumentHistoryTracker.buildReviewContext(
+          sessionId,
+          session.state.currentStep
+        );
         argumentContext = reviewContext.originalArgs;
       } catch (error) {
         // Fallback to session's originalArgs if tracker fails
@@ -669,9 +684,18 @@ export class ChainSessionManager implements ChainSessionService {
       // Chain variables (step results, etc.) from TextReferenceManager
       ...chainVariables,
 
-      // Phase 4: Original arguments - NOW INCLUDED!
+      // Original arguments - NOW INCLUDED!
       ...argumentContext,
     };
+
+    if (reviewContext && Object.keys(reviewContext.previousResults).length > 0) {
+      contextData.previous_step_results = { ...reviewContext.previousResults };
+    }
+
+    const currentStepArgs = this.getCurrentStepArgs(session);
+    if (currentStepArgs && Object.keys(currentStepArgs).length > 0) {
+      contextData.currentStepArgs = currentStepArgs;
+    }
 
     const chainMetadata = this.buildChainMetadata(session);
     if (chainMetadata) {
@@ -716,7 +740,10 @@ export class ChainSessionManager implements ChainSessionService {
     session.blueprint = this.cloneBlueprint(blueprint);
     this.saveSessions().catch((error) => {
       if (this.logger) {
-        this.logger.error(`[ChainSessionManager] Failed to persist blueprint for ${sessionId}`, error);
+        this.logger.error(
+          `[ChainSessionManager] Failed to persist blueprint for ${sessionId}`,
+          error
+        );
       }
     });
   }
@@ -781,6 +808,49 @@ export class ChainSessionManager implements ChainSessionService {
       history: review.history ? review.history.map((entry) => ({ ...entry })) : undefined,
       metadata: review.metadata ? { ...review.metadata } : undefined,
     };
+  }
+
+  /**
+   * Check if the retry limit has been exceeded for a pending gate review.
+   * Returns true if attemptCount >= maxAttempts.
+   * @remarks Uses DEFAULT_RETRY_LIMIT (2) when maxAttempts not specified.
+   */
+  isRetryLimitExceeded(sessionId: string): boolean {
+    const review = this.getPendingGateReview(sessionId);
+    if (!review) {
+      return false;
+    }
+    // Import would create circular dependency, so we inline the default (2)
+    // This matches DEFAULT_RETRY_LIMIT from gates/constants.ts
+    const maxAttempts = review.maxAttempts ?? 2;
+    return (review.attemptCount ?? 0) >= maxAttempts;
+  }
+
+  /**
+   * Reset the retry count for a pending gate review.
+   * Used when user chooses to retry after retry exhaustion.
+   */
+  async resetRetryCount(sessionId: string): Promise<void> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session?.pendingGateReview) {
+      this.logger?.debug?.(
+        `[ChainSessionManager] No pending gate review to reset for session: ${sessionId}`
+      );
+      return;
+    }
+
+    // Reset attempt count and log in history
+    session.pendingGateReview.attemptCount = 0;
+    session.pendingGateReview.history = session.pendingGateReview.history ?? [];
+    session.pendingGateReview.history.push({
+      timestamp: Date.now(),
+      status: 'reset',
+      reasoning: 'User requested retry after exhaustion',
+    });
+
+    await this.saveSessions();
+
+    this.logger?.info?.(`[ChainSessionManager] Reset retry count for session: ${sessionId}`);
   }
 
   async clearPendingGateReview(sessionId: string): Promise<void> {
@@ -1026,8 +1096,7 @@ export class ChainSessionManager implements ChainSessionService {
    */
   async clearSessionsForChain(chainId: string): Promise<void> {
     const baseChainId = this.extractBaseChainId(chainId);
-    const runChainIds =
-      chainId === baseChainId ? [...this.getRunHistory(baseChainId)] : [chainId];
+    const runChainIds = chainId === baseChainId ? [...this.getRunHistory(baseChainId)] : [chainId];
 
     if (runChainIds.length === 0 && this.chainSessionMapping.has(chainId)) {
       runChainIds.push(chainId);
@@ -1404,11 +1473,28 @@ export class ChainSessionManager implements ChainSessionService {
 
     if (Array.isArray(parsedCommand.steps)) {
       for (const step of parsedCommand.steps) {
-        recordIds(step.inlineGateIds as string[] | undefined);
+        recordIds(step.inlineGateIds);
       }
     }
 
     return Array.from(ids);
+  }
+
+  private getCurrentStepArgs(session: ChainSession): Record<string, unknown> | undefined {
+    const blueprintSteps = session.blueprint?.parsedCommand?.steps;
+    if (!Array.isArray(blueprintSteps) || blueprintSteps.length === 0) {
+      return undefined;
+    }
+
+    const currentStep =
+      typeof session.state.currentStep === 'number' ? session.state.currentStep : 1;
+    const maxIndex = blueprintSteps.length - 1;
+    const resolvedIndex = Math.min(Math.max(currentStep - 1, 0), maxIndex);
+    const args = blueprintSteps[resolvedIndex]?.args;
+    if (!args || Object.keys(args).length === 0) {
+      return undefined;
+    }
+    return { ...args };
   }
 
   private cloneBlueprint(blueprint: SessionBlueprint): SessionBlueprint {

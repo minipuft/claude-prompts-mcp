@@ -40,7 +40,7 @@ class GlobalResourceTracker {
       handle,
       source,
       createdAt: new Date(),
-      description
+      description,
     });
     return id;
   }
@@ -58,7 +58,7 @@ class GlobalResourceTracker {
       handle,
       source,
       createdAt: new Date(),
-      description
+      description,
     });
     return id;
   }
@@ -76,7 +76,7 @@ class GlobalResourceTracker {
       handle,
       source,
       createdAt: new Date(),
-      description
+      description,
     });
     return id;
   }
@@ -159,15 +159,16 @@ class GlobalResourceTracker {
       bySource[resource.source] = (bySource[resource.source] || 0) + 1;
     }
 
-    const oldestResource = resources
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
+    const oldestResource = resources.sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+    )[0];
 
     return {
       totalResources: resources.length,
       byType,
       bySource,
       oldestResource,
-      resources: resources.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      resources: resources.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
     };
   }
 
@@ -188,19 +189,23 @@ class GlobalResourceTracker {
 
     if (diagnostics.oldestResource) {
       const age = Date.now() - diagnostics.oldestResource.createdAt.getTime();
-      console.log(`⏰ Oldest resource: ${diagnostics.oldestResource.id} (${Math.round(age/1000)}s old) from ${diagnostics.oldestResource.source}`);
+      console.log(
+        `⏰ Oldest resource: ${diagnostics.oldestResource.id} (${Math.round(age / 1000)}s old) from ${diagnostics.oldestResource.source}`
+      );
     }
 
     // Log details of long-running resources (> 10 seconds)
-    const longRunning = diagnostics.resources.filter(r =>
-      Date.now() - r.createdAt.getTime() > 10000
+    const longRunning = diagnostics.resources.filter(
+      (r) => Date.now() - r.createdAt.getTime() > 10000
     );
 
     if (longRunning.length > 0) {
       console.log('🐛 Long-running resources (>10s):');
       for (const resource of longRunning) {
         const age = Math.round((Date.now() - resource.createdAt.getTime()) / 1000);
-        console.log(`   ${resource.id}: ${resource.type} from ${resource.source} (${age}s) - ${resource.description || 'no description'}`);
+        console.log(
+          `   ${resource.id}: ${resource.type} from ${resource.source} (${age}s) - ${resource.description || 'no description'}`
+        );
       }
     }
   }

@@ -4,6 +4,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
+import type { GateAction } from '../decisions/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
 
 const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
@@ -56,6 +57,14 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
+    // Keep pipeline session context aligned with manager state (important for gate reviews)
+    context.sessionContext = {
+      ...sessionContext,
+      currentStep: session.state.currentStep,
+      totalSteps: session.state.totalSteps,
+      pendingReview: session.pendingGateReview ?? sessionContext.pendingReview,
+    };
+
     // Always refresh chain variables for downstream template rendering
     context.metadata['chainContext'] = this.chainSessionManager.getChainContext(sessionId);
 
@@ -67,15 +76,39 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     let userResponse = context.mcpRequest.user_response?.trim();
     const gateVerdictInput = context.getGateVerdict();
+
+    // Use authority for verdict parsing if available (preferred), fallback to local parsing
+    const parseVerdict = (raw: string | undefined, source: 'gate_verdict' | 'user_response') =>
+      context.gateEnforcement?.parseVerdict(raw, source) ?? this.parseGateVerdict(raw, source);
+
     const verdictFromUserResponse =
-      !gateVerdictInput && userResponse
-        ? this.parseGateVerdict(userResponse, 'user_response')
-        : null;
+      !gateVerdictInput && userResponse ? parseVerdict(userResponse, 'user_response') : null;
+
+    // Handle gate_action parameter (retry/skip/abort) when retry limit exceeded
+    // Delegate to GateEnforcementAuthority for consistent action handling
+    const gateAction = context.mcpRequest.gate_action as GateAction | undefined;
+    const authority = context.gateEnforcement;
+    const isRetryLimitExceeded = authority
+      ? authority.isRetryLimitExceeded(sessionId)
+      : this.chainSessionManager.isRetryLimitExceeded(sessionId);
+
+    if (gateAction && isRetryLimitExceeded) {
+      await this.handleGateAction(context, sessionId, gateAction, sessionContext);
+      // If abort, exit early
+      if (gateAction === 'abort') {
+        this.logExit({ gateAction: 'abort', sessionAborted: true });
+        return;
+      }
+      // If skip or retry was handled, skip verdict processing and exit
+      if (gateAction === 'skip' || gateAction === 'retry') {
+        this.logExit({ gateAction, handled: true });
+        return;
+      }
+    }
 
     if (session.pendingGateReview) {
       const verdictPayload =
-        this.parseGateVerdict(gateVerdictInput ?? undefined, 'gate_verdict') ??
-        verdictFromUserResponse;
+        parseVerdict(gateVerdictInput ?? undefined, 'gate_verdict') ?? verdictFromUserResponse;
 
       if (verdictPayload) {
         const outcome = await this.chainSessionManager.recordGateReviewOutcome(sessionId, {
@@ -85,10 +118,66 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           reviewer: verdictPayload.source,
         });
 
+        // Add detection metadata for transparency and debugging
+        context.metadata['gateVerdictDetection'] = {
+          verdict: verdictPayload.verdict,
+          source: verdictPayload.source,
+          rationale: verdictPayload.rationale,
+          pattern: verdictPayload.detectedPattern,
+          outcome: outcome,
+        };
+
         if (outcome === 'cleared') {
           sessionContext.pendingReview = undefined;
         } else {
           sessionContext.pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+
+          // Get enforcement mode (defaults to 'blocking')
+          const enforcementMode = context.state.gates.enforcementMode ?? 'blocking';
+
+          // Handle FAIL verdict based on enforcement mode
+          if (verdictPayload.verdict === 'FAIL') {
+            switch (enforcementMode) {
+              case 'blocking':
+                // Stay on step, check retry limit
+                const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+                if (pendingReview && this.chainSessionManager.isRetryLimitExceeded(sessionId)) {
+                  context.state.gates.retryLimitExceeded = true;
+                  context.state.gates.retryExhaustedGateIds = [...pendingReview.gateIds];
+                  context.diagnostics.warn(this.name, 'Gate retry limit exceeded', {
+                    attemptCount: pendingReview.attemptCount,
+                    maxAttempts: pendingReview.maxAttempts ?? 2,
+                    gateIds: pendingReview.gateIds,
+                  });
+                }
+                context.diagnostics.info(this.name, 'Gate FAIL - blocking mode, awaiting retry');
+                break;
+
+              case 'advisory':
+                // Log warning but allow advancement
+                context.state.gates.advisoryWarnings ??= [];
+                context.state.gates.advisoryWarnings.push(
+                  `Gate ${session.pendingGateReview?.gateIds.join(', ') ?? 'unknown'} failed: ${verdictPayload.rationale}`
+                );
+                context.diagnostics.warn(this.name, 'Gate FAIL - advisory mode, continuing', {
+                  rationale: verdictPayload.rationale,
+                });
+                // Clear pending review to allow step advancement
+                await this.chainSessionManager.clearPendingGateReview(sessionId);
+                sessionContext.pendingReview = undefined;
+                break;
+
+              case 'informational':
+                // Log only, no user impact
+                context.diagnostics.info(this.name, 'Gate FAIL - informational mode, logged only', {
+                  rationale: verdictPayload.rationale,
+                });
+                // Clear pending review to allow step advancement
+                await this.chainSessionManager.clearPendingGateReview(sessionId);
+                sessionContext.pendingReview = undefined;
+                break;
+            }
+          }
         }
         context.sessionContext = {
           ...sessionContext,
@@ -259,6 +348,89 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     ].join(' ');
   }
 
+  /**
+   * Handle user choice action when retry limit is exceeded.
+   * Delegates to GateEnforcementAuthority for session manager interactions,
+   * handles context state updates locally.
+   */
+  private async handleGateAction(
+    context: ExecutionContext,
+    sessionId: string,
+    gateAction: GateAction,
+    sessionContext: NonNullable<typeof context.sessionContext>
+  ): Promise<void> {
+    const authority = context.gateEnforcement;
+
+    // Delegate session manager operations to authority if available
+    if (authority) {
+      const result = await authority.resolveAction(sessionId, gateAction);
+
+      // Handle context state updates based on action result
+      if (result.handled) {
+        context.state.gates.retryLimitExceeded = false;
+        context.state.gates.awaitingUserChoice = false;
+
+        if (result.retryReset) {
+          context.diagnostics.info(this.name, 'User chose to retry after exhaustion', {
+            sessionId,
+          });
+        } else if (result.reviewCleared) {
+          context.sessionContext = {
+            ...sessionContext,
+            pendingReview: undefined,
+          };
+          context.diagnostics.warn(this.name, 'User chose to skip failed gate', {
+            sessionId,
+            skippedGates: context.state.gates.retryExhaustedGateIds,
+          });
+        } else if (result.sessionAborted) {
+          context.state.session.aborted = true;
+          context.diagnostics.info(this.name, 'User chose to abort chain after gate failure', {
+            sessionId,
+            failedGates: context.state.gates.retryExhaustedGateIds,
+          });
+        }
+      }
+      return;
+    }
+
+    // Fallback: Direct session manager interaction (legacy path)
+    switch (gateAction) {
+      case 'retry':
+        await this.chainSessionManager.resetRetryCount(sessionId);
+        context.state.gates.retryLimitExceeded = false;
+        context.state.gates.awaitingUserChoice = false;
+        context.diagnostics.info(this.name, 'User chose to retry after exhaustion', {
+          sessionId,
+        });
+        break;
+
+      case 'skip':
+        await this.chainSessionManager.clearPendingGateReview(sessionId);
+        context.state.gates.retryLimitExceeded = false;
+        context.state.gates.awaitingUserChoice = false;
+        context.sessionContext = {
+          ...sessionContext,
+          pendingReview: undefined,
+        };
+        context.diagnostics.warn(this.name, 'User chose to skip failed gate', {
+          sessionId,
+          skippedGates: context.state.gates.retryExhaustedGateIds,
+        });
+        break;
+
+      case 'abort':
+        context.state.session.aborted = true;
+        context.state.gates.retryLimitExceeded = false;
+        context.state.gates.awaitingUserChoice = false;
+        context.diagnostics.info(this.name, 'User chose to abort chain after gate failure', {
+          sessionId,
+          failedGates: context.state.gates.retryExhaustedGateIds,
+        });
+        break;
+    }
+  }
+
   private parseGateVerdict(
     raw: string | undefined,
     source: 'gate_verdict' | 'user_response'
@@ -267,21 +439,59 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     rationale: string;
     raw: string;
     source: 'gate_verdict' | 'user_response';
+    detectedPattern?: string;
   } | null {
     if (!raw) {
       return null;
     }
 
-    const match = raw.match(/^GATE_REVIEW:\s*(PASS|FAIL)\s*-\s*(.+)$/i);
-    if (!match) {
-      return null;
+    // Multiple format support (v3.1) - try patterns in order of specificity
+    const patterns = [
+      // Pattern 1: Full format with hyphen (original - backward compatible)
+      { regex: /^GATE_REVIEW:\s*(PASS|FAIL)\s*-\s*(.+)$/i, priority: 'primary' },
+
+      // Pattern 2: Full format with colon separator
+      { regex: /^GATE_REVIEW:\s*(PASS|FAIL)\s*:\s*(.+)$/i, priority: 'high' },
+
+      // Pattern 3: Simplified format with hyphen
+      { regex: /^GATE\s+(PASS|FAIL)\s*-\s*(.+)$/i, priority: 'high' },
+
+      // Pattern 4: Simplified format with colon
+      { regex: /^GATE\s+(PASS|FAIL)\s*:\s*(.+)$/i, priority: 'medium' },
+
+      // Pattern 5: Minimal format (gate_verdict parameter only - prevents false positives)
+      { regex: /^(PASS|FAIL)\s*[-:]\s*(.+)$/i, priority: 'fallback' },
+    ];
+
+    for (const { regex, priority } of patterns) {
+      // Security: Skip minimal format for user_response to prevent false positives
+      if (priority === 'fallback' && source === 'user_response') {
+        continue;
+      }
+
+      const match = raw.match(regex);
+      if (match) {
+        const rationale = match[2]?.trim();
+
+        // Validation: Require non-empty rationale
+        if (!rationale) {
+          this.logger.warn(
+            `Gate verdict detected but missing rationale: "${raw.substring(0, 50)}..."`
+          );
+          continue; // Try next pattern
+        }
+
+        return {
+          verdict: match[1].toUpperCase() as 'PASS' | 'FAIL',
+          rationale,
+          raw,
+          source,
+          detectedPattern: priority, // For telemetry and debugging
+        };
+      }
     }
 
-    return {
-      verdict: match[1].toUpperCase() as 'PASS' | 'FAIL',
-      rationale: match[2].trim(),
-      raw,
-      source,
-    };
+    // No pattern matched
+    return null;
   }
 }

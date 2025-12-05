@@ -1,9 +1,11 @@
 // @lifecycle canonical - Initializes shared dependencies for downstream stages.
 import { BasePipelineStage } from '../stage.js';
+import { GateEnforcementAuthority } from '../decisions/index.js';
 
+import type { ChainSessionService } from '../../../chain-session/types.js';
+import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { Logger } from '../../../logging/index.js';
 import type { MetricsCollector } from '../../../metrics/index.js';
-import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
 
 type MetricsProvider = () => MetricsCollector | undefined;
@@ -21,6 +23,7 @@ export class DependencyInjectionStage extends BasePipelineStage {
 
   constructor(
     private readonly temporaryGateRegistry: TemporaryGateRegistry,
+    private readonly chainSessionManager: ChainSessionService,
     private readonly frameworkEnabledProvider: FrameworkEnabledProvider | null,
     private readonly metricsProvider: MetricsProvider | null,
     private readonly pipelineVersion: string,
@@ -35,6 +38,12 @@ export class DependencyInjectionStage extends BasePipelineStage {
     const frameworkEnabled = this.frameworkEnabledProvider?.() ?? false;
     const analyticsService = this.metricsProvider?.();
 
+    // Initialize gate enforcement authority for downstream stages
+    context.gateEnforcement = new GateEnforcementAuthority(
+      this.chainSessionManager,
+      this.logger
+    );
+
     context.metadata['pipelineDependencies'] = {
       frameworkEnabled,
       analyticsService,
@@ -44,8 +53,7 @@ export class DependencyInjectionStage extends BasePipelineStage {
 
     if (!context.metadata['executionOptions']) {
       context.metadata['executionOptions'] = {
-        apiValidation: context.hasApiValidation(),
-        timeoutMs: context.mcpRequest.timeout,
+        llmValidation: context.hasLlmValidation(),
         options: context.mcpRequest.options,
       };
     }
@@ -53,6 +61,7 @@ export class DependencyInjectionStage extends BasePipelineStage {
     this.logExit({
       frameworkEnabled,
       analyticsAttached: Boolean(analyticsService),
+      gateEnforcementInitialized: true,
     });
   }
 }

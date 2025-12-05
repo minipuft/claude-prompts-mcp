@@ -38,26 +38,20 @@ const PROMPT_MANAGER_ACTION_MAP = new Map<PromptManagerActionId, ActionDescripto
   PROMPT_MANAGER_ACTIONS.map((action) => [action.id as PromptManagerActionId, action])
 );
 
-const LEGACY_ACTION_ALIASES: Record<string, string> = {
-  create_prompt: 'create',
-  create_template: 'create',
-};
-
-const BLOCKED_DEPRECATED_ACTIONS = new Set<PromptManagerActionId>(['create_prompt', 'create_template']);
-
 const GOAL_KEYWORDS: Array<{ keywords: RegExp; actions: PromptManagerActionId[] }> = [
   {
     keywords: /gate|quality|review/i,
-    actions: ['analyze_gates', 'suggest_temporary_gates', 'update'],
+    actions: ['analyze_gates', 'update'],
   },
-  { keywords: /temporary/i, actions: ['suggest_temporary_gates'] },
-  { keywords: /create|add|new/i, actions: ['create', 'create_prompt', 'create_template'] },
+  { keywords: /create|add|new/i, actions: ['create'] },
   { keywords: /list|discover|catalog|show/i, actions: ['list'] },
-  { keywords: /modify|edit|section/i, actions: ['modify', 'update'] },
+  { keywords: /modify|edit|section/i, actions: ['update'] },
   { keywords: /delete|remove/i, actions: ['delete'] },
-  { keywords: /migrate|convert/i, actions: ['migrate_type'] },
   { keywords: /reload|refresh/i, actions: ['reload'] },
 ];
+
+// Legacy aliases fully retired; kept empty to avoid undefined references in summaries/warnings.
+const LEGACY_ACTION_ALIASES: Record<string, string> = {};
 
 /**
  * Consolidated Prompt Manager - Modular Architecture
@@ -188,13 +182,6 @@ export class ConsolidatedPromptManager {
     recordActionInvocation('prompt_manager', action, 'received');
 
     try {
-      if (BLOCKED_DEPRECATED_ACTIONS.has(action) && args.allow_legacy !== true) {
-        const canonical = LEGACY_ACTION_ALIASES[action] ?? 'guide';
-        throw new ValidationError(
-          `❌ The action "${action}" has been retired.\n\nUse action="${canonical}" instead or run action:"guide" for assistance.\nSet allow_legacy:true only if you must temporarily call this legacy path.`
-        );
-      }
-
       let response: ToolResponse;
 
       switch (action) {
@@ -202,20 +189,8 @@ export class ConsolidatedPromptManager {
           response = await this.createPrompt(args);
           break;
 
-        case 'create_prompt':
-          response = await this.createBasicPrompt(args);
-          break;
-
-        case 'create_template':
-          response = await this.createFrameworkTemplate(args);
-          break;
-
         case 'analyze_type':
           response = await this.analyzePromptType(args);
-          break;
-
-        case 'migrate_type':
-          response = await this.migratePromptType(args);
           break;
 
         case 'update':
@@ -226,10 +201,6 @@ export class ConsolidatedPromptManager {
           response = await this.deletePrompt(args);
           break;
 
-        case 'modify':
-          response = await this.modifyPrompt(args);
-          break;
-
         case 'reload':
           response = await this.reloadPrompts(args);
           break;
@@ -238,12 +209,12 @@ export class ConsolidatedPromptManager {
           response = await this.listPrompts(args);
           break;
 
-        case 'analyze_gates':
-          response = await this.analyzePromptGates(args);
+        case 'inspect':
+          response = await this.inspectPrompt(args);
           break;
 
-        case 'suggest_temporary_gates':
-          response = await this.suggestTemporaryGates(args);
+        case 'analyze_gates':
+          response = await this.analyzePromptGates(args);
           break;
 
         case 'guide':
@@ -319,8 +290,8 @@ export class ConsolidatedPromptManager {
       if (promptData.gateConfiguration.include) {
         response += `- Include Gates: ${promptData.gateConfiguration.include.join(', ')}\n`;
       }
-      if (promptData.gateConfiguration.temporary_gates) {
-        response += `- Temporary Gates: ${promptData.gateConfiguration.temporary_gates.length} defined\n`;
+      if (promptData.gateConfiguration.inline_gate_definitions) {
+        response += `- Inline Gate Definitions: ${promptData.gateConfiguration.inline_gate_definitions.length} defined\n`;
       }
     } else if (this.semanticAnalyzer.isLLMEnabled()) {
       // Suggest gate configuration for prompts without gates (only when API analysis is enabled)
@@ -568,7 +539,6 @@ export class ConsolidatedPromptManager {
     result += `\n\n💡 **Usage Tips**:\n`;
     result += `• Use \`>>prompt_id\` to execute prompts\n`;
     result += `• Use \`analyze_type\` to get type recommendations\n`;
-    result += `• Use \`migrate_type\` to convert between prompt/template\n`;
 
     return {
       content: [{ type: 'text' as const, text: result }],
@@ -593,7 +563,7 @@ export class ConsolidatedPromptManager {
     const analysis = await this.promptAnalyzer.analyzePrompt(prompt);
 
     let recommendation = `🔍 **Prompt Type Analysis**: ${prompt.name}\n\n`;
-    recommendation += `📊 **Current Execution Type**: ${analysis.executionType}\n`;
+    recommendation += `📊 **Normalized Execution Type**: ${analysis.executionType}\n`;
     recommendation += `🧠 **Framework Recommended**: ${analysis.requiresFramework ? 'Yes' : 'No'}\n\n`;
 
     recommendation += `📋 **Analysis Details**:\n`;
@@ -603,15 +573,7 @@ export class ConsolidatedPromptManager {
 
     recommendation += `\n🔄 **Recommendations**:\n`;
 
-    if (analysis.executionType === 'prompt' && analysis.requiresFramework) {
-      recommendation += `⬆️ **Consider upgrading to template**: This prompt would benefit from framework guidance\n`;
-      recommendation += `💡 **Migration**: Use \`migrate_type\` action to convert to template\n`;
-    } else if (analysis.executionType === 'template' && !analysis.requiresFramework) {
-      recommendation += `⬇️ **Consider simplifying to prompt**: This might be over-engineered for its use case\n`;
-      recommendation += `💡 **Migration**: Use \`migrate_type\` action to convert to basic prompt\n`;
-    } else {
-      recommendation += `✅ **Well-aligned**: Current execution type matches content appropriately\n`;
-    }
+    recommendation += `✅ **Well-aligned**: Current execution type matches content appropriately\n`;
 
     if (analysis.suggestedGates.length > 0) {
       recommendation += `\n🔒 **Suggested Quality Gates**: ${analysis.suggestedGates.join(', ')}\n`;
@@ -623,26 +585,11 @@ export class ConsolidatedPromptManager {
     };
   }
 
-  // Additional helper methods (maintaining original API)
-  private async createBasicPrompt(args: any): Promise<ToolResponse> {
-    // Implementation delegated to createPrompt with specific mode
-    return this.createPrompt({
-      ...args,
-      executionMode: 'prompt',
-    });
-  }
-
-  private async createFrameworkTemplate(args: any): Promise<ToolResponse> {
-    // Implementation delegated to createPrompt with framework context
-    return this.createPrompt({
-      ...args,
-      executionMode: 'template',
-    });
-  }
-
-  private async migratePromptType(args: any): Promise<ToolResponse> {
-    // Simplified implementation - could be expanded with migration module
-    validateRequiredFields(args, ['id', 'target_type']);
+  /**
+   * Inspect a single prompt by id.
+   */
+  private async inspectPrompt(args: any): Promise<ToolResponse> {
+    validateRequiredFields(args, ['id']);
 
     const prompt = this.convertedPrompts.find((p) => p.id === args.id);
     if (!prompt) {
@@ -652,32 +599,32 @@ export class ConsolidatedPromptManager {
       };
     }
 
+    const classification = await this.promptAnalyzer.analyzePrompt(prompt);
+    const gateConfig = prompt.gateConfiguration;
+
+    let response = `🔍 **Prompt Inspect**: ${prompt.name} (\`${prompt.id}\`)\n\n`;
+    response += `⚡ **Type**: ${classification.executionType}\n`;
+    response += `🧠 **Requires Framework**: ${classification.requiresFramework ? 'Yes' : 'No'}\n`;
+    if (prompt.description) {
+      response += `📝 **Description**: ${prompt.description}\n`;
+    }
+    if (prompt.arguments?.length) {
+      response += `🔧 **Arguments**: ${prompt.arguments.map((arg: any) => arg.name).join(', ')}\n`;
+    }
+    if (prompt.chainSteps?.length) {
+      response += `🔗 **Chain Steps**: ${prompt.chainSteps.length}\n`;
+    }
+    if (gateConfig) {
+      response += `🛡️ **Gates**: ${JSON.stringify(gateConfig)}\n`;
+    }
+
     return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `🔄 Migration from ${prompt.id} to ${args.target_type} would be implemented here`,
-        },
-      ],
+      content: [{ type: 'text' as const, text: response }],
       isError: false,
     };
   }
 
-  private async modifyPrompt(args: any): Promise<ToolResponse> {
-    // Simplified implementation - full modify logic could be in operations module
-    validateRequiredFields(args, ['id', 'section_name', 'new_content']);
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `✏️ **Section Modified**: ${args.section_name} in ${args.id}`,
-        },
-      ],
-      isError: false,
-    };
-  }
-
+  // Additional helper methods (maintaining original API)
   private async reloadPrompts(args: any): Promise<ToolResponse> {
     const reason = args.reason || 'Manual reload requested';
 
@@ -705,16 +652,10 @@ export class ConsolidatedPromptManager {
   }
 
   private getExecutionTypeIcon(executionType: string): string {
-    switch (executionType) {
-      case 'prompt':
-        return '⚡';
-      case 'template':
-        return '🧠';
-      case 'chain':
-        return '🔗';
-      default:
-        return '❓';
+    if (executionType === 'chain') {
+      return '🔗';
     }
+    return '⚡';
   }
 
   private async handleSystemRefresh(fullRestart: boolean = false, reason: string): Promise<void> {
@@ -741,71 +682,35 @@ export class ConsolidatedPromptManager {
 
     const analysis = await this.gateAnalyzer.analyzePromptForGates(prompt);
 
-    let response = `🔒 **Gate Analysis**: ${prompt.name}\n\n`;
-    response += `📊 **Analysis Summary**:\n`;
-    response += `- **Confidence**: ${Math.round(analysis.confidence * 100)}%\n`;
-    response += `- **Recommended Gates**: ${analysis.recommendedGates.length}\n`;
-    response += `- **Suggested Temporary Gates**: ${analysis.suggestedTemporaryGates.length}\n\n`;
+    const totalGatesCount =
+      analysis.recommendedGates.length + analysis.suggestedTemporaryGates.length;
 
-    if (analysis.recommendedGates.length > 0) {
-      response += `🎯 **Recommended Persistent Gates**:\n`;
+    let response = `Gate Analysis: ${prompt.name}\n\n`;
+
+    // Consolidated gates section
+    if (totalGatesCount > 0) {
+      response += `Recommended Gates (${totalGatesCount} total):\n`;
+
+      // List persistent gates
       analysis.recommendedGates.forEach((gate) => {
-        response += `- ${gate}\n`;
+        response += `• ${gate}\n`;
       });
-      response += `\n`;
-    }
 
-    if (analysis.suggestedTemporaryGates.length > 0) {
-      response += `⚡ **Suggested Temporary Gates**:\n`;
+      // List temporary gates with scope indicators
       analysis.suggestedTemporaryGates.forEach((gate) => {
-        response += `- **${gate.name}** (${gate.type}, ${gate.scope})\n`;
-        response += `  ${gate.description}\n`;
+        response += `• ${gate.name} (temporary, ${gate.scope} scope)\n`;
       });
+
       response += `\n`;
+    } else {
+      response += `No specific gate recommendations for this prompt.\n\n`;
     }
 
-    if (analysis.reasoning.length > 0) {
-      response += `🧠 **Analysis Reasoning**:\n`;
-      analysis.reasoning.forEach((reason, i) => {
-        response += `${i + 1}. ${reason}\n`;
-      });
-      response += `\n`;
-    }
-
-    response += `📋 **Suggested Gate Configuration**:\n`;
+    // Gate configuration JSON
+    response += `Gate Configuration:\n`;
     response += `\`\`\`json\n${JSON.stringify(analysis.gateConfigurationPreview, null, 2)}\n\`\`\`\n`;
 
     return { content: [{ type: 'text' as const, text: response }], isError: false };
-  }
-
-  /**
-   * Suggest temporary gates for execution context
-   */
-  private async suggestTemporaryGates(args: any): Promise<ToolResponse> {
-    validateRequiredFields(args, ['execution_context']);
-
-    const context = args.execution_context;
-    const suggestedGates = await this.gateAnalyzer.suggestGatesForContext(context);
-
-    let response = `⚡ **Temporary Gate Suggestions**\n\n`;
-    response += `📋 **Context**: ${context.executionType} execution in ${context.category} category\n`;
-    response += `🎚️ **Complexity**: ${context.complexity}\n\n`;
-
-    if (suggestedGates.length > 0) {
-      response += `🔒 **Suggested Gates**:\n`;
-      suggestedGates.forEach((gate, i) => {
-        response += `${i + 1}. ${gate}\n`;
-      });
-    } else {
-      response += `ℹ️ No specific gate suggestions for this context - default gates will apply.\n`;
-    }
-
-    response += `\n💡 **Usage**: Use these suggestions when creating or updating prompts to ensure appropriate quality gates are applied.\n`;
-
-    return {
-      content: [{ type: 'text' as const, text: response }],
-      isError: false,
-    };
   }
 
   private async guidePromptActions(args: any): Promise<ToolResponse> {

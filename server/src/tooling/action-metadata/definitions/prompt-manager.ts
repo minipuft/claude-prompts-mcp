@@ -1,163 +1,121 @@
 // @lifecycle canonical - Prompt manager action metadata definitions.
-import type {
-  PromptManagerMetadataData,
-  ToolMetadata,
-} from "./types.js";
+import {
+  prompt_managerCommands,
+  prompt_managerParameters,
+} from '../../../tooling/contracts/_generated/prompt_manager.generated.js';
+import {
+  contractToCommandDescriptors,
+  contractToParameterDescriptors,
+} from '../../contracts/adapter.js';
+
+import type { PromptManagerMetadataData, ToolMetadata, ParameterDescriptor } from './types.js';
+import type { prompt_managerParamName } from '../../../tooling/contracts/_generated/prompt_manager.generated.js';
 
 const promptManagerActions = [
   {
-    id: "create",
-    displayName: "Create Prompt (auto)",
-    category: "lifecycle",
-    status: "working",
-    requiredArgs: ["id", "name", "description", "user_message_template"],
-    description: "Create or overwrite a prompt, allowing gate_configuration inline.",
+    id: 'create',
+    displayName: 'Create Prompt',
+    category: 'lifecycle',
+    status: 'working',
+    requiredArgs: ['id', 'name', 'description', 'user_message_template'],
+    description: 'Create or overwrite a prompt or chain with gate_configuration inline.',
     issues: [],
   },
   {
-    id: "create_prompt",
-    displayName: "Create Prompt (explicit)",
-    category: "lifecycle",
-    status: "deprecated",
-    requiredArgs: ["id", "name", "description", "user_message_template"],
-    description: "Same as create but forces prompt tier.",
-    issues: [
-      {
-        severity: "info",
-        summary: "Redundant with create",
-        details: "Separate verb kept for backwards compatibility; candidate for consolidation.",
-      },
-    ],
+    id: 'update',
+    displayName: 'Update Prompt',
+    category: 'lifecycle',
+    status: 'working',
+    requiredArgs: ['id'],
+    description: 'Full metadata replacement including gate_configuration.',
   },
   {
-    id: "create_template",
-    displayName: "Create Template",
-    category: "lifecycle",
-    status: "deprecated",
-    requiredArgs: ["id", "name", "description", "user_message_template"],
-    description: "Creates framework-heavy templates; duplicates create path.",
-    issues: [
-      {
-        severity: "info",
-        summary: "Potentially redundant",
-        details: "Should merge into create once guides steer authors toward template usage.",
-      },
-    ],
+    id: 'delete',
+    displayName: 'Delete Prompt',
+    category: 'lifecycle',
+    status: 'working',
+    requiredArgs: ['id'],
+    description: 'Removes prompt and cleans empty categories.',
   },
   {
-    id: "update",
-    displayName: "Update Prompt",
-    category: "lifecycle",
-    status: "working",
-    requiredArgs: ["id"],
-    description: "Full metadata replacement including gate_configuration.",
-  },
-  {
-    id: "delete",
-    displayName: "Delete Prompt",
-    category: "lifecycle",
-    status: "working",
-    requiredArgs: ["id"],
-    description: "Removes prompt and cleans empty categories.",
-  },
-  {
-    id: "list",
-    displayName: "List Prompts",
-    category: "discovery",
-    status: "working",
+    id: 'list',
+    displayName: 'List Prompts',
+    category: 'discovery',
+    status: 'working',
     requiredArgs: [],
-    description: "Filter/search interface powered by semantic analyzer.",
+    description: 'Filter/search interface powered by semantic analyzer.',
   },
   {
-    id: "reload",
-    displayName: "Reload Prompts",
-    category: "operations",
-    status: "working",
+    id: 'reload',
+    displayName: 'Reload Prompts',
+    category: 'operations',
+    status: 'working',
     requiredArgs: [],
-    description: "Hot reload or full restart of prompt registry.",
+    description: 'Hot reload or full restart of prompt registry.',
   },
   {
-    id: "modify",
-    displayName: "Modify Section",
-    category: "editing",
-    status: "needs-structure",
-    requiredArgs: ["id", "section_name", "new_content"],
-    description: "Targets a single metadata section.",
-    issues: [
-      {
-        severity: "warning",
-        summary: "Section editing errors",
-        details: "Fails with 'Missing required fields' even when payload includes documented keys; schema requires clarification.",
-      },
-    ],
+    id: 'inspect',
+    displayName: 'Inspect Prompt',
+    category: 'discovery',
+    status: 'working',
+    requiredArgs: ['id'],
+    description: 'Display prompt details, arguments, gates, and chain steps for a single prompt.',
+    issues: [],
   },
   {
-    id: "analyze_type",
-    displayName: "Analyze Prompt Type",
-    category: "analysis",
-    status: "working",
-    requiredArgs: ["id"],
-    description: "Runs semantic analyzer to recommend prompt/template/chain tier.",
+    id: 'analyze_type',
+    displayName: 'Analyze Prompt Type',
+    category: 'analysis',
+    status: 'working',
+    requiredArgs: ['id'],
+    description:
+      'Runs semantic analyzer to recommend single vs chain execution with % modifier hints.',
   },
   {
-    id: "migrate_type",
-    displayName: "Migrate Prompt Type",
-    category: "lifecycle",
-    status: "needs-parameter",
-    requiredArgs: ["id", "target_type"],
-    description: "Intended to convert prompts between prompt/template/chain modes.",
-    issues: [
-      {
-        severity: "warning",
-        summary: "Parameter validation failure",
-        details: "Throws 'Parameter validation failed' even when target_type is provided.",
-      },
-    ],
+    id: 'analyze_gates',
+    displayName: 'Analyze Gates',
+    category: 'analysis',
+    status: 'working',
+    requiredArgs: ['id'],
+    description: 'Suggests gate configurations via GateAnalyzer.',
   },
   {
-    id: "analyze_gates",
-    displayName: "Analyze Gates",
-    category: "analysis",
-    status: "working",
-    requiredArgs: ["id"],
-    description: "Suggests gate configurations via GateAnalyzer.",
-  },
-  {
-    id: "suggest_temporary_gates",
-    displayName: "Suggest Temporary Gates",
-    category: "analysis",
-    status: "needs-context",
-    requiredArgs: ["execution_context"],
-    description: "Generates inline gate suggestions for dynamic runs.",
-    issues: [
-      {
-        severity: "warning",
-        summary: "Execution context payload complexity",
-        details: "Fails fast when execution_context object is missing nested fields; no friendly errors.",
-      },
-    ],
-  },
-  {
-    id: "guide",
-    displayName: "Guide",
-    category: "discovery",
-    status: "working",
+    id: 'guide',
+    displayName: 'Guide',
+    category: 'discovery',
+    status: 'working',
     requiredArgs: [],
-    description: "Explains available actions, expected arguments, and known risks using metadata-driven summaries.",
+    description:
+      'Explains available actions, expected arguments, and known risks using metadata-driven summaries.',
   },
 ] as const;
 
-export type PromptManagerActionId = (typeof promptManagerActions)[number]["id"];
+export type PromptManagerActionId = (typeof promptManagerActions)[number]['id'];
+
+const promptManagerContract = {
+  tool: 'prompt_manager',
+  version: 1,
+  summary:
+    'Prompt and chain lifecycle management (create, update, list, analyze, reload, delete). One action per call—include `action` plus the fields for that operation.',
+  parameters: prompt_managerParameters,
+  commands: prompt_managerCommands,
+};
+
+const parameterDescriptors: ParameterDescriptor<prompt_managerParamName>[] =
+  contractToParameterDescriptors<prompt_managerParamName>(promptManagerContract);
+
+const commandDescriptors = contractToCommandDescriptors(promptManagerContract);
 
 export const promptManagerMetadata: ToolMetadata<PromptManagerMetadataData> = {
-  tool: "prompt_manager",
-  version: 2,
+  tool: 'prompt_manager',
+  version: 1, // Matches contract version
   notes: [
-    "Inventory generated automatically from action descriptors.",
-    "create/create_prompt/create_template share identical paths and are candidates for consolidation once guides are live.",
-    "modify/migrate_type/suggest_temporary_gates remain high-risk entry points pending guide instrumentation.",
+    'Parameters sourced from contracts/_generated.',
+    'Actions inventory maintained separately for guide/telemetry.',
   ],
   data: {
     actions: promptManagerActions,
+    parameters: parameterDescriptors,
+    commands: commandDescriptors,
   },
 };

@@ -1,6 +1,6 @@
 // @lifecycle canonical - Barrel exports for the prompt guidance subsystem.
 /**
- * Prompt Guidance System Index - Phase 3 Implementation
+ * Prompt Guidance System Index - Implementation
  *
  * Central exports for the prompt guidance system that provides intelligent
  * methodology integration for MCP prompts.
@@ -15,28 +15,27 @@
 export {
   SystemPromptInjector,
   createSystemPromptInjector,
-  type SystemPromptInjectorConfig
+  type SystemPromptInjectorConfig,
 } from './system-prompt-injector.js';
 
 export {
   MethodologyTracker,
   createMethodologyTracker,
   type MethodologyTrackerConfig,
-  type MethodologyTrackerEvents
+  type MethodologyTrackerEvents,
 } from './methodology-tracker.js';
 
 export {
   TemplateEnhancer,
   createTemplateEnhancer,
   type TemplateEnhancerConfig,
-  type TemplateEnhancementContext
 } from './template-enhancer.js';
 
 // Unified prompt guidance service
 export {
   PromptGuidanceService,
   createPromptGuidanceService,
-  type PromptGuidanceServiceConfig
+  type PromptGuidanceServiceConfig,
 } from './service.js';
 
 // Service-specific types (to avoid conflicts with types/index.js)
@@ -44,13 +43,12 @@ export type { PromptGuidanceResult as ServicePromptGuidanceResult } from './serv
 
 // Re-export relevant types from the types system
 export type {
-  SystemPromptInjectionResult,
-  TemplateEnhancementResult,
+  MethodologyHealth,
   MethodologyState,
   MethodologySwitchRequest,
-  MethodologyHealth,
   PersistedMethodologyState,
-  TemplateProcessingGuidance,
   PromptGuidanceConfig,
-  PromptGuidanceResult
+  PromptGuidanceResult,
+  SystemPromptInjectionResult,
+  TemplateProcessingGuidance,
 } from '../types/index.js';

@@ -3,8 +3,8 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
-import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 
 /**
  * Pipeline Stage: Gate Review Rendering
@@ -45,6 +45,13 @@ export class GateReviewStage extends BasePipelineStage {
       return;
     }
 
+    context.sessionContext = context.sessionContext
+      ? {
+          ...context.sessionContext,
+          pendingReview,
+        }
+      : context.sessionContext;
+
     try {
       const chainContext = this.chainSessionManager.getChainContext(sessionId);
       const renderResult = await this.chainOperatorExecutor.renderStep({
@@ -72,7 +79,16 @@ export class GateReviewStage extends BasePipelineStage {
         generatedAt: Date.now(),
       };
 
-      context.metadata['gateReviewCallToAction'] = renderResult.callToAction;
+      context.state.gates.reviewCallToAction = renderResult.callToAction;
+
+      // Record diagnostic for gate review rendering
+      context.diagnostics.info(this.name, 'Gate review step rendered', {
+        sessionId,
+        gateIds: pendingReview.gateIds,
+        attemptCount: pendingReview.attemptCount,
+        maxAttempts: pendingReview.maxAttempts,
+        contentLength: renderResult.content.length,
+      });
 
       this.logExit({
         renderedGateReview: true,

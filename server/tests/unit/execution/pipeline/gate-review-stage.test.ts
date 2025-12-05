@@ -57,7 +57,12 @@ describe('GateReviewStage', () => {
     );
     expect(context.executionResults?.content).toContain('Gate review content');
     expect(context.executionResults?.metadata?.callToAction).toContain('GATE_REVIEW');
-    expect(context.metadata['gateReviewCallToAction']).toContain('GATE_REVIEW');
+    expect(context.state.gates.reviewCallToAction).toContain('GATE_REVIEW');
+    expect(context.sessionContext?.pendingReview).toEqual(
+      expect.objectContaining({
+        gateIds: ['inline_gate_focus'],
+      })
+    );
   });
 
   test('skips when no pending review data exists', async () => {

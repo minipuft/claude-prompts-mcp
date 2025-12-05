@@ -148,7 +148,7 @@ Every template can declare reusable gates directly inside the Markdown file. Add
   "include": ["technical-accuracy", "code-quality"],
   "exclude": ["research-quality"],
   "framework_gates": true,
-  "temporary_gates": [
+  "inline_gate_definitions": [
     {
       "name": "Inline Project Checklist",
       "type": "quality",
@@ -166,10 +166,16 @@ During loading the server strips this section from the rendered template, stores
 
 - `include`: canonical gate IDs merged with category auto-gates and anything the chain planner adds later.
 - `exclude`: removes specific gates even if they are auto-assigned for the category.
-- `framework_gates`: toggle methodology gates on/off per prompt when `system_control` would otherwise enable them globally.
-- `temporary_gates`: define inline guidance or validation rules without resorting to the symbolic `::` operator. These behave exactly like temporary gates created via `prompt_engine`.
-- `gate_scope`: fine-tune whether a chain step should share execution/session gates or keep them step-local (scope now determines propagation automatically).
+- `framework_gates`: toggle methodology gates on/off for this prompt's default behavior. **For runtime control**, use `%` modifiers instead (`%clean`, `%guided`, `%lean`, `%framework`).
+- `inline_gate_definitions`: define inline guidance or validation rules for this specific prompt. Supply either a slug (`"quality-check"`), a `{ "template": "quality-check" }` shorthand, or a minimal object with criteria/guidance. Matching IDs reuse canonical gates automatically, and any `id` you provide doubles as an inline reference (e.g., `:: quality-check`) so the full criteria/guidance appears in the Quality Enhancement Gates section. You can control gate scope propagation by including a `scope` field (`'execution' | 'session' | 'chain' | 'step'`) in your gate definitions.
 - `gate_verdict`: when gate reviewers pause a run, resume by sending `GATE_REVIEW: PASS/FAIL - reason` via this parameter while keeping `user_response` for the actual step output.
+
+**Template vs Runtime Distinction**:
+- **Template-level** (this Gate Configuration block): Defines default gates for this prompt
+- **Runtime parameters** (when invoking via `prompt_engine`): Use `%` modifiers for framework/gate control, or the unified `gates` parameter to add additional gates
+- Both approaches work together - template gates + runtime gates are merged during planning
+
+**Note**: The legacy `temporary_gates` parameter name is deprecated. Use `inline_gate_definitions` instead (backward compatibility maintained until v4.0.0).
 
 For chain prompts you can also attach gates directly to each `chainSteps` entry in the JSON metadata. Those per-step gates join the same planner pipeline and show up in Gate Enhancement Stage without any extra authoring work.
 
@@ -205,12 +211,12 @@ The framework instruction injector stitches the right methodology guidance into 
 - **Text references**: use `{{ref:path/to/file.md}}` to include reusable snippets from the `text-references` registry.
 - **Conditionals**: leverage Nunjucks (`{% if flags.critical %}...{% endif %}`) for optional sections.
 - **Tables & Lists**: Markdown tables render cleanly in Claude Desktop and SSE clients; align headings with the data you expect from arguments.
-- **Gate hints**: Mention quality expectations inline (e.g., “Ensure at least 3 risks are listed”). Gates (`server/dist/gates/`) enforce the same constraints when `api_validation:true` is provided alongside `gate_verdict`.
+- **Gate hints**: Mention quality expectations inline (e.g., “Ensure at least 3 risks are listed”). Gates (`server/dist/gates/`) enforce the same constraints when `llm_validation:true` is provided alongside `gate_verdict`.
 
 ## Testing & Validation
 
 1. `prompt_manager(action:"list", filter:"id:my_prompt")` to review metadata.
-2. `prompt_engine(command:">>my_prompt arg=value", api_validation=true)` to confirm tier behavior and gate results.
+2. `prompt_engine(command:">>my_prompt arg=value", llm_validation=true)` to confirm tier behavior and gate results.
 3. Inspect logs under `server/logs/` for semantic analyzer traces if the wrong tier is selected.
 4. Document unique behaviors (custom arguments, gate expectations) inside the Markdown to help future maintainers.
 

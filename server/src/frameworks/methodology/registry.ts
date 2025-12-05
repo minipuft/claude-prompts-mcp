@@ -3,16 +3,25 @@
  * Methodology Registry
  *
  * Centralized registry for loading and managing methodology guides.
- * Extracted from FrameworkManager to provide clear separation of concerns
- * and enable better methodology guide management.
+ * Uses YAML-based loading exclusively with fail-fast behavior.
+ * All methodologies must be defined in methodologies/<id>/methodology.yaml.
  */
 
 import { Logger } from '../../logging/index.js';
 import { IMethodologyGuide } from '../types/index.js';
-import { FiveW1HMethodologyGuide } from './guides/5w1h-guide.js';
-import { CAGEERFMethodologyGuide } from './guides/cageerf-guide.js';
-import { ReACTMethodologyGuide } from './guides/react-guide.js';
-import { SCAMPERMethodologyGuide } from './guides/scamper-guide.js';
+
+// Data-driven methodology system (YAML-only)
+import { createGenericGuide } from './generic-methodology-guide.js';
+import {
+  RuntimeMethodologyLoader,
+  type RuntimeMethodologyLoaderConfig,
+} from './runtime-methodology-loader.js';
+
+/**
+ * Methodology source type for tracking how a guide was loaded
+ * YAML-runtime is the only production source; 'custom' for user-provided guides
+ */
+export type MethodologySource = 'yaml-runtime' | 'custom';
 
 /**
  * Methodology registry configuration
@@ -24,6 +33,8 @@ export interface MethodologyRegistryConfig {
   customGuides?: IMethodologyGuide[];
   /** Whether to validate guides on registration */
   validateOnRegistration: boolean;
+  /** Configuration for the runtime YAML loader */
+  runtimeLoaderConfig?: Partial<RuntimeMethodologyLoaderConfig>;
 }
 
 /**
@@ -34,6 +45,8 @@ export interface MethodologyGuideEntry {
   registeredAt: Date;
   isBuiltIn: boolean;
   enabled: boolean;
+  /** How this guide was loaded */
+  source: MethodologySource;
   metadata: {
     loadTime: number;
     validationStatus: 'passed' | 'failed' | 'not_validated';
@@ -52,6 +65,7 @@ export class MethodologyRegistry {
   private logger: Logger;
   private config: MethodologyRegistryConfig;
   private initialized = false;
+  private runtimeLoader: RuntimeMethodologyLoader | null = null;
 
   constructor(logger: Logger, config: Partial<MethodologyRegistryConfig> = {}) {
     this.logger = logger;
@@ -59,7 +73,11 @@ export class MethodologyRegistry {
       autoLoadBuiltIn: config.autoLoadBuiltIn ?? true,
       customGuides: config.customGuides ?? [],
       validateOnRegistration: config.validateOnRegistration ?? true,
+      runtimeLoaderConfig: config.runtimeLoaderConfig,
     };
+
+    // RuntimeMethodologyLoader is mandatory - YAML loading is required
+    this.runtimeLoader = new RuntimeMethodologyLoader(this.config.runtimeLoaderConfig);
   }
 
   /**
@@ -100,7 +118,11 @@ export class MethodologyRegistry {
   /**
    * Register a methodology guide
    */
-  async registerGuide(guide: IMethodologyGuide, isBuiltIn: boolean = false): Promise<boolean> {
+  async registerGuide(
+    guide: IMethodologyGuide,
+    isBuiltIn: boolean = false,
+    source: MethodologySource = 'custom'
+  ): Promise<boolean> {
     const startTime = performance.now();
 
     try {
@@ -126,6 +148,7 @@ export class MethodologyRegistry {
         registeredAt: new Date(),
         isBuiltIn,
         enabled: true,
+        source,
         metadata: {
           loadTime: performance.now() - startTime,
           validationStatus: this.config.validateOnRegistration ? 'passed' : 'not_validated',
@@ -135,7 +158,7 @@ export class MethodologyRegistry {
       this.guides.set(guide.frameworkId, entry);
 
       this.logger.debug(
-        `Registered ${isBuiltIn ? 'built-in' : 'custom'} methodology guide: ${guide.frameworkName} (${guide.frameworkId})`
+        `Registered ${isBuiltIn ? 'built-in' : 'custom'} methodology guide: ${guide.frameworkName} (${guide.frameworkId}) [${source}]`
       );
 
       return true;
@@ -152,7 +175,7 @@ export class MethodologyRegistry {
     this.ensureInitialized();
 
     const entry = this.guides.get(guideId.toLowerCase());
-    if (entry && entry.enabled) {
+    if (entry?.enabled) {
       // Update last used timestamp
       entry.metadata.lastUsed = new Date();
       return entry.guide;
@@ -228,14 +251,25 @@ export class MethodologyRegistry {
     const enabledCount = entries.filter((e) => e.enabled).length;
     const builtInCount = entries.filter((e) => e.isBuiltIn).length;
 
+    // Count by source
+    const sourceDistribution: Record<MethodologySource, number> = {
+      'yaml-runtime': 0,
+      'custom': 0,
+    };
+    for (const entry of entries) {
+      sourceDistribution[entry.source]++;
+    }
+
     return {
       totalGuides: entries.length,
       enabledGuides: enabledCount,
       builtInGuides: builtInCount,
       customGuides: entries.length - builtInCount,
+      sourceDistribution,
       averageLoadTime:
         entries.reduce((sum, e) => sum + e.metadata.loadTime, 0) / entries.length || 0,
       initialized: this.initialized,
+      runtimeLoaderStats: this.runtimeLoader?.getStats() ?? null,
     };
   }
 
@@ -243,25 +277,63 @@ export class MethodologyRegistry {
 
   /**
    * Load built-in methodology guides
+   *
+   * YAML loading is mandatory with fail-fast behavior.
+   * All methodologies must be defined in methodologies/<id>/methodology.yaml.
    */
   private async loadBuiltInGuides(): Promise<void> {
-    this.logger.debug('Loading built-in methodology guides...');
+    this.logger.debug('Loading built-in methodology guides from YAML...');
 
-    const builtInGuides = [
-      new CAGEERFMethodologyGuide(),
-      new ReACTMethodologyGuide(),
-      new FiveW1HMethodologyGuide(),
-      new SCAMPERMethodologyGuide(),
-    ];
+    // Required built-in methodology IDs
+    const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
 
-    for (const guide of builtInGuides) {
-      const success = await this.registerGuide(guide, true);
-      if (!success) {
-        this.logger.warn(`Failed to register built-in guide: ${guide.frameworkName}`);
-      }
+    // Fail-fast: RuntimeMethodologyLoader is required
+    if (!this.runtimeLoader) {
+      throw new Error('RuntimeMethodologyLoader required. YAML loading is mandatory.');
     }
 
-    this.logger.info(`Loaded ${builtInGuides.length} built-in methodology guides`);
+    let loadedCount = 0;
+
+    for (const id of builtInIds) {
+      const definition = this.runtimeLoader.loadMethodology(id);
+
+      if (!definition) {
+        throw new Error(
+          `FATAL: Methodology '${id}' not found. Expected: methodologies/${id}/methodology.yaml`
+        );
+      }
+
+      const guide = createGenericGuide(definition);
+      const success = await this.registerGuide(guide, true, 'yaml-runtime');
+
+      if (!success) {
+        throw new Error(`Failed to register built-in methodology guide: ${id}`);
+      }
+
+      loadedCount++;
+      this.logger.debug(`Loaded methodology from YAML: ${id}`);
+    }
+
+    this.logger.info(`Loaded ${loadedCount} built-in methodology guides from YAML`);
+
+    // Discover and load additional methodologies from YAML
+    const discoveredIds = this.runtimeLoader.discoverMethodologies();
+    const additionalIds = discoveredIds.filter(id => !builtInIds.includes(id));
+
+    for (const id of additionalIds) {
+      try {
+        const definition = this.runtimeLoader.loadMethodology(id);
+        if (definition) {
+          const guide = createGenericGuide(definition);
+          const success = await this.registerGuide(guide, false, 'yaml-runtime');
+          if (success) {
+            this.logger.info(`Discovered additional methodology from YAML: ${id}`);
+          }
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to load discovered methodology '${id}':`, error);
+      }
+    }
   }
 
   /**
@@ -339,6 +411,17 @@ export class MethodologyRegistry {
    */
   get isInitialized(): boolean {
     return this.initialized;
+  }
+
+  /**
+   * Expose the runtime loader so other components (e.g., hot reload) can reuse
+   * the same cache and directory resolution.
+   */
+  getRuntimeLoader(): RuntimeMethodologyLoader {
+    if (!this.runtimeLoader) {
+      throw new Error('RuntimeMethodologyLoader not initialized');
+    }
+    return this.runtimeLoader;
   }
 }
 

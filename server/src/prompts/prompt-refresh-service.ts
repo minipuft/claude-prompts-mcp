@@ -1,7 +1,7 @@
 // @lifecycle canonical - Service that reloads prompts/categories on demand for MCP tools.
+import type { PromptAssetManager } from './index.js';
 import type { ConfigManager } from '../config/index.js';
 import type { McpToolsManager } from '../mcp-tools/index.js';
-import type { PromptAssetManager } from './index.js';
 import type { Category, ConvertedPrompt, PromptData } from '../types/index.js';
 
 export interface PromptReloadResult {
@@ -23,12 +23,18 @@ interface PromptReloadOptions {
  * MCP tools, API caches) so every transport observes the same prompt metadata.
  */
 export async function reloadPromptData(options: PromptReloadOptions): Promise<PromptReloadResult> {
-  const promptsFilePath = options.configManager.getResolvedPromptsFilePath(options.promptsFileOverride);
+  const promptsFilePath = options.configManager.getResolvedPromptsFilePath(
+    options.promptsFileOverride
+  );
 
   const result = await options.promptManager.loadAndConvertPrompts(promptsFilePath);
 
   if (options.mcpToolsManager) {
-    options.mcpToolsManager.updateData(result.promptsData, result.convertedPrompts, result.categories);
+    options.mcpToolsManager.updateData(
+      result.promptsData,
+      result.convertedPrompts,
+      result.categories
+    );
   }
 
   return {

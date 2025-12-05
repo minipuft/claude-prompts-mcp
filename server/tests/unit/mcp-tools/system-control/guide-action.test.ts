@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { createConsolidatedSystemControl } from '../../../../src/mcp-tools/system-control.js';
+
 import type { Logger } from '../../../../src/logging/index.js';
 
 const createLogger = (): Logger => ({

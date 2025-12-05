@@ -36,7 +36,7 @@ Recent `npm run lint:fix` attempts fail before linting due to widespread parser 
 
 - **Corrupted file headers** – many files now start with bare `/` comment markers or truncated block comments (e.g., `src/api/index.ts:1`, `src/runtime/application.ts:1`, `src/gates/constants.ts:2`).
 - **Damaged import statements** – identifiers/keywords are missing (`import  as path from 'path';` in `src/chain-session/manager.ts:13`, `src/mcp-tools/prompt-engine/core/index.ts:1`), producing “Expression expected” or “element access” parse errors.
-- **Mid-file truncation** – certain arrays/objects lost closing tokens, leading to “An element access expression should take an argument” (e.g., `src/execution/parsers/argument-schema.ts:40`, `tests/unit/execution/parsers/unified-command-parser.test.ts:51`).
+- **Mid-file truncation** – certain arrays/objects lost closing tokens, leading to “An element access expression should take an argument” (e.g., `src/execution/parsers/argument-schema.ts:40`, `tests/unit/execution/parsers/command-parser.test.ts:51`).
 
 ### Blocker Inventory (grouped by subsystem)
 

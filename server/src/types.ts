@@ -5,7 +5,16 @@
 
 // Import domain-specific types
 import type { GateDefinition } from './gates/types.js';
-import type { PromptArgument, Category, PromptData, PromptsFile, PromptFile, PromptsConfigFile, PromptsConfig } from './prompts/types.js';
+import type { InjectionConfig } from './execution/pipeline/decisions/injection/index.js';
+import type {
+  PromptArgument,
+  Category,
+  PromptData,
+  PromptsFile,
+  PromptFile,
+  PromptsConfigFile,
+  PromptsConfig,
+} from './prompts/types.js';
 
 // ===== Configuration Types =====
 
@@ -51,12 +60,12 @@ export interface TransportsConfig {
  * Analysis mode for semantic analysis
  * Mode is automatically inferred based on LLM integration configuration
  */
-export type AnalysisMode = "structural" | "semantic";
+export type AnalysisMode = 'structural' | 'semantic';
 
 /**
  * LLM provider for semantic analysis
  */
-export type LLMProvider = "openai" | "anthropic" | "custom";
+export type LLMProvider = 'openai' | 'anthropic' | 'custom';
 
 /**
  * LLM integration configuration
@@ -75,7 +84,6 @@ export interface LLMIntegrationConfig {
   /** Temperature for analysis requests */
   temperature: number;
 }
-
 
 /**
  * Semantic analysis configuration
@@ -125,6 +133,21 @@ export interface FrameworksConfig {
   enableMethodologyGates: boolean;
   /** Enable dynamic tool descriptions per methodology */
   enableDynamicToolDescriptions: boolean;
+  /**
+   * Frequency for reinjecting framework system prompt in chain steps.
+   * - 0 = step 1 only (no reinjection)
+   * - N = reappear every N steps after step 1
+   * Default: 2 (every other step)
+   */
+  systemPromptReinjectionFrequency?: number;
+}
+
+/**
+ * Configuration for the client-driven judge selection system
+ */
+export interface JudgeConfig {
+  /** Whether the judge selection system is enabled */
+  enabled: boolean;
 }
 
 /**
@@ -147,6 +170,8 @@ export interface GatesConfig {
   definitionsDirectory: string;
   /** Directory containing LLM validation templates */
   templatesDirectory: string;
+  /** Enable/disable the gate subsystem entirely */
+  enabled?: boolean;
 }
 
 export interface Config {
@@ -160,6 +185,14 @@ export interface Config {
   gates?: GatesConfig;
   /** Framework feature configuration */
   frameworks?: FrameworksConfig;
+  /**
+   * Modular injection control configuration.
+   * Controls when system prompts, gate guidance, and style guidance are injected.
+   * @see injection/config-types.ts for full schema
+   */
+  injection?: InjectionConfig;
+  /** Judge selection system configuration */
+  judge?: JudgeConfig;
   /** Chain session lifecycle configuration */
   chainSessions?: ChainSessionConfig;
   /** Transports configuration */
@@ -188,7 +221,7 @@ export interface BaseMessageContent {
  */
 export interface TextMessageContent extends BaseMessageContent {
   /** Type discriminator set to "text" */
-  type: "text";
+  type: 'text';
   /** The text content */
   text: string;
 }
@@ -202,7 +235,7 @@ export type MessageContent = TextMessageContent;
 /**
  * Role types for messages
  */
-export type MessageRole = "user" | "assistant" | "system";
+export type MessageRole = 'user' | 'assistant' | 'system';
 
 /**
  * A message in a conversation

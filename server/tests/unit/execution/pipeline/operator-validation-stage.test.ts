@@ -2,6 +2,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
 import { OperatorValidationStage } from '../../../../src/execution/pipeline/stages/03-operator-validation-stage.js';
+
 import type { FrameworkValidator } from '../../../../src/frameworks/framework-validator.js';
 import type { Logger } from '../../../../src/logging/index.js';
 
@@ -28,7 +29,12 @@ describe('OperatorValidationStage', () => {
         detectedFormat: 'symbolic',
         warnings: [],
       },
-      operators: { hasOperators: false, operatorTypes: [], operators: [], parseComplexity: 'simple' },
+      operators: {
+        hasOperators: false,
+        operatorTypes: [],
+        operators: [],
+        parseComplexity: 'simple',
+      },
     };
 
     await stage.execute(context);
@@ -59,7 +65,15 @@ describe('OperatorValidationStage', () => {
         hasOperators: true,
         operatorTypes: ['framework'],
         parseComplexity: 'simple',
-        operators: [{ type: 'framework', frameworkId: 'cageerf', normalizedId: undefined, scopeType: 'execution', temporary: false }],
+        operators: [
+          {
+            type: 'framework',
+            frameworkId: 'cageerf',
+            normalizedId: undefined,
+            scopeType: 'execution',
+            temporary: false,
+          },
+        ],
       },
       executionPlan: { frameworkOverride: 'CAGEERF' },
     } as any;
@@ -67,7 +81,9 @@ describe('OperatorValidationStage', () => {
     await stage.execute(context);
 
     expect(validator.validateAndNormalize).toHaveBeenCalledWith('cageerf', expect.any(Object));
-    expect(context.parsedCommand?.operators?.operators[0]).toMatchObject({ normalizedId: 'CAGEERF' });
+    expect(context.parsedCommand?.operators?.operators[0]).toMatchObject({
+      normalizedId: 'CAGEERF',
+    });
     expect(context.parsedCommand?.executionPlan?.frameworkOverride).toBe('CAGEERF');
     expect(context.metadata.operatorValidation).toMatchObject({
       normalizedFrameworkOperators: 1,

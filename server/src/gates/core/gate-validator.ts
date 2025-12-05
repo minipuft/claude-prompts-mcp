@@ -5,15 +5,17 @@
  */
 
 import { Logger } from '../../logging/index.js';
+import { validateCompliance } from '../../frameworks/utils/compliance-validator.js';
+
 import type { GateLoader } from './gate-loader.js';
+import type { ValidationResult } from '../../execution/types.js';
+import type { LLMIntegrationConfig } from '../../types.js';
 import type {
   LightweightGateDefinition,
   ValidationCheck,
   ValidationContext,
-  GatePassCriteria
+  GatePassCriteria,
 } from '../types.js';
-import type { ValidationResult } from '../../execution/types.js';
-import type { LLMIntegrationConfig } from '../../types.js';
 
 /**
  * Gate validation statistics
@@ -38,7 +40,7 @@ export class GateValidator {
     successfulValidations: 0,
     failedValidations: 0,
     averageValidationTime: 0,
-    retryRequests: 0
+    retryRequests: 0,
   };
   private validationTimes: number[] = [];
 
@@ -51,10 +53,7 @@ export class GateValidator {
   /**
    * Validate content against a gate
    */
-  async validateGate(
-    gateId: string,
-    context: ValidationContext
-  ): Promise<ValidationResult | null> {
+  async validateGate(gateId: string, context: ValidationContext): Promise<ValidationResult | null> {
     const startTime = Date.now();
 
     try {
@@ -75,8 +74,8 @@ export class GateValidator {
           metadata: {
             validationTime: Date.now() - startTime,
             checksPerformed: 0,
-            llmValidationUsed: false
-          }
+            llmValidationUsed: false,
+          },
         };
       }
 
@@ -98,7 +97,7 @@ export class GateValidator {
       }
 
       // Determine overall pass/fail
-      const passed = checks.length === 0 || checks.every(check => check.passed);
+      const passed = checks.length === 0 || checks.every((check) => check.passed);
 
       // Generate retry hints for failures
       const retryHints = passed ? [] : this.generateRetryHints(gate, checks);
@@ -112,8 +111,8 @@ export class GateValidator {
         metadata: {
           validationTime: Date.now() - startTime,
           checksPerformed: checks.length,
-          llmValidationUsed
-        }
+          llmValidationUsed,
+        },
       };
 
       this.logger.debug(
@@ -127,17 +126,19 @@ export class GateValidator {
         valid: false,
         passed: false,
         gateId,
-        checks: [{
-          type: 'system_error',
-          passed: false,
-          message: `Validation error: ${error instanceof Error ? error.message : String(error)}`
-        }],
+        checks: [
+          {
+            type: 'system_error',
+            passed: false,
+            message: `Validation error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         retryHints: [`Gate validation encountered an error. Please try again.`],
         metadata: {
           validationTime: Date.now() - startTime,
           checksPerformed: 0,
-          llmValidationUsed: false
-        }
+          llmValidationUsed: false,
+        },
       };
     }
   }
@@ -145,10 +146,7 @@ export class GateValidator {
   /**
    * Validate content against multiple gates
    */
-  async validateGates(
-    gateIds: string[],
-    context: ValidationContext
-  ): Promise<ValidationResult[]> {
+  async validateGates(gateIds: string[], context: ValidationContext): Promise<ValidationResult[]> {
     const startTime = Date.now();
     const results: ValidationResult[] = [];
 
@@ -190,11 +188,13 @@ export class GateValidator {
           return await this.runPatternCheck(criteria, context);
         case 'llm_self_check':
           return await this.runLLMSelfCheck(criteria, context);
+        case 'methodology_compliance':
+          return await this.runMethodologyComplianceCheck(criteria, context);
         default:
           return {
             type: criteria.type,
             passed: false,
-            message: `Unknown validation type: ${criteria.type}`
+            message: `Unknown validation type: ${criteria.type}`,
           };
       }
     } catch (error) {
@@ -202,9 +202,66 @@ export class GateValidator {
       return {
         type: criteria.type,
         passed: false,
-        message: `Check failed: ${error instanceof Error ? error.message : String(error)}`
+        message: `Check failed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+  }
+
+  /**
+   * Run methodology compliance checks using structured quality indicators when available
+   */
+  private async runMethodologyComplianceCheck(
+    criteria: GatePassCriteria,
+    context: ValidationContext
+  ): Promise<ValidationCheck> {
+    const methodology =
+      criteria.methodology ??
+      (context.metadata?.framework as string | undefined) ??
+      (context.metadata?.methodology as string | undefined) ??
+      'unknown';
+    const minimumScore = criteria.min_compliance_score ?? 0.6;
+    const severity = criteria.severity ?? 'warn';
+    const qualityIndicators =
+      (context.metadata?.qualityIndicators as Record<string, any> | undefined) ??
+      (criteria.quality_indicators as Record<string, any> | undefined);
+
+    // Build validation result using data-driven indicators when available
+    const validation =
+      qualityIndicators && Object.keys(qualityIndicators).length > 0
+        ? validateCompliance(context.content, qualityIndicators)
+        : {
+            compliant: !!methodology && context.content.toLowerCase().includes(methodology.toLowerCase()),
+            complianceScore: !!methodology && context.content.toLowerCase().includes(methodology.toLowerCase())
+              ? 0.5
+              : 0.2,
+            strengths:
+              methodology && context.content.toLowerCase().includes(methodology.toLowerCase())
+                ? [`${methodology} methodology referenced`]
+                : [],
+            improvementAreas:
+              methodology && context.content.toLowerCase().includes(methodology.toLowerCase())
+                ? []
+                : [`Consider applying ${methodology} methodology`],
+            specificSuggestions: [],
+            methodologyGaps: [],
+          };
+
+    const passed = validation.complianceScore >= minimumScore || severity === 'warn';
+
+    return {
+      type: 'methodology_compliance',
+      passed,
+      score: validation.complianceScore,
+      message: passed
+        ? 'Methodology compliance met'
+        : `Methodology compliance below threshold (${validation.complianceScore.toFixed(2)} < ${minimumScore})`,
+      details: {
+        methodology,
+        severity,
+        minimumScore,
+        validation,
+      },
+    };
   }
 
   /**
@@ -249,12 +306,12 @@ export class GateValidator {
     return {
       type: 'content_check',
       passed,
-      score: passed ? 1.0 : Math.max(0, 1 - (issues.length * 0.25)),
+      score: passed ? 1.0 : Math.max(0, 1 - issues.length * 0.25),
       message: passed ? 'Content checks passed' : issues.join('; '),
       details: {
         contentLength: content.length,
-        issuesFound: issues.length
-      }
+        issuesFound: issues.length,
+      },
     };
   }
 
@@ -285,9 +342,12 @@ export class GateValidator {
     // Keyword count checking
     if (criteria.keyword_count) {
       for (const [keyword, requiredCount] of Object.entries(criteria.keyword_count)) {
-        const matches = (content.toLowerCase().match(new RegExp(keyword.toLowerCase(), 'g')) || []).length;
+        const matches = (content.toLowerCase().match(new RegExp(keyword.toLowerCase(), 'g')) || [])
+          .length;
         if (matches < requiredCount) {
-          issues.push(`Insufficient keyword "${keyword}": found ${matches}, required ${requiredCount}`);
+          issues.push(
+            `Insufficient keyword "${keyword}": found ${matches}, required ${requiredCount}`
+          );
         }
       }
     }
@@ -297,9 +357,9 @@ export class GateValidator {
     return {
       type: 'pattern_check',
       passed,
-      score: passed ? 1.0 : Math.max(0, 1 - (issues.length * 0.3)),
+      score: passed ? 1.0 : Math.max(0, 1 - issues.length * 0.3),
       message: passed ? 'Pattern checks passed' : issues.join('; '),
-      details: { issuesFound: issues.length }
+      details: { issuesFound: issues.length },
     };
   }
 
@@ -329,12 +389,13 @@ export class GateValidator {
         type: 'llm_self_check',
         passed: true, // Auto-pass when not configured
         score: 1.0,
-        message: 'LLM validation skipped (not configured - set analysis.semanticAnalysis.llmIntegration.enabled=true)',
+        message:
+          'LLM validation skipped (not configured - set analysis.semanticAnalysis.llmIntegration.enabled=true)',
         details: {
           skipped: true,
           reason: 'LLM integration disabled in config',
-          configPath: 'config.analysis.semanticAnalysis.llmIntegration.enabled'
-        }
+          configPath: 'config.analysis.semanticAnalysis.llmIntegration.enabled',
+        },
       };
     }
 
@@ -348,8 +409,8 @@ export class GateValidator {
         details: {
           skipped: true,
           reason: 'No LLM endpoint configured',
-          configPath: 'config.analysis.semanticAnalysis.llmIntegration.endpoint'
-        }
+          configPath: 'config.analysis.semanticAnalysis.llmIntegration.endpoint',
+        },
       };
     }
 
@@ -369,20 +430,17 @@ export class GateValidator {
         configEnabled: this.llmConfig.enabled,
         endpoint: this.llmConfig.endpoint,
         templateRequested: criteria.prompt_template || 'default',
-        implementation: 'TODO: Wire LLM client from semantic analyzer'
-      }
+        implementation: 'TODO: Wire LLM client from semantic analyzer',
+      },
     };
   }
 
   /**
    * Generate retry hints based on failed checks
    */
-  private generateRetryHints(
-    gate: LightweightGateDefinition,
-    checks: ValidationCheck[]
-  ): string[] {
+  private generateRetryHints(gate: LightweightGateDefinition, checks: ValidationCheck[]): string[] {
     const hints: string[] = [];
-    const failedChecks = checks.filter(check => !check.passed);
+    const failedChecks = checks.filter((check) => !check.passed);
 
     if (failedChecks.length === 0) {
       return hints;
@@ -445,14 +503,14 @@ export class GateValidator {
     }
 
     // Retry if any validation gate failed
-    const shouldRetry = validationResults.some(result => !result.valid);
+    const shouldRetry = validationResults.some((result) => !result.valid);
 
     if (shouldRetry) {
       this.validationStats.retryRequests++;
       this.logger.debug('[GATE VALIDATOR] Retry recommended:', {
         currentAttempt,
         maxAttempts,
-        failedGates: validationResults.filter(r => !r.valid).map(r => r.gateId)
+        failedGates: validationResults.filter((r) => !r.valid).map((r) => r.gateId),
       });
     }
 
@@ -490,7 +548,7 @@ export class GateValidator {
       successfulValidations: 0,
       failedValidations: 0,
       averageValidationTime: 0,
-      retryRequests: 0
+      retryRequests: 0,
     };
     this.validationTimes = [];
     this.logger.debug('[GATE VALIDATOR] Statistics reset');
@@ -500,6 +558,10 @@ export class GateValidator {
 /**
  * Create a gate validator instance
  */
-export function createGateValidator(logger: Logger, gateLoader: GateLoader, llmConfig?: LLMIntegrationConfig): GateValidator {
+export function createGateValidator(
+  logger: Logger,
+  gateLoader: GateLoader,
+  llmConfig?: LLMIntegrationConfig
+): GateValidator {
   return new GateValidator(logger, gateLoader, llmConfig);
 }

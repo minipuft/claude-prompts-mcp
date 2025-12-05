@@ -5,8 +5,8 @@ import { BasePipelineStage } from '../stage.js';
 import type { ChainSessionService, SessionBlueprint } from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ConvertedPrompt } from '../../../types/index.js';
-import type { ExecutionContext, ExecutionPlan, ParsedCommand } from '../../context/execution-context.js';
-import type { ChainStepPrompt } from '../../operators/chain-operator-executor.js';
+import type { ExecutionContext, ParsedCommand } from '../../context/execution-context.js';
+import type { ChainStepPrompt } from '../../operators/types.js';
 import type {
   ArgumentParser,
   ExecutionContext as ArgumentExecutionContext,
@@ -15,7 +15,8 @@ import type {
   GateOperator,
   SymbolicCommandParseResult,
 } from '../../parsers/types/operator-types.js';
-import type { UnifiedCommandParser } from '../../parsers/unified-command-parser.js';
+import type { UnifiedCommandParser } from '../../parsers/command-parser.js';
+import type { ExecutionPlan } from '../../types.js';
 
 type ParsedArgumentsResult = {
   processedArgs: Record<string, any>;
@@ -54,11 +55,14 @@ export class CommandParsingStage extends BasePipelineStage {
     this.logEntry(context);
 
     if (context.isResponseOnlyMode()) {
-      this.logger.debug('[ParsingStage] Response-only mode detected - resuming chain without command', {
-        chainId: context.mcpRequest.chain_id,
-        hasUserResponse: Boolean(context.mcpRequest.user_response),
-        hasCommand: Boolean(context.mcpRequest.command),
-      });
+      this.logger.debug(
+        '[ParsingStage] Response-only mode detected - resuming chain without command',
+        {
+          chainId: context.mcpRequest.chain_id,
+          hasUserResponse: Boolean(context.mcpRequest.user_response),
+          hasCommand: Boolean(context.mcpRequest.command),
+        }
+      );
       this.restoreFromBlueprint(context);
       this.logExit({ skipped: 'Response-only session rehydrated' });
       return;
@@ -194,6 +198,7 @@ export class CommandParsingStage extends BasePipelineStage {
       convertedPrompt,
       promptArgs: resolvedArgs.processedArgs,
       inlineGateCriteria: inlineCriteria,
+      styleSelection: parseResult.executionPlan.styleSelection,
       steps: undefined,
     };
   }
@@ -205,6 +210,9 @@ export class CommandParsingStage extends BasePipelineStage {
     let commandArgs: Record<string, any> = {};
 
     const argumentInputs = parseResult.executionPlan.argumentInputs ?? [];
+
+    // Collect global gate criteria from gate operator (::)
+    const globalGateCriteria = this.collectGlobalInlineCriteria(parseResult);
 
     for (const [index, step] of parseResult.executionPlan.steps.entries()) {
       if (!step.promptId) {
@@ -221,10 +229,14 @@ export class CommandParsingStage extends BasePipelineStage {
         step.args && step.args.trim().length > 0
           ? await this.parseArgumentsSafely(step.args, convertedPrompt)
           : undefined;
+
+      // Merge step-level and global gate criteria
+      const combinedGateCriteria = [...(step.inlineGateCriteria ?? []), ...globalGateCriteria];
+
       const resolvedArgs = await this.resolveArgumentPayload(
         convertedPrompt,
         stepArgumentInput,
-        step.inlineGateCriteria,
+        combinedGateCriteria,
         fallbackArgs?.processedArgs
       );
 
@@ -246,6 +258,7 @@ export class CommandParsingStage extends BasePipelineStage {
       convertedPrompt: undefined,
       steps: stepPrompts,
       promptArgs: commandArgs,
+      styleSelection: parseResult.executionPlan.styleSelection,
     };
   }
 
@@ -368,9 +381,7 @@ export class CommandParsingStage extends BasePipelineStage {
     }
 
     let sessionId = context.getSessionId();
-    let blueprint = sessionId
-      ? this.chainSessionManager.getSessionBlueprint(sessionId)
-      : undefined;
+    let blueprint = sessionId ? this.chainSessionManager.getSessionBlueprint(sessionId) : undefined;
 
     if (!blueprint) {
       const requestedChainId = context.mcpRequest.chain_id;
@@ -380,8 +391,8 @@ export class CommandParsingStage extends BasePipelineStage {
         });
         if (session) {
           sessionId = session.sessionId;
-          context.metadata['resumeSessionId'] = session.sessionId;
-          context.metadata['resumeChainId'] = session.chainId;
+          context.state.session.resumeSessionId = session.sessionId;
+          context.state.session.resumeChainId = session.chainId;
           blueprint = session.blueprint
             ? this.cloneBlueprint(session.blueprint)
             : this.chainSessionManager.getSessionBlueprint(session.sessionId);
@@ -400,9 +411,10 @@ export class CommandParsingStage extends BasePipelineStage {
     if (blueprint.gateInstructions) {
       context.gateInstructions = blueprint.gateInstructions;
     }
-    context.metadata['resumeSessionId'] = sessionId;
-    context.metadata['resumeChainId'] = context.metadata['resumeChainId'] ?? blueprint.parsedCommand.chainId;
-    context.metadata['sessionBlueprintRestored'] = true;
+    context.state.session.resumeSessionId = sessionId;
+    context.state.session.resumeChainId =
+      context.state.session.resumeChainId ?? blueprint.parsedCommand.chainId;
+    context.state.session.isBlueprintRestored = true;
   }
 
   private cloneParsedCommand(parsedCommand: ParsedCommand): ParsedCommand {

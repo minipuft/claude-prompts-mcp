@@ -7,8 +7,10 @@
  */
 
 import { describe, expect, test, beforeEach } from '@jest/globals';
+
 import { createUnifiedCommandParser } from '../../../../src/execution/parsers/index.js';
 import { MockLogger } from '../../../helpers/test-helpers.js';
+
 import type { ConvertedPrompt } from '../../../../src/types/index.js';
 
 describe('XML Encoding Workaround - Symbolic Operators Without >> Prefix', () => {
@@ -87,10 +89,7 @@ describe('XML Encoding Workaround - Symbolic Operators Without >> Prefix', () =>
     });
 
     test('also accepts framework command WITH >> prefix', async () => {
-      const result = await parser.parseCommand(
-        '@CAGEERF >>test_prompt input="value"',
-        mockPrompts
-      );
+      const result = await parser.parseCommand('@CAGEERF >>test_prompt input="value"', mockPrompts);
 
       expect(result).toBeDefined();
       expect(result.promptId).toBe('test_prompt');
@@ -123,10 +122,7 @@ describe('XML Encoding Workaround - Symbolic Operators Without >> Prefix', () =>
 
   describe('Combined Operators work without >> prefix', () => {
     test('framework + chain operators', async () => {
-      const result = await parser.parseCommand(
-        '@CAGEERF test_prompt --> test_simple',
-        mockPrompts
-      );
+      const result = await parser.parseCommand('@CAGEERF test_prompt --> test_simple', mockPrompts);
 
       expect(result).toBeDefined();
       expect(result.promptId).toBe('test_prompt');

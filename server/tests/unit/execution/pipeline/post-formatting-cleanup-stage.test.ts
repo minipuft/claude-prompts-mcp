@@ -70,7 +70,7 @@ describe('PostFormattingCleanupStage', () => {
     const stage = new PostFormattingCleanupStage(null, registry, logger);
     const context = new ExecutionContext({ command: 'noop' });
 
-    context.metadata['executionScopeId'] = 'exec-1';
+    context.state.session.executionScopeId = 'exec-1';
     context.metadata['temporaryGateScopes'] = [
       { scope: 'step', scopeId: 'exec-1:step_1' },
       { scope: 'session', scopeId: 'session-1' },

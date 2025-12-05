@@ -3,6 +3,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
 import { ResponseFormattingStage } from '../../../../src/execution/pipeline/stages/10-formatting-stage.js';
 import { ResponseFormatter } from '../../../../src/mcp-tools/prompt-engine/processors/response-formatter.js';
+
 import type { Logger } from '../../../../src/logging/index.js';
 
 const createLogger = (): Logger => ({
@@ -23,7 +24,7 @@ describe('ResponseFormattingStage', () => {
       gates: [],
       requiresFramework: false,
       requiresSession: true,
-      apiValidationEnabled: true,
+      llmValidationEnabled: true,
       category: 'analysis',
     } as any;
     context.sessionContext = {
@@ -49,8 +50,7 @@ describe('ResponseFormattingStage', () => {
     expect(text).toContain('Gate Summary');
     expect(text).toContain('Chain: chain-demo#2');
     expect(text).toContain('✓ Chain complete (2/2)');
-    expect(text).toContain('Resume Shortcut:');
-    expect(text).toContain('API Resume: call prompt_engine');
+    expect(text).toContain('Next: Chain complete. No user_response needed.');
     expect(response.structuredContent?.chain?.id).toBe('chain-demo#2');
   });
 
@@ -64,7 +64,7 @@ describe('ResponseFormattingStage', () => {
       gates: [],
       requiresFramework: false,
       requiresSession: false,
-      apiValidationEnabled: false,
+      llmValidationEnabled: false,
       category: 'analysis',
     } as any;
     context.parsedCommand = {
@@ -88,61 +88,8 @@ describe('ResponseFormattingStage', () => {
 
     const content = context.response?.content[0].text ?? '';
     expect(content).toContain('Single prompt output');
-    expect(content).not.toContain('Validation Inputs Provided');
+    expect(content).not.toContain('Gate Inputs Provided');
     expect(context.response?.structuredContent).toBeUndefined();
   });
 
-  test('emits gate control summary when overrides are supplied', async () => {
-    const formatter = new ResponseFormatter(createLogger());
-    const stage = new ResponseFormattingStage(formatter, createLogger());
-
-    const context = new ExecutionContext({
-      command: '>>prompt',
-      api_validation: true,
-      quality_gates: ['code-quality'],
-      custom_checks: [{ name: 'Docs', description: 'Ensure documentation' }],
-      temporary_gates: [{ id: 'temp', criteria: ['Check docs'] }],
-      gate_scope: 'execution',
-    });
-    context.executionPlan = {
-      strategy: 'prompt',
-      gates: [],
-      requiresFramework: false,
-      requiresSession: false,
-      apiValidationEnabled: true,
-      category: 'analysis',
-    } as any;
-    context.parsedCommand = {
-      promptId: 'prompt',
-      rawArgs: '',
-      format: 'simple',
-      confidence: 0.9,
-      metadata: {
-        originalCommand: '>>prompt',
-        parseStrategy: 'simple',
-        detectedFormat: 'simple',
-        warnings: [],
-      },
-      convertedPrompt: { id: 'prompt' },
-    } as any;
-    context.executionResults = {
-      content: 'Gate summary test output',
-    };
-    context.metadata['requestedGateOverrides'] = {
-      apiValidation: true,
-      qualityGates: ['code-quality'],
-      customChecks: [{ name: 'Docs', description: 'Ensure documentation' }],
-      temporaryGateCount: 1,
-      gateScope: 'execution',
-    };
-
-    await stage.execute(context);
-
-    const text = context.response?.content[0].text ?? '';
-    expect(text).toContain('### Validation Inputs Provided');
-    expect(text).toContain('API Validation: Enabled');
-    expect(text).toContain('Requested Gates: code-quality');
-    expect(text).toContain('Custom Checks');
-    expect(text).toContain('Gate Scope Override: execution');
-  });
 });

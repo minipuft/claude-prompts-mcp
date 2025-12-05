@@ -10,14 +10,6 @@
  * - Configuration management
  */
 
-import {
-  CONFIG_RESTART_REQUIRED_KEYS,
-  CONFIG_VALID_KEYS,
-  SafeConfigWriter,
-  createSafeConfigWriter,
-  validateConfigInput,
-} from './config-utils.js';
-import { ToolDescriptionManager } from './tool-description-manager.js';
 import { ConfigManager } from '../config/index.js';
 import { FrameworkManager } from '../frameworks/framework-manager.js';
 import {
@@ -27,17 +19,25 @@ import {
 import { Logger } from '../logging/index.js';
 import {
   SYSTEM_CONTROL_ACTION_IDS,
+  systemControlMetadata,
   type SystemControlActionId,
 } from '../tooling/action-metadata/definitions/system-control.js';
-import { systemControlMetadata } from '../tooling/action-metadata/definitions/system-control.js';
 import { ToolResponse } from '../types/index.js';
 import { handleError as utilsHandleError } from '../utils/index.js';
+import {
+  CONFIG_RESTART_REQUIRED_KEYS,
+  CONFIG_VALID_KEYS,
+  SafeConfigWriter,
+  createSafeConfigWriter,
+  validateConfigInput,
+} from './config-utils.js';
 import { ResponseFormatter } from './prompt-engine/processors/response-formatter.js';
+import { ToolDescriptionManager } from './tool-description-manager.js';
 
-// Phase 3: Prompt guidance system integration
+// Prompt guidance system integration
 import { PromptGuidanceService } from '../frameworks/prompt-guidance/index.js';
 
-// Phase 4: Clean architecture gate performance analytics
+// Clean architecture gate performance analytics
 
 // Gates system management integration
 import { GateSystemManager } from '../gates/gate-state-manager.js';
@@ -45,9 +45,23 @@ import { GateSystemManager } from '../gates/gate-state-manager.js';
 import { MetricsCollector } from '../metrics/index.js';
 import { recordActionInvocation } from '../tooling/action-metadata/usage-tracker.js';
 
-import type { ConfigKey } from './config-utils.js';
+// Data-driven methodology system (YAML-only)
+import { getDefaultRuntimeLoader } from '../frameworks/methodology/index.js';
+
+// Injection control system
+import {
+  INJECTION_TYPES,
+  INJECTION_TYPE_DESCRIPTIONS,
+  DECISION_SOURCE_DESCRIPTIONS,
+  isSessionOverrideManagerInitialized,
+  getSessionOverrideManager,
+  initSessionOverrideManager,
+  type InjectionType,
+} from '../execution/pipeline/decisions/injection/index.js';
+
 import type { GateGuidanceRenderer } from '../gates/guidance/GateGuidanceRenderer.js';
 import type { GatePerformanceAnalyzer } from '../gates/intelligence/GatePerformanceAnalyzer.js';
+import type { ConfigKey } from './config-utils.js';
 import type { FormatterExecutionContext } from './prompt-engine/core/types.js';
 
 function createStructuredResponse(
@@ -126,9 +140,9 @@ export class ConsolidatedSystemControl {
   private mcpToolsManager?: any; // Reference to MCPToolsManager for tool updates
   private analyticsService?: MetricsCollector;
   private responseFormatter: ResponseFormatter;
-  // Phase 3: Prompt guidance service
+  // Prompt guidance service
   private promptGuidanceService?: PromptGuidanceService;
-  // Phase 4: Clean architecture gate performance analytics
+  // Clean architecture gate performance analytics
   public gatePerformanceAnalyzer?: GatePerformanceAnalyzer;
   private gateGuidanceRenderer?: GateGuidanceRenderer;
   public startTime: number = Date.now();
@@ -215,7 +229,7 @@ export class ConsolidatedSystemControl {
   }
 
   /**
-   * Set gate performance analyzer (Phase 4 - Clean Architecture)
+   * Set gate performance analyzer (- Clean Architecture)
    */
   setGatePerformanceAnalyzer(analyzer: GatePerformanceAnalyzer): void {
     this.gatePerformanceAnalyzer = analyzer;
@@ -277,7 +291,7 @@ export class ConsolidatedSystemControl {
       action,
       executionMetadata: {
         executionId: `sc-${action}-${now}`,
-        executionType: 'prompt' as const,
+        executionType: 'single' as const,
         startTime: now,
         endTime: now,
         executionTime: 0,
@@ -298,15 +312,12 @@ export class ConsolidatedSystemControl {
    * Derived calculation: Get execution mode distribution from performance trends
    */
   getExecutionsByMode(): Record<string, number> {
-    return this.systemAnalytics.performanceTrends.reduce(
-      (acc, trend) => {
-        if (trend.executionMode) {
-          acc[trend.executionMode] = (acc[trend.executionMode] || 0) + 1;
-        }
-        return acc;
-      },
-      {} as Record<string, number>
-    );
+    return this.systemAnalytics.performanceTrends.reduce((acc, trend) => {
+      if (trend.executionMode) {
+        acc[trend.executionMode] = (acc[trend.executionMode] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>);
   }
 
   /**
@@ -380,6 +391,58 @@ export class ConsolidatedSystemControl {
   }
 
   /**
+   * Persist gate enablement to config.json when requested.
+   */
+  private async persistGateConfig(enabled: boolean): Promise<string | undefined> {
+    if (!this.safeConfigWriter) {
+      return '⚠️ Persistence skipped (config writer unavailable).';
+    }
+
+    try {
+      const result = await this.safeConfigWriter.updateConfigValue('gates.enabled', String(enabled), {
+        createBackup: false,
+      });
+      if (!result.success) {
+        return `⚠️ Failed to persist gates.enabled: ${result.message || result.error}`;
+      }
+      return `📁 Persisted gates.enabled=${enabled} to config.json.`;
+    } catch (error) {
+      this.logger.warn('Failed to persist gates.enabled', error);
+      return `⚠️ Failed to persist gates.enabled: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  /**
+   * Persist framework system enablement toggles to config.json when requested.
+   */
+  private async persistFrameworkConfig(enabled: boolean): Promise<string | undefined> {
+    if (!this.safeConfigWriter) {
+      return '⚠️ Persistence skipped (config writer unavailable).';
+    }
+
+    const keys = [
+      'frameworks.enableSystemPromptInjection',
+      'frameworks.enableMethodologyGates',
+      'frameworks.enableDynamicToolDescriptions',
+    ];
+
+    try {
+      for (const key of keys) {
+        const result = await this.safeConfigWriter.updateConfigValue(key, String(enabled), {
+          createBackup: false,
+        });
+        if (!result.success) {
+          return `⚠️ Failed to persist ${key}: ${result.message || result.error}`;
+        }
+      }
+      return `📁 Persisted framework toggles (${keys.join(', ')}) to ${enabled} in config.json.`;
+    } catch (error) {
+      this.logger.warn('Failed to persist framework toggles', error);
+      return `⚠️ Failed to persist framework toggles: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  /**
    * Main action handler
    */
   public async handleAction(
@@ -437,6 +500,8 @@ export class ConsolidatedSystemControl {
         return new MaintenanceActionHandler(this);
       case 'guide':
         return new GuideActionHandler(this);
+      case 'injection':
+        return new InjectionActionHandler(this);
       default:
         throw new Error(
           `Unknown action: ${action}. Valid actions: ${SYSTEM_CONTROL_ACTION_IDS.join(', ')}`
@@ -561,6 +626,10 @@ export class ConsolidatedSystemControl {
     const currentState = this.frameworkStateManager?.getCurrentState();
     const activeFramework = currentState?.activeFramework || 'CAGEERF';
 
+    // Get available data-driven methodologies for enrichment
+    const runtimeLoader = getDefaultRuntimeLoader();
+    const methodologyIds = runtimeLoader.discoverMethodologies();
+
     let response = `📋 **Available Frameworks**\n\n`;
 
     frameworks.forEach((framework: any) => {
@@ -568,11 +637,29 @@ export class ConsolidatedSystemControl {
       const isActive = framework.id.toUpperCase() === activeFramework.toUpperCase();
       const status = isActive ? '🟢 ACTIVE' : '⚪ Available';
 
+      // Try to load data-driven methodology definition for enhanced info
+      const methodologyDef = runtimeLoader.loadMethodology(framework.id.toLowerCase());
+
       response += `**${framework.name}** ${status}\n`;
 
       if (args.show_details) {
         response += `   📝 ${framework.description}\n`;
         response += `   🎯 Methodology: ${framework.methodology}\n`;
+
+        // Add data-driven methodology info if available
+        if (methodologyDef) {
+          if (methodologyDef.methodologyGates?.length) {
+            response += `   🚧 Methodology Gates: ${methodologyDef.methodologyGates.length}\n`;
+          }
+          if (methodologyDef.phases?.processingSteps?.length) {
+            response += `   📊 Processing Steps: ${methodologyDef.phases.processingSteps.length}\n`;
+          }
+          if (methodologyDef.phases?.qualityIndicators) {
+            const indicatorCount = Object.keys(methodologyDef.phases.qualityIndicators).length;
+            response += `   ✅ Quality Indicators: ${indicatorCount} categories\n`;
+          }
+        }
+
         if (framework.executionGuidelines && framework.executionGuidelines.length > 0) {
           response += `   📋 Guidelines: ${framework.executionGuidelines
             .slice(0, 2)
@@ -586,12 +673,156 @@ export class ConsolidatedSystemControl {
       response += `\n💡 Use 'show_details: true' for more information about each framework.\n`;
     }
 
+    // Note about data-driven methodologies
+    if (methodologyIds.length > 0) {
+      response += `\n📦 Data-driven methodologies: ${methodologyIds.length} available`;
+      response += `\n🔍 Use \`operation:"list_methodologies"\` for methodology-specific details`;
+    }
+
     response += `\n🔄 Switch frameworks using: action="framework", operation="switch", framework="<name>"`;
 
     return this.createMinimalSystemResponse(response, 'list_frameworks');
   }
 
-  public async enableFrameworkSystem(args: { reason?: string }): Promise<ToolResponse> {
+  /**
+   * Inspect a specific methodology's data-driven definition
+   */
+  public async inspectMethodology(args: { methodology_id?: string }): Promise<ToolResponse> {
+    const methodologyId = args.methodology_id?.toLowerCase();
+    const runtimeLoader = getDefaultRuntimeLoader();
+
+    if (!methodologyId) {
+      // List available methodologies
+      const available = runtimeLoader.discoverMethodologies();
+      return this.createMinimalSystemResponse(
+        `📋 **Available Methodologies**\n\n` +
+          `Use \`operation:"inspect" methodology_id:"<id>"\` to inspect a specific methodology.\n\n` +
+          `Available: ${available.join(', ')}`,
+        'inspect_methodology'
+      );
+    }
+
+    const definition = runtimeLoader.loadMethodology(methodologyId);
+
+    if (!definition) {
+      const available = runtimeLoader.discoverMethodologies();
+      return this.createMinimalSystemResponse(
+        `❌ **Methodology Not Found**: \`${methodologyId}\`\n\n` +
+          `Available methodologies: ${available.join(', ')}`,
+        'inspect_methodology'
+      );
+    }
+
+    // Format methodology details
+    let response = `🔍 **Methodology: ${definition.name}**\n\n`;
+
+    response += `**ID**: ${definition.id}\n`;
+    response += `**Version**: ${definition.version || '1.0.0'}\n`;
+    response += `**Methodology**: ${definition.methodology}\n`;
+    response += `**Status**: ${definition.enabled !== false ? '✅ Enabled' : '❌ Disabled'}\n\n`;
+
+    // System prompt guidance
+    if (definition.systemPromptGuidance) {
+      response += `**System Guidance**:\n${definition.systemPromptGuidance.slice(0, 500)}${
+        definition.systemPromptGuidance.length > 500 ? '...' : ''
+      }\n\n`;
+    }
+
+    // Gates
+    if (definition.gates?.include?.length) {
+      response += `**Included Gates**: ${definition.gates.include.join(', ')}\n`;
+    }
+    if (definition.methodologyGates?.length) {
+      response += `**Methodology Gates** (${definition.methodologyGates.length}):\n`;
+      definition.methodologyGates.slice(0, 3).forEach((gate: any) => {
+        response += `  • ${gate.name} (${gate.priority || 'medium'})\n`;
+      });
+      if (definition.methodologyGates.length > 3) {
+        response += `  ... and ${definition.methodologyGates.length - 3} more\n`;
+      }
+      response += '\n';
+    }
+
+    // Methodology elements
+    if (definition.methodologyElements?.requiredSections?.length) {
+      response += `**Required Sections**: ${definition.methodologyElements.requiredSections.join(
+        ', '
+      )}\n\n`;
+    }
+
+    // Phases info
+    if (definition.phases) {
+      const processingSteps = definition.phases.processingSteps?.length || 0;
+      const executionSteps = definition.phases.executionSteps?.length || 0;
+      response += `**Processing Steps**: ${processingSteps}\n`;
+      response += `**Execution Steps**: ${executionSteps}\n`;
+
+      // Quality indicators
+      if (definition.phases.qualityIndicators) {
+        const indicatorCount = Object.keys(definition.phases.qualityIndicators).length;
+        response += `**Quality Indicators**: ${indicatorCount} categories\n`;
+      }
+      response += '\n';
+    }
+
+    // Tool descriptions
+    if (definition.toolDescriptions) {
+      response += `**Tool Description Overrides**: ${Object.keys(definition.toolDescriptions).join(
+        ', '
+      )}\n\n`;
+    }
+
+    response += `💡 Use \`action:"framework" operation:"switch" framework:"${definition.id}"\` to activate this methodology.`;
+
+    return this.createMinimalSystemResponse(response, 'inspect_methodology');
+  }
+
+  /**
+   * List all available data-driven methodologies
+   */
+  public async listMethodologiesAction(args: { show_details?: boolean }): Promise<ToolResponse> {
+    const runtimeLoader = getDefaultRuntimeLoader();
+    const methodologyIds = runtimeLoader.discoverMethodologies();
+
+    if (methodologyIds.length === 0) {
+      return this.createMinimalSystemResponse(
+        `📋 **No Methodologies Found**\n\n` +
+          `Ensure YAML files exist in \`methodologies/<id>/methodology.yaml\`.`,
+        'list_methodologies'
+      );
+    }
+
+    let response = `📋 **Available Methodologies** (${methodologyIds.length})\n\n`;
+
+    for (const id of methodologyIds) {
+      const definition = runtimeLoader.loadMethodology(id);
+      if (!definition) continue;
+
+      const status = definition.enabled !== false ? '✅' : '⚪';
+      response += `${status} **${definition.name}** (\`${definition.id}\`)\n`;
+
+      if (args.show_details) {
+        response += `   Methodology: ${definition.methodology}\n`;
+        if (definition.methodologyGates?.length) {
+          response += `   Gates: ${definition.methodologyGates.length} methodology-specific\n`;
+        }
+        if (definition.phases?.processingSteps?.length) {
+          response += `   Processing Steps: ${definition.phases.processingSteps.length}\n`;
+        }
+        response += '\n';
+      }
+    }
+
+    if (!args.show_details) {
+      response += `\n💡 Use \`show_details:true\` for more information.`;
+    }
+
+    response += `\n🔍 Use \`operation:"inspect" methodology_id:"<id>"\` for full details.`;
+
+    return this.createMinimalSystemResponse(response, 'list_methodologies');
+  }
+
+  public async enableFrameworkSystem(args: { reason?: string; persist?: boolean }): Promise<ToolResponse> {
     if (!this.frameworkStateManager) {
       throw new Error('Framework state manager not initialized');
     }
@@ -613,17 +844,24 @@ export class ConsolidatedSystemControl {
       // Method may not exist, that's ok for now
     }
 
+    const persistenceNotes: string[] = [];
+    if (args.persist) {
+      const note = await this.persistFrameworkConfig(true);
+      if (note) persistenceNotes.push(note);
+    }
+
     const response =
       `✅ **Framework System Enabled**\n\n` +
       `**Reason**: ${args.reason || 'User requested to enable framework system'}\n` +
       `**Status**: Framework system is now active\n` +
       `**Active Framework**: ${currentState.activeFramework}\n\n` +
-      `🎯 All prompt executions will now use framework-guided processing.`;
+      `🎯 All prompt executions will now use framework-guided processing.` +
+      (persistenceNotes.length ? `\n\n${persistenceNotes.join('\n')}` : '');
 
     return this.createMinimalSystemResponse(response, 'enable_framework_system');
   }
 
-  public async disableFrameworkSystem(args: { reason?: string }): Promise<ToolResponse> {
+  public async disableFrameworkSystem(args: { reason?: string; persist?: boolean }): Promise<ToolResponse> {
     if (!this.frameworkStateManager) {
       throw new Error('Framework state manager not initialized');
     }
@@ -645,12 +883,19 @@ export class ConsolidatedSystemControl {
       // Method may not exist, that's ok for now
     }
 
+    const persistenceNotes: string[] = [];
+    if (args.persist) {
+      const note = await this.persistFrameworkConfig(false);
+      if (note) persistenceNotes.push(note);
+    }
+
     const response =
       `⚠️ **Framework System Disabled**\n\n` +
       `**Reason**: ${args.reason || 'User requested to disable framework system'}\n` +
       `**Status**: Framework system is now inactive\n` +
       `**Previous Framework**: ${currentState.activeFramework}\n\n` +
-      `📝 Prompt executions will now use basic processing without framework guidance.`;
+      `📝 Prompt executions will now use basic processing without framework guidance.` +
+      (persistenceNotes.length ? `\n\n${persistenceNotes.join('\n')}` : '');
 
     return this.createMinimalSystemResponse(response, 'disable_framework_system');
   }
@@ -658,7 +903,7 @@ export class ConsolidatedSystemControl {
   /**
    * Enable gate system
    */
-  public async enableGateSystem(args: { reason?: string }): Promise<ToolResponse> {
+  public async enableGateSystem(args: { reason?: string; persist?: boolean }): Promise<ToolResponse> {
     if (!this.gateSystemManager) {
       throw new Error('Gate system manager not initialized');
     }
@@ -675,12 +920,19 @@ export class ConsolidatedSystemControl {
       args.reason || 'User requested to enable gate system'
     );
 
+    const persistenceNotes: string[] = [];
+    if (args.persist) {
+      const note = await this.persistGateConfig(true);
+      if (note) persistenceNotes.push(note);
+    }
+
     const response =
       `✅ **Gate System Enabled**\n\n` +
       `**Reason**: ${args.reason || 'User requested to enable gate system'}\n` +
       `**Status**: Gate system is now active\n` +
       `**Validation**: Quality gates will now be applied to prompt executions\n\n` +
-      `🔍 All template and chain executions will now include gate validation and guidance.`;
+      `🔍 All template and chain executions will now include gate validation and guidance.` +
+      (persistenceNotes.length ? `\n\n${persistenceNotes.join('\n')}` : '');
 
     return this.createMinimalSystemResponse(response, 'enable_gate_system');
   }
@@ -688,7 +940,7 @@ export class ConsolidatedSystemControl {
   /**
    * Disable gate system
    */
-  public async disableGateSystem(args: { reason?: string }): Promise<ToolResponse> {
+  public async disableGateSystem(args: { reason?: string; persist?: boolean }): Promise<ToolResponse> {
     if (!this.gateSystemManager) {
       throw new Error('Gate system manager not initialized');
     }
@@ -705,12 +957,19 @@ export class ConsolidatedSystemControl {
       args.reason || 'User requested to disable gate system'
     );
 
+    const persistenceNotes: string[] = [];
+    if (args.persist) {
+      const note = await this.persistGateConfig(false);
+      if (note) persistenceNotes.push(note);
+    }
+
     const response =
       `⚠️ **Gate System Disabled**\n\n` +
       `**Reason**: ${args.reason || 'User requested to disable gate system'}\n` +
       `**Status**: Gate system is now inactive\n` +
       `**Impact**: Gate validation and guidance will be skipped\n\n` +
-      `📝 Prompt executions will now skip quality gate validation.`;
+      `📝 Prompt executions will now skip quality gate validation.` +
+      (persistenceNotes.length ? `\n\n${persistenceNotes.join('\n')}` : '');
 
     return this.createMinimalSystemResponse(response, 'disable_gate_system');
   }
@@ -821,35 +1080,438 @@ export class ConsolidatedSystemControl {
       '',
       gateList,
       '',
-      "**Usage**: Specify gate names in prompt_engine's `quality_gates` parameter",
-      `**Example**: \`{ \\\"quality_gates\\\": [\"${exampleGate}\"] }\``,
+      "**Usage**: Specify gate names in prompt_engine's `gates` parameter (PREFERRED)",
+      `**Example**: \`{ \\\"gates\\\": [\"${exampleGate}\"] }\``,
+      '**Legacy**: Old `quality_gates` parameter still works but is deprecated',
     ].join('\n');
 
     return this.createMinimalSystemResponse(response, 'gate_list');
   }
 
-  public async resetMetrics(args: any): Promise<ToolResponse> {
-    throw new Error('resetMetrics method not yet implemented');
+  /**
+   * Reset analytics data
+   */
+  private resetAnalyticsData(): void {
+    this.systemAnalytics = {
+      totalExecutions: 0,
+      successfulExecutions: 0,
+      failedExecutions: 0,
+      averageExecutionTime: 0,
+      gateValidationCount: 0,
+      uptime: Date.now() - this.startTime,
+      performanceTrends: [],
+    };
   }
 
-  public async getSwitchHistory(args: any): Promise<ToolResponse> {
-    throw new Error('getSwitchHistory method not yet implemented');
+  private formatExecutionTime(time: number): string {
+    return `${Math.round(time)}ms`;
   }
 
-  public async getAnalytics(args: any): Promise<ToolResponse> {
-    throw new Error('getAnalytics method not yet implemented');
+  public async resetMetrics(args: { confirm?: boolean }): Promise<ToolResponse> {
+    if (!args.confirm) {
+      return this.createMinimalSystemResponse(
+        "❌ Metrics reset cancelled. Set 'confirm: true' to reset all switching performance metrics.",
+        'reset_metrics'
+      );
+    }
+
+    const beforeMetrics = { ...this.systemAnalytics };
+
+    this.resetAnalyticsData();
+
+    if (this.frameworkStateManager) {
+      this.frameworkStateManager.resetMetrics();
+    }
+
+    let response = `# 🔄 Metrics Reset Completed\n\n`;
+    response += `**Reset Timestamp**: ${new Date().toISOString()}\n\n`;
+
+    response += '## Metrics Before Reset\n\n';
+    response += `**Total Executions**: ${beforeMetrics.totalExecutions}\n`;
+    response += `**Successful**: ${beforeMetrics.successfulExecutions}\n`;
+    response += `**Failed**: ${beforeMetrics.failedExecutions}\n`;
+    response += `**Average Time**: ${this.formatExecutionTime(
+      beforeMetrics.averageExecutionTime
+    )}\n\n`;
+
+    response += '## Metrics After Reset\n\n';
+    response += `**Total Executions**: ${this.systemAnalytics.totalExecutions}\n`;
+    response += `**Successful**: ${this.systemAnalytics.successfulExecutions}\n`;
+    response += `**Failed**: ${this.systemAnalytics.failedExecutions}\n`;
+    response += `**Average Time**: ${this.formatExecutionTime(
+      this.systemAnalytics.averageExecutionTime
+    )}\n\n`;
+
+    response +=
+      '✅ All switching performance metrics have been reset. Framework switching monitoring will start fresh.';
+
+    return this.createMinimalSystemResponse(response, 'reset_metrics');
   }
 
-  public async restoreConfig(args: any): Promise<ToolResponse> {
-    throw new Error('restoreConfig method not yet implemented');
+  public async getSwitchHistory(args: { limit?: number }): Promise<ToolResponse> {
+    if (!this.frameworkStateManager) {
+      throw new Error('Framework state manager not initialized');
+    }
+
+    const { limit = 20 } = args;
+
+    const history = this.frameworkStateManager.getSwitchHistory(limit);
+    const currentState = this.frameworkStateManager.getCurrentState();
+
+    let response = `# 📈 Framework Switch History\n\n`;
+    response += `**Current Framework**: ${currentState.activeFramework}\n`;
+    response += `**History Entries**: ${history.length}\n\n`;
+
+    if (history.length === 0) {
+      response += 'No framework switches recorded yet.\n\n';
+    } else {
+      response += '## Recent Switches\n\n';
+
+      history.forEach((entry, index) => {
+        response += `### ${index + 1}. ${entry.from} → ${entry.to}\n\n`;
+        response += `**Timestamp**: ${entry.timestamp.toISOString()}\n`;
+        response += `**Reason**: ${entry.reason}\n\n`;
+      });
+    }
+
+    response += '---\n\n';
+    response += '**Note**: This history helps track framework usage patterns and audit changes.';
+
+    return this.createMinimalSystemResponse(response, 'switch_history');
   }
 
-  public async manageConfig(args: any): Promise<ToolResponse> {
-    throw new Error('manageConfig method not yet implemented');
+  private formatUptime(uptime: number): string {
+    const seconds = Math.floor(uptime / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
   }
 
-  public async restartServer(args: any): Promise<ToolResponse> {
-    throw new Error('restartServer method not yet implemented');
+  private formatBytes(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = bytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex++;
+    }
+    return `${Math.round(value * 100) / 100}${units[unitIndex]}`;
+  }
+
+  private getSuccessRate(): number {
+    const total = this.systemAnalytics.totalExecutions;
+    if (total === 0) return 100;
+    return Math.round((this.systemAnalytics.successfulExecutions / total) * 100);
+  }
+
+  private formatTrendContext(trend: any): string {
+    let context = '';
+    if (trend.framework) context += ` [${trend.framework}]`;
+    if (trend.executionMode) context += ` (${trend.executionMode})`;
+    if (trend.success !== undefined) context += trend.success ? ' ✓' : ' ✗';
+    return context;
+  }
+
+  private formatTrendValue(metric: string, value: number): string {
+    switch (metric) {
+      case 'executionTime':
+        return `${Math.round(value)}ms`;
+      case 'memoryDelta':
+        return `${value > 0 ? '+' : ''}${this.formatBytes(value)}`;
+      case 'successRate':
+        return `${Math.round(value * 100)}%`;
+      case 'gateValidationTime':
+        return `${Math.round(value)}ms validation`;
+      default:
+        return String(value);
+    }
+  }
+
+  public async getAnalytics(args: {
+    include_history?: boolean;
+    reset_analytics?: boolean;
+  }): Promise<ToolResponse> {
+    const { include_history = false, reset_analytics = false } = args;
+
+    if (reset_analytics) {
+      this.resetAnalyticsData();
+      return this.createMinimalSystemResponse('📊 Analytics have been reset to zero.', 'analytics');
+    }
+
+    const successRate = this.getSuccessRate();
+    const avgTime = this.formatExecutionTime(this.systemAnalytics.averageExecutionTime);
+
+    let response = '# 📊 System Analytics Report\n\n';
+
+    // Overall Performance
+    response += '## 📈 Overall Performance\n\n';
+    response += `**Total Executions**: ${this.systemAnalytics.totalExecutions}\n`;
+    response += `**Success Rate**: ${successRate}%\n`;
+    response += `**Failed Executions**: ${this.systemAnalytics.failedExecutions}\n`;
+    response += `**Average Execution Time**: ${avgTime}\n`;
+    response += `**System Uptime**: ${this.formatUptime(this.systemAnalytics.uptime)}\n\n`;
+
+    // Execution Modes
+    response += '## 🎯 Execution Mode Distribution\n\n';
+    const executionsByMode = this.getExecutionsByMode();
+    const totalModeExecutions = Object.values(executionsByMode).reduce((a, b) => a + b, 0);
+    Object.entries(executionsByMode).forEach(([mode, count]) => {
+      const percentage =
+        totalModeExecutions > 0 ? Math.round((count / totalModeExecutions) * 100) : 0;
+      response += `- **${
+        mode.charAt(0).toUpperCase() + mode.slice(1)
+      } Mode**: ${count} executions (${percentage}%)\n`;
+    });
+    response += '\n';
+
+    // Quality Gates
+    response += '## 🛡️ Quality Gate Analytics\n\n';
+    response += `**Gate Validations**: ${this.systemAnalytics.gateValidationCount}\n`;
+    response += `**Gate Adoption Rate**: ${
+      this.systemAnalytics.totalExecutions > 0
+        ? Math.round(
+            (this.systemAnalytics.gateValidationCount / this.systemAnalytics.totalExecutions) * 100
+          )
+        : 0
+    }%\n`;
+
+    // Clean architecture gate performance analytics
+    if (this.gatePerformanceAnalyzer) {
+      try {
+        const gateAnalytics = this.gatePerformanceAnalyzer.getPerformanceAnalytics();
+        response += `**Advanced Gate System**: Enabled\n`;
+        response += `**Total Gates Tracked**: ${gateAnalytics.totalGates}\n`;
+        response += `**Average Gate Execution Time**: ${Math.round(
+          gateAnalytics.avgExecutionTime
+        )}ms\n`;
+        response += `**Overall Gate Success Rate**: ${Math.round(
+          gateAnalytics.overallSuccessRate * 100
+        )}%\n`;
+
+        if (gateAnalytics.topPerformingGates.length > 0) {
+          response += `**Top Performing Gates**: ${gateAnalytics.topPerformingGates.join(', ')}\n`;
+        }
+
+        if (gateAnalytics.underperformingGates.length > 0) {
+          response += `**Needs Optimization**: ${gateAnalytics.underperformingGates.join(', ')}\n`;
+        }
+
+        if (gateAnalytics.recommendations.length > 0) {
+          response += `\n**Optimization Recommendations**:\n`;
+          gateAnalytics.recommendations.forEach((rec: string, index: number) => {
+            response += `${index + 1}. ${rec}\n`;
+          });
+        }
+      } catch (error) {
+        response += `**Advanced Gate System**: Error retrieving analytics\n`;
+      }
+    } else {
+      response += `**Advanced Gate System**: Not available\n`;
+    }
+
+    response += '\n';
+
+    // System Resources
+    if (this.systemAnalytics.memoryUsage) {
+      response += '## 💾 System Resources\n\n';
+      const mem = this.systemAnalytics.memoryUsage;
+      response += `**Heap Used**: ${this.formatBytes(mem.heapUsed)}\n`;
+      response += `**Heap Total**: ${this.formatBytes(mem.heapTotal)}\n`;
+      response += `**RSS**: ${this.formatBytes(mem.rss)}\n`;
+      response += `**External**: ${this.formatBytes(mem.external)}\n\n`;
+    }
+
+    // Performance Trends
+    if (include_history && this.systemAnalytics.performanceTrends.length > 0) {
+      response += '## 📈 Performance Trends\n\n';
+
+      // Group trends by metric type for better organization
+      const trendsByMetric = this.systemAnalytics.performanceTrends.reduce((acc, trend) => {
+        if (!acc[trend.metric]) acc[trend.metric] = [];
+        acc[trend.metric].push(trend);
+        return acc;
+      }, {} as Record<string, any[]>);
+
+      Object.entries(trendsByMetric).forEach(([metric, trends]) => {
+        const recentTrends = trends.slice(-10);
+        response += `### ${metric.charAt(0).toUpperCase() + metric.slice(1)} Trends\n`;
+        recentTrends.forEach((trend, index) => {
+          const time = new Date(trend.timestamp).toISOString().split('T')[1].split('.')[0];
+          const contextInfo = this.formatTrendContext(trend);
+          response += `${index + 1}. ${time}: ${this.formatTrendValue(
+            trend.metric,
+            trend.value
+          )}${contextInfo}\n`;
+        });
+        response += '\n';
+      });
+    }
+
+    response += `\n---\n*Generated at: ${new Date().toISOString()}*`;
+
+    return this.createMinimalSystemResponse(response, 'analytics');
+  }
+
+  private getHealthIcon(status: string): string {
+    switch (status) {
+      case 'healthy':
+        return '✅';
+      case 'warning':
+        return '⚠️';
+      case 'error':
+        return '❌';
+      case 'critical':
+        return '🚨';
+      default:
+        return '❓';
+    }
+  }
+
+  public async restoreConfig(args: {
+    backup_path?: string;
+    confirm?: boolean;
+  }): Promise<ToolResponse> {
+    if (!this.configManager) {
+      throw new Error('Configuration manager not initialized');
+    }
+
+    if (!args.confirm) {
+      return this.createMinimalSystemResponse(
+        "❌ Restore cancelled. Set 'confirm: true' to restore configuration.",
+        'restore_config'
+      );
+    }
+
+    try {
+      if (!this.safeConfigWriter) {
+        throw new Error('SafeConfigWriter not available');
+      }
+      const result = await this.safeConfigWriter.restoreFromBackup(args.backup_path || '');
+      if (result.success) {
+        return this.createMinimalSystemResponse(
+          '✅ Configuration restored successfully.',
+          'restore_config'
+        );
+      } else {
+        throw new Error(result.message || 'Failed to restore configuration.');
+      }
+    } catch (error) {
+      const result = utilsHandleError(error, 'restore_config', this.logger);
+      return createStructuredResponse(result.message, result.isError, { action: 'restore_config' });
+    }
+  }
+
+  public async manageConfig(args: {
+    config?: {
+      key: string;
+      value?: string;
+      operation: 'get' | 'set' | 'list' | 'validate';
+    };
+  }): Promise<ToolResponse> {
+    const configRequest = args.config;
+
+    if (!this.configManager) {
+      return createStructuredResponse(
+        '❌ **Configuration Manager Unavailable**',
+        { operation: 'config', error: 'config_manager_unavailable' },
+        true
+      );
+    }
+
+    try {
+      if (!configRequest) {
+        return await this.handleConfigList();
+      }
+
+      switch (configRequest.operation) {
+        case 'list':
+          return await this.handleConfigList();
+        case 'get':
+          return await this.handleConfigGet(configRequest.key);
+        case 'set':
+          return await this.handleConfigSet(configRequest.key, configRequest.value || '');
+        case 'validate':
+          return await this.handleConfigValidate(configRequest.key, configRequest.value || '');
+        default:
+          throw new Error(`Unknown config operation: ${configRequest.operation}`);
+      }
+    } catch (error) {
+      const result = utilsHandleError(error, 'config_management', this.logger);
+      return createStructuredResponse(result.message, result.isError, { action: 'config' });
+    }
+  }
+
+  public async restartServer(args: { reason?: string; confirm?: boolean }): Promise<ToolResponse> {
+    if (!args.confirm) {
+      return this.createMinimalSystemResponse(
+        "❌ Restart cancelled. Set 'confirm: true' to perform a full system restart.",
+        'restart_server'
+      );
+    }
+
+    const reason = args.reason || 'User requested restart via system_control';
+    this.logger.info(`🔄 System restart requested: ${reason}`);
+
+    if (this.onRestart) {
+      setTimeout(() => {
+        this.onRestart?.(reason).catch((err) => {
+          this.logger.error('Failed to execute restart callback:', err);
+        });
+      }, 1000);
+
+      return this.createMinimalSystemResponse(
+        `🔄 Server restart initiated.\n\n**Reason**: ${reason}\n**Status**: Restarting in 1 second...`,
+        'restart_server'
+      );
+    } else {
+      return this.createMinimalSystemResponse(
+        '⚠️ Restart callback not configured. Server cannot be restarted automatically.',
+        'restart_server'
+      );
+    }
+  }
+
+  private async handleConfigList(): Promise<ToolResponse> {
+    const config = this.configManager?.getConfig();
+    return this.createMinimalSystemResponse(
+      `📋 **Current Configuration**\n\`\`\`json\n${JSON.stringify(config, null, 2)}\n\`\`\``,
+      'config_list'
+    );
+  }
+
+  private async handleConfigGet(key: string): Promise<ToolResponse> {
+    const config = this.configManager?.getConfig();
+    const value = config
+      ? key
+          .split('.')
+          .reduce((obj: any, k) => (obj && obj[k] !== undefined ? obj[k] : undefined), config)
+      : undefined;
+    return this.createMinimalSystemResponse(`**${key}**: ${JSON.stringify(value)}`, 'config_get');
+  }
+
+  private async handleConfigSet(key: string, value: string): Promise<ToolResponse> {
+    if (!this.safeConfigWriter) throw new Error('SafeConfigWriter unavailable');
+    const result = await this.safeConfigWriter.updateConfigValue(key, value);
+    if (!result.success) {
+      throw new Error(result.message || result.error);
+    }
+    return this.createMinimalSystemResponse(`✅ Set **${key}** to \`${value}\``, 'config_set');
+  }
+
+  private async handleConfigValidate(key: string, value: string): Promise<ToolResponse> {
+    if (!this.configManager) throw new Error('Config manager unavailable');
+    const validation = validateConfigInput(key as any, value);
+    return this.createMinimalSystemResponse(
+      validation.valid
+        ? `✅ Configuration valid for **${key}**`
+        : `❌ Invalid configuration for **${key}**: ${validation.error}`,
+      'config_validate'
+    );
   }
 }
 
@@ -1100,9 +1762,17 @@ class FrameworkActionHandler extends ActionHandler {
         return await this.systemControl.disableFrameworkSystem({
           reason: args.reason,
         });
+      case 'inspect':
+        return await this.systemControl.inspectMethodology({
+          methodology_id: args.methodology_id || args.framework,
+        });
+      case 'list_methodologies':
+        return await this.systemControl.listMethodologiesAction({
+          show_details: args.show_details,
+        });
       default:
         throw new Error(
-          `Unknown framework operation: ${operation}. Valid operations: switch, list, enable, disable`
+          `Unknown framework operation: ${operation}. Valid operations: switch, list, enable, disable, inspect, list_methodologies`
         );
     }
   }
@@ -1119,10 +1789,12 @@ class GateActionHandler extends ActionHandler {
       case 'enable':
         return await this.systemControl.enableGateSystem({
           reason: args.reason,
+          persist: args.persist,
         });
       case 'disable':
         return await this.systemControl.disableGateSystem({
           reason: args.reason,
+          persist: args.persist,
         });
       case 'status':
         return await this.systemControl.getGateSystemStatus();
@@ -1175,7 +1847,9 @@ class GuideActionHandler extends ActionHandler {
       );
     } else {
       filtered.forEach((operation) => {
-        let entry = `- \`${operation.id}\` (${this.describeStatus(operation.status)}) — ${operation.description}`;
+        let entry = `- \`${operation.id}\` (${this.describeStatus(operation.status)}) — ${
+          operation.description
+        }`;
         if (operation.issues && operation.issues.length > 0) {
           entry += `\n  Issues: ${operation.issues
             .map((issue) => `${issue.severity === 'high' ? '❗' : '⚠️'} ${issue.summary}`)
@@ -1268,6 +1942,8 @@ class MaintenanceActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
     const operation = args.operation || 'default';
 
+    // TODO: Add cleanup operation to prune logs, remove not-found prompt artifacts, and resync state with the current stack once supporting hooks exist.
+    // TODO: Add diagnostics operation that searches logs for specific error topics/ids and surfaces results to LLM clients for in-tool debugging after log plumbing is in place.
     switch (operation) {
       case 'restart':
       case 'default':
@@ -1339,9 +2015,9 @@ class MaintenanceActionHandler extends ActionHandler {
 
     if (this.systemControl.systemAnalytics.memoryUsage) {
       const mem = this.systemControl.systemAnalytics.memoryUsage;
-      response += `**Memory Usage**: ${this.formatBytes(
-        mem.heapUsed
-      )}/${this.formatBytes(mem.heapTotal)}\n`;
+      response += `**Memory Usage**: ${this.formatBytes(mem.heapUsed)}/${this.formatBytes(
+        mem.heapTotal
+      )}\n`;
     }
 
     response += `\n`;
@@ -1418,7 +2094,7 @@ class MaintenanceActionHandler extends ActionHandler {
     const now = Date.now();
     const formatterContext: FormatterExecutionContext = {
       executionId: `system-control-status-${now}`,
-      executionType: 'prompt',
+      executionType: 'single',
       startTime: now,
       endTime: now,
       frameworkEnabled: currentState.frameworkSystemEnabled,
@@ -1606,7 +2282,7 @@ class MaintenanceActionHandler extends ActionHandler {
     });
     response += '\n';
 
-    // Quality Gates (Phase 4: Enhanced with advanced analytics)
+    // Quality Gates (Enhanced with advanced analytics)
     response += '## 🛡️ Quality Gate Analytics\n\n';
     response += `**Gate Validations**: ${this.systemControl.systemAnalytics.gateValidationCount}\n`;
     response += `**Gate Adoption Rate**: ${
@@ -1619,7 +2295,7 @@ class MaintenanceActionHandler extends ActionHandler {
         : 0
     }%\n`;
 
-    // Phase 4: Clean architecture gate performance analytics
+    // Clean architecture gate performance analytics
     if (this.systemControl.gatePerformanceAnalyzer) {
       try {
         const gateAnalytics = this.systemControl.gatePerformanceAnalyzer.getPerformanceAnalytics();
@@ -1820,9 +2496,9 @@ class MaintenanceActionHandler extends ActionHandler {
       const mem = this.systemControl.systemAnalytics.memoryUsage;
       const heapUsagePercent = Math.round((mem.heapUsed / mem.heapTotal) * 100);
 
-      response += `**Memory Usage**: ${this.formatBytes(
-        mem.heapUsed
-      )}/${this.formatBytes(mem.heapTotal)} (${heapUsagePercent}%)\n`;
+      response += `**Memory Usage**: ${this.formatBytes(mem.heapUsed)}/${this.formatBytes(
+        mem.heapTotal
+      )} (${heapUsagePercent}%)\n`;
 
       if (heapUsagePercent < 70) {
         response += `✅ **Memory Status**: Healthy\n`;
@@ -2715,7 +3391,7 @@ class MaintenanceActionHandler extends ActionHandler {
     const now = Date.now();
     const formatterContext: FormatterExecutionContext = {
       executionId: `system-control-error-${now}`,
-      executionType: 'prompt',
+      executionType: 'single',
       startTime: now,
       endTime: now,
       frameworkEnabled: false,
@@ -2732,6 +3408,162 @@ class MaintenanceActionHandler extends ActionHandler {
           operation: context,
         },
       }
+    );
+  }
+}
+
+/**
+ * Handler for injection control operations.
+ * Manages runtime injection overrides via the modular injection system.
+ */
+class InjectionActionHandler extends ActionHandler {
+  async execute(args: any): Promise<ToolResponse> {
+    const operation = args.operation || 'status';
+
+    switch (operation) {
+      case 'status':
+        return this.getInjectionStatus();
+      case 'override':
+        return this.setInjectionOverride(args);
+      case 'reset':
+        return this.resetInjectionOverrides();
+      default:
+        return this.createMinimalSystemResponse(
+          `❌ Unknown injection operation: ${operation}\n\n` +
+            'Valid operations:\n' +
+            '- `status` - Show injection configuration and active overrides\n' +
+            '- `override` - Set a session override for an injection type\n' +
+            '- `reset` - Clear all session overrides',
+          'injection_error'
+        );
+    }
+  }
+
+  /**
+   * Show current injection configuration and session overrides.
+   */
+  private getInjectionStatus(): ToolResponse {
+    const lines: string[] = [];
+    lines.push('💉 **Injection Control Status**\n');
+
+    // Show available injection types
+    lines.push('**Available Injection Types:**');
+    for (const type of INJECTION_TYPES) {
+      const description = INJECTION_TYPE_DESCRIPTIONS[type] || 'No description';
+      lines.push(`- \`${type}\`: ${description}`);
+    }
+    lines.push('');
+
+    // Show session overrides if manager is initialized
+    if (isSessionOverrideManagerInitialized()) {
+      const manager = getSessionOverrideManager();
+      const status = manager.getStatusSummary();
+
+      lines.push('**Session Overrides:**');
+      if (status.activeOverrides === 0) {
+        lines.push('_No active session overrides._');
+      } else {
+        for (const override of status.overrides) {
+          const enabledStr = override.enabled === true ? '✅ Enabled' : override.enabled === false ? '🚫 Disabled' : '❓ Undefined';
+          const expiresStr = override.expiresAt
+            ? ` (expires: ${new Date(override.expiresAt).toISOString()})`
+            : '';
+          lines.push(`- \`${override.type}\`: ${enabledStr} [scope: ${override.scope}]${expiresStr}`);
+        }
+      }
+      lines.push('');
+      lines.push(`**Override History Count:** ${status.historyCount}`);
+      lines.push('_Applied automatically by InjectionControlStage on every execution._');
+    } else {
+      lines.push('**Session Overrides:** _Manager not initialized._');
+    }
+
+    lines.push('');
+    lines.push('**Decision Source Priority:**');
+    for (const [source, description] of Object.entries(DECISION_SOURCE_DESCRIPTIONS)) {
+      lines.push(`- \`${source}\`: ${description}`);
+    }
+
+    lines.push('');
+    lines.push('**Usage:**');
+    lines.push('- Set override: `system_control action:"injection" operation:"override" type:"system-prompt" enabled:false`');
+    lines.push('- Clear overrides: `system_control action:"injection" operation:"reset"`');
+
+    return this.createMinimalSystemResponse(lines.join('\n'), 'injection_status');
+  }
+
+  /**
+   * Set a session override for an injection type.
+   */
+  private setInjectionOverride(args: any): ToolResponse {
+    const type = args.type as InjectionType | undefined;
+    const enabled = args.enabled as boolean | undefined;
+    const scope = (args.scope as 'session' | 'chain' | 'step') || 'session';
+    const scopeId = args.scope_id as string | undefined;
+    const expiresInMs = args.expires_in_ms as number | undefined;
+
+    // Validate type
+    if (!type || !INJECTION_TYPES.includes(type)) {
+      return this.createMinimalSystemResponse(
+        `❌ Invalid injection type: \`${type}\`\n\n` +
+          `Valid types: ${INJECTION_TYPES.map((t) => `\`${t}\``).join(', ')}`,
+        'injection_override_error'
+      );
+    }
+
+    // Validate enabled is provided
+    if (enabled === undefined) {
+      return this.createMinimalSystemResponse(
+        '❌ Missing `enabled` parameter.\n\n' +
+          'Specify `enabled:true` to enable injection or `enabled:false` to disable.',
+        'injection_override_error'
+      );
+    }
+
+    // Initialize manager if needed
+    if (!isSessionOverrideManagerInitialized()) {
+      initSessionOverrideManager(this.logger);
+    }
+
+    const manager = getSessionOverrideManager();
+    const override = manager.setOverride(type, enabled, scope, scopeId, expiresInMs);
+
+    const lines: string[] = [];
+    lines.push('✅ **Injection Override Set**\n');
+    lines.push(`**Type:** \`${type}\``);
+    lines.push(`**Enabled:** ${enabled ? '✅ Yes' : '🚫 No'}`);
+    lines.push(`**Scope:** ${scope}`);
+    if (scopeId) {
+      lines.push(`**Scope ID:** ${scopeId}`);
+    }
+    if (override.expiresAt) {
+      lines.push(`**Expires:** ${new Date(override.expiresAt).toISOString()}`);
+    }
+    lines.push('');
+    lines.push('_This override will affect injection decisions until cleared or expired._');
+
+    return this.createMinimalSystemResponse(lines.join('\n'), 'injection_override');
+  }
+
+  /**
+   * Clear all session overrides.
+   */
+  private resetInjectionOverrides(): ToolResponse {
+    if (!isSessionOverrideManagerInitialized()) {
+      return this.createMinimalSystemResponse(
+        '✅ **No Active Overrides**\n\nSession override manager was not initialized. Nothing to reset.',
+        'injection_reset'
+      );
+    }
+
+    const manager = getSessionOverrideManager();
+    const count = manager.clearAllOverrides();
+
+    return this.createMinimalSystemResponse(
+      `✅ **Injection Overrides Cleared**\n\n` +
+        `Cleared ${count} override${count === 1 ? '' : 's'}.\n\n` +
+        '_Injection decisions will now use default configuration._',
+      'injection_reset'
     );
   }
 }

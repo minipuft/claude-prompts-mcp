@@ -28,7 +28,11 @@ describe('RequestNormalizationStage', () => {
 
   test('flags conflicting force_restart and chain_id options', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
-    const context = new ExecutionContext({ command: '>>demo', chain_id: 'chain-demo', force_restart: true });
+    const context = new ExecutionContext({
+      command: '>>demo',
+      chain_id: 'chain-demo',
+      force_restart: true,
+    });
 
     await stage.execute(context);
 
@@ -62,26 +66,67 @@ describe('RequestNormalizationStage', () => {
     expect(context.response).toBe(routedResponse);
   });
 
-  test('captures gate override metadata for downstream formatting', async () => {
+  test('normalizes unified gates parameter with all specification types', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
     const context = new ExecutionContext({
       command: '>>demo',
-      api_validation: true,
-      quality_gates: ['code-quality', 'technical-accuracy'],
-      custom_checks: [{ name: 'Docs', description: 'Ensure documentation' }],
-      temporary_gates: [{ id: 'temp-gate', criteria: ['Ensure doc references'] }],
-      gate_scope: 'chain',
+      gates: [
+        'toxicity', // String ID
+        { name: 'red-team', description: 'Confirm exfil path' }, // CustomCheck
+        { id: 'gdpr-check', criteria: ['no PII'], severity: 'high' }, // TemporaryGateInput
+      ],
     });
 
     await stage.execute(context);
 
-    expect(context.metadata.requestedGateOverrides).toMatchObject({
-      apiValidation: true,
-      qualityGates: ['code-quality', 'technical-accuracy'],
-      customChecks: [{ name: 'Docs', description: 'Ensure documentation' }],
-      temporaryGateCount: 1,
-      gateScope: 'chain',
+    const overrides = context.state.gates.requestedOverrides as any;
+    expect(overrides.gates).toBeDefined();
+    expect(overrides.gates).toHaveLength(3);
+    expect(overrides.gates[1]).toMatchObject({
+      name: 'red-team',
+      description: 'Confirm exfil path',
     });
+    expect(overrides.gates[2]).toMatchObject({
+      id: 'gdpr-check',
+      criteria: ['no PII'],
+      severity: 'high',
+    });
+    expect(context.response).toBeUndefined();
+  });
+
+  test('captures unified gates parameter in metadata', async () => {
+    const stage = new RequestNormalizationStage(null, null, createLogger());
+    const context = new ExecutionContext({
+      command: '>>demo',
+      gates: [
+        'code-quality',
+        { name: 'Docs', description: 'Ensure documentation' },
+        { id: 'temp-gate', criteria: ['Ensure references'] },
+      ],
+    });
+
+    await stage.execute(context);
+
+    const overrides = context.state.gates.requestedOverrides as any;
+    expect(overrides.gates).toBeDefined();
+    expect(overrides.gates).toHaveLength(3);
+    expect(overrides.gates[0]).toBe('code-quality');
+    expect(overrides.gates[1]).toMatchObject({ name: 'Docs', description: 'Ensure documentation' });
+    expect(overrides.gates[2]).toMatchObject({ id: 'temp-gate', criteria: ['Ensure references'] });
+    expect(context.response).toBeUndefined();
+  });
+
+  test('handles empty gates parameter correctly', async () => {
+    const stage = new RequestNormalizationStage(null, null, createLogger());
+    const context = new ExecutionContext({
+      command: '>>demo',
+      gates: [],
+    });
+
+    await stage.execute(context);
+
+    const overrides = context.state.gates.requestedOverrides as any;
+    expect(overrides.gates).toEqual([]); // Empty array is preserved
     expect(context.response).toBeUndefined();
   });
 
@@ -95,7 +140,7 @@ describe('RequestNormalizationStage', () => {
     await stage.execute(context);
 
     expect(context.response).toBeUndefined(); // Should NOT error
-    expect(context.metadata.requestNormalizationComplete).toBe(true);
+    expect(context.state.normalization.completed).toBe(true);
   });
 
   test('allows chain_id with gate review response', async () => {
@@ -108,7 +153,7 @@ describe('RequestNormalizationStage', () => {
     await stage.execute(context);
 
     expect(context.response).toBeUndefined(); // Should NOT error
-    expect(context.metadata.requestNormalizationComplete).toBe(true);
+    expect(context.state.normalization.completed).toBe(true);
   });
 
   test('error message explains both execution and resume modes clearly', async () => {
@@ -119,7 +164,8 @@ describe('RequestNormalizationStage', () => {
 
     expect(context.response).toBeDefined();
     expect(context.response?.isError).toBe(true);
-    const errorText = context.response?.content[0]?.type === 'text' ? context.response.content[0].text : '';
+    const errorText =
+      context.response?.content[0]?.type === 'text' ? context.response.content[0].text : '';
 
     // Should explain both modes
     expect(errorText).toContain('To execute a new prompt');

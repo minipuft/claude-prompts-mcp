@@ -6,12 +6,13 @@
  * Clean dependencies: Only content analysis types and framework definitions.
  */
 
-import type { Logger } from '../../logging/index.js';
 import { ConfigManager } from '../../config/index.js';
-import type { FrameworksConfig } from '../../types/index.js';
 import { GateSelectionCriteria, GateSelectionResult } from '../core/gate-definitions.js';
-import type { ContentAnalysisResult } from '../../semantic/types.js';
+
 import type { FrameworkDefinition } from '../../frameworks/types/index.js';
+import type { Logger } from '../../logging/index.js';
+import type { ContentAnalysisResult } from '../../semantic/types.js';
+import type { FrameworksConfig } from '../../types/index.js';
 
 /**
  * User preferences for gate selection
@@ -31,7 +32,7 @@ export interface ExtendedGateSelectionCriteria extends GateSelectionCriteria {
   framework?: string;
   category?: string;
   promptId?: string;
-  executionMode?: 'prompt' | 'template' | 'chain';
+  executionMode?: 'single' | 'prompt' | 'template' | 'chain';
   complexityLevel?: 'low' | 'medium' | 'high';
 
   // Extended properties
@@ -48,10 +49,14 @@ export class GateSelectionEngine {
   private selectionHistory: GateSelectionResult[] = [];
   private configManager: ConfigManager;
   private frameworksConfig: FrameworksConfig;
-  private frameworksConfigListener: (newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void;
+  private frameworksConfigListener: (
+    newConfig: FrameworksConfig,
+    previousConfig: FrameworksConfig
+  ) => void;
 
   private static readonly METHODOLOGY_GATES = new Set<string>([
     'framework-compliance',
+    'methodology-validation',
     'educational-clarity',
     'research-quality',
     'technical-accuracy',
@@ -91,7 +96,7 @@ export class GateSelectionEngine {
       executionMode: criteria.executionMode,
       complexityLevel: criteria.complexityLevel,
       hasSemanticAnalysis: !!criteria.semanticAnalysis,
-      hasFrameworkContext: !!criteria.frameworkContext
+      hasFrameworkContext: !!criteria.frameworkContext,
     });
 
     // Primary gate selection based on framework and category
@@ -104,7 +109,7 @@ export class GateSelectionEngine {
     const selectedGates = this.mergeGateSelections(primaryGates, semanticGates);
     const gatedSelection = this.frameworksConfig.enableMethodologyGates
       ? selectedGates
-      : selectedGates.filter(gate => !GateSelectionEngine.METHODOLOGY_GATES.has(gate));
+      : selectedGates.filter((gate) => !GateSelectionEngine.METHODOLOGY_GATES.has(gate));
 
     // Generate reasoning
     const reasoning = this.generateSelectionReasoning(criteria, primaryGates, semanticGates);
@@ -123,7 +128,7 @@ export class GateSelectionEngine {
       reasoning,
       confidence,
       estimatedExecutionTime,
-      fallbackGates
+      fallbackGates,
     };
 
     // Track selection history
@@ -137,7 +142,7 @@ export class GateSelectionEngine {
       selectedGates: selectedGates.length,
       confidence,
       estimatedExecutionTime,
-      actualSelectionTime: executionTime
+      actualSelectionTime: executionTime,
     });
 
     return result;
@@ -154,6 +159,7 @@ export class GateSelectionEngine {
 
     // Framework-based selection
     if (criteria.framework) {
+      gates.push('methodology-validation');
       switch (criteria.framework) {
         case 'ReACT':
           gates.push('framework-compliance', 'educational-clarity');
@@ -293,7 +299,10 @@ export class GateSelectionEngine {
   /**
    * Estimate execution time for selected gates
    */
-  private estimateExecutionTime(selectedGates: string[], criteria: ExtendedGateSelectionCriteria): number {
+  private estimateExecutionTime(
+    selectedGates: string[],
+    criteria: ExtendedGateSelectionCriteria
+  ): number {
     // Base time per gate (in milliseconds)
     const baseTimePerGate = 100;
 
@@ -301,7 +310,7 @@ export class GateSelectionEngine {
     const complexityMultipliers = {
       low: 0.8,
       medium: 1.0,
-      high: 1.5
+      high: 1.5,
     };
 
     const multiplier = complexityMultipliers[criteria.complexityLevel || 'medium'];
@@ -318,7 +327,7 @@ export class GateSelectionEngine {
 
     // Add framework-specific fallback if available
     if (criteria.framework) {
-      fallbacks.push('framework-compliance');
+      fallbacks.push('framework-compliance', 'methodology-validation');
     }
 
     return fallbacks;
@@ -344,18 +353,22 @@ export class GateSelectionEngine {
    */
   getStatistics() {
     const totalSelections = this.selectionHistory.length;
-    const averageGatesSelected = totalSelections > 0
-      ? this.selectionHistory.reduce((sum, result) => sum + result.selectedGates.length, 0) / totalSelections
-      : 0;
-    const averageConfidence = totalSelections > 0
-      ? this.selectionHistory.reduce((sum, result) => sum + result.confidence, 0) / totalSelections
-      : 0;
+    const averageGatesSelected =
+      totalSelections > 0
+        ? this.selectionHistory.reduce((sum, result) => sum + result.selectedGates.length, 0) /
+          totalSelections
+        : 0;
+    const averageConfidence =
+      totalSelections > 0
+        ? this.selectionHistory.reduce((sum, result) => sum + result.confidence, 0) /
+          totalSelections
+        : 0;
 
     return {
       totalSelections,
       averageGatesSelected: Math.round(averageGatesSelected * 10) / 10,
       averageConfidence: Math.round(averageConfidence * 100) / 100,
-      historySize: this.selectionHistory.length
+      historySize: this.selectionHistory.length,
     };
   }
 
@@ -363,7 +376,11 @@ export class GateSelectionEngine {
    * Cleanup method - removes event listeners to prevent memory leaks
    */
   async cleanup(): Promise<void> {
-    if (this.configManager && 'off' in this.configManager && typeof this.configManager.off === 'function') {
+    if (
+      this.configManager &&
+      'off' in this.configManager &&
+      typeof this.configManager.off === 'function'
+    ) {
       try {
         this.configManager.off('frameworksConfigChanged', this.frameworksConfigListener);
         this.logger.debug('[GATE SELECTION ENGINE] Event listener removed');
@@ -377,7 +394,10 @@ export class GateSelectionEngine {
 /**
  * Factory function for creating gate selection engine
  */
-export function createGateSelectionEngine(logger: Logger, configManager: ConfigManager): GateSelectionEngine {
+export function createGateSelectionEngine(
+  logger: Logger,
+  configManager: ConfigManager
+): GateSelectionEngine {
   return new GateSelectionEngine(logger, configManager);
 }
 

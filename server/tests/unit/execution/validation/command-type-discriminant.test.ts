@@ -5,7 +5,7 @@
  */
 import { describe, test, expect } from '@jest/globals';
 
-import { UnifiedCommandParser } from '../../../../src/execution/parsers/unified-command-parser.js';
+import { UnifiedCommandParser } from '../../../../src/execution/parsers/command-parser.js';
 import { createSimpleLogger } from '../../../../src/logging/index.js';
 
 import type { ConvertedPrompt } from '../../../../src/types/index.js';
@@ -57,25 +57,25 @@ describe('CommandType Discriminant', () => {
 
   describe('Chain commands', () => {
     test('assigns commandType: chain for symbolic chain operator (-->)', async () => {
-    const result = await parser.parseCommand(
-      '>>test_prompt input --> test_prompt input',
-      mockPrompts
-    );
+      const result = await parser.parseCommand(
+        '>>test_prompt input --> test_prompt input',
+        mockPrompts
+      );
 
-    expect(result.commandType).toBe('chain');
-    expect(result.format).toBe('symbolic');
-  });
+      expect(result.commandType).toBe('chain');
+      expect(result.format).toBe('symbolic');
+    });
 
-  test('assigns commandType: chain for JSON-wrapped chain commands', async () => {
-    const command = JSON.stringify({
-      command: '>>test_prompt arg --> test_prompt arg',
+    test('assigns commandType: chain for JSON-wrapped chain commands', async () => {
+      const command = JSON.stringify({
+        command: '>>test_prompt arg --> test_prompt arg',
       });
 
-    const result = await parser.parseCommand(command, mockPrompts);
+      const result = await parser.parseCommand(command, mockPrompts);
 
-    expect(result.commandType).toBe('chain');
-    expect(result.format).toBe('json');
-  });
+      expect(result.commandType).toBe('chain');
+      expect(result.format).toBe('json');
+    });
 
     test('assigns commandType: chain for multi-step chains', async () => {
       const result = await parser.parseCommand(

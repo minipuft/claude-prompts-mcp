@@ -7,14 +7,15 @@
  * sources to eliminate duplication.
  */
 
-import type { ConvertedPrompt } from '../../execution/types.js';
+import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
 import type { ContentAnalysisResult } from '../../semantic/types.js';
+import type { ToolParameter } from '../../types/index.js';
 
 /**
  * Framework methodology definitions
  * Each framework provides system prompt templates and execution guidelines
  */
-export type FrameworkMethodology = "CAGEERF" | "ReACT" | "5W1H" | "SCAMPER" | "AUTO";
+export type FrameworkMethodology = 'CAGEERF' | 'ReACT' | '5W1H' | 'SCAMPER' | 'AUTO';
 
 /**
  * Framework definition structure
@@ -53,7 +54,7 @@ export interface FrameworkSelectionCriteria {
   complexity?: 'low' | 'medium' | 'high';
   domain?: string;
   userPreference?: FrameworkMethodology;
-  executionType?: 'template' | 'chain';
+  executionType?: 'single' | 'chain';
 }
 
 /**
@@ -206,7 +207,7 @@ export interface TemplateEnhancement {
  */
 export interface MethodologyToolDescription {
   description?: string;
-  parameters?: Record<string, string>;
+  parameters?: Record<string, ToolParameter | string>;
 }
 
 /**
@@ -219,15 +220,28 @@ export interface MethodologyToolDescriptions {
 }
 
 /**
+ * Judge prompt definition for resource selection in the two-phase client-driven flow.
+ * Framework-specific judges can customize how resources are selected for their methodology.
+ */
+export interface JudgePromptDefinition {
+  /** System message setting the judge's context and expertise */
+  systemMessage: string;
+  /** User message template with selection instructions */
+  userMessageTemplate: string;
+  /** Expected output format for the selection response */
+  outputFormat: 'json' | 'structured';
+}
+
+/**
  * Methodology validation results
  */
 export interface MethodologyValidation {
   compliant: boolean;
-  compliance_score: number; // 0.0 to 1.0
+  complianceScore: number; // 0.0 to 1.0
   strengths: string[];
-  improvement_areas: string[];
-  specific_suggestions: TemplateEnhancement[];
-  methodology_gaps: string[];
+  improvementAreas: string[];
+  specificSuggestions: TemplateEnhancement[];
+  methodologyGaps: string[];
 }
 
 /**
@@ -238,7 +252,7 @@ export interface IMethodologyGuide {
   // Framework identification
   readonly frameworkId: string;
   readonly frameworkName: string;
-  readonly methodology: string;
+  readonly methodology: FrameworkMethodology;
   readonly version: string;
 
   /**
@@ -247,10 +261,7 @@ export interface IMethodologyGuide {
    * @param context Additional context information
    * @returns Guidance for structuring the prompt according to methodology
    */
-  guidePromptCreation(
-    intent: string,
-    context?: Record<string, any>
-  ): PromptCreationGuidance;
+  guidePromptCreation(intent: string, context?: Record<string, any>): PromptCreationGuidance;
 
   /**
    * Guide template processing during execution
@@ -258,10 +269,7 @@ export interface IMethodologyGuide {
    * @param executionType The execution strategy from semantic analyzer
    * @returns Processing guidance based on methodology
    */
-  guideTemplateProcessing(
-    template: string,
-    executionType: string
-  ): ProcessingGuidance;
+  guideTemplateProcessing(template: string, executionType: ExecutionType): ProcessingGuidance;
 
   /**
    * Guide execution step sequencing
@@ -290,18 +298,14 @@ export interface IMethodologyGuide {
    * @param prompt The prompt to validate
    * @returns Validation results and improvement suggestions
    */
-  validateMethodologyCompliance(
-    prompt: ConvertedPrompt
-  ): MethodologyValidation;
+  validateMethodologyCompliance(prompt: ConvertedPrompt): MethodologyValidation;
 
   /**
    * Get methodology-specific system prompt guidance
    * @param context Execution context
    * @returns System prompt additions for this methodology
    */
-  getSystemPromptGuidance(
-    context: Record<string, any>
-  ): string;
+  getSystemPromptGuidance(context: Record<string, any>): string;
 
   /**
    * Get methodology-specific tool descriptions (optional)
@@ -309,6 +313,14 @@ export interface IMethodologyGuide {
    * @returns Tool descriptions customized for this methodology
    */
   getToolDescriptions?(): MethodologyToolDescriptions;
+
+  /**
+   * Get methodology-specific judge prompt for resource selection (optional)
+   * Used in the two-phase client-driven judge flow to customize how resources
+   * are selected for this methodology.
+   * @returns Judge prompt definition customized for this methodology
+   */
+  getJudgePrompt?(): JudgePromptDefinition;
 }
 
 /**
@@ -318,7 +330,7 @@ export interface IMethodologyGuide {
 export abstract class BaseMethodologyGuide implements IMethodologyGuide {
   abstract readonly frameworkId: string;
   abstract readonly frameworkName: string;
-  abstract readonly methodology: string;
+  abstract readonly methodology: FrameworkMethodology;
   abstract readonly version: string;
 
   abstract guidePromptCreation(
@@ -326,10 +338,7 @@ export abstract class BaseMethodologyGuide implements IMethodologyGuide {
     context?: Record<string, any>
   ): PromptCreationGuidance;
 
-  abstract guideTemplateProcessing(
-    template: string,
-    executionType: string
-  ): ProcessingGuidance;
+  abstract guideTemplateProcessing(template: string, executionType: ExecutionType): ProcessingGuidance;
 
   abstract guideExecutionSteps(
     prompt: ConvertedPrompt,
@@ -341,23 +350,17 @@ export abstract class BaseMethodologyGuide implements IMethodologyGuide {
     context: Record<string, any>
   ): MethodologyEnhancement;
 
-  abstract validateMethodologyCompliance(
-    prompt: ConvertedPrompt
-  ): MethodologyValidation;
+  abstract validateMethodologyCompliance(prompt: ConvertedPrompt): MethodologyValidation;
 
-  abstract getSystemPromptGuidance(
-    context: Record<string, any>
-  ): string;
+  abstract getSystemPromptGuidance(context: Record<string, any>): string;
 
   /**
    * Helper method to extract combined text from prompt
    */
   protected getCombinedText(prompt: ConvertedPrompt): string {
-    return [
-      prompt.systemMessage || '',
-      prompt.userMessageTemplate || '',
-      prompt.description || ''
-    ].filter(text => text.trim()).join(' ');
+    return [prompt.systemMessage || '', prompt.userMessageTemplate || '', prompt.description || '']
+      .filter((text) => text.trim())
+      .join(' ');
   }
 
   /**
@@ -368,7 +371,7 @@ export abstract class BaseMethodologyGuide implements IMethodologyGuide {
       methodology: this.methodology,
       confidence,
       applicabilityReason: reason,
-      appliedAt: new Date()
+      appliedAt: new Date(),
     };
   }
 }

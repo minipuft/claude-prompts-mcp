@@ -1,7 +1,8 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { SessionManagementStage } from '../../../src/execution/pipeline/stages/07-session-stage.js';
 import { ExecutionContext } from '../../../src/execution/context/execution-context.js';
+import { SessionManagementStage } from '../../../src/execution/pipeline/stages/07-session-stage.js';
+
 import type { ChainSession, ChainSessionManager } from '../../../src/chain-session/manager.js';
 import type { Logger } from '../../../src/logging/index.js';
 
@@ -93,7 +94,12 @@ describe('SessionManagementStage continuity', () => {
       rawArgs: '',
       format: 'simple',
       confidence: 0.9,
-      metadata: { originalCommand: '>>demo', parseStrategy: 'simple', detectedFormat: 'simple', warnings: [] },
+      metadata: {
+        originalCommand: '>>demo',
+        parseStrategy: 'simple',
+        detectedFormat: 'simple',
+        warnings: [],
+      },
       promptArgs: { topic: 'testing' },
       commandType: 'single',
     } as any;
@@ -112,7 +118,7 @@ describe('SessionManagementStage continuity', () => {
 
     const stage = new SessionManagementStage(stubManager as any, logger);
     const context = new ExecutionContext({ command: '>>demo' });
-    context.metadata.resumeSessionId = existingSession.sessionId;
+    context.state.session.resumeSessionId = existingSession.sessionId;
     context.executionPlan = { ...sampleExecutionPlan, totalSteps: 3 } as any;
 
     await stage.execute(context);

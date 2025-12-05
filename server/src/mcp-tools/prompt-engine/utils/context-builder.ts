@@ -24,7 +24,6 @@ const logger = createLogger(
 export interface EnhancedExecutionContext extends ExecutionContext {
   promptId: string;
   promptArgs: Record<string, any>;
-  executionMode: string;
   sessionId: string;
   forceRestart: boolean;
   enableGates: boolean;
@@ -89,7 +88,6 @@ export class ContextBuilder {
         ...baseExecutionContext,
         promptId,
         promptArgs,
-        executionMode: options['executionMode'] || 'auto',
         sessionId: options['sessionId'] || this.generateSessionId(),
         forceRestart: options['forceRestart'] || false,
         enableGates: options['enableGates'] !== false,
@@ -128,7 +126,6 @@ export class ContextBuilder {
       return {
         promptId,
         promptArgs,
-        executionMode: 'auto',
         sessionId: this.generateSessionId(),
         forceRestart: false,
         enableGates: true,

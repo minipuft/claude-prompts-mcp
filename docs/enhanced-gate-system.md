@@ -4,10 +4,10 @@
 
 Quality gates enforce consistent outputs across prompts, templates, and chains. This document tracks the implementation that ships in `server/dist/gates/**` and the way it integrates with the consolidated prompt engine.
 
-**What you’ll learn**
+**What you'll learn**
 - How the five-level precedence ladder is constructed
 - Where gate definitions live and how to add or hot-reload them
-- How `api_validation` requests pass through the PromptExecutionPipeline
+- How quality gates are applied through the PromptExecutionPipeline
 - How to toggle framework-derived gates via `server/config.json`
 
 ## Responsibilities
@@ -27,7 +27,7 @@ Quality gates enforce consistent outputs across prompts, templates, and chains. 
 | `GateGuidanceRenderer` | `gates/guidance/GateGuidanceRenderer.js` | Formats guidance text for return payloads and inline chain instructions. The renderer now **requires** a `GateLoader` (it no longer touches the filesystem directly) so guidance always reflects the same cache + activation rules used by the pipeline. |
 | `TemporaryGateRegistry` | `gates/coordination/temporary-gate-registry.js` | Registers per-execution temporary gates (e.g., experiments) at runtime and exposes helpers for converting them into lightweight definitions. |
 | Gate services | `gates/services/*.js` | Execute `content_check`, `pattern_check`, and `llm_self_check` validations. |
-| Pipeline integration | `mcp-tools/prompt-engine/core/prompt-execution-service.ts` + `execution/pipeline/stages/05-gate-enhancement-stage.ts` | Applies gates when `api_validation:true` is supplied or when chains include inline gates. The staged `PromptExecutionPipeline` is the only execution path. |
+| Pipeline integration | `mcp-tools/prompt-engine/core/prompt-execution-service.ts` + `execution/pipeline/stages/05-gate-enhancement-stage.ts` | Applies gates when `quality_gates` are specified or when chains include inline gates. The staged `PromptExecutionPipeline` is the only execution path. |
 
 ## Precedence Ladder
 
@@ -78,23 +78,120 @@ Each JSON file includes:
 
 The gate service factory (`gates/services/gate-service-factory.js`) instantiates the appropriate service based on the check type. Results roll up into a gate pass/fail status.
 
+## Unified Gate Specification Parameter
+
+**New in v2.0.0**: The `gates` parameter unifies all gate specification methods into a single, flexible interface.
+
+### What Changed?
+
+Previously, **runtime** gates were specified using three separate parameters:
+- `quality_gates: string[]` - For canonical gate IDs
+- `custom_checks: CustomCheck[]` - For inline validation criteria
+- `temporary_gates: (string | TemporaryGateInput)[]` - For inline gate definitions
+
+**Now**, use a single `gates` parameter that accepts all three types:
+
+**Note**: For **template-level** gate configuration (in prompt markdown files), use `inline_gate_definitions` instead of the deprecated `temporary_gates` parameter name.
+
+```typescript
+gates: (string | CustomCheck | TemporaryGateInput)[]
+```
+
+### Gate Specification Types
+
+**1. String (Canonical Gate ID)**:
+```bash
+gates:["technical-accuracy", "research-quality", "code-quality"]
+```
+
+**2. CustomCheck (Inline Validation)**:
+```bash
+gates:[{"name": "Test Coverage", "description": "Ensure all functions have unit tests"}]
+```
+
+**3. TemporaryGateInput (Full Gate Definition)**:
+```bash
+gates:[{
+  "id": "gdpr-check",
+  "criteria": ["No PII in logs", "Data anonymization confirmed"],
+  "severity": "high",
+  "scope": "execution"
+}]
+```
+
+**4. Mixed Types (Recommended)**:
+```bash
+gates:[
+  "security-awareness",  // Canonical gate
+  {"name": "OWASP", "description": "Check OWASP Top 10"},  // Custom check
+  {"id": "gdpr", "criteria": ["No PII"], "severity": "high"}  // Full definition
+]
+```
+
+### Migration Path
+
+The old parameters are **deprecated but still functional** (until v3.0.0). You'll see deprecation warnings encouraging migration:
+
+```bash
+# OLD (deprecated - works with warnings):
+prompt_engine(
+  command:"analysis --> ",
+  quality_gates:["technical-accuracy"],
+  custom_checks:[{"name": "Sources", "description": "Cite sources"}]
+)
+
+# NEW (recommended):
+prompt_engine(
+  command:"analysis --> ",
+  gates:[
+    "technical-accuracy",
+    {"name": "Sources", "description": "Cite sources"}
+  ]
+)
+```
+
+### Backward Compatibility
+
+- **Normalization Layer**: Stage 0.1 converts old parameters to unified format internally
+- **Both syntaxes work**: You can mix old and new (though not recommended)
+- **Deprecation warnings**: Clear guidance on migration in response metadata
+- **No breaking changes**: v2.0.0 maintains 100% API compatibility
+
 ## Execution Integration
 
-- **Prompts/Templates**: Pass `api_validation:true` to `prompt_engine` when you plan to return `gate_verdict`. `PromptExecutionService` feeds the request into the staged pipeline, which builds the `ExecutionPlan`, injects frameworks, and invokes `GateLoader`/`GateGuidanceRenderer` inside Stage 5 (Gate Enhancement).
+- **Prompts/Templates**: Specify `quality_gates` to request specific quality gates. Resume paused runs by sending `gate_verdict` with **flexible formats (v3.1+)**: `"GATE_REVIEW: PASS - reason"` (primary), `"GATE PASS - reason"` (simplified), or `"PASS - reason"` (minimal). All formats are case-insensitive. Rationale required. See [MCP Tooling Guide](mcp-tooling-guide.md#enhanced-gate-verdict-formats-v31) for details.
 - **Chains**: Steps can declare `inlineGateIds`. Stage 2 extracts inline gates, Stage 4 plans per-step gates, and Stage 5 applies them before `ChainOperatorExecutor` renders each step.
 - **System telemetry**: `system_control(action:"analytics")` reports gate pass/fail counts pulled from `metrics/analytics-service.js` and formats responses via the shared `ResponseFormatter` + `GateGuidanceRenderer` hookup.
 
 Example prompt execution:
 
 ```bash
-prompt_engine(command:">>analysis_prompt content:'...'", api_validation=true)
+# Recommended (v2.0.0+):
+prompt_engine(command:">>analysis_prompt content:'...'", gates:["technical-accuracy", "research-quality"])
+
+# Deprecated (still works):
+prompt_engine(command:">>analysis_prompt content:'...'", quality_gates:["technical-accuracy", "research-quality"])
 ```
 
 Example chain enforcement:
 
 ```bash
-prompt_engine(command:"chain://research_pipeline?force_restart=true", api_validation=true)
+# Recommended (v2.0.0+):
+prompt_engine(command:"chain://research_pipeline?force_restart=true", gates:["technical-accuracy", "research-quality"])
+
+# Deprecated (still works):
+prompt_engine(command:"chain://research_pipeline?force_restart=true", quality_gates:["technical-accuracy", "research-quality"])
 ```
+
+### Shorthand Inline Gates
+
+- **Slug references**: Inline gate definitions like `["quality-check"]` now resolve directly to the canonical gate, so you no longer need to paste the full JSON payload just to reuse existing checks.
+- **Template aliases**: Inline objects such as `{ "template": "security-awareness" }` behave the same way and let you override scope/severity without redefining guidance.
+- **Inline definitions**: When you do need bespoke criteria, keep the object minimal—provide `criteria`/`guidance` only and the server fills in the remaining fields. The Symbolic `::` operator still works for quick, inline criteria and can be combined with these shorthands.
+- **Inline references**: Any gate created through inline definitions that specifies an `id` can be re-used later via `:: gate-id`; the inline gate resolver now loads the stored guidance so the Quality Enhancement Gates section reflects the original criteria instead of a placeholder string.
+- **Deduping**: If a shorthand matches a gate already listed in `gates`, the planner keeps a single copy so guidance stays concise while tokens stay low.
+
+**Note**: In template-level configuration, use `inline_gate_definitions` parameter. The legacy `temporary_gates` name is deprecated but still supported until v4.0.0.
 
 ## Guidance & Developer Feedback
 

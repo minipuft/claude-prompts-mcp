@@ -7,6 +7,7 @@ yarn.lock
 
 # Build Output and TypeScript
 server/dist/
+server/dist/methodologies/
 build/
 out/
 *.tsbuildinfo
@@ -58,6 +59,7 @@ pids/
 
 # MCP Server Specific
 admin-ui/
+server/graphs/
 
 # Runtime State Files
 # server/config/framework-state.json

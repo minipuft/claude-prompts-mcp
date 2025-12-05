@@ -1,7 +1,8 @@
 // @lifecycle canonical - Tracks MCP tool usage metrics in-memory.
 /**
  * Lightweight telemetry tracker for MCP tool actions and parameter issues.
- * Phase 1 collects in-memory metrics so later phases can expose them via guides or diagnostics.
+ *  collects in-memory metrics so later phases can expose them via guides or diagnostics.
+ * #TODO telemetry: Persist snapshots and expose via system_control analytics once that surface lands.
  */
 
 type ActionStatus = 'received' | 'success' | 'failure' | 'unknown';
@@ -87,8 +88,14 @@ export function recordParameterIssue(
   }
 }
 
-export function getActionUsageSnapshot(): Record<string, { actions: ActionMetricEntry[]; parameterIssues: ParameterIssue[] }> {
-  const snapshot: Record<string, { actions: ActionMetricEntry[]; parameterIssues: ParameterIssue[] }> = {};
+export function getActionUsageSnapshot(): Record<
+  string,
+  { actions: ActionMetricEntry[]; parameterIssues: ParameterIssue[] }
+> {
+  const snapshot: Record<
+    string,
+    { actions: ActionMetricEntry[]; parameterIssues: ParameterIssue[] }
+  > = {};
 
   for (const [toolId, metrics] of toolMetrics.entries()) {
     snapshot[toolId] = {

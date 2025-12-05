@@ -2,8 +2,13 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
 import { SessionManagementStage } from '../../../../src/execution/pipeline/stages/07-session-stage.js';
+import { GateEnforcementAuthority } from '../../../../src/execution/pipeline/decisions/index.js';
+
 import type { ChainSession, ChainSessionService } from '../../../../src/chain-session/types.js';
-import type { ExecutionPlan, ParsedCommand } from '../../../../src/execution/context/execution-context.js';
+import type {
+  ExecutionPlan,
+  ParsedCommand,
+} from '../../../../src/execution/context/execution-context.js';
 
 const createLogger = () => ({
   info: jest.fn(),
@@ -112,7 +117,8 @@ describe('SessionManagementStage', () => {
     await stage.execute(context);
 
     expect(manager.createSession).toHaveBeenCalledTimes(1);
-    const [sessionId, chainId, totalSteps, originalArgs, options] = manager.createSession.mock.calls[0];
+    const [sessionId, chainId, totalSteps, originalArgs, options] =
+      manager.createSession.mock.calls[0];
     expect(sessionId).toBe('review-chain_prompt-1700000000000');
     expect(chainId).toBe('chain-chain_prompt#1');
     expect(totalSteps).toBe(2);
@@ -126,7 +132,7 @@ describe('SessionManagementStage', () => {
       currentStep: 1,
       totalSteps: 2,
     });
-    expect(context.metadata.sessionLifecycleDecision).toBe('create-new');
+    expect(context.state.session.lifecycleDecision).toBe('create-new');
     dateSpy.mockRestore();
   });
 
@@ -146,7 +152,7 @@ describe('SessionManagementStage', () => {
     manager.getSession.mockReturnValue(existingSession);
 
     const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
-    context.metadata.resumeSessionId = 'sess-active';
+    context.state.session.resumeSessionId = 'sess-active';
     context.executionPlan = createExecutionPlan();
     context.parsedCommand = createParsedCommand();
 
@@ -161,7 +167,7 @@ describe('SessionManagementStage', () => {
       totalSteps: 3,
       pendingReview: undefined,
     });
-    expect(context.metadata.sessionLifecycleDecision).toBe('resume-chain');
+    expect(context.state.session.lifecycleDecision).toBe('resume-chain');
   });
 
   test('resumes sessions using chain identifiers when no session id is provided', async () => {
@@ -178,7 +184,10 @@ describe('SessionManagementStage', () => {
 
     manager.getSessionByChainIdentifier.mockReturnValue(existingSession);
 
-    const context = new ExecutionContext({ command: '>>chain_prompt', chain_id: 'chain-chain_prompt#5' } as any);
+    const context = new ExecutionContext({
+      command: '>>chain_prompt',
+      chain_id: 'chain-chain_prompt#5',
+    } as any);
     context.executionPlan = createExecutionPlan();
     context.parsedCommand = createParsedCommand();
 
@@ -196,7 +205,7 @@ describe('SessionManagementStage', () => {
       totalSteps: 2,
       pendingReview: undefined,
     });
-    expect(context.metadata.sessionLifecycleDecision).toBe('resume-chain-id');
+    expect(context.state.session.lifecycleDecision).toBe('resume-chain-id');
   });
 
   test('creates a new session when only base history exists without explicit resume', async () => {
@@ -222,7 +231,7 @@ describe('SessionManagementStage', () => {
     expect(manager.getSessionByChainIdentifier).not.toHaveBeenCalled();
     expect(manager.getLatestSessionForBaseChain).not.toHaveBeenCalled();
     expect(manager.createSession).toHaveBeenCalledTimes(1);
-    expect(context.metadata.sessionLifecycleDecision).toBe('create-new');
+    expect(context.state.session.lifecycleDecision).toBe('create-new');
     expect(context.sessionContext?.chainId).not.toBe(existingSession.chainId);
   });
 
@@ -248,7 +257,64 @@ describe('SessionManagementStage', () => {
     await stage.execute(context);
 
     expect(manager.createSession).toHaveBeenCalledTimes(1);
-    expect(context.metadata.sessionLifecycleDecision).toBe('create-force-restart');
+    expect(context.state.session.lifecycleDecision).toBe('create-force-restart');
     expect(context.sessionContext?.currentStep).toBe(1);
+  });
+
+  test('delegates pending review creation to GateEnforcementAuthority', async () => {
+    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
+    context.parsedCommand = createParsedCommand();
+    context.gateInstructions = 'Review these gates carefully.';
+
+    // Set up gate state to trigger review creation
+    context.state.gates.hasBlockingGates = true;
+    context.state.gates.accumulatedGateIds = ['gate-alpha', 'gate-beta'];
+
+    // Initialize the authority on context (normally done by DI stage)
+    context.gateEnforcement = new GateEnforcementAuthority(
+      manager as any,
+      createLogger() as any
+    );
+
+    const dateSpy = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    manager.getRunHistory.mockReturnValue([]);
+
+    await stage.execute(context);
+
+    // Verify review was created via authority and persisted
+    expect(manager.setPendingGateReview).toHaveBeenCalledTimes(1);
+    const [sessionId, pendingReview] = manager.setPendingGateReview.mock.calls[0];
+    expect(sessionId).toBe('review-chain_prompt-1700000000000');
+    expect(pendingReview.gateIds).toEqual(['gate-alpha', 'gate-beta']);
+    expect(pendingReview.combinedPrompt).toBe('Review these gates carefully.');
+    expect(pendingReview.attemptCount).toBe(0);
+    expect(pendingReview.maxAttempts).toBe(2); // DEFAULT_RETRY_LIMIT
+
+    // Verify review is attached to session context
+    expect(context.sessionContext?.pendingReview).toBeDefined();
+    expect(context.sessionContext?.pendingReview?.gateIds).toEqual(['gate-alpha', 'gate-beta']);
+
+    dateSpy.mockRestore();
+  });
+
+  test('skips review creation when no authority is available', async () => {
+    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
+    context.parsedCommand = createParsedCommand();
+
+    // Set up gate state but no authority
+    context.state.gates.hasBlockingGates = true;
+    context.state.gates.accumulatedGateIds = ['gate-alpha'];
+    // context.gateEnforcement is undefined
+
+    manager.getRunHistory.mockReturnValue([]);
+
+    await stage.execute(context);
+
+    // Session should be created but no pending review
+    expect(manager.createSession).toHaveBeenCalledTimes(1);
+    expect(manager.setPendingGateReview).not.toHaveBeenCalled();
+    expect(context.sessionContext?.pendingReview).toBeUndefined();
   });
 });

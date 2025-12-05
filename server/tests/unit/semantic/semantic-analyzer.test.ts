@@ -41,7 +41,7 @@ describe('ContentAnalyzer (structural mode)', () => {
       })
     );
 
-    expect(result.executionType).toBe('prompt');
+    expect(result.executionType).toBe('single');
     expect(result.requiresFramework).toBe(false);
     expect(result.frameworkRecommendation?.requiresUserChoice).toBe(true);
     expect(result.reasoning.length).toBeGreaterThan(0);

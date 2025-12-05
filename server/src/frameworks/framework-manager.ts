@@ -57,7 +57,7 @@ export class FrameworkManager {
 
     this.logger.info('Initializing FrameworkManager with methodology registry...');
 
-    // Initialize methodology registry (Phase 2: NEW)
+    // Initialize methodology registry (NEW)
     this.methodologyRegistry = await createMethodologyRegistry(this.logger);
 
     // Generate framework definitions from methodology guides
@@ -77,7 +77,7 @@ export class FrameworkManager {
     // User preference takes priority (this is the primary selection mechanism)
     if (criteria.userPreference && criteria.userPreference !== 'AUTO') {
       const preferred = this.getFramework(criteria.userPreference);
-      if (preferred && preferred.enabled) {
+      if (preferred?.enabled) {
         this.logger.debug(`Framework selected by user preference: ${preferred.name}`);
         return preferred;
       } else {
@@ -93,7 +93,7 @@ export class FrameworkManager {
       const activeFramework = this.frameworkStateManager.getActiveFramework();
       if (activeFramework) {
         const framework = this.getFramework(activeFramework.methodology);
-        if (framework && framework.enabled) {
+        if (framework?.enabled) {
           this.logger.debug(`Framework selected: ${framework.name} (from active state manager)`);
           return framework;
         }
@@ -205,6 +205,17 @@ export class FrameworkManager {
   }
 
   /**
+   * Expose the methodology registry for integrations (e.g., hot reload wiring).
+   */
+  getMethodologyRegistry(): MethodologyRegistry {
+    this.ensureInitialized();
+    if (!this.methodologyRegistry) {
+      throw new Error('Methodology registry not initialized');
+    }
+    return this.methodologyRegistry;
+  }
+
+  /**
    * Check if framework is applicable for given criteria
    */
   private isApplicable(
@@ -265,6 +276,16 @@ export class FrameworkManager {
     systemPrompt = systemPrompt.replace(/\{PROMPT_CATEGORY\}/g, prompt.category || 'general');
     systemPrompt = systemPrompt.replace(/\{FRAMEWORK_NAME\}/g, framework.name);
 
+    // Replace methodology guidance from guide
+    const guide = this.getMethodologyGuide(framework.id);
+    if (guide) {
+      const guidance = guide.getSystemPromptGuidance({
+        promptName: prompt.name,
+        promptCategory: prompt.category,
+      });
+      systemPrompt = systemPrompt.replace(/\{METHODOLOGY_GUIDANCE\}/g, guidance);
+    }
+
     return systemPrompt;
   }
 
@@ -283,7 +304,7 @@ export class FrameworkManager {
   }
 
   /**
-   * Initialize methodology guides registry (REMOVED - Phase 2)
+   * Initialize methodology guides registry (REMOVED - )
    * Functionality moved to MethodologyRegistry for better separation of concerns
    */
 
@@ -325,13 +346,17 @@ export class FrameworkManager {
   }
 
   /**
-   * Generate system prompt template from methodology guide
+   * Generate system prompt template from methodology guide.
+   *
+   * NOTE: This creates a WRAPPER only. The actual methodology guidance is injected
+   * by SystemPromptInjector.injectMethodologyGuidance() to avoid duplication.
+   * The injector calls guide.getSystemPromptGuidance() to get the detailed content.
    */
   private generateSystemPromptTemplate(guide: IMethodologyGuide): string {
-    const baseGuidance = guide.getSystemPromptGuidance({});
+    // Return wrapper only - guidance is injected by SystemPromptInjector
     return `You are operating under the ${guide.frameworkName} methodology for {PROMPT_NAME}.
 
-${baseGuidance}
+{METHODOLOGY_GUIDANCE}
 
 Apply this methodology systematically to ensure comprehensive and structured responses.`;
   }
@@ -360,7 +385,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
    */
   private getExecutionGuidelines(guide: IMethodologyGuide): string[] {
     // Generate basic guidelines from methodology guide context
-    const processingGuidance = guide.guideTemplateProcessing('', 'template');
+    const processingGuidance = guide.guideTemplateProcessing('', 'single');
     return processingGuidance.templateEnhancements.systemPromptAdditions;
   }
 

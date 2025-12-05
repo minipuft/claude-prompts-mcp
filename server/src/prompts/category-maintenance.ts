@@ -3,12 +3,13 @@
  * Filesystem-level category maintenance helpers shared across prompt tooling.
  */
 
-import * as fs from "node:fs/promises";
-import { readFile } from "node:fs/promises";
-import * as path from "node:path";
-import { Logger } from "../logging/index.js";
-import { PromptsConfigFile } from "../types/index.js";
-import { safeWriteFile } from "./promptUtils.js";
+import * as fs from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
+
+import { safeWriteFile } from './promptUtils.js';
+import { Logger } from '../logging/index.js';
+import { PromptsConfigFile } from '../types/index.js';
 
 export interface CategoryResult {
   effectiveCategory: string;
@@ -44,7 +45,7 @@ export async function ensureCategoryExistsOnDisk({
   promptsConfig,
   promptsFile,
 }: EnsureCategoryOptions): Promise<CategoryResult> {
-  const effectiveCategory = category.toLowerCase().replace(/\s+/g, "-");
+  const effectiveCategory = category.toLowerCase().replace(/\s+/g, '-');
   const exists = promptsConfig.categories.some((cat) => cat.id === effectiveCategory);
 
   if (!exists) {
@@ -57,19 +58,15 @@ export async function ensureCategoryExistsOnDisk({
     const categoryDir = path.join(path.dirname(promptsFile), effectiveCategory);
     await fs.mkdir(categoryDir, { recursive: true });
 
-    const categoryPromptsPath = path.join(categoryDir, "prompts.json");
-    await safeWriteFile(
-      categoryPromptsPath,
-      JSON.stringify({ prompts: [] }, null, 2),
-      "utf8"
-    );
+    const categoryPromptsPath = path.join(categoryDir, 'prompts.json');
+    await safeWriteFile(categoryPromptsPath, JSON.stringify({ prompts: [] }, null, 2), 'utf8');
 
-    const relativePath = path.join(effectiveCategory, "prompts.json").replace(/\\/g, "/");
+    const relativePath = path.join(effectiveCategory, 'prompts.json').replace(/\\/g, '/');
     if (!promptsConfig.imports.includes(relativePath)) {
       promptsConfig.imports.push(relativePath);
     }
 
-    await safeWriteFile(promptsFile, JSON.stringify(promptsConfig, null, 2), "utf8");
+    await safeWriteFile(promptsFile, JSON.stringify(promptsConfig, null, 2), 'utf8');
 
     logger.info(`Created new category: ${effectiveCategory}`);
     return { effectiveCategory, created: true };
@@ -93,7 +90,7 @@ export async function cleanupEmptyCategoryOnDisk({
   const messages: string[] = [];
 
   try {
-    const categoryId = categoryImport.split("/")[0];
+    const categoryId = categoryImport.split('/')[0];
 
     const categoryIndex = promptsConfig.categories.findIndex((cat) => cat.id === categoryId);
     if (categoryIndex > -1) {
@@ -107,7 +104,7 @@ export async function cleanupEmptyCategoryOnDisk({
       messages.push(`✅ Removed import path: ${categoryImport}`);
     }
 
-    await safeWriteFile(promptsFile, JSON.stringify(promptsConfig, null, 2), "utf8");
+    await safeWriteFile(promptsFile, JSON.stringify(promptsConfig, null, 2), 'utf8');
     messages.push(`✅ Updated promptsConfig.json`);
 
     try {
@@ -117,7 +114,7 @@ export async function cleanupEmptyCategoryOnDisk({
       await fs.rmdir(categoryDir);
       messages.push(`✅ Deleted empty category folder: ${path.basename(categoryDir)}`);
     } catch (folderError: any) {
-      if (folderError.code !== "ENOENT") {
+      if (folderError.code !== 'ENOENT') {
         messages.push(`⚠️ Could not delete category folder: ${folderError.message}`);
       }
     }
@@ -128,7 +125,7 @@ export async function cleanupEmptyCategoryOnDisk({
     messages.push(`❌ Category cleanup failed: ${error.message}`);
   }
 
-  return messages.join("\n");
+  return messages.join('\n');
 }
 
 /**
@@ -142,7 +139,7 @@ export async function isCategoryImportEmpty(
   try {
     const promptsConfigDir = path.dirname(promptsFile);
     const categoryPath = path.join(promptsConfigDir, categoryImport);
-    const categoryContent = await readFile(categoryPath, "utf8");
+    const categoryContent = await readFile(categoryPath, 'utf8');
     const categoryData = JSON.parse(categoryContent);
 
     return !categoryData.prompts || categoryData.prompts.length === 0;
@@ -165,13 +162,13 @@ export async function getCategoryStatsFromDisk(
   for (const categoryImport of categories) {
     try {
       const categoryPath = path.join(promptsConfigDir, categoryImport);
-      const categoryContent = await readFile(categoryPath, "utf8");
+      const categoryContent = await readFile(categoryPath, 'utf8');
       const categoryData = JSON.parse(categoryContent);
 
-      const categoryId = categoryImport.split("/")[0];
+      const categoryId = categoryImport.split('/')[0];
       stats[categoryId] = categoryData.prompts ? categoryData.prompts.length : 0;
     } catch (error) {
-      const categoryId = categoryImport.split("/")[0];
+      const categoryId = categoryImport.split('/')[0];
       stats[categoryId] = 0;
     }
   }
@@ -191,7 +188,7 @@ export async function validateCategoryStructureOnDisk(
   const categoryPath = path.join(promptsConfigDir, categoryImport);
 
   try {
-    const categoryContent = await readFile(categoryPath, "utf8");
+    const categoryContent = await readFile(categoryPath, 'utf8');
 
     try {
       const categoryData = JSON.parse(categoryContent);
@@ -216,10 +213,10 @@ export async function validateCategoryStructureOnDisk(
         }
       }
     } catch {
-      issues.push("Invalid JSON format");
+      issues.push('Invalid JSON format');
     }
   } catch {
-    issues.push("Category file not accessible");
+    issues.push('Category file not accessible');
   }
 
   return {

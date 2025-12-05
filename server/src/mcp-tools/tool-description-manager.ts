@@ -3,6 +3,8 @@
  * Tool Description Manager
  *
  * Manages externalized tool descriptions with graceful fallback to defaults.
+ * Methodology-specific overlays are sourced solely from runtime YAML definitions (SOT); config
+ * may define baseline/non-methodology text but methodology entries are ignored (warned).
  * Follows established ConfigManager pattern for consistency with existing architecture.
  */
 
@@ -12,11 +14,10 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { ConfigManager } from '../config/index.js';
+import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
 import {
-  CAGEERFMethodologyGuide,
-  ReACTMethodologyGuide,
-  FiveW1HMethodologyGuide,
-  SCAMPERMethodologyGuide,
+  getDefaultRuntimeLoader,
+  createGenericGuide,
 } from '../frameworks/methodology/index.js';
 import { MethodologyToolDescriptions } from '../frameworks/types/index.js';
 import { Logger } from '../logging/index.js';
@@ -28,8 +29,8 @@ const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[string, ToolDescription]> = [
     'prompt_engine',
     {
       description:
-        '🚀 PROMPT ENGINE [HOT-RELOAD]: Processes Nunjucks templates, returns executable instructions. WARNING: Output contains instructions YOU must execute (code gen, analysis, multi-step tasks) - not just information. IMPORTANT: Prompt names are case-insensitive and hyphens are converted to underscores. When your arguments include newlines or multi-line payloads, wrap the call in JSON so the parser receives a single-line command shell.',
-      shortDescription: 'Execute prompts, templates, and chains',
+        '🚀 PROMPT ENGINE: Executes prompts/chains with % modifiers and unified gates. Start with real prompt ids (no invented labels); list/inspect via prompt_manager(action:"list") when unsure. Inline gates via `::`; frameworks via `@`; `%clean`/`%lean` disable framework injection. Use `>>guide <topic>` only when you need help.',
+      shortDescription: 'Execute prompts and chains',
       category: 'execution',
     },
   ],
@@ -37,8 +38,8 @@ const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[string, ToolDescription]> = [
     'prompt_manager',
     {
       description:
-        '🧰 PROMPT MANAGER: Create, update, delete, list, and analyze prompts. Supports gate configuration, temporary gates, and prompt-type migration for full lifecycle control.',
-      shortDescription: 'Manage prompt lifecycle, gates, and discovery',
+        '📝 PROMPT MANAGER: Lifecycle operations for prompts. Actions: create|update|delete|list|inspect|analyze_type|analyze_gates|guide. Use `guide` action to discover which verb fits your goal.',
+      shortDescription: 'Manage prompt lifecycle',
       category: 'management',
     },
   ],
@@ -46,8 +47,8 @@ const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[string, ToolDescription]> = [
     'system_control',
     {
       description:
-        '⚙️ SYSTEM CONTROL: Unified interface for status reporting, framework and gate controls, analytics, configuration management, and maintenance operations.',
-      shortDescription: 'Manage framework state, metrics, and maintenance',
+        '⚙️ SYSTEM CONTROL: Framework switching, gate management, analytics. Actions: status|framework|gates|analytics|config|maintenance|guide. Use `>>help` for system-wide guidance.',
+      shortDescription: 'Framework, gates, analytics controls',
       category: 'system',
     },
   ],
@@ -97,6 +98,9 @@ export function getDefaultToolDescription(toolName: string): ToolDescription | u
 export class ToolDescriptionManager extends EventEmitter {
   private logger: Logger;
   private configPath: string;
+  private activeConfigPath: string;
+  private fallbackConfigPath: string;
+  private legacyFallbackPath: string;
   private descriptions: Map<string, ToolDescription>;
   private defaults: Map<string, ToolDescription>;
   private methodologyDescriptions: Map<string, MethodologyToolDescriptions>;
@@ -110,12 +114,25 @@ export class ToolDescriptionManager extends EventEmitter {
     newConfig: FrameworksConfig,
     previousConfig: FrameworksConfig
   ) => void;
+  private frameworkStateManager?: FrameworkStateManager;
+  private lastLoadSource: 'active' | 'fallback' | 'legacy' | 'defaults' = 'defaults';
+  private frameworkSwitchedListener?: (
+    previousFramework: string,
+    newFramework: string,
+    reason: string
+  ) => void;
+  private frameworkToggledListener?: (enabled: boolean, reason: string) => void;
 
   constructor(logger: Logger, configManager: ConfigManager) {
     super();
     this.logger = logger;
     this.configManager = configManager;
-    this.configPath = path.join(configManager.getServerRoot(), 'config', 'tool-descriptions.json');
+    const serverRoot = configManager.getServerRoot();
+    // Generated from contracts - single source of truth
+    this.configPath = path.join(serverRoot, 'src', 'tooling', 'contracts', '_generated', 'tool-descriptions.json');
+    this.activeConfigPath = this.configPath;
+    this.fallbackConfigPath = this.configPath; // No separate fallback - contracts are SSOT
+    this.legacyFallbackPath = this.configPath;
     this.descriptions = new Map();
     this.defaults = this.createDefaults();
     this.methodologyDescriptions = new Map();
@@ -126,6 +143,11 @@ export class ToolDescriptionManager extends EventEmitter {
       this.logger.info(
         `Tool description manager feature toggle updated (dynamicDescriptions: ${this.frameworksConfig.enableDynamicToolDescriptions})`
       );
+      if (this.isInitialized) {
+        void this.synchronizeActiveConfig(
+          'Framework feature config changed (dynamic tool descriptions toggle)'
+        );
+      }
     };
 
     this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
@@ -147,20 +169,33 @@ export class ToolDescriptionManager extends EventEmitter {
   }
 
   /**
+   * Warn if config attempts to define methodology-specific overlays (YAML is SOT for methodology).
+   */
+  private warnOnMethodologyConfigLeak(toolName: string, description: ToolDescription): void {
+    const hasMethodologyDesc = Boolean(description.frameworkAware?.methodologies);
+    const hasMethodologyParams = Boolean(description.frameworkAware?.methodologyParameters);
+    if (hasMethodologyDesc || hasMethodologyParams) {
+      this.logger.warn(
+        `[ToolDescriptionManager] Config contains methodology-specific entries for ${toolName}; YAML overlays are the sole source of truth. Config methodology entries are ignored.`
+      );
+    }
+  }
+
+  /**
    * Pre-load all methodology descriptions for dynamic switching
+   * Uses RuntimeMethodologyLoader for YAML-based methodology loading
    */
   private preloadMethodologyDescriptions(): void {
     try {
-      // Initialize all methodology guides
-      const guides = [
-        new CAGEERFMethodologyGuide(),
-        new ReACTMethodologyGuide(),
-        new FiveW1HMethodologyGuide(),
-        new SCAMPERMethodologyGuide(),
-      ];
+      this.methodologyDescriptions.clear();
+      const loader = getDefaultRuntimeLoader();
+      const methodologyIds = loader.discoverMethodologies();
 
-      // Pre-load tool descriptions for each methodology using normalized keys
-      for (const guide of guides) {
+      for (const id of methodologyIds) {
+        const definition = loader.loadMethodology(id);
+        if (!definition) continue;
+
+        const guide = createGenericGuide(definition);
         const descriptions = guide.getToolDescriptions?.() || {};
         const methodologyKey = this.normalizeMethodologyKey(guide.methodology);
         const frameworkKey = this.normalizeMethodologyKey(guide.frameworkId);
@@ -175,7 +210,7 @@ export class ToolDescriptionManager extends EventEmitter {
       }
 
       this.logger.info(
-        `✅ Pre-loaded tool descriptions for ${this.methodologyDescriptions.size} methodologies`
+        `✅ Pre-loaded tool descriptions for ${this.methodologyDescriptions.size} methodologies from YAML (SOT)`
       );
     } catch (error) {
       this.logger.error(
@@ -184,46 +219,263 @@ export class ToolDescriptionManager extends EventEmitter {
     }
   }
 
-  /**
-   * Initialize by loading descriptions from external config file
-   */
-  async initialize(): Promise<void> {
+  private async readToolDescriptionsConfig(
+    filePath: string
+  ): Promise<ToolDescriptionsConfig | undefined> {
     try {
-      this.logger.info(`Loading tool descriptions from ${this.configPath}...`);
-      const content = await fs.readFile(this.configPath, 'utf-8');
+      const content = await fs.readFile(filePath, 'utf-8');
       const config: ToolDescriptionsConfig = JSON.parse(content);
 
-      // Validate config structure
       if (!config.tools || typeof config.tools !== 'object') {
         throw new Error('Invalid tool descriptions config: missing or invalid tools section');
       }
 
-      // Load descriptions
-      this.descriptions.clear();
-      for (const [name, description] of Object.entries(config.tools)) {
-        this.descriptions.set(name, description);
+      return config;
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT') {
+        this.logger.warn(
+          `[ToolDescriptionManager] Unable to read tool descriptions from ${filePath}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
       }
+      return undefined;
+    }
+  }
 
-      this.isInitialized = true;
-      this.logger.info(
-        `✅ Loaded ${this.descriptions.size} tool descriptions from external config (version: ${config.version})`
-      );
+  private createConfigFromMap(
+    sourceMap: Map<string, ToolDescription>,
+    source: 'defaults' | 'fallback' | 'legacy'
+  ): ToolDescriptionsConfig {
+    return {
+      version: '2.0.0',
+      lastUpdated: new Date().toISOString(),
+      generatedFrom: source,
+      tools: Object.fromEntries(
+        Array.from(sourceMap.entries()).map(([name, description]) => [
+          name,
+          cloneToolDescription(description),
+        ])
+      ),
+    };
+  }
 
-      // Pre-load methodology descriptions for dynamic switching
-      this.preloadMethodologyDescriptions();
+  private async loadBaseConfig(): Promise<{
+    config: ToolDescriptionsConfig;
+    source: 'active' | 'fallback' | 'legacy' | 'defaults';
+    path: string;
+  }> {
+    // Load from generated tool-descriptions.json (contracts are SSOT)
+    const generated = await this.readToolDescriptionsConfig(this.configPath);
+    if (generated) {
+      return { config: generated, source: 'active', path: this.configPath };
+    }
+
+    // Fallback to in-memory defaults if generated file missing
+    // This should only happen if contracts weren't generated - run `npm run generate:contracts`
+    this.logger.warn(
+      `[ToolDescriptionManager] Generated tool-descriptions.json not found at ${this.configPath}. ` +
+      `Run 'npm run generate:contracts' to generate from contracts. Using in-memory defaults.`
+    );
+    return {
+      config: this.createConfigFromMap(this.defaults, 'defaults'),
+      source: 'defaults',
+      path: '<defaults>',
+    };
+  }
+
+  private setDescriptionsFromConfig(config: ToolDescriptionsConfig): void {
+    this.descriptions.clear();
+    for (const [name, description] of Object.entries(config.tools)) {
+      this.warnOnMethodologyConfigLeak(name, description as ToolDescription);
+      this.descriptions.set(name, cloneToolDescription(description as ToolDescription));
+    }
+  }
+
+  private getActiveFrameworkContext(): {
+    activeFramework?: string;
+    activeMethodology?: string;
+    frameworkSystemEnabled?: boolean;
+  } {
+    if (!this.frameworkStateManager) {
+      return {};
+    }
+
+    try {
+      const state = this.frameworkStateManager.getCurrentState();
+      const activeFramework = this.frameworkStateManager.getActiveFramework();
+
+      return {
+        activeFramework: activeFramework?.id,
+        activeMethodology: activeFramework?.methodology ?? activeFramework?.id,
+        frameworkSystemEnabled: state?.frameworkSystemEnabled,
+      };
     } catch (error) {
       this.logger.warn(
-        `⚠️ Failed to load tool descriptions from ${this.configPath}: ${error instanceof Error ? error.message : String(error)}`
+        `[ToolDescriptionManager] Unable to read framework state for tool descriptions: ${
+          error instanceof Error ? error.message : String(error)
+        }`
       );
-      this.logger.info('🔄 Using hardcoded default descriptions as fallback');
+      return {};
+    }
+  }
 
-      // Use defaults as fallback
-      this.descriptions = new Map(this.defaults);
+  private buildActiveConfig(
+    baseConfig: ToolDescriptionsConfig,
+    activeContext: {
+      activeFramework?: string;
+      activeMethodology?: string;
+      frameworkSystemEnabled?: boolean;
+    }
+  ): ToolDescriptionsConfig {
+    const methodologyKey = this.normalizeMethodologyKey(
+      activeContext.activeMethodology ?? activeContext.activeFramework
+    );
+    const dynamicDescriptionsEnabled =
+      this.frameworksConfig.enableDynamicToolDescriptions &&
+      (activeContext.frameworkSystemEnabled ?? true);
+
+    const tools: Record<string, ToolDescription> = {};
+    for (const [name, description] of Object.entries(baseConfig.tools)) {
+      const baseDescription = cloneToolDescription(description as ToolDescription);
+
+      if (dynamicDescriptionsEnabled && methodologyKey) {
+        const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
+        const methodologyTool =
+          methodologyDescs?.[name as keyof MethodologyToolDescriptions] || undefined;
+
+        if (methodologyTool?.description) {
+          baseDescription.description = methodologyTool.description;
+        }
+
+        if (methodologyTool?.parameters) {
+          baseDescription.parameters = {
+            ...baseDescription.parameters,
+            ...methodologyTool.parameters,
+          };
+        }
+      }
+
+      tools[name] = baseDescription;
+    }
+
+    return {
+      ...baseConfig,
+      tools,
+      activeFramework: activeContext.activeFramework,
+      activeMethodology: activeContext.activeMethodology,
+      generatedAt: new Date().toISOString(),
+      generatedFrom: baseConfig.generatedFrom ?? 'fallback',
+    };
+  }
+
+  private async maybePersistActiveConfig(config: ToolDescriptionsConfig): Promise<boolean> {
+    try {
+      const serialized = JSON.stringify(config, null, 2);
+      let existing: string | undefined;
+      try {
+        existing = await fs.readFile(this.activeConfigPath, 'utf-8');
+      } catch (error: any) {
+        if (error?.code !== 'ENOENT') {
+          this.logger.warn(
+            `[ToolDescriptionManager] Unable to read active tool descriptions before write: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      }
+
+      if (existing && existing.trim() === serialized.trim()) {
+        return false;
+      }
+
+      await fs.mkdir(path.dirname(this.activeConfigPath), { recursive: true });
+      await fs.writeFile(this.activeConfigPath, serialized, 'utf-8');
+      this.logger.info(
+        `💾 Wrote active tool descriptions to ${this.activeConfigPath} (framework: ${config.activeFramework || 'n/a'}, methodology: ${config.activeMethodology || 'n/a'})`
+      );
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `[ToolDescriptionManager] Failed to persist active tool descriptions: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return false;
+    }
+  }
+
+  private async synchronizeActiveConfig(
+    reason: string,
+    options?: { emitChange?: boolean }
+  ): Promise<void> {
+    try {
+      const base = await this.loadBaseConfig();
+      this.lastLoadSource = base.source;
+      this.preloadMethodologyDescriptions();
+      const activeContext = this.getActiveFrameworkContext();
+      const activeConfig = this.buildActiveConfig(base.config, activeContext);
+      activeConfig.generatedFrom = base.source;
+
+      await this.maybePersistActiveConfig(activeConfig);
+      this.setDescriptionsFromConfig(activeConfig);
       this.isInitialized = true;
 
-      // Pre-load methodology descriptions for dynamic switching
-      this.preloadMethodologyDescriptions();
+      this.logger.info(
+        `✅ Synchronized tool descriptions (${reason}); source=${base.source}, framework=${activeContext.activeFramework || 'n/a'}, methodology=${activeContext.activeMethodology || 'n/a'}`
+      );
+
+      if (options?.emitChange ?? true) {
+        this.emit('descriptions-changed', this.getStats());
+      }
+    } catch (error) {
+      this.logger.error(
+        `[ToolDescriptionManager] Failed to synchronize tool descriptions: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      this.descriptions = new Map(this.defaults);
+      this.lastLoadSource = 'defaults';
+      this.isInitialized = true;
+      if (options?.emitChange ?? true) {
+        this.emit('descriptions-error', error);
+      }
     }
+  }
+
+  setFrameworkStateManager(frameworkStateManager: FrameworkStateManager): void {
+    if (this.frameworkStateManager === frameworkStateManager) {
+      return;
+    }
+
+    // Clean up old listeners if re-binding
+    if (this.frameworkStateManager && this.frameworkSwitchedListener) {
+      this.frameworkStateManager.off('framework-switched', this.frameworkSwitchedListener);
+    }
+    if (this.frameworkStateManager && this.frameworkToggledListener) {
+      this.frameworkStateManager.off('framework-system-toggled', this.frameworkToggledListener);
+    }
+
+    this.frameworkStateManager = frameworkStateManager;
+
+    this.frameworkSwitchedListener = async (_prev, _next, reason) => {
+      await this.synchronizeActiveConfig(`framework switched: ${reason}`);
+    };
+    this.frameworkToggledListener = async (enabled, reason) => {
+      await this.synchronizeActiveConfig(
+        `framework system ${enabled ? 'enabled' : 'disabled'}: ${reason}`
+      );
+    };
+
+    this.frameworkStateManager.on('framework-switched', this.frameworkSwitchedListener);
+    this.frameworkStateManager.on('framework-system-toggled', this.frameworkToggledListener);
+  }
+
+  /**
+   * Initialize by loading descriptions from external config file
+   */
+  async initialize(): Promise<void> {
+    await this.synchronizeActiveConfig('initial load', { emitChange: false });
   }
 
   /**
@@ -255,7 +507,7 @@ export class ToolDescriptionManager extends EventEmitter {
     const methodologyKey = this.normalizeMethodologyKey(activeMethodology);
     const methodologyLogName = activeMethodology ?? methodologyKey;
 
-    // PRIORITY 1: Methodology-specific descriptions from guides (HIGHEST PRIORITY)
+    // PRIORITY 1: Methodology-specific descriptions from YAML guides (SOT, HIGHEST PRIORITY)
     if (applyMethodologyOverride && methodologyKey) {
       const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
       if (methodologyDescs?.[toolName as keyof MethodologyToolDescriptions]?.description) {
@@ -285,20 +537,6 @@ export class ToolDescriptionManager extends EventEmitter {
         return toolDesc.frameworkAware.disabled;
       }
 
-      // Check for static methodology descriptions in config as fallback
-      if (frameworkEnabled && methodologyKey && toolDesc.frameworkAware?.methodologies) {
-        const configMethodologyDescription =
-          toolDesc.frameworkAware.methodologies[methodologyKey] ??
-          (activeMethodology
-            ? toolDesc.frameworkAware.methodologies[activeMethodology]
-            : undefined);
-        if (configMethodologyDescription) {
-          this.logger.debug(
-            `✅ Using static methodology description from config for ${toolName} (${methodologyLogName})`
-          );
-          return configMethodologyDescription;
-        }
-      }
     }
 
     // PRIORITY 3: Basic config file descriptions (LOWER PRIORITY)
@@ -330,20 +568,12 @@ export class ToolDescriptionManager extends EventEmitter {
     if (!toolDesc.parameters) return undefined;
     const methodologyKey = this.normalizeMethodologyKey(activeMethodology);
 
-    // Check for methodology-specific parameter descriptions first (from pre-loaded cache)
+    // Check for methodology-specific parameter descriptions first (from YAML SOT cache)
     if (applyMethodologyOverride && methodologyKey) {
       const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
       const methodologyTool = methodologyDescs?.[toolName as keyof MethodologyToolDescriptions];
       if (methodologyTool?.parameters?.[paramName]) {
-        return methodologyTool.parameters[paramName];
-      }
-      // Fallback to static config if available
-      const methodologyParameters = toolDesc.frameworkAware?.methodologyParameters;
-      const methodologyParamConfig =
-        methodologyParameters?.[methodologyKey] ??
-        (activeMethodology ? methodologyParameters?.[activeMethodology] : undefined);
-      if (methodologyParamConfig?.[paramName]) {
-        const param = methodologyParamConfig[paramName];
+        const param = methodologyTool.parameters[paramName];
         return typeof param === 'string' ? param : param?.description;
       }
     }
@@ -383,7 +613,7 @@ export class ToolDescriptionManager extends EventEmitter {
    * Get configuration path for debugging
    */
   getConfigPath(): string {
-    return this.configPath;
+    return this.activeConfigPath;
   }
 
   /**
@@ -395,16 +625,20 @@ export class ToolDescriptionManager extends EventEmitter {
     usingDefaults: number;
     configPath: string;
     isInitialized: boolean;
+    source: string;
   } {
-    const loadedFromFile = this.descriptions.size;
+    const loadedFromFile =
+      this.lastLoadSource === 'defaults' ? 0 : this.descriptions.size || 0;
     const defaultCount = this.defaults.size;
+    const usingDefaults = this.lastLoadSource === 'defaults' ? defaultCount : 0;
 
     return {
       totalDescriptions: this.descriptions.size,
-      loadedFromFile: loadedFromFile > defaultCount ? loadedFromFile : 0,
-      usingDefaults: loadedFromFile <= defaultCount ? defaultCount : 0,
-      configPath: this.configPath,
+      loadedFromFile,
+      usingDefaults,
+      configPath: this.activeConfigPath,
       isInitialized: this.isInitialized,
+      source: this.lastLoadSource,
     };
   }
 
@@ -418,9 +652,11 @@ export class ToolDescriptionManager extends EventEmitter {
     }
 
     try {
-      this.logger.info(`🔍 Starting file watcher for tool descriptions: ${this.configPath}`);
+      this.logger.info(
+        `🔍 Starting file watcher for tool descriptions: ${this.activeConfigPath}`
+      );
 
-      this.fileWatcher = watch(this.configPath, (eventType) => {
+      this.fileWatcher = watch(this.activeConfigPath, (eventType) => {
         if (eventType === 'change') {
           this.handleFileChange();
         }
@@ -488,7 +724,7 @@ export class ToolDescriptionManager extends EventEmitter {
    * Reload descriptions from file
    */
   async reload(): Promise<void> {
-    await this.initialize();
+    await this.synchronizeActiveConfig('file change');
   }
 
   /**
@@ -503,6 +739,15 @@ export class ToolDescriptionManager extends EventEmitter {
    */
   shutdown(): void {
     this.stopWatching();
+    if (this.frameworksConfigListener) {
+      this.configManager.off('frameworksConfigChanged', this.frameworksConfigListener);
+    }
+    if (this.frameworkStateManager && this.frameworkSwitchedListener) {
+      this.frameworkStateManager.off('framework-switched', this.frameworkSwitchedListener);
+    }
+    if (this.frameworkStateManager && this.frameworkToggledListener) {
+      this.frameworkStateManager.off('framework-system-toggled', this.frameworkToggledListener);
+    }
     this.removeAllListeners();
   }
 }

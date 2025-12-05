@@ -50,7 +50,10 @@ describe('Consolidated MCP tool factories', () => {
     const mockConfigManager = {
       getConfig: () => ({
         server: { name: 'test-server', version: '1.0.0' },
-        gates: { definitionsDirectory: 'src/gates/definitions', templatesDirectory: 'src/gates/templates' },
+        gates: {
+          definitionsDirectory: 'src/gates/definitions',
+          templatesDirectory: 'src/gates/templates',
+        },
       }),
       getPromptsFilePath: () => '/test/prompts.json',
       getFrameworksConfig: () => ({
@@ -103,7 +106,7 @@ describe('Consolidated MCP tool factories', () => {
       mockSemanticAnalyzer as any,
       mockConversationManager as any,
       mockTextReferenceManager as any,
-      mockMcpToolsManager,
+      mockMcpToolsManager
     );
 
     promptManager = createConsolidatedPromptManager(
@@ -117,10 +120,8 @@ describe('Consolidated MCP tool factories', () => {
       () => Promise.resolve()
     );
 
-    systemControl = createConsolidatedSystemControl(
-      logger as any,
-      mockMcpServer as any,
-      () => Promise.resolve()
+    systemControl = createConsolidatedSystemControl(logger as any, mockMcpServer as any, () =>
+      Promise.resolve()
     );
   });
 

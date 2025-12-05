@@ -2,11 +2,15 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
 import { CommandParsingStage } from '../../../../src/execution/pipeline/stages/01-parsing-stage.js';
-import type { UnifiedCommandParser } from '../../../../src/execution/parsers/unified-command-parser.js';
-import type { ArgumentParser, ArgumentParsingResult } from '../../../../src/execution/parsers/argument-parser.js';
+
+import type {
+  ArgumentParser,
+  ArgumentParsingResult,
+} from '../../../../src/execution/parsers/argument-parser.js';
 import type { SymbolicCommandParseResult } from '../../../../src/execution/parsers/types/operator-types.js';
-import type { ConvertedPrompt } from '../../../../src/types/index.js';
+import type { UnifiedCommandParser } from '../../../../src/execution/parsers/command-parser.js';
 import type { Logger } from '../../../../src/logging/index.js';
+import type { ConvertedPrompt } from '../../../../src/types/index.js';
 
 const createLogger = (): Logger => ({
   info: jest.fn(),

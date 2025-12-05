@@ -8,18 +8,6 @@
 import { z } from 'zod';
 
 /**
- * Zod schema for ExecutionMode validation
- */
-export const executionModeSchema = z.enum(['auto', 'prompt', 'template', 'chain'], {
-  errorMap: (issue, ctx) => {
-    if (issue.code === z.ZodIssueCode.invalid_enum_value) {
-      return { message: 'Execution mode must be one of: auto, prompt, template, chain' };
-    }
-    return { message: ctx.defaultError };
-  },
-});
-
-/**
  * Zod schema for GateScope validation
  */
 export const gateScopeSchema = z.enum(['execution', 'session', 'chain', 'step'], {
@@ -50,25 +38,95 @@ export const customCheckSchema = z.object(
 );
 
 /**
- * Zod schema for TemporaryGateDefinition validation
+ * Zod schema for temporary gate object validation
+ *
+ * Note: The 'severity' field is currently metadata-only and does not affect execution behavior.
+ * Severity-based enforcement is planned for future semantic layer integration.
+ *
+ * Note: Gate types 'validation' and 'guidance' are actively used. Types 'approval', 'condition',
+ * and 'quality' are accepted but currently treated identically to 'validation'.
  */
-export const temporaryGateDefinitionSchema = z.object(
-  {
-    id: z.string().min(1, 'Gate ID cannot be empty'),
-    criteria: z
-      .array(z.string().min(1, 'Gate criteria cannot be empty'))
-      .min(1, 'Gate criteria cannot be empty'),
-    severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
-  },
+const temporaryGateObjectSchema = z
+  .object(
+    {
+      id: z.string().min(1, 'Gate ID cannot be empty').optional(),
+      template: z.string().trim().min(1, 'Template reference cannot be empty').optional(),
+      name: z.string().trim().min(1, 'Gate name cannot be empty').optional(),
+      type: z.enum(['validation', 'approval', 'condition', 'quality', 'guidance']).optional(),
+      scope: gateScopeSchema.optional(),
+      criteria: z.array(z.string().min(1, 'Gate criteria cannot be empty')).optional(),
+      pass_criteria: z.array(z.string().min(1, 'Pass criteria cannot be empty')).optional(),
+      guidance: z.string().optional(),
+      description: z.string().optional(),
+      severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+      context: z.record(z.any()).optional(),
+      source: z.enum(['manual', 'automatic', 'analysis']).optional(),
+    },
+    {
+      errorMap: (issue, ctx) => {
+        if (issue.code === z.ZodIssueCode.invalid_type) {
+          return { message: 'Temporary gate definition must be an object or string reference' };
+        }
+        return { message: ctx.defaultError };
+      },
+    }
+  )
+  .superRefine((value, ctx) => {
+    const hasIdentifier = Boolean(value.id || value.template);
+    const hasContent = Boolean(
+      (value.criteria && value.criteria.length > 0) ||
+        (value.pass_criteria && value.pass_criteria.length > 0) ||
+        (value.guidance && value.guidance.trim().length > 0) ||
+        (value.description && value.description.trim().length > 0)
+    );
+
+    if (!hasIdentifier && !hasContent) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide an id/template or include criteria/guidance for each temporary gate',
+      });
+    }
+  });
+
+/**
+ * Zod schema for unified GateSpecification validation (canonical in v3.0.0+).
+ *
+ * Accepts:
+ * - String gate ID references (e.g., "toxicity")
+ * - Simple custom checks ({name, description})
+ * - Full temporary gate definitions (with criteria, severity, etc.)
+ */
+export const gateSpecificationSchema = z.union(
+  [
+    z.string().trim().min(1, 'Gate reference cannot be empty'),
+    customCheckSchema,
+    temporaryGateObjectSchema,
+  ],
   {
     errorMap: (issue, ctx) => {
-      if (issue.code === z.ZodIssueCode.invalid_type) {
-        return { message: 'Temporary gate definition must be an object with id and criteria' };
+      if (issue.code === z.ZodIssueCode.invalid_union) {
+        return {
+          message:
+            'Gate specification must be a string ID, custom check object, or full gate definition',
+        };
       }
       return { message: ctx.defaultError };
     },
   }
 );
+
+/**
+ * Zod schema for gate_action parameter validation
+ * Used when retry limit is exceeded to let user choose: retry, skip, or abort
+ */
+export const gateActionSchema = z.enum(['retry', 'skip', 'abort'], {
+  errorMap: (issue, ctx) => {
+    if (issue.code === z.ZodIssueCode.invalid_enum_value) {
+      return { message: 'Gate action must be one of: retry, skip, abort' };
+    }
+    return { message: ctx.defaultError };
+  },
+});
 
 /**
  * Complete Zod schema for McpToolRequest validation
@@ -92,16 +150,10 @@ export const mcpToolRequestSchema = z
           'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
         )
         .optional(),
+      gate_action: gateActionSchema.optional(),
       user_response: z.string().trim().optional(),
       force_restart: z.boolean().optional(),
-      execution_mode: executionModeSchema.optional(),
-      api_validation: z.boolean().optional(),
-      gate_validation: z.boolean().optional(),
-      quality_gates: z.array(z.string()).optional(),
-      custom_checks: z.array(customCheckSchema).optional(),
-      temporary_gates: z.array(temporaryGateDefinitionSchema).optional(),
-      gate_scope: gateScopeSchema.optional(),
-      timeout: z.number().int().positive().optional(),
+      gates: z.array(gateSpecificationSchema).optional(),
       options: z.record(z.any()).optional(),
     },
     {

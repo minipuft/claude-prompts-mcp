@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 
 import { ChainSessionManager, type SessionBlueprint } from '../../../src/chain-session/manager.js';
 import { StepState } from '../../../src/mcp-tools/prompt-engine/core/types.js';
+
 import type { Logger } from '../../../src/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/types/index.js';
 
@@ -126,7 +127,7 @@ describe('ChainSessionManager', () => {
           {
             stepNumber: 1,
             promptId: 'chain-alpha:step1',
-            args: {},
+            args: { input: 'alpha' },
             inlineGateIds: ['inline_gate_focus_step'],
           },
         ] as any,
@@ -150,6 +151,7 @@ describe('ChainSessionManager', () => {
 
     expect(context.chain_run_id).toBe('session-chain-context');
     expect(context.total_steps).toBe(2);
+    expect(context.currentStepArgs).toEqual({ input: 'alpha' });
     expect(context.chain_metadata).toEqual(
       expect.objectContaining({
         chainId: 'chain-alpha',

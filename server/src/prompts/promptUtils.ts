@@ -1,8 +1,10 @@
 // @lifecycle canonical - Shared filesystem utilities for prompt discovery and safe writes.
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
-import type { Dirent } from "node:fs";
-import { PromptData, PromptsConfigFile } from "../types.js";
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+
+import { PromptData, PromptsConfigFile } from '../types.js';
+
+import type { Dirent } from 'node:fs';
 
 // Create a simple logger since we can't import from index.ts
 const log = {
@@ -29,10 +31,10 @@ export function resolvePromptFilePath(
   configFilePath: string,
   categoryFolder: string
 ): string {
-  if (promptFile.startsWith("/")) {
+  if (promptFile.startsWith('/')) {
     // Absolute path (relative to config file location)
     return path.resolve(path.dirname(configFilePath), promptFile.slice(1));
-  } else if (promptFile.includes("/")) {
+  } else if (promptFile.includes('/')) {
     // Path already includes category or sub-path
     return path.resolve(path.dirname(configFilePath), promptFile);
   } else {
@@ -48,13 +50,11 @@ export function resolvePromptFilePath(
  */
 export async function readPromptFile(promptFilePath: string): Promise<string> {
   try {
-    return await fs.readFile(promptFilePath, "utf8");
+    return await fs.readFile(promptFilePath, 'utf8');
   } catch (error) {
     log.error(`Error reading prompt file ${promptFilePath}:`, error);
     throw new Error(
-      `Failed to read prompt file: ${
-        error instanceof Error ? error.message : String(error)
-      }`
+      `Failed to read prompt file: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }
@@ -77,14 +77,12 @@ export function parsePromptSections(content: string): Record<string, string> {
     if (descMatch) {
       sections.description = descMatch[1].trim();
     } else {
-      sections.description = "";
+      sections.description = '';
     }
   }
 
   // Extract other sections (## headings)
-  const sectionMatches = content.matchAll(
-    /## ([^\n]+)\n\n([\s\S]+?)(?=\n## |\n# |\n$)/g
-  );
+  const sectionMatches = content.matchAll(/## ([^\n]+)\n\n([\s\S]+?)(?=\n## |\n# |\n$)/g);
   for (const match of sectionMatches) {
     const sectionName = match[1].trim();
     const sectionContent = match[2].trim();
@@ -117,12 +115,12 @@ export async function modifyPromptSection(
     const messages: string[] = [];
     // Read the promptsConfig.json file
     const configFilePath = path.resolve(configPath);
-    const configContent = await fs.readFile(configFilePath, "utf8");
+    const configContent = await fs.readFile(configFilePath, 'utf8');
     const promptsConfig = JSON.parse(configContent) as PromptsConfigFile;
 
     // Find the prompt in all category files
     let prompt: PromptData | null = null;
-    let categoryFilePath: string = "";
+    let categoryFilePath: string = '';
     let promptIndex: number = -1;
     let promptsFile: any = null;
 
@@ -130,10 +128,7 @@ export async function modifyPromptSection(
     for (const importPath of promptsConfig.imports) {
       try {
         // Construct the full path to the import file
-        const fullImportPath = path.resolve(
-          path.dirname(configFilePath),
-          importPath
-        );
+        const fullImportPath = path.resolve(path.dirname(configFilePath), importPath);
 
         // Check if the file exists
         try {
@@ -144,13 +139,10 @@ export async function modifyPromptSection(
         }
 
         // Read the file
-        const fileContent = await fs.readFile(fullImportPath, "utf8");
+        const fileContent = await fs.readFile(fullImportPath, 'utf8');
         const categoryPromptsFile = JSON.parse(fileContent);
 
-        if (
-          categoryPromptsFile.prompts &&
-          Array.isArray(categoryPromptsFile.prompts)
-        ) {
+        if (categoryPromptsFile.prompts && Array.isArray(categoryPromptsFile.prompts)) {
           // Find the prompt in this category file
           const foundIndex = categoryPromptsFile.prompts.findIndex(
             (p: PromptData) => p.id === promptId
@@ -162,9 +154,7 @@ export async function modifyPromptSection(
             promptIndex = foundIndex;
             promptsFile = categoryPromptsFile;
             messages.push(
-              `✅ Found prompt '${promptId}' in category file: ${path.basename(
-                categoryFilePath
-              )}`
+              `✅ Found prompt '${promptId}' in category file: ${path.basename(categoryFilePath)}`
             );
             break;
           }
@@ -186,11 +176,7 @@ export async function modifyPromptSection(
     const categoryFolder = path.dirname(categoryFilePath);
 
     // Get the full path to the prompt file using the new utility function
-    const promptFilePath = resolvePromptFilePath(
-      prompt.file,
-      configFilePath,
-      categoryFolder
-    );
+    const promptFilePath = resolvePromptFilePath(prompt.file, configFilePath, categoryFolder);
 
     // Read the prompt file
     const promptContent = await readPromptFile(promptFilePath);
@@ -199,7 +185,7 @@ export async function modifyPromptSection(
     const sections = parsePromptSections(promptContent);
 
     // Check if the section exists
-    if (!(sectionName in sections) && sectionName !== "description") {
+    if (!(sectionName in sections) && sectionName !== 'description') {
       return {
         success: false,
         message: `Section '${sectionName}' not found in prompt '${promptId}'`,
@@ -211,9 +197,9 @@ export async function modifyPromptSection(
     const originalContent = promptContent;
 
     // Modify the section
-    if (sectionName === "title") {
+    if (sectionName === 'title') {
       sections.title = newContent;
-    } else if (sectionName === "description") {
+    } else if (sectionName === 'description') {
       sections.description = newContent;
     } else {
       sections[sectionName] = newContent;
@@ -224,7 +210,7 @@ export async function modifyPromptSection(
 
     // Add other sections
     for (const [name, content] of Object.entries(sections)) {
-      if (name !== "title" && name !== "description") {
+      if (name !== 'title' && name !== 'description') {
         newPromptContent += `## ${name}\n\n${content}\n\n`;
       }
     }
@@ -232,7 +218,7 @@ export async function modifyPromptSection(
     // Create the updated prompt
     const updatedPrompt: PromptData = {
       ...originalPrompt,
-      name: sectionName === "title" ? newContent : originalPrompt.name,
+      name: sectionName === 'title' ? newContent : originalPrompt.name,
     };
 
     // Create a copy of the prompts file with the prompt removed
@@ -252,40 +238,29 @@ export async function modifyPromptSection(
 
       // 2. Write the updated category file with the prompt removed and added back
       async () =>
-        await safeWriteFile(
-          categoryFilePath,
-          JSON.stringify(updatedPromptsFile, null, 2)
-        ),
+        await safeWriteFile(categoryFilePath, JSON.stringify(updatedPromptsFile, null, 2)),
     ];
 
     const rollbacks = [
       // 1. Restore the original prompt content
-      async () => await fs.writeFile(promptFilePath, originalContent, "utf8"),
+      async () => await fs.writeFile(promptFilePath, originalContent, 'utf8'),
 
       // 2. Restore the original category file
       async () =>
-        await fs.writeFile(
-          categoryFilePath,
-          JSON.stringify(promptsFile, null, 2),
-          "utf8"
-        ),
+        await fs.writeFile(categoryFilePath, JSON.stringify(promptsFile, null, 2), 'utf8'),
     ];
 
     // Perform the operations as a transaction
     await performTransactionalFileOperations(operations, rollbacks);
 
-    messages.push(
-      `✅ Updated section '${sectionName}' in markdown file: ${prompt.file}`
-    );
-    if (sectionName === "title") {
-      messages.push(
-        `✅ Updated prompt name in category file to '${newContent}'`
-      );
+    messages.push(`✅ Updated section '${sectionName}' in markdown file: ${prompt.file}`);
+    if (sectionName === 'title') {
+      messages.push(`✅ Updated prompt name in category file to '${newContent}'`);
     }
 
     return {
       success: true,
-      message: messages.join("\n"),
+      message: messages.join('\n'),
       promptData: updatedPrompt,
       filePath: promptFilePath,
     };
@@ -313,12 +288,12 @@ export async function performTransactionalFileOperations<T>(
 ): Promise<T> {
   // Validate inputs
   if (!operations || !Array.isArray(operations) || operations.length === 0) {
-    throw new Error("No operations provided for transaction");
+    throw new Error('No operations provided for transaction');
   }
 
   if (!rollbacks || !Array.isArray(rollbacks)) {
     log.warn(
-      "No rollbacks provided for transaction - operations cannot be rolled back if they fail"
+      'No rollbacks provided for transaction - operations cannot be rolled back if they fail'
     );
     rollbacks = [];
   }
@@ -342,7 +317,7 @@ export async function performTransactionalFileOperations<T>(
   try {
     // Perform operations
     for (let i = 0; i < operations.length; i++) {
-      if (typeof operations[i] !== "function") {
+      if (typeof operations[i] !== 'function') {
         throw new Error(`Operation at index ${i} is not a function`);
       }
       result = await operations[i]();
@@ -350,15 +325,12 @@ export async function performTransactionalFileOperations<T>(
     }
     return result as T;
   } catch (error) {
-    log.error(
-      `Transaction failed at operation ${lastSuccessfulIndex + 1}:`,
-      error
-    );
+    log.error(`Transaction failed at operation ${lastSuccessfulIndex + 1}:`, error);
 
     // Perform rollbacks in reverse order
     for (let i = lastSuccessfulIndex; i >= 0; i--) {
       try {
-        if (typeof rollbacks[i] === "function") {
+        if (typeof rollbacks[i] === 'function') {
           await rollbacks[i]();
         } else {
           log.warn(`Skipping invalid rollback at index ${i} (not a function)`);
@@ -382,7 +354,7 @@ export async function performTransactionalFileOperations<T>(
 export async function safeWriteFile(
   filePath: string,
   content: string,
-  encoding: BufferEncoding = "utf8"
+  encoding: BufferEncoding = 'utf8'
 ): Promise<void> {
   const tempPath = `${filePath}.tmp`;
 
@@ -484,7 +456,7 @@ export async function findPromptFile(
 }> {
   try {
     // Get all category directories
-    const categoryDirs = (await fs.readdir(baseDir, { withFileTypes: true })) as Dirent[];
+    const categoryDirs = await fs.readdir(baseDir, { withFileTypes: true });
 
     // Filter for directories only
     const categories = categoryDirs
@@ -498,8 +470,8 @@ export async function findPromptFile(
     // Possible filenames to look for
     const possibleFilenames = [
       `${promptId}.md`, // Simple ID.md
-      `${promptId.replace(/-/g, "_")}.md`, // ID with underscores instead of hyphens
-      `${promptId.replace(/_/g, "-")}.md`, // ID with hyphens instead of underscores
+      `${promptId.replace(/-/g, '_')}.md`, // ID with underscores instead of hyphens
+      `${promptId.replace(/_/g, '-')}.md`, // ID with hyphens instead of underscores
     ];
 
     // Search each category directory for the file
@@ -527,9 +499,7 @@ export async function findPromptFile(
       }
     }
 
-    log.warn(
-      `Could not find markdown file for prompt '${promptId}' in any category folder`
-    );
+    log.warn(`Could not find markdown file for prompt '${promptId}' in any category folder`);
     return { found: false };
   } catch (error) {
     const errorMessage = `Error searching for prompt file: ${

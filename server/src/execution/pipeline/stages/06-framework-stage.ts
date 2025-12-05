@@ -1,12 +1,16 @@
 // @lifecycle canonical - Applies framework methodology guidance to prompts.
+import { METHODOLOGY_GATES } from '../../../gates/constants.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
-import type { FrameworkExecutionContext, FrameworkMethodology } from '../../../frameworks/types/index.js';
+import type {
+  FrameworkExecutionContext,
+  FrameworkMethodology,
+} from '../../../frameworks/types/index.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
-import { METHODOLOGY_GATES } from '../../../gates/constants.js';
-import type { ChainStepPrompt } from '../../operators/chain-operator-executor.js';
+import type { ChainStepPrompt } from '../../operators/types.js';
+import type { FrameworkDecisionInput } from '../decisions/index.js';
 
 type FrameworkEnabledProvider = () => boolean;
 
@@ -39,17 +43,71 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       return;
     }
 
-    if (!this.frameworkEnabled?.()) {
-      this.logExit({ skipped: 'Framework system disabled' });
-      return;
-    }
-
     const plan = context.executionPlan;
     if (!plan) {
       this.logExit({ skipped: 'Execution plan missing' });
       return;
     }
 
+    // Use FrameworkDecisionAuthority for centralized decision making
+    const decisionInput = this.buildDecisionInput(context);
+    const decision = context.frameworkAuthority.decide(decisionInput);
+
+    // Record framework decision diagnostic
+    context.diagnostics.info(this.name, 'Framework decision made', {
+      shouldApply: decision.shouldApply,
+      frameworkId: decision.frameworkId,
+      source: decision.source,
+      reason: decision.reason,
+    });
+
+    // Check if framework is disabled by modifiers (%clean, %lean)
+    if (!decision.shouldApply && decision.source === 'disabled') {
+      // Allow @ operator override even when framework system is globally disabled
+      const hasFrameworkOverride = Boolean(
+        context.parsedCommand?.executionPlan?.frameworkOverride ||
+          context.state.framework.clientOverride
+      );
+
+      if (!this.frameworkEnabled?.() && !hasFrameworkOverride) {
+        this.logExit({
+          skipped: 'Framework system disabled and no override specified',
+          decision: { source: decision.source, reason: decision.reason },
+        });
+        return;
+      }
+
+      // If modifiers disabled it, respect that decision
+      if (decision.reason.includes('%clean') || decision.reason.includes('%lean')) {
+        this.logExit({
+          skipped: 'Framework resolution disabled by modifier',
+          decision: { source: decision.source, reason: decision.reason },
+        });
+        return;
+      }
+    }
+
+    // For non-modifier disabling (no framework configured), check if resolution is needed
+    if (!decision.shouldApply && decision.source === 'disabled' && !decision.reason.includes('%')) {
+      // Framework not configured, but check if we need it
+      const chainRequiresFramework = context.hasChainCommand()
+        ? this.chainStepsRequireFramework(context)
+        : false;
+      const singleRequiresFramework = context.hasSinglePromptCommand()
+        ? this.hasMethodologyGate(context.parsedCommand.inlineGateIds)
+        : false;
+
+      const requiresFramework = Boolean(
+        plan.requiresFramework || chainRequiresFramework || singleRequiresFramework
+      );
+
+      if (!requiresFramework) {
+        this.logExit({ skipped: 'Framework not required' });
+        return;
+      }
+    }
+
+    // If decision says to apply, or if requirements trigger framework resolution
     const chainRequiresFramework = context.hasChainCommand()
       ? this.chainStepsRequireFramework(context)
       : false;
@@ -58,7 +116,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       : false;
 
     const requiresFramework = Boolean(
-      plan.requiresFramework || chainRequiresFramework || singleRequiresFramework
+      plan.requiresFramework || chainRequiresFramework || singleRequiresFramework || decision.shouldApply
     );
 
     if (!requiresFramework) {
@@ -68,7 +126,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
 
     try {
       if (context.hasChainCommand()) {
-        const result = this.resolveChainFrameworks(context);
+        const result = this.resolveChainFrameworks(context, decision.frameworkId);
         this.logExit(result);
         return;
       }
@@ -78,36 +136,86 @@ export class FrameworkResolutionStage extends BasePipelineStage {
         return;
       }
 
-      const result = this.resolveSinglePromptFramework(context);
+      const result = this.resolveSinglePromptFramework(context, decision.frameworkId);
       this.logExit(result);
     } catch (error) {
       this.handleError(error, 'Framework resolution failed');
     }
   }
 
-  private resolveSinglePromptFramework(context: ExecutionContext): Record<string, unknown> {
-    const prompt = context.requireConvertedPrompt();
-    const frameworkOverride = this.getFrameworkOverride(context);
+  /**
+   * Build decision input from context for FrameworkDecisionAuthority.
+   * This extracts all relevant data for the centralized framework decision.
+   */
+  private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
+    return {
+      modifiers: context.executionPlan?.modifiers,
+      operatorOverride: context.parsedCommand?.executionPlan?.frameworkOverride,
+      clientOverride: context.state.framework.clientOverride,
+      globalActiveFramework: context.frameworkContext?.selectedFramework?.id,
+    };
+  }
 
-    const frameworkContext: FrameworkExecutionContext = this.frameworkManager.generateExecutionContext(
-      prompt,
-      frameworkOverride ? { userPreference: frameworkOverride } : {}
-    );
+  /**
+   * Resolve framework context for a single prompt.
+   * @param context - Execution context
+   * @param authorityFrameworkId - Framework ID from FrameworkDecisionAuthority (already resolved)
+   */
+  private resolveSinglePromptFramework(
+    context: ExecutionContext,
+    authorityFrameworkId?: string
+  ): Record<string, unknown> {
+    const prompt = context.requireConvertedPrompt();
+
+    // Use framework ID from authority decision (already resolved with proper priority)
+    const frameworkOverride = authorityFrameworkId as FrameworkMethodology | undefined;
+
+    const frameworkContext: FrameworkExecutionContext =
+      this.frameworkManager.generateExecutionContext(
+        prompt,
+        frameworkOverride ? { userPreference: frameworkOverride } : {}
+      );
 
     context.frameworkContext = frameworkContext;
+    // Coordination flag: system prompt already applied via framework context for single prompts
+    context.state.framework.systemPromptApplied = true;
+
+    // Note: InjectionControlStage (07b) now controls system prompt injection.
+    // Downstream stages read from context.state.injection for injection decisions.
 
     return {
       framework: frameworkContext.selectedFramework?.name,
       override: Boolean(frameworkOverride),
+      source: 'authority-decision',
     };
   }
 
-  private resolveChainFrameworks(context: ExecutionContext): Record<string, unknown> {
+  /**
+   * Resolve framework context for chain steps.
+   * Generates framework context for each step but does NOT make injection decisions.
+   * Injection frequency control is handled by InjectionControlStage (07b)
+   * which runs after Session Stage when currentStep is known.
+   *
+   * @param context - Execution context
+   * @param authorityFrameworkId - Framework ID from FrameworkDecisionAuthority (already resolved)
+   */
+  private resolveChainFrameworks(
+    context: ExecutionContext,
+    authorityFrameworkId?: string
+  ): Record<string, unknown> {
     const steps = context.requireChainSteps();
-    const frameworkOverride = this.getFrameworkOverride(context);
+
+    // Use framework ID from authority decision (already resolved with proper priority)
+    const frameworkOverride = authorityFrameworkId as FrameworkMethodology | undefined;
     const resolvedSteps: string[] = [];
 
     for (const step of steps) {
+      // Check step-level modifiers for per-step framework control
+      if (this.stepHasDisablingModifiers(step)) {
+        step.frameworkContext = undefined;
+        continue;
+      }
+
       const requiresFrameworkForStep = this.stepRequiresFramework(step);
 
       if (!requiresFrameworkForStep) {
@@ -129,18 +237,32 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     }
 
     // Surface the first resolved framework context for downstream telemetry/formatting
-    context.frameworkContext = resolvedSteps.length > 0 ? steps.find((step) => step.frameworkContext)?.frameworkContext : undefined;
+    context.frameworkContext =
+      resolvedSteps.length > 0
+        ? steps.find((step) => step.frameworkContext)?.frameworkContext
+        : undefined;
+
+    // InjectionControlStage (07b) controls injection frequency for chains.
+    // It runs after SessionStage (07) when currentStep is known.
 
     return {
       chainSteps: steps.length,
       frameworksApplied: resolvedSteps.length,
       override: Boolean(frameworkOverride),
+      source: 'authority-decision',
     };
   }
 
-  private getFrameworkOverride(context: ExecutionContext): FrameworkMethodology | undefined {
-    const override = context.parsedCommand?.executionPlan?.frameworkOverride;
-    return override ? (override as FrameworkMethodology) : undefined;
+  /**
+   * Check if a step has modifiers that disable framework.
+   * This is for per-step control within chains.
+   */
+  private stepHasDisablingModifiers(step: ChainStepPrompt): boolean {
+    const modifiers = step.executionPlan?.modifiers;
+    if (!modifiers) {
+      return false;
+    }
+    return modifiers.clean === true || modifiers.lean === true;
   }
 
   private chainStepsRequireFramework(context: ExecutionContext): boolean {

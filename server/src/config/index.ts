@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import { watch, FSWatcher } from 'fs';
 import { readFile } from 'fs/promises';
 import path from 'path';
+
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
 const logger = createLogger(
@@ -27,7 +28,10 @@ import {
   LoggingConfig,
   FrameworksConfig,
   ChainSessionConfig,
+  JudgeConfig,
+  GatesConfig,
 } from '../types/index.js';
+import { DEFAULT_INJECTION_CONFIG, type InjectionConfig } from '../execution/pipeline/decisions/injection/index.js';
 // Removed: ToolDescriptionManager import to break circular dependency
 // Now injected via dependency injection pattern
 
@@ -72,12 +76,23 @@ const DEFAULT_FRAMEWORKS_CONFIG: FrameworksConfig = {
   enableSystemPromptInjection: true,
   enableMethodologyGates: true,
   enableDynamicToolDescriptions: true,
+  systemPromptReinjectionFrequency: 2,
+};
+
+const DEFAULT_GATES_CONFIG: GatesConfig = {
+  definitionsDirectory: 'src/gates/definitions',
+  templatesDirectory: 'src/gates/templates',
+  enabled: true,
 };
 
 const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
   sessionTimeoutMinutes: 24 * 60,
   reviewTimeoutMinutes: 30,
   cleanupIntervalMinutes: 5,
+};
+
+const DEFAULT_JUDGE_CONFIG: JudgeConfig = {
+  enabled: true,
 };
 
 const DEFAULT_CONFIG: Config = {
@@ -90,6 +105,7 @@ const DEFAULT_CONFIG: Config = {
     file: 'prompts/promptsConfig.json',
   },
   analysis: DEFAULT_ANALYSIS_CONFIG,
+  gates: DEFAULT_GATES_CONFIG,
   frameworks: DEFAULT_FRAMEWORKS_CONFIG,
   chainSessions: DEFAULT_CHAIN_SESSION_CONFIG,
   transports: {
@@ -165,6 +181,14 @@ export class ConfigManager extends EventEmitter {
   }
 
   /**
+   * Get global registerWithMcp default from prompts config
+   * Returns undefined if not specified (allowing downstream defaults)
+   */
+  getPromptsRegisterWithMcp(): boolean | undefined {
+    return this.config.prompts?.registerWithMcp;
+  }
+
+  /**
    * Get transports configuration
    */
   getTransportsConfig() {
@@ -235,6 +259,23 @@ export class ConfigManager extends EventEmitter {
       enableDynamicToolDescriptions:
         this.config.frameworks?.enableDynamicToolDescriptions ??
         DEFAULT_FRAMEWORKS_CONFIG.enableDynamicToolDescriptions,
+      systemPromptReinjectionFrequency:
+        this.config.frameworks?.systemPromptReinjectionFrequency ??
+        DEFAULT_FRAMEWORKS_CONFIG.systemPromptReinjectionFrequency,
+    };
+  }
+
+  /**
+   * Get gates configuration
+   */
+  getGatesConfig(): GatesConfig {
+    const gatesConfig: Partial<GatesConfig> = this.config.gates ?? {};
+    return {
+      definitionsDirectory:
+        gatesConfig.definitionsDirectory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
+      templatesDirectory:
+        gatesConfig.templatesDirectory ?? DEFAULT_GATES_CONFIG.templatesDirectory,
+      enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
     };
   }
 
@@ -254,6 +295,53 @@ export class ConfigManager extends EventEmitter {
   }
 
   /**
+   * Get judge selection system configuration
+   */
+  getJudgeConfig(): JudgeConfig {
+    const judgeConfig: Partial<JudgeConfig> = this.config.judge ?? {};
+    return {
+      enabled: judgeConfig.enabled ?? DEFAULT_JUDGE_CONFIG.enabled,
+    };
+  }
+
+  /**
+   * Get injection control configuration.
+   * Supports backward compatibility with frameworks.systemPromptReinjectionFrequency.
+   */
+  getInjectionConfig(): InjectionConfig {
+    // If injection config exists, use it directly
+    if (this.config.injection) {
+      return {
+        ...DEFAULT_INJECTION_CONFIG,
+        ...this.config.injection,
+      };
+    }
+
+    // Backward compatibility: map legacy frameworks.systemPromptReinjectionFrequency
+    const legacyFrequency = this.config.frameworks?.systemPromptReinjectionFrequency;
+    if (legacyFrequency !== undefined) {
+      logger.warn(
+        '[ConfigManager] DEPRECATION: frameworks.systemPromptReinjectionFrequency is deprecated. ' +
+          'Use injection.system-prompt.frequency instead. ' +
+          'See docs/architecture.md for migration guide.'
+      );
+
+      return {
+        ...DEFAULT_INJECTION_CONFIG,
+        'system-prompt': {
+          enabled: true,
+          frequency: {
+            mode: legacyFrequency === 0 ? 'first-only' : 'every',
+            interval: legacyFrequency === 0 ? undefined : legacyFrequency,
+          },
+        },
+      };
+    }
+
+    return DEFAULT_INJECTION_CONFIG;
+  }
+
+  /**
    * Get the port number, with environment variable override
    */
   getPort(): number {
@@ -261,11 +349,15 @@ export class ConfigManager extends EventEmitter {
   }
 
   /**
-   * Determine transport from command line arguments or configuration
+   * Determine transport from command line arguments, environment variable, or configuration
+   * Priority: CLI args > MCP_TRANSPORT env > config.transports.default
    */
   getTransport(args: string[]): string {
     const transportArg = args.find((arg: string) => arg.startsWith('--transport='));
-    return transportArg ? transportArg.split('=')[1] : this.config.transports.default;
+    if (transportArg) {
+      return transportArg.split('=')[1];
+    }
+    return process.env['MCP_TRANSPORT'] || this.config.transports.default;
   }
 
   /**
@@ -294,9 +386,7 @@ export class ConfigManager extends EventEmitter {
       : path.dirname(this.configPath);
 
     let resolvedPath =
-      overridePath ??
-      process.env['MCP_PROMPTS_CONFIG_PATH'] ??
-      this.getPromptsFilePath();
+      overridePath ?? process.env['MCP_PROMPTS_CONFIG_PATH'] ?? this.getPromptsFilePath();
 
     if (!path.isAbsolute(resolvedPath)) {
       const baseDir =
@@ -382,6 +472,15 @@ export class ConfigManager extends EventEmitter {
         cleanupIntervalMinutes:
           this.config.chainSessions.cleanupIntervalMinutes ??
           DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
+      };
+    }
+
+    // Ensure judge config exists
+    if (!this.config.judge) {
+      this.config.judge = { ...DEFAULT_JUDGE_CONFIG };
+    } else {
+      this.config.judge = {
+        enabled: this.config.judge.enabled ?? DEFAULT_JUDGE_CONFIG.enabled,
       };
     }
   }
@@ -513,7 +612,8 @@ export class ConfigManager extends EventEmitter {
     return (
       a.enableSystemPromptInjection !== b.enableSystemPromptInjection ||
       a.enableMethodologyGates !== b.enableMethodologyGates ||
-      a.enableDynamicToolDescriptions !== b.enableDynamicToolDescriptions
+      a.enableDynamicToolDescriptions !== b.enableDynamicToolDescriptions ||
+      a.systemPromptReinjectionFrequency !== b.systemPromptReinjectionFrequency
     );
   }
 }

@@ -4,15 +4,12 @@
  * Handles HTTP server lifecycle, process management, and orchestration
  */
 
-import { createServer, Server } from "http";
-import { ApiManager } from "../api/index.js";
-import { ConfigManager } from "../config/index.js";
-import { Logger } from "../logging/index.js";
-import {
-  TransportManager,
-  createTransportManager,
-  TransportType
-} from "./transport/index.js";
+import { createServer, Server } from 'http';
+
+import { ApiManager } from '../api/index.js';
+import { ConfigManager } from '../config/index.js';
+import { Logger } from '../logging/index.js';
+import { TransportManager, createTransportManager, TransportType } from './transport/index.js';
 
 // Re-export transport types and utilities for external consumers
 export { TransportManager, createTransportManager, TransportType };
@@ -57,14 +54,12 @@ export class ServerManager {
       } else if (this.transportManager.isSse()) {
         await this.startSseServer();
       } else {
-        throw new Error(
-          `Unsupported transport type: ${this.transportManager.getTransportType()}`
-        );
+        throw new Error(`Unsupported transport type: ${this.transportManager.getTransportType()}`);
       }
 
-      this.logger.info("Server started successfully");
+      this.logger.info('Server started successfully');
     } catch (error) {
-      this.logger.error("Error starting server:", error);
+      this.logger.error('Error starting server:', error);
       throw error;
     }
   }
@@ -82,7 +77,7 @@ export class ServerManager {
    */
   private async startSseServer(): Promise<void> {
     if (!this.apiManager) {
-      throw new Error("API Manager is required for SSE transport");
+      throw new Error('API Manager is required for SSE transport');
     }
 
     // Create Express app
@@ -100,22 +95,18 @@ export class ServerManager {
     // Start listening
     await new Promise<void>((resolve, reject) => {
       this.httpServer!.listen(this.port, () => {
-        this.logger.info(
-          `MCP Prompts Server running on http://localhost:${this.port}`
-        );
-        this.logger.info(
-          `Connect to http://localhost:${this.port}/mcp for MCP connections`
-        );
+        this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
+        this.logger.info(`Connect to http://localhost:${this.port}/mcp for MCP connections`);
         resolve();
       });
 
-      this.httpServer!.on("error", (error: any) => {
-        if (error.code === "EADDRINUSE") {
+      this.httpServer!.on('error', (error: any) => {
+        if (error.code === 'EADDRINUSE') {
           this.logger.error(
             `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
           );
         } else {
-          this.logger.error("Server error:", error);
+          this.logger.error('Server error:', error);
         }
         reject(error);
       });
@@ -128,19 +119,19 @@ export class ServerManager {
   private setupHttpServerEventHandlers(): void {
     if (!this.httpServer) return;
 
-    this.httpServer.on("error", (error: any) => {
-      if (error.code === "EADDRINUSE") {
+    this.httpServer.on('error', (error: any) => {
+      if (error.code === 'EADDRINUSE') {
         this.logger.error(
           `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
         );
       } else {
-        this.logger.error("Server error:", error);
+        this.logger.error('Server error:', error);
       }
       process.exit(1);
     });
 
-    this.httpServer.on("close", () => {
-      this.logger.info("HTTP server closed");
+    this.httpServer.on('close', () => {
+      this.logger.info('HTTP server closed');
     });
   }
 
@@ -148,9 +139,7 @@ export class ServerManager {
    * Log system information
    */
   private logSystemInfo(): void {
-    this.logger.info(
-      `Server process memory usage: ${JSON.stringify(process.memoryUsage())}`
-    );
+    this.logger.info(`Server process memory usage: ${JSON.stringify(process.memoryUsage())}`);
     this.logger.info(`Process ID: ${process.pid}`);
     this.logger.info(`Node version: ${process.version}`);
     this.logger.info(`Working directory: ${process.cwd()}`);
@@ -160,15 +149,15 @@ export class ServerManager {
    * Graceful shutdown
    */
   shutdown(exitCode: number = 0): void {
-    this.logger.info("Initiating graceful shutdown...");
+    this.logger.info('Initiating graceful shutdown...');
 
     // Close HTTP server if running
     if (this.httpServer) {
       this.httpServer.close((error) => {
         if (error) {
-          this.logger.error("Error closing HTTP server:", error);
+          this.logger.error('Error closing HTTP server:', error);
         } else {
-          this.logger.info("HTTP server closed successfully");
+          this.logger.info('HTTP server closed successfully');
         }
         this.finalizeShutdown(exitCode);
       });
@@ -186,14 +175,14 @@ export class ServerManager {
       this.transportManager.closeAllConnections();
     }
 
-    this.logger.info("Server shutdown complete");
+    this.logger.info('Server shutdown complete');
     process.exit(exitCode);
   }
 
   /**
    * Restart the server
    */
-  async restart(reason: string = "Manual restart"): Promise<void> {
+  async restart(reason: string = 'Manual restart'): Promise<void> {
     this.logger.info(`Restarting server: ${reason}`);
 
     try {
@@ -201,7 +190,7 @@ export class ServerManager {
       if (this.httpServer) {
         await new Promise<void>((resolve) => {
           this.httpServer!.close(() => {
-            this.logger.info("Server closed for restart");
+            this.logger.info('Server closed for restart');
             resolve();
           });
         });
@@ -213,9 +202,9 @@ export class ServerManager {
       // Start server again
       await this.startServer();
 
-      this.logger.info("Server restarted successfully");
+      this.logger.info('Server restarted successfully');
     } catch (error) {
-      this.logger.error("Error during server restart:", error);
+      this.logger.error('Error during server restart:', error);
       throw error;
     }
   }
@@ -290,12 +279,7 @@ export async function startMcpServer(
   transportManager: TransportManager,
   apiManager?: ApiManager
 ): Promise<ServerManager> {
-  const serverManager = createServerManager(
-    logger,
-    configManager,
-    transportManager,
-    apiManager
-  );
+  const serverManager = createServerManager(logger, configManager, transportManager, apiManager);
 
   await serverManager.startServer();
   return serverManager;

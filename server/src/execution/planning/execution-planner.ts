@@ -10,23 +10,22 @@ import type { Logger } from '../../logging/index.js';
 import type { ContentAnalyzer } from '../../semantic/configurable-semantic-analyzer.js';
 import type { ContentAnalysisResult } from '../../semantic/types.js';
 import type { ConvertedPrompt, GateDefinition } from '../../types/index.js';
+import type { ParsedCommand } from '../context/execution-context.js';
+import type { ChainStepPrompt } from '../operators/types.js';
 import type {
+  ExecutionModifier,
+  ExecutionModifiers,
   ExecutionPlan,
-  ExecutionStrategy,
-  ParsedCommand,
-} from '../context/execution-context.js';
-import type { ChainStepPrompt } from '../operators/chain-operator-executor.js';
+  ExecutionStrategyType,
+} from '../types.js';
 
 type GateOverrideOptions = {
-  apiValidation?: boolean;
-  qualityGates?: string[];
-  customChecks?: Array<{ name: string; description: string }>;
+  gates?: import('../../types/execution.js').GateSpecification[];
 };
 
 export interface ExecutionPlannerOptions {
   parsedCommand?: ParsedCommand;
   convertedPrompt: ConvertedPrompt;
-  executionMode?: 'auto' | 'prompt' | 'template' | 'chain';
   frameworkEnabled?: boolean;
   gateOverrides?: GateOverrideOptions;
 }
@@ -34,7 +33,6 @@ export interface ExecutionPlannerOptions {
 export interface ChainExecutionPlannerOptions {
   parsedCommand: ParsedCommand;
   steps: readonly ChainStepPrompt[];
-  executionMode?: 'auto' | 'prompt' | 'template' | 'chain';
   frameworkEnabled?: boolean;
   gateOverrides?: GateOverrideOptions;
 }
@@ -45,6 +43,12 @@ export interface ChainExecutionPlanResult {
 }
 
 type SemanticAnalyzerLike = Pick<ContentAnalyzer, 'analyzePrompt' | 'isLLMEnabled'>;
+
+type StrategyResolution = {
+  strategy: ExecutionStrategyType;
+  modifier?: ExecutionModifier;
+  modifiers?: ExecutionModifiers;
+};
 
 /**
  * Determines execution strategy, complexity, and gate requirements for a command.
@@ -66,13 +70,7 @@ export class ExecutionPlanner {
   }
 
   async createPlan(options: ExecutionPlannerOptions): Promise<ExecutionPlan> {
-    const {
-      parsedCommand,
-      convertedPrompt,
-      executionMode = 'auto',
-      frameworkEnabled = false,
-      gateOverrides,
-    } = options;
+    const { parsedCommand, convertedPrompt, frameworkEnabled = false, gateOverrides } = options;
 
     let analysis: ContentAnalysisResult | null = null;
     if (this.semanticAnalyzer) {
@@ -87,12 +85,16 @@ export class ExecutionPlanner {
     }
 
     const categoryInfo = this.categoryExtractor.extractCategory(convertedPrompt);
-    const strategy = this.determineStrategy({
-      executionMode,
+    const strategyInfo = this.resolveStrategy({
       convertedPrompt,
       parsedCommand,
       analysis,
     });
+
+    const modifierResolution = this.normalizeModifiers(
+      parsedCommand?.modifier ?? strategyInfo.modifier,
+      parsedCommand?.modifiers ?? strategyInfo.modifiers ?? convertedPrompt.executionModifiers
+    );
 
     const explicitGates = this.collectExplicitGateIds(convertedPrompt, categoryInfo);
     const autoGates = this.shouldAutoAssignGates()
@@ -103,51 +105,54 @@ export class ExecutionPlanner {
       ...this.getPromptLevelExcludes(convertedPrompt),
     ]);
 
+    // Add string gate IDs from unified gates parameter
+    if (gateOverrides?.gates?.length) {
+      gateOverrides.gates.forEach((gate) => {
+        if (typeof gate === 'string') {
+          mergedGates.add(gate);
+        }
+      });
+    }
+
     if (convertedPrompt.enhancedGateConfiguration?.framework_gates === false) {
       METHODOLOGY_GATES.forEach((gateId: string) => mergedGates.delete(gateId));
     }
 
-    if (gateOverrides?.qualityGates?.length) {
-      for (const gateId of gateOverrides.qualityGates) {
-        if (gateId) mergedGates.add(gateId);
-      }
-    }
-
-    const apiValidationEnabled = this.shouldEnableApiValidation({
-      overrides: gateOverrides,
-      frameworkEnabled,
-      hasGates: mergedGates.size > 0,
-      strategy,
-    });
-
     // Check for framework override from symbolic operators
-    const hasFrameworkOverride = Boolean(parsedCommand?.executionPlan?.frameworkOverride);
+    const hasFrameworkOverride = Boolean(
+      parsedCommand?.executionPlan?.frameworkOverride ?? parsedCommand?.executionPlan
+    );
+
+    let requiresFramework = this.requiresFramework(
+      strategyInfo.strategy,
+      convertedPrompt,
+      analysis,
+      mergedGates,
+      frameworkEnabled,
+      hasFrameworkOverride
+    );
+
+    const adjusted = this.applyModifierOverrides(
+      modifierResolution.modifiers,
+      mergedGates,
+      requiresFramework
+    );
+    requiresFramework = adjusted.requiresFramework;
 
     return {
-      strategy,
-      gates: Array.from(mergedGates),
-      requiresFramework: this.requiresFramework(
-        strategy,
-        convertedPrompt,
-        analysis,
-        mergedGates,
-        frameworkEnabled,
-        hasFrameworkOverride
-      ),
-      requiresSession: this.requiresSession(parsedCommand, convertedPrompt, strategy),
-      apiValidationEnabled,
+      strategy: strategyInfo.strategy,
+      gates: Array.from(adjusted.gates),
+      requiresFramework,
+      requiresSession: this.requiresSession(parsedCommand, convertedPrompt, strategyInfo.strategy),
       category: categoryInfo.category,
+      modifier: modifierResolution.modifier,
+      modifiers: modifierResolution.modifiers,
+      semanticAnalysis: analysis ?? undefined,
     };
   }
 
   async createChainPlan(options: ChainExecutionPlannerOptions): Promise<ChainExecutionPlanResult> {
-    const {
-      parsedCommand,
-      steps,
-      executionMode = 'auto',
-      frameworkEnabled = false,
-      gateOverrides,
-    } = options;
+    const { parsedCommand, steps, frameworkEnabled = false, gateOverrides } = options;
 
     if (!Array.isArray(steps) || steps.length === 0) {
       throw new Error('Chain planning requires at least one step with a converted prompt');
@@ -161,7 +166,6 @@ export class ExecutionPlanner {
     const chainPlan = await this.createPlan({
       parsedCommand,
       convertedPrompt: chainPrompt,
-      executionMode,
       frameworkEnabled,
       gateOverrides,
     });
@@ -169,13 +173,14 @@ export class ExecutionPlanner {
     const stepPlans: ExecutionPlan[] = [];
     for (const step of steps) {
       if (!step?.convertedPrompt) {
-        throw new Error(`Chain step ${step?.promptId ?? 'unknown'} missing converted prompt for planning`);
+        throw new Error(
+          `Chain step ${step?.promptId ?? 'unknown'} missing converted prompt for planning`
+        );
       }
 
       const stepPlan = await this.createPlan({
         parsedCommand,
         convertedPrompt: step.convertedPrompt,
-        executionMode,
         frameworkEnabled,
         gateOverrides,
       });
@@ -188,35 +193,26 @@ export class ExecutionPlanner {
     };
   }
 
-  private determineStrategy(params: {
-    executionMode: 'auto' | 'prompt' | 'template' | 'chain';
+  private resolveStrategy(params: {
     convertedPrompt: ConvertedPrompt;
     parsedCommand?: ParsedCommand;
     analysis: ContentAnalysisResult | null;
-  }): ExecutionStrategy {
-    const { executionMode, convertedPrompt, parsedCommand, analysis } = params;
-
-    if (executionMode && executionMode !== 'auto') {
-      return executionMode;
-    }
-
-    if (convertedPrompt.executionMode) {
-      return convertedPrompt.executionMode;
-    }
+  }): StrategyResolution {
+    const { convertedPrompt, parsedCommand, analysis } = params;
 
     if (this.hasChainIndicators(parsedCommand, convertedPrompt, analysis)) {
-      return 'chain';
+      return { strategy: 'chain' };
     }
 
-    if (analysis?.executionType === 'template') {
-      return 'template';
+    if (analysis?.executionType === 'chain') {
+      return { strategy: 'chain' };
     }
 
-    if (analysis?.executionType === 'prompt') {
-      return 'prompt';
+    if (analysis?.executionType === 'single') {
+      return { strategy: 'single' };
     }
 
-    return this.heuristicStrategy(convertedPrompt);
+    return this.heuristicResolution(convertedPrompt);
   }
 
   private hasChainIndicators(
@@ -248,24 +244,108 @@ export class ExecutionPlanner {
     return false;
   }
 
-  private heuristicStrategy(prompt: ConvertedPrompt): ExecutionStrategy {
+  private heuristicResolution(prompt: ConvertedPrompt): StrategyResolution {
     if (prompt.chainSteps?.length) {
-      return 'chain';
+      return { strategy: 'chain' };
     }
 
     const hasSystemMessage = Boolean(prompt.systemMessage?.trim());
     const hasTemplateVars = /\{\{.*?\}\}/.test(prompt.userMessageTemplate ?? '');
     const hasComplexLogic = /{%-|{%\s*if|{%\s*for/.test(prompt.userMessageTemplate ?? '');
 
-    if (hasSystemMessage || hasComplexLogic) {
-      return 'template';
+    // All single prompts resolve to 'single' strategy (formerly 'prompt' or 'template')
+    return { strategy: 'single' };
+  }
+
+  private normalizeModifiers(
+    modifier?: ExecutionModifier,
+    modifiers?: ExecutionModifiers
+  ): { modifier?: ExecutionModifier; modifiers?: ExecutionModifiers } {
+    const normalizedModifier = modifier ?? this.extractModifierFromFlags(modifiers);
+    const normalizedModifiers =
+      normalizedModifier !== undefined
+        ? this.buildModifiers(normalizedModifier)
+        : modifiers
+          ? this.stripModifierFlags(modifiers)
+          : undefined;
+
+    return {
+      modifier: normalizedModifier,
+      modifiers: normalizedModifiers,
+    };
+  }
+
+  private buildModifiers(modifier: ExecutionModifier): ExecutionModifiers {
+    return {
+      clean: modifier === 'clean',
+      guided: modifier === 'guided',
+      lean: modifier === 'lean',
+      framework: modifier === 'framework',
+    };
+  }
+
+  private stripModifierFlags(modifiers: ExecutionModifiers): ExecutionModifiers {
+    return {
+      clean: modifiers.clean === true,
+      guided: modifiers.guided === true,
+      lean: modifiers.lean === true,
+      framework: modifiers.framework === true,
+    };
+  }
+
+  private extractModifierFromFlags(modifiers?: ExecutionModifiers): ExecutionModifier | undefined {
+    if (!modifiers) {
+      return undefined;
     }
 
-    if (hasTemplateVars && (prompt.arguments?.length ?? 0) > 0) {
-      return 'template';
+    const enabled: ExecutionModifier[] = [];
+    if (modifiers.clean) enabled.push('clean');
+    if (modifiers.guided) enabled.push('guided');
+    if (modifiers.lean) enabled.push('lean');
+    if (modifiers.framework) enabled.push('framework');
+
+    if (enabled.length > 1) {
+      this.logger.warn(
+        '[ExecutionPlanner] Multiple execution modifiers detected; using the first match',
+        {
+          modifiers: enabled,
+        }
+      );
     }
 
-    return 'prompt';
+    return enabled[0];
+  }
+
+  private applyModifierOverrides(
+    modifiers: ExecutionModifiers | undefined,
+    gates: Set<string>,
+    requiresFramework: boolean
+  ): { gates: Set<string>; requiresFramework: boolean } {
+    if (!modifiers) {
+      return { gates, requiresFramework };
+    }
+
+    const normalized = this.stripModifierFlags(modifiers);
+
+    if (normalized.clean) {
+      gates.clear();
+      return { gates, requiresFramework: false };
+    }
+
+    if (normalized.framework) {
+      gates.clear();
+      return { gates, requiresFramework: true };
+    }
+
+    if (normalized.lean) {
+      return { gates, requiresFramework: false };
+    }
+
+    if (normalized.guided) {
+      return { gates, requiresFramework: true };
+    }
+
+    return { gates, requiresFramework };
   }
 
   /**
@@ -374,7 +454,7 @@ export class ExecutionPlanner {
   }
 
   private requiresFramework(
-    strategy: ExecutionStrategy,
+    strategy: ExecutionStrategyType,
     prompt: ConvertedPrompt,
     analysis: ContentAnalysisResult | null,
     gates: Set<string>,
@@ -391,7 +471,7 @@ export class ExecutionPlanner {
   private requiresSession(
     parsedCommand: ParsedCommand | undefined,
     prompt: ConvertedPrompt,
-    strategy: ExecutionStrategy
+    strategy: ExecutionStrategyType
   ): boolean {
     if (strategy === 'chain') {
       return true;
@@ -408,29 +488,6 @@ export class ExecutionPlanner {
       ) ?? false;
 
     if (hasSessionOperator) {
-      return true;
-    }
-
-    return false;
-  }
-
-  private shouldEnableApiValidation(params: {
-    overrides?: GateOverrideOptions;
-    frameworkEnabled: boolean;
-    hasGates: boolean;
-    strategy: ExecutionStrategy;
-  }): boolean {
-    const { overrides } = params;
-
-    if (overrides?.apiValidation !== undefined) {
-      return overrides.apiValidation;
-    }
-
-    if ((overrides?.qualityGates?.length ?? 0) > 0) {
-      return true;
-    }
-
-    if ((overrides?.customChecks?.length ?? 0) > 0) {
       return true;
     }
 

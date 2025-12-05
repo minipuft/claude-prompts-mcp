@@ -2,8 +2,8 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 
-import type { Logger } from '../logging/index.js';
 import type { PersistedChainRunRegistry } from './types.js';
+import type { Logger } from '../logging/index.js';
 
 export interface ChainRunRegistry {
   ensureInitialized(): Promise<void>;
@@ -73,9 +73,7 @@ export class FileBackedChainRunRegistry implements ChainRunRegistry {
   async save(store: PersistedChainRunRegistry): Promise<void> {
     try {
       await fs.writeFile(this.filePath, JSON.stringify(store, null, 2), 'utf-8');
-      this.logger?.debug?.(
-        `[ChainRunRegistry] Persisted chain run state to ${this.filePath}`
-      );
+      this.logger?.debug?.(`[ChainRunRegistry] Persisted chain run state to ${this.filePath}`);
     } catch (error) {
       this.logger?.error?.(
         `[ChainRunRegistry] Failed to persist session state: ${

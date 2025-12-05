@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionPlanner } from '../../../../src/execution/planning/execution-planner.js';
+
 import type { ParsedCommand } from '../../../../src/execution/context/execution-context.js';
 import type { Logger } from '../../../../src/logging/index.js';
-import type { ContentAnalysisResult } from '../../../../src/semantic/types.js';
 import type { ContentAnalyzer } from '../../../../src/semantic/configurable-semantic-analyzer.js';
+import type { ContentAnalysisResult } from '../../../../src/semantic/types.js';
 import type { ConvertedPrompt } from '../../../../src/types/index.js';
 
 const createLogger = (): Logger => ({
@@ -24,7 +25,7 @@ const basePrompt: ConvertedPrompt = {
 };
 
 const baseAnalysis: ContentAnalysisResult = {
-  executionType: 'prompt',
+  executionType: 'single',
   requiresExecution: true,
   requiresFramework: false,
   confidence: 0.85,
@@ -130,11 +131,10 @@ describe('ExecutionPlanner', () => {
     expect(plan.strategy).toBe('chain');
     expect(plan.requiresSession).toBe(true);
     expect(plan.requiresFramework).toBe(true);
-    expect(plan.apiValidationEnabled).toBe(false);
   });
 
   test('auto-assigns documentation gates and keeps methodology gates unless excluded', async () => {
-    const analyzer = createAnalyzer({ executionType: 'template' });
+    const analyzer = createAnalyzer({ executionType: 'single' });
     const planner = new ExecutionPlanner(analyzer, logger);
 
     const plan = await planner.createPlan({
@@ -142,11 +142,10 @@ describe('ExecutionPlanner', () => {
       frameworkEnabled: false,
     });
 
-    expect(plan.strategy).toBe('template');
+    expect(plan.strategy).toBe('single');
     expect(new Set(plan.gates)).toEqual(
       new Set(['content-structure', 'educational-clarity', 'framework-compliance'])
     );
-    expect(plan.apiValidationEnabled).toBe(false);
   });
 
   test('respects gate validation overrides and custom quality gates', async () => {
@@ -156,13 +155,11 @@ describe('ExecutionPlanner', () => {
     const plan = await planner.createPlan({
       convertedPrompt: basePrompt,
       gateOverrides: {
-        apiValidation: false,
         qualityGates: ['technical-accuracy'],
       },
     });
 
     expect(plan.gates).toContain('technical-accuracy');
-    expect(plan.apiValidationEnabled).toBe(false);
   });
 
   test('requires framework when symbolic plan contains framework override even if disabled', async () => {

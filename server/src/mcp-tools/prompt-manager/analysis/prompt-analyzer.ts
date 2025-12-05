@@ -97,8 +97,9 @@ export class PromptAnalyzer {
    * Create fallback analysis when semantic analysis fails
    */
   private createFallbackAnalysis(prompt: ConvertedPrompt, error: any): PromptClassification {
+    const isChain = (prompt.chainSteps?.length ?? 0) > 0;
     return {
-      executionType: (prompt.chainSteps?.length ?? 0) > 0 ? 'chain' : 'template',
+      executionType: isChain ? 'chain' : 'single',
       requiresExecution: true,
       requiresFramework: true, // Default to requiring framework for fallback
       confidence: 0.5,
@@ -126,11 +127,9 @@ export class PromptAnalyzer {
     const hasTemplateVars = /\{\{.*?\}\}/g.test(prompt.userMessageTemplate || '');
 
     // Basic execution type detection without semantic analysis
-    let executionType: 'prompt' | 'template' | 'chain' = 'prompt';
+    let executionType: 'single' | 'chain' = 'single';
     if (hasChainSteps) {
       executionType = 'chain';
-    } else if (hasComplexArgs || hasTemplateVars) {
-      executionType = 'template';
     }
 
     return {
@@ -216,7 +215,7 @@ export class PromptAnalyzer {
   /**
    * Detect execution type from prompt structure
    */
-  detectExecutionType(prompt: ConvertedPrompt): 'prompt' | 'template' | 'chain' {
+  detectExecutionType(prompt: ConvertedPrompt): 'single' | 'chain' {
     if (prompt.chainSteps && prompt.chainSteps.length > 0) {
       return 'chain';
     }
@@ -225,10 +224,10 @@ export class PromptAnalyzer {
     const hasComplexArgs = (prompt.arguments?.length || 0) > 2;
 
     if (hasTemplateVars || hasComplexArgs) {
-      return 'template';
+      return 'single';
     }
 
-    return 'prompt';
+    return 'single';
   }
 
   /**

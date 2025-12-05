@@ -48,7 +48,7 @@ Each step inside `chainSteps` follows this shape:
 | --- | --- |
 | `id` | Unique identifier (use snake_case). Referenced in dependencies and logs.
 | `name` / `description` | User-facing context for editors and logs.
-| `promptId` | ID of the prompt/template executed for this step.
+| `promptId` | ID of the prompt executed for this step.
 | `order` | Zero-based ordering; must be unique per chain.
 | `dependencies` | Step IDs that must be completed successfully before this step can run.
 | `inputMapping` | Maps values from chain arguments, previous step outputs, or runtime context into the step prompt arguments.
@@ -126,6 +126,7 @@ The system supports **command-free continuation** - just provide the chain ident
 - The `command` parameter is **optional** when resuming
 - The system restores the execution blueprint from the chain session automatically
 - This is the simplest and recommended approach for continuing chains
+- LLM-friendly guardrail: If you send the chain identifier as `command` (e.g., `command:"chain-research_pipeline#3"`) with a `user_response` or `gate_verdict`, the runtime now normalizes it into `chain_id` for you.
 
 **For gate reviews**, use the special format:
 
@@ -167,11 +168,10 @@ You can also provide the original command when resuming:
 The chain footer provides convenient shortcuts:
 
 ```
-Resume Shortcut: `chain-my_prompt#2 --> (optional input) --> user_response:"<latest step output>"`
-API Resume: call prompt_engine with `chain_id: "chain-my_prompt#2"` plus your latest response
+Resume via prompt_engine with `chain_id: "chain-my_prompt#2"` plus user_response:"<latest step output>" — no need to resend the original command — Shortcut: `chain-my_prompt#2 --> (optional input) --> user_response:"<latest step output>"`
 ```
 
-Use these as templates for continuing execution.
+Use this as the template for continuing execution. Fill in the latest response content or switch to `gate_verdict` when clearing a review.
 
 ## Authoring & Editing Chains
 
@@ -189,7 +189,7 @@ Use these as templates for continuing execution.
    ```
 4. **Test end-to-end**
    ```bash
-   prompt_engine(command:"chain://notes_modular?force_restart=true", api_validation=true)
+   prompt_engine(command:"chain://notes_modular?force_restart=true", llm_validation=true)
    ```
 
 Always add supporting prompts (`promptId` targets) before referencing them inside chain steps. Chains can only call registered prompt IDs.

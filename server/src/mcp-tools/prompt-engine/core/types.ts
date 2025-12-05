@@ -8,7 +8,11 @@
 
 import { ConvertedPrompt, ToolResponse } from '../../../types/index.js';
 
-import type { GateReviewPrompt, TemporaryGateDefinition } from '../../../execution/types.js';
+import type {
+  GateReviewPrompt,
+  TemporaryGateDefinition,
+  TemporaryGateInput,
+} from '../../../execution/types.js';
 
 /**
  * Chain step execution context
@@ -66,13 +70,20 @@ export interface ChainExecutionOptions {
   enableGates: boolean;
   force_restart?: boolean;
   session_id?: never;
-  /** Execution-time temporary gates (not persisted to prompt configuration) */
-  temporary_gates?: TemporaryGateDefinition[];
-  /** Scope for execution-time temporary gates (default: execution) */
-  gate_scope?: 'execution' | 'session' | 'chain' | 'step';
-  /** Built-in quality gates to apply (by name) - use system_control to discover */
+  /**
+   * @deprecated Use unified 'gates' parameter in McpToolRequest instead. Will be removed in v3.0.0.
+   * Execution-time temporary gates (not persisted to prompt configuration)
+   */
+  temporary_gates?: TemporaryGateInput[];
+  /**
+   * @deprecated Use unified 'gates' parameter in McpToolRequest instead. Will be removed in v3.0.0.
+   * Built-in quality gates to apply (by name) - use system_control to discover
+   */
   quality_gates?: string[];
-  /** Custom quality checks (simplified: name + description only) */
+  /**
+   * @deprecated Use unified 'gates' parameter in McpToolRequest instead. Will be removed in v3.0.0.
+   * Custom quality checks (simplified: name + description only)
+   */
   custom_checks?: Array<{ name: string; description: string }>;
 }
 
@@ -81,7 +92,8 @@ export interface ChainExecutionOptions {
  */
 export interface FormatterExecutionContext {
   executionId: string;
-  executionType: 'prompt' | 'template' | 'chain';
+  executionType: 'single' | 'chain';
+  legacyExecutionType?: 'prompt' | 'template';
   startTime: number;
   endTime: number;
   frameworkUsed?: string;
@@ -122,7 +134,8 @@ export interface SimpleResponseFormatter {
  * Prompt classification interface for execution strategy
  */
 export interface PromptClassification {
-  executionType: 'prompt' | 'template' | 'chain';
+  executionType: 'single' | 'chain';
+  legacyExecutionType?: 'prompt' | 'template';
   requiresExecution: boolean;
   confidence: number;
   reasoning: string[];
@@ -134,8 +147,9 @@ export interface PromptClassification {
  * Chain execution strategy result
  */
 export interface ChainExecutionStrategy {
-  mode: 'prompt' | 'template' | 'chain';
-  apiValidation: boolean;
+  mode: 'single' | 'chain';
+  legacyExecutionType?: 'prompt' | 'template';
+  llmValidation: boolean;
 }
 
 /**
@@ -207,6 +221,11 @@ export interface GateReviewHistoryEntry {
 /**
  * Pending gate review payload stored on the session manager so multi-turn
  * reviews can resume after the user responds through the MCP session.
+ *
+ * @remarks Infrastructure for pause/resume gate validation. Session manager APIs are
+ * implemented (setPendingGateReview, getPendingGateReview) but not yet auto-populated.
+ * Will be activated when semantic layer gate enforcement is implemented.
+ * @see ChainSessionManager for storage APIs
  */
 export interface PendingGateReview {
   combinedPrompt: string;

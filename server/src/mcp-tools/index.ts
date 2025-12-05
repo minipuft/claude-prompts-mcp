@@ -20,6 +20,16 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
+// Import generated Zod schemas from contracts (SSOT for parameter validation)
+import {
+  promptEngineSchema,
+  promptManagerSchema,
+  systemControlSchema,
+  type promptEngineInput,
+  type promptManagerInput,
+  type systemControlInput,
+} from '../tooling/contracts/_generated/mcp-schemas.js';
+
 import { ConfigManager } from '../config/index.js';
 import { FrameworkManager, createFrameworkManager } from '../frameworks/framework-manager.js';
 import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
@@ -35,6 +45,7 @@ import { createSemanticIntegrationFactory } from '../semantic/integrations/index
 import { ConversationManager } from '../text-references/conversation.js';
 import { TextReferenceManager } from '../text-references/index.js';
 import { Category, ConvertedPrompt, PromptData, ToolResponse } from '../types/index.js';
+import { ServiceManager } from '../utils/service-manager.js';
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
 
 // Consolidated tools
@@ -72,7 +83,8 @@ export class ConsolidatedMcpToolsManager {
   private toolDescriptionManager?: ToolDescriptionManager;
   private gateSystemManager?: GateSystemManager;
   private analyticsService!: MetricsCollector;
-  // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution model
+  private serviceManager?: ServiceManager;
+  // Removed executionCoordinator - chains now use LLM-driven execution model
 
   // Callback references
   private onRestart?: (reason: string) => Promise<void>;
@@ -91,7 +103,8 @@ export class ConsolidatedMcpToolsManager {
     promptManager: PromptAssetManager,
     configManager: ConfigManager,
     conversationManager: ConversationManager,
-    textReferenceManager: TextReferenceManager
+    textReferenceManager: TextReferenceManager,
+    serviceManager?: ServiceManager
   ) {
     this.logger = logger;
     this.mcpServer = mcpServer;
@@ -99,6 +112,7 @@ export class ConsolidatedMcpToolsManager {
     this.configManager = configManager;
     this.conversationManager = conversationManager;
     this.textReferenceManager = textReferenceManager;
+    this.serviceManager = serviceManager;
   }
 
   /**
@@ -134,7 +148,7 @@ export class ConsolidatedMcpToolsManager {
       this.conversationManager,
       this.textReferenceManager,
       this // Pass manager reference for analytics data flow
-      // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution
+      // Removed executionCoordinator - chains now use LLM-driven execution
     );
 
     // Set gate system manager in prompt engine
@@ -226,8 +240,17 @@ export class ConsolidatedMcpToolsManager {
       );
     });
 
-    // Start file watching if not already watching
-    if (!manager.isWatchingFile()) {
+    const serviceName = 'tool-description-watcher';
+    if (this.serviceManager) {
+      if (!this.serviceManager.hasService(serviceName)) {
+        this.serviceManager.register({
+          name: serviceName,
+          start: () => manager.startWatching(),
+          stop: () => manager.stopWatching(),
+        });
+      }
+      void this.serviceManager.startService(serviceName);
+    } else if (!manager.isWatchingFile()) {
       manager.startWatching();
     }
   }
@@ -292,6 +315,13 @@ export class ConsolidatedMcpToolsManager {
       // Use provided framework manager or create a new one
       this.frameworkManager =
         existingFrameworkManager || (await createFrameworkManager(this.logger));
+
+      // FIX: Connect frameworkStateManager if it was set before frameworkManager was created
+      // This handles the startup order where setFrameworkStateManager() is called first
+      if (this.frameworkStateManager) {
+        this.frameworkManager.setFrameworkStateManager(this.frameworkStateManager);
+      }
+
       this.promptExecutionService.setFrameworkManager(this.frameworkManager);
       this.systemControl.setFrameworkManager(this.frameworkManager);
       this.promptManagerTool.setFrameworkManager?.(this.frameworkManager);
@@ -303,7 +333,7 @@ export class ConsolidatedMcpToolsManager {
       // Set MCPToolsManager reference for dynamic tool updates
       this.systemControl.setMCPToolsManager(this);
 
-      // Enhanced tool delegation removed (Phase 1.2)
+      // Enhanced tool delegation removed (.2)
       // Using core tools directly without delegation patterns
 
       // REMOVED: ChainOrchestrator initialization - modular chain system removed
@@ -314,6 +344,13 @@ export class ConsolidatedMcpToolsManager {
         this.logger.info('Framework manager initialized and integrated with MCP tools');
       }
     }
+  }
+
+  /**
+   * Expose the framework manager for runtime integrations (e.g., methodology hot reload).
+   */
+  getFrameworkManager(): FrameworkManager | undefined {
+    return this.frameworkManager;
   }
 
   // REMOVED: wireExecutionCoordinator - ExecutionCoordinator removed
@@ -347,7 +384,7 @@ export class ConsolidatedMcpToolsManager {
           activeMethodology,
           { applyMethodologyOverride: true }
         ) ??
-        '🚀 PROMPT ENGINE [HOT-RELOAD]: Processes Nunjucks templates, returns executable instructions. WARNING: Output contains instructions YOU must execute (code gen, analysis, multi-step tasks) - not just information. IMPORTANT: When your arguments include newlines or structured blocks, wrap the call in JSON so the parser receives a single-line command shell.';
+        '🚀 PROMPT ENGINE: Execute prompts/chains. SYNTAX: >>prompt_id key="value" | Chain: >>s1 --> >>s2 (N-1 arrows) | OPERATORS: @framework ::gates #style(id) %modifier | Gate verdicts via `gate_verdict`; step outputs via `user_response`.';
 
       const getPromptEngineParamDescription = (paramName: string, fallback: string) =>
         this.toolDescriptionManager?.getParameterDescription(
@@ -369,18 +406,47 @@ export class ConsolidatedMcpToolsManager {
         );
       }
 
-      const temporaryGateSchema = z.object({
-        id: z.string().optional(),
-        name: z.string().optional(),
-        type: z.string().optional(),
-        scope: z.string().optional(),
-        description: z.string().optional(),
-        guidance: z.string().optional(),
-        criteria: z.array(z.string()).optional(),
-        pass_criteria: z.array(z.string()).optional(),
-        source: z.string().optional(),
-        context: z.record(z.any()).optional(),
+      // Custom check schema for simple inline validation
+      const customCheckSchema = z.object({
+        name: z.string().min(1, 'Custom check name cannot be empty'),
+        description: z.string().min(1, 'Custom check description cannot be empty'),
       });
+
+      // Temporary gate object schema for full gate definitions
+      const temporaryGateObjectSchema = z
+        .object({
+          id: z.string().min(1, 'Gate ID cannot be empty').optional(),
+          template: z.string().min(1, 'Template reference cannot be empty').optional(),
+          name: z.string().optional(),
+          type: z.enum(['validation', 'approval', 'condition', 'quality', 'guidance']).optional(),
+          scope: z.enum(['execution', 'session', 'chain', 'step']).optional(),
+          description: z.string().optional(),
+          guidance: z.string().optional(),
+          criteria: z.array(z.string().min(1)).optional(),
+          pass_criteria: z.array(z.string().min(1)).optional(),
+          severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+          source: z.enum(['manual', 'automatic', 'analysis']).optional(),
+          context: z.record(z.any()).optional(),
+          target_step_number: z.number().int().positive().optional(),
+          apply_to_steps: z.array(z.number().int().positive()).optional(),
+        })
+        .refine(
+          (value) => {
+            if (value.id || value.template) {
+              return true;
+            }
+            const hasCriteria = Boolean(value.criteria?.length || value.pass_criteria?.length);
+            const hasGuidance = Boolean(
+              (value.guidance && value.guidance.trim().length > 0) ||
+                (value.description && value.description.trim().length > 0)
+            );
+            return hasCriteria || hasGuidance;
+          },
+          {
+            message:
+              'Temporary gate entries require an id/template or some inline criteria/guidance',
+          }
+        );
 
       this.mcpServer.registerTool(
         'prompt_engine',
@@ -395,34 +461,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptEngineParamDescription(
                   'command',
-                  'Prompt name and arguments to process. OPTIONAL when resuming a chain (provide chain_id instead). WARNING: Will return instructions for YOU to execute, not just information. SIMPLE: >>prompt_name content (single-line arguments only). MULTI-LINE / RICH FORMATTING: {\\"command\\": \\" >>prompt_name\\", \\"args\\":{...}} keeps payload intact. ADVANCED: JSON with execution options'
-                )
-              ),
-            execution_mode: z
-              .enum(['auto', 'prompt', 'template', 'chain'])
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  'execution_mode',
-                  'Pin how the pipeline executes when semantic detection guesses wrong: `prompt` for single-step instructions, `template` for structured substitutions, `chain` to force multi-step orchestration. Default `auto` selects automatically.'
-                )
-              ),
-            api_validation: z
-              .boolean()
-              .default(false)
-              .describe(
-                getPromptEngineParamDescription(
-                  'api_validation',
-                  'Opt-in handshake for API-driven validation. Set true only when you plan to return `gate_verdict` so manual reviews pause without breaking the chain.'
-                )
-              ),
-            gate_validation: z
-              .boolean()
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  'gate_validation',
-                  '[deprecated] Legacy alias automatically mapped to api_validation.'
+                  'Prompt/chain command. PATTERNS: >>prompt_id key="value" (single) | >>s1 --> >>s2 (chain). RESUME: omit command, use chain_id + user_response only.'
                 )
               ),
             force_restart: z
@@ -432,19 +471,6 @@ export class ConsolidatedMcpToolsManager {
                 getPromptEngineParamDescription(
                   'force_restart',
                   'Create a new chain execution (increments chain ID). Use `command`.'
-                )
-              ),
-            session_id: z
-              .any()
-              .optional()
-              .refine((value) => value === undefined, {
-                message:
-                  'session_id is no longer supported. Use chain_id from the response footer.',
-              })
-              .describe(
-                getPromptEngineParamDescription(
-                  'session_id',
-                  'Deprecated archival identifier. Requests containing this field are rejected.'
                 )
               ),
             chain_id: z
@@ -457,7 +483,30 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptEngineParamDescription(
                   'chain_id',
-                  'Public chain identifier returned in each footer. Include to continue, re-render, or cross-check workflows.'
+                  'Resume token (e.g., `chain-demo#2`). RESUME: chain_id + user_response only. Omit command.'
+                )
+              ),
+            gate_verdict: z
+              .string()
+              .trim()
+              .regex(
+                /^GATE_REVIEW:\s(PASS|FAIL)\s-\s.+$/,
+                'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
+              )
+              .optional()
+              .describe(
+                getPromptEngineParamDescription(
+                  'gate_verdict',
+                  'Send PASS/FAIL verdicts when resuming after gate reviews (e.g., "GATE_REVIEW: PASS - rationale"). Keep user_response for actual step output.'
+                )
+              ),
+            gate_action: z
+              .enum(['retry', 'skip', 'abort'])
+              .optional()
+              .describe(
+                getPromptEngineParamDescription(
+                  'gate_action',
+                  'User choice after gate retry limit exhaustion. "retry" resets attempt count, "skip" bypasses the gate, "abort" stops execution.'
                 )
               ),
             user_response: z
@@ -470,53 +519,19 @@ export class ConsolidatedMcpToolsManager {
                   'Your Step output to capture before advancing. Supply the same text you would reply with during manual execution.'
                 )
               ),
-            timeout: z
-              .number()
-              .int()
-              .positive()
-              .optional()
-              .describe(
-                getPromptEngineParamDescription('timeout', 'Execution timeout in milliseconds')
-              ),
-            quality_gates: z
-              .array(z.string().min(1))
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  'quality_gates',
-                  'Array of quality gate names to apply'
-                )
-              ),
-            custom_checks: z
+            gates: z
               .array(
-                z.object({
-                  name: z.string().min(1, 'Custom check name cannot be empty'),
-                  description: z.string().min(1, 'Custom check description cannot be empty'),
-                })
+                z.union([
+                  z.string().min(1, 'Gate reference cannot be empty'),
+                  customCheckSchema,
+                  temporaryGateObjectSchema,
+                ])
               )
               .optional()
               .describe(
                 getPromptEngineParamDescription(
-                  'custom_checks',
-                  'Array of custom quality checks (each with name and description)'
-                )
-              ),
-            temporary_gates: z
-              .array(temporaryGateSchema)
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  'temporary_gates',
-                  '[ADVANCED] Full gate definition objects for execution-time validation'
-                )
-              ),
-            gate_scope: z
-              .enum(['execution', 'session', 'chain', 'step'])
-              .optional()
-              .describe(
-                getPromptEngineParamDescription(
-                  'gate_scope',
-                  'Scope for execution-time temporary gates (default: execution)'
+                  'gates',
+                  'Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions. Supports mixed types in single array for maximum flexibility. Canonical parameter for all gate specification (v3.0.0+).'
                 )
               ),
             options: z
@@ -525,27 +540,12 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptEngineParamDescription(
                   'options',
-                  'Additional execution options (key-value pairs)'
+                  'Additional execution options (key-value pairs) passed through to execution.'
                 )
               ),
           },
         },
-        async (args: {
-          command: string;
-          execution_mode?: 'auto' | 'prompt' | 'template' | 'chain';
-          api_validation?: boolean;
-          gate_validation?: boolean;
-          force_restart?: boolean;
-          session_id?: never;
-          chain_id?: string;
-          user_response?: string;
-          timeout?: number;
-          temporary_gates?: any[];
-          gate_scope?: 'execution' | 'session' | 'chain' | 'step';
-          quality_gates?: string[];
-          custom_checks?: Array<{ name: string; description: string }>;
-          options?: Record<string, unknown>;
-        }) => {
+        async (args: promptEngineInput) => {
           try {
             const extraPayload =
               args.user_response && args.user_response.trim().length > 0
@@ -597,7 +597,7 @@ export class ConsolidatedMcpToolsManager {
           activeMethodology,
           { applyMethodologyOverride: true }
         ) ??
-        '🧰 PROMPT MANAGER: Create, update, delete, list, and analyze prompts. Supports gate configuration, temporary gates, and prompt-type migration.';
+        '🧰 PROMPT MANAGER: Create, update, delete, list, inspect, and analyze prompts/chains. Supports gate configuration and metadata-driven guides; legacy creation aliases are removed.';
 
       const getPromptManagerParamDescription = (paramName: string, fallback: string) =>
         this.toolDescriptionManager?.getParameterDescription(
@@ -628,22 +628,19 @@ export class ConsolidatedMcpToolsManager {
             action: z
               .enum([
                 'create',
-                'create_prompt',
-                'create_template',
                 'analyze_type',
-                'migrate_type',
                 'update',
                 'delete',
-                'modify',
                 'reload',
                 'list',
+                'inspect',
                 'analyze_gates',
-                'suggest_temporary_gates',
+                'guide',
               ])
               .describe(
                 getPromptManagerParamDescription(
                   'action',
-                  'Action to perform. Supported: create, create_prompt, create_template, update, delete, modify, reload, list, analyze_type, migrate_type, analyze_gates, suggest_temporary_gates.'
+                  'Action to perform. Supported: create, update, delete, reload, list, inspect, analyze_type, analyze_gates, guide.'
                 )
               ),
             id: z
@@ -652,7 +649,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptManagerParamDescription(
                   'id',
-                  'Prompt identifier. Required for create*, update, delete, modify, analyze_type, migrate_type, analyze_gates. Use letters, numbers, underscores, or hyphens.'
+                  'Prompt identifier. Required for create*, update, delete, analyze_type, analyze_gates. Use letters, numbers, underscores, or hyphens.'
                 )
               ),
             name: z
@@ -661,7 +658,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptManagerParamDescription(
                   'name',
-                  'Friendly prompt name. Required for create*.'
+                  'Friendly prompt name. Required for create.'
                 )
               ),
             description: z
@@ -670,7 +667,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptManagerParamDescription(
                   'description',
-                  'Short description of the prompt purpose. Required for create*.'
+                  'Short description of the prompt purpose. Required for create.'
                 )
               ),
             user_message_template: z
@@ -679,7 +676,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getPromptManagerParamDescription(
                   'user_message_template',
-                  "Prompt body with Nunjucks placeholders (e.g. 'Analyze {{input}}'). Required for create*."
+                  "Prompt body with Nunjucks placeholders (e.g. 'Analyze {{input}}'). Required for create."
                 )
               ),
             system_message: z
@@ -728,14 +725,14 @@ export class ConsolidatedMcpToolsManager {
               .object({
                 include: z.array(z.string()).optional(),
                 exclude: z.array(z.string()).optional(),
-                temporary_gates: z.array(z.any()).optional(),
+                gates: z.array(z.any()).optional(),
                 framework_gates: z.boolean().optional(),
               })
               .optional()
               .describe(
                 getPromptManagerParamDescription(
                   'gate_configuration',
-                  'Explicit gate configuration (include/exclude lists, temporary gates, framework_gates flag).'
+                  'Explicit gate configuration (include/exclude lists, unified gates array, framework_gates flag).'
                 )
               ),
             search_query: z
@@ -749,22 +746,7 @@ export class ConsolidatedMcpToolsManager {
               ),
           },
         },
-        async (args: {
-          action:
-            | 'create'
-            | 'create_prompt'
-            | 'create_template'
-            | 'analyze_type'
-            | 'migrate_type'
-            | 'update'
-            | 'delete'
-            | 'modify'
-            | 'reload'
-            | 'list'
-            | 'analyze_gates'
-            | 'suggest_temporary_gates';
-          [key: string]: any;
-        }) => {
+        async (args: promptManagerInput) => {
           try {
             // Check if promptManagerTool exists
             if (!this.promptManagerTool) {
@@ -930,6 +912,15 @@ export class ConsolidatedMcpToolsManager {
                   'Audit-friendly explanation for switches, config changes, or restarts.'
                 )
               ),
+            persist: z
+              .boolean()
+              .optional()
+              .describe(
+                getSystemControlParamDescription(
+                  'persist',
+                  'When true, gate/framework enable/disable changes are also written to config.json.'
+                )
+              ),
             include_history: z
               .boolean()
               .optional()
@@ -959,7 +950,7 @@ export class ConsolidatedMcpToolsManager {
               ),
           },
         },
-        async (args: { action: string; [key: string]: any }) => {
+        async (args: systemControlInput) => {
           try {
             const toolResponse = await this.systemControl.handleAction(args, {});
             return {
@@ -1133,9 +1124,10 @@ export async function createConsolidatedMcpToolsManager(
   configManager: ConfigManager,
   conversationManager: ConversationManager,
   textReferenceManager: TextReferenceManager,
+  lifecycleServices: ServiceManager | undefined,
   onRefresh: () => Promise<void>,
   onRestart: (reason: string) => Promise<void>
-  // Phase 3: Removed executionCoordinator parameter - using LLM-driven chain model
+  // Removed executionCoordinator parameter - using LLM-driven chain model
 ): Promise<ConsolidatedMcpToolsManager> {
   const manager = new ConsolidatedMcpToolsManager(
     logger,
@@ -1143,8 +1135,9 @@ export async function createConsolidatedMcpToolsManager(
     promptManager,
     configManager,
     conversationManager,
-    textReferenceManager
-    // Phase 3: Removed executionCoordinator parameter
+    textReferenceManager,
+    lifecycleServices
+    // Removed executionCoordinator parameter
   );
 
   await manager.initialize(onRefresh, onRestart);
@@ -1158,16 +1151,13 @@ export const createMcpToolsManager = createConsolidatedMcpToolsManager;
 export type PromptManagerActionArgs = {
   action:
     | 'create'
-    | 'create_prompt'
-    | 'create_template'
     | 'analyze_type'
-    | 'migrate_type'
     | 'update'
     | 'delete'
-    | 'modify'
     | 'reload'
     | 'list'
+    | 'inspect'
     | 'analyze_gates'
-    | 'suggest_temporary_gates';
+    | 'guide';
   [key: string]: any;
 };

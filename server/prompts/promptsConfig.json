@@ -6,11 +6,6 @@
       "description": "Prompts for analyzing content and data"
     },
     {
-      "id": "education",
-      "name": "Education",
-      "description": "Prompts for learning and teaching concepts"
-    },
-    {
       "id": "development",
       "name": "Development",
       "description": "Prompts for software development and code quality"
@@ -31,31 +26,25 @@
       "description": "Prompts related to content_processing"
     },
     {
-      "id": "architecture",
-      "name": "architecture",
-      "description": "Prompts related to architecture"
-    },
-    {
       "id": "general",
       "name": "general",
       "description": "Prompts related to general"
     },
     {
-      "id": "testing",
-      "name": "testing",
-      "description": "Prompts related to testing"
+      "id": "guidance",
+      "name": "Guidance",
+      "description": "Methodology guidance and structural frameworks",
+      "registerWithMcp": false
     }
   ],
   "prompts": [],
   "imports": [
     "analysis/prompts.json",
-    "education/prompts.json",
     "development/prompts.json",
     "documentation/prompts.json",
     "debugging/prompts.json",
     "content_processing/prompts.json",
-    "architecture/prompts.json",
     "general/prompts.json",
-    "testing/prompts.json"
+    "guidance/prompts.json"
   ]
 }

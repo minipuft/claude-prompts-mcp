@@ -196,15 +196,17 @@ export class ContentAnalyzer {
     const llmResult = await this.llmClient!.classify({
       text: combinedText,
       task: 'Analyze this prompt for execution strategy and framework requirements',
-      categories: ['prompt', 'template', 'chain'],
+      categories: ['single', 'prompt', 'template', 'chain'],
       methodologies: ['CAGEERF', 'ReACT', '5W1H', 'SCAMPER', 'none'],
     });
+
+    const normalizedExecution = this.normalizeExecutionType(llmResult.executionType);
 
     // Build structural characteristics as baseline
     const structuralCharacteristics = this.analyzeStructuralCharacteristics(prompt);
 
     return {
-      executionType: llmResult.executionType as any,
+      executionType: normalizedExecution.executionType,
       requiresExecution: true,
       requiresFramework: llmResult.recommendedFramework !== 'none',
       confidence: llmResult.confidence,
@@ -454,7 +456,7 @@ export class ContentAnalyzer {
   private determineExecutionTypeFromStructure(
     characteristics: any,
     prompt: ConvertedPrompt
-  ): 'prompt' | 'template' | 'chain' {
+  ): 'single' | 'chain' {
     // CHAIN: Sequential execution indicators
     if (characteristics.hasChainSteps || prompt.chainSteps?.length) {
       return 'chain';
@@ -470,29 +472,29 @@ export class ContentAnalyzer {
       return 'chain';
     }
 
-    // TEMPLATE: Has template syntax or structural complexity
+    // SINGLE: framework-aware single execution when structural complexity is present
     if (
       characteristics.templateComplexity > 0.3 ||
       characteristics.argumentCount > 2 ||
       characteristics.hasConditionals ||
       characteristics.hasLoops
     ) {
-      return 'template';
+      return 'single';
     }
 
-    // PROMPT: Simple variable substitution
-    return 'prompt';
+    // SINGLE: Simple execution
+    return 'single';
   }
 
   /**
    * Determine if framework should be used based on structural analysis
    */
   private shouldUseFrameworkStructurally(executionType: string, characteristics: any): boolean {
-    // In structural mode, we're conservative
-    // Only recommend framework for clearly complex cases
+    // In structural mode, recommend framework for complex or chain-like prompts
     return (
-      executionType === 'template' ||
       executionType === 'chain' ||
+      characteristics.templateComplexity > 0.3 ||
+      characteristics.argumentCount > 2 ||
       characteristics.hasMethodologyKeywords
     );
   }
@@ -642,7 +644,7 @@ export class ContentAnalyzer {
     error: any
   ): ContentAnalysisResult {
     return {
-      executionType: 'prompt',
+      executionType: 'single',
       requiresExecution: true,
       requiresFramework: false,
       confidence: 0.3,
@@ -690,6 +692,15 @@ export class ContentAnalyzer {
         fallbackUsed: true,
       },
     };
+  }
+
+  private normalizeExecutionType(executionType: string): { executionType: 'single' | 'chain' } {
+    const normalized = executionType.toLowerCase();
+    if (normalized === 'chain') {
+      return { executionType: 'chain' };
+    }
+
+    return { executionType: 'single' };
   }
 }
 

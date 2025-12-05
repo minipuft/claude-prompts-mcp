@@ -21,12 +21,37 @@
     },
     {
       "id": "note_refinement",
-      "name": "Note Refinement",
+      "name": "Advanced Note Refinement (Integration Chain)",
       "category": "analysis",
-      "description": "Refine existing notes by improving organization, flow, and clarity without adding or modifying the content.",
+      "description": "Advanced workflow that runs a comprehensive content analysis chain to transform raw content into publication-ready, interconnected notes optimized for Obsidian knowledge management systems.",
       "file": "note_refinement.md",
-      "arguments": [],
-      "onEmptyInvocation": "return_template"
+      "arguments": [
+        {
+          "name": "content",
+          "type": "string",
+          "description": "The raw content to be processed and integrated"
+        },
+        {
+          "name": "existing_notes",
+          "type": "string",
+          "description": "Any existing notes to preserve and integrate with"
+        },
+        {
+          "name": "vault_context",
+          "type": "string",
+          "description": "Context about the vault structure and existing content"
+        },
+        {
+          "name": "domain",
+          "type": "string",
+          "description": "Knowledge domain for appropriate formatting strategy"
+        },
+        {
+          "name": "enhancement_level",
+          "type": "string",
+          "description": "Enhancement intensity: standard, comprehensive, showcase (default: comprehensive)"
+        }
+      ]
     },
     {
       "id": "note_integration",
@@ -37,13 +62,13 @@
       "arguments": [
         {
           "name": "notes",
-          "description": "The existing notes",
-          "required": false
+          "type": "string",
+          "description": "The existing notes to integrate into"
         },
         {
           "name": "new_information",
-          "description": "The new information to be integrated",
-          "required": false
+          "type": "string",
+          "description": "The new information to be integrated"
         }
       ]
     },
@@ -57,60 +82,6 @@
         {
           "name": "query",
           "description": "The original user query to refine",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "advanced_analysis_engine",
-      "name": "Advanced Analysis Engine",
-      "category": "analysis",
-      "description": "Complex template testing prompt with advanced Nunjucks features including conditionals, loops, inheritance, filters, and multi-format output generation. Designed to stress-test the template engine with maximum complexity.",
-      "file": "advanced_analysis_engine.md",
-      "arguments": [
-        {
-          "name": "topic",
-          "description": "Main topic or subject for analysis",
-          "required": true
-        },
-        {
-          "name": "analysis_type",
-          "description": "Type of analysis: market, technical, competitive, trend, risk, opportunity",
-          "required": false
-        },
-        {
-          "name": "sources",
-          "description": "Array of data sources: web, papers, news, social, industry, expert",
-          "required": false
-        },
-        {
-          "name": "depth",
-          "description": "Analysis depth: surface, standard, comprehensive, expert",
-          "required": false
-        },
-        {
-          "name": "format",
-          "description": "Output format: executive_summary, technical_report, presentation, research_paper",
-          "required": false
-        },
-        {
-          "name": "focus_areas",
-          "description": "Array of focus areas: technical, business, ethical, regulatory, social, environmental",
-          "required": false
-        },
-        {
-          "name": "constraints",
-          "description": "Object with constraints like time_limit, budget, scope, audience",
-          "required": false
-        },
-        {
-          "name": "requirements",
-          "description": "Array of specific requirements or objects with category, description, priority, examples",
-          "required": false
-        },
-        {
-          "name": "previous_context",
-          "description": "Previous analysis context to build upon",
           "required": false
         }
       ]

@@ -75,7 +75,9 @@ export function hasFrameworkSpecificContent(
   frameworkNames?: readonly string[]
 ): boolean {
   const frameworks = resolveFrameworks(frameworkNames);
-  return frameworks.some((framework) => guidance.includes(`- ${framework}:`) || guidance.includes(`${framework}:`));
+  return frameworks.some(
+    (framework) => guidance.includes(`- ${framework}:`) || guidance.includes(`${framework}:`)
+  );
 }
 
 /**

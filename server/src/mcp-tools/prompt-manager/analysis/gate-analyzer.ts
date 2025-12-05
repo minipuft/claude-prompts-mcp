@@ -28,24 +28,8 @@ export interface GateAnalysisResult {
     include?: string[];
     exclude?: string[];
     framework_gates?: boolean;
-    temporary_gates?: TemporaryGateDefinition[];
+    inline_gate_definitions?: TemporaryGateDefinition[];
   };
-}
-
-/**
- * Gate suggestion context
- */
-export interface GateSuggestionContext {
-  /** Execution context type */
-  executionType: 'prompt' | 'template' | 'chain';
-  /** Prompt category */
-  category: string;
-  /** Framework context */
-  framework?: string;
-  /** User intent keywords */
-  intentKeywords?: string[];
-  /** Complexity level */
-  complexity: 'low' | 'medium' | 'high';
 }
 
 /**
@@ -83,12 +67,13 @@ export class GateAnalyzer {
     // Generate temporary gate suggestions
     const temporaryGates = this.generateTemporaryGateSuggestions(context, contentAnalysis);
 
-    // Calculate confidence based on analysis depth
-    const confidence = this.calculateConfidence(
-      context,
-      contentAnalysis,
-      recommendedGates.length + temporaryGates.length
-    );
+    // TODO: Confidence calculation requires semantic LLM layer (future feature)
+    // const confidence = this.calculateConfidence(
+    //   context,
+    //   contentAnalysis,
+    //   recommendedGates.length + temporaryGates.length
+    // );
+    const confidence = 0.0; // Placeholder until semantic LLM integration
 
     // Create reasoning
     const reasoning = this.generateReasoning(
@@ -116,61 +101,28 @@ export class GateAnalyzer {
       promptId: prompt.id,
       recommendedGatesCount: recommendedGates.length,
       temporaryGatesCount: temporaryGates.length,
-      confidence,
+      // confidence, // Disabled until semantic LLM integration
     });
 
     return result;
   }
 
   /**
-   * Suggest gates for a specific execution context
-   */
-  async suggestGatesForContext(context: GateSuggestionContext): Promise<string[]> {
-    const gates: string[] = [];
-
-    // Category-based recommendations
-    const categoryGates = this.getCategoryGateMapping()[context.category] || [];
-    gates.push(...categoryGates);
-
-    // Execution type specific gates
-    if (context.executionType === 'template') {
-      gates.push('framework-compliance');
-    }
-    if (context.executionType === 'chain') {
-      gates.push('content-structure');
-    }
-
-    // Framework-specific gates
-    if (context.framework) {
-      const frameworkGates = this.getFrameworkGates(context.framework);
-      gates.push(...frameworkGates);
-    }
-
-    // Complexity-based gates
-    if (context.complexity === 'high') {
-      gates.push('technical-accuracy', 'research-quality');
-    }
-
-    // Intent-based gates
-    if (context.intentKeywords) {
-      const intentGates = this.getIntentBasedGates(context.intentKeywords);
-      gates.push(...intentGates);
-    }
-
-    // Remove duplicates and return
-    return [...new Set(gates)];
-  }
-
-  /**
    * Extract gate suggestion context from prompt
    */
-  private extractGateSuggestionContext(prompt: ConvertedPrompt): GateSuggestionContext {
+  private extractGateSuggestionContext(prompt: ConvertedPrompt): {
+    executionType: 'single' | 'chain';
+    category: string;
+    framework?: string;
+    intentKeywords?: string[];
+    complexity: 'low' | 'medium' | 'high';
+  } {
     // Determine execution type
-    let executionType: 'prompt' | 'template' | 'chain' = 'prompt';
+    let executionType: 'single' | 'chain' = 'single';
     if (prompt.chainSteps && prompt.chainSteps.length > 0) {
       executionType = 'chain';
     } else if (prompt.systemMessage || (prompt.arguments && prompt.arguments.length > 2)) {
-      executionType = 'template';
+      executionType = 'single';
     }
 
     // Determine complexity
@@ -229,7 +181,13 @@ export class GateAnalyzer {
    * Generate gate recommendations based on analysis
    */
   private generateGateRecommendations(
-    context: GateSuggestionContext,
+    context: {
+      executionType: 'single' | 'chain';
+      category: string;
+      framework?: string;
+      intentKeywords?: string[];
+      complexity: 'low' | 'medium' | 'high';
+    },
     contentAnalysis: any
   ): string[] {
     const gates: string[] = [];
@@ -263,7 +221,13 @@ export class GateAnalyzer {
    * Generate temporary gate suggestions
    */
   private generateTemporaryGateSuggestions(
-    context: GateSuggestionContext,
+    context: {
+      executionType: 'single' | 'chain';
+      category: string;
+      framework?: string;
+      intentKeywords?: string[];
+      complexity: 'low' | 'medium' | 'high';
+    },
     contentAnalysis: any
   ): TemporaryGateDefinition[] {
     const temporaryGates: TemporaryGateDefinition[] = [];
@@ -327,7 +291,13 @@ export class GateAnalyzer {
    * Calculate confidence score
    */
   private calculateConfidence(
-    context: GateSuggestionContext,
+    context: {
+      executionType: 'single' | 'chain';
+      category: string;
+      framework?: string;
+      intentKeywords?: string[];
+      complexity: 'low' | 'medium' | 'high';
+    },
     contentAnalysis: any,
     totalGatesRecommended: number
   ): number {
@@ -353,7 +323,13 @@ export class GateAnalyzer {
    * Generate reasoning for recommendations
    */
   private generateReasoning(
-    context: GateSuggestionContext,
+    context: {
+      executionType: 'single' | 'chain';
+      category: string;
+      framework?: string;
+      intentKeywords?: string[];
+      complexity: 'low' | 'medium' | 'high';
+    },
     contentAnalysis: any,
     recommendedGates: string[],
     temporaryGates: TemporaryGateDefinition[]
@@ -401,7 +377,7 @@ export class GateAnalyzer {
     }
 
     if (temporaryGates.length > 0) {
-      preview.temporary_gates = temporaryGates;
+      preview.inline_gate_definitions = temporaryGates;
     }
 
     // Default to including framework gates unless specifically disabled

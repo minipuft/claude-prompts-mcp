@@ -1,14 +1,12 @@
 // @lifecycle canonical - Type definitions for chain sessions.
+import type { ParsedCommand } from '../execution/context/execution-context.js';
+import type { ExecutionPlan } from '../execution/types.js';
 import type {
   ChainState,
   PendingGateReview,
   StepMetadata,
   StepState,
 } from '../mcp-tools/prompt-engine/core/types.js';
-import type {
-  ExecutionPlan,
-  ParsedCommand,
-} from '../execution/context/execution-context.js';
 
 export type ChainSessionLifecycle = 'legacy' | 'canonical';
 
@@ -27,6 +25,11 @@ export interface ChainSession {
   startTime: number;
   lastActivity: number;
   originalArgs: Record<string, any>;
+  /**
+   * Pending gate review awaiting user verdict.
+   * @remarks Infrastructure for pause/resume validation. APIs implemented but not yet auto-triggered.
+   * Planned for future semantic layer gate enforcement.
+   */
   pendingGateReview?: PendingGateReview;
   blueprint?: SessionBlueprint;
   lifecycle?: ChainSessionLifecycle;
@@ -94,6 +97,8 @@ export interface ChainSessionService {
   setPendingGateReview(sessionId: string, review: PendingGateReview): Promise<void>;
   getPendingGateReview(sessionId: string): PendingGateReview | undefined;
   clearPendingGateReview(sessionId: string): Promise<void>;
+  isRetryLimitExceeded(sessionId: string): boolean;
+  resetRetryCount(sessionId: string): Promise<void>;
   recordGateReviewOutcome(
     sessionId: string,
     outcome: GateReviewOutcomeUpdate

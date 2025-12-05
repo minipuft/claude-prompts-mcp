@@ -20,8 +20,6 @@ export const TOOL_NAMES = {
 export const ACTIONS = {
   PROMPT_MANAGER: {
     CREATE: 'create',
-    CREATE_PROMPT: 'create_prompt',
-    CREATE_TEMPLATE: 'create_template',
     UPDATE: 'update',
     DELETE: 'delete',
     RELOAD: 'reload',

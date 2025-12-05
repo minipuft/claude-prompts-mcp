@@ -31,7 +31,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    if (context.metadata['sessionBlueprintRestored']) {
+    if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
       return;
     }
@@ -60,12 +60,25 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     const plan = await this.executionPlanner.createPlan({
       parsedCommand,
       convertedPrompt,
-      executionMode: context.getExecutionMode(),
       frameworkEnabled: this.frameworkEnabled?.() ?? false,
       gateOverrides: this.buildGateOverrides(context),
     });
 
     context.executionPlan = plan;
+
+    // Store semantic analysis in metadata for downstream stages (e.g., Judge Selection)
+    if (plan.semanticAnalysis) {
+      context.metadata['semanticAnalysis'] = plan.semanticAnalysis;
+    }
+
+    // Record diagnostic for execution plan creation
+    context.diagnostics.info(this.name, 'Execution plan created for single prompt', {
+      strategy: plan.strategy,
+      gateCount: plan.gates.length,
+      requiresFramework: plan.requiresFramework,
+      requiresSession: plan.requiresSession,
+      promptId: convertedPrompt.id,
+    });
 
     this.logExit({
       strategy: plan.strategy,
@@ -80,14 +93,12 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     const { chainPlan, stepPlans } = await this.executionPlanner.createChainPlan({
       parsedCommand,
       steps,
-      executionMode: context.getExecutionMode(),
       frameworkEnabled: this.frameworkEnabled?.() ?? false,
       gateOverrides,
     });
 
     const aggregatedGates = new Set(chainPlan.gates ?? []);
     let requiresFramework = chainPlan.requiresFramework;
-    let apiValidationEnabled = Boolean(chainPlan.apiValidationEnabled);
 
     stepPlans.forEach((plan, index) => {
       if (steps[index]) {
@@ -99,7 +110,6 @@ export class ExecutionPlanningStage extends BasePipelineStage {
       }
 
       requiresFramework = requiresFramework || plan.requiresFramework;
-      apiValidationEnabled = apiValidationEnabled || Boolean(plan.apiValidationEnabled);
     });
 
     context.executionPlan = {
@@ -108,8 +118,18 @@ export class ExecutionPlanningStage extends BasePipelineStage {
       gates: Array.from(aggregatedGates),
       requiresFramework,
       requiresSession: true,
-      apiValidationEnabled,
+      modifier: chainPlan.modifier,
+      modifiers: chainPlan.modifiers,
     };
+
+    // Record diagnostic for chain execution plan creation
+    context.diagnostics.info(this.name, 'Execution plan created for chain', {
+      strategy: 'chain',
+      stepCount: stepPlans.length,
+      gateCount: aggregatedGates.size,
+      requiresFramework,
+      stepIds: steps.map((s) => s.promptId),
+    });
 
     this.logExit({
       strategy: 'chain',
@@ -119,18 +139,16 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     });
   }
 
+  /**
+   * Build gate overrides from normalized gates in metadata.
+   * Uses unified 'gates' parameter (already normalized from legacy parameters).
+   */
   private buildGateOverrides(context: ExecutionContext) {
+    const overrides = context.state.gates.requestedOverrides as Record<string, any> | undefined;
+
     return {
-      apiValidation: context.mcpRequest.api_validation,
-      qualityGates: context.mcpRequest.quality_gates
-        ? Array.from(context.mcpRequest.quality_gates)
-        : undefined,
-      customChecks: context.mcpRequest.custom_checks
-        ? context.mcpRequest.custom_checks.map((check) => ({
-            name: check.name,
-            description: check.description,
-          }))
-        : undefined,
+      llmValidation: overrides?.llmValidation ?? context.mcpRequest.llm_validation,
+      gates: overrides?.gates ?? context.mcpRequest.gates,
     };
   }
 }

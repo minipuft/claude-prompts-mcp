@@ -18,7 +18,7 @@ export interface GateDefinition {
   id: string;
   name: string;
   guidance: string;
-  gate_type?: GateType;  // Framework gates bypass category checks
+  gate_type?: GateType; // Framework gates bypass category checks
   activation: {
     prompt_categories?: string[];
     framework_context?: string[];
@@ -33,6 +33,7 @@ export interface GateContext {
   framework?: string;
   category?: string;
   promptId?: string;
+  explicitGateIds?: readonly string[];
 }
 
 /**
@@ -42,7 +43,7 @@ export interface GateSelectionCriteria {
   framework?: string;
   category?: string;
   promptId?: string;
-  executionMode?: 'prompt' | 'template' | 'chain';
+  executionMode?: 'single' | 'prompt' | 'template' | 'chain';
   complexityLevel?: 'low' | 'medium' | 'high';
 }
 

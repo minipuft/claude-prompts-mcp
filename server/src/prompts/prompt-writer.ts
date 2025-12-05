@@ -22,29 +22,19 @@ export function buildGateConfigurationSection(
   gateConfiguration: Record<string, unknown> | undefined
 ): string {
   if (!gateConfiguration) {
-    return "";
+    return '';
   }
 
   const gateConfigJson = JSON.stringify(gateConfiguration, null, 2);
-  return [
-    "",
-    "## Gate Configuration",
-    "",
-    "```json",
-    gateConfigJson,
-    "```",
-    "",
-  ].join("\n");
+  return ['', '## Gate Configuration', '', '```json', gateConfigJson, '```', ''].join('\n');
 }
 
-export function buildChainStepsSection(
-  chainSteps: PromptMarkdownData["chainSteps"]
-): string {
+export function buildChainStepsSection(chainSteps: PromptMarkdownData['chainSteps']): string {
   if (!chainSteps?.length) {
-    return "";
+    return '';
   }
 
-  const lines: string[] = ["", "## Chain Steps", ""];
+  const lines: string[] = ['', '## Chain Steps', ''];
 
   chainSteps.forEach((step, index) => {
     const name = step.stepName ?? `Step ${index + 1}`;
@@ -58,28 +48,22 @@ export function buildChainStepsSection(
       lines.push(`   - Output Mapping: ${JSON.stringify(step.outputMapping)}`);
     }
 
-    lines.push("");
+    lines.push('');
   });
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 export function buildPromptBaseContent(data: PromptMarkdownData): string {
-  const lines: string[] = [
-    `# ${data.name}`,
-    "",
-    "## Description",
-    data.description,
-    "",
-  ];
+  const lines: string[] = [`# ${data.name}`, '', '## Description', data.description, ''];
 
   if (data.systemMessage) {
-    lines.push("## System Message", data.systemMessage, "");
+    lines.push('## System Message', data.systemMessage, '');
   }
 
-  lines.push("## User Message Template", data.userMessageTemplate);
+  lines.push('## User Message Template', data.userMessageTemplate);
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /**

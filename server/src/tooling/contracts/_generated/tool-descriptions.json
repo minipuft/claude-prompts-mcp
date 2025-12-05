@@ -1,0 +1,34 @@
+{
+  "version": "2.0.0",
+  "lastUpdated": "2025-12-05T08:39:06.448Z",
+  "generatedFrom": "active",
+  "tools": {
+    "prompt_engine": {
+      "description": "🚀 PROMPT ENGINE [CAGEERF]: Expands prompts with C.A.G.E.E.R.F methodology for you to follow.\n\nWHAT IT RETURNS: Prepared prompt + CAGEERF phase instructions (Context→Analysis→Goals→Execution→Evaluation→Refinement).\nWHAT YOU DO: Execute each phase yourself using the returned structure.\n\nSYNTAX: >>prompt_id key=\"value\" | Chain: >>s1 --> >>s2\nOPERATORS: @CAGEERF | :: \"criteria\" | %clean/%lean\n",
+      "shortDescription": "Execute prompts and chains",
+      "category": "execution",
+      "parameters": {
+        "command": "Prompt ID to expand. Resulting prompt will include CAGEERF phase guidance for you to apply."
+      }
+    },
+    "prompt_manager": {
+      "description": "📝 PROMPT MANAGER [CAGEERF]: Manages prompt templates. Use action:\"guide\" for phase-appropriate recommendations (Context research vs. Execution updates).\n",
+      "shortDescription": "Manage prompt lifecycle",
+      "category": "management",
+      "parameters": {
+        "action": "Use 'guide' with your current CAGEERF phase for phase-appropriate action recommendations."
+      }
+    },
+    "system_control": {
+      "description": "⚙️ SYSTEM CONTROL [CAGEERF]: System administration. Status shows current CAGEERF phase context.\n",
+      "shortDescription": "Framework, gates, analytics controls",
+      "category": "system",
+      "parameters": {
+        "action": "Use 'guide' with topic:'framework' for phase-specific operation guidance."
+      }
+    }
+  },
+  "activeFramework": "CAGEERF",
+  "activeMethodology": "CAGEERF",
+  "generatedAt": "2025-12-05T08:39:08.453Z"
+}

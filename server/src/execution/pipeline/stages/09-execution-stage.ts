@@ -1,14 +1,13 @@
 // @lifecycle canonical - Runs operator executors and orchestrates outputs.
+import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
 import { processTemplate } from '../../../utils/jsonUtils.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
-import type {
-  ChainOperatorExecutor,
-  ChainStepRenderResult,
-} from '../../operators/chain-operator-executor.js';
+import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
+import type { ChainStepRenderResult } from '../../operators/types.js';
 
 /**
  * Pipeline Stage 9: Step Execution
@@ -77,11 +76,44 @@ export class StepExecutionStage extends BasePipelineStage {
       throw new Error('Execution plan not available for chain execution');
     }
 
-    const currentStepIndex = Math.max(0, (session.currentStep ?? 1) - 1);
+    const totalSteps = steps.length;
+    const currentStepNumber = session.currentStep ?? 1;
+    const isChainComplete = totalSteps > 0 && currentStepNumber > totalSteps;
+    const normalizedStepNumber = totalSteps > 0 ? Math.min(currentStepNumber, totalSteps) : 1;
+    const currentStepIndex = Math.max(0, normalizedStepNumber - 1);
+
+    // Persist completion awareness for downstream stages/formatting
+    if (isChainComplete) {
+      context.state.session.chainComplete = true;
+      context.executionResults = {
+        content:
+          'Chain already complete. No further user_response is required unless a gate review is pending.',
+        metadata: {
+          promptId: 'chain-complete',
+          promptName: 'chain-complete',
+          stepNumber: normalizedStepNumber,
+          totalSteps,
+          callToAction: 'Chain complete. Provide gate_verdict only if requested.',
+        },
+        generatedAt: Date.now(),
+      };
+      this.logExit({
+        skipped: 'Chain already complete',
+        currentStep: currentStepNumber,
+        totalSteps,
+      });
+      return;
+    }
+
     const currentStep = steps[currentStepIndex];
     const chainContextSnapshot = this.chainSessionManager.getChainContext(session.sessionId);
 
     const normalizedStepArgs = currentStep.args ?? {};
+
+    // Use injection decision from InjectionControlStage (state.injection)
+    // inject=true means INJECT, inject=false means SKIP
+    const injectionDecision = context.state.injection?.systemPrompt;
+    const suppressFrameworkInjection = injectionDecision?.inject === false;
 
     const renderResult = await this.chainOperatorExecutor.renderStep({
       executionType: 'normal',
@@ -95,11 +127,23 @@ export class StepExecutionStage extends BasePipelineStage {
         chain_id: session.chainId,
         promptArgs: normalizedStepArgs,
         currentStepArgs: normalizedStepArgs,
+        suppressFrameworkInjection, // Pass injection decision to chain executor
+        injectionState: context.state.injection, // Also pass full injection state
       },
       additionalGateIds: executionPlan.gates,
     });
 
     context.executionResults = this.createExecutionResults(renderResult);
+
+    // Record diagnostic for chain step execution
+    context.diagnostics.info(this.name, 'Chain step executed', {
+      stepNumber: renderResult.stepNumber,
+      totalSteps: renderResult.totalSteps,
+      promptId: renderResult.promptId,
+      contentLength: renderResult.content.length,
+      gateCount: executionPlan.gates?.length ?? 0,
+    });
+
     this.logExit({ stepRendered: renderResult.stepNumber });
   }
 
@@ -120,12 +164,25 @@ export class StepExecutionStage extends BasePipelineStage {
     const renderedTemplate = processTemplate(prompt.userMessageTemplate, args, {});
     const sections: string[] = [];
 
-    // Deduplication: Skip frameworkContext.systemPrompt if prompt.systemMessage already contains framework guidance
-    const systemMessageHasFramework = this.hasFrameworkGuidance(prompt.systemMessage);
+    // Use injection decision from InjectionControlStage (state.injection)
+    // This is the authoritative source with 7-level hierarchical resolution
+    const injectionDecision = context.state.injection?.systemPrompt;
+    const injectionSuppressed = injectionDecision?.inject === false;
 
-    if (context.frameworkContext?.systemPrompt && !systemMessageHasFramework) {
+    // Deduplication: Skip frameworkContext.systemPrompt if prompt.systemMessage already contains framework guidance
+    const systemMessageHasFramework = hasFrameworkGuidance(prompt.systemMessage);
+
+    if (
+      context.frameworkContext?.systemPrompt &&
+      !systemMessageHasFramework &&
+      !injectionSuppressed
+    ) {
       sections.push(context.frameworkContext.systemPrompt.trim());
       this.logger.debug('StepExecution: Added framework system prompt from context');
+    } else if (injectionSuppressed) {
+      this.logger.debug('StepExecution: Skipped framework injection (suppressed by injection decision)', {
+        source: injectionDecision?.source,
+      });
     } else if (systemMessageHasFramework) {
       this.logger.debug(
         'StepExecution: Skipped framework context injection (already in prompt.systemMessage)'
@@ -150,6 +207,15 @@ export class StepExecutionStage extends BasePipelineStage {
       generatedAt: Date.now(),
     };
 
+    // Record diagnostic for single prompt execution
+    context.diagnostics.info(this.name, 'Single prompt executed', {
+      promptId: prompt.id,
+      contentLength: combinedContent.length,
+      hasFrameworkContext: Boolean(context.frameworkContext?.systemPrompt),
+      injectionSuppressed,
+      gateCount: executionPlan.gates?.length ?? 0,
+    });
+
     this.logExit({ promptId: prompt.id });
   }
 
@@ -167,28 +233,4 @@ export class StepExecutionStage extends BasePipelineStage {
     };
   }
 
-  /**
-   * Detects if a system message already contains framework methodology guidance.
-   * Used to prevent duplicate framework injection.
-   */
-  private hasFrameworkGuidance(systemMessage?: string): boolean {
-    if (!systemMessage) return false;
-
-    // Check for any of these strong indicators that framework guidance is already present
-    const frameworkIndicators = [
-      'Apply the C.A.G.E.E.R.F methodology systematically',
-      'Apply the ReACT methodology systematically',
-      'Apply the 5W1H methodology systematically',
-      'Apply the SCAMPER methodology systematically',
-      'You are operating under the C.A.G.E.E.R.F',
-      'You are operating under the ReACT',
-      'You are operating under the 5W1H',
-      'You are operating under the SCAMPER',
-      '**Context**: Establish comprehensive situational awareness', // CAGEERF specific
-      '**Reasoning**: Think through the problem', // ReACT specific
-    ];
-
-    // Any single match is enough to confirm framework guidance exists
-    return frameworkIndicators.some((indicator) => systemMessage.includes(indicator));
-  }
 }

@@ -1,30 +1,33 @@
 // @lifecycle canonical - JSON escaping/unescaping helpers for prompt templates.
 // JSON utility functions
 
-import nunjucks from "nunjucks";
-import * as path from "node:path"; // Import path module
-import { fileURLToPath } from "url"; // For ES module __dirname equivalent
-import type { PromptArgument } from "../types/index.js";
+import * as path from 'node:path'; // Import path module
+import { fileURLToPath } from 'url'; // For ES module __dirname equivalent
+
+import nunjucks from 'nunjucks';
+
+import type { PromptArgument } from '../types/index.js';
+
 type PromptDefinition = { arguments: PromptArgument[] };
 // JSON escaping utilities (moved here to avoid circular dependency)
 function escapeJsonForNunjucks(jsonStr: string): string {
   return jsonStr
-    .replace(/\{\{/g, '\\{\\{')  // Escape Nunjucks variable syntax
-    .replace(/\}\}/g, '\\}\\}')  // Escape Nunjucks variable syntax  
-    .replace(/\{%/g, '\\{\\%')   // Escape Nunjucks tag syntax
-    .replace(/%\}/g, '\\%\\}')   // Escape Nunjucks tag syntax
-    .replace(/\{#/g, '\\{\\#')   // Escape Nunjucks comment syntax
-    .replace(/#\}/g, '\\#\\}');  // Escape Nunjucks comment syntax
+    .replace(/\{\{/g, '\\{\\{') // Escape Nunjucks variable syntax
+    .replace(/\}\}/g, '\\}\\}') // Escape Nunjucks variable syntax
+    .replace(/\{%/g, '\\{\\%') // Escape Nunjucks tag syntax
+    .replace(/%\}/g, '\\%\\}') // Escape Nunjucks tag syntax
+    .replace(/\{#/g, '\\{\\#') // Escape Nunjucks comment syntax
+    .replace(/#\}/g, '\\#\\}'); // Escape Nunjucks comment syntax
 }
 
 function unescapeJsonFromNunjucks(escapedStr: string): string {
   return escapedStr
-    .replace(/\\{\\{/g, '{{')   // Unescape Nunjucks variable syntax
-    .replace(/\\}\\}/g, '}}')   // Unescape Nunjucks variable syntax
-    .replace(/\\{\\%/g, '{%')   // Unescape Nunjucks tag syntax  
-    .replace(/\\%\\}/g, '%}')   // Unescape Nunjucks tag syntax
-    .replace(/\\{\\#/g, '{#')   // Unescape Nunjucks comment syntax
-    .replace(/\\#\\}/g, '#}');  // Unescape Nunjucks comment syntax
+    .replace(/\\{\\{/g, '{{') // Unescape Nunjucks variable syntax
+    .replace(/\\}\\}/g, '}}') // Unescape Nunjucks variable syntax
+    .replace(/\\{\\%/g, '{%') // Unescape Nunjucks tag syntax
+    .replace(/\\%\\}/g, '%}') // Unescape Nunjucks tag syntax
+    .replace(/\\{\\#/g, '{#') // Unescape Nunjucks comment syntax
+    .replace(/\\#\\}/g, '#}'); // Unescape Nunjucks comment syntax
 }
 
 // Lazy initialization to avoid Jest import.meta.url issues
@@ -40,7 +43,7 @@ function getPromptTemplatesPath(): string {
 
   if (typeof __dirname !== 'undefined') {
     // Jest/CommonJS environment - __dirname is available
-    return path.resolve(__dirname, "../../prompts");
+    return path.resolve(__dirname, '../../prompts');
   }
 
   // ES modules environment - use import.meta.url
@@ -50,11 +53,11 @@ function getPromptTemplatesPath(): string {
     const metaUrl = eval('import.meta.url');
     const currentFileUrl = fileURLToPath(metaUrl);
     const currentDirPath = path.dirname(currentFileUrl);
-    return path.resolve(currentDirPath, "../../prompts");
+    return path.resolve(currentDirPath, '../../prompts');
   } catch (error) {
     // Fallback for any environment where import.meta is not available
     // Use process.cwd() as last resort
-    return path.resolve(process.cwd(), "server/prompts");
+    return path.resolve(process.cwd(), 'server/prompts');
   }
 }
 
@@ -66,14 +69,14 @@ function getNunjucksEnv(): nunjucks.Environment {
       autoescape: false, // We're generating plain text prompts for LLM, not HTML
       throwOnUndefined: false, // Renders undefined variables as empty string for better compatibility
       watch: false, // Set to true for development to auto-reload templates; false for production
-      noCache: process.env.NODE_ENV === "development", // Disable cache in development, enable in production
+      noCache: process.env.NODE_ENV === 'development', // Disable cache in development, enable in production
       tags: {
-        blockStart: "{%",
-        blockEnd: "%}",
-        variableStart: "{{",
-        variableEnd: "}}",
-        commentStart: "{#",
-        commentEnd: "#}",
+        blockStart: '{%',
+        blockEnd: '%}',
+        variableStart: '{{',
+        variableEnd: '}}',
+        commentStart: '{#',
+        commentEnd: '#}',
       },
     });
   }
@@ -115,22 +118,22 @@ export function validateJsonArguments(
     if (value !== undefined) {
       // Sanitize the value based on expected type
       // This is a simple implementation - expand as needed for your use case
-      if (typeof value === "string") {
+      if (typeof value === 'string') {
         // Sanitize string inputs
         sanitizedArgs[arg.name] = value
-          .replace(/[<>]/g, "") // Remove potentially dangerous HTML characters
+          .replace(/[<>]/g, '') // Remove potentially dangerous HTML characters
           .trim();
-      } else if (typeof value === "number") {
+      } else if (typeof value === 'number') {
         // Ensure it's a valid number
         sanitizedArgs[arg.name] = isNaN(value) ? 0 : value;
-      } else if (typeof value === "boolean") {
+      } else if (typeof value === 'boolean') {
         sanitizedArgs[arg.name] = !!value; // Ensure boolean type
       } else if (Array.isArray(value)) {
         // For arrays, sanitize each element if they're strings
         sanitizedArgs[arg.name] = value.map((item) =>
-          typeof item === "string" ? item.replace(/[<>]/g, "").trim() : item
+          typeof item === 'string' ? item.replace(/[<>]/g, '').trim() : item
         );
-      } else if (value !== null && typeof value === "object") {
+      } else if (value !== null && typeof value === 'object') {
         // For objects, convert to string for simplicity
         sanitizedArgs[arg.name] = JSON.stringify(value);
       } else {
@@ -162,7 +165,10 @@ export function processTemplate(
   // Pre-escape any string values that might contain Nunjucks syntax
   const escapedArgs: Record<string, any> = {};
   for (const [key, value] of Object.entries(args)) {
-    if (typeof value === 'string' && (value.includes('{{') || value.includes('{%') || value.includes('{#'))) {
+    if (
+      typeof value === 'string' &&
+      (value.includes('{{') || value.includes('{%') || value.includes('{#'))
+    ) {
       escapedArgs[key] = escapeJsonForNunjucks(value);
     } else {
       // Pass non-string values (arrays, objects) directly to Nunjucks
@@ -176,7 +182,7 @@ export function processTemplate(
     // Use Nunjucks to render the template with the combined context
     const env = getNunjucksEnv();
     const rendered = env.renderString(template, context);
-    
+
     // Unescape any values that were escaped for Nunjucks
     let unescapedResult = rendered;
     for (const [key, value] of Object.entries(escapedArgs)) {
@@ -184,27 +190,27 @@ export function processTemplate(
         // This arg was escaped, so we need to unescape it in the result
         const originalValue = args[key];
         const escapedValue = value;
-        unescapedResult = unescapedResult.replace(new RegExp(escapedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), originalValue);
+        unescapedResult = unescapedResult.replace(
+          new RegExp(escapedValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+          originalValue
+        );
       }
     }
-    
+
     return unescapedResult;
   } catch (error) {
     // Log the Nunjucks rendering error for debugging purposes.
     // The error will be re-thrown and should be handled by the calling function
     // (e.g., in TemplateProcessor) which can add more context like Prompt ID.
     if (error instanceof Error) {
-      console.error(
-        "[Nunjucks Render Error] Failed to process template:",
-        error.message
-      );
+      console.error('[Nunjucks Render Error] Failed to process template:', error.message);
       // Optionally, log error.stack for more detailed debugging if needed in development
       // if (process.env.NODE_ENV === 'development' && error.stack) {
       //   console.error(error.stack);
       // }
     } else {
       console.error(
-        "[Nunjucks Render Error] Failed to process template with an unknown error object:",
+        '[Nunjucks Render Error] Failed to process template with an unknown error object:',
         error
       );
     }

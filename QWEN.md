@@ -324,7 +324,7 @@ The project uses GitHub Actions for automated testing and validation:
 
 ### Command Format Specification
 
-**Unified Command Parser** (`unified-command-parser.ts`, 549 lines): Multi-strategy parsing system with symbolic operator support optimized for LLM interactions
+**Command Parser** (`command-parser.ts`, ~750 lines): Multi-strategy parsing system with symbolic operator support optimized for LLM interactions
 
 **Formats**: Simple (`>>prompt_name arguments`), JSON (`{"command": ">>prompt_name", "args": {...}}`), Key=value (`key="value"`), Single argument (text → first param), Symbolic operators (`-->`, `@`, `::`)
 
@@ -338,7 +338,7 @@ The project uses GitHub Actions for automated testing and validation:
 
 **Symbolic Operators**: Chain operator (`-->`), Framework operator (`@`), Gate operator (`::`), integrated with session management for stateful execution
 
-**References**: `docs/symbolic-command-language.md`, `server/src/execution/parsers/unified-command-parser.ts`, `server/src/execution/parsers/symbolic-command-parser.ts`
+**References**: `docs/symbolic-command-language.md`, `server/src/execution/parsers/command-parser.ts`, `server/src/execution/parsers/symbolic-operator-parser.ts`
 
 ### Symbolic Command Language Development
 
@@ -358,7 +358,7 @@ The project uses GitHub Actions for automated testing and validation:
 
 **Parser Integration**:
 
-- **SymbolicCommandParser**: Use existing operator detection patterns in `server/src/execution/parsers/symbolic-command-parser.ts`
+- **SymbolicCommandParser**: Use existing operator detection patterns in `server/src/execution/parsers/symbolic-operator-parser.ts`
 - **Precedence Handling**: Framework > Conditional > Parallel > Chain > Gate
 - **Type Safety**: All operators must implement `SymbolicOperator` interface from `types/operator-types.ts`
 - **Error Handling**: Comprehensive error boundaries with meaningful user messages
@@ -436,7 +436,7 @@ The project uses GitHub Actions for automated testing and validation:
 
 **Domain Separation**:
 
-- **Parser Logic**: Keep in `/execution/parsers/symbolic-command-parser.ts`
+- **Parser Logic**: Keep in `/execution/parsers/symbolic-operator-parser.ts`
 - **Operator Executors**: Implement in `/execution/operators/` directory
 - **Type Definitions**: Use existing interfaces in `/execution/parsers/types/`
 - **Integration Points**: Use established patterns for framework and gate integration

@@ -21,6 +21,10 @@ export const CONFIG_VALID_KEYS = [
   'transports.sse.enabled',
   'logging.level',
   'logging.directory',
+  'gates.enabled',
+  'frameworks.enableSystemPromptInjection',
+  'frameworks.enableMethodologyGates',
+  'frameworks.enableDynamicToolDescriptions',
   'analysis.semanticAnalysis.llmIntegration.enabled',
   'analysis.semanticAnalysis.llmIntegration.model',
   'analysis.semanticAnalysis.llmIntegration.maxTokens',
@@ -83,6 +87,24 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
 
     case 'transports.stdio.enabled':
     case 'transports.sse.enabled': {
+      const boolValue = value.trim().toLowerCase();
+      if (!['true', 'false'].includes(boolValue)) {
+        return {
+          valid: false,
+          error: "Value must be 'true' or 'false'",
+        };
+      }
+      return {
+        valid: true,
+        convertedValue: boolValue === 'true',
+        valueType: 'boolean',
+      };
+    }
+
+    case 'gates.enabled':
+    case 'frameworks.enableSystemPromptInjection':
+    case 'frameworks.enableMethodologyGates':
+    case 'frameworks.enableDynamicToolDescriptions': {
       const boolValue = value.trim().toLowerCase();
       if (!['true', 'false'].includes(boolValue)) {
         return {
@@ -202,7 +224,11 @@ export class SafeConfigWriter {
   /**
    * Safely update a configuration value with atomic operations
    */
-  async updateConfigValue(key: string, value: string): Promise<ConfigWriteResult> {
+  async updateConfigValue(
+    key: string,
+    value: string,
+    options?: { createBackup?: boolean }
+  ): Promise<ConfigWriteResult> {
     try {
       // Step 1: Validate the operation
       const validation = validateConfigInput(key, value);
@@ -215,8 +241,11 @@ export class SafeConfigWriter {
       }
 
       // Step 2: Create backup
-      const backup = await this.createConfigBackup();
-      this.logger.info(`Config backup created: ${backup.backupPath}`);
+      const shouldCreateBackup = options?.createBackup !== false;
+      const backup = shouldCreateBackup ? await this.createConfigBackup() : undefined;
+      if (backup) {
+        this.logger.info(`Config backup created: ${backup.backupPath}`);
+      }
 
       // Step 3: Load current config and apply changes
       const currentConfig = this.configManager.getConfig();
@@ -229,7 +258,7 @@ export class SafeConfigWriter {
           success: false,
           message: `Configuration validation failed: ${configValidation.error}`,
           error: configValidation.error,
-          backupPath: backup.backupPath,
+          backupPath: backup?.backupPath,
         };
       }
 
@@ -242,7 +271,7 @@ export class SafeConfigWriter {
       return {
         success: true,
         message: `Configuration updated successfully: ${key} = ${value}`,
-        backupPath: backup.backupPath,
+        backupPath: backup?.backupPath,
         restartRequired: this.requiresRestart(key),
       };
     } catch (error) {

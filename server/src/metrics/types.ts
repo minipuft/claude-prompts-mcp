@@ -12,7 +12,7 @@
  */
 export interface ExecutionData {
   executionId: string;
-  executionType: 'prompt' | 'template' | 'chain';
+  executionType: 'single' | 'chain';
   startTime: number;
   endTime: number;
   executionTime: number;
@@ -86,8 +86,7 @@ export interface ExecutionStats {
   failedExecutions: number;
   averageExecutionTime: number;
   executionsByMode: {
-    prompt: number;
-    template: number;
+    single: number;
     chain: number;
   };
   executionsByTool: {
@@ -234,7 +233,7 @@ export interface PipelineStageMetric {
 
 export type MetricStatus = 'success' | 'error';
 
-export type CommandExecutionMode = 'prompt' | 'template' | 'chain' | 'auto';
+export type CommandExecutionMode = 'single' | 'chain' | 'auto' | 'prompt' | 'template';
 
 export interface CommandExecutionMetric {
   commandId: string;

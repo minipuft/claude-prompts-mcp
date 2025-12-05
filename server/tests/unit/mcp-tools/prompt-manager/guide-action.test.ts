@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { createConsolidatedPromptManager } from '../../../../src/mcp-tools/prompt-manager/index.js';
+
 import type { Logger } from '../../../../src/logging/index.js';
 
 const createLogger = (): Logger => ({
@@ -54,34 +55,12 @@ describe('Prompt Manager guide action', () => {
 
   test('highlights gate workflows when goal references gates', async () => {
     const manager = createPromptManager();
-    const response = await manager.handleAction({ action: 'guide', goal: 'gate config' } as any, {});
-    const text = response.content?.[0]?.text ?? '';
-    expect(text).toContain('`analyze_gates`');
-    expect(text).toContain('Heads-Up');
-  });
-
-  test('blocks deprecated creation actions unless allow_legacy is true', async () => {
-    const manager = createPromptManager();
-    const legacyBlock = await manager.handleAction({ action: 'create_prompt' } as any, {});
-    expect(legacyBlock.isError).toBe(true);
-    expect(legacyBlock.content?.[0]?.text ?? '').toContain('retired');
-
-    const spy = jest.spyOn(manager as any, 'createBasicPrompt').mockResolvedValue({
-      content: [{ type: 'text' as const, text: 'ok' }],
-      isError: false,
-    });
-
-    await manager.handleAction(
-      {
-        action: 'create_prompt',
-        allow_legacy: true,
-        id: 'demo',
-        name: 'Demo',
-        description: 'desc',
-        user_message_template: '{{input}}',
-      } as any,
+    const response = await manager.handleAction(
+      { action: 'guide', goal: 'gate config' } as any,
       {}
     );
-    expect(spy).toHaveBeenCalled();
+    const text = response.content?.[0]?.text ?? '';
+    expect(text).toContain('`analyze_gates`');
+    expect(text).toContain('Recommended Actions');
   });
 });

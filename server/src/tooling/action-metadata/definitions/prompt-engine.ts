@@ -1,193 +1,148 @@
 // @lifecycle canonical - Prompt engine action metadata definitions.
+import {
+  prompt_engineCommands,
+  prompt_engineParameters,
+} from '../../../tooling/contracts/_generated/prompt_engine.generated.js';
+import {
+  contractToCommandDescriptors,
+  contractToParameterDescriptors,
+} from '../../contracts/adapter.js';
+
 import type {
   PromptEngineMetadataData,
   ToolMetadata,
   ParameterDescriptor,
   CommandDescriptor,
   UsagePatternDescriptor,
-} from "./types.js";
-import type { McpToolRequest } from "../../../types/execution.js";
+} from './types.js';
+import type { McpToolRequest } from '../../../types/execution.js';
 
 type RequestField = keyof McpToolRequest;
 
+const promptEngineContract = {
+  tool: 'prompt_engine',
+  version: 1,
+  summary:
+    'Execute prompts/chains with inline operators. Steps must start with `>>prompt_id` (or `/prompt_id`); place modifiers first: `%judge @Framework #style(...) :: gates`.',
+  parameters: prompt_engineParameters,
+  commands: prompt_engineCommands,
+};
+
+// Parameter-specific issues (only track actual problems, not documentation)
+const issuesByParam: Partial<Record<RequestField, ParameterDescriptor<RequestField>['issues']>> = {
+  // No active issues - parameters are working as designed
+};
+
+const generatedParameters = contractToParameterDescriptors<RequestField>(promptEngineContract).map(
+  (param) => ({
+    ...param,
+    issues: issuesByParam[param.name],
+  })
+) satisfies ParameterDescriptor<RequestField>[];
+
+// Parameters from contracts plus any manually tracked deprecated params
 const parameterDescriptors: ParameterDescriptor<RequestField>[] = [
-  {
-    name: "command",
-    status: "working",
-    description: "Primary execution command (>>prompt, chain://, JSON payloads).",
-  },
-  {
-    name: "session_id",
-    status: "deprecated",
-    description: "Legacy resume identifier; validator rejects usage.",
-    issues: [
-      {
-        severity: "info",
-        summary: "Explicitly blocked",
-        details: "Validator throws with guidance to use chain_id instead.",
-      },
-    ],
-  },
-  {
-    name: "chain_id",
-    status: "untested",
-    description: "Canonical chain identifier (chain-<prompt>#run).",
-    issues: [
-      {
-        severity: "info",
-        summary: "Resume path not validated",
-        details: "Need reproducible scenario proving resume flows succeed when ID provided.",
-      },
-    ],
-  },
-  {
-    name: "gate_verdict",
-    status: "working",
-    description: "Use this to resume after manual gate review (send GATE_REVIEW: PASS/FAIL here while keeping user_response for actual step output).",
-  },
-  {
-    name: "user_response",
-    status: "working",
-    description: "Response payload for ongoing chain sessions.",
-  },
-  {
-    name: "force_restart",
-    status: "untested",
-    description: "Forces chain sessions to restart from step 1.",
-    issues: [
-      {
-        severity: "info",
-        summary: "Requires confirmation",
-        details: "Flag is parsed but not covered by tests; telemetry needed.",
-      },
-    ],
-  },
-  {
-    name: "execution_mode",
-    status: "needs-validation",
-    description: "Force how the pipeline executes when semantic detection guesses wrong (prompt/template/chain/auto).",
-    issues: [
-      {
-        severity: "warning",
-        summary: "Override ignored",
-        details: "Requests that set execution_mode may still run semantic detection, ignoring override.",
-      },
-    ],
-  },
-  {
-    name: "api_validation",
-    status: "needs-validation",
-    description: "Opt-in API handshake for manual reviews. When true, responses include gate_verdict reminders instead of forcing retries.",
-  },
-  {
-    name: "quality_gates",
-    status: "display-gap",
-    description: "List of gate IDs to include explicitly.",
-    issues: [
-      {
-        severity: "warning",
-        summary: "Not reflected in output",
-        details: "Parameter accepted but GateEnhancement output omits requested gates.",
-      },
-    ],
-  },
-  {
-    name: "custom_checks",
-    status: "display-gap",
-    description: "Array of custom validation checks.",
-    issues: [
-      {
-        severity: "warning",
-        summary: "Not visible",
-        details: "Accepted payload never appears in quality guidance.",
-      },
-    ],
-  },
-  {
-    name: "gate_scope",
-    status: "untested",
-    description: "Controls how long gate validation applies (execution | session | chain | step).",
-    issues: [
-      {
-        severity: "info",
-        summary: "Field never surfaced",
-        details: "Schema accepts the field but runtime never echoes it back or documents defaults.",
-      },
-    ],
-  },
-  {
-    name: "temporary_gates",
-    status: "untested",
-    description: "Inline gate definitions (id + criteria + severity). If the ID matches an existing quality gate, it reuses that gate automatically.",
-    issues: [
-      {
-        severity: "warning",
-        summary: "Structure unclear",
-        details: "Full gate definition accepted but never referenced in Stage 5 output.",
-      },
-    ],
-  },
-  {
-    name: "timeout",
-    status: "working",
-    description: "Optional execution timeout override in milliseconds.",
-  },
-  {
-    name: "options",
-    status: "working",
-    description: "Bag of execution-specific options forwarded downstream.",
-  },
-] satisfies ParameterDescriptor<RequestField>[];
+  ...generatedParameters,
+  // session_id is in contracts as hidden/deprecated, no need to duplicate here
+];
 
 const commandDescriptors: CommandDescriptor[] = [
+  ...contractToCommandDescriptors(promptEngineContract),
   {
-    id: ">>listprompts",
-    status: "routing_issue",
-    description: "Should list prompts but instead attempts to execute a prompt with ID 'listprompts'.",
-    issues: [
-      {
-        severity: "high",
-        summary: "Misrouted command",
-        details: "Command hits prompt execution path, returning 'No prompts found' instead of enumerating prompts.",
-      },
-    ],
+    id: '>>listprompts',
+    status: 'working',
+    description: 'Routes to prompt_manager list action. Accepts optional search terms.',
+    issues: [],
   },
 ];
 
 const usagePatterns: UsagePatternDescriptor<RequestField>[] = [
   {
-    id: "gate-controls",
-    title: "Gate Controls + Temporary Gates",
+    id: 'combined-operators',
+    title: 'Combined Modifiers Chain',
     summary:
-      "Combine api_validation, reusable quality gates, inline custom checks, and temporary gate definitions in a single run.",
+      'Show correct operator order: modifiers first, prompt ids on every step, quoted free text after the prompt id.',
     sampleCommand: [
       'prompt_engine({',
-      '  "command": ">>prompt security-review",',
-      '  "api_validation": true,',
-      '  "quality_gates": ["toxicity", "traceability"],',
-      '  "custom_checks": [{ "name": "red-team", "description": "Confirm exfil path" }],',
-      '  "temporary_gates": [{ "id": "temp-gdpr", "criteria": ["no PII"], "severity": "high" }],',
-      '  "gate_scope": "execution"',
+      '  "command": "%judge @CAGEERF #style(analytical) >>analytical \\"overview\\" --> >>procedural \\"edge cases\\" --> >>creative \\"JSON summary\\" :: framework-compliance :: technical-accuracy"',
       '})',
-    ].join("\n"),
-    parameters: [
-      "command",
-      "api_validation",
-      "quality_gates",
-      "custom_checks",
-      "temporary_gates",
-      "gate_scope",
-    ],
+    ].join('\n'),
+    parameters: ['command'],
     notes: [
-      "Temporary gates follow the same schema as canonical GateRegistry entries and reuse built-in gates automatically when IDs match.",
-      "Gate scope controls whether validation stays execution-local or follows the chain.",
+      'Modifiers (%judge/@/#style/::) apply to the whole chain—keep them at the front.',
+      'Each step must start with `>>prompt_id` (or `/prompt_id`); avoid plain-text step labels.',
+      'Execution shape: command (+optional gates/options); resume shape: chain_id plus user_response and/or gate_verdict/gate_action.',
     ],
   },
   {
-    id: "chain-resume",
-    title: "Chain Resume & Restart",
+    id: 'inline-criteria',
+    title: 'Inline Quality Criteria (Simplest)',
     summary:
-      "Resume an interrupted chain with chain_id, feed a user response, or force a restart from the first step.",
+      'Use the `::` operator to add validation criteria directly in commands as natural language. Simple, flexible, and requires no setup.',
+    sampleCommand: [
+      '// Simple single prompt with criteria',
+      'prompt_engine({',
+      '  "command": ">>audit_plan topic:\\"security\\" :: \\"cite two examples, list mitigations, flag open questions\\""',
+      '})',
+      '',
+      '// Chain with criteria applied to steps',
+      'prompt_engine({',
+      '  "command": ">>analysis --> summary :: \\"include sources, note confidence levels\\""',
+      '})',
+      '',
+      '// Multiple criteria',
+      'prompt_engine({',
+      '  "command": ">>code_review :: \\"check naming conventions, verify error handling, confirm tests\\" -->"',
+      '})',
+    ].join('\n'),
+    parameters: ['command'],
+    notes: [
+      'Provide clear, actionable criteria as natural language text - the system automatically creates validation guidance.',
+      'Works with single prompts and chains - criteria apply to all steps in a chain.',
+      'Most flexible approach - adjust criteria per execution without configuration.',
+      'For reusable validation with complex configurations, use the `gates` parameter instead.',
+    ],
+  },
+  {
+    id: 'unified-gates',
+    title: 'Unified Gates Parameter (Recommended)',
+    summary:
+      'Use the new `gates` parameter to specify all types of validation in a single array. Accepts gate IDs, simple checks, and full gate definitions.',
+    sampleCommand: [
+      '// Mix gate IDs, simple checks, and full definitions',
+      'prompt_engine({',
+      '  "command": ">>prompt security-review",',
+      '  "gates": [',
+      '    "toxicity",                                    // Gate ID reference',
+      '    "traceability",                                // Gate ID reference',
+      '    { "name": "red-team", "description": "Confirm exfil path" },  // Simple check',
+      '    { "id": "gdpr-check", "criteria": ["no PII"], "severity": "high" }  // Full definition',
+      '  ]',
+      '})',
+      '',
+      '// Chain with step-specific gates',
+      'prompt_engine({',
+      '  "command": ">>analysis --> review --> summary",',
+      '  "gates": [',
+      '    "research-quality",                            // Applies to all steps',
+      '    { "id": "step2-only", "criteria": ["cite sources"], "target_step_number": 2 },',
+      '    { "id": "final-steps", "criteria": ["verify conclusions"], "apply_to_steps": [2, 3] }',
+      '  ]',
+      '})',
+    ].join('\n'),
+    parameters: ['command', 'gates'],
+    notes: [
+      'Canonical parameter for all gate specification (v3.0.0+).',
+      'Accepts mixed array: gate ID strings, simple name/description objects, or full gate definitions.',
+      'In chain executions, use target_step_number or apply_to_steps to control which steps gates apply to.',
+      'Without step targeting, gates default to current step (step 1 for new chains, resume step for resumed chains).',
+    ],
+  },
+  {
+    id: 'chain-resume',
+    title: 'Chain Resume & Restart',
+    summary:
+      'Resume an interrupted chain with chain_id, feed a user response, or force a restart from the first step.',
     sampleCommand: [
       'prompt_engine({',
       '  "command": ">>prompt chain://threat-model#step-3",',
@@ -195,78 +150,39 @@ const usagePatterns: UsagePatternDescriptor<RequestField>[] = [
       '  "user_response": "Proceed with mitigations A and B.",',
       '  "force_restart": false',
       '})',
-    ].join("\n"),
-    parameters: ["command", "chain_id", "user_response", "force_restart"],
+    ].join('\n'),
+    parameters: ['command', 'chain_id', 'user_response', 'force_restart'],
     notes: [
-      "Use gate_verdict when resuming after manual reviews.",
-      "Setting force_restart:true ignores previously cached steps even if chain_id is present.",
+      'Use gate_verdict when resuming after manual reviews.',
+      'Setting force_restart:true ignores previously cached steps even if chain_id is present.',
     ],
   },
   {
-    id: "prompt-catalog",
-    title: "Prompt Catalog Discovery",
+    id: 'prompt-catalog',
+    title: 'Prompt Catalog Discovery',
     summary:
-      "Route list commands back to the prompt manager for semantic filtering, even when invoked from prompt engine.",
+      'Route list commands back to the prompt manager for semantic filtering, even when invoked from prompt engine.',
     sampleCommand: ['prompt_engine({', '  "command": ">>listprompts security audits"', '})'].join(
-      "\n"
+      '\n'
     ),
-    parameters: ["command"],
+    parameters: ['command'],
     notes: [
-      "Routing pattern handled before prompt execution; falls back to in-memory catalog if prompt_manager is offline.",
-      "Use search terms after >>listprompts to limit results (e.g., `>>listprompts security`).",
-    ],
-  },
-  {
-    id: "execution-mode",
-    title: "Execution Mode Overrides + Timeouts",
-    summary:
-      "Pin execution_mode to prompt/template/chain, set explicit timeouts, and relay tool-specific options in one payload.",
-    sampleCommand: [
-      'prompt_engine({',
-      '  "command": ">>prompt system-hardening-plan",',
-      '  "execution_mode": "chain",',
-      '  "force_restart": true,',
-      '  "timeout": 180000,',
-      '  "options": { "context": "prod-cluster-7", "telemetry": true }',
-      '})',
-    ].join("\n"),
-    parameters: ["command", "execution_mode", "force_restart", "timeout", "options"],
-    notes: [
-      "execution_mode defaults to auto (semantic detection) when omitted.",
-      "Timeouts apply to the full pipeline; upstream transports may impose stricter caps.",
+      'Routing pattern handled before prompt execution; falls back to in-memory catalog if prompt_manager is offline.',
+      'Use search terms after >>listprompts to limit results (e.g., `>>listprompts security`).',
     ],
   },
 ];
 
 export const promptEngineMetadata: ToolMetadata<PromptEngineMetadataData> = {
-  tool: "prompt_engine",
-  version: 2,
+  tool: 'prompt_engine',
+  version: 1, // Matches contract version
   notes: [
-    "Parameters sourced from McpToolRequest interface.",
-    "Command routing issue reproduced with command string '>>listprompts'.",
-    "Use this data to seed telemetry and guide flows.",
+    'Parameters sourced from contracts/_generated and McpToolRequest interface.',
+    'Use this data to seed telemetry and guide flows.',
+    'Unified gates parameter is canonical for all gate specification.',
   ],
   issues: [
-    {
-      severity: "warning",
-      summary: "Custom quality gates not rendered",
-      details: "quality_gates parameter accepts IDs but GateEnhancement output omits them.",
-    },
-    {
-      severity: "warning",
-      summary: "custom_checks invisible",
-      details: "custom_checks payload is accepted yet never surfaced in quality guidance.",
-    },
-    {
-      severity: "warning",
-      summary: "Framework state drift",
-      details: "Some execution contexts ignore system_control framework selection; verify injection stage.",
-    },
-    {
-      severity: "warning",
-      summary: "execution_mode override",
-      details: "Requests that set execution_mode may still run semantic detection, ignoring override.",
-    },
+    // No active issues - system is stable
   ],
   data: {
     parameters: parameterDescriptors,

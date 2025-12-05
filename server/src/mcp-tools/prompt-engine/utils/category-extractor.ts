@@ -7,10 +7,8 @@
  * 2. File path structure (/prompts/analysis/ -> analysis)
  * 3. Pattern-based detection (fallback)
  *
- * Part of Gate System Intelligent Selection Upgrade - Phase 1
+ * Part of Gate System Intelligent Selection Upgrade -
  */
-
-import * as path from 'node:path';
 
 import type { Logger } from '../../../logging/index.js';
 
@@ -252,7 +250,7 @@ export class CategoryExtractor {
     let precedenceUsed: string[] = [];
     let reasoning = '';
 
-    // Phase 1: Start with template gates if specified
+    //  Start with template gates if specified
     if (gateConfiguration) {
       if (gateConfiguration.include && gateConfiguration.include.length > 0) {
         selectedGates.push(...gateConfiguration.include);
@@ -260,7 +258,7 @@ export class CategoryExtractor {
         reasoning += `Template includes: [${gateConfiguration.include.join(', ')}]. `;
       }
 
-      // Phase 2: Add category gates if framework_gates is true (default)
+      // Add category gates if framework_gates is true (default)
       if (gateConfiguration.framework_gates !== false) {
         const additionalCategoryGates = categoryGates.filter(
           (gate) => !selectedGates.includes(gate)
@@ -271,7 +269,7 @@ export class CategoryExtractor {
           reasoning += `Category gates: [${additionalCategoryGates.join(', ')}]. `;
         }
 
-        // Phase 3: Add framework gates
+        // Add framework gates
         const additionalFrameworkGates = frameworkGates.filter(
           (gate) => !selectedGates.includes(gate)
         );
@@ -282,7 +280,7 @@ export class CategoryExtractor {
         }
       }
 
-      // Phase 4: Apply exclusions
+      // Apply exclusions
       if (gateConfiguration.exclude && gateConfiguration.exclude.length > 0) {
         const originalCount = selectedGates.length;
         selectedGates = selectedGates.filter((gate) => !gateConfiguration.exclude!.includes(gate));
@@ -294,14 +292,14 @@ export class CategoryExtractor {
     } else {
       // No template configuration - use standard precedence
 
-      // Phase 2: Category gates
+      // Category gates
       selectedGates.push(...categoryGates);
       if (categoryGates.length > 0) {
         precedenceUsed.push('category-gates');
         reasoning += `Category gates: [${categoryGates.join(', ')}]. `;
       }
 
-      // Phase 3: Framework gates
+      // Framework gates
       const additionalFrameworkGates = frameworkGates.filter(
         (gate) => !selectedGates.includes(gate)
       );
@@ -312,7 +310,7 @@ export class CategoryExtractor {
       }
     }
 
-    // Phase 5: Fallback if no gates selected
+    // Fallback if no gates selected
     if (selectedGates.length === 0) {
       selectedGates.push(...fallbackGates);
       precedenceUsed.push('fallback');
@@ -355,7 +353,7 @@ export class CategoryExtractor {
   /**
    * Enhanced gate selection with 5-level precedence including temporary gates
    *
-   * Priority order (Phase 3):
+   * Priority order ():
    * 1. Temporary gates (highest priority - execution-specific)
    * 2. Explicit template gates
    * 3. Category-based gates
@@ -392,7 +390,7 @@ export class CategoryExtractor {
     let reasoning = '';
     let temporaryGatesApplied: string[] = [];
 
-    // Phase 1: Start with temporary gates (highest priority)
+    //  Start with temporary gates (highest priority)
     if (temporaryGates.length > 0) {
       selectedGates.push(...temporaryGates);
       precedenceUsed.push('temporary-gates');
@@ -400,7 +398,7 @@ export class CategoryExtractor {
       reasoning += `Temporary gates: [${temporaryGates.join(', ')}]. `;
     }
 
-    // Phase 2: Add template gates if specified
+    // Add template gates if specified
     if (gateConfiguration) {
       if (gateConfiguration.include && gateConfiguration.include.length > 0) {
         const additionalTemplateGates = gateConfiguration.include.filter(
@@ -413,7 +411,7 @@ export class CategoryExtractor {
         }
       }
 
-      // Phase 3: Add category gates if framework_gates is true (default)
+      // Add category gates if framework_gates is true (default)
       if (gateConfiguration.framework_gates !== false) {
         const additionalCategoryGates = categoryGates.filter(
           (gate) => !selectedGates.includes(gate)
@@ -424,7 +422,7 @@ export class CategoryExtractor {
           reasoning += `Category gates: [${additionalCategoryGates.join(', ')}]. `;
         }
 
-        // Phase 4: Add framework gates
+        // Add framework gates
         const additionalFrameworkGates = frameworkGates.filter(
           (gate) => !selectedGates.includes(gate)
         );
@@ -435,7 +433,7 @@ export class CategoryExtractor {
         }
       }
 
-      // Phase 5: Apply exclusions (can remove temporary, template, category, or framework gates)
+      // Apply exclusions (can remove temporary, template, category, or framework gates)
       if (gateConfiguration.exclude && gateConfiguration.exclude.length > 0) {
         const originalCount = selectedGates.length;
         selectedGates = selectedGates.filter((gate) => !gateConfiguration.exclude!.includes(gate));
@@ -453,7 +451,7 @@ export class CategoryExtractor {
     } else {
       // No template configuration - use standard precedence (skip template level)
 
-      // Phase 3: Category gates
+      // Category gates
       const additionalCategoryGates = categoryGates.filter((gate) => !selectedGates.includes(gate));
       selectedGates.push(...additionalCategoryGates);
       if (additionalCategoryGates.length > 0) {
@@ -461,7 +459,7 @@ export class CategoryExtractor {
         reasoning += `Category gates: [${additionalCategoryGates.join(', ')}]. `;
       }
 
-      // Phase 4: Framework gates
+      // Framework gates
       const additionalFrameworkGates = frameworkGates.filter(
         (gate) => !selectedGates.includes(gate)
       );
@@ -472,7 +470,7 @@ export class CategoryExtractor {
       }
     }
 
-    // Phase 6: Fallback if no gates selected
+    // Fallback if no gates selected
     if (selectedGates.length === 0) {
       selectedGates.push(...fallbackGates);
       precedenceUsed.push('fallback');

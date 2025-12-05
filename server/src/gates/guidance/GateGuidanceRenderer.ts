@@ -6,12 +6,13 @@
  * Clean dependencies: Only imports what it needs for guidance rendering.
  */
 
+import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './FrameworkGuidanceFilter.js';
+
 import type { Logger } from '../../logging/index.js';
 import type { GateContext } from '../core/gate-definitions.js';
 import type { GateLoader } from '../core/gate-loader.js';
-import type { LightweightGateDefinition } from '../types.js';
-import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './FrameworkGuidanceFilter.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
+import type { LightweightGateDefinition } from '../types.js';
 
 export interface GateGuidanceRendererOptions {
   gateLoader: GateLoader;
@@ -29,7 +30,7 @@ export class GateGuidanceRenderer {
   private readonly frameworkIdentifierProvider?: () => readonly string[] | undefined;
 
   constructor(logger: Logger, options: GateGuidanceRendererOptions) {
-    if (!options || !options.gateLoader) {
+    if (!options?.gateLoader) {
       throw new Error('GateGuidanceRenderer requires a GateLoader instance');
     }
 
@@ -65,6 +66,7 @@ export class GateGuidanceRenderer {
 
     const inlineGuidance: string[] = [];
     const frameworkGuidance: string[] = [];
+    const explicitSet = new Set(context.explicitGateIds ?? []);
 
     for (const gateId of gateIds) {
       try {
@@ -74,9 +76,10 @@ export class GateGuidanceRenderer {
           continue;
         }
 
-        const inline = this.isInlineGate(gateId, gate);
+        const isExplicit = explicitSet.has(gateId);
+        const inline = this.isInlineGate(gateId, gate) || isExplicit;
 
-        if (!inline && !this.isGateActive(gate, context)) {
+        if (!inline && !this.isGateActive(gate, context, isExplicit)) {
           this.logger.debug('[GATE GUIDANCE RENDERER] Skipped gate (not applicable):', gateId);
           continue;
         }
@@ -94,18 +97,18 @@ export class GateGuidanceRenderer {
     }
 
     if (inlineGuidance.length === 0 && frameworkGuidance.length === 0) {
-      this.logger.debug('[GATE GUIDANCE RENDERER] No applicable gates found, returning empty guidance');
+      this.logger.debug(
+        '[GATE GUIDANCE RENDERER] No applicable gates found, returning empty guidance'
+      );
       return '';
     }
 
-    const sections: string[] = [
-      '\n\n---\n\n## 🎯 Quality Enhancement Gates',
-    ];
+    const sections: string[] = ['\n\n---\n\n## Inline Gates'];
 
     // Add inline guidance first (task-specific)
     if (inlineGuidance.length > 0) {
-      sections.push('\n\n### 🎯 **Inline Quality Criteria** (PRIMARY VALIDATION)\n');
-      sections.push(inlineGuidance.join('\n\n'));
+      sections.push('\n');
+      sections.push([...new Set(inlineGuidance)].join('\n\n'));
     }
 
     // Add framework guidance second (universal standards)
@@ -116,7 +119,9 @@ export class GateGuidanceRenderer {
 
     // Add post-execution review LAST (final reminder)
     sections.push('\n\n**Post-Execution Review Guidelines:**');
-    sections.push('Review your output against these quality standards before finalizing your response.');
+    sections.push(
+      'Review your output against these quality standards before finalizing your response.'
+    );
 
     sections.push('\n\n---');
 
@@ -125,50 +130,42 @@ export class GateGuidanceRenderer {
     this.logger.debug('[GATE GUIDANCE RENDERER] Generated supplemental guidance:', {
       inlineGateCount: inlineGuidance.length,
       frameworkGateCount: frameworkGuidance.length,
-      guidanceLength: supplementalGuidance.length
+      guidanceLength: supplementalGuidance.length,
     });
 
     return supplementalGuidance;
   }
 
   private isInlineGate(gateId: string, gate: LightweightGateDefinition): boolean {
+    // Auto-generated inline gates
     if (gateId.startsWith('inline_gate_')) {
       return true;
     }
 
+    // User-provided temporary gates (should always display, bypass activation checks)
+    if (gateId.startsWith('temp_') || this.temporaryGateRegistry?.getTemporaryGate(gateId)) {
+      return true;
+    }
+
+    // Gates explicitly named as inline quality criteria
     const normalizedName = gate.name?.toLowerCase() ?? '';
     return normalizedName.includes('inline quality') || normalizedName.includes('inline gate');
   }
 
   /**
-   * Load gate definition via the shared gate loader (with temporary registry fallback)
+   * Load gate definition via the shared gate loader
+   *
+   * Note: GateLoader already checks the temporary registry, so no fallback needed here.
+   * This eliminates duplication and trusts the loader to handle all gate sources.
    */
   private async loadGateDefinition(gateId: string): Promise<LightweightGateDefinition | null> {
     const gate = await this.gateLoader.loadGate(gateId);
-    if (gate) {
-      return gate;
+
+    if (!gate) {
+      this.logger.warn('[GATE GUIDANCE RENDERER] Gate definition not found:', gateId);
     }
 
-    if (gateId.startsWith('temp_') && this.temporaryGateRegistry) {
-      this.logger.debug('[GATE GUIDANCE RENDERER] Attempting to load temporary gate:', gateId);
-      const tempGate = this.temporaryGateRegistry.getTemporaryGate(gateId);
-
-      if (tempGate) {
-        const lightweight = this.temporaryGateRegistry.convertToLightweightGate(tempGate);
-        this.logger.info('[GATE GUIDANCE RENDERER] ✅ Loaded temporary gate:', {
-          gateId,
-          name: tempGate.name,
-          guidanceLength: tempGate.guidance.length
-        });
-
-        return lightweight;
-      }
-
-      this.logger.warn('[GATE GUIDANCE RENDERER] ⚠️ Temporary gate not found in registry:', gateId);
-    }
-
-    this.logger.warn('[GATE GUIDANCE RENDERER] Gate definition not found via loader:', gateId);
-    return null;
+    return gate;
   }
 
   /**
@@ -178,11 +175,15 @@ export class GateGuidanceRenderer {
    * based on framework context alone. This ensures framework methodology guidance
    * applies universally across all categories.
    */
-  private isGateActive(gate: LightweightGateDefinition, context: GateContext): boolean {
+  private isGateActive(
+    gate: LightweightGateDefinition,
+    context: GateContext,
+    explicit: boolean = false
+  ): boolean {
     return this.gateLoader.isGateActive(gate, {
       promptCategory: context.category,
       framework: context.framework,
-      explicitRequest: false,
+      explicitRequest: explicit,
     });
   }
 
@@ -195,7 +196,15 @@ export class GateGuidanceRenderer {
 
     if (context.framework && hasFrameworkSpecificContent(guidance, frameworkNames)) {
       guidance = filterFrameworkGuidance(guidance, context.framework, frameworkNames);
-      this.logger.debug('[GATE GUIDANCE RENDERER] Applied framework filtering for:', context.framework);
+      this.logger.debug(
+        '[GATE GUIDANCE RENDERER] Applied framework filtering for:',
+        context.framework
+      );
+    }
+
+    // Skip header for auto-generated inline gates - they're already under the section header
+    if (gate.name === 'Inline Quality Criteria') {
+      return guidance;
     }
 
     return `### ${gate.name}\n${guidance}`;
@@ -223,7 +232,7 @@ export class GateGuidanceRenderer {
     const stats = this.gateLoader.getStatistics();
     return {
       cachedGates: stats.cachedGates,
-      gatesDirectory: 'loader-managed'
+      gatesDirectory: 'loader-managed',
     };
   }
 }

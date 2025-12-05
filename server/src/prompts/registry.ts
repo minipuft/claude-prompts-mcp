@@ -4,19 +4,21 @@
  * Handles registering prompts with MCP server using proper MCP protocol and managing conversation history
  */
 
-import { z } from "zod";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ConfigManager } from "../config/index.js";
-import { Logger } from "../logging/index.js";
-import { ConvertedPrompt } from "../types/index.js";
-import { isChainPrompt } from "../utils/chainUtils.js";
-import { ConversationManager } from "../text-references/conversation.js";
+import { z } from 'zod';
+
+import { ConfigManager } from '../config/index.js';
+import { Logger } from '../logging/index.js';
+import { ConversationManager } from '../text-references/conversation.js';
+import { ConvertedPrompt } from '../types/index.js';
+import { isChainPrompt } from '../utils/chainUtils.js';
+
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 // TemplateProcessor functionality consolidated into UnifiedPromptProcessor
 
 /**
  * Prompt Registry class
  */
-type PromptRegistryServer = Pick<McpServer, "registerPrompt"> & {
+type PromptRegistryServer = Pick<McpServer, 'registerPrompt'> & {
   notification?: (notification: { method: string; params?: unknown }) => void;
 };
 
@@ -26,7 +28,7 @@ export class PromptRegistry {
   private configManager: ConfigManager;
   private conversationManager: ConversationManager;
   // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
-  private registeredPromptNames = new Set<string>(); // Track registered prompts to prevent duplicates
+  private registeredPromptIds = new Set<string>(); // Track registered prompt IDs to prevent duplicates
 
   /**
    * Direct template processing method (minimal implementation)
@@ -39,14 +41,14 @@ export class PromptRegistry {
     toolsEnabled: boolean = false
   ): Promise<string> {
     // Import jsonUtils for basic template processing
-    const { processTemplate } = await import("../utils/jsonUtils.js");
-    const { getAvailableTools } = await import("../utils/index.js");
-    
+    const { processTemplate } = await import('../utils/jsonUtils.js');
+    const { getAvailableTools } = await import('../utils/index.js');
+
     const enhancedSpecialContext = { ...specialContext };
     if (toolsEnabled) {
-      enhancedSpecialContext["tools_available"] = getAvailableTools();
+      enhancedSpecialContext['tools_available'] = getAvailableTools();
     }
-    
+
     return processTemplate(template, args, enhancedSpecialContext);
   }
 
@@ -73,9 +75,15 @@ export class PromptRegistry {
       let registeredCount = 0;
 
       for (const prompt of prompts) {
+        // Skip MCP registration if disabled (prompt or category level)
+        if (prompt.registerWithMcp === false) {
+          this.logger.debug(`Skipping MCP registration: ${prompt.id} (registerWithMcp=false)`);
+          continue;
+        }
+
         // Skip if already registered (deduplication guard)
-        if (this.registeredPromptNames.has(prompt.name)) {
-          this.logger.debug(`Skipping already registered prompt: ${prompt.name}`);
+        if (this.registeredPromptIds.has(prompt.id)) {
+          this.logger.debug(`Skipping already registered prompt: ${prompt.id}`);
           continue;
         }
 
@@ -89,41 +97,52 @@ export class PromptRegistry {
         }
 
         // Register the prompt using the correct MCP SDK API with error recovery
+        // Use prompt.id for all MCP registration (slug-based, no spaces)
         try {
           this.mcpServer.registerPrompt(
-            prompt.name,
+            prompt.id,
             {
-              title: prompt.name,
-              description: prompt.description || `Prompt: ${prompt.name}`,
-              argsSchema
+              title: prompt.id,
+              description: prompt.description || `Prompt: ${prompt.id}`,
+              argsSchema,
             },
             async (args: any) => {
-              this.logger.debug(`Executing prompt '${prompt.name}' with args:`, args);
+              this.logger.debug(`Executing prompt '${prompt.id}' with args:`, args);
               return await this.executePromptLogic(prompt, args || {});
             }
           );
 
           // Track the registered prompt
-          this.registeredPromptNames.add(prompt.name);
+          this.registeredPromptIds.add(prompt.id);
           registeredCount++;
-          this.logger.debug(`Registered prompt: ${prompt.name}`);
+          this.logger.debug(`Registered prompt: ${prompt.id}`);
         } catch (error: any) {
-          if (error.message && error.message.includes('already registered')) {
+          if (error.message?.includes('already registered')) {
             // Handle MCP SDK's "already registered" error gracefully
-            this.logger.warn(`Prompt '${prompt.name}' already registered in MCP SDK, skipping re-registration`);
-            this.registeredPromptNames.add(prompt.name); // Track it anyway
+            this.logger.warn(
+              `Prompt '${prompt.id}' already registered in MCP SDK, skipping re-registration`
+            );
+            this.registeredPromptIds.add(prompt.id); // Track it anyway
             continue;
           } else {
             // Re-throw other errors
-            this.logger.error(`Failed to register prompt '${prompt.name}':`, error.message || error);
+            this.logger.error(
+              `Failed to register prompt '${prompt.id}':`,
+              error.message || error
+            );
             throw error;
           }
         }
       }
 
-      this.logger.info(`Successfully registered ${registeredCount} of ${prompts.length} prompts with MCP SDK`);
+      this.logger.info(
+        `Successfully registered ${registeredCount} of ${prompts.length} prompts with MCP SDK`
+      );
     } catch (error) {
-      this.logger.error('Error registering individual prompts:', error instanceof Error ? error.message : String(error));
+      this.logger.error(
+        'Error registering individual prompts:',
+        error instanceof Error ? error.message : String(error)
+      );
       throw error;
     }
   }
@@ -136,15 +155,9 @@ export class PromptRegistry {
       this.logger.info(`Executing prompt '${promptData.name}'...`);
 
       // Check if arguments are effectively empty
-      const effectivelyEmptyArgs = this.areArgumentsEffectivelyEmpty(
-        promptData.arguments,
-        args
-      );
+      const effectivelyEmptyArgs = this.areArgumentsEffectivelyEmpty(promptData.arguments, args);
 
-      if (
-        effectivelyEmptyArgs &&
-        promptData.onEmptyInvocation === "return_template"
-      ) {
+      if (effectivelyEmptyArgs && promptData.onEmptyInvocation === 'return_template') {
         this.logger.info(
           `Prompt '${promptData.name}' invoked without arguments and onEmptyInvocation is 'return_template'. Returning template info.`
         );
@@ -156,34 +169,28 @@ export class PromptRegistry {
           responseText += `This prompt requires the following arguments:\n`;
           promptData.arguments.forEach((arg) => {
             responseText += `  - ${arg.name}${
-              arg.required ? " (required)" : " (optional)"
-            }: ${arg.description || "No description"}\n`;
+              arg.required ? ' (required)' : ' (optional)'
+            }: ${arg.description || 'No description'}\n`;
           });
           responseText += `\nExample usage: >>${
             promptData.id || promptData.name
-          } ${promptData.arguments
-            .map((arg) => `${arg.name}=\"value\"`)
-            .join(" ")}`;
+          } ${promptData.arguments.map((arg) => `${arg.name}=\"value\"`).join(' ')}`;
         } else {
-          responseText += "This prompt does not require any arguments.\n";
+          responseText += 'This prompt does not require any arguments.\n';
         }
 
         return {
           messages: [
             {
-              role: "assistant" as const,
-              content: { type: "text" as const, text: responseText },
+              role: 'assistant' as const,
+              content: { type: 'text' as const, text: responseText },
             },
           ],
         };
       }
 
       // Check if this is a chain prompt
-      if (
-        isChainPrompt(promptData) &&
-        promptData.chainSteps &&
-        promptData.chainSteps.length > 0
-      ) {
+      if (isChainPrompt(promptData) && promptData.chainSteps && promptData.chainSteps.length > 0) {
         this.logger.info(
           `Prompt '${promptData.name}' is a chain with ${promptData.chainSteps.length} steps. NOT automatically executing the chain.`
         );
@@ -192,8 +199,8 @@ export class PromptRegistry {
 
       // Create messages array with only user and assistant roles
       const messages: {
-        role: "user" | "assistant";
-        content: { type: "text"; text: string };
+        role: 'user' | 'assistant';
+        content: { type: 'text'; text: string };
       }[] = [];
 
       // Create user message with placeholders replaced
@@ -217,7 +224,7 @@ export class PromptRegistry {
 
       // Store in conversation history for future reference
       this.conversationManager.addToConversationHistory({
-        role: "user",
+        role: 'user',
         content: userMessageText,
         timestamp: Date.now(),
         isProcessedTemplate: true, // Mark as a processed template
@@ -225,23 +232,17 @@ export class PromptRegistry {
 
       // Push the user message to the messages array
       messages.push({
-        role: "user",
+        role: 'user',
         content: {
-          type: "text",
+          type: 'text',
           text: userMessageText,
         },
       });
 
-      this.logger.debug(
-        `Processed messages for prompt '${promptData.name}':`,
-        messages
-      );
+      this.logger.debug(`Processed messages for prompt '${promptData.name}':`, messages);
       return { messages };
     } catch (error) {
-      this.logger.error(
-        `Error executing prompt '${promptData.name}':`,
-        error
-      );
+      this.logger.error(`Error executing prompt '${promptData.name}':`, error);
       throw error; // Re-throw to let the MCP framework handle it
     }
   }
@@ -251,23 +252,18 @@ export class PromptRegistry {
    */
   async registerAllPrompts(prompts: ConvertedPrompt[]): Promise<number> {
     try {
-      this.logger.info(
-        `Registering ${prompts.length} prompts with MCP SDK registerPrompt API...`
-      );
+      this.logger.info(`Registering ${prompts.length} prompts with MCP SDK registerPrompt API...`);
 
       // Register individual prompts using the correct MCP SDK API
       this.registerIndividualPrompts(prompts);
 
-      this.logger.info(
-        `Successfully registered ${prompts.length} prompts with MCP SDK`
-      );
+      this.logger.info(`Successfully registered ${prompts.length} prompts with MCP SDK`);
       return prompts.length;
     } catch (error) {
       this.logger.error(`Error registering prompts:`, error);
       throw error;
     }
   }
-
 
   /**
    * Send list_changed notification to clients (for hot-reload)
@@ -278,14 +274,14 @@ export class PromptRegistry {
       // Send MCP notification that prompt list has changed
       if (this.mcpServer && typeof this.mcpServer.notification === 'function') {
         this.mcpServer.notification({
-          method: "notifications/prompts/list_changed"
+          method: 'notifications/prompts/list_changed',
         });
-        this.logger.info("✅ Sent prompts/list_changed notification to clients");
+        this.logger.info('✅ Sent prompts/list_changed notification to clients');
       } else {
         this.logger.debug("MCP server doesn't support notifications");
       }
     } catch (error) {
-      this.logger.warn("Could not send prompts/list_changed notification:", error);
+      this.logger.warn('Could not send prompts/list_changed notification:', error);
     }
   }
 
@@ -302,7 +298,7 @@ export class PromptRegistry {
   ): boolean {
     if (
       !providedArgs ||
-      typeof providedArgs !== "object" ||
+      typeof providedArgs !== 'object' ||
       Object.keys(providedArgs).length === 0
     ) {
       return true; // No arguments provided at all
@@ -310,18 +306,12 @@ export class PromptRegistry {
     // Check if any of the defined arguments for the prompt have a meaningful value
     for (const definedArg of promptArgs) {
       const value = providedArgs[definedArg.name];
-      if (
-        value !== undefined &&
-        value !== null &&
-        String(value).trim() !== ""
-      ) {
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
         return false; // Found at least one provided argument with a value
       }
     }
     return true; // All defined arguments are missing or have empty values
   }
-
-
 
   /**
    * Execute a prompt directly (for testing or internal use)
@@ -337,10 +327,7 @@ export class PromptRegistry {
         throw new Error(`Could not find prompt with ID: ${promptId}`);
       }
 
-      this.logger.debug(
-        `Running prompt directly: ${promptId} with arguments:`,
-        args
-      );
+      this.logger.debug(`Running prompt directly: ${promptId} with arguments:`, args);
 
       // Check for missing arguments but treat all as optional
       const missingArgs = convertedPrompt.arguments
@@ -350,7 +337,7 @@ export class PromptRegistry {
       if (missingArgs.length > 0) {
         this.logger.info(
           `Missing arguments for '${promptId}': ${missingArgs.join(
-            ", "
+            ', '
           )}. Will attempt to use conversation context.`
         );
 
@@ -371,7 +358,7 @@ export class PromptRegistry {
 
       // Add the message to conversation history
       this.conversationManager.addToConversationHistory({
-        role: "user",
+        role: 'user',
         content: userMessageText,
         timestamp: Date.now(),
         isProcessedTemplate: true,
@@ -382,7 +369,7 @@ export class PromptRegistry {
 
       // Store the response in conversation history
       this.conversationManager.addToConversationHistory({
-        role: "assistant",
+        role: 'assistant',
         content: response,
         timestamp: Date.now(),
       });
@@ -408,10 +395,7 @@ export class PromptRegistry {
     const chainPrompts = prompts.filter((p) => isChainPrompt(p)).length;
     const toolEnabledPrompts = prompts.filter((p) => p.tools).length;
     const categoriesSet = new Set(prompts.map((p) => p.category));
-    const totalArguments = prompts.reduce(
-      (sum, p) => sum + p.arguments.length,
-      0
-    );
+    const totalArguments = prompts.reduce((sum, p) => sum + p.arguments.length, 0);
 
     return {
       totalPrompts: prompts.length,
@@ -419,8 +403,7 @@ export class PromptRegistry {
       regularPrompts: prompts.length - chainPrompts,
       toolEnabledPrompts,
       categoriesCount: categoriesSet.size,
-      averageArgumentsPerPrompt:
-        prompts.length > 0 ? totalArguments / prompts.length : 0,
+      averageArgumentsPerPrompt: prompts.length > 0 ? totalArguments / prompts.length : 0,
     };
   }
 }

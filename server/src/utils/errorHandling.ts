@@ -7,7 +7,7 @@
 // Define StructuredToolResponse locally to avoid circular dependency
 interface StructuredToolResponse {
   content: Array<{
-    type: "text";
+    type: 'text';
     text: string;
   }>;
   isError?: boolean;
@@ -37,8 +37,8 @@ export interface ErrorContext {
     memoryUsage?: number;
     uptime?: number;
   };
-  errorType?: "validation" | "execution" | "system" | "client" | "configuration";
-  severity?: "low" | "medium" | "high" | "critical";
+  errorType?: 'validation' | 'execution' | 'system' | 'client' | 'configuration';
+  severity?: 'low' | 'medium' | 'high' | 'critical';
   suggestedActions?: string[];
   relatedComponents?: string[];
   details?: any;
@@ -83,17 +83,19 @@ export abstract class BaseError extends Error {
    */
   toStructuredResponse(): StructuredToolResponse {
     return {
-      content: [{
-        type: "text",
-        text: this.getEnhancedMessage()
-      }],
+      content: [
+        {
+          type: 'text',
+          text: this.getEnhancedMessage(),
+        },
+      ],
       isError: true,
       metadata: {
         tool: this.context.tool || 'unknown',
         action: this.context.action || 'unknown',
         timestamp: this.timestamp,
-        errorCode: this.code
-      }
+        errorCode: this.code,
+      },
     };
   }
 
@@ -152,7 +154,11 @@ export class ValidationError extends BaseError {
   public readonly validationResult?: ValidationResult;
   public readonly validationErrors?: string[]; // Keep for backwards compatibility
 
-  constructor(message: string, validationErrorsOrContext?: string[] | ErrorContext, validationResult?: ValidationResult) {
+  constructor(
+    message: string,
+    validationErrorsOrContext?: string[] | ErrorContext,
+    validationResult?: ValidationResult
+  ) {
     // Handle backwards compatibility with old constructor signature
     let context: ErrorContext = {};
     let validationErrors: string[] | undefined;
@@ -211,7 +217,10 @@ export class ConfigError extends BaseError {
   constructor(message: string, context: ErrorContext = {}) {
     super(message, 'CONFIG_ERROR', {
       ...context,
-      suggestions: context.suggestions || ["Check your configuration file syntax and required fields", "See config documentation for valid options"]
+      suggestions: context.suggestions || [
+        'Check your configuration file syntax and required fields',
+        'See config documentation for valid options',
+      ],
     });
   }
 }
@@ -220,7 +229,10 @@ export class FrameworkError extends BaseError {
   constructor(message: string, context: ErrorContext = {}) {
     super(message, 'FRAMEWORK_ERROR', {
       ...context,
-      suggestions: context.suggestions || ["Verify framework is enabled and properly configured", "See framework documentation for setup instructions"]
+      suggestions: context.suggestions || [
+        'Verify framework is enabled and properly configured',
+        'See framework documentation for setup instructions',
+      ],
     });
   }
 }
@@ -228,7 +240,11 @@ export class FrameworkError extends BaseError {
 export class ExecutionError extends BaseError {
   public readonly executionContext?: Record<string, unknown>;
 
-  constructor(message: string, context: ErrorContext = {}, executionContext?: Record<string, unknown>) {
+  constructor(
+    message: string,
+    context: ErrorContext = {},
+    executionContext?: Record<string, unknown>
+  ) {
     super(message, 'EXECUTION_ERROR', context);
     this.executionContext = executionContext;
   }
@@ -289,8 +305,8 @@ export class ErrorHandler {
       }
     })(message, 'UNKNOWN_ERROR', {
       ...context,
-      suggestions: ["An unexpected error occurred. Please try again or contact support."],
-      recoveryOptions: ["Try the operation again", "Check system status", "Contact support"]
+      suggestions: ['An unexpected error occurred. Please try again or contact support.'],
+      recoveryOptions: ['Try the operation again', 'Check system status', 'Contact support'],
     });
 
     return baseError.toStructuredResponse();
@@ -319,7 +335,9 @@ export class ErrorHandler {
    */
   isRetryable(error: BaseError): boolean {
     const strategy = this.retryStrategies.get(error.code);
-    return strategy ? strategy(error) : Boolean(error.context.recoveryOptions && error.context.recoveryOptions.length > 0);
+    return strategy
+      ? strategy(error)
+      : Boolean(error.context.recoveryOptions && error.context.recoveryOptions.length > 0);
   }
 
   /**
@@ -328,8 +346,12 @@ export class ErrorHandler {
   private setupDefaultRetryStrategies(): void {
     this.addRetryStrategy('VALIDATION_ERROR', () => false); // User must fix input
     this.addRetryStrategy('CONFIG_ERROR', () => false); // User must fix config
-    this.addRetryStrategy('FRAMEWORK_ERROR', (error) => Boolean(error.context.recoveryOptions && error.context.recoveryOptions.length > 0));
-    this.addRetryStrategy('EXECUTION_ERROR', (error) => Boolean(error.context.recoveryOptions && error.context.recoveryOptions.length > 0));
+    this.addRetryStrategy('FRAMEWORK_ERROR', (error) =>
+      Boolean(error.context.recoveryOptions && error.context.recoveryOptions.length > 0)
+    );
+    this.addRetryStrategy('EXECUTION_ERROR', (error) =>
+      Boolean(error.context.recoveryOptions && error.context.recoveryOptions.length > 0)
+    );
   }
 }
 
@@ -340,16 +362,18 @@ export class ValidationHelpers {
   /**
    * Create validation result from errors
    */
-  static createValidationResult(errors: Array<{
-    field: string;
-    message: string;
-    code: string;
-    suggestion?: string;
-    example?: string;
-  }>): ValidationResult {
+  static createValidationResult(
+    errors: Array<{
+      field: string;
+      message: string;
+      code: string;
+      suggestion?: string;
+      example?: string;
+    }>
+  ): ValidationResult {
     return {
       valid: errors.length === 0,
-      errors: errors.length > 0 ? errors : undefined
+      errors: errors.length > 0 ? errors : undefined,
     };
   }
 
@@ -362,14 +386,19 @@ export class ValidationHelpers {
   ): ValidationResult {
     const errors: ValidationResult['errors'] = [];
 
-    requiredFields.forEach(field => {
-      if (!(field in data) || data[field] === undefined || data[field] === null || data[field] === '') {
-        errors!.push({
+    requiredFields.forEach((field) => {
+      if (
+        !(field in data) ||
+        data[field] === undefined ||
+        data[field] === null ||
+        data[field] === ''
+      ) {
+        errors.push({
           field,
           message: `Field '${field}' is required but was not provided`,
           code: 'REQUIRED_FIELD_MISSING',
           suggestion: `Please provide a value for '${field}'`,
-          example: `"${field}": "example_value"`
+          example: `"${field}": "example_value"`,
         });
       }
     });
@@ -381,8 +410,8 @@ export class ValidationHelpers {
    * Create "did you mean" suggestions for typos
    */
   static createDidYouMeanSuggestion(input: string, validOptions: string[]): string | undefined {
-    const suggestions = validOptions.filter(option =>
-      this.levenshteinDistance(input.toLowerCase(), option.toLowerCase()) <= 2
+    const suggestions = validOptions.filter(
+      (option) => this.levenshteinDistance(input.toLowerCase(), option.toLowerCase()) <= 2
     );
 
     if (suggestions.length > 0) {
@@ -396,7 +425,9 @@ export class ValidationHelpers {
    * Calculate Levenshtein distance for typo detection
    */
   private static levenshteinDistance(str1: string, str2: string): number {
-    const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
+    const matrix = Array(str2.length + 1)
+      .fill(null)
+      .map(() => Array(str1.length + 1).fill(null));
 
     for (let i = 0; i <= str1.length; i += 1) {
       matrix[0][i] = i;
@@ -432,7 +463,8 @@ export function handleError(
 ): { message: string; isError: boolean } {
   // Enhanced handling with new error types
   if (error instanceof BaseError) {
-    const logLevel = error.code === 'VALIDATION_ERROR' || error.code === 'ARGUMENT_ERROR' ? 'warn' : 'error';
+    const logLevel =
+      error.code === 'VALIDATION_ERROR' || error.code === 'ARGUMENT_ERROR' ? 'warn' : 'error';
     logger[logLevel](`${context}: ${error.message}`);
     return { message: error.getEnhancedMessage(), isError: error.code !== 'ARGUMENT_ERROR' };
   } else if (error instanceof PromptError) {
@@ -450,4 +482,4 @@ export function handleError(
     logger.error(`${context}: ${errorMessage}`);
     return { message: `Unexpected error: ${errorMessage}`, isError: true };
   }
-} 
+}

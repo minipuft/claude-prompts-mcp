@@ -4,6 +4,8 @@
  * Tests comprehensive validation logic for MCP tool requests
  * including edge cases, error handling, and type safety.
  */
+import { jest } from '@jest/globals';
+
 import { McpToolRequestValidator } from '../../../../dist/execution/validation/request-validator';
 
 import type { McpToolRequest } from '../../../../dist/types/execution';
@@ -17,12 +19,7 @@ describe('McpToolRequestValidator', () => {
       expect(result.command).toBe('>>test_prompt');
       expect(result.gate_verdict).toBeUndefined();
       expect(result.force_restart).toBeUndefined();
-      expect(result.execution_mode).toBeUndefined();
-      expect(result.api_validation).toBe(false);
-      expect(result.quality_gates).toBeUndefined();
-      expect(result.custom_checks).toBeUndefined();
-      expect(result.temporary_gates).toBeUndefined();
-      expect(result.gate_scope).toBeUndefined();
+      expect(result.gates).toBeUndefined();
     });
 
     it('should validate a complete valid request', () => {
@@ -31,12 +28,12 @@ describe('McpToolRequestValidator', () => {
         chain_id: 'chain-test_prompt',
         gate_verdict: 'GATE_REVIEW: PASS - All criteria met',
         force_restart: true,
-        execution_mode: 'chain',
-        api_validation: true,
-        quality_gates: ['technical-accuracy', 'code-quality'],
-        custom_checks: [{ name: 'custom-check', description: 'Custom validation' }],
-        temporary_gates: [{ id: 'temp-gate', criteria: ['criteria'], severity: 'high' }],
-        gate_scope: 'session',
+        gates: [
+          'technical-accuracy',
+          'code-quality',
+          { name: 'custom-check', description: 'Custom validation' },
+          { id: 'temp-gate', criteria: ['criteria'], severity: 'high' },
+        ],
       };
 
       const result = McpToolRequestValidator.validate(raw);
@@ -78,6 +75,39 @@ describe('McpToolRequestValidator', () => {
       );
     });
 
+    it('should reject legacy gate_validation usage', () => {
+      const raw = {
+        command: '>>test',
+        gate_validation: true,
+      } as any;
+
+      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
+        "gate_validation has been retired. Use 'gates' parameter to specify quality gates."
+      );
+    });
+
+    it('should reject legacy api_validation usage', () => {
+      const raw = {
+        command: '>>test',
+        api_validation: true,
+      } as any;
+
+      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
+        "api_validation has been removed. Use 'gates' parameter to specify quality gates."
+      );
+    });
+
+    it('should reject experimental llm_validation parameter', () => {
+      const raw = {
+        command: '>>test',
+        llm_validation: true,
+      } as any;
+
+      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
+        "llm_validation is experimental and not yet implemented. Use 'gates' parameter with gate_verdict for gate-based validation. See docs/enhanced-gate-system.md for current gate features."
+      );
+    });
+
     it('should reject invalid gate_verdict format', () => {
       const raw = {
         command: '>>test',
@@ -86,56 +116,6 @@ describe('McpToolRequestValidator', () => {
 
       expect(() => McpToolRequestValidator.validate(raw)).toThrow(
         'McpToolRequest validation failed: gate_verdict: Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
-      );
-    });
-
-    it('should reject invalid execution_mode', () => {
-      const raw = {
-        command: '>>test',
-        execution_mode: 'invalid-mode' as any,
-      };
-
-      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        'McpToolRequest validation failed: execution_mode: Execution mode must be one of: auto, prompt, template, chain'
-      );
-    });
-
-    it('should reject invalid gate_scope', () => {
-      const raw = {
-        command: '>>test',
-        gate_scope: 'invalid-scope' as any,
-      };
-
-      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        'McpToolRequest validation failed: gate_scope: Gate scope must be one of: execution, session, chain, step'
-      );
-    });
-
-    it('should reject invalid custom_checks structure', () => {
-      const raw = {
-        command: '>>test',
-        custom_checks: [
-          { name: 'valid-check', description: 'valid description' },
-          { name: 'test', description: '' }, // empty description
-        ],
-      };
-
-      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        'McpToolRequest validation failed: custom_checks.1.description: Custom check description cannot be empty'
-      );
-    });
-
-    it('should reject invalid temporary_gates structure', () => {
-      const raw = {
-        command: '>>test',
-        temporary_gates: [
-          { id: 'valid', criteria: ['criterion'] },
-          { id: 'test', criteria: [] }, // missing criteria entries
-        ],
-      };
-
-      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        'McpToolRequest validation failed: temporary_gates.1.criteria: Gate criteria cannot be empty'
       );
     });
 
@@ -155,11 +135,11 @@ describe('McpToolRequestValidator', () => {
     it('should handle multiple validation errors', () => {
       const raw = {
         command: '',
-        execution_mode: 'invalid' as any,
+        gates: 'not-array' as any,
       };
 
       expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        /McpToolRequest validation failed:.*command.*execution_mode/
+        /McpToolRequest validation failed:.*command/
       );
     });
 
@@ -311,15 +291,14 @@ describe('McpToolRequestValidator', () => {
       const partial = {
         command: '>>test',
         chain_id: 'chain-test',
-        api_validation: true,
+        force_restart: false,
       };
 
       const result = McpToolRequestValidator.validatePartial(partial);
 
       expect(result.command).toBe('>>test');
       expect(result.chain_id).toBe('chain-test');
-      expect(result.api_validation).toBe(true);
-      expect(result.force_restart).toBeUndefined();
+      expect(result.force_restart).toBe(false);
     });
 
     it('should validate and trim command in partial request', () => {
@@ -381,11 +360,11 @@ describe('McpToolRequestValidator', () => {
 
     it('should copy other fields as-is', () => {
       const partial = {
-        execution_mode: 'chain' as const,
-        quality_gates: ['gate', 'gate'],
-        custom_checks: [{ name: 'test', description: 'test desc' }],
-        temporary_gates: [{ id: 'temp', criteria: ['crit'] }],
-        gate_scope: 'session' as const,
+        gates: [
+          'gate-id',
+          { name: 'test', description: 'test desc' },
+          { id: 'temp', criteria: ['crit'] },
+        ],
       };
 
       const result = McpToolRequestValidator.validatePartial(partial);
@@ -399,6 +378,129 @@ describe('McpToolRequestValidator', () => {
       expect(() => {
         (result as any).newField = 'test';
       }).toThrow();
+    });
+  });
+
+  describe('Unified gates parameter', () => {
+    it('should validate unified gates parameter with string IDs', () => {
+      const raw = {
+        command: '>>test',
+        gates: ['toxicity', 'code-quality'],
+      };
+
+      const result = McpToolRequestValidator.validate(raw);
+      expect(result.gates).toEqual(['toxicity', 'code-quality']);
+    });
+
+    it('should validate unified gates parameter with CustomCheck objects', () => {
+      const raw = {
+        command: '>>test',
+        gates: [{ name: 'red-team', description: 'Confirm exfil path' }],
+      };
+
+      const result = McpToolRequestValidator.validate(raw);
+      expect(result.gates).toEqual([{ name: 'red-team', description: 'Confirm exfil path' }]);
+    });
+
+    it('should validate unified gates parameter with TemporaryGateInput objects', () => {
+      const raw = {
+        command: '>>test',
+        gates: [{ id: 'gdpr-check', criteria: ['no PII'], severity: 'high' }],
+      };
+
+      const result = McpToolRequestValidator.validate(raw);
+      expect(result.gates).toEqual([{ id: 'gdpr-check', criteria: ['no PII'], severity: 'high' }]);
+    });
+
+    it('should validate unified gates parameter with mixed specification types', () => {
+      const raw = {
+        command: '>>test',
+        gates: [
+          'toxicity', // String ID
+          { name: 'red-team', description: 'Confirm exfil path' }, // CustomCheck
+          { id: 'gdpr-check', criteria: ['no PII'], severity: 'high' }, // TemporaryGateInput
+        ],
+      };
+
+      const result = McpToolRequestValidator.validate(raw);
+      expect(result.gates).toEqual([
+        'toxicity',
+        { name: 'red-team', description: 'Confirm exfil path' },
+        { id: 'gdpr-check', criteria: ['no PII'], severity: 'high' },
+      ]);
+    });
+
+    it('should accept empty gates array', () => {
+      const raw = {
+        command: '>>test',
+        gates: [],
+      };
+
+      const result = McpToolRequestValidator.validate(raw);
+      expect(result.gates).toEqual([]);
+    });
+  });
+
+  describe('v3.0.0 Breaking Changes', () => {
+    it('validates v3.0.0 parameter requirements', () => {
+      // ============================================
+      // REMOVED PARAMETERS (v2.x → v3.0.0)
+      // ============================================
+
+      // Legacy parameters that throw errors
+      expect(() =>
+        McpToolRequestValidator.validate({
+          command: '>>test',
+          session_id: 'old-session',
+        })
+      ).toThrow('session_id is no longer supported');
+
+      expect(() =>
+        McpToolRequestValidator.validate({
+          command: '>>test',
+          gate_validation: true,
+        })
+      ).toThrow('gate_validation has been retired');
+
+      expect(() =>
+        McpToolRequestValidator.validate({
+          command: '>>test',
+          api_validation: true,
+        })
+      ).toThrow('api_validation has been removed');
+
+      // ============================================
+      // EXPERIMENTAL PARAMETERS (blocked)
+      // ============================================
+
+      // llm_validation is experimental (not yet implemented)
+      expect(() =>
+        McpToolRequestValidator.validate({
+          command: '>>test',
+          llm_validation: true,
+        })
+      ).toThrow('llm_validation is experimental and not yet implemented');
+
+      // ============================================
+      // v3.0.0+ UNIFIED GATES PARAMETER
+      // ============================================
+
+      // Modern v3.0.0 style - unified gates parameter
+      const modernRequest = McpToolRequestValidator.validate({
+        command: '>>test',
+        gates: [
+          'toxicity', // Gate ID
+          { name: 'security', description: 'Check for vulnerabilities' }, // CustomCheck
+          { id: 'temp', criteria: ['test'] }, // TemporaryGateInput
+        ],
+      });
+
+      // Unified parameter works correctly
+      expect(modernRequest.gates).toEqual([
+        'toxicity',
+        { name: 'security', description: 'Check for vulnerabilities' },
+        { id: 'temp', criteria: ['test'] },
+      ]);
     });
   });
 });

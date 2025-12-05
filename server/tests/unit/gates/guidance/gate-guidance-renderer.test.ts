@@ -94,12 +94,12 @@ describe('GateGuidanceRenderer (loader integration)', () => {
       gateLoader: loader as any,
     });
 
-    const guidance = await renderer.renderGuidance(
-      ['inline_gate_clarity', 'framework_quality'],
-      { framework: 'CAGEERF', category: 'analysis' }
-    );
+    const guidance = await renderer.renderGuidance(['inline_gate_clarity', 'framework_quality'], {
+      framework: 'CAGEERF',
+      category: 'analysis',
+    });
 
-    expect(guidance).toContain('### 🎯 **Inline Quality Criteria** (PRIMARY VALIDATION)');
+    expect(guidance).toContain('## Inline Gates');
     expect(guidance).toContain('Inline Clarity Gate');
     expect(guidance).toContain('Framework Excellence');
     expect(guidance).toContain('**Post-Execution Review Guidelines:**');
@@ -128,7 +128,62 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     });
 
     expect(guidance).toContain('CAGEERF Methodology Guidelines');
-    expect(guidance).toContain('Provide context, analysis, goals, execution, evaluation, refinement');
+    expect(guidance).toContain(
+      'Provide context, analysis, goals, execution, evaluation, refinement'
+    );
     expect(guidance).not.toContain('ReACT');
+  });
+
+  test('loads temporary gates via GateLoader (no direct registry fallback)', async () => {
+    const loader = createMockLoader();
+    // GateLoader is responsible for checking temporary registry internally
+    // So we mock it to return the gate as if it found it in the registry
+    (loader.loadGate as jest.Mock).mockResolvedValue({
+      id: 'custom_quality_gate',
+      name: 'Custom Quality Gate',
+      type: 'validation',
+      description: 'Custom guidance',
+      guidance: '- Ensure custom output guidelines.',
+    });
+    (loader.isGateActive as jest.Mock).mockReturnValue(true);
+
+    const renderer = new GateGuidanceRenderer(logger as any, {
+      gateLoader: loader as any,
+    });
+
+    const guidance = await renderer.renderGuidance(['custom_quality_gate'], {
+      framework: 'CAGEERF',
+    });
+
+    // Renderer should only call GateLoader, not temporary registry directly
+    expect(loader.loadGate).toHaveBeenCalledWith('custom_quality_gate');
+    expect(guidance).toContain('Custom Quality Gate');
+    expect(guidance).toContain('Ensure custom output guidelines');
+  });
+
+  test('renders explicit-request gates when context marks them explicit', async () => {
+    const loader = createMockLoader();
+    (loader.loadGate as jest.Mock).mockResolvedValue({
+      id: 'code-quality',
+      name: 'Code Quality Gate',
+      type: 'validation',
+      guidance: '- Ensure code passes linting.',
+      activation: { explicit_request: true },
+    });
+    (loader.isGateActive as jest.Mock).mockImplementation((_gate, ctx) =>
+      Boolean(ctx.explicitRequest)
+    );
+
+    const renderer = new GateGuidanceRenderer(logger as any, {
+      gateLoader: loader as any,
+    });
+
+    const guidance = await renderer.renderGuidance(['code-quality'], {
+      framework: 'CAGEERF',
+      explicitGateIds: ['code-quality'],
+    });
+
+    expect(guidance).toContain('Code Quality Gate');
+    expect(guidance).toContain('Ensure code passes linting.');
   });
 });

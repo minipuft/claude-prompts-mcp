@@ -6,6 +6,7 @@
  * dependencies between the unified parser implementation and the
  * symbolic/operator type definitions.
  */
+import type { ExecutionModifier, ExecutionModifiers } from '../../types.js';
 
 export interface CommandParseResultBase<TOperators = unknown, TPlan = unknown> {
   promptId: string;
@@ -13,11 +14,15 @@ export interface CommandParseResultBase<TOperators = unknown, TPlan = unknown> {
   format: 'simple' | 'json' | 'structured' | 'legacy' | 'symbolic';
   confidence: number;
   commandType?: 'single' | 'chain';
+  modifier?: ExecutionModifier;
+  modifiers?: ExecutionModifiers;
   metadata: {
     originalCommand: string;
     parseStrategy: string;
     detectedFormat: string;
     warnings: string[];
+    prefixesNormalized?: boolean;
+    modifier?: ExecutionModifier;
   };
   operators?: TOperators;
   executionPlan?: TPlan;

@@ -57,7 +57,7 @@ This baseline report documents the current state of file size violations in the 
 | 798 | mcp-tools/prompt-manager/core/manager.ts | Prompt Management | 2025-Q3 |
 | 791 | semantic/configurable-semantic-analyzer.ts | Semantic Analysis | 2025-Q3 |
 | 763 | frameworks/methodology/guides/cageerf-guide.ts | Methodology | 2025-Q3 |
-| 749 | execution/parsers/unified-command-parser.ts | Command Parsing | 2025-Q3 |
+| 749 | execution/parsers/command-parser.ts | Command Parsing | 2025-Q3 |
 | 748 | utils/file-observer.ts | Utilities | 2025-Q3 |
 | 743 | frameworks/framework-state-manager.ts | Framework State | 2025-Q3 |
 | 742 | hot-reload/hot-reload-manager.ts | Hot Reload | 2025-Q3 |
@@ -148,7 +148,7 @@ This baseline report documents the current state of file size violations in the 
 
 **Top Violators**:
 - argument-parser.ts (1,011 lines)
-- unified-command-parser.ts (749 lines)
+- command-parser.ts (749 lines)
 - context-resolver.ts (714 lines)
 
 **Decomposition Plan**:

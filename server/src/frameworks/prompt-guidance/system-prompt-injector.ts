@@ -1,20 +1,20 @@
 // @lifecycle canonical - Injects methodology-specific guidance into system prompts.
 /**
- * System Prompt Injector - Phase 3 Implementation
+ * System Prompt Injector - Implementation
  *
  * Handles intelligent injection of methodology guidance into system prompts.
  * Extracted from framework-manager execution logic for better separation of concerns.
  */
 
-import { Logger } from "../../logging/index.js";
-import { ConvertedPrompt } from "../../types/index.js";
+import { Logger } from '../../logging/index.js';
+import { ConvertedPrompt } from '../../types/index.js';
 import {
-  IMethodologyGuide,
   FrameworkDefinition,
+  IMethodologyGuide,
   SystemPromptInjectionResult,
-  PromptGuidanceConfig
-} from "../types/index.js";
-import type { ContentAnalysisResult } from "../../semantic/types.js";
+} from '../types/index.js';
+
+import type { ContentAnalysisResult } from '../../semantic/types.js';
 
 /**
  * System prompt injection configuration
@@ -25,7 +25,7 @@ export interface SystemPromptInjectorConfig {
   enableValidationGuidance: boolean;
   injectionMethod: 'template' | 'append' | 'prepend' | 'smart' | 'semantic-aware';
   maxPromptLength: number;
-  // Phase 4: Semantic awareness settings
+  // Semantic awareness settings
   enableSemanticAwareness: boolean;
   semanticComplexityAdaptation: boolean;
   semanticInjectionStrategy: 'conservative' | 'moderate' | 'aggressive';
@@ -49,18 +49,18 @@ export class SystemPromptInjector {
       enableValidationGuidance: true,
       injectionMethod: 'smart',
       maxPromptLength: 4000,
-      // Phase 4: Semantic awareness defaults
+      // Semantic awareness defaults
       enableSemanticAwareness: true,
       semanticComplexityAdaptation: true,
       semanticInjectionStrategy: 'moderate',
-      ...config
+      ...config,
     };
   }
 
   /**
    * Inject methodology guidance into system prompt
    * Extracted from framework-manager.generateSystemPrompt()
-   * Phase 4: Enhanced with semantic analysis awareness
+   * Enhanced with semantic analysis awareness
    */
   injectMethodologyGuidance(
     prompt: ConvertedPrompt,
@@ -69,7 +69,9 @@ export class SystemPromptInjector {
     semanticAnalysis?: ContentAnalysisResult
   ): SystemPromptInjectionResult {
     const startTime = Date.now();
-    this.logger.debug(`Injecting ${framework.methodology} guidance into system prompt for ${prompt.name}`);
+    this.logger.debug(
+      `Injecting ${framework.methodology} guidance into system prompt for ${prompt.name}`
+    );
 
     try {
       // Generate base guidance from methodology guide
@@ -102,18 +104,22 @@ export class SystemPromptInjector {
           confidence: validationResult.confidence,
           processingTimeMs: Date.now() - startTime,
           validationPassed: validationResult.passed,
-          // Phase 4: Semantic analysis metadata
+          // Semantic analysis metadata
           semanticAware: semanticAnalysis !== undefined,
           semanticComplexity: semanticAnalysis?.complexity,
-          semanticConfidence: semanticAnalysis?.confidence
-        }
+          semanticConfidence: semanticAnalysis?.confidence,
+        },
       };
 
-      this.logger.debug(`System prompt injection completed for ${framework.methodology} in ${result.metadata.processingTimeMs}ms`);
+      this.logger.debug(
+        `System prompt injection completed for ${framework.methodology} in ${result.metadata.processingTimeMs}ms`
+      );
       return result;
-
     } catch (error) {
-      this.logger.error(`Failed to inject methodology guidance for ${framework.methodology}:`, error);
+      this.logger.error(
+        `Failed to inject methodology guidance for ${framework.methodology}:`,
+        error
+      );
 
       // Return fallback result with original prompt
       return {
@@ -128,8 +134,8 @@ export class SystemPromptInjector {
           confidence: 0,
           processingTimeMs: Date.now() - startTime,
           validationPassed: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        }
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
       };
     }
   }
@@ -137,7 +143,7 @@ export class SystemPromptInjector {
   /**
    * Generate base methodology guidance from guide
    * Extracted from framework-manager.generateSystemPromptTemplate()
-   * Phase 4: Enhanced with semantic analysis
+   * Enhanced with semantic analysis
    */
   private generateBaseGuidance(
     guide: IMethodologyGuide,
@@ -148,10 +154,10 @@ export class SystemPromptInjector {
     const baseGuidance = guide.getSystemPromptGuidance({
       promptName: prompt.name,
       promptCategory: prompt.category,
-      promptType: prompt.executionMode || 'prompt'
+      promptType: this.normalizePromptType(prompt.chainSteps),
     });
 
-    // Phase 4: Enhance with semantic-aware contextual guidance
+    // Enhance with semantic-aware contextual guidance
     if (this.config.enableContextualEnhancement) {
       const contextualGuidance = this.generateContextualGuidance(guide, prompt, semanticAnalysis);
       return `${baseGuidance}\n\n${contextualGuidance}`;
@@ -170,7 +176,7 @@ export class SystemPromptInjector {
 
   /**
    * Create enhanced system prompt with methodology integration
-   * Phase 4: Enhanced with semantic analysis awareness
+   * Enhanced with semantic analysis awareness
    */
   private createEnhancedPrompt(
     template: string,
@@ -197,7 +203,7 @@ export class SystemPromptInjector {
 
   /**
    * Smart injection that adapts to prompt characteristics
-   * Phase 4: Enhanced with semantic analysis awareness
+   * Enhanced with semantic analysis awareness
    */
   private smartInject(
     template: string,
@@ -206,19 +212,19 @@ export class SystemPromptInjector {
     framework: FrameworkDefinition,
     semanticAnalysis?: ContentAnalysisResult
   ): string {
+    // Always use template placeholder replacement first (preferred method)
+    // This ensures guidance is injected at the designated location in the template
+    if (template.includes('{METHODOLOGY_GUIDANCE}')) {
+      return this.injectViaTemplate(template, guidance);
+    }
+
     // Use semantic analysis if available and semantic awareness is enabled
     if (this.config.enableSemanticAwareness && semanticAnalysis) {
       return this.semanticAwareInject(template, guidance, prompt, framework, semanticAnalysis);
     }
 
-    // Fallback to original smart injection logic
-    // For complex prompts or chain types, use template integration
-    if (prompt.executionMode === 'chain' || (prompt.arguments && prompt.arguments.length > 3)) {
-      return this.injectViaTemplate(template, guidance);
-    }
-
-    // For simple prompts, append guidance
-    return `${template}\n\n## ${framework.methodology} Methodology Guidance\n\n${guidance}`;
+    // Fallback: append guidance for templates without placeholder
+    return `${template}\n\n${guidance}`;
   }
 
   /**
@@ -251,21 +257,25 @@ export class SystemPromptInjector {
 
     // Replace standard template variables
     processedPrompt = processedPrompt.replace(/\{PROMPT_NAME\}/g, convertedPrompt.name || 'Prompt');
-    processedPrompt = processedPrompt.replace(/\{PROMPT_CATEGORY\}/g, convertedPrompt.category || 'general');
+    processedPrompt = processedPrompt.replace(
+      /\{PROMPT_CATEGORY\}/g,
+      convertedPrompt.category || 'general'
+    );
     processedPrompt = processedPrompt.replace(/\{FRAMEWORK_NAME\}/g, framework.name);
     processedPrompt = processedPrompt.replace(/\{METHODOLOGY\}/g, framework.methodology);
 
     // Replace prompt-specific variables
-    if (convertedPrompt.executionMode) {
-      processedPrompt = processedPrompt.replace(/\{PROMPT_TYPE\}/g, convertedPrompt.executionMode);
-    }
+    processedPrompt = processedPrompt.replace(
+      /\{PROMPT_TYPE\}/g,
+      this.normalizePromptType(convertedPrompt.chainSteps)
+    );
 
     return processedPrompt;
   }
 
   /**
    * Generate contextual guidance based on prompt characteristics
-   * Phase 4: Enhanced with semantic analysis
+   * Enhanced with semantic analysis
    */
   private generateContextualGuidance(
     guide: IMethodologyGuide,
@@ -274,53 +284,76 @@ export class SystemPromptInjector {
   ): string {
     const contextParts = [];
 
-    // Phase 4: Use semantic analysis for enhanced contextual guidance
+    // Use semantic analysis for enhanced contextual guidance
     if (semanticAnalysis && this.config.enableSemanticAwareness) {
       // Add semantic complexity-based guidance
       switch (semanticAnalysis.complexity) {
         case 'high':
-          contextParts.push(`High complexity detected - apply ${guide.methodology} with extra attention to systematic breakdown and validation.`);
+          contextParts.push(
+            `High complexity detected - apply ${guide.methodology} with extra attention to systematic breakdown and validation.`
+          );
           break;
         case 'medium':
-          contextParts.push(`Medium complexity detected - ensure ${guide.methodology} methodology is applied comprehensively.`);
+          contextParts.push(
+            `Medium complexity detected - ensure ${guide.methodology} methodology is applied comprehensively.`
+          );
           break;
         case 'low':
-          contextParts.push(`Low complexity detected - apply ${guide.methodology} efficiently while maintaining quality.`);
+          contextParts.push(
+            `Low complexity detected - apply ${guide.methodology} efficiently while maintaining quality.`
+          );
           break;
       }
 
       // Add semantic execution characteristics guidance
       if (semanticAnalysis.executionCharacteristics.hasStructuredReasoning) {
-        contextParts.push(`Structured reasoning detected - leverage ${guide.methodology} systematic approach.`);
+        contextParts.push(
+          `Structured reasoning detected - leverage ${guide.methodology} systematic approach.`
+        );
       }
 
       if (semanticAnalysis.executionCharacteristics.hasComplexAnalysis) {
-        contextParts.push(`Complex analysis patterns detected - emphasize ${guide.methodology} analytical rigor.`);
+        contextParts.push(
+          `Complex analysis patterns detected - emphasize ${guide.methodology} analytical rigor.`
+        );
       }
 
       // Add semantic confidence-based guidance
       if (semanticAnalysis.confidence < 0.7) {
-        contextParts.push(`Uncertain semantic analysis - apply ${guide.methodology} with additional validation steps.`);
+        contextParts.push(
+          `Uncertain semantic analysis - apply ${guide.methodology} with additional validation steps.`
+        );
       }
     } else {
       // Fallback to original logic when semantic analysis unavailable
       // Add complexity-based guidance
       if (prompt.arguments && prompt.arguments.length > 2) {
-        contextParts.push(`This prompt has multiple parameters - apply ${guide.methodology} systematically to each component.`);
+        contextParts.push(
+          `This prompt has multiple parameters - apply ${guide.methodology} systematically to each component.`
+        );
       }
 
       // Add type-specific guidance
-      if (prompt.executionMode === 'chain') {
-        contextParts.push(`Chain execution detected - maintain ${guide.methodology} consistency across all steps.`);
+      if (prompt.chainSteps && prompt.chainSteps.length > 0) {
+        contextParts.push(
+          `Chain execution detected - maintain ${guide.methodology} consistency across all steps.`
+        );
       }
 
       // Add category-specific guidance
       if (prompt.category === 'analysis') {
-        contextParts.push(`Analysis prompt detected - emphasize thorough ${guide.methodology} analytical phases.`);
+        contextParts.push(
+          `Analysis prompt detected - emphasize thorough ${guide.methodology} analytical phases.`
+        );
       }
     }
 
     return contextParts.join('\n');
+  }
+
+  private normalizePromptType(chainSteps?: any[]): string {
+    // Determine prompt type based on presence of chain steps
+    return chainSteps && chainSteps.length > 0 ? 'chain' : 'single';
   }
 
   /**
@@ -336,7 +369,9 @@ export class SystemPromptInjector {
 
     // Check prompt length
     if (prompt.length > this.config.maxPromptLength) {
-      issues.push(`Prompt length (${prompt.length}) exceeds maximum (${this.config.maxPromptLength})`);
+      issues.push(
+        `Prompt length (${prompt.length}) exceeds maximum (${this.config.maxPromptLength})`
+      );
       confidence -= 0.2;
     }
 
@@ -359,12 +394,12 @@ export class SystemPromptInjector {
     return {
       passed: issues.length === 0,
       confidence,
-      issues
+      issues,
     };
   }
 
   /**
-   * Phase 4: Semantic-aware injection that adapts based on semantic analysis
+   * Semantic-aware injection that adapts based on semantic analysis
    */
   private semanticAwareInject(
     template: string,
@@ -373,8 +408,15 @@ export class SystemPromptInjector {
     framework: FrameworkDefinition,
     semanticAnalysis?: ContentAnalysisResult
   ): string {
-    if (!semanticAnalysis) {
+    // Always use template placeholder replacement first (preferred method)
+    // This ensures guidance is injected at the designated location
+    if (template.includes('{METHODOLOGY_GUIDANCE}')) {
       return this.injectViaTemplate(template, guidance);
+    }
+
+    // Fallback for templates without placeholder
+    if (!semanticAnalysis) {
+      return `${template}\n\n${guidance}`;
     }
 
     // Determine injection strategy based on semantic complexity and characteristics
@@ -390,16 +432,14 @@ export class SystemPromptInjector {
         return `${template}\n\n## ${framework.methodology} Methodology Guidance\n\n${guidance}`;
 
       case 'comprehensive':
-        // High complexity - full template integration
-        return this.injectViaTemplate(template, `## ${framework.methodology} Methodology Framework\n\n${guidance}`);
-
       default:
-        return this.injectViaTemplate(template, guidance);
+        // High complexity - full integration
+        return `${template}\n\n## ${framework.methodology} Methodology Framework\n\n${guidance}`;
     }
   }
 
   /**
-   * Phase 4: Generate semantic-specific guidance based on analysis results
+   * Generate semantic-specific guidance based on analysis results
    */
   private generateSemanticGuidance(
     guide: IMethodologyGuide,
@@ -409,28 +449,38 @@ export class SystemPromptInjector {
 
     // Add analysis mode-specific guidance
     if (semanticAnalysis.analysisMetadata.mode === 'semantic') {
-      guidanceParts.push(`Semantic analysis mode: Apply ${guide.methodology} with intelligent pattern recognition.`);
+      guidanceParts.push(
+        `Semantic analysis mode: Apply ${guide.methodology} with intelligent pattern recognition.`
+      );
     } else if (semanticAnalysis.analysisMetadata.mode === 'structural') {
-      guidanceParts.push(`Structural analysis mode: Apply ${guide.methodology} with systematic template analysis.`);
+      guidanceParts.push(
+        `Structural analysis mode: Apply ${guide.methodology} with systematic template analysis.`
+      );
     }
 
     // Add capability-based guidance
     if (semanticAnalysis.capabilities.hasSemanticUnderstanding) {
-      guidanceParts.push(`Enhanced semantic understanding available - leverage for nuanced ${guide.methodology} application.`);
+      guidanceParts.push(
+        `Enhanced semantic understanding available - leverage for nuanced ${guide.methodology} application.`
+      );
     }
 
     // Add limitation-aware guidance
     if (semanticAnalysis.limitations.length > 0) {
-      guidanceParts.push(`Analysis limitations detected - apply ${guide.methodology} with extra validation.`);
+      guidanceParts.push(
+        `Analysis limitations detected - apply ${guide.methodology} with extra validation.`
+      );
     }
 
     return guidanceParts.length > 0 ? guidanceParts.join('\n') : '';
   }
 
   /**
-   * Phase 4: Determine injection strategy based on semantic analysis
+   * Determine injection strategy based on semantic analysis
    */
-  private determineSemanticInjectionStrategy(semanticAnalysis: ContentAnalysisResult): 'minimal' | 'structured' | 'comprehensive' {
+  private determineSemanticInjectionStrategy(
+    semanticAnalysis: ContentAnalysisResult
+  ): 'minimal' | 'structured' | 'comprehensive' {
     // Base strategy on configured approach
     if (this.config.semanticInjectionStrategy === 'conservative') {
       return 'minimal';
@@ -451,16 +501,22 @@ export class SystemPromptInjector {
   }
 
   /**
-   * Phase 4: Calculate semantic complexity score for injection decisions
+   * Calculate semantic complexity score for injection decisions
    */
   private calculateSemanticComplexityScore(semanticAnalysis: ContentAnalysisResult): number {
     let score = 0;
 
     // Base complexity mapping
     switch (semanticAnalysis.complexity) {
-      case 'high': score += 0.6; break;
-      case 'medium': score += 0.4; break;
-      case 'low': score += 0.2; break;
+      case 'high':
+        score += 0.6;
+        break;
+      case 'medium':
+        score += 0.4;
+        break;
+      case 'low':
+        score += 0.2;
+        break;
     }
 
     // Execution characteristics influence
@@ -471,13 +527,13 @@ export class SystemPromptInjector {
     if (chars.argumentCount > 3) score += 0.1;
 
     // Confidence influence (higher confidence = more decisive injection)
-    score += (semanticAnalysis.confidence * 0.2);
+    score += semanticAnalysis.confidence * 0.2;
 
     return Math.min(score, 1.0);
   }
 
   /**
-   * Phase 4: Get effective injection method based on semantic analysis
+   * Get effective injection method based on semantic analysis
    */
   private getEffectiveInjectionMethod(semanticAnalysis?: ContentAnalysisResult): string {
     if (!semanticAnalysis || !this.config.enableSemanticAwareness) {
@@ -497,13 +553,15 @@ export class SystemPromptInjector {
    */
   private extractUsedVariables(prompt: string): string[] {
     const originalVariables = [
-      'PROMPT_NAME', 'PROMPT_CATEGORY', 'FRAMEWORK_NAME',
-      'METHODOLOGY', 'PROMPT_TYPE', 'METHODOLOGY_GUIDANCE'
+      'PROMPT_NAME',
+      'PROMPT_CATEGORY',
+      'FRAMEWORK_NAME',
+      'METHODOLOGY',
+      'PROMPT_TYPE',
+      'METHODOLOGY_GUIDANCE',
     ];
 
-    return originalVariables.filter(variable =>
-      !prompt.includes(`{${variable}}`)
-    );
+    return originalVariables.filter((variable) => !prompt.includes(`{${variable}}`));
   }
 
   /**

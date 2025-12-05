@@ -4,13 +4,16 @@ import { ExecutionContext } from '../../../../dist/execution/context/execution-c
 import { InlineGateExtractionStage } from '../../../../dist/execution/pipeline/stages/02-inline-gate-stage.js';
 import { OperatorValidationStage } from '../../../../dist/execution/pipeline/stages/03-operator-validation-stage.js';
 import { SessionManagementStage } from '../../../../dist/execution/pipeline/stages/07-session-stage.js';
-import { FrameworkRegistry } from '../../../../dist/frameworks/methodology/framework-registry.js';
 import { FrameworkValidator } from '../../../../dist/frameworks/framework-validator.js';
+import { FrameworkRegistry } from '../../../../dist/frameworks/methodology/framework-registry.js';
 
 import type { ChainSessionManager } from '../../../../dist/chain-session/manager.js';
-import type { FrameworkDefinition } from '../../../../dist/frameworks/types/index.js';
+import type {
+  ExecutionPlan,
+  ParsedCommand,
+} from '../../../../dist/execution/context/execution-context.js';
 import type { ChainStepPrompt } from '../../../../dist/execution/operators/chain-operator-executor.js';
-import type { ExecutionPlan, ParsedCommand } from '../../../../dist/execution/context/execution-context.js';
+import type { FrameworkDefinition } from '../../../../dist/frameworks/types/index.js';
 import type { Logger } from '../../../../dist/logging/index.js';
 
 const createLogger = (): Logger => ({
@@ -161,6 +164,7 @@ const createTemporaryGateRegistry = () => ({
     .mockReturnValueOnce('inline_command_gate')
     .mockReturnValueOnce('step_gate_1')
     .mockReturnValueOnce('step_gate_2'),
+  getTemporaryGate: jest.fn().mockReturnValue(undefined),
 });
 
 const createSessionManager = (): jest.Mocked<ChainSessionManager> =>
@@ -180,11 +184,15 @@ describe('Symbolic pipeline coverage', () => {
   test('inline gate and operator validation stages normalize symbolic metadata', async () => {
     const logger = createLogger();
     const context = new ExecutionContext({ command: 'symbolic chain' });
-    context.metadata.executionScopeId = 'exec-scope';
+    context.state.session.executionScopeId = 'exec-scope';
     context.parsedCommand = buildParsedCommand();
 
     const registry = createTemporaryGateRegistry();
-    const inlineStage = new InlineGateExtractionStage(registry as any, createResolver() as any, logger);
+    const inlineStage = new InlineGateExtractionStage(
+      registry as any,
+      createResolver() as any,
+      logger
+    );
     await inlineStage.execute(context);
 
     expect(registry.createTemporaryGate).toHaveBeenCalledTimes(3);
@@ -216,7 +224,7 @@ describe('Symbolic pipeline coverage', () => {
     expect(context.parsedCommand?.inlineGateIds).toEqual(['inline_command_gate']);
     expect(context.parsedCommand?.steps?.[0].inlineGateIds).toEqual(['step_gate_1']);
     expect(context.parsedCommand?.steps?.[1].inlineGateIds).toEqual(['step_gate_2']);
-    expect(context.metadata.temporaryGateIds).toEqual([
+    expect(context.state.gates.temporaryGateIds).toEqual([
       'inline_command_gate',
       'step_gate_1',
       'step_gate_2',
@@ -249,7 +257,7 @@ describe('Symbolic pipeline coverage', () => {
       gates: ['code-quality', 'inline_command_gate'],
       requiresFramework: false,
       requiresSession: true,
-      apiValidationEnabled: true,
+      llmValidationEnabled: true,
     } as ExecutionPlan;
     context.gateInstructions = 'Apply inline gates before responding.';
 
@@ -279,7 +287,7 @@ describe('Symbolic pipeline coverage', () => {
         currentStep: 1,
       })
     );
-    expect(context.metadata.sessionLifecycleDecision).toBe('create-new');
+    expect(context.state.session.lifecycleDecision).toBe('create-new');
 
     dateSpy.mockRestore();
   });

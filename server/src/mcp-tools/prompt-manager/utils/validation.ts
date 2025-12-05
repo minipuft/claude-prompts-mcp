@@ -17,14 +17,6 @@ const ACTION_REQUIREMENTS: Record<string, { required: string[]; example: string 
     required: ['id', 'name', 'description', 'user_message_template'],
     example: `{action:'create', id:'my_prompt', name:'My Prompt', description:'What it does', user_message_template:'Process {{input}}'}`,
   },
-  create_prompt: {
-    required: ['id', 'name', 'description', 'user_message_template'],
-    example: `{action:'create_prompt', id:'simple_prompt', name:'Simple', description:'Basic prompt', user_message_template:'{{text}}'}`,
-  },
-  create_template: {
-    required: ['id', 'name', 'description', 'user_message_template'],
-    example: `{action:'create_template', id:'smart_template', name:'Template', description:'Advanced', user_message_template:'{{input}}'}`,
-  },
   update: {
     required: ['id'],
     example: `{action:'update', id:'existing_prompt', description:'Updated description', gate_configuration:{include:['validation']}}`,
@@ -33,25 +25,13 @@ const ACTION_REQUIREMENTS: Record<string, { required: string[]; example: string 
     required: ['id'],
     example: `{action:'delete', id:'prompt_to_remove'}`,
   },
-  modify: {
-    required: ['id', 'section_name', 'new_content'],
-    example: `{action:'modify', id:'my_prompt', section_name:'description', new_content:'New text'}`,
-  },
   analyze_type: {
     required: ['id'],
     example: `{action:'analyze_type', id:'my_prompt'}`,
   },
-  migrate_type: {
-    required: ['id', 'target_type'],
-    example: `{action:'migrate_type', id:'my_prompt', target_type:'template'}`,
-  },
   analyze_gates: {
     required: ['id'],
     example: `{action:'analyze_gates', id:'my_prompt'}`,
-  },
-  suggest_temporary_gates: {
-    required: ['execution_context'],
-    example: `{action:'suggest_temporary_gates', execution_context:{executionType:'chain', category:'analysis'}}`,
   },
 };
 
@@ -94,9 +74,6 @@ export function validateRequiredFields(args: any, required: string[]): void {
       }
       if (descriptor.requiredArgs.length > 0) {
         errorMessage += `🔑 Requires: ${descriptor.requiredArgs.join(', ')}\n`;
-      }
-      if (descriptor.id === 'create_prompt' || descriptor.id === 'create_template') {
-        errorMessage += `ℹ️ Tip: Use action="create" for canonical prompt creation workflows.\n`;
       }
       errorMessage += '\n';
     }
@@ -162,29 +139,6 @@ export function validateCategoryName(category: string): void {
 /**
  * Validate execution mode
  */
-export function validateExecutionMode(mode: string): void {
-  const validModes = ['prompt', 'template', 'chain'];
-
-  if (!validModes.includes(mode)) {
-    throw new ValidationError(
-      `Invalid execution mode: ${mode}. Must be one of: ${validModes.join(', ')}`
-    );
-  }
-}
-
-/**
- * Validate target type for migration
- */
-export function validateMigrationType(targetType: string): void {
-  const validTypes = ['prompt', 'template', 'chain'];
-
-  if (!validTypes.includes(targetType)) {
-    throw new ValidationError(
-      `Invalid target type: ${targetType}. Must be one of: ${validTypes.join(', ')}`
-    );
-  }
-}
-
 /**
  * Validate prompt content structure
  */

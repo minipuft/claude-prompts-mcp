@@ -9,6 +9,7 @@
 
 // Import unified validation types from execution domain (not re-exported to avoid conflicts)
 import type { ValidationResult, ValidationCheck } from '../execution/types.js';
+
 export type { ValidationCheck } from '../execution/types.js';
 
 /**
@@ -122,13 +123,25 @@ export interface GateDefinition {
  */
 export interface GatePassCriteria {
   /** Type of check to perform */
-  type: 'content_check' | 'llm_self_check' | 'pattern_check';
+  type: 'content_check' | 'llm_self_check' | 'pattern_check' | 'methodology_compliance';
 
   // Content check options
   min_length?: number;
   max_length?: number;
   required_patterns?: string[];
   forbidden_patterns?: string[];
+
+  // Methodology compliance options
+  methodology?: string;
+  min_compliance_score?: number;
+  severity?: 'warn' | 'fail';
+  quality_indicators?: Record<
+    string,
+    {
+      keywords?: string[];
+      patterns?: string[];
+    }
+  >;
 
   // LLM self-check options
   prompt_template?: string;
@@ -207,6 +220,10 @@ export interface LightweightGateDefinition {
   type: 'validation' | 'guidance';
   /** Description of what this gate checks/guides */
   description: string;
+  /** Severity level for prioritization (defaults to 'medium') */
+  severity?: 'critical' | 'high' | 'medium' | 'low';
+  /** Enforcement mode override (defaults to severity-based mapping) */
+  enforcementMode?: 'blocking' | 'advisory' | 'informational';
   /** Guidance text injected into prompts */
   guidance?: string;
   /** Pass/fail criteria for validation gates */
@@ -233,6 +250,8 @@ export interface GatesConfig {
   definitionsDirectory: string;
   /** Directory containing LLM validation templates */
   templatesDirectory: string;
+  /** Enable/disable the gate subsystem entirely */
+  enabled?: boolean;
 }
 
 /**
@@ -251,9 +270,37 @@ export interface StepResult {
  * Gate type enumeration
  */
 export enum GateType {
-  VALIDATION = "validation",
-  APPROVAL = "approval",
-  CONDITION = "condition",
-  QUALITY = "quality",
-  GUIDANCE = "guidance"
+  VALIDATION = 'validation',
+  APPROVAL = 'approval',
+  CONDITION = 'condition',
+  QUALITY = 'quality',
+  GUIDANCE = 'guidance',
 }
+
+/**
+ * Gate enforcement mode determines behavior on validation failure.
+ * - blocking: Execution pauses until gate criteria are met (default for critical)
+ * - advisory: Logs warning but allows advancement (default for high/medium)
+ * - informational: Logs only, no user impact (default for low)
+ */
+export type GateEnforcementMode = 'blocking' | 'advisory' | 'informational';
+
+/**
+ * Gate severity levels for prioritization
+ */
+export type GateSeverity = 'critical' | 'high' | 'medium' | 'low';
+
+/**
+ * Default mapping from severity to enforcement mode
+ */
+export const SEVERITY_TO_ENFORCEMENT: Record<GateSeverity, GateEnforcementMode> = {
+  critical: 'blocking',
+  high: 'advisory',
+  medium: 'advisory',
+  low: 'informational',
+};
+
+/**
+ * User action choices when retry limit is exceeded
+ */
+export type GateAction = 'retry' | 'skip' | 'abort';

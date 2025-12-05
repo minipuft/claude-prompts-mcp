@@ -1,12 +1,16 @@
 // @lifecycle canonical - Evaluates inline gates before heavy execution work.
+import { formatCriteriaAsGuidance } from '../../../gates/utils/gate-guidance-formatter.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
+import type {
+  GateReferenceResolver,
+  GateReferenceResolution,
+} from '../../../gates/services/gate-reference-resolver.js';
 import type { Logger } from '../../../logging/index.js';
 import type { GateScope } from '../../../types/execution.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
-import type { ChainStepPrompt } from '../../operators/chain-operator-executor.js';
-import type { GateReferenceResolver, GateReferenceResolution } from '../../../gates/services/gate-reference-resolver.js';
+import type { ChainStepPrompt } from '../../operators/types.js';
 
 /**
  * Scope information for inline gate creation
@@ -16,14 +20,15 @@ interface InlineGateScope {
   readonly stepNumber?: number;
 }
 
-
 /**
  * Type guard for validating gate criteria
  */
 function isValidGateCriteria(criteria: unknown): criteria is readonly string[] {
-  return Array.isArray(criteria) &&
-         criteria.length > 0 &&
-         criteria.every(item => typeof item === 'string' && item.trim().length > 0);
+  return (
+    Array.isArray(criteria) &&
+    criteria.length > 0 &&
+    criteria.every((item) => typeof item === 'string' && item.trim().length > 0)
+  );
 }
 
 /**
@@ -66,10 +71,15 @@ export class InlineGateExtractionStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    if (context.metadata['sessionBlueprintRestored']) {
+    if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
       return;
     }
+
+    // Register temporary gates from MCP request BEFORE resolving gate references
+    // This ensures gates are available when the gate reference resolver tries to find them
+    // Uses shared formatCriteriaAsGuidance() utility for proper criteria formatting
+    await this.registerTemporaryGatesFromRequest(context);
 
     const parsedCommand = context.parsedCommand;
     if (!parsedCommand) {
@@ -101,8 +111,17 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       }
     }
 
-    this.appendGateMetadata(context, 'temporaryGateIds', createdIds);
-    this.appendGateMetadata(context, 'registeredInlineGateIds', registeredIds);
+    if (createdIds.length > 0) {
+      const existing = context.state.gates.temporaryGateIds ?? [];
+      context.state.gates.temporaryGateIds = Array.from(new Set([...existing, ...createdIds]));
+    }
+
+    if (registeredIds.length > 0) {
+      const existing = context.state.gates.registeredInlineGateIds ?? [];
+      context.state.gates.registeredInlineGateIds = Array.from(
+        new Set([...existing, ...registeredIds])
+      );
+    }
 
     this.logExit({
       temporaryInlineGates: createdIds.length,
@@ -148,18 +167,6 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     }
   }
 
-  private appendGateMetadata(context: ExecutionContext, key: string, values: string[]): void {
-    if (values.length === 0) {
-      return;
-    }
-
-    const existing = Array.isArray(context.metadata[key])
-      ? (context.metadata[key] as string[])
-      : [];
-    const combined = new Set([...existing, ...values]);
-    context.metadata[key] = Array.from(combined);
-  }
-
   private appendGateId(existing: string[] | undefined, gateId: string): string[] {
     if (!gateId) {
       return existing ?? [];
@@ -190,7 +197,7 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       return null;
     }
 
-    const guidance = this.generateGuidance(criteria);
+    const guidance = formatCriteriaAsGuidance(criteria);
     const description = scope.stepNumber
       ? `Inline criteria for step ${scope.stepNumber}`
       : 'Inline criteria for symbolic command';
@@ -201,15 +208,18 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     const scopeId = this.getScopeId(context, scope.stepNumber);
 
     try {
-      const gateId = this.temporaryGateRegistry.createTemporaryGate({
-        name: 'Inline Quality Criteria',
-        type: 'quality',
-        scope: gateScope,
-        description,
-        guidance,
-        pass_criteria: [...criteria], // Convert readonly to mutable for compatibility
-        source: 'automatic',
-      }, scopeId);
+      const gateId = this.temporaryGateRegistry.createTemporaryGate(
+        {
+          name: 'Inline Quality Criteria',
+          type: 'quality',
+          scope: gateScope,
+          description,
+          guidance,
+          pass_criteria: [...criteria], // Convert readonly to mutable for compatibility
+          source: 'automatic',
+        },
+        scopeId
+      );
 
       this.trackTemporaryGateScope(context, gateScope, scopeId);
       return gateId;
@@ -235,6 +245,12 @@ export class InlineGateExtractionStage extends BasePipelineStage {
         continue;
       }
 
+      const registryGateId = this.lookupTemporaryGateId(trimmed);
+      if (registryGateId) {
+        registeredGateIds.push(registryGateId);
+        continue;
+      }
+
       try {
         const resolution = await this.gateReferenceResolver.resolve(trimmed);
         this.applyResolution(resolution, inlineCriteria, registeredGateIds);
@@ -251,6 +267,23 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       inlineCriteria,
       registeredGateIds: Array.from(new Set(registeredGateIds)),
     };
+  }
+
+  private lookupTemporaryGateId(reference: string): string | undefined {
+    if (!reference || !this.temporaryGateRegistry) {
+      return undefined;
+    }
+
+    const gate = this.temporaryGateRegistry.getTemporaryGate(reference);
+    if (gate) {
+      this.logger.debug('[InlineGateExtractionStage] Resolved inline reference to temporary gate', {
+        reference,
+        gateId: gate.id,
+      });
+      return gate.id;
+    }
+
+    return undefined;
   }
 
   private applyResolution(
@@ -270,7 +303,7 @@ export class InlineGateExtractionStage extends BasePipelineStage {
 
   private getScopeId(context: ExecutionContext, stepNumber?: number): string {
     const baseScope =
-      (context.metadata['executionScopeId'] as string | undefined) ||
+      context.state.session.executionScopeId ||
       context.getSessionId?.() ||
       context.mcpRequest.chain_id ||
       context.mcpRequest.command ||
@@ -283,19 +316,6 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     return `${baseScope}:command`;
   }
 
-  private generateGuidance(criteria: readonly string[]): string {
-    if (criteria.length === 0) {
-      return 'Evaluate the output against the inline criteria.';
-    }
-
-    const lines = [
-      'Evaluate the output against these criteria:',
-      ...criteria.map((item, index) => `${index + 1}. ${item}`),
-    ];
-
-    return lines.join('\n');
-  }
-
   private trackTemporaryGateScope(
     context: ExecutionContext,
     scope: GateScope,
@@ -305,17 +325,115 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       return;
     }
 
-    const scopes = Array.isArray(context.metadata['temporaryGateScopes'])
-      ? (context.metadata['temporaryGateScopes'] as Array<{ scope: GateScope; scopeId: string }>)
-      : [];
+    const scopes = context.state.gates.temporaryGateScopes ?? [];
 
-    if (!Array.isArray(context.metadata['temporaryGateScopes'])) {
-      context.metadata['temporaryGateScopes'] = scopes;
+    if (!context.state.gates.temporaryGateScopes) {
+      context.state.gates.temporaryGateScopes = scopes;
     }
 
     const exists = scopes.some((entry) => entry.scope === scope && entry.scopeId === scopeId);
     if (!exists) {
       scopes.push({ scope, scopeId });
+    }
+  }
+
+  /**
+   * Register temporary gates from MCP request before gate reference resolution.
+   * Uses shared formatCriteriaAsGuidance() utility for proper criteria formatting.
+   * This ensures gates are available when the gate reference resolver tries to find them.
+   *
+   * Uses normalized gates from metadata (supports unified 'gates' parameter and legacy parameters).
+   */
+  private async registerTemporaryGatesFromRequest(context: ExecutionContext): Promise<void> {
+    // Use normalized gates from metadata (already merged by normalization stage)
+    const overrides = context.state.gates.requestedOverrides as Record<string, any> | undefined;
+    const normalizedGates = overrides?.gates as
+      | import('../../../types/execution.js').GateSpecification[]
+      | undefined;
+
+    if (!normalizedGates || normalizedGates.length === 0 || !this.temporaryGateRegistry) {
+      return;
+    }
+
+    const scopeId =
+      context.getSessionId?.() ||
+      context.mcpRequest.chain_id ||
+      context.mcpRequest.command ||
+      'execution';
+
+    for (const gate of normalizedGates) {
+      try {
+        // Handle string shorthand (gate ID references) - skip these
+        if (typeof gate === 'string') {
+          this.logger.debug('[InlineGateExtractionStage] Skipping shorthand gate reference', {
+            gate,
+          });
+          continue;
+        }
+
+        // Handle CustomCheck objects (simple name/description pairs)
+        if (
+          typeof gate === 'object' &&
+          gate !== null &&
+          'name' in gate &&
+          'description' in gate &&
+          !('id' in gate)
+        ) {
+          this.logger.debug(
+            '[InlineGateExtractionStage] Skipping CustomCheck (will be converted to temporary gate)',
+            { gate }
+          );
+          continue;
+        }
+
+        // Handle template-based gates - skip these
+        if (typeof gate === 'object' && gate !== null && 'template' in gate) {
+          this.logger.debug('[InlineGateExtractionStage] Skipping template-based gate', { gate });
+          continue;
+        }
+
+        // Register full gate definitions with proper criteria formatting
+        if (typeof gate === 'object' && gate !== null && 'id' in gate && gate.id) {
+          const criteria = Array.from(gate.pass_criteria || gate.criteria || []);
+
+          // Use shared utility to format criteria as guidance (if not explicitly provided)
+          const effectiveGuidance =
+            gate.guidance ||
+            (criteria.length > 0 ? formatCriteriaAsGuidance(criteria) : undefined) ||
+            gate.description ||
+            `Review output against ${gate.id} criteria`;
+
+          const registeredId = this.temporaryGateRegistry.createTemporaryGate(
+            {
+              id: gate.id, // Preserve user-provided ID
+              name: gate.name || gate.id,
+              type: (gate.type as any) || 'quality',
+              scope: (gate.scope as GateScope) || 'execution',
+              description: gate.description || `Temporary gate: ${gate.id}`,
+              guidance: effectiveGuidance,
+              pass_criteria: criteria,
+              source: 'manual',
+            },
+            scopeId
+          );
+
+          this.logger.debug(
+            '[InlineGateExtractionStage] Registered temporary gate with formatted guidance',
+            {
+              requestedId: gate.id,
+              registeredId: registeredId,
+              scopeId,
+              criteriaCount: criteria.length,
+              guidanceLength: effectiveGuidance.length,
+            }
+          );
+        }
+      } catch (error) {
+        this.logger.warn('[InlineGateExtractionStage] Failed to register temporary gate', {
+          error,
+          gate,
+        });
+      }
     }
   }
 }

@@ -1,141 +1,182 @@
 // @lifecycle canonical - System control action metadata definitions.
+import {
+  system_controlCommands,
+  system_controlParameters,
+} from '../../../tooling/contracts/_generated/system_control.generated.js';
+import {
+  contractToCommandDescriptors,
+  contractToParameterDescriptors,
+} from '../../contracts/adapter.js';
+
 import type {
   ToolMetadata,
   SystemControlMetadataData,
   ActionDescriptor,
-} from "./types.js";
+  ParameterDescriptor,
+} from './types.js';
+import type { system_controlParamName } from '../../../tooling/contracts/_generated/system_control.generated.js';
 
 const operations: ActionDescriptor[] = [
   {
-    id: "status",
-    displayName: "System Status",
-    category: "status",
-    status: "working",
+    id: 'status',
+    displayName: 'System Status',
+    category: 'status',
+    status: 'working',
     requiredArgs: [],
-    description: "Reports framework enablement, uptime, and execution metrics.",
+    description: 'Reports framework enablement, uptime, and execution metrics.',
   },
   {
-    id: "framework:list",
-    displayName: "List Frameworks",
-    category: "framework",
-    status: "working",
+    id: 'framework:list',
+    displayName: 'List Frameworks',
+    category: 'framework',
+    status: 'working',
     requiredArgs: [],
-    description: "Enumerates available frameworks with optional details.",
+    description: 'Enumerates available frameworks with optional details.',
   },
   {
-    id: "framework:switch",
-    displayName: "Switch Framework",
-    category: "framework",
-    status: "working",
-    requiredArgs: ["framework"],
-    description: "Changes active methodology via framework manager.",
+    id: 'framework:switch',
+    displayName: 'Switch Framework',
+    category: 'framework',
+    status: 'working',
+    requiredArgs: ['framework'],
+    description: 'Changes active methodology via framework manager.',
   },
   {
-    id: "framework:enable",
-    displayName: "Enable Framework System",
-    category: "framework",
-    status: "working",
+    id: 'framework:enable',
+    displayName: 'Enable Framework System',
+    category: 'framework',
+    status: 'working',
     requiredArgs: [],
-    description: "Turns on methodology injection globally.",
+    description: 'Turns on methodology injection globally.',
   },
   {
-    id: "framework:disable",
-    displayName: "Disable Framework System",
-    category: "framework",
-    status: "working",
+    id: 'framework:disable',
+    displayName: 'Disable Framework System',
+    category: 'framework',
+    status: 'working',
     requiredArgs: [],
-    description: "Turns off methodology injection globally.",
+    description: 'Turns off methodology injection globally.',
   },
   {
-    id: "gates:list",
-    displayName: "List Gates",
-    category: "gates",
-    status: "working",
+    id: 'gates:list',
+    displayName: 'List Gates',
+    category: 'gates',
+    status: 'working',
     requiredArgs: [],
-    description: "Displays registered quality gates via GateSystemManager.",
+    description: 'Displays registered quality gates via GateSystemManager.',
   },
   {
-    id: "analytics:view",
-    displayName: "View Analytics",
-    category: "analytics",
-    status: "planned",
+    id: 'analytics:view',
+    displayName: 'View Analytics',
+    category: 'analytics',
+    status: 'working',
     requiredArgs: [],
-    description: "Expose execution analytics currently tracked in MetricsCollector.",
-    issues: [
-      {
-        severity: "info",
-        summary: "Pending implementation",
-        details: "Telemetry exists but no action routes to a formatter yet.",
-      },
-    ],
+    description: 'Returns execution analytics from MetricsCollector.',
   },
   {
-    id: "analytics:history",
-    displayName: "Analytics History",
-    category: "analytics",
-    status: "planned",
+    id: 'analytics:history',
+    displayName: 'Analytics History',
+    category: 'analytics',
+    status: 'working',
     requiredArgs: [],
-    description: "Return framework switch history and performance trends.",
-    issues: [
-      {
-        severity: "info",
-        summary: "Not wired",
-        details: "Action handler reserved but not exposed to clients.",
-      },
-    ],
+    description: 'Returns framework switch history.',
   },
   {
-    id: "config",
-    displayName: "Config Operations",
-    category: "config",
-    status: "planned",
-    requiredArgs: [],
-    description: "Safe config writer hooks for server/config.json updates.",
-    issues: [
-      {
-        severity: "info",
-        summary: "Schema TBD",
-        details: "Need explicit list of allowed keys before exposing publicly.",
-      },
-    ],
+    id: 'analytics:reset',
+    displayName: 'Reset Analytics',
+    category: 'analytics',
+    status: 'working',
+    requiredArgs: ['confirm'],
+    description: 'Clears analytics data (requires confirmation).',
   },
   {
-    id: "maintenance",
-    displayName: "Maintenance",
-    category: "maintenance",
-    status: "planned",
+    id: 'config',
+    displayName: 'Config Operations',
+    category: 'config',
+    status: 'working',
     requiredArgs: [],
-    description: "Server maintenance tasks (restart, cleanup, diagnostics).",
-    issues: [
-      {
-        severity: "info",
-        summary: "Pending feature",
-        details: "Action handler exists but does not perform any side effects yet.",
-      },
-    ],
+    description: 'Manage server configuration (get, set, restore).',
   },
   {
-    id: "guide",
-    displayName: "Guide",
-    category: "discovery",
-    status: "working",
+    id: 'maintenance',
+    displayName: 'Maintenance',
+    category: 'maintenance',
+    status: 'working',
     requiredArgs: [],
-    description: "Summarizes available operations (status/framework/gates/analytics/config/maintenance) with lifecycle cues.",
+    description: 'Server maintenance tasks (restart). Cleanup and diagnostics planned.',
+  },
+  {
+    id: 'guide',
+    displayName: 'Guide',
+    category: 'discovery',
+    status: 'working',
+    requiredArgs: [],
+    description:
+      'Summarizes available operations (status/framework/gates/analytics/config/maintenance) with lifecycle cues.',
+  },
+  {
+    id: 'injection:status',
+    displayName: 'Injection Status',
+    category: 'injection',
+    status: 'working',
+    requiredArgs: [],
+    description: 'Shows injection config, active overrides, and session state.',
+  },
+  {
+    id: 'injection:override',
+    displayName: 'Injection Override',
+    category: 'injection',
+    status: 'working',
+    requiredArgs: ['type'],
+    description: 'Set temporary session override for injection type (system-prompt, gate-guidance, style-guidance).',
+  },
+  {
+    id: 'injection:reset',
+    displayName: 'Injection Reset',
+    category: 'injection',
+    status: 'working',
+    requiredArgs: [],
+    description: 'Clear all session overrides for injection control.',
   },
 ];
 
-export const SYSTEM_CONTROL_ACTION_IDS = ["status", "framework", "gates", "analytics", "config", "maintenance", "guide"] as const;
+export const SYSTEM_CONTROL_ACTION_IDS = [
+  'status',
+  'framework',
+  'gates',
+  'analytics',
+  'config',
+  'maintenance',
+  'guide',
+  'injection',
+] as const;
 
-export type SystemControlActionId = typeof SYSTEM_CONTROL_ACTION_IDS[number];
+export type SystemControlActionId = (typeof SYSTEM_CONTROL_ACTION_IDS)[number];
+
+const systemControlContract = {
+  tool: 'system_control',
+  version: 1,
+  summary:
+    'Runtime administration (status, framework, analytics, diagnostics). One action per call—set `action` and required fields; chain admin steps with separate calls.',
+  parameters: system_controlParameters,
+  commands: system_controlCommands,
+};
+
+const parameterDescriptors: ParameterDescriptor<system_controlParamName>[] =
+  contractToParameterDescriptors<system_controlParamName>(systemControlContract);
+
+const commandDescriptors = contractToCommandDescriptors(systemControlContract);
 
 export const systemControlMetadata: ToolMetadata<SystemControlMetadataData> = {
-  tool: "system_control",
-  version: 2,
+  tool: 'system_control',
+  version: 1, // Matches contract version
   notes: [
-    "Actions pulled from ConsolidatedSystemControl.getActionHandler.",
-    "Planned items highlight where handler scaffolding exists without public parameters.",
+    'Parameters sourced from contracts/_generated.',
+    'Operations inventory maintained separately for guide/telemetry.',
   ],
   data: {
     operations,
+    parameters: parameterDescriptors,
+    commands: commandDescriptors,
   },
 };

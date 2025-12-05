@@ -1,18 +1,20 @@
 // @lifecycle canonical - Type definitions for action metadata.
 export type LifecycleStatus =
-  | "working"
-  | "needs-structure"
-  | "needs-parameter"
-  | "needs-context"
-  | "routing_issue"
-  | "display-gap"
-  | "needs-validation"
-  | "needs-visuals"
-  | "planned"
-  | "untested"
-  | "deprecated";
+  | 'working'
+  | 'needs-structure'
+  | 'needs-parameter'
+  | 'needs-context'
+  | 'routing_issue'
+  | 'display-gap'
+  | 'needs-validation'
+  | 'needs-visuals'
+  | 'planned'
+  | 'untested'
+  | 'deprecated'
+  | 'hidden'
+  | 'experimental';
 
-export type IssueSeverity = "info" | "warning" | "high";
+export type IssueSeverity = 'info' | 'warning' | 'high';
 
 export interface IssueDescriptor {
   readonly severity: IssueSeverity;
@@ -63,6 +65,8 @@ export interface ToolMetadata<T = Record<string, unknown>> {
 
 export interface PromptManagerMetadataData {
   readonly actions: readonly ActionDescriptor[];
+  readonly parameters?: readonly ParameterDescriptor[];
+  readonly commands?: readonly CommandDescriptor[];
 }
 
 export interface PromptEngineMetadataData {
@@ -73,4 +77,6 @@ export interface PromptEngineMetadataData {
 
 export interface SystemControlMetadataData {
   readonly operations: readonly ActionDescriptor[];
+  readonly parameters?: readonly ParameterDescriptor[];
+  readonly commands?: readonly CommandDescriptor[];
 }
