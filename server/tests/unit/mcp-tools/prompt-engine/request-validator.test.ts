@@ -6,9 +6,9 @@
  */
 import { jest } from '@jest/globals';
 
-import { McpToolRequestValidator } from '../../../../dist/execution/validation/request-validator';
+import { McpToolRequestValidator } from '../../../../dist/execution/validation/request-validator.js';
 
-import type { McpToolRequest } from '../../../../dist/types/execution';
+import type { McpToolRequest } from '../../../../dist/types/execution.js';
 
 describe('McpToolRequestValidator', () => {
   describe('validate()', () => {

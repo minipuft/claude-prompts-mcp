@@ -168,6 +168,61 @@ The system now intelligently manages gate failures:
   - **Advisory**: Logs a warning but allows the chain to continue (Medium/Low severity).
 - **User Choice**: On exhaustion, you can choose to `retry`, `skip`, or `abort`.
 
+### Gate Types
+
+Gates come in three flavors, from simple to sophisticated:
+
+#### 1. Inline Text Gates (Symbolic `::`)
+Simple criteria embedded directly in the command. Quick and readable.
+
+```bash
+prompt_engine(command:">>research :: 'cite sources' :: 'include examples'")
+```
+
+#### 2. Quick Gates (Name + Description)
+Structured gates with proper naming. **Ideal for LLM-generated validation**—the client can craft domain-specific checks without memorizing schemas.
+
+```javascript
+prompt_engine({
+  command: ">>deep_research topic:'API design'",
+  gates: [
+    { name: "Source Quality", description: "All sources must be official docs or peer-reviewed" },
+    { name: "Code Completeness", description: "Every concept needs a runnable code example" },
+    { name: "Actionable Output", description: "End with implementation checklist" }
+  ]
+})
+```
+
+#### 3. Full Gate Definitions (Production-Grade)
+Complete gate schema for complex validation workflows. Supports severity levels, multiple criteria, pass conditions, and guidance.
+
+```javascript
+prompt_engine({
+  command: ">>code_review",
+  gates: [{
+    id: "security-audit",
+    name: "Security Audit Gate",
+    description: "Comprehensive security validation",
+    severity: "critical",        // critical|high|medium|low
+    type: "validation",          // validation|approval|condition|quality|guidance
+    scope: "execution",          // execution|session|chain|step
+    criteria: [
+      "No hardcoded secrets or API keys",
+      "Input validation on all user data",
+      "SQL queries use parameterized statements"
+    ],
+    pass_criteria: ["All security criteria addressed with specific code references"],
+    guidance: "Flag any potential vulnerabilities with severity ratings and remediation steps."
+  }]
+})
+```
+
+| Gate Type | Syntax | Best For |
+|-----------|--------|----------|
+| **Inline** | `:: 'text'` | Quick checks, readable commands |
+| **Quick** | `{name, description}` | LLM-crafted validation, domain-specific |
+| **Full** | `{id, severity, criteria[], ...}` | Production workflows, complex validation |
+
 ### Examples
 
 **1. Resource-Driven Prompt Enhancement (New)**

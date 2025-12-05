@@ -94,13 +94,20 @@ export const prompt_engineParameters: ToolParameter[] = [
   {
     "name": "gates",
     "type": "array<string|{name,description}|gate>",
-    "description": "Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions.",
+    "description": "Quality gates for output validation. Three formats supported:\n\n**1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.\n\n**2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.\n\n**3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows.",
     "status": "working",
     "compatibility": "canonical",
+    "examples": [
+      "[\"code-quality\", \"research-quality\"]",
+      "[{\"name\": \"Source Verification\", \"description\": \"All claims must cite sources\"}]",
+      "[{\"id\": \"security-gate\", \"severity\": \"critical\", \"criteria\": [\"No hardcoded secrets\", \"Input validation present\"]}]"
+    ],
     "notes": [
+      "RECOMMENDED: Use Quick Gates `{name, description}` when dynamically creating validation - simple to generate, properly named in output.",
+      "Quick Gates auto-default to severity:medium, type:validation, scope:execution.",
+      "Full schema supports: id, name, description, severity (critical|high|medium|low), type, scope, criteria[], pass_criteria[], guidance, apply_to_steps[].",
       "Supports mixed types in single array for maximum flexibility.",
-      "Step-targeted gates: Use target_step_number or apply_to_steps in gate definitions.",
-      "Canonical parameter for all gate specification (v3.0.0+)."
+      "Step-targeted gates: Use target_step_number or apply_to_steps in full gate definitions."
     ]
   },
   {

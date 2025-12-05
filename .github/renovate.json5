@@ -116,6 +116,12 @@
       "schedule": ["before 3am on Monday"],
       "labels": ["dependencies", "linting", "needs-review"],
       "groupName": "Linting and formatting tools"
+    },
+    {
+      "description": "Vulnerability fixes - high priority",
+      "matchUpdateTypes": ["patch", "minor"],
+      "isVulnerabilityAlert": true,
+      "prPriority": 10
     }
   ],
 
@@ -123,8 +129,7 @@
   "vulnerabilityAlerts": {
     "labels": ["security", "vulnerability"],
     "automerge": true,
-    "schedule": ["at any time"],
-    "prPriority": 10
+    "schedule": ["at any time"]
   },
 
   // Dependency dashboard
@@ -133,8 +138,8 @@
   "dependencyDashboardHeader": "This dashboard tracks all pending dependency updates. Security updates are processed immediately, while regular updates follow a weekly schedule.",
   "dependencyDashboardApproval": false,
 
-  // Stability days - wait for package to stabilize
-  "stabilityDays": 3,
+  // Stability - wait for package to stabilize (renamed from stabilityDays)
+  "minimumReleaseAge": "3 days",
   "internalChecksFilter": "strict",
 
   // Ignore specific packages or update types
@@ -149,12 +154,6 @@
     "commitMessageAction": "refresh",
     "labels": ["dependencies", "lockfile-maintenance"]
   },
-
-  // Require CI to pass before auto-merge
-  "requiredStatusChecks": [
-    "Build & Test Validation",
-    "Pull Request Quality Gates"
-  ],
 
   // PR body template
   "prBodyTemplate": "{{{header}}}{{{table}}}{{{notes}}}{{{changelogs}}}{{{configDescription}}}{{{controls}}}{{{footer}}}",
@@ -173,11 +172,6 @@
   // Respect package.json version ranges
   "rangeStrategy": "auto",
   "respectLatest": true,
-
-  // Node.js version support
-  "node": {
-    "supportPolicy": ["lts_active", "lts_maintenance", "current"]
-  },
 
   // Post-upgrade tasks
   "postUpgradeTasks": {

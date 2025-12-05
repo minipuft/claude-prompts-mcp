@@ -115,13 +115,13 @@ system_control(action: "analytics")
 
 Express complex execution flows with intuitive operators:
 
-| Operator    | Symbol | Example                     | Purpose              |
-| ----------- | ------ | --------------------------- | -------------------- |
-| Chain       | `-->`  | `step1 --> step2 --> step3` | Sequential execution |
-| Framework   | `@`    | `@CAGEERF analysis`         | Apply methodology    |
-| Gate        | `::`   | `report :: 'cite sources'`  | Quality validation   |
-| Parallel    | `+`    | `task1 + task2 + task3`     | Concurrent execution |
-| Conditional | `?`    | `check ? pass : fail`       | Branch execution     |
+| **Symbol** | **Name** | **Pipeline Action** | **Visual Mnemonics** |
+| :---: | :--- | :--- | :--- |
+| `-->` | **Chain** | **Pipes** output from one step to the next | 🔗 **Link** steps together |
+| `@` | **Framework** | Injects **Thinking Models** (CAGEERF, ReACT) | 🧠 **Brain** of the operation |
+| `::` | **Gate** | Enforces **Quality Checks** before proceeding | 🛡️ **Shield** the output |
+| `%` | **Modifier** | Toggles **Execution Modes** (Menu/Clean/Lean) | ⚙️ **Config** the settings |
+| `#` | **Style** | Applies **Persona/Tone** presets | 🎨 **Paint** the response |
 
 ### Execution Modifiers
 

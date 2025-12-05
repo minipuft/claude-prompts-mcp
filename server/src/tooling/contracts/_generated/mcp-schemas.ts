@@ -16,7 +16,7 @@ export const promptEngineSchema = z.object({
   gate_verdict: z.string().regex(/^GATE_REVIEW:\s(PASS|FAIL)\s-\s.+$/, 'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"').optional(),
   /** User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely. */
   gate_action: z.enum(['retry', 'skip', 'abort']).optional(),
-  /** Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions. */
+  /** Quality gates for output validation. Three formats supported:  **1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.  **2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.  **3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows. */
   gates: z.array(z.union([
         z.string(),
         z.object({ name: z.string(), description: z.string() }),
