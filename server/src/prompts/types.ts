@@ -1,3 +1,4 @@
+// @lifecycle canonical - Type definitions for prompt metadata, categories, and files.
 /**
  * Prompt System Type Definitions
  *
@@ -21,7 +22,14 @@ export interface PromptArgument {
   /** Default value if not provided */
   defaultValue?: string | number | boolean | null | object | Array<any>;
   /** Optional CAGEERF component association for framework-aware processing */
-  cageerfComponent?: 'context' | 'analysis' | 'goals' | 'execution' | 'evaluation' | 'refinement' | 'framework';
+  cageerfComponent?:
+    | 'context'
+    | 'analysis'
+    | 'goals'
+    | 'execution'
+    | 'evaluation'
+    | 'refinement'
+    | 'framework';
   /** Validation rules for the argument */
   validation?: {
     /** Regex pattern for string validation */
@@ -45,6 +53,8 @@ export interface Category {
   name: string;
   /** Description of the category */
   description: string;
+  /** MCP registration default for prompts in this category. Default: true */
+  registerWithMcp?: boolean;
 }
 
 /**
@@ -81,9 +91,11 @@ export interface PromptData {
   /** Whether this prompt should use available tools */
   tools?: boolean;
   /** Defines behavior when prompt is invoked without its defined arguments */
-  onEmptyInvocation?: "execute_if_possible" | "return_template";
+  onEmptyInvocation?: 'execute_if_possible' | 'return_template';
   /** Optional gates for validation */
   gates?: GateDefinition[];
+  /** Whether to register this prompt with MCP. Overrides category default. */
+  registerWithMcp?: boolean;
 }
 
 /**
@@ -128,6 +140,8 @@ export interface PromptsConfigFile {
 export interface PromptsConfig {
   /** Path to the prompts definition file */
   file: string;
+  /** Global default for MCP registration. Category/prompt overrides take precedence. */
+  registerWithMcp?: boolean;
 }
 
 /**
@@ -153,7 +167,8 @@ export interface CategoryPromptsResult {
 export interface ChainStep {
   promptId: string;
   stepName: string;
-  executionType?: 'prompt' | 'template';
+  executionType?: 'single' | 'chain';
+  legacyExecutionType?: 'prompt' | 'template';
   inputMapping?: Record<string, string>;
   outputMapping?: Record<string, string>;
 }

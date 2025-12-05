@@ -1,19 +1,26 @@
+// @lifecycle canonical - Watches prompt/config directories and emits change events for hot reload.
 /**
  * File Observer Module
  * Handles file system watching for automatic change detection and hot reload triggers
  */
 
-import * as fs from "fs";
-import { FSWatcher } from "fs";
-import path from "path";
-import { Logger } from "../logging/index.js";
-import { EventEmitter } from "events";
-import { ConfigManager } from "../config/index.js";
+import { EventEmitter } from 'events';
+import * as fs from 'node:fs';
+import { FSWatcher } from 'node:fs';
+import * as path from 'node:path';
+
+import { ConfigManager } from '../config/index.js';
+import { Logger } from '../logging/index.js';
 
 /**
  * File change event types
  */
 export type FileChangeType = 'added' | 'modified' | 'removed' | 'renamed';
+
+/**
+ * File content types for classification
+ */
+export type FileContentType = 'prompt' | 'config' | 'methodology' | 'unknown';
 
 /**
  * Framework analysis data for file changes
@@ -35,6 +42,9 @@ export interface FileChangeEvent {
   timestamp: number;
   isPromptFile: boolean;
   isConfigFile: boolean;
+  isMethodologyFile: boolean;
+  /** Extracted methodology ID for methodology file changes */
+  methodologyId?: string;
   category?: string;
   frameworkAnalysis?: FrameworkAnalysisData;
 }
@@ -57,6 +67,7 @@ export interface FileObserverConfig {
   debounceMs: number;
   watchPromptFiles: boolean;
   watchConfigFiles: boolean;
+  watchMethodologyFiles: boolean;
   recursive: boolean;
   ignoredPatterns: string[];
   maxRetries: number;
@@ -77,6 +88,7 @@ export interface FileObserverStats {
   retryCount: number;
   frameworkEvents: number;
   frameworkCacheInvalidations: number;
+  methodologyFileEvents: number;
 }
 
 /**
@@ -87,6 +99,7 @@ const DEFAULT_CONFIG: FileObserverConfig = {
   debounceMs: 500,
   watchPromptFiles: true,
   watchConfigFiles: true,
+  watchMethodologyFiles: true,
   recursive: true,
   ignoredPatterns: [
     '**/.git/**',
@@ -96,7 +109,7 @@ const DEFAULT_CONFIG: FileObserverConfig = {
     '**/*.tmp',
     '**/*.temp',
     '**/dist/**',
-    '**/*.log'
+    '**/*.log',
   ],
   maxRetries: 3,
   retryDelayMs: 1000,
@@ -104,8 +117,8 @@ const DEFAULT_CONFIG: FileObserverConfig = {
     enabled: false,
     analyzeChanges: false,
     cacheInvalidation: false,
-    performanceTracking: false
-  }
+    performanceTracking: false,
+  },
 };
 
 /**
@@ -122,6 +135,8 @@ export class FileObserver extends EventEmitter {
   private startTime: number = 0;
   private retryCount: number = 0;
   private configManager?: ConfigManager;
+  private sigintHandler?: () => void;
+  private sigtermHandler?: () => void;
 
   constructor(logger: Logger, config?: Partial<FileObserverConfig>, configManager?: ConfigManager) {
     super();
@@ -136,7 +151,8 @@ export class FileObserver extends EventEmitter {
       uptime: 0,
       retryCount: 0,
       frameworkEvents: 0,
-      frameworkCacheInvalidations: 0
+      frameworkCacheInvalidations: 0,
+      methodologyFileEvents: 0,
     };
 
     // Set max listeners to prevent warning for multiple prompt directories
@@ -148,22 +164,32 @@ export class FileObserver extends EventEmitter {
    */
   async start(): Promise<void> {
     if (this.isStarted) {
-      this.logger.warn("FileObserver is already started");
+      this.logger.warn('FileObserver is already started');
       return;
     }
 
     if (!this.config.enabled) {
-      this.logger.info("FileObserver is disabled in configuration");
+      this.logger.info('FileObserver is disabled in configuration');
       return;
     }
 
-    this.logger.info("📁 FileObserver: Starting file system watching...");
+    this.logger.info('📁 FileObserver: Starting file system watching...');
     this.startTime = Date.now();
     this.isStarted = true;
 
     // Listen for process termination to clean up watchers
-    process.on('SIGINT', () => this.stop());
-    process.on('SIGTERM', () => this.stop());
+    if (!this.sigintHandler) {
+      this.sigintHandler = () => {
+        void this.stop();
+      };
+      process.on('SIGINT', this.sigintHandler);
+    }
+    if (!this.sigtermHandler) {
+      this.sigtermHandler = () => {
+        void this.stop();
+      };
+      process.on('SIGTERM', this.sigtermHandler);
+    }
 
     this.logger.info(`✅ FileObserver started with debounce: ${this.config.debounceMs}ms`);
   }
@@ -176,7 +202,7 @@ export class FileObserver extends EventEmitter {
       return;
     }
 
-    this.logger.info("🛑 FileObserver: Stopping file system watching...");
+    this.logger.info('🛑 FileObserver: Stopping file system watching...');
 
     // Clear all debounce timers
     for (const timer of this.debounceTimers.values()) {
@@ -198,7 +224,16 @@ export class FileObserver extends EventEmitter {
     this.isStarted = false;
     this.stats.watchersActive = 0;
 
-    this.logger.info("✅ FileObserver stopped and resources cleaned up");
+    this.logger.info('✅ FileObserver stopped and resources cleaned up');
+
+    if (this.sigintHandler) {
+      process.off('SIGINT', this.sigintHandler);
+      this.sigintHandler = undefined;
+    }
+    if (this.sigtermHandler) {
+      process.off('SIGTERM', this.sigtermHandler);
+      this.sigtermHandler = undefined;
+    }
   }
 
   /**
@@ -206,7 +241,7 @@ export class FileObserver extends EventEmitter {
    */
   async watchDirectory(directoryPath: string, category?: string): Promise<void> {
     if (!this.isStarted) {
-      throw new Error("FileObserver must be started before adding watchers");
+      throw new Error('FileObserver must be started before adding watchers');
     }
 
     if (this.watchers.has(directoryPath)) {
@@ -221,9 +256,13 @@ export class FileObserver extends EventEmitter {
         throw new Error(`Path is not a directory: ${directoryPath}`);
       }
 
-      const watcher = fs.watch(directoryPath, { recursive: this.config.recursive }, (eventType, filename) => {
-        this.handleFileEvent(eventType, directoryPath, filename, category);
-      });
+      const watcher = fs.watch(
+        directoryPath,
+        { recursive: this.config.recursive },
+        (eventType, filename) => {
+          this.handleFileEvent(eventType, directoryPath, filename, category);
+        }
+      );
 
       watcher.on('error', (error) => {
         this.handleWatcherError(directoryPath, error);
@@ -232,14 +271,19 @@ export class FileObserver extends EventEmitter {
       this.watchers.set(directoryPath, watcher);
       this.stats.watchersActive = this.watchers.size;
 
-      this.logger.info(`👁️ FileObserver: Watching directory: ${directoryPath}${category ? ` (category: ${category})` : ''}`);
-
+      this.logger.info(
+        `👁️ FileObserver: Watching directory: ${directoryPath}${
+          category ? ` (category: ${category})` : ''
+        }`
+      );
     } catch (error) {
       this.logger.error(`Failed to watch directory ${directoryPath}:`, error);
       if (this.retryCount < this.config.maxRetries) {
         this.retryCount++;
         this.stats.retryCount++;
-        this.logger.info(`Retrying in ${this.config.retryDelayMs}ms (attempt ${this.retryCount}/${this.config.maxRetries})`);
+        this.logger.info(
+          `Retrying in ${this.config.retryDelayMs}ms (attempt ${this.retryCount}/${this.config.maxRetries})`
+        );
         setTimeout(() => this.watchDirectory(directoryPath, category), this.config.retryDelayMs);
       } else {
         throw error;
@@ -270,10 +314,9 @@ export class FileObserver extends EventEmitter {
           timersToRemove.push(key);
         }
       }
-      timersToRemove.forEach(key => this.debounceTimers.delete(key));
+      timersToRemove.forEach((key) => this.debounceTimers.delete(key));
 
       this.logger.info(`🚫 FileObserver: Stopped watching directory: ${directoryPath}`);
-
     } catch (error) {
       this.logger.error(`Failed to stop watching directory ${directoryPath}:`, error);
       throw error;
@@ -283,7 +326,12 @@ export class FileObserver extends EventEmitter {
   /**
    * Handle file system events
    */
-  private handleFileEvent(eventType: string, directoryPath: string, filename: string | null, category?: string): void {
+  private handleFileEvent(
+    eventType: string,
+    directoryPath: string,
+    filename: string | null,
+    category?: string
+  ): void {
     if (!filename) {
       return;
     }
@@ -299,9 +347,11 @@ export class FileObserver extends EventEmitter {
     // Determine file types
     const isPromptFile = this.isPromptFile(filename);
     const isConfigFile = this.isConfigFile(filename, filePath);
+    const methodologyInfo = this.isMethodologyFile(filename, filePath);
+    const isMethodologyFile = methodologyInfo.isMethodology;
 
-    // Skip if we're not watching this type
-    if (!isPromptFile && !isConfigFile) {
+    // Skip if we're not watching any applicable type
+    if (!isPromptFile && !isConfigFile && !isMethodologyFile) {
       return;
     }
 
@@ -313,6 +363,10 @@ export class FileObserver extends EventEmitter {
       return;
     }
 
+    if (!this.config.watchMethodologyFiles && isMethodologyFile) {
+      return;
+    }
+
     const changeType = this.mapEventType(eventType);
     const event: FileChangeEvent = {
       type: changeType,
@@ -321,7 +375,9 @@ export class FileObserver extends EventEmitter {
       timestamp: Date.now(),
       isPromptFile,
       isConfigFile,
-      category
+      isMethodologyFile,
+      methodologyId: methodologyInfo.methodologyId,
+      category,
     };
 
     // Add framework analysis if enabled
@@ -330,6 +386,11 @@ export class FileObserver extends EventEmitter {
       if (event.frameworkAnalysis.requiresFrameworkUpdate) {
         this.stats.frameworkEvents++;
       }
+    }
+
+    // Track methodology events separately
+    if (isMethodologyFile) {
+      this.stats.methodologyFileEvents++;
     }
 
     this.logger.debug(`File event detected: ${changeType} ${filename} in ${directoryPath}`);
@@ -343,7 +404,7 @@ export class FileObserver extends EventEmitter {
    */
   private debounceEvent(event: FileChangeEvent): void {
     const debounceKey = `${event.filePath}_${event.type}`;
-    
+
     // Clear existing timer for this file+type
     const existingTimer = this.debounceTimers.get(debounceKey);
     if (existingTimer) {
@@ -368,17 +429,21 @@ export class FileObserver extends EventEmitter {
     this.stats.lastEventTime = event.timestamp;
 
     this.logger.info(`🔄 FileObserver: File ${event.type}: ${event.filename}`);
-    
+
     // Emit specific event types
     this.emit('fileChange', event);
     this.emit(`file:${event.type}`, event);
-    
+
     if (event.isPromptFile) {
       this.emit('promptFileChange', event);
     }
-    
+
     if (event.isConfigFile) {
       this.emit('configFileChange', event);
+    }
+
+    if (event.isMethodologyFile) {
+      this.emit('methodologyFileChange', event);
     }
   }
 
@@ -387,7 +452,7 @@ export class FileObserver extends EventEmitter {
    */
   private handleWatcherError(directoryPath: string, error: Error): void {
     this.logger.error(`FileObserver: Watcher error for ${directoryPath}:`, error);
-    
+
     // Remove failed watcher
     this.watchers.delete(directoryPath);
     this.stats.watchersActive = this.watchers.size;
@@ -401,7 +466,7 @@ export class FileObserver extends EventEmitter {
       this.stats.retryCount++;
       setTimeout(() => {
         this.logger.info(`Attempting to restart watcher for: ${directoryPath}`);
-        this.watchDirectory(directoryPath).catch(retryError => {
+        this.watchDirectory(directoryPath).catch((retryError) => {
           this.logger.error(`Failed to restart watcher for ${directoryPath}:`, retryError);
         });
       }, this.config.retryDelayMs);
@@ -413,14 +478,14 @@ export class FileObserver extends EventEmitter {
    */
   private shouldIgnoreFile(filePath: string, filename: string): boolean {
     const normalizedPath = path.normalize(filePath).replace(/\\/g, '/');
-    
-    return this.config.ignoredPatterns.some(pattern => {
+
+    return this.config.ignoredPatterns.some((pattern) => {
       // Simple glob pattern matching
       const regexPattern = pattern
         .replace(/\*\*/g, '.*')
         .replace(/\*/g, '[^/]*')
         .replace(/\?/g, '[^/]');
-      
+
       const regex = new RegExp(`^${regexPattern}$`);
       return regex.test(normalizedPath) || regex.test(filename);
     });
@@ -439,12 +504,12 @@ export class FileObserver extends EventEmitter {
    */
   private isConfigFile(filename: string, fullPath?: string): boolean {
     const basename = path.basename(filename);
-    
+
     // Standard config files
     if (basename === 'prompts.json' || basename === 'config.json') {
       return true;
     }
-    
+
     // Main prompts config - get filename from ConfigManager if available
     if (this.configManager && fullPath) {
       try {
@@ -456,9 +521,47 @@ export class FileObserver extends EventEmitter {
         this.logger.debug(`Could not get prompts config path from ConfigManager: ${error}`);
       }
     }
-    
+
     // Fallback for backward compatibility
     return basename === 'promptsConfig.json';
+  }
+
+  /**
+   * Check if file is a methodology YAML file
+   * Methodology files live in methodologies/{id}/ directories and are YAML files
+   *
+   * @returns Object with isMethodology flag and extracted methodologyId
+   */
+  private isMethodologyFile(
+    filename: string,
+    fullPath?: string
+  ): { isMethodology: boolean; methodologyId?: string } {
+    const ext = path.extname(filename).toLowerCase();
+
+    // Must be a YAML file
+    if (ext !== '.yaml' && ext !== '.yml') {
+      return { isMethodology: false };
+    }
+
+    // Check if path contains /methodologies/ directory
+    if (!fullPath) {
+      return { isMethodology: false };
+    }
+
+    const normalizedPath = fullPath.replace(/\\/g, '/');
+    const methodologyMatch = normalizedPath.match(/\/methodologies\/([^/]+)\//);
+
+    if (!methodologyMatch) {
+      return { isMethodology: false };
+    }
+
+    // Extract methodology ID from path (e.g., /methodologies/cageerf/methodology.yaml -> cageerf)
+    const methodologyId = methodologyMatch[1].toLowerCase();
+
+    return {
+      isMethodology: true,
+      methodologyId,
+    };
   }
 
   /**
@@ -481,7 +584,7 @@ export class FileObserver extends EventEmitter {
   getStats(): FileObserverStats {
     return {
       ...this.stats,
-      uptime: this.isStarted ? Date.now() - this.startTime : 0
+      uptime: this.isStarted ? Date.now() - this.startTime : 0,
     };
   }
 
@@ -497,7 +600,7 @@ export class FileObserver extends EventEmitter {
    */
   updateConfig(newConfig: Partial<FileObserverConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    this.logger.info("FileObserver configuration updated");
+    this.logger.info('FileObserver configuration updated');
   }
 
   /**
@@ -516,13 +619,14 @@ export class FileObserver extends EventEmitter {
 
   /**
    * Analyze framework impact of file changes
-   * Phase 1: Basic analysis without complex framework dependencies
+   *  Basic analysis without complex framework dependencies
    */
   private analyzeFrameworkImpact(event: FileChangeEvent): FrameworkAnalysisData {
-    // Basic framework analysis for Phase 1 compatibility
+    // Basic framework analysis for  compatibility
     const requiresFrameworkUpdate = event.isPromptFile || event.isConfigFile;
     const affectedFrameworks = requiresFrameworkUpdate ? ['basic'] : [];
-    const analysisInvalidated = event.isPromptFile && (event.type === 'modified' || event.type === 'added');
+    const analysisInvalidated =
+      event.isPromptFile && (event.type === 'modified' || event.type === 'added');
     const performanceImpact: 'low' | 'medium' | 'high' = event.isConfigFile ? 'high' : 'low';
 
     if (requiresFrameworkUpdate && this.config.frameworkIntegration?.cacheInvalidation) {
@@ -534,7 +638,7 @@ export class FileObserver extends EventEmitter {
       requiresFrameworkUpdate,
       affectedFrameworks,
       analysisInvalidated,
-      performanceImpact
+      performanceImpact,
     };
   }
 
@@ -547,9 +651,9 @@ export class FileObserver extends EventEmitter {
       analyzeChanges: true,
       cacheInvalidation: true,
       performanceTracking: true,
-      ...options
+      ...options,
     };
-    this.logger.info("Framework integration enabled for FileObserver");
+    this.logger.info('Framework integration enabled for FileObserver');
   }
 
   /**
@@ -560,9 +664,9 @@ export class FileObserver extends EventEmitter {
       enabled: false,
       analyzeChanges: false,
       cacheInvalidation: false,
-      performanceTracking: false
+      performanceTracking: false,
     };
-    this.logger.info("Framework integration disabled for FileObserver");
+    this.logger.info('Framework integration disabled for FileObserver');
   }
 
   /**
@@ -589,7 +693,7 @@ export class FileObserver extends EventEmitter {
       stats: this.getStats(),
       watchedDirectories: this.getWatchedDirectories(),
       activeDebounceTimers: this.debounceTimers.size,
-      frameworkIntegration: this.config.frameworkIntegration
+      frameworkIntegration: this.config.frameworkIntegration,
     };
   }
 }
@@ -597,6 +701,10 @@ export class FileObserver extends EventEmitter {
 /**
  * Factory function to create a FileObserver instance
  */
-export function createFileObserver(logger: Logger, config?: Partial<FileObserverConfig>, configManager?: ConfigManager): FileObserver {
+export function createFileObserver(
+  logger: Logger,
+  config?: Partial<FileObserverConfig>,
+  configManager?: ConfigManager
+): FileObserver {
   return new FileObserver(logger, config, configManager);
 }

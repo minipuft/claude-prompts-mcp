@@ -1,19 +1,30 @@
+// @lifecycle canonical - Coordinates prompt hot reload workflows using the file observer + category manager.
 /**
  * Hot Reload Manager Module
  * Orchestrates file system monitoring and reload workflows with event-driven architecture
  */
 
-import { Logger } from "../logging/index.js";
-import { FileObserver, FileChangeEvent, FileObserverConfig, createFileObserver } from "./file-observer.js";
-import { CategoryManager } from "./category-manager.js";
-import { ConfigManager } from "../config/index.js";
-import path from "path";
-import * as fs from "fs/promises";
+import * as path from 'node:path';
+
+import { ConfigManager } from '../config/index.js';
+import { Logger } from '../logging/index.js';
+import { CategoryManager } from './category-manager.js';
+import {
+  FileChangeEvent,
+  FileObserver,
+  FileObserverConfig,
+  createFileObserver,
+} from './file-observer.js';
 
 /**
  * Hot reload event types
  */
-export type HotReloadEventType = 'prompt_changed' | 'config_changed' | 'category_changed' | 'reload_required';
+export type HotReloadEventType =
+  | 'prompt_changed'
+  | 'config_changed'
+  | 'category_changed'
+  | 'methodology_changed'
+  | 'reload_required';
 
 /**
  * Hot reload event data
@@ -23,6 +34,8 @@ export interface HotReloadEvent {
   reason: string;
   affectedFiles: string[];
   category?: string;
+  /** Methodology ID for methodology_changed events */
+  methodologyId?: string;
   timestamp: number;
   requiresFullReload: boolean;
 }
@@ -64,6 +77,13 @@ export interface HotReloadStats {
   performanceOptimizations: number;
 }
 
+export interface AuxiliaryReloadConfig {
+  id: string;
+  directories: string[];
+  handler: (event: HotReloadEvent) => Promise<void>;
+  match?: (event: FileChangeEvent) => boolean;
+}
+
 /**
  * Hot reload manager configuration
  */
@@ -85,7 +105,7 @@ const DEFAULT_HOT_RELOAD_CONFIG: HotReloadConfig = {
     '**/*.tmp',
     '**/*.temp',
     '**/dist/**',
-    '**/*.log'
+    '**/*.log',
   ],
   maxRetries: 3,
   retryDelayMs: 1000,
@@ -94,8 +114,8 @@ const DEFAULT_HOT_RELOAD_CONFIG: HotReloadConfig = {
     frameworkAnalysis: false,
     performanceMonitoring: false,
     preWarmAnalysis: false,
-    invalidateFrameworkCaches: false
-  }
+    invalidateFrameworkCaches: false,
+  },
 };
 
 /**
@@ -108,6 +128,8 @@ export class HotReloadManager {
   private fileObserver: FileObserver;
   private categoryManager?: CategoryManager;
   private onReloadCallback?: (event: HotReloadEvent) => Promise<void>;
+  private onMethodologyReloadCallback?: (event: HotReloadEvent) => Promise<void>;
+  private auxiliaryReloads: AuxiliaryReloadConfig[] = [];
   private stats: HotReloadStats;
   private isStarted: boolean = false;
   private batchTimer?: NodeJS.Timeout;
@@ -115,7 +137,7 @@ export class HotReloadManager {
   private watchedDirectories: Set<string> = new Set();
 
   constructor(
-    logger: Logger, 
+    logger: Logger,
     categoryManager?: CategoryManager,
     config?: Partial<HotReloadConfig>,
     configManager?: ConfigManager
@@ -123,7 +145,7 @@ export class HotReloadManager {
     this.logger = logger;
     this.categoryManager = categoryManager;
     this.config = { ...DEFAULT_HOT_RELOAD_CONFIG, ...config };
-    
+
     // Create file observer with filtered config
     const observerConfig = {
       enabled: this.config.enabled,
@@ -133,11 +155,11 @@ export class HotReloadManager {
       recursive: this.config.recursive,
       ignoredPatterns: this.config.ignoredPatterns,
       maxRetries: this.config.maxRetries,
-      retryDelayMs: this.config.retryDelayMs
+      retryDelayMs: this.config.retryDelayMs,
     };
-    
+
     this.fileObserver = createFileObserver(logger, observerConfig, configManager);
-    
+
     this.stats = {
       reloadsTriggered: 0,
       filesChanged: 0,
@@ -145,7 +167,7 @@ export class HotReloadManager {
       fileObserverStats: this.fileObserver.getStats(),
       frameworkReloads: 0,
       frameworkCacheClears: 0,
-      performanceOptimizations: 0
+      performanceOptimizations: 0,
     };
 
     this.setupFileObserverEventHandlers();
@@ -156,21 +178,23 @@ export class HotReloadManager {
    */
   async start(): Promise<void> {
     if (this.isStarted) {
-      this.logger.warn("HotReloadManager is already started");
+      this.logger.warn('HotReloadManager is already started');
       return;
     }
 
     if (!this.config.enabled) {
-      this.logger.info("HotReloadManager is disabled in configuration");
+      this.logger.info('HotReloadManager is disabled in configuration');
       return;
     }
 
-    this.logger.info("🔥 HotReloadManager: Starting hot reload monitoring...");
+    this.logger.info('🔥 HotReloadManager: Starting hot reload monitoring...');
 
     await this.fileObserver.start();
     this.isStarted = true;
 
-    this.logger.info(`✅ HotReloadManager started - Auto reload: ${this.config.autoReload ? 'ON' : 'OFF'}`);
+    this.logger.info(
+      `✅ HotReloadManager started - Auto reload: ${this.config.autoReload ? 'ON' : 'OFF'}`
+    );
   }
 
   /**
@@ -181,7 +205,7 @@ export class HotReloadManager {
       return;
     }
 
-    this.logger.info("🛑 HotReloadManager: Stopping hot reload monitoring...");
+    this.logger.info('🛑 HotReloadManager: Stopping hot reload monitoring...');
 
     // Clear batch timer
     if (this.batchTimer) {
@@ -192,7 +216,7 @@ export class HotReloadManager {
     await this.fileObserver.stop();
     this.isStarted = false;
 
-    this.logger.info("✅ HotReloadManager stopped");
+    this.logger.info('✅ HotReloadManager stopped');
   }
 
   /**
@@ -200,7 +224,31 @@ export class HotReloadManager {
    */
   setReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
     this.onReloadCallback = callback;
-    this.logger.debug("HotReloadManager: Reload callback registered");
+    this.logger.debug('HotReloadManager: Reload callback registered');
+  }
+
+  /**
+   * Set the callback for methodology reload events
+   * This callback is invoked when methodology YAML files change
+   */
+  setMethodologyReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
+    this.onMethodologyReloadCallback = callback;
+    this.logger.debug('HotReloadManager: Methodology reload callback registered');
+  }
+
+  /**
+   * Register auxiliary reload handlers (e.g., methodology, gate) with their watch directories.
+   * Directories must also be passed to watchDirectories by the caller.
+   */
+  setAuxiliaryReloads(reloads: AuxiliaryReloadConfig[]): void {
+    this.auxiliaryReloads = reloads.map((reload) => ({
+      ...reload,
+      directories: reload.directories.map((dir) => path.normalize(dir)),
+    }));
+    this.logger.debug('HotReloadManager: Auxiliary reload handlers registered', {
+      count: this.auxiliaryReloads.length,
+      ids: this.auxiliaryReloads.map((r) => r.id),
+    });
   }
 
   /**
@@ -208,14 +256,16 @@ export class HotReloadManager {
    */
   async watchDirectories(directories: Array<{ path: string; category?: string }>): Promise<void> {
     if (!this.isStarted) {
-      throw new Error("HotReloadManager must be started before watching directories");
+      throw new Error('HotReloadManager must be started before watching directories');
     }
 
     for (const { path: dirPath, category } of directories) {
       try {
         await this.fileObserver.watchDirectory(dirPath, category);
         this.watchedDirectories.add(dirPath);
-        this.logger.info(`📁 HotReloadManager: Watching directory: ${dirPath}${category ? ` (${category})` : ''}`);
+        this.logger.info(
+          `📁 HotReloadManager: Watching directory: ${dirPath}${category ? ` (${category})` : ''}`
+        );
       } catch (error) {
         this.logger.error(`Failed to watch directory ${dirPath}:`, error);
       }
@@ -225,13 +275,16 @@ export class HotReloadManager {
   /**
    * Manually trigger a reload
    */
-  async triggerReload(reason: string = 'Manual trigger', requiresFullReload: boolean = true): Promise<void> {
+  async triggerReload(
+    reason: string = 'Manual trigger',
+    requiresFullReload: boolean = true
+  ): Promise<void> {
     const event: HotReloadEvent = {
       type: 'reload_required',
       reason,
       affectedFiles: [],
       timestamp: Date.now(),
-      requiresFullReload
+      requiresFullReload,
     };
 
     await this.processReloadEvent(event);
@@ -245,11 +298,15 @@ export class HotReloadManager {
       this.handleFileChange(event);
     });
 
+    this.fileObserver.on('methodologyFileChange', (event: FileChangeEvent) => {
+      this.handleMethodologyFileChange(event);
+    });
+
     this.fileObserver.on('watcherError', (error: { directoryPath: string; error: Error }) => {
       this.logger.error(`File watcher error for ${error.directoryPath}:`, error.error);
     });
 
-    this.logger.debug("HotReloadManager: File observer event handlers registered");
+    this.logger.debug('HotReloadManager: File observer event handlers registered');
   }
 
   /**
@@ -259,10 +316,92 @@ export class HotReloadManager {
     this.stats.filesChanged++;
     this.logger.debug(`File change detected: ${event.type} - ${event.filename}`);
 
+    // Fire auxiliary reload handlers opportunistically (non-blocking)
+    void this.triggerAuxiliaryReloads(event);
+
     if (this.config.batchChanges) {
       this.batchFileChange(event);
     } else {
       this.processFileChangeImmediate(event);
+    }
+  }
+
+  /**
+   * Handle methodology file change events
+   * These are processed separately from regular file changes to enable
+   * targeted methodology reload without affecting prompt system
+   */
+  private async handleMethodologyFileChange(event: FileChangeEvent): Promise<void> {
+    this.stats.filesChanged++;
+    const methodologyId = event.methodologyId ?? this.extractMethodologyId(event.filePath);
+
+    this.logger.info(
+      `🔧 Methodology file change detected: ${event.type} - ${event.filename}` +
+        (methodologyId ? ` (methodology: ${methodologyId})` : '')
+    );
+
+    const hotReloadEvent: HotReloadEvent = {
+      type: 'methodology_changed',
+      reason: `Methodology file ${event.type}: ${event.filename}`,
+      affectedFiles: [event.filePath],
+      methodologyId,
+      timestamp: event.timestamp,
+      requiresFullReload: false, // Methodology changes typically don't need full reload
+    };
+
+    // Use dedicated methodology callback if available, otherwise fall through to general reload
+    if (this.onMethodologyReloadCallback) {
+      try {
+        await this.onMethodologyReloadCallback(hotReloadEvent);
+        this.logger.info(`✅ Methodology ${methodologyId ?? 'unknown'} reloaded successfully`);
+      } catch (error) {
+        this.logger.error(`❌ Failed to reload methodology ${methodologyId ?? 'unknown'}:`, error);
+      }
+    } else {
+      // Fallback to regular reload processing
+      await this.processReloadEvent(hotReloadEvent);
+    }
+  }
+
+  /**
+   * Extract methodology ID from file path
+   */
+  private extractMethodologyId(filePath: string): string | undefined {
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    const match = normalizedPath.match(/\/methodologies\/([^/]+)\//);
+    return match?.[1]?.toLowerCase();
+  }
+
+  private async triggerAuxiliaryReloads(event: FileChangeEvent): Promise<void> {
+    if (this.auxiliaryReloads.length === 0) {
+      return;
+    }
+
+    const normalizedPath = path.normalize(event.filePath);
+
+    for (const reload of this.auxiliaryReloads) {
+      const matchesPath = reload.directories.some((dir) =>
+        normalizedPath.startsWith(path.normalize(dir))
+      );
+      const matchesCustom = reload.match ? reload.match(event) : true;
+
+      if (!matchesPath || !matchesCustom) {
+        continue;
+      }
+
+      const hotReloadEvent: HotReloadEvent = {
+        type: 'reload_required',
+        reason: `${reload.id} file ${event.type}: ${event.filename}`,
+        affectedFiles: [event.filePath],
+        timestamp: event.timestamp,
+        requiresFullReload: false,
+      };
+
+      try {
+        await reload.handler(hotReloadEvent);
+      } catch (error) {
+        this.logger.error(`[HotReloadManager] Auxiliary reload failed for ${reload.id}`, error);
+      }
     }
   }
 
@@ -298,12 +437,13 @@ export class HotReloadManager {
     this.logger.info(`Processing ${changes.length} batched file changes`);
 
     // Group changes by type
-    const promptChanges = changes.filter(c => c.isPromptFile);
-    const configChanges = changes.filter(c => c.isConfigFile);
+    const promptChanges = changes.filter((c) => c.isPromptFile);
+    const configChanges = changes.filter((c) => c.isConfigFile);
 
     // Determine reload type
-    const requiresFullReload = configChanges.length > 0 || 
-      promptChanges.some(c => c.type === 'added' || c.type === 'removed');
+    const requiresFullReload =
+      configChanges.length > 0 ||
+      promptChanges.some((c) => c.type === 'added' || c.type === 'removed');
 
     let reloadType: HotReloadEventType = 'prompt_changed';
     let reason = `${promptChanges.length} prompt file(s) changed`;
@@ -316,9 +456,9 @@ export class HotReloadManager {
     const hotReloadEvent: HotReloadEvent = {
       type: reloadType,
       reason,
-      affectedFiles: changes.map(c => c.filePath),
+      affectedFiles: changes.map((c) => c.filePath),
       timestamp: Date.now(),
-      requiresFullReload
+      requiresFullReload,
     };
 
     await this.processReloadEvent(hotReloadEvent);
@@ -344,7 +484,7 @@ export class HotReloadManager {
       affectedFiles: [event.filePath],
       category: event.category,
       timestamp: event.timestamp,
-      requiresFullReload
+      requiresFullReload,
     };
 
     await this.processReloadEvent(hotReloadEvent);
@@ -369,23 +509,22 @@ export class HotReloadManager {
         // Add delay if configured
         if (this.config.reloadDelayMs > 0) {
           this.logger.debug(`Delaying reload by ${this.config.reloadDelayMs}ms`);
-          await new Promise(resolve => setTimeout(resolve, this.config.reloadDelayMs));
+          await new Promise((resolve) => setTimeout(resolve, this.config.reloadDelayMs));
         }
 
         await this.onReloadCallback(event);
-        
+
         // Framework-aware post-processing
         if (this.config.frameworkCapabilities?.enabled) {
           await this.processFrameworkPostReload(event);
         }
 
-        this.logger.info("✅ Hot reload completed successfully");
-
+        this.logger.info('✅ Hot reload completed successfully');
       } catch (error) {
-        this.logger.error("❌ Hot reload failed:", error);
+        this.logger.error('❌ Hot reload failed:', error);
       }
     } else {
-      this.logger.info("⏭️ Auto reload is disabled - skipping automatic reload");
+      this.logger.info('⏭️ Auto reload is disabled - skipping automatic reload');
     }
   }
 
@@ -395,7 +534,7 @@ export class HotReloadManager {
   getStats(): HotReloadStats {
     return {
       ...this.stats,
-      fileObserverStats: this.fileObserver.getStats()
+      fileObserverStats: this.fileObserver.getStats(),
     };
   }
 
@@ -412,15 +551,17 @@ export class HotReloadManager {
   updateConfig(newConfig: Partial<HotReloadConfig>): void {
     const oldAutoReload = this.config.autoReload;
     this.config = { ...this.config, ...newConfig };
-    
+
     // Update file observer config if needed
-    if (newConfig.debounceMs !== undefined || 
-        newConfig.watchPromptFiles !== undefined || 
-        newConfig.watchConfigFiles !== undefined) {
+    if (
+      newConfig.debounceMs !== undefined ||
+      newConfig.watchPromptFiles !== undefined ||
+      newConfig.watchConfigFiles !== undefined
+    ) {
       this.fileObserver.updateConfig({
         debounceMs: this.config.debounceMs,
         watchPromptFiles: this.config.watchPromptFiles,
-        watchConfigFiles: this.config.watchConfigFiles
+        watchConfigFiles: this.config.watchConfigFiles,
       });
     }
 
@@ -429,7 +570,7 @@ export class HotReloadManager {
       this.logger.info(`Auto reload ${this.config.autoReload ? 'enabled' : 'disabled'}`);
     }
 
-    this.logger.info("HotReloadManager configuration updated");
+    this.logger.info('HotReloadManager configuration updated');
   }
 
   /**
@@ -448,41 +589,41 @@ export class HotReloadManager {
 
   /**
    * Framework pre-reload processing
-   * Phase 1: Basic framework cache invalidation and analysis
+   *  Basic framework cache invalidation and analysis
    */
   private async processFrameworkPreReload(event: HotReloadEvent): Promise<void> {
     const startTime = performance.now();
-    
-    this.logger.debug("Processing framework pre-reload analysis...");
-    
+
+    this.logger.debug('Processing framework pre-reload analysis...');
+
     if (this.config.frameworkCapabilities?.invalidateFrameworkCaches) {
       this.stats.frameworkCacheClears++;
-      this.logger.debug("Framework caches invalidated for hot-reload");
+      this.logger.debug('Framework caches invalidated for hot-reload');
     }
-    
+
     if (this.config.frameworkCapabilities?.frameworkAnalysis) {
       this.stats.frameworkReloads++;
       this.logger.debug(`Framework analysis prepared for ${event.affectedFiles.length} files`);
     }
-    
+
     const processingTime = performance.now() - startTime;
     this.logger.debug(`Framework pre-reload completed in ${processingTime.toFixed(2)}ms`);
   }
 
   /**
    * Framework post-reload processing
-   * Phase 1: Basic performance optimization and cache warming
+   *  Basic performance optimization and cache warming
    */
   private async processFrameworkPostReload(event: HotReloadEvent): Promise<void> {
     const startTime = performance.now();
-    
-    this.logger.debug("Processing framework post-reload optimizations...");
-    
+
+    this.logger.debug('Processing framework post-reload optimizations...');
+
     if (this.config.frameworkCapabilities?.preWarmAnalysis) {
       this.stats.performanceOptimizations++;
-      this.logger.debug("Framework analysis cache pre-warmed");
+      this.logger.debug('Framework analysis cache pre-warmed');
     }
-    
+
     if (this.config.frameworkCapabilities?.performanceMonitoring) {
       const processingTime = performance.now() - startTime;
       this.logger.debug(`Framework post-reload monitoring: ${processingTime.toFixed(2)}ms`);
@@ -499,20 +640,20 @@ export class HotReloadManager {
       performanceMonitoring: true,
       preWarmAnalysis: true,
       invalidateFrameworkCaches: true,
-      ...options
+      ...options,
     };
-    
+
     // Enable framework integration on file observer if available
     if ('enableFrameworkIntegration' in this.fileObserver) {
       (this.fileObserver as any).enableFrameworkIntegration({
         enabled: true,
         analyzeChanges: this.config.frameworkCapabilities.frameworkAnalysis,
         cacheInvalidation: this.config.frameworkCapabilities.invalidateFrameworkCaches,
-        performanceTracking: this.config.frameworkCapabilities.performanceMonitoring
+        performanceTracking: this.config.frameworkCapabilities.performanceMonitoring,
       });
     }
-    
-    this.logger.info("Framework capabilities enabled for HotReloadManager");
+
+    this.logger.info('Framework capabilities enabled for HotReloadManager');
   }
 
   /**
@@ -524,15 +665,15 @@ export class HotReloadManager {
       frameworkAnalysis: false,
       performanceMonitoring: false,
       preWarmAnalysis: false,
-      invalidateFrameworkCaches: false
+      invalidateFrameworkCaches: false,
     };
-    
+
     // Disable framework integration on file observer if available
     if ('disableFrameworkIntegration' in this.fileObserver) {
       (this.fileObserver as any).disableFrameworkIntegration();
     }
-    
-    this.logger.info("Framework capabilities disabled for HotReloadManager");
+
+    this.logger.info('Framework capabilities disabled for HotReloadManager');
   }
 
   /**
@@ -561,7 +702,7 @@ export class HotReloadManager {
       watchedDirectories: this.getWatchedDirectories(),
       pendingChanges: this.pendingChanges.length,
       fileObserverDebug: this.fileObserver.getDebugInfo(),
-      frameworkCapabilities: this.config.frameworkCapabilities
+      frameworkCapabilities: this.config.frameworkCapabilities,
     };
   }
 }
@@ -570,7 +711,7 @@ export class HotReloadManager {
  * Factory function to create a HotReloadManager instance
  */
 export function createHotReloadManager(
-  logger: Logger, 
+  logger: Logger,
   categoryManager?: CategoryManager,
   config?: Partial<HotReloadConfig>,
   configManager?: ConfigManager

@@ -1,24 +1,22 @@
+// @lifecycle canonical - Type definitions for prompt manager internals.
 /**
  * Shared types and interfaces for prompt manager modules
  */
 
-import { Logger } from "../../../logging/index.js";
-import { ConfigManager } from "../../../config/index.js";
-import {
-  ToolResponse,
-  ConvertedPrompt,
-  PromptData,
-  Category
-} from "../../../types/index.js";
-import { ContentAnalyzer } from "../../../semantic/configurable-semantic-analyzer.js";
-import { FrameworkStateManager } from "../../../frameworks/framework-state-manager.js";
-import { FrameworkManager } from "../../../frameworks/framework-manager.js";
+import { ConfigManager } from '../../../config/index.js';
+import { FrameworkManager } from '../../../frameworks/framework-manager.js';
+import { FrameworkStateManager } from '../../../frameworks/framework-state-manager.js';
+import { Logger } from '../../../logging/index.js';
+import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
+import { ToolResponse, ConvertedPrompt, PromptData, Category } from '../../../types/index.js';
+
+export type { CategoryResult } from '../../../prompts/category-maintenance.js';
 
 /**
  * Prompt classification interface for management operations
  */
 export interface PromptClassification {
-  executionType: "prompt" | "template" | "chain";
+  executionType: 'single' | 'chain';
   requiresExecution: boolean;
   requiresFramework: boolean;
   confidence: number;
@@ -98,14 +96,6 @@ export interface ValidationContext {
   operation: string;
   requiredFields: string[];
   providedFields: string[];
-}
-
-/**
- * Category management result
- */
-export interface CategoryResult {
-  effectiveCategory: string;
-  created: boolean;
 }
 
 /**

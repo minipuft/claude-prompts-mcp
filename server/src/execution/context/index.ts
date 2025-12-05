@@ -1,6 +1,7 @@
+// @lifecycle canonical - Barrel exports for execution context utilities.
 /**
  * Context System Export Module
- * 
+ *
  * Centralizes all context resolution infrastructure exports
  */
 
@@ -10,5 +11,5 @@ export {
   type ContextResolution,
   type ContextProvider,
   type ContextSource,
-  type ContextAggregationOptions
+  type ContextAggregationOptions,
 } from './context-resolver.js';

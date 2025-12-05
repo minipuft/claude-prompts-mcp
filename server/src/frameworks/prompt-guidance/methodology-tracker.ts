@@ -1,21 +1,22 @@
+// @lifecycle canonical - Tracks framework methodology state for prompt guidance orchestration.
 /**
- * Methodology Tracker - Phase 3 Implementation
+ * Methodology Tracker
  *
  * Tracks active methodology state and handles framework switching.
  * Consolidated from framework-state-manager for better separation of concerns.
  */
 
-import { EventEmitter } from "events";
-import { Logger } from "../../logging/index.js";
+import { EventEmitter } from 'events';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+
+import { Logger } from '../../logging/index.js';
 import {
-  FrameworkDefinition,
+  MethodologyHealth,
   MethodologyState,
   MethodologySwitchRequest,
-  MethodologyHealth,
-  PersistedMethodologyState
-} from "../types/index.js";
-import * as fs from 'fs/promises';
-import * as path from 'path';
+  PersistedMethodologyState,
+} from '../types/index.js';
 
 /**
  * Methodology tracking configuration
@@ -63,7 +64,7 @@ export class MethodologyTracker extends EventEmitter {
     successfulSwitches: 0,
     failedSwitches: 0,
     averageResponseTime: 0,
-    responseTimes: [] as number[]
+    responseTimes: [] as number[],
   };
 
   constructor(logger: Logger, config?: Partial<MethodologyTrackerConfig>) {
@@ -79,7 +80,7 @@ export class MethodologyTracker extends EventEmitter {
       enableHealthMonitoring: true,
       healthCheckIntervalMs: 30000, // 30 seconds
       maxSwitchHistory: 100,
-      enableMetrics: true
+      enableMetrics: true,
     };
 
     this.config = {
@@ -89,22 +90,22 @@ export class MethodologyTracker extends EventEmitter {
         ? path.isAbsolute(config.stateFilePath)
           ? config.stateFilePath
           : path.resolve(rootPath, config.stateFilePath)
-        : defaultConfig.stateFilePath
+        : defaultConfig.stateFilePath,
     };
 
     // Initialize default state
     this.currentState = {
-      activeMethodology: "CAGEERF", // Default methodology
+      activeMethodology: 'CAGEERF', // Default methodology
       previousMethodology: null,
       switchedAt: new Date(),
-      switchReason: "Initial state",
+      switchReason: 'Initial state',
       isHealthy: true,
       methodologySystemEnabled: true,
       switchingMetrics: {
         switchCount: 0,
         averageResponseTime: 0,
-        errorCount: 0
-      }
+        errorCount: 0,
+      },
     };
   }
 
@@ -112,7 +113,7 @@ export class MethodologyTracker extends EventEmitter {
    * Initialize methodology tracker with state restoration
    */
   async initialize(): Promise<void> {
-    this.logger.info("Initializing MethodologyTracker...");
+    this.logger.info('Initializing MethodologyTracker...');
 
     try {
       // Restore state from disk if enabled
@@ -125,9 +126,11 @@ export class MethodologyTracker extends EventEmitter {
         this.startHealthMonitoring();
       }
 
-      this.logger.info(`MethodologyTracker initialized with ${this.currentState.activeMethodology} methodology`);
+      this.logger.info(
+        `MethodologyTracker initialized with ${this.currentState.activeMethodology} methodology`
+      );
     } catch (error) {
-      this.logger.error("Failed to initialize MethodologyTracker:", error);
+      this.logger.error('Failed to initialize MethodologyTracker:', error);
       throw error;
     }
   }
@@ -140,9 +143,11 @@ export class MethodologyTracker extends EventEmitter {
     const startTime = Date.now();
     const previousMethodology = this.currentState.activeMethodology;
     const targetMethodology = request.targetMethodology;
-    const reason = request.reason || "Manual switch";
+    const reason = request.reason || 'Manual switch';
 
-    this.logger.info(`Switching methodology: ${previousMethodology} -> ${targetMethodology} (${reason})`);
+    this.logger.info(
+      `Switching methodology: ${previousMethodology} -> ${targetMethodology} (${reason})`
+    );
 
     try {
       // Validate switch request
@@ -159,8 +164,8 @@ export class MethodologyTracker extends EventEmitter {
         switchReason: reason,
         switchingMetrics: {
           ...this.currentState.switchingMetrics,
-          switchCount: this.currentState.switchingMetrics.switchCount + 1
-        }
+          switchCount: this.currentState.switchingMetrics.switchCount + 1,
+        },
       };
 
       // Record switch in history
@@ -169,7 +174,7 @@ export class MethodologyTracker extends EventEmitter {
         to: targetMethodology,
         timestamp: new Date(),
         reason,
-        success: true
+        success: true,
       };
       this.addToSwitchHistory(switchRecord);
 
@@ -186,9 +191,12 @@ export class MethodologyTracker extends EventEmitter {
       // Emit event
       this.emit('methodology-switched', previousMethodology, targetMethodology, reason);
 
-      this.logger.info(`Methodology switch completed: ${previousMethodology} -> ${targetMethodology} in ${Date.now() - startTime}ms`);
+      this.logger.info(
+        `Methodology switch completed: ${previousMethodology} -> ${targetMethodology} in ${
+          Date.now() - startTime
+        }ms`
+      );
       return true;
-
     } catch (error) {
       this.logger.error(`Failed to switch methodology to ${targetMethodology}:`, error);
 
@@ -198,7 +206,7 @@ export class MethodologyTracker extends EventEmitter {
         to: targetMethodology,
         timestamp: new Date(),
         reason,
-        success: false
+        success: false,
       });
 
       // Update failure metrics
@@ -207,7 +215,11 @@ export class MethodologyTracker extends EventEmitter {
       }
 
       // Emit error event
-      this.emit('methodology-error', targetMethodology, error instanceof Error ? error : new Error(String(error)));
+      this.emit(
+        'methodology-error',
+        targetMethodology,
+        error instanceof Error ? error : new Error(String(error))
+      );
 
       return false;
     }
@@ -225,7 +237,7 @@ export class MethodologyTracker extends EventEmitter {
    */
   getSystemHealth(): MethodologyHealth {
     return {
-      status: this.currentState.isHealthy ? "healthy" : "error",
+      status: this.currentState.isHealthy ? 'healthy' : 'error',
       activeMethodology: this.currentState.activeMethodology,
       methodologySystemEnabled: this.currentState.methodologySystemEnabled,
       lastSwitchTime: this.currentState.switchedAt,
@@ -233,16 +245,19 @@ export class MethodologyTracker extends EventEmitter {
         totalSwitches: this.switchingMetrics.totalSwitches,
         successfulSwitches: this.switchingMetrics.successfulSwitches,
         failedSwitches: this.switchingMetrics.failedSwitches,
-        averageResponseTime: this.switchingMetrics.averageResponseTime
+        averageResponseTime: this.switchingMetrics.averageResponseTime,
       },
-      issues: this.detectHealthIssues()
+      issues: this.detectHealthIssues(),
     };
   }
 
   /**
    * Enable or disable the methodology system
    */
-  async setMethodologySystemEnabled(enabled: boolean, reason: string = "Manual toggle"): Promise<void> {
+  async setMethodologySystemEnabled(
+    enabled: boolean,
+    reason: string = 'Manual toggle'
+  ): Promise<void> {
     const previousState = this.currentState.methodologySystemEnabled;
 
     this.currentState.methodologySystemEnabled = enabled;
@@ -264,7 +279,13 @@ export class MethodologyTracker extends EventEmitter {
   /**
    * Get switch history
    */
-  getSwitchHistory(): Array<{ from: string; to: string; timestamp: Date; reason: string; success: boolean }> {
+  getSwitchHistory(): Array<{
+    from: string;
+    to: string;
+    timestamp: Date;
+    reason: string;
+    success: boolean;
+  }> {
     return [...this.switchHistory];
   }
 
@@ -273,14 +294,14 @@ export class MethodologyTracker extends EventEmitter {
    */
   clearSwitchHistory(): void {
     this.switchHistory = [];
-    this.logger.debug("Switch history cleared");
+    this.logger.debug('Switch history cleared');
   }
 
   /**
    * Shutdown methodology tracker
    */
   async shutdown(): Promise<void> {
-    this.logger.info("Shutting down MethodologyTracker...");
+    this.logger.info('Shutting down MethodologyTracker...');
 
     // Stop health monitoring
     if (this.healthCheckTimer) {
@@ -293,7 +314,11 @@ export class MethodologyTracker extends EventEmitter {
       await this.persistState();
     }
 
-    this.logger.info("MethodologyTracker shutdown complete");
+    // Remove all event listeners to prevent memory leaks
+    this.removeAllListeners();
+    this.logger.debug('Event listeners removed during shutdown');
+
+    this.logger.info('MethodologyTracker shutdown complete');
   }
 
   /**
@@ -302,7 +327,7 @@ export class MethodologyTracker extends EventEmitter {
   private validateSwitchRequest(request: MethodologySwitchRequest): boolean {
     // Check if methodology system is enabled
     if (!this.currentState.methodologySystemEnabled) {
-      this.logger.warn("Methodology switch rejected - system disabled");
+      this.logger.warn('Methodology switch rejected - system disabled');
       return false;
     }
 
@@ -313,7 +338,7 @@ export class MethodologyTracker extends EventEmitter {
     }
 
     // Validate methodology exists (basic validation)
-    const validMethodologies = ["CAGEERF", "ReACT", "5W1H", "SCAMPER"];
+    const validMethodologies = ['CAGEERF', 'ReACT', '5W1H', 'SCAMPER'];
     if (!validMethodologies.includes(request.targetMethodology)) {
       this.logger.error(`Invalid methodology: ${request.targetMethodology}`);
       return false;
@@ -366,7 +391,7 @@ export class MethodologyTracker extends EventEmitter {
     this.currentState.switchingMetrics = {
       switchCount: this.switchingMetrics.totalSwitches,
       averageResponseTime: this.switchingMetrics.averageResponseTime,
-      errorCount: this.switchingMetrics.failedSwitches
+      errorCount: this.switchingMetrics.failedSwitches,
     };
   }
 
@@ -378,7 +403,9 @@ export class MethodologyTracker extends EventEmitter {
       this.performHealthCheck();
     }, this.config.healthCheckIntervalMs);
 
-    this.logger.debug(`Health monitoring started (interval: ${this.config.healthCheckIntervalMs}ms)`);
+    this.logger.debug(
+      `Health monitoring started (interval: ${this.config.healthCheckIntervalMs}ms)`
+    );
   }
 
   /**
@@ -389,7 +416,7 @@ export class MethodologyTracker extends EventEmitter {
     const health = this.getSystemHealth();
 
     // Update health status
-    this.currentState.isHealthy = health.status === "healthy";
+    this.currentState.isHealthy = health.status === 'healthy';
 
     // Emit health change event if status changed
     if (wasHealthy !== this.currentState.isHealthy) {
@@ -405,22 +432,27 @@ export class MethodologyTracker extends EventEmitter {
     const issues: string[] = [];
 
     // Check error rate
-    const errorRate = this.switchingMetrics.totalSwitches > 0
-      ? this.switchingMetrics.failedSwitches / this.switchingMetrics.totalSwitches
-      : 0;
+    const errorRate =
+      this.switchingMetrics.totalSwitches > 0
+        ? this.switchingMetrics.failedSwitches / this.switchingMetrics.totalSwitches
+        : 0;
 
-    if (errorRate > 0.1) { // More than 10% error rate
+    if (errorRate > 0.1) {
+      // More than 10% error rate
       issues.push(`High error rate: ${(errorRate * 100).toFixed(1)}%`);
     }
 
     // Check response time
-    if (this.switchingMetrics.averageResponseTime > 1000) { // More than 1 second
-      issues.push(`Slow switching: ${this.switchingMetrics.averageResponseTime.toFixed(0)}ms average`);
+    if (this.switchingMetrics.averageResponseTime > 1000) {
+      // More than 1 second
+      issues.push(
+        `Slow switching: ${this.switchingMetrics.averageResponseTime.toFixed(0)}ms average`
+      );
     }
 
     // Check if system is disabled
     if (!this.currentState.methodologySystemEnabled) {
-      issues.push("Methodology system is disabled");
+      issues.push('Methodology system is disabled');
     }
 
     return issues;
@@ -432,23 +464,19 @@ export class MethodologyTracker extends EventEmitter {
   private async persistState(): Promise<void> {
     try {
       const persistedState: PersistedMethodologyState = {
-        version: "1.0.0",
+        version: '1.0.0',
         methodologySystemEnabled: this.currentState.methodologySystemEnabled,
         activeMethodology: this.currentState.activeMethodology,
         lastSwitchedAt: this.currentState.switchedAt.toISOString(),
-        switchReason: this.currentState.switchReason
+        switchReason: this.currentState.switchReason,
       };
 
       await fs.mkdir(path.dirname(this.config.stateFilePath), { recursive: true });
-      await fs.writeFile(
-        this.config.stateFilePath,
-        JSON.stringify(persistedState, null, 2)
-      );
+      await fs.writeFile(this.config.stateFilePath, JSON.stringify(persistedState, null, 2));
       this.emit('state-persisted', persistedState);
       this.logger.debug(`State persisted to ${this.config.stateFilePath}`);
-
     } catch (error) {
-      this.logger.error("Failed to persist methodology state:", error);
+      this.logger.error('Failed to persist methodology state:', error);
     }
   }
 
@@ -459,7 +487,7 @@ export class MethodologyTracker extends EventEmitter {
     const persistedState = await this.readPersistedState();
 
     if (!persistedState) {
-      this.logger.debug("Using default methodology state");
+      this.logger.debug('Using default methodology state');
       return;
     }
 
@@ -468,7 +496,7 @@ export class MethodologyTracker extends EventEmitter {
       activeMethodology: persistedState.activeMethodology,
       methodologySystemEnabled: persistedState.methodologySystemEnabled,
       switchedAt: new Date(persistedState.lastSwitchedAt),
-      switchReason: persistedState.switchReason
+      switchReason: persistedState.switchReason,
     };
 
     this.logger.info(
@@ -506,7 +534,10 @@ export class MethodologyTracker extends EventEmitter {
     }
 
     // Restart health monitoring if interval changed
-    if (oldConfig.healthCheckIntervalMs !== this.config.healthCheckIntervalMs && this.config.enableHealthMonitoring) {
+    if (
+      oldConfig.healthCheckIntervalMs !== this.config.healthCheckIntervalMs &&
+      this.config.enableHealthMonitoring
+    ) {
       if (this.healthCheckTimer) {
         clearInterval(this.healthCheckTimer);
       }

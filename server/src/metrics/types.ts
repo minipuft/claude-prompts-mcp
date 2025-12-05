@@ -1,3 +1,4 @@
+// @lifecycle canonical - Type definitions for metrics subsystem.
 /**
  * Analytics Service Types
  *
@@ -11,7 +12,7 @@
  */
 export interface ExecutionData {
   executionId: string;
-  executionType: "prompt" | "template" | "chain";
+  executionType: 'single' | 'chain';
   startTime: number;
   endTime: number;
   executionTime: number;
@@ -49,6 +50,20 @@ export interface GateValidationData {
   }>;
 }
 
+export type GateValidationResult = 'passed' | 'failed' | 'skipped';
+
+export interface GateUsageMetric {
+  gateId: string;
+  gateType: 'canonical' | 'temporary';
+  sessionId?: string;
+  instructionCount: number;
+  instructionCharacters?: number;
+  temporary: boolean;
+  validationResult?: GateValidationResult;
+  metadata?: Record<string, unknown>;
+  timestamp?: number;
+}
+
 /**
  * Framework switching data for methodology analytics
  */
@@ -71,8 +86,7 @@ export interface ExecutionStats {
   failedExecutions: number;
   averageExecutionTime: number;
   executionsByMode: {
-    prompt: number;
-    template: number;
+    single: number;
     chain: number;
   };
   executionsByTool: {
@@ -105,7 +119,7 @@ export interface SystemMetrics {
  */
 export interface PerformanceTrend {
   timestamp: number;
-  metric: "execution_time" | "memory_usage" | "success_rate" | "response_time";
+  metric: 'execution_time' | 'memory_usage' | 'success_rate' | 'response_time';
   value: number;
   context?: string;
 }
@@ -123,11 +137,14 @@ export interface FrameworkUsage {
     toFramework: string;
     reason?: string;
   }>;
-  frameworkPerformance: Record<string, {
-    averageExecutionTime: number;
-    successRate: number;
-    usageCount: number;
-  }>;
+  frameworkPerformance: Record<
+    string,
+    {
+      averageExecutionTime: number;
+      successRate: number;
+      usageCount: number;
+    }
+  >;
 }
 
 /**
@@ -171,4 +188,65 @@ export interface AnalyticsSummary {
     gateAdoptionRate: number;
   };
   recommendations: string[];
+}
+
+/**
+ * Pipeline stage categories tracked during execution.
+ */
+export type PipelineStageType =
+  | 'parsing'
+  | 'inline_gate'
+  | 'operator_validation'
+  | 'planning'
+  | 'gate_enhancement'
+  | 'framework'
+  | 'session'
+  | 'response_capture'
+  | 'execution'
+  | 'post_processing'
+  | 'other';
+
+export type PipelineStageStatus = 'success' | 'error' | 'skipped';
+
+export interface PipelineStageMetadata {
+  heapUsed?: number;
+  rss?: number;
+  heapUsedDelta?: number;
+  rssDelta?: number;
+  responseReady?: boolean;
+  [key: string]: unknown;
+}
+
+export interface PipelineStageMetric {
+  stageId: string;
+  stageName: string;
+  stageType: PipelineStageType;
+  toolName: string;
+  sessionId?: string;
+  startTime: number;
+  endTime: number;
+  durationMs: number;
+  status: PipelineStageStatus;
+  errorMessage?: string;
+  metadata?: PipelineStageMetadata;
+}
+
+export type MetricStatus = 'success' | 'error';
+
+export type CommandExecutionMode = 'single' | 'chain' | 'auto' | 'prompt' | 'template';
+
+export interface CommandExecutionMetric {
+  commandId: string;
+  commandName: string;
+  toolName: string;
+  executionMode: CommandExecutionMode;
+  sessionId?: string;
+  startTime: number;
+  endTime: number;
+  durationMs: number;
+  status: MetricStatus;
+  appliedGates: string[];
+  temporaryGatesApplied: number;
+  errorMessage?: string;
+  metadata?: Record<string, unknown>;
 }

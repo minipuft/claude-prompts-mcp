@@ -1,16 +1,17 @@
+// @lifecycle canonical - Manages prompt category metadata, validation, and analytics.
 /**
  * Category Manager Module
  * Handles category management logic with validation, organization, and relationship tracking
  */
 
-import { Logger } from "../logging/index.js";
-import { Category, PromptData } from "../types/index.js";
+import { Logger } from '../logging/index.js';
+import { Category, PromptData } from '../types/index.js';
 
 // Import category interfaces from prompts/types.ts instead of redefining
 import type {
   CategoryValidationResult,
   CategoryStatistics,
-  CategoryPromptRelationship
+  CategoryPromptRelationship,
 } from './types.js';
 
 /**
@@ -30,11 +31,11 @@ export class CategoryManager {
    */
   async loadCategories(categories: Category[]): Promise<CategoryValidationResult> {
     this.logger.debug(`CategoryManager: Loading ${categories.length} categories`);
-    
+
     const result: CategoryValidationResult = {
       isValid: true,
       issues: [],
-      warnings: []
+      warnings: [],
     };
 
     // Validate categories
@@ -44,7 +45,7 @@ export class CategoryManager {
 
     for (let i = 0; i < categories.length; i++) {
       const category = categories[i];
-      
+
       // Validate required fields
       if (!category.id || typeof category.id !== 'string') {
         result.issues.push(`Category ${i + 1}: Missing or invalid 'id' field`);
@@ -80,7 +81,8 @@ export class CategoryManager {
       const normalizedCategory: Category = {
         id: category.id.trim(),
         name: category.name.trim(),
-        description: (category.description || '').trim()
+        description: (category.description || '').trim(),
+        registerWithMcp: category.registerWithMcp,
       };
 
       validatedCategories.push(normalizedCategory);
@@ -91,11 +93,11 @@ export class CategoryManager {
     this.logger.info(`CategoryManager: Loaded ${this.categories.length} valid categories`);
     if (result.issues.length > 0) {
       this.logger.error(`CategoryManager: ${result.issues.length} validation issues found`);
-      result.issues.forEach(issue => this.logger.error(`  - ${issue}`));
+      result.issues.forEach((issue) => this.logger.error(`  - ${issue}`));
     }
     if (result.warnings.length > 0) {
       this.logger.warn(`CategoryManager: ${result.warnings.length} warnings found`);
-      result.warnings.forEach(warning => this.logger.warn(`  - ${warning}`));
+      result.warnings.forEach((warning) => this.logger.warn(`  - ${warning}`));
     }
 
     return result;
@@ -112,14 +114,14 @@ export class CategoryManager {
    * Get category by ID
    */
   getCategoryById(id: string): Category | undefined {
-    return this.categories.find(cat => cat.id === id);
+    return this.categories.find((cat) => cat.id === id);
   }
 
   /**
    * Get category by name
    */
   getCategoryByName(name: string): Category | undefined {
-    return this.categories.find(cat => cat.name === name);
+    return this.categories.find((cat) => cat.name === name);
   }
 
   /**
@@ -129,10 +131,10 @@ export class CategoryManager {
     const result: CategoryValidationResult = {
       isValid: true,
       issues: [],
-      warnings: []
+      warnings: [],
     };
 
-    const categoryIds = new Set(this.categories.map(cat => cat.id));
+    const categoryIds = new Set(this.categories.map((cat) => cat.id));
     const usedCategories = new Set<string>();
 
     for (const prompt of prompts) {
@@ -143,7 +145,9 @@ export class CategoryManager {
       }
 
       if (!categoryIds.has(prompt.category)) {
-        result.issues.push(`Prompt '${prompt.id}' references non-existent category: ${prompt.category}`);
+        result.issues.push(
+          `Prompt '${prompt.id}' references non-existent category: ${prompt.category}`
+        );
         result.isValid = false;
         continue;
       }
@@ -154,7 +158,9 @@ export class CategoryManager {
     // Check for unused categories
     for (const category of this.categories) {
       if (!usedCategories.has(category.id)) {
-        result.warnings.push(`Category '${category.id}' (${category.name}) has no prompts assigned`);
+        result.warnings.push(
+          `Category '${category.id}' (${category.name}) has no prompts assigned`
+        );
       }
     }
 
@@ -165,7 +171,7 @@ export class CategoryManager {
    * Get prompts by category
    */
   getPromptsByCategory(prompts: PromptData[], categoryId: string): PromptData[] {
-    return prompts.filter(prompt => prompt.category === categoryId);
+    return prompts.filter((prompt) => prompt.category === categoryId);
   }
 
   /**
@@ -178,27 +184,26 @@ export class CategoryManager {
     for (const category of this.categories) {
       const categoryPrompts = this.getPromptsByCategory(prompts, category.id);
       const promptCount = categoryPrompts.length;
-      
+
       categoryBreakdown.push({
         category,
-        promptCount
+        promptCount,
       });
-      
+
       totalPrompts += promptCount;
     }
 
-    const categoriesWithPrompts = categoryBreakdown.filter(item => item.promptCount > 0).length;
+    const categoriesWithPrompts = categoryBreakdown.filter((item) => item.promptCount > 0).length;
     const emptyCategoriesCount = this.categories.length - categoriesWithPrompts;
-    const averagePromptsPerCategory = this.categories.length > 0 
-      ? totalPrompts / this.categories.length 
-      : 0;
+    const averagePromptsPerCategory =
+      this.categories.length > 0 ? totalPrompts / this.categories.length : 0;
 
     return {
       totalCategories: this.categories.length,
       categoriesWithPrompts,
       emptyCategoriesCount,
       averagePromptsPerCategory,
-      categoryBreakdown
+      categoryBreakdown,
     };
   }
 
@@ -206,16 +211,16 @@ export class CategoryManager {
    * Get category-prompt relationships
    */
   getCategoryPromptRelationships(prompts: PromptData[]): CategoryPromptRelationship[] {
-    return this.categories.map(category => {
+    return this.categories.map((category) => {
       const categoryPrompts = this.getPromptsByCategory(prompts, category.id);
 
       return {
         categoryId: category.id,
         categoryName: category.name,
-        promptIds: categoryPrompts.map(p => p.id),
+        promptIds: categoryPrompts.map((p) => p.id),
         promptCount: categoryPrompts.length,
-        hasChains: categoryPrompts.some(p => p.file && p.file.includes('chain')),
-        hasTemplates: categoryPrompts.some(p => p.file && p.file.includes('template'))
+        hasChains: categoryPrompts.some((p) => p.file && p.file.includes('chain')),
+        hasTemplates: categoryPrompts.some((p) => p.file && p.file.includes('template')),
       };
     });
   }
@@ -225,7 +230,7 @@ export class CategoryManager {
    */
   organizePromptsByCategory(prompts: PromptData[]): Map<Category, PromptData[]> {
     const organized = new Map<Category, PromptData[]>();
-    
+
     for (const category of this.categories) {
       const categoryPrompts = this.getPromptsByCategory(prompts, category.id);
       organized.set(category, categoryPrompts);
@@ -246,8 +251,8 @@ export class CategoryManager {
     const issues: string[] = [];
     const orphanedPrompts: PromptData[] = [];
     const emptyCategories: Category[] = [];
-    
-    const categoryIds = new Set(this.categories.map(cat => cat.id));
+
+    const categoryIds = new Set(this.categories.map((cat) => cat.id));
 
     // Find orphaned prompts (prompts with invalid category references)
     for (const prompt of prompts) {
@@ -271,7 +276,7 @@ export class CategoryManager {
       consistent,
       issues,
       orphanedPrompts,
-      emptyCategories
+      emptyCategories,
     };
   }
 
@@ -283,14 +288,14 @@ export class CategoryManager {
     categoryIds: string[];
     categoryNames: string[];
     statistics?: CategoryStatistics;
-    consistency?: ReturnType<CategoryManager["checkConsistency"]>;
+    consistency?: ReturnType<CategoryManager['checkConsistency']>;
   } {
     const debugInfo = {
       categoriesLoaded: this.categories.length,
-      categoryIds: this.categories.map(cat => cat.id),
-      categoryNames: this.categories.map(cat => cat.name),
+      categoryIds: this.categories.map((cat) => cat.id),
+      categoryNames: this.categories.map((cat) => cat.name),
       statistics: prompts ? this.getCategoryStatistics(prompts) : undefined,
-      consistency: prompts ? this.checkConsistency(prompts) : undefined
+      consistency: prompts ? this.checkConsistency(prompts) : undefined,
     };
 
     return debugInfo;

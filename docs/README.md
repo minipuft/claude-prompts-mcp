@@ -1,30 +1,33 @@
-# Claude Prompts MCP - Documentation
+# Documentation Index
 
-## 🚀 Getting Started
+This is the map for the Claude Prompts MCP server. All canonical guides live here.
 
-- [Installation Guide](installation-guide.md) - Setup and configuration instructions
-- [Quick Start: Execution Modes](prompt-vs-template-guide.md) - Choose the right execution mode for your needs
-- [Troubleshooting](troubleshooting.md) - Common issues and solutions
+## Learning Path
 
-## 📋 Core Concepts
+If you are new, follow this sequence:
 
-- [System Architecture](architecture.md) - Overall system design and components
-- [Three-Tier Execution System](execution-architecture-guide.md) - **Comprehensive guide** to prompt → template → chain execution model
-- [Chain System Analysis](chain-system-analysis.md) - Current chain capabilities, limitations, and future roadmap
+1.  **[Operations Guide](operations-guide.md)**: Install Node, build the server, and connect Claude Desktop.
+2.  **[MCP Tooling Guide](mcp-tooling-guide.md)**: Learn the commands (`prompt_engine`, `prompt_manager`, `system_control`).
+3.  **[Authoring Guide](prompt-authoring-guide.md)**: Write your first hot-reloadable prompt template.
+4.  **[Chain Workflows](chain-workflows.md)**: Connect prompts into multi-step workflows.
+5.  **[Architecture](architecture.md)**: Deep dive into the runtime, transports, and pipeline.
 
-## 🛠️ Development Guides
+## Reference Manual
 
-- [Prompt Format Guide](prompt-format-guide.md) - How to create and format custom prompt templates
-- [Template Development Guide](template-development-guide.md) - Creating framework-aware templates with methodology integration
-- [Prompt Management](prompt-management.md) - Managing prompts and categories in the distributed configuration system
-- [Enhanced Gate System](enhanced-gate-system.md) - Quality validation system for templates and chains
+| Doc                                          | Purpose                                                   |
+| -------------------------------------------- | --------------------------------------------------------- |
+| [Architecture Overview](architecture.md)     | Runtime lifecycle, execution pipeline, and transport map. |
+| [Operations Guide](operations-guide.md)      | Installation, troubleshooting, and supervisor mode.       |
+| [MCP Tooling Guide](mcp-tooling-guide.md)    | API reference for all MCP tools.                          |
+| [Authoring Guide](prompt-authoring-guide.md) | Markdown schemas, Nunjucks templates, and arguments.      |
+| [Chain Workflows](chain-workflows.md)        | Defining steps, branching logic, and state.               |
+| [Gate System](enhanced-gate-system.md)       | Configuring quality gates and validation.                 |
+| [Release Notes](release-notes.md)            | Changelog and migration notes.                            |
+| [Contributing](../CONTRIBUTING.md)           | How to build, test, and submit PRs.                       |
 
-## 📚 Technical Reference
+## Meta
 
-- [MCP Tools Reference](mcp-tools-reference.md) - Complete reference for the server's MCP tools
-- [Version History](version-history.md) - Complete version history and release notes
+- **[Plans](../plans/)**: Implementation plans and roadmap for LLM context.
+- **[TODO](TODO.md)**: Official task list.
 
-## 🤝 Contributing
-
-- [Contributing Guide](contributing.md) - Development and contribution guidelines
-- [TODO](TODO.md) - Current development tasks and roadmap
+**Note**: If you find a discrepancy between these docs and the code in `server/src/`, the code is the source of truth. Please submit a PR to fix the doc.

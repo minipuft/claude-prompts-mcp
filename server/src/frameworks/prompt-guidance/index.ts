@@ -1,41 +1,38 @@
+// @lifecycle canonical - Barrel exports for the prompt guidance subsystem.
 /**
- * Prompt Guidance System Index - Phase 3 Implementation
+ * Prompt Guidance System Index
  *
  * Central exports for the prompt guidance system that provides intelligent
  * methodology integration for MCP prompts.
  *
- * The prompt guidance system consists of three core components:
- * - SystemPromptInjector: Injects methodology guidance into system prompts
+ * The prompt guidance system consists of:
+ * - PromptGuidanceService: Unified service orchestrating all guidance components
  * - MethodologyTracker: Tracks active methodology state and handles switching
  * - TemplateEnhancer: Enhances user templates with methodology-specific guidance
+ *
+ * Note: SystemPromptInjector was removed - its functionality is now inlined
+ * in PromptGuidanceService.injectMethodologyGuidance()
  */
 
 // Core prompt guidance components
 export {
-  SystemPromptInjector,
-  createSystemPromptInjector,
-  type SystemPromptInjectorConfig
-} from './system-prompt-injector.js';
-
-export {
   MethodologyTracker,
   createMethodologyTracker,
   type MethodologyTrackerConfig,
-  type MethodologyTrackerEvents
+  type MethodologyTrackerEvents,
 } from './methodology-tracker.js';
 
 export {
   TemplateEnhancer,
   createTemplateEnhancer,
   type TemplateEnhancerConfig,
-  type TemplateEnhancementContext
 } from './template-enhancer.js';
 
 // Unified prompt guidance service
 export {
   PromptGuidanceService,
   createPromptGuidanceService,
-  type PromptGuidanceServiceConfig
+  type PromptGuidanceServiceConfig,
 } from './service.js';
 
 // Service-specific types (to avoid conflicts with types/index.js)
@@ -43,13 +40,12 @@ export type { PromptGuidanceResult as ServicePromptGuidanceResult } from './serv
 
 // Re-export relevant types from the types system
 export type {
-  SystemPromptInjectionResult,
-  TemplateEnhancementResult,
+  MethodologyHealth,
   MethodologyState,
   MethodologySwitchRequest,
-  MethodologyHealth,
   PersistedMethodologyState,
-  TemplateProcessingGuidance,
   PromptGuidanceConfig,
-  PromptGuidanceResult
+  PromptGuidanceResult,
+  SystemPromptInjectionResult,
+  TemplateProcessingGuidance,
 } from '../types/index.js';

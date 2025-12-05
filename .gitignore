@@ -1,6 +1,5 @@
 # Dependencies and Package Management
 server/node_modules/
-server/package-lock.json
 .npm/
 .yarn/
 .pnp.*
@@ -8,6 +7,7 @@ yarn.lock
 
 # Build Output and TypeScript
 server/dist/
+server/dist/methodologies/
 build/
 out/
 *.tsbuildinfo
@@ -59,6 +59,7 @@ pids/
 
 # MCP Server Specific
 admin-ui/
+server/graphs/
 
 # Runtime State Files
 # server/config/framework-state.json
@@ -81,3 +82,21 @@ CLAUDE.md
 AGENTS.md
 .claude/
 server/.claude/
+.clinerules/
+
+# Temporary test files
+test_*.js
+test_*.ts
+
+# Backup files
+*.backup
+*.bak
+
+# Temporary directories
+opencodetmp/
+
+# Future planning
+plans/future/
+
+# Test prompts
+server/prompts/general/test_*.md

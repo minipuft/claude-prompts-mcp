@@ -1,3 +1,4 @@
+// @lifecycle canonical - Shared interfaces and types for gate definitions.
 /**
  * Gate System - Shared Definitions & Interfaces
  *
@@ -17,7 +18,7 @@ export interface GateDefinition {
   id: string;
   name: string;
   guidance: string;
-  gate_type?: GateType;  // Framework gates bypass category checks
+  gate_type?: GateType; // Framework gates bypass category checks
   activation: {
     prompt_categories?: string[];
     framework_context?: string[];
@@ -32,6 +33,7 @@ export interface GateContext {
   framework?: string;
   category?: string;
   promptId?: string;
+  explicitGateIds?: readonly string[];
 }
 
 /**
@@ -41,7 +43,7 @@ export interface GateSelectionCriteria {
   framework?: string;
   category?: string;
   promptId?: string;
-  executionMode?: 'prompt' | 'template' | 'chain';
+  executionMode?: 'single' | 'prompt' | 'template' | 'chain';
   complexityLevel?: 'low' | 'medium' | 'high';
 }
 
@@ -54,28 +56,4 @@ export interface GateSelectionResult {
   confidence: number;
   estimatedExecutionTime: number;
   fallbackGates: string[];
-}
-
-/**
- * Performance metrics for individual gates
- */
-export interface GatePerformanceMetrics {
-  gateId: string;
-  avgExecutionTime: number;
-  successRate: number;
-  retryRate: number;
-  lastUsed: Date;
-  usageCount: number;
-}
-
-/**
- * Overall gate system analytics
- */
-export interface GateSystemAnalytics {
-  totalGates: number;
-  avgExecutionTime: number;
-  overallSuccessRate: number;
-  topPerformingGates: string[];
-  underperformingGates: string[];
-  recommendations: string[];
 }

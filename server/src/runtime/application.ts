@@ -1,3 +1,4 @@
+// @lifecycle canonical - Bootstraps runtime modules and orchestrates startup lifecycle.
 /**
  * Application Runtime Management
  * Manages application lifecycle, module coordination, and system health
@@ -6,89 +7,93 @@
  * focused on runtime concerns while delegating execution to the execution engine.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { promises as fs } from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // Import all module managers
-import { ApiManager, createApiManager } from "../api/index.js";
-import { ConfigManager } from "../config/index.js";
-import {
-  createFrameworkStateManager,
-  FrameworkStateManager,
-} from "../frameworks/framework-state-manager.js";
-import {
-  createLogger,
-  EnhancedLoggingConfig,
-  Logger,
-} from "../logging/index.js";
-import { createMcpToolsManager, McpToolsManager } from "../mcp-tools/index.js";
-import { createToolDescriptionManager, ToolDescriptionManager } from "../mcp-tools/tool-description-manager.js";
-import { PromptManager } from "../prompts/index.js";
-import {
-  ServerManager,
-  startMcpServer,
-  createTransportManager,
-  TransportManager,
-} from "../server/index.js";
-import { TextReferenceManager } from "../text-references/index.js";
+import type { ApiManager } from '../api/index.js';
+import { ConfigManager } from '../config/index.js';
+import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
+import { Logger } from '../logging/index.js';
+import type { McpToolsManager } from '../mcp-tools/index.js';
+import type { ToolDescriptionManager } from '../mcp-tools/tool-description-manager.js';
+import { PromptAssetManager } from '../prompts/index.js';
+import { reloadPromptData } from '../prompts/prompt-refresh-service.js';
+import type { ServerManager, TransportManager } from '../server/index.js';
+import { ConversationManager, createConversationManager } from '../text-references/conversation.js';
+import { TextReferenceManager } from '../text-references/index.js';
+import { createRuntimeFoundation } from './context.js';
+import { loadPromptData } from './data-loader.js';
+import { buildHealthReport } from './health.js';
+import { buildMethodologyAuxiliaryReloadConfig } from './methodology-hot-reload.js';
+import { initializeModules } from './module-initializer.js';
+import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
+import { startServerWithManagers } from './startup-server.js';
 
 // Import execution modules
-import {
-  ConversationManager,
-  createConversationManager,
-} from "../text-references/conversation.js";
 // REMOVED: ExecutionCoordinator and GateEvaluator imports - modular chain and gate systems removed
 
-// Phase 1: Framework capabilities now integrated into base components
+//  Framework capabilities now integrated into base components
 // No separate framework observers needed - functionality moved to enhanced FileObserver and HotReloadManager
 
 // Import startup management
-import { ServerRootDetector } from "./startup.js";
 
 // Import types
-import { Category, ConvertedPrompt, PromptData } from "../types/index.js";
+import { Category, ConvertedPrompt, FrameworksConfig, PromptData } from '../types/index.js';
 // Import chain utilities
-import { isChainPrompt } from "../utils/chainUtils.js";
+import { ServiceManager } from '../utils/service-manager.js';
+
+import type { HotReloadEvent } from '../prompts/hot-reload-manager.js';
 
 /**
  * Application Runtime class
  * Coordinates all modules and manages application lifecycle
  */
 export class Application {
-  private logger: Logger;
-  private configManager: ConfigManager;
-  private textReferenceManager: TextReferenceManager;
-  private conversationManager: ConversationManager;
-  private promptManager: PromptManager;
+  private logger!: Logger;
+  private configManager!: ConfigManager;
+  private textReferenceManager!: TextReferenceManager;
+  private conversationManager!: ConversationManager;
+  private promptManager!: PromptAssetManager;
   // REMOVED: executionCoordinator - modular chain system removed
   // REMOVED: gateEvaluator - gate evaluation system removed
-  private mcpToolsManager: McpToolsManager;
-  private toolDescriptionManager: ToolDescriptionManager;
-  private frameworkStateManager: FrameworkStateManager;
-  private transportManager: TransportManager;
+  private mcpToolsManager!: McpToolsManager;
+  private toolDescriptionManager!: ToolDescriptionManager;
+  private frameworkStateManager!: FrameworkStateManager;
+  private transportManager!: TransportManager;
   private apiManager?: ApiManager;
   private serverManager?: ServerManager;
-  // Phase 1: Framework capabilities integrated into base components
+  //  Framework capabilities integrated into base components
   // No separate framework observers needed
 
   // MCP Server instance
-  private mcpServer: McpServer;
+  private mcpServer!: McpServer;
 
   // Application data
   private _promptsData: PromptData[] = [];
   private _categories: Category[] = [];
   private _convertedPrompts: ConvertedPrompt[] = [];
+  private promptsFilePath?: string;
+  private hotReloadInitialized = false;
+  private promptReloadInProgress?: Promise<void>;
+  private promptHotReloadHandler = (event: HotReloadEvent) => this.handlePromptHotReload(event);
 
   // Performance monitoring
   private memoryOptimizationInterval?: NodeJS.Timeout;
 
   // Server root detector
-  private serverRootDetector: ServerRootDetector;
 
   // Debug output control
   private debugOutput: boolean;
+  private runtimeOptions: RuntimeLaunchOptions;
+  private serviceManager: ServiceManager;
+  private serverRoot?: string;
+  private transportType?: string;
+
+  private frameworksConfigListener?: (
+    newConfig: FrameworksConfig,
+    previousConfig: FrameworksConfig
+  ) => void;
+  private pendingFrameworkSystemState?: boolean;
 
   /**
    * Conditional debug logging to prevent output flood during tests
@@ -99,44 +104,16 @@ export class Application {
     }
   }
 
-  constructor(logger?: Logger) {
+  constructor(logger?: Logger, runtimeOptions?: RuntimeLaunchOptions) {
     // Will be initialized in startup() if not provided
-    this.logger = logger || (null as any);
-    this.configManager = null as any;
-    this.textReferenceManager = null as any;
-    this.conversationManager = null as any;
-    this.promptManager = null as any;
-    // REMOVED: executionCoordinator - modular chain system removed
-    // REMOVED: gateEvaluator - gate evaluation system removed
-    this.mcpToolsManager = null as any;
-    this.toolDescriptionManager = null as any;
-    this.frameworkStateManager = null as any;
-    this.transportManager = null as any;
-    this.mcpServer = null as any;
-    // Phase 1: Framework capabilities integrated into base components
-    // Phase 3 consensus observer removed
-    this.serverRootDetector = new ServerRootDetector();
+    if (logger) {
+      this.logger = logger;
+    }
+    this.runtimeOptions = runtimeOptions ?? resolveRuntimeLaunchOptions();
+    this.serviceManager = new ServiceManager();
 
     // Initialize debug output control - suppress in test environments
-    this.debugOutput = !this.isTestEnvironment();
-  }
-
-  /**
-   * Detect if running in test environment to suppress debug output
-   */
-  private isTestEnvironment(): boolean {
-    return (
-      process.env.NODE_ENV === 'test' ||
-      process.argv.includes('--suppress-debug') ||
-      process.argv.includes('--test-mode') ||
-      // Detect GitHub Actions CI environment
-      process.env.GITHUB_ACTIONS === 'true' ||
-      process.env.CI === 'true' ||
-      // Detect common test runner patterns
-      process.argv.some(arg => arg.includes('test') || arg.includes('jest') || arg.includes('mocha')) ||
-      // Detect if called from integration test scripts
-      process.argv[1]?.includes('tests/scripts/')
-    );
+    this.debugOutput = !this.runtimeOptions.testEnvironment;
   }
 
   /**
@@ -144,38 +121,33 @@ export class Application {
    */
   async startup(): Promise<void> {
     try {
-      // Phase 1: Core Foundation
-      this.debugLog("Starting Phase 1 - Core Foundation...");
+      //  Core Foundation
+      this.debugLog('Starting  - Core Foundation...');
       await this.initializeFoundation();
-      this.debugLog("Phase 1 completed successfully");
+      this.debugLog(' completed successfully');
 
-      // Phase 2: Data Loading and Processing
-      this.debugLog("Starting Phase 2 - Data Loading and Processing...");
+      // Data Loading and Processing
+      this.debugLog('Starting  - Data Loading and Processing...');
       await this.loadAndProcessData();
-      this.debugLog("Phase 2 completed successfully");
+      this.debugLog(' completed successfully');
 
-      // Phase 3: Module Initialization
-      this.debugLog("Starting Phase 3 - Module Initialization...");
+      // Module Initialization
+      this.debugLog('Starting - Module Initialization...');
       await this.initializeModulesPrivate();
-      this.debugLog("Phase 3 completed successfully");
+      this.debugLog('completed successfully');
 
-      // Phase 4: Server Setup and Startup
-      this.debugLog("Starting Phase 4 - Server Setup and Startup...");
-      // Check if this is a startup test mode
-      const args = process.argv.slice(2);
-      const isStartupTest = args.includes("--startup-test");
-      await this.startServer(isStartupTest);
-      this.debugLog("Phase 4 completed successfully");
-      console.error(
-        "DEBUG: All startup phases completed, server should be running..."
-      );
+      // Server Setup and Startup
+      this.debugLog('Starting - Server Setup and Startup...');
+      await this.startServer();
+      this.debugLog('completed successfully');
+      console.error('DEBUG: All startup phases completed, server should be running...');
 
-      this.logger.info("Application startup completed successfully");
+      this.logger.info('Application startup completed successfully');
     } catch (error) {
       if (this.logger) {
-        this.logger.error("Error during application startup:", error);
+        this.logger.error('Error during application startup:', error);
       } else {
-        console.error("Error during application startup:", error);
+        console.error('Error during application startup:', error);
       }
       throw error;
     }
@@ -215,557 +187,201 @@ export class Application {
   }
 
   /**
-   * Phase 1: Initialize foundation (configuration, logging, basic services)
+   *  Initialize foundation (configuration, logging, basic services)
    */
   private async initializeFoundation(): Promise<void> {
-    // Determine server root directory robustly
-    const serverRoot = await this.serverRootDetector.determineServerRoot();
-    this.debugLog("Server root detected:", serverRoot);
+    const foundation = await createRuntimeFoundation(this.runtimeOptions, {
+      logger: this.logger,
+      configManager: this.configManager,
+      serviceManager: this.serviceManager,
+    });
 
-    // Initialize configuration manager using the detected server root
-    this.debugLog("About to call path.join with serverRoot:", serverRoot);
-    const CONFIG_FILE = path.join(serverRoot, "config.json");
-    this.debugLog("Config file path:", CONFIG_FILE);
-    this.debugLog("About to create ConfigManager with CONFIG_FILE:", CONFIG_FILE);
-    try {
-      this.configManager = new ConfigManager(CONFIG_FILE);
-      this.debugLog("ConfigManager created successfully");
-    } catch (error) {
-      this.debugLog("ConfigManager creation failed:", error);
-      throw error;
-    }
-    this.debugLog("About to load config");
-    try {
-      await this.configManager.loadConfig();
-      this.debugLog("Config loaded successfully");
-    } catch (error) {
-      this.debugLog("Config loading failed:", error);
-      throw error;
-    }
+    this.runtimeOptions = foundation.runtimeOptions;
+    this.logger = foundation.logger;
+    this.configManager = foundation.configManager;
+    this.serviceManager = foundation.serviceManager;
+    this.serverRoot = foundation.serverRoot;
+    this.transportType = foundation.transport;
 
-    // Determine transport from command line arguments
-    const args = process.argv.slice(2);
-    this.debugLog("Args:", args);
-    const transport = TransportManager.determineTransport(
-      args,
-      this.configManager
-    );
-    this.debugLog("Transport determined:", transport);
+    const transport = foundation.transport;
 
     // Check verbosity flags for conditional logging
-    const isVerbose =
-      args.includes("--verbose") || args.includes("--debug-startup");
-    const isQuiet = args.includes("--quiet");
-    this.debugLog("Verbose:", isVerbose, "Quiet:", isQuiet);
+    const isVerbose = this.runtimeOptions.verbose;
+    const isQuiet = this.runtimeOptions.quiet;
 
-    // Initialize enhanced logger with config-based settings
-    this.debugLog("About to create enhanced logger");
-    const loggingConfig = this.configManager.getLoggingConfig();
-    const logDirectory = path.isAbsolute(loggingConfig.directory)
-      ? loggingConfig.directory
-      : path.resolve(serverRoot, loggingConfig.directory);
-    const logFile = path.join(logDirectory, "mcp-server.log");
-
-    // Ensure log directory exists
-    try {
-      await fs.mkdir(logDirectory, { recursive: true });
-      console.error(`DEBUG: Log directory ensured: ${logDirectory}`);
-    } catch (error) {
-      console.error(
-        `DEBUG: Failed to create log directory ${logDirectory}:`,
-        error
-      );
-    }
-
-    const enhancedLoggerConfig: EnhancedLoggingConfig = {
-      logFile,
-      transport,
-      enableDebug: isVerbose,
-      configuredLevel: loggingConfig.level,
-    };
-
-    this.logger = createLogger(enhancedLoggerConfig);
-
-    // Initialize log file
-    await (this.logger as any).initLogFile();
-    this.debugLog("Enhanced logger created and initialized");
+    // Monitor framework feature toggles and log state changes
+    this.setupFrameworkConfigListener();
 
     // Only show startup messages if not in quiet mode
     if (!isQuiet) {
-      this.debugLog("About to call logger.info - Starting MCP...");
-      this.logger.info("Starting MCP Claude Prompts Server...");
-      this.debugLog("First logger.info completed");
+      this.debugLog('About to call logger.info - Starting MCP...');
+      this.logger.info('Starting MCP Claude Prompts Server...');
+      this.debugLog('First logger.info completed');
       this.logger.info(`Transport: ${transport}`);
-      this.debugLog("Second logger.info completed");
+      this.debugLog('Second logger.info completed');
     }
 
     // Verbose mode shows detailed configuration info
     if (isVerbose) {
-      this.debugLog("About to call verbose logger.info calls");
-      this.logger.info(`Server root: ${serverRoot}`);
-      this.logger.info(`Config file: ${CONFIG_FILE}`);
-      this.logger.debug(`Command line args: ${JSON.stringify(args)}`);
+      this.debugLog('About to call verbose logger.info calls');
+      this.logger.info(`Server root: ${this.serverRoot}`);
+      this.logger.info(`Config file: ${this.configManager.getConfigPath()}`);
+      this.logger.debug(`Command line args: ${JSON.stringify(this.runtimeOptions.args)}`);
       this.logger.debug(`Process working directory: ${process.cwd()}`);
-      this.debugLog("Verbose logger.info calls completed");
+      this.debugLog('Verbose logger.info calls completed');
     }
 
     // Initialize text reference manager
-    this.debugLog("About to create TextReferenceManager");
+    this.debugLog('About to create TextReferenceManager');
     this.textReferenceManager = new TextReferenceManager(this.logger);
-    this.debugLog("TextReferenceManager created");
+    this.debugLog('TextReferenceManager created');
 
     // Initialize conversation manager
-    this.debugLog("About to create ConversationManager");
+    this.debugLog('About to create ConversationManager');
     try {
       this.conversationManager = createConversationManager(this.logger);
-      this.debugLog("ConversationManager created successfully");
+      this.debugLog('ConversationManager created successfully');
     } catch (error) {
-      this.debugLog("ConversationManager creation failed:", error);
+      this.debugLog('ConversationManager creation failed:', error);
       throw error;
     }
-    this.debugLog("ConversationManager created");
+    this.debugLog('ConversationManager created');
 
     // Create MCP server
-    this.debugLog("About to get config");
+    this.debugLog('About to get config');
     const config = this.configManager.getConfig();
-    this.debugLog("Config retrieved successfully");
-    this.debugLog("About to create McpServer");
-    this.mcpServer = new McpServer({
-      name: config.server.name,
-      version: config.server.version,
-      capabilities: {
-        prompts: { listChanged: true },
-        tools: { listChanged: true },
+    this.debugLog('Config retrieved successfully');
+    this.debugLog('About to create McpServer');
+    this.mcpServer = new McpServer(
+      {
+        name: config.server.name,
+        version: config.server.version,
       },
-    });
-    this.debugLog("McpServer created successfully");
+      {
+        capabilities: {
+          prompts: { listChanged: true },
+          tools: { listChanged: true },
+        },
+      }
+    );
+    this.debugLog('McpServer created successfully');
 
     // Only log completion in verbose mode
     if (isVerbose) {
-      this.debugLog("About to log foundation initialized");
-      this.logger.info("Foundation modules initialized");
-      this.debugLog("Foundation initialized log completed");
+      this.debugLog('About to log foundation initialized');
+      this.logger.info('Foundation modules initialized');
+      this.debugLog('Foundation initialized log completed');
     }
-    this.debugLog("initializeFoundation completed successfully");
+    this.debugLog('initializeFoundation completed successfully');
   }
 
   /**
-   * Phase 2: Load and process prompt data
+   * Load and process prompt data
    */
   private async loadAndProcessData(): Promise<void> {
-    // Check verbosity flags for conditional logging
-    const args = process.argv.slice(2);
-    const isVerbose =
-      args.includes("--verbose") || args.includes("--debug-startup");
-    const isQuiet = args.includes("--quiet");
-
-    // Initialize prompt manager
-    this.promptManager = new PromptManager(
-      this.logger,
-      this.textReferenceManager,
-      this.configManager,
-      this.mcpServer
-    );
-
-    // Load and convert prompts with enhanced path resolution
-    const config = this.configManager.getConfig();
-
-    // ENHANCED: Allow direct prompts config path override via environment variable
-    // This bypasses server root detection issues entirely and is perfect for Claude Desktop
-    let PROMPTS_FILE: string;
-
-    if (process.env.MCP_PROMPTS_CONFIG_PATH) {
-      PROMPTS_FILE = process.env.MCP_PROMPTS_CONFIG_PATH;
-      if (isVerbose) {
-        this.logger.info(
-          "🎯 Using MCP_PROMPTS_CONFIG_PATH environment variable override"
-        );
-      }
-    } else {
-      // Fallback to ConfigManager's getPromptsFilePath() method
-      PROMPTS_FILE = this.configManager.getPromptsFilePath();
-      if (isVerbose) {
-        this.logger.info("📁 Using config-based prompts file path resolution");
-      }
-    }
-
-    // Enhanced logging for prompt loading pipeline (verbose mode only)
-    if (isVerbose) {
-      this.logger.info("=== PROMPT LOADING PIPELINE START ===");
-      this.logger.info(`Config prompts.file setting: "${config.prompts.file}"`);
-      if (process.env.MCP_PROMPTS_CONFIG_PATH) {
-        this.logger.info(
-          `🎯 MCP_PROMPTS_CONFIG_PATH override: "${process.env.MCP_PROMPTS_CONFIG_PATH}"`
-        );
-      } else {
-        this.logger.info(
-          `Config manager base directory: "${path.dirname(
-            this.configManager.getPromptsFilePath()
-          )}"`
-        );
-      }
-      this.logger.info(`✅ Final PROMPTS_FILE path: "${PROMPTS_FILE}"`);
-
-      // Add additional diagnostic information
-      this.logger.info("=== PATH RESOLUTION DIAGNOSTICS ===");
-      this.logger.info(`process.cwd(): ${process.cwd()}`);
-      this.logger.info(`process.argv[0]: ${process.argv[0]}`);
-      this.logger.info(`process.argv[1]: ${process.argv[1] || "undefined"}`);
-      this.logger.info(
-        `__filename equivalent: ${fileURLToPath(import.meta.url)}`
-      );
-      this.logger.info(
-        `Config file path: ${(this.configManager as any).configPath}`
-      );
-      this.logger.info(
-        `MCP_PROMPTS_CONFIG_PATH: ${
-          process.env.MCP_PROMPTS_CONFIG_PATH || "undefined"
-        }`
-      );
-      this.logger.info(
-        `MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || "undefined"}`
-      );
-      this.logger.info(
-        `PROMPTS_FILE is absolute: ${path.isAbsolute(PROMPTS_FILE)}`
-      );
-      this.logger.info(
-        `PROMPTS_FILE normalized: ${path.normalize(PROMPTS_FILE)}`
+    if (!this.promptManager) {
+      this.promptManager = new PromptAssetManager(
+        this.logger,
+        this.textReferenceManager,
+        this.conversationManager,
+        this.configManager,
+        this.mcpServer
       );
     }
 
-    // Validate that we're using absolute paths (critical for Claude Desktop)
-    if (!path.isAbsolute(PROMPTS_FILE)) {
-      if (isVerbose) {
-        this.logger.error(
-          `⚠️  CRITICAL: PROMPTS_FILE is not absolute: ${PROMPTS_FILE}`
-        );
-        this.logger.error(
-          `This will cause issues with Claude Desktop execution!`
-        );
-      }
-      // Convert to absolute path as fallback
-      // Use serverRoot which is determined earlier and more reliable for constructing the absolute path
-      const serverRoot = await this.serverRootDetector.determineServerRoot(); // Ensure serverRoot is available
-      const absolutePromptsFile = path.resolve(serverRoot, PROMPTS_FILE);
-      if (isVerbose) {
-        this.logger.info(
-          `🔧 Converting to absolute path: ${absolutePromptsFile}`
-        );
-      }
-      PROMPTS_FILE = absolutePromptsFile;
-    }
+    const result = await loadPromptData({
+      logger: this.logger,
+      configManager: this.configManager,
+      promptManager: this.promptManager,
+      runtimeOptions: this.runtimeOptions,
+      serverRoot: this.serverRoot,
+      mcpToolsManager: this.mcpToolsManager,
+      apiManager: this.apiManager,
+    });
 
-    // Verify the file exists before attempting to load
-    try {
-      const fs = await import("fs/promises");
-      await fs.access(PROMPTS_FILE);
-      if (isVerbose) {
-        this.logger.info(
-          `✓ Prompts configuration file exists: ${PROMPTS_FILE}`
-        );
-      }
-    } catch (error) {
-      this.logger.error(
-        `✗ Prompts configuration file NOT FOUND: ${PROMPTS_FILE}`
-      );
-      if (isVerbose) {
-        this.logger.error(`File access error:`, error);
-
-        // Provide additional troubleshooting information
-        this.logger.error("=== TROUBLESHOOTING INFORMATION ===");
-        this.logger.error(`Is path absolute? ${path.isAbsolute(PROMPTS_FILE)}`);
-        this.logger.error(`Normalized path: ${path.normalize(PROMPTS_FILE)}`);
-        this.logger.error(`Path exists check: ${PROMPTS_FILE}`);
-      }
-
-      throw new Error(`Prompts configuration file not found: ${PROMPTS_FILE}`);
-    }
-
-    try {
-      this.logger.info("Initiating prompt loading and conversion...");
-      // Pass path.dirname(PROMPTS_FILE) as the basePath for resolving relative prompt file paths
-      const result = await this.promptManager.loadAndConvertPrompts(
-        PROMPTS_FILE,
-        path.dirname(PROMPTS_FILE)
-      );
-
-      this._promptsData = result.promptsData;
-      this._categories = result.categories;
-      this._convertedPrompts = result.convertedPrompts;
-
-      this.logger.info("=== PROMPT LOADING RESULTS ===");
-      this.logger.info(
-        `✓ Loaded ${this._promptsData.length} prompts from ${this._categories.length} categories`
-      );
-      this.logger.info(
-        `✓ Converted ${this._convertedPrompts.length} prompts to MCP format`
-      );
-
-      // Log category breakdown
-      if (this._categories.length > 0) {
-        this.logger.info("Categories loaded:");
-        this._categories.forEach((category) => {
-          const categoryPrompts = this._promptsData.filter(
-            (p) => p.category === category.id
-          );
-          this.logger.info(
-            `  - ${category.name} (${category.id}): ${categoryPrompts.length} prompts`
-          );
-        });
-      } else {
-        this.logger.warn("⚠ No categories were loaded!");
-      }
-
-      this.logger.info("=== PROMPT LOADING PIPELINE END ===");
-
-      // Propagate updated data to other relevant managers
-      if (this.mcpToolsManager) {
-        this.mcpToolsManager.updateData(
-          this._promptsData,
-          this._convertedPrompts,
-          this.categories
-        );
-      }
-      // REMOVED: ExecutionCoordinator prompts update - modular chain system removed
-      if (this.apiManager) {
-        // apiManager might not exist for stdio
-        this.apiManager.updateData(
-          this._promptsData,
-          this._categories,
-          this.convertedPrompts
-        );
-      }
-
-      // CRUCIAL STEP: Re-register all prompts with the McpServer using the newly loaded data
-      if (this.promptManager && this.mcpServer) {
-        this.logger.info(
-          "🔄 Re-registering all prompts with MCP server after hot-reload..."
-        );
-        const registeredCount = await this.promptManager.registerAllPrompts(
-          this.convertedPrompts
-        );
-        this.logger.info(
-          `✅ Successfully re-registered ${registeredCount} prompts.`
-        );
-      } else {
-        this.logger.warn(
-          "⚠️ PromptManager or McpServer not available, skipping re-registration of prompts after hot-reload."
-        );
-      }
-    } catch (error) {
-      this.logger.error("✗ PROMPT LOADING FAILED:");
-      this.logger.error("Error details:", error);
-      this.logger.error(
-        "Stack trace:",
-        error instanceof Error ? error.stack : "No stack trace available"
-      );
-      throw error;
-    }
+    this._promptsData = result.promptsData;
+    this._categories = result.categories;
+    this._convertedPrompts = result.convertedPrompts;
+    this.promptsFilePath = result.promptsFilePath;
   }
 
   /**
-   * Phase 3: Initialize remaining modules with loaded data
+   * Initialize remaining modules with loaded data
    */
   private async initializeModulesPrivate(): Promise<void> {
-    // Check verbosity flags for conditional logging
-    const args = process.argv.slice(2);
-    const isVerbose =
-      args.includes("--verbose") || args.includes("--debug-startup");
+    const result = await initializeModules({
+      logger: this.logger,
+      configManager: this.configManager,
+      runtimeOptions: this.runtimeOptions,
+      promptsData: this._promptsData,
+      categories: this._categories,
+      convertedPrompts: this._convertedPrompts,
+      promptManager: this.promptManager,
+      conversationManager: this.conversationManager,
+      textReferenceManager: this.textReferenceManager,
+      mcpServer: this.mcpServer,
+      serviceManager: this.serviceManager,
+      callbacks: {
+        fullServerRefresh: () => this.fullServerRefresh(),
+        restartServer: (reason: string) => this.restartServer(reason),
+        handleFrameworkConfigChange: (config, previous) =>
+          this.handleFrameworkConfigChange(config, previous),
+      },
+    });
 
-    // REMOVED: Gate evaluator and ExecutionCoordinator initialization - modular systems removed
+    this.frameworkStateManager = result.frameworkStateManager;
+    this.mcpToolsManager = result.mcpToolsManager;
+    this.toolDescriptionManager = result.toolDescriptionManager;
 
-    // Initialize Framework State Manager (for framework switching)
-    if (isVerbose)
-      this.logger.info("🔄 Initializing Framework State Manager...");
-    const frameworkStateRoot =
-      typeof this.configManager.getServerRoot === 'function'
-        ? this.configManager.getServerRoot()
-        : path.dirname(this.configManager.getConfigPath());
-    this.frameworkStateManager = await createFrameworkStateManager(
-      this.logger,
-      frameworkStateRoot
+    const currentFrameworkConfig = this.configManager.getFrameworksConfig();
+    this.syncFrameworkSystemStateFromConfig(
+      currentFrameworkConfig,
+      'Framework configuration synchronized during initialization'
     );
 
-    // Validation: Ensure FrameworkStateManager was created successfully
-    if (!this.frameworkStateManager) {
-      throw new Error(
-        "Failed to initialize FrameworkStateManager - required for framework switching"
-      );
-    }
-    if (isVerbose)
-      this.logger.info("✅ FrameworkStateManager initialized successfully");
+    await this.ensurePromptHotReload();
 
-    // Debug: Log chain prompt availability
-    const chainCount = this._convertedPrompts.filter((p) =>
-      isChainPrompt(p)
-    ).length;
-    if (isVerbose)
-      this.logger.info(
-        `🔗 Chain prompts available: ${chainCount}/${this._convertedPrompts.length} total prompts`
-      );
-    if (chainCount > 0 && isVerbose) {
-      const chainNames = this._convertedPrompts
-        .filter((p) => isChainPrompt(p))
-        .map((p) => p.id)
-        .join(", ");
-      this.logger.info(`🔗 Available chains: ${chainNames}`);
-    }
-
-    // Phase 2: Workflow registration removed - chains handle all multi-step execution
-
-    // Initialize MCP tools manager
-    if (isVerbose) this.logger.info("🔄 Initializing MCP tools manager...");
-    this.mcpToolsManager = await createMcpToolsManager(
-      this.logger,
-      this.mcpServer,
-      this.promptManager,
-      this.configManager,
-      () => this.fullServerRefresh(),
-      (reason: string) => this.restartServer(reason)
-      // Phase 3: Removed executionCoordinator - chains now use LLM-driven execution
-    );
-
-    // Update MCP tools manager with current data
-    if (isVerbose) this.logger.info("🔄 Updating MCP tools manager data...");
-    this.mcpToolsManager.updateData(
-      this._promptsData,
-      this._convertedPrompts,
-      this.categories
-    );
-
-    // Connect Framework State Manager to MCP Tools Manager
-    if (isVerbose) this.logger.info("🔄 Connecting Framework State Manager...");
-    this.mcpToolsManager.setFrameworkStateManager(this.frameworkStateManager);
-
-    // Initialize and connect Framework Manager
-    if (isVerbose) this.logger.info("🔄 Initializing Framework Manager...");
-    await this.mcpToolsManager.setFrameworkManager();
-
-    // Initialize Tool Description Manager
-    if (isVerbose) this.logger.info("🔄 Initializing Tool Description Manager...");
-    this.toolDescriptionManager = createToolDescriptionManager(this.logger, this.configManager);
-    await this.toolDescriptionManager.initialize();
-
-    // Connect Tool Description Manager to MCP Tools Manager
-    if (isVerbose) this.logger.info("🔄 Connecting Tool Description Manager to MCP Tools...");
-    this.mcpToolsManager.setToolDescriptionManager(this.toolDescriptionManager);
-
-    // REMOVED: ConsolidatedPromptEngine to ExecutionCoordinator wiring - ExecutionCoordinator removed
-
-    // Register all MCP tools
-    if (isVerbose) this.logger.info("🔄 Registering all MCP tools...");
-    await this.mcpToolsManager.registerAllTools();
-
-    // Register all prompts
-    if (isVerbose) this.logger.info("🔄 Registering all prompts...");
-    await this.promptManager.registerAllPrompts(this._convertedPrompts);
-
-    this.logger.info("All modules initialized successfully");
-
-    // REMOVED: ExecutionCoordinator stats collection - modular chain system removed
+    this.logger.info('All modules initialized successfully');
   }
 
-  // Phase 2: Workflow registration completely removed - chains handle all multi-step execution
+  // Workflow registration completely removed - chains handle all multi-step execution
 
   /**
-   * Phase 4: Setup and start the server
+   * Setup and start the server
    */
-  private async startServer(isStartupTest: boolean = false): Promise<void> {
-    console.error("DEBUG: startServer() - Determining transport...");
-    // Determine transport
-    const args = process.argv.slice(2);
-    const transport = TransportManager.determineTransport(
-      args,
-      this.configManager
-    );
-    console.error("DEBUG: startServer() - Transport determined:", transport);
+  private async startServer(): Promise<void> {
+    const { transportManager, apiManager, serverManager } = await startServerWithManagers({
+      logger: this.logger,
+      configManager: this.configManager,
+      promptManager: this.promptManager,
+      mcpToolsManager: this.mcpToolsManager,
+      mcpServer: this.mcpServer,
+      runtimeOptions: this.runtimeOptions,
+      transportType: this.transportType,
+      promptsData: this._promptsData,
+      categories: this._categories,
+      convertedPrompts: this._convertedPrompts,
+    });
 
-    console.error("DEBUG: startServer() - Creating transport manager...");
-    // Create transport manager
-    this.transportManager = createTransportManager(
-      this.logger,
-      this.configManager,
-      this.mcpServer,
-      transport
-    );
-    console.error("DEBUG: startServer() - Transport manager created");
-
-    console.error("DEBUG: startServer() - Checking if SSE transport...");
-    // Create API manager for SSE transport
-    if (this.transportManager.isSse()) {
-      console.error("DEBUG: startServer() - Creating API manager for SSE...");
-      this.apiManager = createApiManager(
-        this.logger,
-        this.configManager,
-        this.promptManager,
-        this.mcpToolsManager
-      );
-      console.error("DEBUG: startServer() - API manager created");
-
-      console.error("DEBUG: startServer() - Updating API manager data...");
-      // Update API manager with current data
-      this.apiManager.updateData(
-        this._promptsData,
-        this._categories,
-        this.convertedPrompts
-      );
-      console.error("DEBUG: startServer() - API manager data updated");
-    } else {
-      console.error(
-        "DEBUG: startServer() - Using STDIO transport (no API manager needed)"
-      );
-    }
-
-    // Phase 1: Framework capabilities integrated into base components
-    console.error(
-      "DEBUG: startServer() - Framework capabilities integrated into base components"
-    );
-
-    if (isStartupTest) {
-      console.error(
-        "DEBUG: startServer() - Skipping MCP server startup (test mode)"
-      );
-      // Create a mock server manager for health validation
-      this.serverManager = {
-        shutdown: () => console.error("DEBUG: Mock server shutdown"),
-        getStatus: () => ({ running: true, transport: "stdio" }),
-        isRunning: () => true,
-      } as any;
-      console.error("DEBUG: startServer() - Mock server manager created");
-    } else {
-      console.error("DEBUG: startServer() - About to start MCP server...");
-      // Start the server
-      this.serverManager = await startMcpServer(
-        this.logger,
-        this.configManager,
-        this.transportManager,
-        this.apiManager
-      );
-      console.error("DEBUG: startServer() - MCP server started");
-    }
-
-    this.logger.info("Server started successfully");
-    console.error("DEBUG: startServer() - Server startup completed");
+    this.transportManager = transportManager;
+    this.apiManager = apiManager;
+    this.serverManager = serverManager;
   }
 
   /**
    * Switch to a different framework by ID (CAGEERF, ReACT, 5W1H, etc.)
    * Core functionality: Allow switching between frameworks to guide the system
    */
-  async switchFramework(
-    frameworkId: string
-  ): Promise<{ success: boolean; message: string }> {
-    // Phase 1: Framework switching simplified - basic support only
+  async switchFramework(frameworkId: string): Promise<{ success: boolean; message: string }> {
+    //  Framework switching simplified - basic support only
 
     try {
-      this.logger.info(
-        `Framework switching to ${frameworkId} (Phase 1 basic support)`
-      );
+      this.logger.info(`Framework switching to ${frameworkId} ( basic support)`);
       const result = {
         success: true,
         message: `Switched to ${frameworkId}`,
         newFramework: frameworkId,
-        previousFramework: "basic",
+        previousFramework: 'basic',
       };
 
       if (result.success) {
@@ -778,11 +394,11 @@ export class Application {
         this.logger.warn(`❌ Framework switch failed: ${result.message}`);
         return {
           success: false,
-          message: result.message || "Unknown error during framework switch",
+          message: result.message || 'Unknown error during framework switch',
         };
       }
     } catch (error) {
-      this.logger.error("Framework switch error:", error);
+      this.logger.error('Framework switch error:', error);
       return {
         success: false,
         message: `Error switching framework: ${
@@ -801,13 +417,13 @@ export class Application {
     availableFrameworks: string[];
     isHealthy: boolean;
   } {
-    // Phase 1: Framework status simplified - basic support only
+    //  Framework status simplified - basic support only
     const status = {
-      currentFramework: "basic",
-      currentFrameworkName: "Basic Framework",
+      currentFramework: 'basic',
+      currentFrameworkName: 'Basic Framework',
       isHealthy: true,
     };
-    const available = ["basic"];
+    const available = ['basic'];
 
     return {
       id: status.currentFramework,
@@ -823,110 +439,152 @@ export class Application {
   async shutdown(): Promise<void> {
     try {
       if (this.logger) {
-        this.logger.info("Initiating application shutdown...");
+        this.logger.info('Initiating application shutdown...');
       }
 
-      // Phase 1: Stop server and transport layers
+      //  Stop server and transport layers
       if (this.serverManager) {
         if (this.logger) {
-          this.logger.debug("Shutting down server manager...");
+          this.logger.debug('Shutting down server manager...');
         }
         this.serverManager.shutdown();
       }
 
-      // Phase 2: Stop transport layer (if it has shutdown method)
-      if (this.transportManager && 'shutdown' in this.transportManager && typeof (this.transportManager as any).shutdown === 'function') {
+      // Stop transport layer (if it has shutdown method)
+      if (
+        this.transportManager &&
+        'shutdown' in this.transportManager &&
+        typeof (this.transportManager as any).shutdown === 'function'
+      ) {
         if (this.logger) {
-          this.logger.debug("Shutting down transport manager...");
+          this.logger.debug('Shutting down transport manager...');
         }
         try {
           await (this.transportManager as any).shutdown();
         } catch (error) {
-          this.logger?.warn("Error shutting down transport manager:", error);
+          this.logger?.warn('Error shutting down transport manager:', error);
         }
       }
 
-      // Phase 3: Stop monitoring and resource-intensive components (if they have shutdown method)
-      if (this.frameworkStateManager && 'shutdown' in this.frameworkStateManager && typeof (this.frameworkStateManager as any).shutdown === 'function') {
+      // Stop monitoring and resource-intensive components (if they have shutdown method)
+      if (
+        this.frameworkStateManager &&
+        'shutdown' in this.frameworkStateManager &&
+        typeof (this.frameworkStateManager as any).shutdown === 'function'
+      ) {
         if (this.logger) {
-          this.logger.debug("Shutting down framework state manager...");
+          this.logger.debug('Shutting down framework state manager...');
         }
         try {
           await (this.frameworkStateManager as any).shutdown();
         } catch (error) {
-          this.logger?.warn("Error shutting down framework state manager:", error);
+          this.logger?.warn('Error shutting down framework state manager:', error);
         }
       }
 
-      // Phase 4: Stop file watchers and hot-reload systems (if they have shutdown method)
-      if (this.promptManager && 'shutdown' in this.promptManager && typeof (this.promptManager as any).shutdown === 'function') {
+      // Stop file watchers and hot-reload systems (if they have shutdown method)
+      if (
+        this.promptManager &&
+        'shutdown' in this.promptManager &&
+        typeof (this.promptManager as any).shutdown === 'function'
+      ) {
         if (this.logger) {
-          this.logger.debug("Shutting down prompt manager...");
+          this.logger.debug('Shutting down prompt manager...');
         }
         try {
           await (this.promptManager as any).shutdown();
         } catch (error) {
-          this.logger?.warn("Error shutting down prompt manager:", error);
+          this.logger?.warn('Error shutting down prompt manager:', error);
         }
       }
 
-      // Phase 5: Stop API and MCP tools (if they have shutdown method)
-      if (this.apiManager && 'shutdown' in this.apiManager && typeof (this.apiManager as any).shutdown === 'function') {
+      // Stop registered background services (watchers, timers, etc.)
+      await this.serviceManager.stopAll();
+
+      // Stop API and MCP tools (if they have shutdown method)
+      if (
+        this.apiManager &&
+        'shutdown' in this.apiManager &&
+        typeof (this.apiManager as any).shutdown === 'function'
+      ) {
         if (this.logger) {
-          this.logger.debug("Shutting down API manager...");
+          this.logger.debug('Shutting down API manager...');
         }
         try {
           await (this.apiManager as any).shutdown();
         } catch (error) {
-          this.logger?.warn("Error shutting down API manager:", error);
+          this.logger?.warn('Error shutting down API manager:', error);
         }
       }
 
-      if (this.mcpToolsManager && 'shutdown' in this.mcpToolsManager && typeof (this.mcpToolsManager as any).shutdown === 'function') {
+      if (
+        this.mcpToolsManager &&
+        'shutdown' in this.mcpToolsManager &&
+        typeof (this.mcpToolsManager as any).shutdown === 'function'
+      ) {
         if (this.logger) {
-          this.logger.debug("Shutting down MCP tools manager...");
+          this.logger.debug('Shutting down MCP tools manager...');
         }
         try {
           await (this.mcpToolsManager as any).shutdown();
         } catch (error) {
-          this.logger?.warn("Error shutting down MCP tools manager:", error);
+          this.logger?.warn('Error shutting down MCP tools manager:', error);
         }
       }
 
-      // Phase 6: Stop conversation and text reference managers (if they have shutdown method)
-      if (this.conversationManager && 'shutdown' in this.conversationManager && typeof (this.conversationManager as any).shutdown === 'function') {
+      // Stop conversation and text reference managers (if they have shutdown method)
+      if (
+        this.conversationManager &&
+        'shutdown' in this.conversationManager &&
+        typeof (this.conversationManager as any).shutdown === 'function'
+      ) {
         if (this.logger) {
-          this.logger.debug("Shutting down conversation manager...");
+          this.logger.debug('Shutting down conversation manager...');
         }
         try {
           await (this.conversationManager as any).shutdown();
         } catch (error) {
-          this.logger?.warn("Error shutting down conversation manager:", error);
+          this.logger?.warn('Error shutting down conversation manager:', error);
         }
       }
 
-      if (this.textReferenceManager && 'shutdown' in this.textReferenceManager && typeof (this.textReferenceManager as any).shutdown === 'function') {
+      if (
+        this.textReferenceManager &&
+        'shutdown' in this.textReferenceManager &&
+        typeof (this.textReferenceManager as any).shutdown === 'function'
+      ) {
         if (this.logger) {
-          this.logger.debug("Shutting down text reference manager...");
+          this.logger.debug('Shutting down text reference manager...');
         }
         try {
           await (this.textReferenceManager as any).shutdown();
         } catch (error) {
-          this.logger?.warn("Error shutting down text reference manager:", error);
+          this.logger?.warn('Error shutting down text reference manager:', error);
         }
       }
 
-      // Phase 6: Clean up internal timers
+      // Clean up internal timers
+      if (this.configManager) {
+        if (this.frameworksConfigListener) {
+          this.configManager.removeListener(
+            'frameworksConfigChanged',
+            this.frameworksConfigListener
+          );
+          this.frameworksConfigListener = undefined;
+        }
+        this.configManager.stopWatching();
+      }
+
       this.cleanup();
 
       if (this.logger) {
-        this.logger.info("Application shutdown completed successfully");
+        this.logger.info('Application shutdown completed successfully');
       }
     } catch (error) {
       if (this.logger) {
-        this.logger.error("Error during shutdown:", error);
+        this.logger.error('Error during shutdown:', error);
       } else {
-        console.error("Error during shutdown (logger not available):", error);
+        console.error('Error during shutdown (logger not available):', error);
       }
       throw error;
     }
@@ -937,24 +595,20 @@ export class Application {
    * This reloads all prompts from disk and updates all relevant modules.
    */
   public async fullServerRefresh(): Promise<void> {
-    this.logger.info(
-      "🔥 Application: Starting full server refresh (hot-reload)..."
-    );
+    this.logger.info('🔥 Application: Starting full server refresh (hot-reload)...');
     try {
       // Step 1: Reload all prompt data from disk by re-running the data loading phase.
       // This updates the application's internal state with the latest file contents.
       await this.loadAndProcessData();
-      this.logger.info("✅ Data reloaded and processed from disk.");
+      this.logger.info('✅ Data reloaded and processed from disk.');
 
       // Step 2: Framework hot-reload integration now handled by enhanced base components
-      this.logger.info(
-        "✅ Framework capabilities integrated into base components"
-      );
+      this.logger.info('✅ Framework capabilities integrated into base components');
 
-      // Step 2.5: Phase 2 - Simple framework switching status check
+      // Step 2.5:  - Simple framework switching status check
       const switchingStatus = {
-        currentFramework: "basic",
-        currentFrameworkName: "Basic Framework",
+        currentFramework: 'basic',
+        currentFrameworkName: 'Basic Framework',
         enabledFrameworks: 1,
         availableFrameworks: 1,
       };
@@ -963,62 +617,139 @@ export class Application {
           `(${switchingStatus.enabledFrameworks}/${switchingStatus.availableFrameworks} frameworks available)`
       );
 
-      // Phase 3 complexity removed - focusing on simple framework switching instead of multi-framework consensus
+      // complexity removed - focusing on simple framework switching instead of multi-framework consensus
 
       // Step 3: Propagate the new data to all dependent modules.
       // This ensures all parts of the application are synchronized with the new state.
       // REMOVED: ExecutionCoordinator prompts update - modular chain system removed
 
       if (this.mcpToolsManager) {
-        this.mcpToolsManager.updateData(
-          this._promptsData,
-          this._convertedPrompts,
-          this.categories
-        );
-        this.logger.info("✅ McpToolsManager updated with new data.");
+        this.mcpToolsManager.updateData(this._promptsData, this._convertedPrompts, this.categories);
+        this.logger.info('✅ McpToolsManager updated with new data.');
       }
 
       if (this.apiManager) {
         // The API manager is only available for the SSE transport.
-        this.apiManager.updateData(
-          this._promptsData,
-          this._categories,
-          this.convertedPrompts
-        );
-        this.logger.info("✅ ApiManager updated with new data.");
+        this.apiManager.updateData(this._promptsData, this._categories, this.convertedPrompts);
+        this.logger.info('✅ ApiManager updated with new data.');
       }
 
       // Step 4: Notify MCP clients that the prompt list has changed (proper hot-reload)
       // This follows MCP protocol - clients will re-query the server for the updated list
       await this.promptManager.notifyPromptsListChanged();
-      this.logger.info(
-        "✅ Prompts list_changed notification sent to MCP clients."
-      );
+      this.logger.info('✅ Prompts list_changed notification sent to MCP clients.');
 
-      // Step 5: Phase 2 - Workflow registration removed
+      // Step 5:  - Workflow registration removed
 
-      this.logger.info("🚀 Full server refresh completed successfully.");
+      this.logger.info('🚀 Full server refresh completed successfully.');
     } catch (error) {
-      this.logger.error("❌ Error during full server refresh:", error);
+      this.logger.error('❌ Error during full server refresh:', error);
       // Re-throw the error so the caller can handle it appropriately.
       throw error;
     }
+  }
+
+  private async ensurePromptHotReload(): Promise<void> {
+    if (this.hotReloadInitialized) {
+      return;
+    }
+
+    if (!this.promptManager || !this.promptsFilePath || !this.mcpToolsManager) {
+      return;
+    }
+
+    try {
+      const serviceName = 'prompt-hot-reload';
+      if (!this.serviceManager.hasService(serviceName)) {
+        this.serviceManager.register({
+          name: serviceName,
+          start: async () => {
+            const methodologyAux = buildMethodologyAuxiliaryReloadConfig(
+              this.logger,
+              this.mcpToolsManager
+            );
+            await this.promptManager.startHotReload(this.promptsFilePath!, this.promptHotReloadHandler, {
+              auxiliaryReloads: methodologyAux ? [methodologyAux] : undefined,
+            });
+          },
+          stop: async () => {
+            await this.promptManager.stopHotReload();
+            this.hotReloadInitialized = false;
+          },
+        });
+      }
+
+      await this.serviceManager.startService(serviceName);
+      this.hotReloadInitialized = true;
+      this.logger.info('🔄 Prompt hot reload monitoring activated');
+    } catch (error) {
+      this.logger.error('Failed to start prompt hot reload monitoring:', error);
+    }
+  }
+
+  private async handlePromptHotReload(event: HotReloadEvent): Promise<void> {
+    if (!this.promptManager || !this.mcpToolsManager) {
+      this.logger.warn('Hot reload triggered before prompt systems initialized; ignoring event.');
+      return;
+    }
+
+    if (this.promptReloadInProgress) {
+      this.logger.warn(`Hot reload already running; skipping event: ${event.reason}`);
+      return;
+    }
+
+    this.promptReloadInProgress = (async () => {
+      try {
+        this.logger.info(
+          `🔥 Hot reload event received (${event.type}): ${
+            event.reason
+          } [${event.affectedFiles.join(', ')}]`
+        );
+
+        const result = await reloadPromptData({
+          configManager: this.configManager,
+          promptManager: this.promptManager,
+          mcpToolsManager: this.mcpToolsManager,
+        });
+
+        this._promptsData = result.promptsData;
+        this._convertedPrompts = result.convertedPrompts;
+        this._categories = result.categories;
+        this.promptsFilePath = result.promptsFilePath;
+
+        if (this.apiManager) {
+          this.apiManager.updateData(this._promptsData, this._categories, this._convertedPrompts);
+        }
+
+        if (this.mcpServer) {
+          const count = await this.promptManager.registerAllPrompts(this._convertedPrompts);
+          this.logger.info(`🔁 Re-registered ${count} prompts after hot reload.`);
+          await this.promptManager.notifyPromptsListChanged();
+        }
+
+        this.logger.info('✅ Prompt data refreshed from filesystem changes.');
+      } catch (error) {
+        this.logger.error('❌ Prompt hot reload failed:', error);
+      } finally {
+        this.promptReloadInProgress = undefined;
+      }
+    })();
+
+    await this.promptReloadInProgress;
   }
 
   /**
    * Restart the application by shutting down and exiting with a restart code.
    * Relies on a process manager (e.g., PM2) to restart the process.
    */
-  public async restartServer(reason: string = "Manual restart"): Promise<void> {
+  public async restartServer(reason: string = 'Manual restart'): Promise<void> {
     this.logger.info(`🚨 Initiating server restart. Reason: ${reason}`);
     try {
       // Ensure all current operations are gracefully shut down.
       await this.shutdown();
-      this.logger.info(
-        "✅ Server gracefully shut down. Exiting with restart code."
-      );
+      this.logger.info('✅ Server gracefully shut down. Exiting with restart code.');
     } catch (error) {
-      this.logger.error("❌ Error during pre-restart shutdown:", error);
+      this.logger.error('❌ Error during pre-restart shutdown:', error);
     } finally {
       // Exit with a specific code that a process manager can detect.
       process.exit(100);
@@ -1038,11 +769,10 @@ export class Application {
       totalExecutions: number;
       promptExecutions: number;
       chainExecutions: number;
-      // workflowExecutions: number; // Phase 2: removed, workflows tracked as advanced chains
+      // workflowExecutions: number; // removed, workflows tracked as advanced chains
       successRate: number;
     };
   } {
-    // REMOVED: ExecutionCoordinator status - providing default execution status
     const executionCoordinatorStatus = {
       totalExecutions: 0,
       promptExecutions: 0,
@@ -1100,22 +830,17 @@ export class Application {
     const moduleStatus: Record<string, boolean> = {};
 
     // Check foundation modules
-    const foundationHealthy = !!(
-      this.logger &&
-      this.configManager &&
-      this.textReferenceManager
-    );
+    const foundationHealthy = !!(this.logger && this.configManager && this.textReferenceManager);
     moduleStatus.foundation = foundationHealthy;
     if (!foundationHealthy) {
-      issues.push("Foundation modules not properly initialized");
+      issues.push('Foundation modules not properly initialized');
     }
 
     // Check data loading
-    const dataLoaded =
-      this._promptsData.length > 0 && this._categories.length > 0;
+    const dataLoaded = this._promptsData.length > 0 && this._categories.length > 0;
     moduleStatus.dataLoaded = dataLoaded;
     if (!dataLoaded) {
-      issues.push("Prompt data not loaded or empty");
+      issues.push('Prompt data not loaded or empty');
     }
 
     // Check module initialization
@@ -1125,9 +850,7 @@ export class Application {
       this.mcpToolsManager
     );
     moduleStatus.modulesInitialized = modulesInitialized;
-    moduleStatus.serverRunning = !!(
-      this.serverManager && this.transportManager
-    );
+    moduleStatus.serverRunning = !!(this.serverManager && this.transportManager);
 
     moduleStatus.configManager = !!this.configManager;
     moduleStatus.logger = !!this.logger;
@@ -1141,29 +864,17 @@ export class Application {
     moduleStatus.serverManager = !!this.serverManager;
 
     // Check overall health
-    const isHealthy =
-      foundationHealthy &&
-      dataLoaded &&
-      modulesInitialized &&
-      moduleStatus.serverRunning &&
-      issues.length === 0;
-
-    return {
-      healthy: isHealthy,
-      modules: {
-        foundation: foundationHealthy,
-        dataLoaded,
-        modulesInitialized,
-        serverRunning: moduleStatus.serverRunning,
-      },
-      details: {
-        promptsLoaded: this._promptsData.length,
-        categoriesLoaded: this._categories.length,
-        serverStatus: this.serverManager?.getStatus(),
-        moduleStatus,
-      },
+    return buildHealthReport({
+      foundation: foundationHealthy,
+      dataLoaded,
+      modulesInitialized,
+      serverRunning: moduleStatus.serverRunning,
+      moduleStatus,
+      promptsLoaded: this._promptsData.length,
+      categoriesLoaded: this._categories.length,
+      serverStatus: this.serverManager?.getStatus(),
       issues,
-    };
+    });
   }
 
   /**
@@ -1226,8 +937,81 @@ export class Application {
     if (this.memoryOptimizationInterval) {
       clearInterval(this.memoryOptimizationInterval);
       this.memoryOptimizationInterval = undefined;
-      this.logger.debug("Memory optimization timer stopped");
+      this.logger.debug('Memory optimization timer stopped');
     }
+  }
+
+  private setupFrameworkConfigListener(): void {
+    if (!this.configManager || this.frameworksConfigListener) {
+      return;
+    }
+
+    this.frameworksConfigListener = (
+      newConfig: FrameworksConfig,
+      previousConfig: FrameworksConfig
+    ) => {
+      this.handleFrameworkConfigChange(newConfig, previousConfig);
+    };
+
+    this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
+    this.handleFrameworkConfigChange(this.configManager.getFrameworksConfig());
+  }
+
+  private handleFrameworkConfigChange(
+    newConfig: FrameworksConfig,
+    previousConfig?: FrameworksConfig
+  ): void {
+    if (!this.logger) {
+      return;
+    }
+
+    const disabled = this.describeDisabledFrameworkFeatures(newConfig);
+    if (disabled.length > 0) {
+      this.logger.warn(`⚠️ Framework features disabled via config: ${disabled.join(', ')}`);
+    }
+
+    this.syncFrameworkSystemStateFromConfig(newConfig);
+
+    if (previousConfig) {
+      const previouslyDisabled = this.describeDisabledFrameworkFeatures(previousConfig);
+      if (previouslyDisabled.length > 0 && disabled.length === 0) {
+        this.logger.info('✅ Framework features re-enabled; all toggles active');
+      }
+    }
+  }
+
+  private syncFrameworkSystemStateFromConfig(config: FrameworksConfig, reason?: string): void {
+    const shouldEnable =
+      config.enableSystemPromptInjection ||
+      config.enableMethodologyGates ||
+      config.enableDynamicToolDescriptions;
+
+    if (!this.frameworkStateManager) {
+      this.pendingFrameworkSystemState = shouldEnable;
+      return;
+    }
+
+    const resolvedReason =
+      reason ??
+      (shouldEnable
+        ? 'Framework system enabled via configuration toggles'
+        : 'Framework system disabled via configuration toggles');
+    this.frameworkStateManager.setFrameworkSystemEnabled(shouldEnable, resolvedReason);
+    this.pendingFrameworkSystemState = undefined;
+  }
+
+  private describeDisabledFrameworkFeatures(config: FrameworksConfig): string[] {
+    const disabled: string[] = [];
+    if (!config.enableSystemPromptInjection) {
+      disabled.push('system prompt injection');
+    }
+    if (!config.enableMethodologyGates) {
+      disabled.push('methodology gates');
+    }
+    if (!config.enableDynamicToolDescriptions) {
+      disabled.push('dynamic tool descriptions');
+    }
+    return disabled;
   }
 
   /**
@@ -1235,8 +1019,8 @@ export class Application {
    */
   getDiagnosticInfo(): {
     timestamp: string;
-    health: ReturnType<Application["validateHealth"]>;
-    performance: ReturnType<Application["getPerformanceMetrics"]>;
+    health: ReturnType<Application['validateHealth']>;
+    performance: ReturnType<Application['getPerformanceMetrics']>;
     configuration: {
       transport: string;
       configLoaded: boolean;
@@ -1248,15 +1032,15 @@ export class Application {
     try {
       // Collect any recent errors or issues
       if (!this.mcpServer) {
-        errors.push("MCP Server instance not available");
+        errors.push('MCP Server instance not available');
       }
 
       if (this._promptsData.length === 0) {
-        errors.push("No prompts loaded");
+        errors.push('No prompts loaded');
       }
 
       if (this._categories.length === 0) {
-        errors.push("No categories loaded");
+        errors.push('No categories loaded');
       }
 
       return {
@@ -1264,7 +1048,7 @@ export class Application {
         health: this.validateHealth(),
         performance: this.getPerformanceMetrics(),
         configuration: {
-          transport: this.transportManager?.getTransportType() || "unknown",
+          transport: this.transportManager?.getTransportType() || 'unknown',
           configLoaded: !!this.configManager,
         },
         errors,
@@ -1287,7 +1071,7 @@ export class Application {
             serverRunning: false,
           },
           details: { promptsLoaded: 0, categoriesLoaded: 0, moduleStatus: {} },
-          issues: ["Failed to collect health information"],
+          issues: ['Failed to collect health information'],
         },
         performance: {
           uptime: process.uptime(),
@@ -1301,7 +1085,7 @@ export class Application {
           application: { promptsLoaded: 0, categoriesLoaded: 0 },
         },
         configuration: {
-          transport: "unknown",
+          transport: 'unknown',
           configLoaded: false,
         },
         errors,
@@ -1313,15 +1097,20 @@ export class Application {
 /**
  * Create and configure an application runtime
  */
-export function createApplication(): Application {
-  return new Application();
+export function createApplication(
+  logger?: Logger,
+  runtimeOptions?: RuntimeLaunchOptions
+): Application {
+  return new Application(logger, runtimeOptions);
 }
 
 /**
  * Main application entry point
  */
-export async function startApplication(): Promise<Application> {
-  const application = createApplication();
+export async function startApplication(
+  runtimeOptions?: RuntimeLaunchOptions
+): Promise<Application> {
+  const application = createApplication(undefined, runtimeOptions);
   await application.startup();
   return application;
 }

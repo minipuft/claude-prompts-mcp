@@ -1,10 +1,13 @@
+// @lifecycle canonical - Primary logger implementation and console adapters.
 /**
  * Logging Module
  * Handles file logging and transport-aware console logging
  */
 
-import { appendFile, writeFile } from "fs/promises";
-import { LogLevel, TransportType } from "../types/index.js";
+import { appendFile, writeFile } from 'node:fs/promises';
+import * as path from 'node:path';
+
+import { LogLevel, TransportType } from '../types/index.js';
 
 /**
  * Logger interface compatible with existing code
@@ -47,7 +50,7 @@ export class EnhancedLogger implements Logger {
     this.transport = config.transport;
     this.enableDebug = config.enableDebug || false;
     this.isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
-    
+
     // Map config level to LogLevel enum with fallback to INFO
     this.configuredLevel = this.parseLogLevel(config.configuredLevel || 'info');
   }
@@ -58,11 +61,15 @@ export class EnhancedLogger implements Logger {
   private parseLogLevel(level: string): LogLevel {
     const normalizedLevel = level.toUpperCase();
     switch (normalizedLevel) {
-      case 'DEBUG': return LogLevel.DEBUG;
-      case 'INFO': return LogLevel.INFO;
-      case 'WARN': return LogLevel.WARN;
-      case 'ERROR': return LogLevel.ERROR;
-      default: 
+      case 'DEBUG':
+        return LogLevel.DEBUG;
+      case 'INFO':
+        return LogLevel.INFO;
+      case 'WARN':
+        return LogLevel.WARN;
+      case 'ERROR':
+        return LogLevel.ERROR;
+      default:
         console.warn(`Unknown log level "${level}", defaulting to INFO`);
         return LogLevel.INFO;
     }
@@ -76,10 +83,10 @@ export class EnhancedLogger implements Logger {
     if (this.enableDebug) {
       return true; // Show everything in debug mode
     }
-    
+
     const levelPriority = EnhancedLogger.LOG_LEVEL_PRIORITY[level];
     const configPriority = EnhancedLogger.LOG_LEVEL_PRIORITY[this.configuredLevel];
-    
+
     return levelPriority <= configPriority;
   }
 
@@ -89,11 +96,7 @@ export class EnhancedLogger implements Logger {
   async initLogFile(): Promise<void> {
     try {
       const timestamp = new Date().toISOString();
-      await writeFile(
-        this.logFile,
-        `--- MCP Server Log Started at ${timestamp} ---\n`,
-        "utf8"
-      );
+      await writeFile(this.logFile, `--- MCP Server Log Started at ${timestamp} ---\n`, 'utf8');
     } catch (error) {
       console.error(`Error initializing log file:`, error);
     }
@@ -102,11 +105,7 @@ export class EnhancedLogger implements Logger {
   /**
    * Write a message to the log file
    */
-  private async logToFile(
-    level: LogLevel,
-    message: string,
-    ...args: any[]
-  ): Promise<void> {
+  private async logToFile(level: LogLevel, message: string, ...args: any[]): Promise<void> {
     // Check if this log level should be output based on configuration
     if (!this.shouldLog(level)) {
       return;
@@ -116,12 +115,12 @@ export class EnhancedLogger implements Logger {
       let logMessage = `[${new Date().toISOString()}] [${level}] ${message}`;
       if (args.length > 0) {
         logMessage += ` ${args
-          .map((arg) => (typeof arg === "object" ? JSON.stringify(arg) : arg))
-          .join(" ")}`;
+          .map((arg) => (typeof arg === 'object' ? JSON.stringify(arg) : arg))
+          .join(' ')}`;
       }
-      await appendFile(this.logFile, logMessage + "\n", "utf8");
+      await appendFile(this.logFile, logMessage + '\n', 'utf8');
     } catch (error) {
-      console.error("Error writing to log file:", error);
+      console.error('Error writing to log file:', error);
     }
   }
 
@@ -228,16 +227,14 @@ export class EnhancedLogger implements Logger {
     this.info(`Working directory: ${process.cwd()}`);
     this.info(`Using transport: ${transport}`);
     this.info(`Command-line arguments: ${JSON.stringify(process.argv)}`);
-    this.debug("Configuration:", JSON.stringify(config, null, 2));
+    this.debug('Configuration:', JSON.stringify(config, null, 2));
   }
 
   /**
    * Log memory usage information
    */
   logMemoryUsage(): void {
-    this.info(
-      `Server process memory usage: ${JSON.stringify(process.memoryUsage())}`
-    );
+    this.info(`Server process memory usage: ${JSON.stringify(process.memoryUsage())}`);
   }
 }
 
@@ -249,17 +246,34 @@ export function createLogger(config: EnhancedLoggingConfig): EnhancedLogger {
 }
 
 /**
+ * Helper to build a logger configuration with sensible defaults.
+ * Allows subsystems to opt into lightweight logging without duplicating paths.
+ */
+export function getDefaultLoggerConfig(
+  overrides: Partial<EnhancedLoggingConfig> = {}
+): EnhancedLoggingConfig {
+  const defaultLogDir = path.join(process.cwd(), 'logs');
+  const defaultLogFile = overrides.logFile ?? path.join(defaultLogDir, 'mcp-server.log');
+
+  return {
+    logFile: defaultLogFile,
+    transport: overrides.transport ?? TransportType.SSE,
+    enableDebug: overrides.enableDebug ?? false,
+    configuredLevel: overrides.configuredLevel ?? 'info',
+  };
+}
+
+/**
  * Create a simple logger for areas that don't need the full enhanced logger
  * Now supports verbosity control via command-line flags
  */
-export function createSimpleLogger(transport: string = "sse"): Logger {
+export function createSimpleLogger(transport: string = 'sse'): Logger {
   const enableConsole = transport !== TransportType.STDIO;
 
   // Check command-line flags for verbosity control
   const args = process.argv.slice(2);
-  const isVerbose =
-    args.includes("--verbose") || args.includes("--debug-startup");
-  const isQuiet = args.includes("--quiet");
+  const isVerbose = args.includes('--verbose') || args.includes('--debug-startup');
+  const isQuiet = args.includes('--quiet');
 
   return {
     info: (message: string, ...args: any[]) => {
@@ -294,11 +308,11 @@ export function setupConsoleRedirection(logger: Logger): void {
   const originalConsoleError = console.error;
 
   console.log = (...args) => {
-    logger.debug("CONSOLE: " + args.join(" "));
+    logger.debug('CONSOLE: ' + args.join(' '));
   };
 
   console.error = (...args) => {
-    logger.error("CONSOLE_ERROR: " + args.join(" "));
+    logger.error('CONSOLE_ERROR: ' + args.join(' '));
   };
 }
 
@@ -307,24 +321,24 @@ export function setupConsoleRedirection(logger: Logger): void {
  */
 export function setupProcessEventHandlers(logger: Logger): void {
   // Handle graceful shutdown
-  process.on("SIGINT", () => {
-    logger.info("Shutting down server...");
+  process.on('SIGINT', () => {
+    logger.info('Shutting down server...');
     process.exit(0);
   });
 
   // Handle uncaught exceptions
-  process.on("uncaughtException", (error) => {
-    logger.error("Uncaught exception:", error);
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception:', error);
   });
 
   // Handle unhandled promise rejections
-  process.on("unhandledRejection", (reason, promise) => {
-    logger.error("Unhandled Rejection at:", promise, "reason:", reason);
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
   });
 
   // Log when the stdin closes (which happens when the parent process terminates)
-  process.stdin.on("end", () => {
-    logger.info("STDIN stream ended - parent process may have terminated");
+  process.stdin.on('end', () => {
+    logger.info('STDIN stream ended - parent process may have terminated');
     process.exit(0);
   });
 }

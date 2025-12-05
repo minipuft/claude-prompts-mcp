@@ -1,20 +1,25 @@
+// @lifecycle canonical - Coordinates methodology selection and framework execution contexts.
 /**
- * Framework Manager - Phase 2 Implementation
+ * Framework Manager
  * Manages methodology selection and system prompt guidelines
  * Framework = Constitutional guidelines for HOW to execute prompts, not analysis tools
  */
 
-import { Logger } from "../logging/index.js";
-import { ConvertedPrompt } from "../types/index.js";
+import { Logger } from '../logging/index.js';
+import { ConvertedPrompt } from '../types/index.js';
+import { MethodologyRegistry, createMethodologyRegistry } from './methodology/index.js';
 import {
-  IMethodologyGuide,
-  FrameworkMethodology,
   FrameworkDefinition,
   FrameworkExecutionContext,
-  FrameworkSelectionCriteria
-} from "./types/index.js";
-import { MethodologyRegistry, createMethodologyRegistry } from "./methodology/index.js";
-import type { FrameworkStateManager } from "./framework-state-manager.js";
+  FrameworkMethodology,
+  FrameworkSelectionCriteria,
+  IMethodologyGuide,
+} from './types/index.js';
+
+interface FrameworkStateAccessor {
+  isFrameworkSystemEnabled(): boolean;
+  getActiveFramework(): { methodology: string } | null | undefined;
+}
 
 /**
  * Framework Manager Implementation
@@ -23,10 +28,10 @@ import type { FrameworkStateManager } from "./framework-state-manager.js";
 export class FrameworkManager {
   private frameworks: Map<string, FrameworkDefinition> = new Map();
   private methodologyRegistry: MethodologyRegistry | null = null;
-  private defaultFramework: string = "CAGEERF";
+  private defaultFramework: string = 'CAGEERF';
   private logger: Logger;
   private initialized: boolean = false;
-  private frameworkStateManager?: FrameworkStateManager;
+  private frameworkStateManager?: FrameworkStateAccessor;
 
   constructor(logger: Logger) {
     this.logger = logger;
@@ -36,9 +41,9 @@ export class FrameworkManager {
    * Set the framework state manager for synchronization
    * FIXED: Allows Framework Manager to sync with active framework state
    */
-  setFrameworkStateManager(frameworkStateManager: FrameworkStateManager): void {
+  setFrameworkStateManager(frameworkStateManager: FrameworkStateAccessor): void {
     this.frameworkStateManager = frameworkStateManager;
-    this.logger.debug("Framework State Manager synchronized with Framework Manager");
+    this.logger.debug('Framework State Manager synchronized with Framework Manager');
   }
 
   /**
@@ -46,13 +51,13 @@ export class FrameworkManager {
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
-      this.logger.debug("FrameworkManager already initialized");
+      this.logger.debug('FrameworkManager already initialized');
       return;
     }
 
-    this.logger.info("Initializing FrameworkManager with methodology registry...");
+    this.logger.info('Initializing FrameworkManager with methodology registry...');
 
-    // Initialize methodology registry (Phase 2: NEW)
+    // Initialize methodology registry (NEW)
     this.methodologyRegistry = await createMethodologyRegistry(this.logger);
 
     // Generate framework definitions from methodology guides
@@ -70,13 +75,15 @@ export class FrameworkManager {
     this.ensureInitialized();
 
     // User preference takes priority (this is the primary selection mechanism)
-    if (criteria.userPreference && criteria.userPreference !== "AUTO") {
+    if (criteria.userPreference && criteria.userPreference !== 'AUTO') {
       const preferred = this.getFramework(criteria.userPreference);
-      if (preferred && preferred.enabled) {
+      if (preferred?.enabled) {
         this.logger.debug(`Framework selected by user preference: ${preferred.name}`);
         return preferred;
       } else {
-        this.logger.warn(`Requested framework ${criteria.userPreference} not found or disabled, using default`);
+        this.logger.warn(
+          `Requested framework ${criteria.userPreference} not found or disabled, using default`
+        );
       }
     }
 
@@ -86,7 +93,7 @@ export class FrameworkManager {
       const activeFramework = this.frameworkStateManager.getActiveFramework();
       if (activeFramework) {
         const framework = this.getFramework(activeFramework.methodology);
-        if (framework && framework.enabled) {
+        if (framework?.enabled) {
           this.logger.debug(`Framework selected: ${framework.name} (from active state manager)`);
           return framework;
         }
@@ -107,14 +114,14 @@ export class FrameworkManager {
    * Generate execution context with system prompts and guidelines
    */
   generateExecutionContext(
-    prompt: ConvertedPrompt, 
+    prompt: ConvertedPrompt,
     criteria: FrameworkSelectionCriteria = {}
   ): FrameworkExecutionContext {
     const selectedFramework = this.selectFramework(criteria);
-    
+
     // Generate framework-specific system prompt
     const systemPrompt = this.generateSystemPrompt(selectedFramework, prompt);
-    
+
     return {
       selectedFramework,
       systemPrompt,
@@ -122,8 +129,8 @@ export class FrameworkManager {
       metadata: {
         selectionReason: this.getSelectionReason(selectedFramework, criteria),
         confidence: 1.0, // High confidence since frameworks are user-selected
-        appliedAt: new Date()
-      }
+        appliedAt: new Date(),
+      },
     };
   }
 
@@ -133,14 +140,14 @@ export class FrameworkManager {
    */
   getFramework(methodology: string): FrameworkDefinition | undefined {
     this.ensureInitialized();
-    
+
     // Try exact match first (fastest path)
     let framework = this.frameworks.get(methodology);
     if (framework) {
       this.logger.debug(`Framework found via exact match: ${methodology} -> ${framework.name}`);
       return framework;
     }
-    
+
     // Try uppercase match (most common conversion)
     const upperCaseId = methodology.toUpperCase();
     framework = this.frameworks.get(upperCaseId);
@@ -148,24 +155,28 @@ export class FrameworkManager {
       this.logger.debug(`Framework found via uppercase match: ${methodology} -> ${framework.name}`);
       return framework;
     }
-    
+
     // Try case-insensitive search through all frameworks
     for (const [id, def] of this.frameworks) {
       if (id.toLowerCase() === methodology.toLowerCase()) {
-        this.logger.debug(`Framework found via case-insensitive match: ${methodology} -> ${def.name}`);
+        this.logger.debug(
+          `Framework found via case-insensitive match: ${methodology} -> ${def.name}`
+        );
         return def;
       }
-      
+
       // Also check methodology field for additional matching
       if (def.methodology.toLowerCase() === methodology.toLowerCase()) {
         this.logger.debug(`Framework found via methodology match: ${methodology} -> ${def.name}`);
         return def;
       }
     }
-    
+
     // Log available frameworks for debugging
     const availableIds = Array.from(this.frameworks.keys());
-    this.logger.warn(`Framework '${methodology}' not found. Available frameworks: [${availableIds.join(', ')}]`);
+    this.logger.warn(
+      `Framework '${methodology}' not found. Available frameworks: [${availableIds.join(', ')}]`
+    );
     return undefined;
   }
 
@@ -174,7 +185,7 @@ export class FrameworkManager {
    */
   listFrameworks(enabledOnly: boolean = false): FrameworkDefinition[] {
     const frameworks = Array.from(this.frameworks.values());
-    return enabledOnly ? frameworks.filter(f => f.enabled) : frameworks;
+    return enabledOnly ? frameworks.filter((f) => f.enabled) : frameworks;
   }
 
   /**
@@ -194,9 +205,23 @@ export class FrameworkManager {
   }
 
   /**
+   * Expose the methodology registry for integrations (e.g., hot reload wiring).
+   */
+  getMethodologyRegistry(): MethodologyRegistry {
+    this.ensureInitialized();
+    if (!this.methodologyRegistry) {
+      throw new Error('Methodology registry not initialized');
+    }
+    return this.methodologyRegistry;
+  }
+
+  /**
    * Check if framework is applicable for given criteria
    */
-  private isApplicable(framework: FrameworkDefinition, criteria: FrameworkSelectionCriteria): boolean {
+  private isApplicable(
+    framework: FrameworkDefinition,
+    criteria: FrameworkSelectionCriteria
+  ): boolean {
     // Check execution type compatibility
     if (criteria.executionType && framework.applicableTypes.length > 0) {
       if (!framework.applicableTypes.includes(criteria.executionType)) {
@@ -211,7 +236,10 @@ export class FrameworkManager {
   /**
    * Calculate fit score for framework selection
    */
-  private calculateFitScore(framework: FrameworkDefinition, criteria: FrameworkSelectionCriteria): number {
+  private calculateFitScore(
+    framework: FrameworkDefinition,
+    criteria: FrameworkSelectionCriteria
+  ): number {
     let score = framework.priority;
 
     // Execution type match bonus
@@ -242,28 +270,41 @@ export class FrameworkManager {
    */
   private generateSystemPrompt(framework: FrameworkDefinition, prompt: ConvertedPrompt): string {
     let systemPrompt = framework.systemPromptTemplate;
-    
+
     // Replace template variables
     systemPrompt = systemPrompt.replace(/\{PROMPT_NAME\}/g, prompt.name || 'Prompt');
     systemPrompt = systemPrompt.replace(/\{PROMPT_CATEGORY\}/g, prompt.category || 'general');
     systemPrompt = systemPrompt.replace(/\{FRAMEWORK_NAME\}/g, framework.name);
-    
+
+    // Replace methodology guidance from guide
+    const guide = this.getMethodologyGuide(framework.id);
+    if (guide) {
+      const guidance = guide.getSystemPromptGuidance({
+        promptName: prompt.name,
+        promptCategory: prompt.category,
+      });
+      systemPrompt = systemPrompt.replace(/\{METHODOLOGY_GUIDANCE\}/g, guidance);
+    }
+
     return systemPrompt;
   }
 
   /**
    * Get selection reason for context metadata (simplified)
    */
-  private getSelectionReason(framework: FrameworkDefinition, criteria: FrameworkSelectionCriteria): string {
-    if (criteria.userPreference && criteria.userPreference !== "AUTO") {
+  private getSelectionReason(
+    framework: FrameworkDefinition,
+    criteria: FrameworkSelectionCriteria
+  ): string {
+    if (criteria.userPreference && criteria.userPreference !== 'AUTO') {
       return `User preference: ${criteria.userPreference}`;
     }
-    
-    return "Default framework selection";
+
+    return 'Default framework selection';
   }
 
   /**
-   * Initialize methodology guides registry (REMOVED - Phase 2)
+   * Initialize methodology guides registry (REMOVED - )
    * Functionality moved to MethodologyRegistry for better separation of concerns
    */
 
@@ -288,28 +329,34 @@ export class FrameworkManager {
           executionGuidelines: this.getExecutionGuidelines(guide),
           applicableTypes: this.getApplicableTypes(guide),
           priority: this.getFrameworkPriority(guide),
-          enabled: true
+          enabled: true,
         };
 
         this.frameworks.set(frameworkDefinition.id, frameworkDefinition);
         this.logger.debug(`Generated framework definition for ${guide.frameworkName}`);
       }
 
-      this.logger.info(`Generated ${this.frameworks.size} framework definitions from methodology guides`);
+      this.logger.info(
+        `Generated ${this.frameworks.size} framework definitions from methodology guides`
+      );
     } catch (error) {
-      this.logger.error("Failed to generate framework definitions:", error);
+      this.logger.error('Failed to generate framework definitions:', error);
       throw error;
     }
   }
 
   /**
-   * Generate system prompt template from methodology guide
+   * Generate system prompt template from methodology guide.
+   *
+   * NOTE: This creates a WRAPPER only. The actual methodology guidance is injected
+   * by SystemPromptInjector.injectMethodologyGuidance() to avoid duplication.
+   * The injector calls guide.getSystemPromptGuidance() to get the detailed content.
    */
   private generateSystemPromptTemplate(guide: IMethodologyGuide): string {
-    const baseGuidance = guide.getSystemPromptGuidance({});
+    // Return wrapper only - guidance is injected by SystemPromptInjector
     return `You are operating under the ${guide.frameworkName} methodology for {PROMPT_NAME}.
 
-${baseGuidance}
+{METHODOLOGY_GUIDANCE}
 
 Apply this methodology systematically to ensure comprehensive and structured responses.`;
   }
@@ -320,14 +367,14 @@ Apply this methodology systematically to ensure comprehensive and structured res
   private getFrameworkDescription(guide: IMethodologyGuide): string {
     // Generate descriptions based on methodology type
     switch (guide.methodology) {
-      case "CAGEERF":
-        return "Comprehensive structured approach: Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework";
-      case "ReACT":
-        return "Reasoning and Acting pattern for systematic problem-solving";
-      case "5W1H":
-        return "Who, What, When, Where, Why, How systematic analysis";
-      case "SCAMPER":
-        return "Creative problem-solving: Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse";
+      case 'CAGEERF':
+        return 'Comprehensive structured approach: Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework';
+      case 'ReACT':
+        return 'Reasoning and Acting pattern for systematic problem-solving';
+      case '5W1H':
+        return 'Who, What, When, Where, Why, How systematic analysis';
+      case 'SCAMPER':
+        return 'Creative problem-solving: Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse';
       default:
         return `${guide.methodology} methodology for systematic approach`;
     }
@@ -338,7 +385,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
    */
   private getExecutionGuidelines(guide: IMethodologyGuide): string[] {
     // Generate basic guidelines from methodology guide context
-    const processingGuidance = guide.guideTemplateProcessing("", "template");
+    const processingGuidance = guide.guideTemplateProcessing('', 'single');
     return processingGuidance.templateEnhancements.systemPromptAdditions;
   }
 
@@ -347,16 +394,16 @@ Apply this methodology systematically to ensure comprehensive and structured res
    */
   private getApplicableTypes(guide: IMethodologyGuide): string[] {
     switch (guide.methodology) {
-      case "CAGEERF":
-        return ["chain", "template"];
-      case "ReACT":
-        return ["chain"];
-      case "5W1H":
-        return ["template", "chain"];
-      case "SCAMPER":
-        return ["template"];
+      case 'CAGEERF':
+        return ['chain', 'template'];
+      case 'ReACT':
+        return ['chain'];
+      case '5W1H':
+        return ['template', 'chain'];
+      case 'SCAMPER':
+        return ['template'];
       default:
-        return ["template"];
+        return ['template'];
     }
   }
 
@@ -365,13 +412,13 @@ Apply this methodology systematically to ensure comprehensive and structured res
    */
   private getFrameworkPriority(guide: IMethodologyGuide): number {
     switch (guide.methodology) {
-      case "CAGEERF":
+      case 'CAGEERF':
         return 10;
-      case "ReACT":
+      case 'ReACT':
         return 8;
-      case "5W1H":
+      case '5W1H':
         return 7;
-      case "SCAMPER":
+      case 'SCAMPER':
         return 6;
       default:
         return 5;
@@ -383,7 +430,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
    */
   private ensureInitialized(): void {
     if (!this.initialized) {
-      throw new Error("FrameworkManager not initialized. Call initialize() first.");
+      throw new Error('FrameworkManager not initialized. Call initialize() first.');
     }
   }
 

@@ -1,60 +1,26 @@
 {
   "prompts": [
     {
-      "id": "expert_code_implementation",
-      "name": "Expert Code Implementation",
-      "category": "development",
-      "description": "Expert implementation of refined coding requirements with comprehensive explanation and best practices.",
-      "file": "expert_code_implementation.md",
-      "arguments": [
-        {
-          "name": "refined_query",
-          "description": "The refined coding request",
-          "required": true
-        },
-        {
-          "name": "language",
-          "description": "The programming language to use",
-          "required": true
-        },
-        {
-          "name": "requirements",
-          "description": "The functional requirements",
-          "required": true
-        },
-        {
-          "name": "constraints",
-          "description": "Any performance/security/quality considerations",
-          "required": false
-        }
-      ],
-      "gates": [
-        "security-awareness",
-        "code-quality",
-        "technical-accuracy"
-      ]
-    },
-    {
       "id": "code_review_optimization_chain",
-      "name": "Comprehensive Code Review",
+      "name": "Comprehensive Code Review Chain",
       "category": "development",
-      "description": "Systematic 6-step code review covering structure, functionality, security, performance, optimization, and quality assurance",
+      "description": "Systematic code review covering structure, functionality, security, performance, optimization, and quality assurance using symbolic tool chain.",
       "file": "code_review_optimization_chain.md",
       "arguments": [
         {
           "name": "target_code",
-          "description": "The code to be reviewed and optimized",
-          "required": true
+          "type": "string",
+          "description": "The code to be reviewed and optimized"
         },
         {
           "name": "language_framework",
-          "description": "Programming language and framework being used",
-          "required": true
+          "type": "string",
+          "description": "Programming language and framework being used"
         },
         {
           "name": "performance_goals",
-          "description": "Specific performance targets or optimization goals",
-          "required": false
+          "type": "string",
+          "description": "Specific performance targets or optimization goals"
         }
       ]
     },
@@ -107,30 +73,6 @@
         {
           "name": "project_commands",
           "description": "JSON object with detected project commands",
-          "required": true
-        }
-      ]
-    },
-    {
-      "id": "analyze_file_structure",
-      "name": "Analyze File Structure",
-      "category": "development",
-      "description": "Analyzes a file's structure to identify potential modules, dependencies, and organization patterns for refactoring.",
-      "file": "analyze_file_structure.md",
-      "arguments": [
-        {
-          "name": "code",
-          "description": "The source code to analyze",
-          "required": true
-        },
-        {
-          "name": "language",
-          "description": "Programming language of the code",
-          "required": true
-        },
-        {
-          "name": "file_path",
-          "description": "Path to the file being analyzed",
           "required": true
         }
       ]
@@ -189,44 +131,6 @@
       ]
     },
     {
-      "id": "test_temporary_gates",
-      "name": "Test Temporary Gates Implementation",
-      "category": "development",
-      "description": "Test prompt for validating the enhanced gate system with temporary gates. Demonstrates 5-level precedence, execution-scoped lifecycle management, and multiple gate types.",
-      "file": "test-temporary-gates.md",
-      "arguments": [
-        {
-          "name": "analysis_type",
-          "description": "Type of analysis to perform (e.g., 'technical specification', 'architectural design', 'implementation plan')",
-          "required": true
-        },
-        {
-          "name": "topic",
-          "description": "The main subject to analyze",
-          "required": true
-        },
-        {
-          "name": "content",
-          "description": "The content or scenario to analyze",
-          "required": true
-        },
-        {
-          "name": "focus_area",
-          "description": "Specific area to emphasize in the analysis",
-          "required": true
-        },
-        {
-          "name": "context",
-          "description": "The broader context or use case for the analysis",
-          "required": true
-        }
-      ],
-      "gates": [
-        "content-structure",
-        "technical-accuracy"
-      ]
-    },
-    {
       "id": "strategicImplement",
       "name": "Strategic Implementation",
       "category": "development",
@@ -241,7 +145,7 @@
         {
           "name": "phase_identifier",
           "type": "string",
-          "description": "Specific phase to implement (e.g., 'Phase 1', 'Phase 2A', 'Step 3: Integration')"
+          "description": "Specific phase to implement (e.g., '', 'Phase 2A', 'Step 3: Integration')"
         }
       ]
     },
@@ -271,48 +175,6 @@
           "name": "language",
           "type": "string",
           "description": "Programming language (JavaScript, TypeScript, etc.)"
-        }
-      ]
-    },
-    {
-      "id": "test_concise_format",
-      "name": "Test Concise Format",
-      "category": "development",
-      "description": "Testing the new concise message format",
-      "file": "test_concise_format.md",
-      "arguments": [
-        {
-          "name": "test_param",
-          "type": "string",
-          "description": "Test parameter"
-        }
-      ]
-    },
-    {
-      "id": "test_concise_v2",
-      "name": "Test Concise Format V2",
-      "category": "development",
-      "description": "Testing the simplified concise message format after restart",
-      "file": "test_concise_v2.md",
-      "arguments": [
-        {
-          "name": "input",
-          "type": "string",
-          "description": "Test input"
-        }
-      ]
-    },
-    {
-      "id": "test_final_concise",
-      "name": "Test Final Concise Format",
-      "category": "development",
-      "description": "Final test of concise message format with isLLMEnabled() fix",
-      "file": "test_final_concise.md",
-      "arguments": [
-        {
-          "name": "test_input",
-          "type": "string",
-          "description": "Test input parameter"
         }
       ]
     }

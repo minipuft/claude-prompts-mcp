@@ -1,3 +1,4 @@
+// @lifecycle canonical - Types for system prompt injection and template guidance flows.
 /**
  * Prompt Guidance Type Definitions
  *
@@ -7,7 +8,11 @@
  */
 
 import type { ConvertedPrompt } from '../../execution/types.js';
-import type { FrameworkDefinition, MethodologyEnhancement, ProcessingGuidance } from './methodology-types.js';
+import type {
+  FrameworkDefinition,
+  MethodologyEnhancement,
+  ProcessingGuidance,
+} from './methodology-types.js';
 
 /**
  * System prompt injection configuration
@@ -44,153 +49,22 @@ export interface SystemPromptInjectionResult {
     processingTimeMs: number;
     validationPassed: boolean;
     error?: string;
-    // Phase 4: Semantic analysis metadata
+    // Semantic analysis metadata
     semanticAware?: boolean;
     semanticComplexity?: 'low' | 'medium' | 'high';
     semanticConfidence?: number;
   };
-}
-
-/**
- * Template enhancement configuration
- */
-export interface TemplateEnhancementConfig {
-  /** Whether to enhance templates with methodology guidance */
-  enabled: boolean;
-  /** Types of enhancements to apply */
-  enabledEnhancements: TemplateEnhancementType[];
-  /** Minimum confidence threshold for applying enhancements */
-  confidenceThreshold: number;
-  /** Maximum number of enhancements to apply */
-  maxEnhancements: number;
-}
-
-/**
- * Types of template enhancements
- */
-export type TemplateEnhancementType =
-  | 'structure'
-  | 'clarity'
-  | 'completeness'
-  | 'methodology_alignment'
-  | 'quality_gates';
-
-/**
- * Template enhancement result
- */
-export interface TemplateEnhancementResult {
-  /** Original template before enhancement */
-  originalTemplate: string;
-  /** Enhanced template with methodology improvements */
-  enhancedTemplate: string;
-  /** Applied enhancements */
-  suggestions: string[];
-  /** Template processing guidance from methodology */
-  processingGuidance: ProcessingGuidance;
-  /** Framework that provided the guidance */
-  sourceFramework: FrameworkDefinition;
-  /** Enhancement metadata */
-  metadata: {
-    enhancementTime: Date;
-    enhancementLevel: 'minimal' | 'moderate' | 'comprehensive';
-    suggestionsCount: number;
-    validationPassed: boolean;
-    processingTimeMs: number;
-    methodologyApplied: string;
-    error?: string;
-    // Phase 4: Semantic analysis metadata
-    semanticAware?: boolean;
-    semanticComplexity?: 'low' | 'medium' | 'high';
-    semanticConfidence?: number;
-    semanticEnhancementsApplied?: string[];
-  };
-  /** Validation result */
-  validation: {
-    passed: boolean;
-    score: number;
-    issues: string[];
-    recommendations: string[];
-  };
-}
-
-/**
- * Applied enhancement details
- */
-export interface AppliedEnhancement {
-  /** Type of enhancement applied */
-  type: TemplateEnhancementType;
-  /** Description of what was enhanced */
-  description: string;
-  /** Location in template where enhancement was applied */
-  location: 'system' | 'user' | 'arguments' | 'metadata';
-  /** Enhancement content that was added/modified */
-  content: string;
-  /** Confidence in this enhancement */
-  confidence: number;
-  /** Methodology justification for the enhancement */
-  justification: string;
 }
 
 /**
  * Methodology tracking state
  */
-export interface MethodologyTrackingState {
-  /** Currently active methodology */
-  activeMethodology: string;
-  /** Previous methodology (for switch tracking) */
-  previousMethodology: string | null;
-  /** When the current methodology was activated */
-  activatedAt: Date;
-  /** Reason for the current methodology selection */
-  activationReason: string;
-  /** Whether methodology tracking is enabled */
-  trackingEnabled: boolean;
-  /** Methodology switch history */
-  switchHistory: MethodologySwitchRecord[];
-}
-
-/**
- * Methodology switch record
- */
-export interface MethodologySwitchRecord {
-  /** When the switch occurred */
-  timestamp: Date;
-  /** Methodology switched from */
-  fromMethodology: string;
-  /** Methodology switched to */
-  toMethodology: string;
-  /** Reason for the switch */
-  reason: string;
-  /** Whether the switch was successful */
-  successful: boolean;
-  /** Switch duration in milliseconds */
-  duration: number;
-}
-
-/**
- * Methodology state change event
- */
-export interface MethodologyStateChangeEvent {
-  /** Type of state change */
-  type: 'switch' | 'enable' | 'disable' | 'error';
-  /** Previous state */
-  previousState: MethodologyTrackingState;
-  /** New state */
-  newState: MethodologyTrackingState;
-  /** Event timestamp */
-  timestamp: Date;
-  /** Additional event context */
-  context?: Record<string, any>;
-}
-
 /**
  * Prompt guidance configuration
  */
 export interface PromptGuidanceConfig {
   /** System prompt injection configuration */
   systemPromptInjection: SystemPromptInjectionConfig;
-  /** Template enhancement configuration */
-  templateEnhancement: TemplateEnhancementConfig;
   /** Methodology tracking configuration */
   methodologyTracking: {
     enabled: boolean;
@@ -210,8 +84,6 @@ export interface PromptGuidanceResult {
   enhancedPrompt: ConvertedPrompt;
   /** System prompt injection result */
   systemPromptInjection: SystemPromptInjectionResult | null;
-  /** Template enhancement result */
-  templateEnhancement: TemplateEnhancementResult | null;
   /** Applied methodology enhancement */
   methodologyEnhancement: MethodologyEnhancement | null;
   /** Guidance metadata */
@@ -234,14 +106,15 @@ export interface PromptGuidanceAnalytics {
   successRate: number;
   /** Average enhancement confidence */
   averageConfidence: number;
-  /** Most common enhancement types */
-  commonEnhancements: Record<TemplateEnhancementType, number>;
   /** Methodology usage distribution */
-  methodologyUsage: Record<string, {
-    count: number;
-    averageConfidence: number;
-    successRate: number;
-  }>;
+  methodologyUsage: Record<
+    string,
+    {
+      count: number;
+      averageConfidence: number;
+      successRate: number;
+    }
+  >;
   /** Performance metrics */
   performance: {
     averageProcessingTime: number;
@@ -283,9 +156,9 @@ export interface IPromptGuidanceService {
   ): Promise<PromptGuidanceResult>;
 
   /**
-   * Get current methodology tracking state
+   * Get current methodology state
    */
-  getMethodologyState(): MethodologyTrackingState;
+  getCurrentMethodologyState(): MethodologyState;
 
   /**
    * Get framework state information
@@ -304,7 +177,7 @@ export interface IPromptGuidanceService {
 }
 
 /**
- * Methodology state information (Phase 3)
+ * Methodology state information
  */
 export interface MethodologyState {
   /** Currently active methodology */
@@ -328,7 +201,7 @@ export interface MethodologyState {
 }
 
 /**
- * Methodology switch request (Phase 3)
+ * Methodology switch request ()
  */
 export interface MethodologySwitchRequest {
   /** Target methodology to switch to */
@@ -340,11 +213,11 @@ export interface MethodologySwitchRequest {
 }
 
 /**
- * Methodology system health information (Phase 3)
+ * Methodology system health information ()
  */
 export interface MethodologyHealth {
   /** System health status */
-  status: "healthy" | "degraded" | "error";
+  status: 'healthy' | 'degraded' | 'error';
   /** Currently active methodology */
   activeMethodology: string;
   /** Whether methodology system is enabled */
@@ -363,7 +236,7 @@ export interface MethodologyHealth {
 }
 
 /**
- * Persisted methodology state for disk storage (Phase 3)
+ * Persisted methodology state for disk storage ()
  */
 export interface PersistedMethodologyState {
   /** State format version */
@@ -379,31 +252,7 @@ export interface PersistedMethodologyState {
 }
 
 /**
- * Template processing guidance from methodology guides (Phase 3)
- * Extends the base ProcessingGuidance interface
+ * Template processing guidance from methodology guides.
+ * Alias to ProcessingGuidance to keep a single source of truth.
  */
-export interface TemplateProcessingGuidance {
-  // Methodology-specific processing steps
-  processingSteps: Array<{
-    id: string;
-    name: string;
-    action: string;
-    methodologyPhase: string;
-    dependencies: string[];
-    expected_output: string;
-  }>;
-
-  // Template enhancement suggestions
-  templateEnhancements: {
-    systemPromptAdditions: string[];
-    userPromptModifications: string[];
-    contextualHints: string[];
-  };
-
-  // Execution flow guidance
-  executionFlow: {
-    preProcessingSteps: string[];
-    postProcessingSteps: string[];
-    validationSteps: string[];
-  };
-}
+export type TemplateProcessingGuidance = ProcessingGuidance;

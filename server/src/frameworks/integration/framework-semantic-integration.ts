@@ -1,38 +1,36 @@
+// @lifecycle migrating - Coordinating semantic analysis with framework switching is still stabilizing.
 /**
- * Framework-Semantic Integration - Phase 2 Implementation
+ * Framework-Semantic Integration -  Implementation
  * Intelligent framework switching and consensus mechanisms
- * 
+ *
  * Key Integration Points:
  * - Semantic Analysis provides WHAT the prompt needs (complexity, structure, requirements)
  * - Framework Manager provides HOW to approach it (methodology, system prompts)
  * - Integration layer coordinates between systems WITHOUT interference
  */
 
-import { Logger } from "../../logging/index.js";
-import { ConvertedPrompt } from "../../types/index.js";
-import { FrameworkManager } from "../framework-manager.js";
+import { Logger } from '../../logging/index.js';
+import { ContentAnalyzer } from '../../semantic/configurable-semantic-analyzer.js';
+import { ConvertedPrompt } from '../../types/index.js';
+import { FrameworkManager } from '../framework-manager.js';
+import { FrameworkStateManager } from '../framework-state-manager.js';
+import { PromptGuidanceService } from '../prompt-guidance/service.js';
 import {
   FrameworkDefinition,
   FrameworkExecutionContext,
   FrameworkSelectionCriteria,
+  FrameworkAlignmentResult,
   FrameworkSwitchingConfig,
-  FrameworkUsageInsights,
   FrameworkSwitchRecommendation,
-  IntegratedAnalysisResult
-} from "../types/index.js";
-import {
-  ContentAnalyzer,
-  ContentAnalysisResult
-} from "../../semantic/configurable-semantic-analyzer.js";
-import { FrameworkStateManager } from "../framework-state-manager.js";
-import { PromptGuidanceService } from "../prompt-guidance/service.js";
+  FrameworkUsageInsights,
+  FrameworkUsageMetrics,
+  IntegratedAnalysisResult,
+} from '../types/index.js';
+
+import type { ContentAnalysisResult } from '../../semantic/types.js';
 
 /**
- * Integrated analysis result (imported from types/integration-types.js)
- */
-
-/**
- * Framework switching configuration (imported from types)
+ * Integration types are sourced from the semantic integration type module
  */
 
 /**
@@ -45,7 +43,7 @@ export class FrameworkSemanticIntegration {
   private semanticAnalyzer: ContentAnalyzer;
   private logger: Logger;
   private config: FrameworkSwitchingConfig;
-  // Phase 4: Prompt guidance coordination
+  // Prompt guidance coordination
   private promptGuidanceService?: PromptGuidanceService;
 
   // Framework switching state management
@@ -63,20 +61,20 @@ export class FrameworkSemanticIntegration {
     this.frameworkStateManager = frameworkStateManager;
     this.semanticAnalyzer = semanticAnalyzer;
     this.logger = logger;
-    
+
     this.config = {
       enableAutomaticSwitching: config.enableAutomaticSwitching ?? true,
       switchingThreshold: config.switchingThreshold ?? 0.8,
       preventThrashing: config.preventThrashing ?? true,
       switchingCooldownMs: config.switchingCooldownMs ?? 30000, // 30 second cooldown
       blacklistedFrameworks: config.blacklistedFrameworks ?? [],
-      preferredFrameworks: config.preferredFrameworks ?? []
+      preferredFrameworks: config.preferredFrameworks ?? [],
     };
   }
 
   /**
    * Main integration method - combines semantic analysis with framework selection
-   * Phase 4: Enhanced with prompt guidance coordination
+   * Enhanced with prompt guidance coordination
    */
   async analyzeWithFrameworkIntegration(
     prompt: ConvertedPrompt,
@@ -87,7 +85,9 @@ export class FrameworkSemanticIntegration {
 
     // NEW: Check if framework system is enabled before proceeding
     if (!this.frameworkStateManager.isFrameworkSystemEnabled()) {
-      this.logger.debug(`Framework system disabled - returning semantic analysis only for prompt: ${prompt.id}`);
+      this.logger.debug(
+        `Framework system disabled - returning semantic analysis only for prompt: ${prompt.id}`
+      );
       return this.createNonFrameworkIntegratedResult(prompt, startTime);
     }
 
@@ -95,36 +95,44 @@ export class FrameworkSemanticIntegration {
       // Step 1: Perform semantic analysis (WHAT does the prompt need?)
       this.logger.debug(`Starting semantic analysis for prompt: ${prompt.id}`);
       const semanticAnalysis = await this.semanticAnalyzer.analyzePrompt(prompt);
-      
+
       // Step 2: Check analysis capabilities and adapt accordingly
       const analysisCapabilities = semanticAnalysis.capabilities;
-      this.logger.debug(`Analysis capabilities: semantic=${analysisCapabilities.hasSemanticUnderstanding}, framework=${analysisCapabilities.canRecommendFramework}`);
-      
+      this.logger.debug(
+        `Analysis capabilities: semantic=${analysisCapabilities.hasSemanticUnderstanding}, framework=${analysisCapabilities.canRecommendFramework}`
+      );
+
       // Step 3: Enhance framework criteria with user preference and analysis mode
-      const executionType = semanticAnalysis.executionType;
+      const executionType = semanticAnalysis.executionType === 'chain' ? 'chain' : 'single';
       const enhancedCriteria = this.enhanceFrameworkCriteria(
         {
-          executionType: executionType as "template" | "chain",
-          complexity: semanticAnalysis.complexity
+          executionType,
+          complexity: semanticAnalysis.complexity,
         },
         userFrameworkPreference,
         semanticAnalysis
       );
-      
+
       // Step 4: Framework selection adapted to analysis capabilities
-      this.logger.debug(`Selecting framework based on semantic criteria (mode: ${semanticAnalysis.analysisMetadata.mode})`);
+      this.logger.debug(
+        `Selecting framework based on semantic criteria (mode: ${semanticAnalysis.analysisMetadata.mode})`
+      );
       const frameworkContext = this.selectOptimalFramework(
         prompt,
         enhancedCriteria,
         semanticAnalysis
       );
-      
+
       // Step 5: Validate framework-semantic alignment
       const alignment = this.validateFrameworkAlignment(semanticAnalysis, frameworkContext);
-      
+
       // Step 6: Generate alternative frameworks (adapted for analysis mode)
-      const alternatives = this.generateAlternativeFrameworks(enhancedCriteria, frameworkContext, semanticAnalysis);
-      
+      const alternatives = this.generateAlternativeFrameworks(
+        enhancedCriteria,
+        frameworkContext,
+        semanticAnalysis
+      );
+
       // Step 6: Build integrated result with optional prompt guidance
       const result: IntegratedAnalysisResult = {
         semanticAnalysis,
@@ -133,23 +141,23 @@ export class FrameworkSemanticIntegration {
           frameworkSelectionReason: frameworkContext.metadata.selectionReason,
           semanticFrameworkAlignment: alignment.overallAlignment,
           alternativeFrameworks: alternatives,
-          consensusMetrics: alignment.detailedMetrics
+          consensusMetrics: alignment.detailedMetrics,
         },
         recommendations: this.generateIntegratedRecommendations(
           semanticAnalysis,
           frameworkContext,
           alignment
-        )
+        ),
       };
 
-      // Phase 4: Apply prompt guidance if requested and available
+      // Apply prompt guidance if requested and available
       if (includePromptGuidance && this.promptGuidanceService?.isInitialized()) {
         try {
           const guidanceResult = await this.promptGuidanceService.applyGuidance(prompt, {
             includeSystemPromptInjection: true,
             includeTemplateEnhancement: true,
             frameworkOverride: frameworkContext.selectedFramework.methodology,
-            semanticAnalysis: semanticAnalysis
+            semanticAnalysis: semanticAnalysis,
           });
 
           // Enhance the result with prompt guidance information
@@ -157,34 +165,33 @@ export class FrameworkSemanticIntegration {
             guidanceApplied: guidanceResult.guidanceApplied,
             enhancedPrompt: guidanceResult.enhancedPrompt,
             systemPromptInjection: guidanceResult.systemPromptInjection,
-            templateEnhancement: guidanceResult.templateEnhancement,
             processingTimeMs: guidanceResult.processingTimeMs,
-            confidenceScore: guidanceResult.metadata.confidenceScore
+            confidenceScore: guidanceResult.metadata.confidenceScore,
           };
 
-          this.logger.debug(`Prompt guidance applied with confidence: ${guidanceResult.metadata.confidenceScore}`);
-
+          this.logger.debug(
+            `Prompt guidance applied with confidence: ${guidanceResult.metadata.confidenceScore}`
+          );
         } catch (error) {
-          this.logger.warn("Failed to apply prompt guidance:", error);
+          this.logger.warn('Failed to apply prompt guidance:', error);
         }
       }
-      
+
       // Update performance tracking
       this.updateFrameworkUsage(
         frameworkContext.selectedFramework.id,
         performance.now() - startTime,
         alignment.overallAlignment
       );
-      
+
       this.logger.info(
         `Framework integration completed: ${frameworkContext.selectedFramework.name} ` +
-        `(alignment: ${(alignment.overallAlignment * 100).toFixed(1)}%)`
+          `(alignment: ${(alignment.overallAlignment * 100).toFixed(1)}%)`
       );
-      
+
       return result;
-      
     } catch (error) {
-      this.logger.error("Framework-semantic integration failed:", error);
+      this.logger.error('Framework-semantic integration failed:', error);
       return this.createFallbackIntegratedResult(prompt, startTime);
     }
   }
@@ -197,23 +204,23 @@ export class FrameworkSemanticIntegration {
     const insights: FrameworkUsageInsights = {
       totalAnalyses: 0,
       frameworkUsage: {},
-      recommendations: []
+      recommendations: [],
     };
-    
-    frameworks.forEach(framework => {
+
+    frameworks.forEach((framework) => {
       const metrics = this.frameworkUsageHistory.get(framework.id);
       if (metrics) {
         insights.frameworkUsage[framework.id] = {
           framework: framework,
-          ...metrics
+          ...metrics,
         };
         insights.totalAnalyses += metrics.usageCount;
       }
     });
-    
+
     // Generate optimization recommendations
     insights.recommendations = this.generateUsageRecommendations(insights);
-    
+
     return insights;
   }
 
@@ -227,7 +234,7 @@ export class FrameworkSemanticIntegration {
     if (!this.config.enableAutomaticSwitching) {
       return null;
     }
-    
+
     // Check if framework context is available (framework system enabled)
     if (!currentResult.frameworkContext) {
       return null; // Cannot switch if framework system is disabled
@@ -235,12 +242,12 @@ export class FrameworkSemanticIntegration {
 
     const currentFramework = currentResult.frameworkContext.selectedFramework;
     const alignment = currentResult.integration.semanticFrameworkAlignment;
-    
+
     // Check if switching is warranted
     if (alignment >= this.config.switchingThreshold) {
       return null; // Current framework is performing well
     }
-    
+
     // Check cooldown period to prevent thrashing
     if (this.config.preventThrashing) {
       const lastSwitch = this.lastFrameworkSwitch.get(prompt.id);
@@ -248,27 +255,28 @@ export class FrameworkSemanticIntegration {
         return null; // Still in cooldown period
       }
     }
-    
+
     // Evaluate alternatives
     const alternatives = currentResult.integration.alternativeFrameworks;
-    const bestAlternative = alternatives.find(alt => 
-      !this.config.blacklistedFrameworks.includes(alt.id) &&
-      alt.id !== currentFramework.id
+    const bestAlternative = alternatives.find(
+      (alt) => !this.config.blacklistedFrameworks.includes(alt.id) && alt.id !== currentFramework.id
     );
-    
+
     if (!bestAlternative) {
       return null; // No viable alternatives
     }
-    
+
     return {
       currentFramework: currentFramework,
       recommendedFramework: bestAlternative,
-      reason: `Low alignment (${(alignment * 100).toFixed(1)}%) suggests ${bestAlternative.name} would be more suitable`,
+      reason: `Low alignment (${(alignment * 100).toFixed(1)}%) suggests ${
+        bestAlternative.name
+      } would be more suitable`,
       expectedImprovement: this.estimateImprovementPotential(
         currentFramework,
         bestAlternative,
         currentResult.semanticAnalysis
-      )
+      ),
     };
   }
 
@@ -283,35 +291,39 @@ export class FrameworkSemanticIntegration {
     semanticAnalysis?: ContentAnalysisResult
   ): FrameworkSelectionCriteria {
     const enhanced = { ...baseCriteria };
-    
+
     // Apply user preference if provided
     if (userPreference) {
       enhanced.userPreference = userPreference as any;
     }
-    
+
     // Handle analysis mode specific logic
     if (semanticAnalysis) {
       // In structural mode, user choice is more important
       if (semanticAnalysis.analysisMetadata.mode === 'structural') {
         if (!userPreference && semanticAnalysis.frameworkRecommendation.requiresUserChoice) {
           // Log that user choice is needed
-          this.logger.info("Structural analysis mode - framework selection requires user choice or default");
+          this.logger.info(
+            'Structural analysis mode - framework selection requires user choice or default'
+          );
         }
       }
-      
+
       // In semantic mode, use intelligent recommendations
-      if (semanticAnalysis.analysisMetadata.mode === 'semantic' && 
-          semanticAnalysis.frameworkRecommendation.shouldUseFramework) {
+      if (
+        semanticAnalysis.analysisMetadata.mode === 'semantic' &&
+        semanticAnalysis.frameworkRecommendation.shouldUseFramework
+      ) {
         // We can trust the semantic recommendation more
-        this.logger.debug("Semantic analysis provides framework recommendation");
+        this.logger.debug('Semantic analysis provides framework recommendation');
       }
     }
-    
+
     // Apply global preferences
     if (this.config.preferredFrameworks.length > 0 && !enhanced.userPreference) {
       // Don't override user preference, but suggest from preferred list
     }
-    
+
     return enhanced;
   }
 
@@ -325,13 +337,13 @@ export class FrameworkSemanticIntegration {
   ): FrameworkExecutionContext {
     // Use framework manager's selection logic
     const frameworkContext = this.frameworkManager.generateExecutionContext(prompt, criteria);
-    
+
     // Log selection reasoning
     this.logger.debug(
       `Framework selection: ${frameworkContext.selectedFramework.name} ` +
-      `(reason: ${frameworkContext.metadata.selectionReason})`
+        `(reason: ${frameworkContext.metadata.selectionReason})`
     );
-    
+
     return frameworkContext;
   }
 
@@ -343,32 +355,30 @@ export class FrameworkSemanticIntegration {
     frameworkContext: FrameworkExecutionContext
   ): FrameworkAlignmentResult {
     const framework = frameworkContext.selectedFramework;
-    
+
     // Calculate alignment scores
     const confidenceAlignment = this.calculateConfidenceAlignment(
       semanticAnalysis.confidence,
       frameworkContext.metadata.confidence
     );
-    
-    const complexityMatch = this.calculateComplexityMatch(
-      semanticAnalysis.complexity,
-      framework
-    );
-    
+
+    const complexityMatch = this.calculateComplexityMatch(semanticAnalysis.complexity, framework);
+
     const executionTypeCompatibility = this.calculateExecutionTypeCompatibility(
       semanticAnalysis.executionType,
       framework
     );
-    
-    const overallAlignment = (confidenceAlignment + complexityMatch + executionTypeCompatibility) / 3;
-    
+
+    const overallAlignment =
+      (confidenceAlignment + complexityMatch + executionTypeCompatibility) / 3;
+
     return {
       overallAlignment,
       detailedMetrics: {
         confidenceAlignment,
         complexityMatch,
-        executionTypeCompatibility
-      }
+        executionTypeCompatibility,
+      },
     };
   }
 
@@ -382,11 +392,11 @@ export class FrameworkSemanticIntegration {
   ): FrameworkDefinition[] {
     const allFrameworks = this.frameworkManager.listFrameworks(true);
     const currentFramework = currentContext.selectedFramework;
-    
+
     // Return frameworks that are NOT the current one, sorted by suitability
     return allFrameworks
-      .filter(f => f.id !== currentFramework.id)
-      .filter(f => !this.config.blacklistedFrameworks.includes(f.id))
+      .filter((f) => f.id !== currentFramework.id)
+      .filter((f) => !this.config.blacklistedFrameworks.includes(f.id))
       .slice(0, 3); // Limit to top 3 alternatives
   }
 
@@ -403,19 +413,26 @@ export class FrameworkSemanticIntegration {
       expectedPerformance: {
         processingTime: this.estimateProcessingTime(semanticAnalysis),
         memoryUsage: this.estimateMemoryUsage(semanticAnalysis),
-        cacheable: semanticAnalysis.complexity !== "high"
+        cacheable: semanticAnalysis.complexity !== 'high',
       },
       qualityAssurance: [
         ...semanticAnalysis.suggestedGates,
-        ...this.getFrameworkSpecificGates(frameworkContext.selectedFramework)
+        ...this.getFrameworkSpecificGates(frameworkContext.selectedFramework),
       ],
-      optimizations: this.generateOptimizationSuggestions(semanticAnalysis, frameworkContext, alignment)
+      optimizations: this.generateOptimizationSuggestions(
+        semanticAnalysis,
+        frameworkContext,
+        alignment
+      ),
     };
   }
 
   // Helper methods for alignment calculations
 
-  private calculateConfidenceAlignment(semanticConfidence: number, frameworkConfidence: number): number {
+  private calculateConfidenceAlignment(
+    semanticConfidence: number,
+    frameworkConfidence: number
+  ): number {
     // How well do the confidence scores align?
     const difference = Math.abs(semanticConfidence - frameworkConfidence);
     return Math.max(0, 1 - difference);
@@ -427,13 +444,13 @@ export class FrameworkSemanticIntegration {
   ): number {
     // Check if framework is suitable for the complexity level
     const complexityScore: Record<string, number> = {
-      'low': 1,
-      'medium': 2,
-      'high': 3
+      low: 1,
+      medium: 2,
+      high: 3,
     };
-    
+
     const semantic = complexityScore[semanticComplexity] || 2;
-    
+
     // Framework suitability based on methodology
     let frameworkSuitability = 2; // Default medium
     switch (framework.methodology) {
@@ -450,7 +467,7 @@ export class FrameworkSemanticIntegration {
         frameworkSuitability = 1.5; // Best for low-medium
         break;
     }
-    
+
     const difference = Math.abs(semantic - frameworkSuitability);
     return Math.max(0, 1 - difference / 3);
   }
@@ -461,7 +478,7 @@ export class FrameworkSemanticIntegration {
   ): number {
     // Check if execution type is compatible with framework
     if (framework.applicableTypes.length === 0) return 1.0; // Framework supports all types
-    
+
     return framework.applicableTypes.includes(executionType) ? 1.0 : 0.6;
   }
 
@@ -472,7 +489,7 @@ export class FrameworkSemanticIntegration {
     frameworkContext: FrameworkExecutionContext
   ): string {
     const baseApproach = `Execute as ${semanticAnalysis.executionType} using ${frameworkContext.selectedFramework.name} methodology`;
-    
+
     // Add mode-specific context
     if (semanticAnalysis.analysisMetadata.mode === 'structural') {
       return `${baseApproach} (structural analysis mode)`;
@@ -511,32 +528,34 @@ export class FrameworkSemanticIntegration {
     alignment: FrameworkAlignmentResult
   ): string[] {
     const suggestions: string[] = [];
-    
+
     if (alignment.overallAlignment < 0.7) {
-      suggestions.push("Consider framework switching for better alignment");
+      suggestions.push('Consider framework switching for better alignment');
     }
-    
-    if (semanticAnalysis.complexity === "low") {
-      suggestions.push("Enable parallel processing for performance improvement");
+
+    if (semanticAnalysis.complexity === 'low') {
+      suggestions.push('Enable parallel processing for performance improvement');
     }
-    
+
     if (semanticAnalysis.confidence > 0.8) {
-      suggestions.push("Enable caching to improve repeat performance");
+      suggestions.push('Enable caching to improve repeat performance');
     }
-    
+
     // Mode-specific suggestions
     if (semanticAnalysis.analysisMetadata.mode === 'structural') {
-      suggestions.push("Consider enabling semantic analysis for intelligent framework recommendations");
+      suggestions.push(
+        'Consider enabling semantic analysis for intelligent framework recommendations'
+      );
       if (semanticAnalysis.limitations.length > 0) {
-        suggestions.push("Enable LLM integration or Claude hooks for better analysis capabilities");
+        suggestions.push('Enable LLM integration or Claude hooks for better analysis capabilities');
       }
     }
-    
+
     // Warning-based suggestions
     if (semanticAnalysis.warnings.length > 0) {
-      suggestions.push("Review analysis warnings for potential configuration improvements");
+      suggestions.push('Review analysis warnings for potential configuration improvements');
     }
-    
+
     return suggestions;
   }
 
@@ -545,24 +564,26 @@ export class FrameworkSemanticIntegration {
    */
   private estimateProcessingTime(semanticAnalysis: ContentAnalysisResult): number {
     let baseTime = 100; // Base processing time in ms
-    
+
     // Adjust based on complexity
     switch (semanticAnalysis.complexity) {
-      case "high":
+      case 'high':
         baseTime *= 3;
         break;
-      case "medium":
+      case 'medium':
         baseTime *= 2;
         break;
       default:
         break;
     }
-    
+
     // Adjust based on execution type
     switch (semanticAnalysis.executionType) {
-      case "chain":
+      case 'chain':
         // Advanced chains with workflow-like features get higher multiplier
-        if (semanticAnalysis.executionCharacteristics.advancedChainFeatures?.requiresAdvancedExecution) {
+        if (
+          semanticAnalysis.executionCharacteristics.advancedChainFeatures?.requiresAdvancedExecution
+        ) {
           baseTime *= 2.5;
         } else {
           baseTime *= 2;
@@ -571,7 +592,7 @@ export class FrameworkSemanticIntegration {
       default:
         break;
     }
-    
+
     return baseTime;
   }
 
@@ -579,12 +600,12 @@ export class FrameworkSemanticIntegration {
    * Estimate memory usage based on semantic analysis
    */
   private estimateMemoryUsage(semanticAnalysis: ContentAnalysisResult): string {
-    if (semanticAnalysis.complexity === "high") {
-      return "high";
-    } else if (semanticAnalysis.complexity === "medium") {
-      return "medium";
+    if (semanticAnalysis.complexity === 'high') {
+      return 'high';
+    } else if (semanticAnalysis.complexity === 'medium') {
+      return 'medium';
     } else {
-      return "low";
+      return 'low';
     }
   }
 
@@ -594,47 +615,51 @@ export class FrameworkSemanticIntegration {
     alignmentScore: number
   ): void {
     let metrics = this.frameworkUsageHistory.get(frameworkId);
-    
+
     if (!metrics) {
       metrics = {
         usageCount: 0,
         averageProcessingTime: 0,
         averageAlignmentScore: 0,
-        lastUsed: new Date()
+        lastUsed: new Date(),
       };
     }
-    
+
     metrics.usageCount++;
     metrics.averageProcessingTime = (metrics.averageProcessingTime + processingTime) / 2;
     metrics.averageAlignmentScore = (metrics.averageAlignmentScore + alignmentScore) / 2;
     metrics.lastUsed = new Date();
-    
+
     this.frameworkUsageHistory.set(frameworkId, metrics);
   }
 
   private generateUsageRecommendations(insights: FrameworkUsageInsights): string[] {
     const recommendations: string[] = [];
-    
+
     const frameworkUsage = Object.values(insights.frameworkUsage);
     if (frameworkUsage.length === 0) return recommendations;
-    
+
     // Find best and worst performing frameworks
-    const mostUsedFramework = frameworkUsage.reduce((best, current) => 
+    const mostUsedFramework = frameworkUsage.reduce((best, current) =>
       current.usageCount > best.usageCount ? current : best
     );
-    
-    const leastUsedFramework = frameworkUsage.reduce((worst, current) => 
+
+    const leastUsedFramework = frameworkUsage.reduce((worst, current) =>
       current.usageCount < worst.usageCount ? current : worst
     );
-    
+
     if (mostUsedFramework.usageCount > 10) {
-      recommendations.push(`Most used framework: ${mostUsedFramework.framework.name} (${mostUsedFramework.usageCount} uses)`);
+      recommendations.push(
+        `Most used framework: ${mostUsedFramework.framework.name} (${mostUsedFramework.usageCount} uses)`
+      );
     }
-    
+
     if (leastUsedFramework.usageCount === 0) {
-      recommendations.push(`Unused framework: ${leastUsedFramework.framework.name} - consider if it's needed`);
+      recommendations.push(
+        `Unused framework: ${leastUsedFramework.framework.name} - consider if it's needed`
+      );
     }
-    
+
     return recommendations;
   }
 
@@ -645,20 +670,26 @@ export class FrameworkSemanticIntegration {
   ): number {
     // Estimate potential improvement based on framework characteristics
     let improvement = 0.1; // Base improvement assumption
-    
+
     // Framework-specific improvements
     if (semanticAnalysis.complexity === 'high' && alternativeFramework.methodology === 'CAGEERF') {
       improvement += 0.2;
     }
-    
-    if (semanticAnalysis.executionType === 'chain' && alternativeFramework.methodology === 'ReACT') {
+
+    if (
+      semanticAnalysis.executionType === 'chain' &&
+      alternativeFramework.methodology === 'ReACT'
+    ) {
       improvement += 0.15;
     }
-    
+
     return Math.min(improvement, 0.4); // Cap at 40% improvement
   }
 
-  private async createNonFrameworkIntegratedResult(prompt: ConvertedPrompt, startTime: number): Promise<IntegratedAnalysisResult> {
+  private async createNonFrameworkIntegratedResult(
+    prompt: ConvertedPrompt,
+    startTime: number
+  ): Promise<IntegratedAnalysisResult> {
     // When framework system is disabled, provide semantic analysis without framework integration
     const semanticAnalysis = await this.semanticAnalyzer.analyzePrompt(prompt);
 
@@ -666,45 +697,45 @@ export class FrameworkSemanticIntegration {
       semanticAnalysis,
       frameworkContext: null as any, // No framework context when disabled
       integration: {
-        frameworkSelectionReason: "Framework system disabled",
+        frameworkSelectionReason: 'Framework system disabled',
         semanticFrameworkAlignment: 0,
         alternativeFrameworks: [],
         consensusMetrics: {
           confidenceAlignment: 0,
           complexityMatch: 0,
-          executionTypeCompatibility: 0
-        }
+          executionTypeCompatibility: 0,
+        },
       },
       recommendations: {
         executionApproach: `Execute as ${semanticAnalysis.executionType} without framework methodology`,
         expectedPerformance: {
           processingTime: this.estimateProcessingTime(semanticAnalysis),
           memoryUsage: this.estimateMemoryUsage(semanticAnalysis),
-          cacheable: semanticAnalysis.complexity !== "high"
+          cacheable: semanticAnalysis.complexity !== 'high',
         },
         qualityAssurance: semanticAnalysis.suggestedGates,
-        optimizations: ["Framework system disabled - using standard execution"]
-      }
+        optimizations: ['Framework system disabled - using standard execution'],
+      },
     };
   }
 
   /**
-   * Phase 4: Set prompt guidance service for intelligent coordination
+   * Set prompt guidance service for intelligent coordination
    */
   setPromptGuidanceService(promptGuidanceService: PromptGuidanceService): void {
     this.promptGuidanceService = promptGuidanceService;
-    this.logger.info("PromptGuidanceService integrated with FrameworkSemanticIntegration");
+    this.logger.info('PromptGuidanceService integrated with FrameworkSemanticIntegration');
   }
 
   /**
-   * Phase 4: Check if prompt guidance is available and ready
+   * Check if prompt guidance is available and ready
    */
   hasPromptGuidance(): boolean {
     return this.promptGuidanceService?.isInitialized() ?? false;
   }
 
   /**
-   * Phase 4: Apply semantic-guided prompt enhancement
+   * Apply semantic-guided prompt enhancement
    */
   async applySemanticGuidedEnhancement(
     prompt: ConvertedPrompt,
@@ -712,7 +743,7 @@ export class FrameworkSemanticIntegration {
     frameworkContext: FrameworkExecutionContext
   ): Promise<any> {
     if (!this.promptGuidanceService?.isInitialized()) {
-      this.logger.debug("Prompt guidance service not available for semantic-guided enhancement");
+      this.logger.debug('Prompt guidance service not available for semantic-guided enhancement');
       return null;
     }
 
@@ -721,47 +752,49 @@ export class FrameworkSemanticIntegration {
         includeSystemPromptInjection: true,
         includeTemplateEnhancement: true,
         frameworkOverride: frameworkContext.selectedFramework.methodology,
-        semanticAnalysis: semanticAnalysis
+        semanticAnalysis: semanticAnalysis,
       });
 
       return {
         enhancedPrompt: guidanceResult.enhancedPrompt,
         systemPromptInjection: guidanceResult.systemPromptInjection,
-        templateEnhancement: guidanceResult.templateEnhancement,
         guidanceMetadata: {
           semanticAware: guidanceResult.metadata.semanticAware,
           semanticComplexity: guidanceResult.metadata.semanticComplexity,
           confidenceScore: guidanceResult.metadata.confidenceScore,
-          enhancementsApplied: guidanceResult.metadata.enhancementsApplied
-        }
+          enhancementsApplied: guidanceResult.metadata.enhancementsApplied,
+        },
       };
     } catch (error) {
-      this.logger.error("Failed to apply semantic-guided enhancement:", error);
+      this.logger.error('Failed to apply semantic-guided enhancement:', error);
       return null;
     }
   }
 
-  private createFallbackIntegratedResult(prompt: ConvertedPrompt, startTime: number): IntegratedAnalysisResult {
+  private createFallbackIntegratedResult(
+    prompt: ConvertedPrompt,
+    startTime: number
+  ): IntegratedAnalysisResult {
     const fallbackFramework = this.frameworkManager.listFrameworks(true)[0];
-    
+
     return {
       semanticAnalysis: {
-        executionType: "template",
+        executionType: 'single',
         requiresExecution: false,
         requiresFramework: false,
         confidence: 0.3,
-        reasoning: ["Fallback analysis"],
-        
+        reasoning: ['Fallback analysis'],
+
         capabilities: {
           canDetectStructure: false,
           canAnalyzeComplexity: false,
           canRecommendFramework: false,
-          hasSemanticUnderstanding: false
+          hasSemanticUnderstanding: false,
         },
-        
-        limitations: ["Fallback analysis with minimal capabilities"],
-        warnings: ["Analysis failed - using basic fallback"],
-        
+
+        limitations: ['Fallback analysis with minimal capabilities'],
+        warnings: ['Analysis failed - using basic fallback'],
+
         executionCharacteristics: {
           hasConditionals: false,
           hasLoops: false,
@@ -772,70 +805,50 @@ export class FrameworkSemanticIntegration {
           hasUserTemplate: false,
           hasStructuredReasoning: false,
           hasMethodologyKeywords: false,
-          hasComplexAnalysis: false
+          hasComplexAnalysis: false,
         },
-        complexity: "low",
-        suggestedGates: ["basic_validation"],
+        complexity: 'low',
+        suggestedGates: ['basic_validation'],
         frameworkRecommendation: {
           shouldUseFramework: false,
-          reasoning: ["Fallback analysis - framework not recommended"],
-          confidence: 0.9
+          reasoning: ['Fallback analysis - framework not recommended'],
+          confidence: 0.9,
         },
         analysisMetadata: {
-          version: "2.0.0",
-          mode: "structural",
+          version: '2.0.0',
+          mode: 'structural',
           analysisTime: performance.now() - startTime,
-          analyzer: "content",
-          cacheHit: false
-        }
+          analyzer: 'content',
+          cacheHit: false,
+        },
       },
       frameworkContext: this.frameworkManager.generateExecutionContext(prompt, {
-        executionType: "template",
-        complexity: "low"
+        executionType: 'single',
+        complexity: 'low',
       }),
       integration: {
-        frameworkSelectionReason: "Fallback selection",
+        frameworkSelectionReason: 'Fallback selection',
         semanticFrameworkAlignment: 0.3,
         alternativeFrameworks: [],
         consensusMetrics: {
           confidenceAlignment: 0.3,
           complexityMatch: 0.3,
-          executionTypeCompatibility: 0.3
-        }
+          executionTypeCompatibility: 0.3,
+        },
       },
       recommendations: {
-        executionApproach: "Basic template execution",
+        executionApproach: 'Basic single execution',
         expectedPerformance: {
           processingTime: 100,
-          memoryUsage: "low",
-          cacheable: true
+          memoryUsage: 'low',
+          cacheable: true,
         },
-        qualityAssurance: ["basic_validation"],
-        optimizations: []
-      }
+        qualityAssurance: ['basic_validation'],
+        optimizations: [],
+      },
     };
   }
 }
-
-// Supporting interfaces
-
-interface FrameworkUsageMetrics {
-  usageCount: number;
-  averageProcessingTime: number;
-  averageAlignmentScore: number;
-  lastUsed: Date;
-}
-
-interface FrameworkAlignmentResult {
-  overallAlignment: number;
-  detailedMetrics: {
-    confidenceAlignment: number;
-    complexityMatch: number;
-    executionTypeCompatibility: number;
-  };
-}
-
-// Interfaces imported from types/index.js
 
 /**
  * Create and configure framework-semantic integration with configurable analyzer
@@ -847,5 +860,11 @@ export async function createFrameworkSemanticIntegration(
   semanticAnalyzer: ContentAnalyzer,
   config?: Partial<FrameworkSwitchingConfig>
 ): Promise<FrameworkSemanticIntegration> {
-  return new FrameworkSemanticIntegration(frameworkManager, frameworkStateManager, semanticAnalyzer, logger, config);
+  return new FrameworkSemanticIntegration(
+    frameworkManager,
+    frameworkStateManager,
+    semanticAnalyzer,
+    logger,
+    config
+  );
 }

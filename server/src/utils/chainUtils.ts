@@ -1,3 +1,4 @@
+// @lifecycle canonical - Utility helpers for identifying and validating chain prompts.
 /**
  * Chain Utility Functions
  *
@@ -5,11 +6,10 @@
  * MIGRATION: Simplified to support only markdown-embedded chains.
  * Modular chain functions are deprecated but maintained for compatibility.
  *
- * Phase 2 of Chain System Migration (2025-01-30)
+ *  of Chain System Migration (2025-01-30)
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as path from 'node:path';
 
 import { ValidationError } from './errorHandling.js';
 // REMOVED: All types from deleted chain-scaffolding.ts
@@ -51,7 +51,8 @@ export function normalizeChainId(chainId: string): string {
 export interface ChainStep {
   promptId: string;
   stepName: string;
-  executionType?: 'prompt' | 'template';
+  executionType?: 'single' | 'chain';
+  legacyExecutionType?: 'prompt' | 'template';
   inputMapping?: Record<string, string>;
   outputMapping?: Record<string, string>;
   dependencies?: string[];
@@ -59,7 +60,6 @@ export interface ChainStep {
 
 // Import ConvertedPrompt from execution domain instead of redefining
 import type { ConvertedPrompt } from '../execution/types.js';
-
 
 /**
  * Determines if a prompt is a chain based on the presence of chain steps
@@ -84,11 +84,12 @@ export function validateChainSteps(steps: ChainStep[]): boolean {
     return false;
   }
 
-  return steps.every(step =>
-    step.promptId &&
-    step.stepName &&
-    typeof step.promptId === 'string' &&
-    typeof step.stepName === 'string'
+  return steps.every(
+    (step) =>
+      step.promptId &&
+      step.stepName &&
+      typeof step.promptId === 'string' &&
+      typeof step.stepName === 'string'
   );
 }
 
@@ -113,14 +114,13 @@ export function getChainInfo(prompt: ConvertedPrompt): {
   return {
     isChain: isChainPrompt(prompt),
     stepCount: getChainStepCount(prompt),
-    isValid: steps ? validateChainSteps(steps) : false
+    isValid: steps ? validateChainSteps(steps) : false,
   };
 }
 
 // ===== REMOVED: Modular Chain Detection and Management =====
 // ChainType enum and detectChainType() function removed
 // All chain detection now uses isChainPrompt() and chainSteps property
-
 
 /**
  * Check if a prompt is a chain with valid steps (replaces legacy isMonolithicChain)

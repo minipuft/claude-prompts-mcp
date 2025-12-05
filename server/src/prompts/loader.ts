@@ -1,19 +1,17 @@
+// @lifecycle canonical - Loads prompt and category definitions from disk into structured data.
 /**
  * Prompt Loader Module
  * Handles loading prompts from category-specific configuration files and markdown templates
  */
 
-import * as fs from "fs/promises";
-import { readFile } from "fs/promises";
-import path from "path";
-import { Logger } from "../logging/index.js";
-import {
-  CategoryPromptsResult,
-  PromptData,
-  PromptsConfigFile,
-} from "../types/index.js";
-import { safeWriteFile } from "./promptUtils.js";
-import { CategoryManager, createCategoryManager } from "./category-manager.js";
+import * as fs from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
+
+import { Logger } from '../logging/index.js';
+import { CategoryPromptsResult, PromptData, PromptsConfigFile } from '../types/index.js';
+import { CategoryManager, createCategoryManager } from './category-manager.js';
+import { safeWriteFile } from './promptUtils.js';
 
 /**
  * Prompt Loader class
@@ -30,32 +28,23 @@ export class PromptLoader {
   /**
    * Load prompts from category-specific prompts.json files
    */
-  async loadCategoryPrompts(
-    configPath: string
-  ): Promise<CategoryPromptsResult> {
+  async loadCategoryPrompts(configPath: string): Promise<CategoryPromptsResult> {
     try {
-      this.logger.info(
-        `🔍 PromptLoader: Starting to load category prompts from: ${configPath}`
-      );
+      this.logger.info(`🔍 PromptLoader: Starting to load category prompts from: ${configPath}`);
 
       // Read the promptsConfig.json file
-      this.logger.info("📖 Reading promptsConfig.json file...");
-      const configContent = await readFile(configPath, "utf8");
-      this.logger.info(
-        `✓ Config file read successfully, ${configContent.length} characters`
-      );
+      this.logger.info('📖 Reading promptsConfig.json file...');
+      const configContent = await readFile(configPath, 'utf8');
+      this.logger.info(`✓ Config file read successfully, ${configContent.length} characters`);
 
       let promptsConfig: PromptsConfigFile;
 
       try {
-        this.logger.info("🔧 Parsing promptsConfig.json...");
+        this.logger.info('🔧 Parsing promptsConfig.json...');
         promptsConfig = JSON.parse(configContent) as PromptsConfigFile;
-        this.logger.info("✓ Config file parsed successfully");
+        this.logger.info('✓ Config file parsed successfully');
       } catch (jsonError) {
-        this.logger.error(
-          `❌ Error parsing config file ${configPath}:`,
-          jsonError
-        );
+        this.logger.error(`❌ Error parsing config file ${configPath}:`, jsonError);
         throw new Error(
           `Invalid JSON in config file: ${
             jsonError instanceof Error ? jsonError.message : String(jsonError)
@@ -65,22 +54,18 @@ export class PromptLoader {
 
       // Log the parsed config structure
       this.logger.info(`📋 Config structure analysis:`);
-      this.logger.info(
-        `   - Categories defined: ${promptsConfig.categories?.length || 0}`
-      );
-      this.logger.info(
-        `   - Import paths defined: ${promptsConfig.imports?.length || 0}`
-      );
+      this.logger.info(`   - Categories defined: ${promptsConfig.categories?.length || 0}`);
+      this.logger.info(`   - Import paths defined: ${promptsConfig.imports?.length || 0}`);
 
       if (promptsConfig.categories?.length > 0) {
-        this.logger.info("📂 Categories found:");
+        this.logger.info('📂 Categories found:');
         promptsConfig.categories.forEach((cat) => {
           this.logger.info(`   - ${cat.name} (${cat.id}): ${cat.description}`);
         });
       }
 
       if (promptsConfig.imports?.length > 0) {
-        this.logger.info("📥 Import paths to process:");
+        this.logger.info('📥 Import paths to process:');
         promptsConfig.imports.forEach((importPath, index) => {
           this.logger.info(`   ${index + 1}. ${importPath}`);
         });
@@ -102,17 +87,19 @@ export class PromptLoader {
       }
 
       // Load and validate categories using CategoryManager
-      const categoryValidation = await this.categoryManager.loadCategories(promptsConfig.categories);
-      
+      const categoryValidation = await this.categoryManager.loadCategories(
+        promptsConfig.categories
+      );
+
       if (!categoryValidation.isValid) {
-        this.logger.error("❌ Category validation failed:");
-        categoryValidation.issues.forEach(issue => this.logger.error(`  - ${issue}`));
+        this.logger.error('❌ Category validation failed:');
+        categoryValidation.issues.forEach((issue) => this.logger.error(`  - ${issue}`));
         throw new Error(`Category validation failed: ${categoryValidation.issues.join('; ')}`);
       }
 
       if (categoryValidation.warnings.length > 0) {
-        this.logger.warn("⚠️ Category validation warnings:");
-        categoryValidation.warnings.forEach(warning => this.logger.warn(`  - ${warning}`));
+        this.logger.warn('⚠️ Category validation warnings:');
+        categoryValidation.warnings.forEach((warning) => this.logger.warn(`  - ${warning}`));
       }
 
       // Get validated categories
@@ -123,9 +110,7 @@ export class PromptLoader {
       let totalImportProcessed = 0;
       let totalImportsFailed = 0;
 
-      this.logger.info(
-        `🚀 Starting to process ${promptsConfig.imports.length} import paths...`
-      );
+      this.logger.info(`🚀 Starting to process ${promptsConfig.imports.length} import paths...`);
 
       // Load prompts from each import path
       for (const importPath of promptsConfig.imports) {
@@ -136,10 +121,7 @@ export class PromptLoader {
 
         try {
           // Construct the full path to the import file
-          const fullImportPath = path.join(
-            path.dirname(configPath),
-            importPath
-          );
+          const fullImportPath = path.join(path.dirname(configPath), importPath);
 
           this.logger.info(`   🔍 Full path: ${fullImportPath}`);
 
@@ -148,29 +130,21 @@ export class PromptLoader {
             await fs.access(fullImportPath);
             this.logger.info(`   ✓ Import file exists`);
           } catch (error) {
-            this.logger.warn(
-              `   ⚠️ Import file not found: ${importPath}. Creating empty file.`
-            );
+            this.logger.warn(`   ⚠️ Import file not found: ${importPath}. Creating empty file.`);
 
             // Create the directory if it doesn't exist
             const dir = path.dirname(fullImportPath);
             await fs.mkdir(dir, { recursive: true });
 
             // Create an empty prompts file
-            await safeWriteFile(
-              fullImportPath,
-              JSON.stringify({ prompts: [] }, null, 2),
-              "utf8"
-            );
+            await safeWriteFile(fullImportPath, JSON.stringify({ prompts: [] }, null, 2), 'utf8');
             this.logger.info(`   ✓ Created empty prompts file`);
           }
 
           // Read the file
           this.logger.info(`   📖 Reading import file...`);
-          const fileContent = await readFile(fullImportPath, "utf8");
-          this.logger.info(
-            `   ✓ File read successfully, ${fileContent.length} characters`
-          );
+          const fileContent = await readFile(fullImportPath, 'utf8');
+          this.logger.info(`   ✓ File read successfully, ${fileContent.length} characters`);
 
           let categoryPromptsFile: any;
 
@@ -178,10 +152,7 @@ export class PromptLoader {
             categoryPromptsFile = JSON.parse(fileContent);
             this.logger.info(`   ✓ Import file parsed successfully`);
           } catch (jsonError) {
-            this.logger.error(
-              `   ❌ Error parsing import file ${importPath}:`,
-              jsonError
-            );
+            this.logger.error(`   ❌ Error parsing import file ${importPath}:`, jsonError);
             this.logger.info(
               `   🔧 Creating empty prompts file for ${importPath} due to parsing error.`
             );
@@ -189,7 +160,7 @@ export class PromptLoader {
             await safeWriteFile(
               fullImportPath,
               JSON.stringify(categoryPromptsFile, null, 2),
-              "utf8"
+              'utf8'
             );
           }
 
@@ -202,7 +173,7 @@ export class PromptLoader {
             await safeWriteFile(
               fullImportPath,
               JSON.stringify(categoryPromptsFile, null, 2),
-              "utf8"
+              'utf8'
             );
           } else if (!Array.isArray(categoryPromptsFile.prompts)) {
             this.logger.warn(
@@ -212,7 +183,7 @@ export class PromptLoader {
             await safeWriteFile(
               fullImportPath,
               JSON.stringify(categoryPromptsFile, null, 2),
-              "utf8"
+              'utf8'
             );
           }
 
@@ -237,10 +208,7 @@ export class PromptLoader {
               }
 
               // If the file path is already absolute or starts with the category folder, keep it as is
-              if (
-                prompt.file.startsWith("/") ||
-                prompt.file.startsWith(categoryPath)
-              ) {
+              if (prompt.file.startsWith('/') || prompt.file.startsWith(categoryPath)) {
                 return prompt;
               }
 
@@ -255,9 +223,7 @@ export class PromptLoader {
           const afterCount = categoryPrompts.length;
           if (beforeCount !== afterCount) {
             this.logger.warn(
-              `   ⚠️ ${
-                beforeCount - afterCount
-              } prompts were filtered out due to validation issues`
+              `   ⚠️ ${beforeCount - afterCount} prompts were filtered out due to validation issues`
             );
           }
 
@@ -269,48 +235,57 @@ export class PromptLoader {
           allPrompts = [...allPrompts, ...categoryPrompts];
         } catch (error) {
           totalImportsFailed++;
-          this.logger.error(
-            `   ❌ Error loading prompts from ${importPath}:`,
-            error
-          );
+          this.logger.error(`   ❌ Error loading prompts from ${importPath}:`, error);
         }
       }
 
       this.logger.info(`\n🎯 IMPORT PROCESSING SUMMARY:`);
       this.logger.info(`   Total imports processed: ${totalImportProcessed}`);
       this.logger.info(`   Imports failed: ${totalImportsFailed}`);
-      this.logger.info(
-        `   Imports succeeded: ${totalImportProcessed - totalImportsFailed}`
-      );
+      this.logger.info(`   Imports succeeded: ${totalImportProcessed - totalImportsFailed}`);
       this.logger.info(`   Total prompts collected: ${allPrompts.length}`);
       this.logger.info(`   Categories available: ${categories.length}`);
+
+      // Attach category's registerWithMcp default to each prompt
+      const categoryMap = new Map(categories.map((cat) => [cat.id, cat]));
+      allPrompts = allPrompts.map((prompt) => {
+        const category = categoryMap.get(prompt.category);
+        if (category?.registerWithMcp !== undefined) {
+          return { ...prompt, _categoryRegisterWithMcp: category.registerWithMcp } as PromptData & {
+            _categoryRegisterWithMcp?: boolean;
+          };
+        }
+        return prompt;
+      });
 
       // Validate category-prompt relationships using CategoryManager
       this.logger.info(`🔍 Validating category-prompt relationships...`);
       const promptCategoryValidation = this.categoryManager.validatePromptCategories(allPrompts);
-      
+
       if (!promptCategoryValidation.isValid) {
-        this.logger.error("❌ Category-prompt relationship validation failed:");
-        promptCategoryValidation.issues.forEach(issue => this.logger.error(`  - ${issue}`));
-        this.logger.warn("Continuing with loading but some prompts may not display correctly");
+        this.logger.error('❌ Category-prompt relationship validation failed:');
+        promptCategoryValidation.issues.forEach((issue) => this.logger.error(`  - ${issue}`));
+        this.logger.warn('Continuing with loading but some prompts may not display correctly');
       }
 
       if (promptCategoryValidation.warnings.length > 0) {
-        this.logger.warn("⚠️ Category-prompt relationship warnings:");
-        promptCategoryValidation.warnings.forEach(warning => this.logger.warn(`  - ${warning}`));
+        this.logger.warn('⚠️ Category-prompt relationship warnings:');
+        promptCategoryValidation.warnings.forEach((warning) => this.logger.warn(`  - ${warning}`));
       }
 
       // Generate category statistics for debugging
       const categoryStats = this.categoryManager.getCategoryStatistics(allPrompts);
       this.logger.info(`📊 Category Statistics:`);
-      this.logger.info(`   Categories with prompts: ${categoryStats.categoriesWithPrompts}/${categoryStats.totalCategories}`);
+      this.logger.info(
+        `   Categories with prompts: ${categoryStats.categoriesWithPrompts}/${categoryStats.totalCategories}`
+      );
       this.logger.info(`   Empty categories: ${categoryStats.emptyCategoriesCount}`);
-      this.logger.info(`   Average prompts per category: ${categoryStats.averagePromptsPerCategory.toFixed(1)}`);
+      this.logger.info(
+        `   Average prompts per category: ${categoryStats.averagePromptsPerCategory.toFixed(1)}`
+      );
 
       const result = { promptsData: allPrompts, categories };
-      this.logger.info(
-        `✅ PromptLoader.loadCategoryPrompts() completed successfully`
-      );
+      this.logger.info(`✅ PromptLoader.loadCategoryPrompts() completed successfully`);
 
       return result;
     } catch (error) {
@@ -340,7 +315,7 @@ export class PromptLoader {
       include?: string[];
       exclude?: string[];
       framework_gates?: boolean;
-      temporary_gates?: Array<{
+      inline_gate_definitions?: Array<{
         id?: string;
         name: string;
         type: 'validation' | 'approval' | 'condition';
@@ -352,8 +327,6 @@ export class PromptLoader {
         source?: 'manual' | 'automatic' | 'analysis';
         context?: Record<string, any>;
       }>;
-      gate_scope?: 'execution' | 'session' | 'chain' | 'step';
-      inherit_chain_gates?: boolean;
     };
     chainSteps?: Array<{
       promptId: string;
@@ -365,43 +338,35 @@ export class PromptLoader {
   }> {
     try {
       const fullPath = path.join(basePath, filePath);
-      const content = await readFile(fullPath, "utf8");
+      const content = await readFile(fullPath, 'utf8');
 
       // Extract system message and user message template from markdown
-      const systemMessageMatch = content.match(
-        /## System Message\s*\n([\s\S]*?)(?=\n##|$)/
-      );
-      const userMessageMatch = content.match(
-        /## User Message Template\s*\n([\s\S]*)$/
-      );
+      const systemMessageMatch = content.match(/## System Message\s*\n([\s\S]*?)(?=\n##|$)/);
+      const userMessageMatch = content.match(/## User Message Template\s*\n([\s\S]*)$/);
 
-      const systemMessage = systemMessageMatch
-        ? systemMessageMatch[1].trim()
-        : undefined;
-      let userMessageTemplate = userMessageMatch
-        ? userMessageMatch[1].trim()
-        : "";
+      const systemMessage = systemMessageMatch ? systemMessageMatch[1].trim() : undefined;
+      let userMessageTemplate = userMessageMatch ? userMessageMatch[1].trim() : '';
 
-      // Extract gate configuration if present (Phase 3: Enhanced gate configuration with temporary gates)
-      let gateConfiguration: {
-        include?: string[];
-        exclude?: string[];
-        framework_gates?: boolean;
-        temporary_gates?: Array<{
-          id?: string;
-          name: string;
-          type: 'validation' | 'approval' | 'condition';
-          scope: 'execution' | 'session' | 'chain' | 'step';
-          description: string;
-          guidance: string;
-          pass_criteria: any[];
-          expires_at?: number;
-          source?: 'manual' | 'automatic' | 'analysis';
-          context?: Record<string, any>;
-        }>;
-        gate_scope?: 'execution' | 'session' | 'chain' | 'step';
-        inherit_chain_gates?: boolean;
-      } | undefined;
+      // Extract gate configuration if present (Enhanced gate configuration with inline gates)
+      let gateConfiguration:
+        | {
+            include?: string[];
+            exclude?: string[];
+            framework_gates?: boolean;
+            inline_gate_definitions?: Array<{
+              id?: string;
+              name: string;
+              type: 'validation' | 'approval' | 'condition';
+              scope: 'execution' | 'session' | 'chain' | 'step';
+              description: string;
+              guidance: string;
+              pass_criteria: any[];
+              expires_at?: number;
+              source?: 'manual' | 'automatic' | 'analysis';
+              context?: Record<string, any>;
+            }>;
+          }
+        | undefined;
 
       const gateConfigMatch = content.match(
         /## Gate Configuration\s*\n```json\s*\n([\s\S]*?)\n```/
@@ -417,38 +382,47 @@ export class PromptLoader {
             // Simple array format: ["gate1", "gate2"]
             gateConfiguration = {
               include: parsedConfig,
-              framework_gates: true
+              framework_gates: true,
             };
           } else if (typeof parsedConfig === 'object' && parsedConfig !== null) {
-            // Object format: {"include": [...], "exclude": [...], "framework_gates": true, "temporary_gates": [...]}
+            // Object format: {"include": [...], "exclude": [...], "framework_gates": true, "inline_gate_definitions": [...]}
             gateConfiguration = {
               include: Array.isArray(parsedConfig.include) ? parsedConfig.include : undefined,
               exclude: Array.isArray(parsedConfig.exclude) ? parsedConfig.exclude : undefined,
-              framework_gates: typeof parsedConfig.framework_gates === 'boolean' ? parsedConfig.framework_gates : true,
-              temporary_gates: Array.isArray(parsedConfig.temporary_gates) ? parsedConfig.temporary_gates : undefined,
-              gate_scope: typeof parsedConfig.gate_scope === 'string' ? parsedConfig.gate_scope : undefined,
-              inherit_chain_gates: typeof parsedConfig.inherit_chain_gates === 'boolean' ? parsedConfig.inherit_chain_gates : undefined
+              framework_gates:
+                typeof parsedConfig.framework_gates === 'boolean'
+                  ? parsedConfig.framework_gates
+                  : true,
+              inline_gate_definitions: Array.isArray(parsedConfig.inline_gate_definitions)
+                ? parsedConfig.inline_gate_definitions
+                : undefined,
             };
           }
 
-          this.logger.debug(`[LOADER] Gate configuration parsed for ${filePath}:`, gateConfiguration);
+          this.logger.debug(
+            `[LOADER] Gate configuration parsed for ${filePath}:`,
+            gateConfiguration
+          );
 
-          // Phase 3 Fix: Strip Gate Configuration section from userMessageTemplate
+          // Fix: Strip Gate Configuration section from userMessageTemplate
           // so it doesn't appear in the output to the user
           if (gateConfigMatch) {
             const gateConfigSectionRegex = /## Gate Configuration\s*\n```json\s*\n[\s\S]*?\n```\s*/;
             userMessageTemplate = userMessageTemplate.replace(gateConfigSectionRegex, '').trim();
-            this.logger.debug(`[LOADER] Stripped Gate Configuration section from user message template for ${filePath}`);
+            this.logger.debug(
+              `[LOADER] Stripped Gate Configuration section from user message template for ${filePath}`
+            );
           }
         } catch (gateConfigError) {
-          this.logger.warn(`[LOADER] Failed to parse gate configuration in ${filePath}:`, gateConfigError);
+          this.logger.warn(
+            `[LOADER] Failed to parse gate configuration in ${filePath}:`,
+            gateConfigError
+          );
         }
       }
 
       // Extract chain information if present
-      const chainMatch = content.match(
-        /## Chain Steps\s*\n([\s\S]*?)(?=\n##|$)/
-      );
+      const chainMatch = content.match(/## Chain Steps\s*\n([\s\S]*?)(?=\n##|$)/);
       let chainSteps: Array<{
         promptId: string;
         stepName: string;
@@ -465,15 +439,8 @@ export class PromptLoader {
         );
 
         for (const match of stepMatches) {
-          const [
-            _,
-            stepNumber,
-            promptId,
-            stepName,
-            gatesStr,
-            inputMappingStr,
-            outputMappingStr,
-          ] = match;
+          const [_, stepNumber, promptId, stepName, gatesStr, inputMappingStr, outputMappingStr] =
+            match;
 
           const step: {
             promptId: string;
@@ -496,9 +463,16 @@ export class PromptLoader {
                 step.gates = JSON.parse(gatesStrTrimmed);
               } else {
                 // Simple comma-separated format: "gate1, gate2"
-                step.gates = gatesStrTrimmed.split(',').map(g => g.trim()).filter(g => g.length > 0);
+                step.gates = gatesStrTrimmed
+                  .split(',')
+                  .map((g) => g.trim())
+                  .filter((g) => g.length > 0);
               }
-              this.logger.debug(`Loaded ${step.gates?.length || 0} gate(s) for step ${stepNumber}: ${step.gates?.join(', ') || ''}`);
+              this.logger.debug(
+                `Loaded ${step.gates?.length || 0} gate(s) for step ${stepNumber}: ${
+                  step.gates?.join(', ') || ''
+                }`
+              );
             } catch (e) {
               this.logger.warn(
                 `Invalid gates format in chain step ${stepNumber} of ${filePath}: ${e}`
@@ -510,11 +484,11 @@ export class PromptLoader {
             try {
               // Parse YAML-style mapping into JSON object
               const inputMapping: Record<string, string> = {};
-              const lines = inputMappingStr.trim().split("\n");
+              const lines = inputMappingStr.trim().split('\n');
               for (const line of lines) {
                 const [key, value] = line
                   .trim()
-                  .split(":")
+                  .split(':')
                   .map((s) => s.trim());
                 if (key && value) {
                   inputMapping[key] = value;
@@ -532,11 +506,11 @@ export class PromptLoader {
             try {
               // Parse YAML-style mapping into JSON object
               const outputMapping: Record<string, string> = {};
-              const lines = outputMappingStr.trim().split("\n");
+              const lines = outputMappingStr.trim().split('\n');
               for (const line of lines) {
                 const [key, value] = line
                   .trim()
-                  .split(":")
+                  .split(':')
                   .map((s) => s.trim());
                 if (key && value) {
                   outputMapping[key] = value;
@@ -553,9 +527,7 @@ export class PromptLoader {
           chainSteps.push(step);
         }
 
-        this.logger.debug(
-          `Loaded chain with ${chainSteps.length} steps from ${filePath}`
-        );
+        this.logger.debug(`Loaded chain with ${chainSteps.length} steps from ${filePath}`);
       }
 
       if (!userMessageTemplate && !(chainSteps.length > 0)) {
@@ -566,7 +538,7 @@ export class PromptLoader {
         systemMessage,
         userMessageTemplate,
         gateConfiguration,
-        chainSteps
+        chainSteps,
       };
     } catch (error) {
       this.logger.error(`Error loading prompt file ${filePath}:`, error);

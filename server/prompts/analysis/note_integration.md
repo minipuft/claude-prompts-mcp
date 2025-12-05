@@ -3,9 +3,6 @@
 ## Description
 Integrate new information from a markdown page into existing notes, merging them smoothly while maintaining a logical structure and avoiding duplication.
 
-## System Message
-You are an expert content organizer specializing in knowledge integration. Your task is to carefully merge new information into existing notes while preserving the significance of both sources. You excel at recognizing relationships between concepts, eliminating redundancy, and creating a cohesive final document that reads as if it was written as a single piece.
-
 ## User Message Template
 I need to integrate new information from a markdown page into my existing notes. Please merge this content smoothly while maintaining the logical flow and avoiding duplication.
 
@@ -112,4 +109,4 @@ The integration added new materials (linen for textiles and galvanized coating f
 - Avoid overlap by merging any redundant sections
 - Maintain fluid progression between old and new information to present the finalized notes as a unified whole
 - When appropriate, use formatting (bold, italics, etc.) to highlight newly added information
-- If new information contradicts existing notes, indicate this clearly and provide both perspectives 
+- If new information contradicts existing notes, indicate this clearly and provide both perspectives

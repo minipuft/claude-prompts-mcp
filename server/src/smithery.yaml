@@ -1,3 +1,12 @@
 version: 1
-start:
-  command: ["node", "dist/index.js", "--transport=stdio", "--quiet"]
+runtime: "container"
+build:
+  dockerfile: "src/Dockerfile"
+  context: "."
+startCommand:
+  type: "http"
+  command: ["node", "dist/index.js", "--transport=sse", "--quiet"]
+  configSchema:
+    type: "object"
+    properties: {}
+

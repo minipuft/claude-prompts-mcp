@@ -1,3 +1,4 @@
+// @lifecycle canonical - Gate system constants shared across loaders/validators.
 /**
  * Gate System Constants
  *
@@ -7,8 +8,18 @@
 
 /**
  * Default retry limit for failed validations
+ * @remarks Changed from 3 to 2 per gate-retry-enforcement.md plan
  */
-export const DEFAULT_RETRY_LIMIT = 3;
+export const DEFAULT_RETRY_LIMIT = 2;
+
+/**
+ * Default retry configuration for gates that don't specify their own
+ */
+export const DEFAULT_GATE_RETRY_CONFIG = {
+  max_attempts: DEFAULT_RETRY_LIMIT,
+  improvement_hints: true,
+  preserve_context: true,
+} as const;
 
 /**
  * Whether to inject gate guidance into prompts by default
@@ -27,4 +38,16 @@ export const GATE_SYSTEM_DEFAULTS = {
   defaultRetryLimit: DEFAULT_RETRY_LIMIT,
   enableGuidanceInjection: ENABLE_GUIDANCE_INJECTION,
   enableValidation: ENABLE_VALIDATION,
+  defaultRetryConfig: DEFAULT_GATE_RETRY_CONFIG,
 } as const;
+
+/**
+ * @deprecated METHODOLOGY_GATES was removed in favor of dynamic gate_type detection.
+ *
+ * Methodology gates are now identified by their `gate_type: "framework"` field
+ * in the gate definition JSON files. Use `GateLoader.getMethodologyGateIds()`
+ * or `GateLoader.isMethodologyGate(gateId)` for dynamic detection.
+ *
+ * This ensures new methodology gates added to the definitions directory are
+ * automatically recognized without code changes.
+ */

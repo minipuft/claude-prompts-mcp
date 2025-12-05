@@ -1,3 +1,4 @@
+// @lifecycle canonical - Analytics service for metrics emission.
 /**
  * Metrics Collector - Centralized Performance and Usage Metrics Collection
  *
@@ -7,19 +8,23 @@
  */
 
 import { EventEmitter } from 'events';
-import { Logger } from '../logging/index.js';
+
 import {
   ExecutionData,
   GateValidationData,
+  GateUsageMetric,
   FrameworkSwitchData,
   ExecutionStats,
   SystemMetrics,
   FrameworkUsage,
-  AnalyticsEvent,
   AnalyticsQueryOptions,
   AnalyticsSummary,
-  PerformanceTrend
+  PerformanceTrend,
+  PipelineStageMetric,
+  CommandExecutionMetric,
+  CommandExecutionMode,
 } from './types.js';
+import { Logger } from '../logging/index.js';
 
 /**
  * Centralized Metrics Collector
@@ -36,13 +41,16 @@ export class MetricsCollector extends EventEmitter {
     totalValidations: 0,
     successfulValidations: 0,
     totalValidationTime: 0,
-    validationHistory: [] as GateValidationData[]
+    validationHistory: [] as GateValidationData[],
   };
+  private gateUsageHistory: GateUsageMetric[] = [];
 
   // Raw data storage for queries
   private executionHistory: ExecutionData[] = [];
   private frameworkSwitchHistory: FrameworkSwitchData[] = [];
   private performanceTrends: PerformanceTrend[] = [];
+  private pipelineStageHistory: PipelineStageMetric[] = [];
+  private commandExecutionHistory: CommandExecutionMetric[] = [];
 
   // Performance monitoring
   private memoryCheckInterval?: NodeJS.Timeout;
@@ -60,16 +68,15 @@ export class MetricsCollector extends EventEmitter {
       failedExecutions: 0,
       averageExecutionTime: 0,
       executionsByMode: {
-        prompt: 0,
-        template: 0,
-        chain: 0
+        single: 0,
+        chain: 0,
       },
       executionsByTool: {
         prompt_engine: 0,
         prompt_manager: 0,
-        system_control: 0
+        system_control: 0,
       },
-      lastUpdated: Date.now()
+      lastUpdated: Date.now(),
     };
 
     this.systemMetrics = {
@@ -78,12 +85,12 @@ export class MetricsCollector extends EventEmitter {
         heapUsed: 0,
         heapTotal: 0,
         external: 0,
-        rss: 0
+        rss: 0,
       },
       averageResponseTime: 0,
       requestsPerMinute: 0,
       errorRate: 0,
-      performanceTrends: []
+      performanceTrends: [],
     };
 
     this.frameworkUsage = {
@@ -91,7 +98,7 @@ export class MetricsCollector extends EventEmitter {
       frameworkSwitches: 0,
       frameworkUsageTime: {},
       frameworkSwitchHistory: [],
-      frameworkPerformance: {}
+      frameworkPerformance: {},
     };
 
     this.setupEventListeners();
@@ -143,10 +150,51 @@ export class MetricsCollector extends EventEmitter {
   }
 
   /**
+   * Record gate usage metrics emitted from enhancement stage.
+   */
+  recordGateUsage(metric: GateUsageMetric): void {
+    const entry = {
+      ...metric,
+      timestamp: metric.timestamp ?? Date.now(),
+    };
+    this.gateUsageHistory.push(entry);
+    this.trimHistory(this.gateUsageHistory);
+    this.logger.debug('[Analytics] Gate usage recorded', {
+      gateId: entry.gateId,
+      type: entry.gateType,
+      validation: entry.validationResult,
+    });
+  }
+
+  /**
    * Record framework switch
    */
   recordFrameworkSwitch(switchData: FrameworkSwitchData): void {
     this.emit('framework:switch', switchData);
+  }
+
+  /**
+   * Record an individual pipeline stage execution.
+   */
+  recordPipelineStage(metric: PipelineStageMetric): void {
+    this.pipelineStageHistory.push(metric);
+    this.trimHistory(this.pipelineStageHistory);
+    this.logger.debug('[Analytics] Pipeline stage recorded', {
+      stage: metric.stageName,
+      status: metric.status,
+      durationMs: metric.durationMs,
+    });
+  }
+
+  /**
+   * Record command-level execution metrics emitted by the pipeline orchestrator.
+   */
+  recordCommandExecutionMetric(metric: CommandExecutionMetric): void {
+    this.commandExecutionHistory.push(metric);
+    this.trimHistory(this.commandExecutionHistory);
+
+    const executionData = this.createExecutionDataFromCommand(metric);
+    this.recordExecution(executionData);
   }
 
   /**
@@ -163,7 +211,8 @@ export class MetricsCollector extends EventEmitter {
     }
 
     // Update average execution time
-    const totalTime = this.executionStats.averageExecutionTime * (this.executionStats.totalExecutions - 1);
+    const totalTime =
+      this.executionStats.averageExecutionTime * (this.executionStats.totalExecutions - 1);
     this.executionStats.averageExecutionTime =
       (totalTime + executionData.executionTime) / this.executionStats.totalExecutions;
 
@@ -173,8 +222,14 @@ export class MetricsCollector extends EventEmitter {
     }
 
     // Update execution by tool
-    if (this.executionStats.executionsByTool[executionData.toolName as keyof typeof this.executionStats.executionsByTool] !== undefined) {
-      this.executionStats.executionsByTool[executionData.toolName as keyof typeof this.executionStats.executionsByTool]++;
+    if (
+      this.executionStats.executionsByTool[
+        executionData.toolName as keyof typeof this.executionStats.executionsByTool
+      ] !== undefined
+    ) {
+      this.executionStats.executionsByTool[
+        executionData.toolName as keyof typeof this.executionStats.executionsByTool
+      ]++;
     }
 
     // Update framework performance
@@ -183,7 +238,7 @@ export class MetricsCollector extends EventEmitter {
         this.frameworkUsage.frameworkPerformance[executionData.frameworkUsed] = {
           averageExecutionTime: 0,
           successRate: 0,
-          usageCount: 0
+          usageCount: 0,
         };
       }
 
@@ -203,11 +258,17 @@ export class MetricsCollector extends EventEmitter {
     this.trimHistory(this.executionHistory);
 
     // Record performance trend
-    this.recordPerformanceTrend('execution_time', executionData.executionTime, executionData.toolName);
+    this.recordPerformanceTrend(
+      'execution_time',
+      executionData.executionTime,
+      executionData.toolName
+    );
 
     this.executionStats.lastUpdated = Date.now();
 
-    this.logger.debug(`Analytics updated: Total executions: ${this.executionStats.totalExecutions}, Success rate: ${this.getSuccessRate()}%`);
+    this.logger.debug(
+      `Analytics updated: Total executions: ${this.executionStats.totalExecutions}, Success rate: ${this.getSuccessRate()}%`
+    );
   }
 
   /**
@@ -232,7 +293,9 @@ export class MetricsCollector extends EventEmitter {
     this.gateValidationStats.validationHistory.push(gateData);
     this.trimHistory(this.gateValidationStats.validationHistory);
 
-    this.logger.debug(`Gate validation recorded: ${gateData.passedGates}/${gateData.totalGates} passed`);
+    this.logger.debug(
+      `Gate validation recorded: ${gateData.passedGates}/${gateData.totalGates} passed`
+    );
   }
 
   /**
@@ -246,13 +309,15 @@ export class MetricsCollector extends EventEmitter {
       timestamp: switchData.switchTime,
       fromFramework: switchData.fromFramework,
       toFramework: switchData.toFramework,
-      reason: switchData.reason
+      reason: switchData.reason,
     });
 
     this.frameworkSwitchHistory.push(switchData);
     this.trimHistory(this.frameworkSwitchHistory);
 
-    this.logger.debug(`Framework switch recorded: ${switchData.fromFramework} → ${switchData.toFramework}`);
+    this.logger.debug(
+      `Framework switch recorded: ${switchData.fromFramework} → ${switchData.toFramework}`
+    );
   }
 
   /**
@@ -274,10 +339,49 @@ export class MetricsCollector extends EventEmitter {
       heapUsed: usage.heapUsed,
       heapTotal: usage.heapTotal,
       external: usage.external,
-      rss: usage.rss
+      rss: usage.rss,
     };
 
     this.recordPerformanceTrend('memory_usage', usage.heapUsed, 'system');
+  }
+
+  private createExecutionDataFromCommand(metric: CommandExecutionMetric): ExecutionData {
+    const metadata = metric.metadata ?? {};
+    const frameworkUsed =
+      typeof metadata['frameworkUsed'] === 'string' ? metadata['frameworkUsed'] : undefined;
+    const frameworkEnabled =
+      typeof metadata['frameworkEnabled'] === 'boolean'
+        ? metadata['frameworkEnabled']
+        : Boolean(frameworkUsed);
+    const stepsExecuted =
+      typeof metadata['stepsExecuted'] === 'number' ? metadata['stepsExecuted'] : undefined;
+    return {
+      executionId: metric.commandId,
+      executionType: this.mapExecutionModeToExecutionType(metric.executionMode),
+      startTime: metric.startTime,
+      endTime: metric.endTime,
+      executionTime: metric.durationMs,
+      success: metric.status === 'success',
+      frameworkUsed,
+      frameworkEnabled,
+      stepsExecuted,
+      sessionId: metric.sessionId,
+      toolName: metric.toolName,
+      error: metric.errorMessage,
+    };
+  }
+
+  private mapExecutionModeToExecutionType(
+    mode: CommandExecutionMode
+  ): ExecutionData['executionType'] {
+    switch (mode) {
+      case 'chain':
+        return 'chain';
+      case 'single':
+        return 'single';
+      default:
+        return 'single';
+    }
   }
 
   /**
@@ -292,7 +396,7 @@ export class MetricsCollector extends EventEmitter {
       timestamp: Date.now(),
       metric,
       value,
-      context
+      context,
     };
 
     this.emit('system:performance', trend);
@@ -340,7 +444,7 @@ export class MetricsCollector extends EventEmitter {
       totalValidations: this.gateValidationStats.totalValidations,
       validationSuccessRate: this.getGateValidationSuccessRate(),
       averageValidationTime: this.getAverageGateValidationTime(),
-      gateAdoptionRate: this.getGateAdoptionRate()
+      gateAdoptionRate: this.getGateAdoptionRate(),
     };
 
     const recommendations = this.generateRecommendations();
@@ -350,7 +454,7 @@ export class MetricsCollector extends EventEmitter {
       systemMetrics: this.getSystemMetrics(),
       frameworkUsage: this.getFrameworkUsage(),
       gateValidationStats: gateStats,
-      recommendations
+      recommendations,
     };
   }
 
@@ -364,23 +468,22 @@ export class MetricsCollector extends EventEmitter {
       failedExecutions: 0,
       averageExecutionTime: 0,
       executionsByMode: {
-        prompt: 0,
-        template: 0,
-        chain: 0
+        single: 0,
+        chain: 0,
       },
       executionsByTool: {
         prompt_engine: 0,
         prompt_manager: 0,
-        system_control: 0
+        system_control: 0,
       },
-      lastUpdated: Date.now()
+      lastUpdated: Date.now(),
     };
 
     this.gateValidationStats = {
       totalValidations: 0,
       successfulValidations: 0,
       totalValidationTime: 0,
-      validationHistory: []
+      validationHistory: [],
     };
 
     this.frameworkUsage.frameworkSwitches = 0;
@@ -391,6 +494,8 @@ export class MetricsCollector extends EventEmitter {
     this.frameworkSwitchHistory = [];
     this.performanceTrends = [];
     this.systemMetrics.performanceTrends = [];
+    this.pipelineStageHistory = [];
+    this.commandExecutionHistory = [];
 
     this.logger.info('Analytics data reset');
   }
@@ -400,7 +505,9 @@ export class MetricsCollector extends EventEmitter {
    */
   private getSuccessRate(): number {
     if (this.executionStats.totalExecutions === 0) return 100;
-    return Math.round((this.executionStats.successfulExecutions / this.executionStats.totalExecutions) * 100);
+    return Math.round(
+      (this.executionStats.successfulExecutions / this.executionStats.totalExecutions) * 100
+    );
   }
 
   /**
@@ -416,7 +523,10 @@ export class MetricsCollector extends EventEmitter {
    */
   private getGateValidationSuccessRate(): number {
     if (this.gateValidationStats.totalValidations === 0) return 100;
-    return (this.gateValidationStats.successfulValidations / this.gateValidationStats.totalValidations) * 100;
+    return (
+      (this.gateValidationStats.successfulValidations / this.gateValidationStats.totalValidations) *
+      100
+    );
   }
 
   /**
@@ -443,11 +553,14 @@ export class MetricsCollector extends EventEmitter {
 
     // Performance recommendations
     if (this.executionStats.averageExecutionTime > 5000) {
-      recommendations.push('Average execution time is high (>5s). Consider optimizing prompt complexity or system resources.');
+      recommendations.push(
+        'Average execution time is high (>5s). Consider optimizing prompt complexity or system resources.'
+      );
     }
 
     // Memory recommendations
-    const memoryUtilization = this.systemMetrics.memoryUsage.heapUsed / this.systemMetrics.memoryUsage.heapTotal;
+    const memoryUtilization =
+      this.systemMetrics.memoryUsage.heapUsed / this.systemMetrics.memoryUsage.heapTotal;
     if (memoryUtilization > 0.8) {
       recommendations.push('High memory utilization detected (>80%). Monitor for memory leaks.');
     }
@@ -455,12 +568,16 @@ export class MetricsCollector extends EventEmitter {
     // Gate adoption recommendations
     const gateAdoption = this.getGateAdoptionRate();
     if (gateAdoption < 50) {
-      recommendations.push('Low gate validation adoption (<50%). Consider enabling gates for better quality assurance.');
+      recommendations.push(
+        'Low gate validation adoption (<50%). Consider enabling gates for better quality assurance.'
+      );
     }
 
     // Error rate recommendations
     if (this.getErrorRate() > 0.1) {
-      recommendations.push('High error rate detected (>10%). Review failed executions for patterns.');
+      recommendations.push(
+        'High error rate detected (>10%). Review failed executions for patterns.'
+      );
     }
 
     // Framework recommendations
@@ -473,7 +590,9 @@ export class MetricsCollector extends EventEmitter {
       });
 
       if (this.frameworkUsage.currentFramework !== bestFramework) {
-        recommendations.push(`Consider switching to ${bestFramework} framework for better performance (${Math.round(this.frameworkUsage.frameworkPerformance[bestFramework].successRate * 100)}% success rate).`);
+        recommendations.push(
+          `Consider switching to ${bestFramework} framework for better performance (${Math.round(this.frameworkUsage.frameworkPerformance[bestFramework].successRate * 100)}% success rate).`
+        );
       }
     }
 

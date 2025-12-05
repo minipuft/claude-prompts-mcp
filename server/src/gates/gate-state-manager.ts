@@ -1,3 +1,4 @@
+// @lifecycle canonical - Persists gate enable/disable state across runtime.
 /**
  * Gate System Manager - Runtime State Management
  *
@@ -6,8 +7,10 @@
  */
 
 import { EventEmitter } from 'events';
-import path from 'path';
-import fs from 'fs/promises';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { Logger } from '../logging/index.js';
 
 /**
@@ -30,7 +33,7 @@ export interface GateSystemState {
  * Gate system health status
  */
 export interface GateSystemHealth {
-  status: "healthy" | "degraded" | "disabled";
+  status: 'healthy' | 'degraded' | 'disabled';
   enabled: boolean;
   totalValidations: number;
   successRate: number;
@@ -80,13 +83,15 @@ export class GateSystemManager extends EventEmitter {
         totalValidations: 0,
         successfulValidations: 0,
         averageValidationTime: 0,
-        lastValidationTime: null
-      }
+        lastValidationTime: null,
+      },
     };
 
-    // Set up state file path
-    const baseDir = stateDirectory || path.join(process.cwd(), 'runtime-state');
-    this.stateFilePath = path.join(baseDir, 'gate-system-state.json');
+    // Set up state file path (default to server runtime-state resolving from module location)
+    const resolvedBaseDir =
+      stateDirectory ||
+      path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'runtime-state');
+    this.stateFilePath = path.join(path.resolve(resolvedBaseDir), 'gate-system-state.json');
 
     this.logger.debug(`GateSystemManager initialized with state file: ${this.stateFilePath}`);
   }
@@ -102,7 +107,9 @@ export class GateSystemManager extends EventEmitter {
       // Start health monitoring
       this.startHealthMonitoring();
 
-      this.logger.info(`🚪 Gate System Manager initialized - System ${this.currentState.enabled ? 'enabled' : 'disabled'}`);
+      this.logger.info(
+        `🚪 Gate System Manager initialized - System ${this.currentState.enabled ? 'enabled' : 'disabled'}`
+      );
     } catch (error) {
       this.logger.error('Failed to initialize GateSystemManager:', error);
       throw error;
@@ -131,10 +138,12 @@ export class GateSystemManager extends EventEmitter {
           ...persistedState.validationMetrics,
           lastValidationTime: persistedState.validationMetrics.lastValidationTime
             ? new Date(persistedState.validationMetrics.lastValidationTime)
-            : null
+            : null,
         };
 
-        this.logger.info(`✅ Loaded persisted gate system state: ${persistedState.enabled ? 'enabled' : 'disabled'}`);
+        this.logger.info(
+          `✅ Loaded persisted gate system state: ${persistedState.enabled ? 'enabled' : 'disabled'}`
+        );
       } else {
         this.logger.warn('⚠️ Invalid persisted gate state format, using defaults');
         await this.saveStateToFile(); // Save valid defaults
@@ -162,9 +171,10 @@ export class GateSystemManager extends EventEmitter {
         enableReason: this.currentState.enableReason,
         validationMetrics: {
           ...this.currentState.validationMetrics,
-          lastValidationTime: this.currentState.validationMetrics.lastValidationTime?.toISOString() || null
+          lastValidationTime:
+            this.currentState.validationMetrics.lastValidationTime?.toISOString() || null,
         },
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
       };
 
       await fs.writeFile(this.stateFilePath, JSON.stringify(stateToSave, null, 2));
@@ -247,21 +257,22 @@ export class GateSystemManager extends EventEmitter {
    */
   getSystemHealth(): GateSystemHealth {
     const metrics = this.currentState.validationMetrics;
-    const successRate = metrics.totalValidations > 0
-      ? (metrics.successfulValidations / metrics.totalValidations) * 100
-      : 100;
+    const successRate =
+      metrics.totalValidations > 0
+        ? (metrics.successfulValidations / metrics.totalValidations) * 100
+        : 100;
 
-    let status: "healthy" | "degraded" | "disabled" = "healthy";
+    let status: 'healthy' | 'degraded' | 'disabled' = 'healthy';
     const issues: string[] = [];
 
     if (!this.currentState.enabled) {
-      status = "disabled";
+      status = 'disabled';
     } else if (successRate < 80 && metrics.totalValidations > 10) {
-      status = "degraded";
-      issues.push("Low validation success rate");
+      status = 'degraded';
+      issues.push('Low validation success rate');
     } else if (metrics.averageValidationTime > 1000) {
-      status = "degraded";
-      issues.push("High validation latency");
+      status = 'degraded';
+      issues.push('High validation latency');
     }
 
     return {
@@ -271,7 +282,7 @@ export class GateSystemManager extends EventEmitter {
       successRate: Math.round(successRate * 100) / 100,
       averageValidationTime: Math.round(metrics.averageValidationTime * 100) / 100,
       lastValidationTime: metrics.lastValidationTime,
-      issues
+      issues,
     };
   }
 
@@ -295,7 +306,7 @@ export class GateSystemManager extends EventEmitter {
 
     // Save state periodically (every 10 validations)
     if (metrics.totalValidations % 10 === 0) {
-      this.saveStateToFile().catch(error => {
+      this.saveStateToFile().catch((error) => {
         this.logger.error('Failed to save validation metrics:', error);
       });
     }
@@ -303,7 +314,9 @@ export class GateSystemManager extends EventEmitter {
     // Emit event
     this.emit('validation-completed', success, executionTime);
 
-    this.logger.debug(`Validation recorded: ${success ? 'success' : 'failure'} (${executionTime}ms)`);
+    this.logger.debug(
+      `Validation recorded: ${success ? 'success' : 'failure'} (${executionTime}ms)`
+    );
   }
 
   /**

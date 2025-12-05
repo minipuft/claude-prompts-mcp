@@ -1,3 +1,4 @@
+// @lifecycle canonical - Common type definitions for MCP tools.
 /**
  * Shared Type Definitions for MCP Tools
  *
@@ -27,7 +28,7 @@ export interface ToolExtra {
  */
 export interface StructuredToolResponse {
   content: Array<{
-    type: "text";
+    type: 'text';
     text: string;
   }>;
   isError?: boolean;
@@ -96,7 +97,7 @@ export interface ResponseContext {
 }
 
 // ============================================================================
-// PROPER ERROR TYPES (Phase 1: Replace error: any)
+// PROPER ERROR TYPES ( Replace error: any)
 // ============================================================================
 
 /**
@@ -160,8 +161,7 @@ export interface FrameworkError extends TypedError {
  * Type guard functions for errors
  */
 export function isTypedError(error: unknown): error is TypedError {
-  return typeof error === 'object' && error !== null &&
-         'name' in error && 'message' in error;
+  return typeof error === 'object' && error !== null && 'name' in error && 'message' in error;
 }
 
 export function isValidationError(error: unknown): error is ValidationError {
@@ -199,7 +199,8 @@ export interface ExecutionData {
   action: string;
   success: boolean;
   duration: number;
-  executionType: 'prompt' | 'template' | 'chain';
+  executionType: 'single' | 'chain';
+  legacyExecutionType?: 'prompt' | 'template';
   startTime: number;
   endTime: number;
   framework?: string;
@@ -269,7 +270,8 @@ export interface GateValidationData {
   requirements: string[];
   context: {
     promptId: string;
-    executionType: 'prompt' | 'template' | 'chain';
+    executionType: 'single' | 'chain';
+    legacyExecutionType?: 'prompt' | 'template';
     framework?: string;
   };
 }
@@ -284,7 +286,7 @@ export interface ConfigObject {
 export interface ConfigArray extends Array<ConfigValue> {}
 
 // ============================================================================
-// SPECIFIC ARGUMENT TYPES (Phase 1: Replace any types)
+// SPECIFIC ARGUMENT TYPES ( Replace any types)
 // ============================================================================
 
 /**
@@ -336,27 +338,34 @@ export interface BasePromptManagerArgs {
 }
 
 export type PromptManagerAction =
-  | { action: 'create'; id: string; name: string; user_message_template: string } & BasePromptManagerArgs
-  | { action: 'create_prompt'; id: string; name: string; user_message_template: string } & BasePromptManagerArgs
-  | { action: 'create_template'; id: string; name: string; user_message_template: string } & BasePromptManagerArgs
-  | { action: 'update'; id: string } & BasePromptManagerArgs & {
-      migrate_to?: 'prompt' | 'template';
-      section?: 'name' | 'description' | 'system_message' | 'user_message_template' | 'arguments' | 'chain_steps';
-      section_content?: string;
-    }
+  | ({
+      action: 'create';
+      id: string;
+      name: string;
+      user_message_template: string;
+    } & BasePromptManagerArgs)
+  | ({ action: 'update'; id: string } & BasePromptManagerArgs & {
+        section?:
+          | 'name'
+          | 'description'
+          | 'system_message'
+          | 'user_message_template'
+          | 'arguments'
+          | 'chain_steps';
+        section_content?: string;
+      })
   | { action: 'delete'; id: string }
   | { action: 'reload' }
-  | { action: 'list' } & Pick<BasePromptManagerArgs, 'filter' | 'format'>
-  | { action: 'inspect'; id: string } & Pick<BasePromptManagerArgs, 'detail' | 'format'>;
+  | ({ action: 'list' } & Pick<BasePromptManagerArgs, 'filter' | 'format'>)
+  | ({ action: 'inspect'; id: string } & Pick<BasePromptManagerArgs, 'detail' | 'format'>);
 
 /**
  * Prompt Engine argument types
  */
 export interface PromptEngineArgs {
   command: string;
-  execution_mode?: 'auto' | 'prompt' | 'template' | 'chain';
   force_restart?: boolean;
-  session_id?: string;
+  session_id?: never;
   options?: ExecutionOptions;
 }
 
@@ -365,7 +374,7 @@ export interface PromptEngineArgs {
  */
 export interface ExecutionOptions {
   framework?: 'CAGEERF' | 'ReACT' | '5W1H' | 'SCAMPER';
-  gateValidation?: boolean;
+  llmValidation?: boolean;
   timeout?: number;
   retryCount?: number;
   debugMode?: boolean;
@@ -409,11 +418,23 @@ export interface BaseSystemControlArgs {
 }
 
 export type SystemControlAction =
-  | { action: 'status' } & Pick<BaseSystemControlArgs, 'include_history' | 'include_metrics' | 'operation'>
-  | { action: 'framework'; framework?: string } & Pick<BaseSystemControlArgs, 'reason' | 'show_details' | 'operation'>
-  | { action: 'analytics' } & Pick<BaseSystemControlArgs, 'include_history' | 'reset_analytics' | 'limit' | 'confirm' | 'operation'>
-  | { action: 'config'; config?: ConfigObject; backup_path?: string } & Pick<BaseSystemControlArgs, 'confirm' | 'operation'>
-  | { action: 'maintenance' } & Pick<BaseSystemControlArgs, 'reason' | 'confirm' | 'operation'>;
+  | ({ action: 'status' } & Pick<
+      BaseSystemControlArgs,
+      'include_history' | 'include_metrics' | 'operation'
+    >)
+  | ({ action: 'framework'; framework?: string } & Pick<
+      BaseSystemControlArgs,
+      'reason' | 'show_details' | 'operation'
+    >)
+  | ({ action: 'analytics' } & Pick<
+      BaseSystemControlArgs,
+      'include_history' | 'reset_analytics' | 'limit' | 'confirm' | 'operation'
+    >)
+  | ({ action: 'config'; config?: ConfigObject; backup_path?: string } & Pick<
+      BaseSystemControlArgs,
+      'confirm' | 'operation'
+    >)
+  | ({ action: 'maintenance' } & Pick<BaseSystemControlArgs, 'reason' | 'confirm' | 'operation'>);
 
 // ============================================================================
 // REPLACEMENT TYPES FOR Record<string, any>
@@ -528,7 +549,6 @@ export interface FilterParseResult {
   };
 }
 
-
 // ValidationResult now imported from execution/types.js - provides unified validation interface
 // Import at top of file if needed for MCP tool usage
 
@@ -536,11 +556,11 @@ export interface FilterParseResult {
  * Output formatting options
  */
 export interface OutputOptions {
-  format: "compact" | "detailed" | "json" | "markdown";
+  format: 'compact' | 'detailed' | 'json' | 'markdown';
   includeMetadata: boolean;
   maxResults?: number;
   sortBy?: string;
-  sortOrder?: "asc" | "desc";
+  sortOrder?: 'asc' | 'desc';
 }
 
 /**

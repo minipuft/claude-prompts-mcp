@@ -1,3 +1,4 @@
+// @lifecycle canonical - In-memory registry for temporary/inline gates.
 /**
  * Temporary Gate Registry
  *
@@ -6,13 +7,19 @@
  */
 
 import { Logger } from '../../logging/index.js';
-import type { GateDefinition } from '../types.js';
+
+import type { GateDefinition, GatePassCriteria, LightweightGateDefinition } from '../types.js';
 
 /**
  * Temporary gate definition with lifecycle management
  */
 export interface TemporaryGateDefinition {
-  /** Unique identifier (UUID-based to prevent conflicts) */
+  /**
+   * Unique identifier
+   * - Auto-generated (temp_${timestamp}_${random}) if not provided
+   * - User-provided IDs must not match auto-generated pattern to avoid collisions
+   * - Must match /^[A-Za-z0-9_-]+$/ pattern
+   */
   id: string;
   /** Human-readable name */
   name: string;
@@ -36,6 +43,10 @@ export interface TemporaryGateDefinition {
   context?: Record<string, any>;
   /** Associated execution/session/chain ID */
   scope_id?: string;
+  /** Target specific step number in a chain (1-based) */
+  target_step_number?: number;
+  /** Target multiple specific steps in a chain (1-based) */
+  apply_to_steps?: number[];
 }
 
 /**
@@ -81,11 +92,20 @@ export class TemporaryGateRegistry {
    * Create a new temporary gate
    */
   createTemporaryGate(
-    definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'>,
+    definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> & { id?: string },
     scopeId?: string
   ): string {
-    // Generate unique ID
-    const gateId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Use provided ID if valid, otherwise generate new one
+    const gateId =
+      definition.id && this.isValidCustomId(definition.id)
+        ? definition.id
+        : `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Check for ID collision
+    if (this.temporaryGates.has(gateId)) {
+      this.logger.warn(`[TEMP GATE REGISTRY] Gate ID collision: ${gateId}`);
+      throw new Error(`Temporary gate ID already exists: ${gateId}`);
+    }
 
     // Check memory limits
     if (this.temporaryGates.size >= this.maxMemoryGates) {
@@ -96,12 +116,14 @@ export class TemporaryGateRegistry {
     }
 
     const now = Date.now();
+    // Destructure to exclude 'id' from spread to avoid overwriting gateId
+    const { id: _unusedId, ...defWithoutId } = definition;
     const tempGate: TemporaryGateDefinition = {
       id: gateId,
       created_at: now,
-      expires_at: definition.expires_at || (now + this.defaultExpirationMs),
+      expires_at: definition.expires_at || now + this.defaultExpirationMs,
       scope_id: scopeId,
-      ...definition
+      ...defWithoutId,
     };
 
     // Store the gate
@@ -126,7 +148,7 @@ export class TemporaryGateRegistry {
       name: tempGate.name,
       scope: tempGate.scope,
       scopeId,
-      expiresAt: tempGate.expires_at
+      expiresAt: tempGate.expires_at,
     });
 
     return gateId;
@@ -184,11 +206,30 @@ export class TemporaryGateRegistry {
       retry_config: {
         max_attempts: 3,
         improvement_hints: true,
-        preserve_context: true
+        preserve_context: true,
       },
       activation: {
-        explicit_request: true
-      }
+        explicit_request: true,
+      },
+    };
+  }
+
+  convertToLightweightGate(tempGate: TemporaryGateDefinition): LightweightGateDefinition {
+    return {
+      id: tempGate.id,
+      name: tempGate.name,
+      type: tempGate.type === 'guidance' ? 'guidance' : 'validation',
+      description: tempGate.description,
+      guidance: tempGate.guidance,
+      pass_criteria: tempGate.pass_criteria as GatePassCriteria[] | undefined,
+      retry_config: {
+        max_attempts: 3,
+        improvement_hints: true,
+        preserve_context: true,
+      },
+      activation: {
+        explicit_request: true,
+      },
     };
   }
 
@@ -298,7 +339,9 @@ export class TemporaryGateRegistry {
       totalCleaned++;
     }
 
-    this.logger.info(`[TEMP GATE REGISTRY] Chain ${chainExecutionId} cleanup: ${totalCleaned} gates removed`);
+    this.logger.info(
+      `[TEMP GATE REGISTRY] Chain ${chainExecutionId} cleanup: ${totalCleaned} gates removed`
+    );
     return totalCleaned;
   }
 
@@ -317,16 +360,22 @@ export class TemporaryGateRegistry {
     const now = Date.now();
     const gates = Array.from(this.temporaryGates.values());
 
-    const expiredCount = gates.filter(g => g.expires_at && g.expires_at <= now).length;
-    const byScope = gates.reduce((acc, gate) => {
-      acc[gate.scope] = (acc[gate.scope] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const expiredCount = gates.filter((g) => g.expires_at && g.expires_at <= now).length;
+    const byScope = gates.reduce(
+      (acc, gate) => {
+        acc[gate.scope] = (acc[gate.scope] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
-    const bySource = gates.reduce((acc, gate) => {
-      acc[gate.source] = (acc[gate.source] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const bySource = gates.reduce(
+      (acc, gate) => {
+        acc[gate.source] = (acc[gate.source] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
 
     return {
       totalGates: this.temporaryGates.size,
@@ -337,7 +386,7 @@ export class TemporaryGateRegistry {
       activeCleanupTimers: this.cleanupTimers.size,
       gatesByScope: byScope,
       gatesBySource: bySource,
-      memoryUsageEstimate: this.estimateMemoryUsage()
+      memoryUsageEstimate: this.estimateMemoryUsage(),
     };
   }
 
@@ -352,8 +401,9 @@ export class TemporaryGateRegistry {
 
     // If still at capacity, remove oldest gates
     if (this.temporaryGates.size >= this.maxMemoryGates) {
-      const gates = Array.from(this.temporaryGates.values())
-        .sort((a, b) => a.created_at - b.created_at);
+      const gates = Array.from(this.temporaryGates.values()).sort(
+        (a, b) => a.created_at - b.created_at
+      );
 
       const toRemove = Math.min(100, gates.length - Math.floor(this.maxMemoryGates * 0.8));
       for (let i = 0; i < toRemove; i++) {
@@ -375,7 +425,7 @@ export class TemporaryGateRegistry {
         scope_type: scope as any,
         scope_id: scopeId,
         gates: new Set(),
-        created_at: Date.now()
+        created_at: Date.now(),
       });
     }
 
@@ -422,6 +472,34 @@ export class TemporaryGateRegistry {
     const timerSize = this.cleanupTimers.size * 64;
 
     return gateSize + scopeSize + timerSize;
+  }
+
+  /**
+   * Validate user-provided custom ID
+   * Prevents collision with auto-generated IDs and enforces format requirements
+   */
+  private isValidCustomId(id: string): boolean {
+    // Must not be empty
+    if (!id || id.trim().length === 0) {
+      return false;
+    }
+
+    // Prevent collision with auto-generated IDs
+    // Auto-generated format: temp_${timestamp}_${random}
+    if (id.startsWith('temp_') && /^temp_\d+_[a-z0-9]+$/.test(id)) {
+      this.logger.warn(
+        `[TEMP GATE REGISTRY] Rejecting user ID that matches auto-generated pattern: ${id}`
+      );
+      return false;
+    }
+
+    // Validate format (alphanumeric, dashes, underscores only)
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      this.logger.warn(`[TEMP GATE REGISTRY] Invalid ID format: ${id}`);
+      return false;
+    }
+
+    return true;
   }
 
   /**

@@ -1,35 +1,37 @@
+// @lifecycle canonical - Barrel exports for gate core helpers.
 /**
  * Core Gate System - Main Exports
  * Provides guidance and validation capabilities for prompt execution
  */
 
-import type { ValidationResult } from "../../execution/types.js";
-import { GateSystemManager } from "../gate-state-manager.js";
-import { GateLoader, createGateLoader } from "./gate-loader.js";
-import { GateValidator, createGateValidator } from "./gate-validator.js";
+import { GateSystemManager } from '../gate-state-manager.js';
+import { GateLoader, createGateLoader } from './gate-loader.js';
+import { GateValidator, createGateValidator } from './gate-validator.js';
 import {
   TemporaryGateRegistry,
   createTemporaryGateRegistry,
   type TemporaryGateDefinition,
-} from "./temporary-gate-registry.js";
+} from './temporary-gate-registry.js';
 
-export { GateLoader, createGateLoader } from "./gate-loader.js";
-export { GateValidator, createGateValidator } from "./gate-validator.js";
+import type { ValidationResult } from '../../execution/types.js';
+
+export { GateLoader, createGateLoader } from './gate-loader.js';
+export { GateValidator, createGateValidator } from './gate-validator.js';
 export {
   TemporaryGateRegistry,
   createTemporaryGateRegistry,
   type TemporaryGateDefinition as TemporaryGateRegistryDefinition,
-} from "./temporary-gate-registry.js";
+} from './temporary-gate-registry.js';
 
-export type { ValidationResult } from "../../execution/types.js";
+export type { ValidationResult } from '../../execution/types.js';
 export type {
   GateActivationResult,
   GatePassCriteria,
   LightweightGateDefinition,
   ValidationCheck,
   ValidationContext,
-} from "../types.js";
-export type { GateValidationStatistics } from "./gate-validator.js";
+} from '../types.js';
+export type { GateValidationStatistics } from './gate-validator.js';
 
 /**
  * Core gate system manager with temporary gate support
@@ -64,7 +66,7 @@ export class LightweightGateSystem {
    * Create a temporary gate
    */
   createTemporaryGate(
-    definition: Omit<TemporaryGateDefinition, "id" | "created_at">,
+    definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'>,
     scopeId?: string
   ): string | null {
     if (!this.temporaryGateRegistry) {
@@ -76,10 +78,7 @@ export class LightweightGateSystem {
   /**
    * Get temporary gates for scope
    */
-  getTemporaryGatesForScope(
-    scope: string,
-    scopeId: string
-  ): TemporaryGateDefinition[] {
+  getTemporaryGatesForScope(scope: string, scopeId: string): TemporaryGateDefinition[] {
     if (!this.temporaryGateRegistry) {
       return [];
     }
@@ -148,7 +147,7 @@ export class LightweightGateSystem {
         gateId,
         valid: true,
         passed: true,
-        message: "Gate system disabled - validation skipped",
+        message: 'Gate system disabled - validation skipped',
         score: 1.0,
         details: {},
         retryHints: [],
@@ -189,11 +188,7 @@ export class LightweightGateSystem {
     currentAttempt: number,
     maxAttempts: number = 3
   ): boolean {
-    return this.gateValidator.shouldRetry(
-      validationResults,
-      currentAttempt,
-      maxAttempts
-    );
+    return this.gateValidator.shouldRetry(validationResults, currentAttempt, maxAttempts);
   }
 
   /**
@@ -208,7 +203,7 @@ export class LightweightGateSystem {
         if (result.retryHints) {
           allHints.push(...result.retryHints);
         }
-        allHints.push(""); // Empty line for separation
+        allHints.push(''); // Empty line for separation
       }
     }
 
@@ -226,10 +221,42 @@ export class LightweightGateSystem {
   }
 
   /**
-   * Get the temporary gate registry instance (Phase 3 enhancement)
+   * Get the temporary gate registry instance (enhancement)
    */
   getTemporaryGateRegistry(): TemporaryGateRegistry | undefined {
     return this.temporaryGateRegistry;
+  }
+
+  /**
+   * Cleanup the lightweight gate system and sub-components
+   * Prevents async handle leaks by delegating to sub-component cleanup
+   */
+  async cleanup(): Promise<void> {
+    // Cleanup gate system manager if present
+    if (
+      this.gateSystemManager &&
+      'cleanup' in this.gateSystemManager &&
+      typeof (this.gateSystemManager as any).cleanup === 'function'
+    ) {
+      try {
+        await (this.gateSystemManager as any).cleanup();
+      } catch (error) {
+        // Errors are already logged by sub-components
+      }
+    }
+
+    // Cleanup temporary gate registry if present
+    if (
+      this.temporaryGateRegistry &&
+      'cleanup' in this.temporaryGateRegistry &&
+      typeof (this.temporaryGateRegistry as any).cleanup === 'function'
+    ) {
+      try {
+        await (this.temporaryGateRegistry as any).cleanup();
+      } catch (error) {
+        // Errors are already logged by sub-components
+      }
+    }
   }
 }
 
@@ -247,9 +274,6 @@ export function createLightweightGateSystem(
     llmConfig?: any; // LLMIntegrationConfig from types
   }
 ): LightweightGateSystem {
-  const gateLoader = createGateLoader(logger, gatesDirectory);
-  const gateValidator = createGateValidator(logger, gateLoader, options?.llmConfig);
-
   // Create temporary gate registry if enabled
   let temporaryGateRegistry: TemporaryGateRegistry | undefined;
   if (options?.enableTemporaryGates !== false) {
@@ -259,11 +283,10 @@ export function createLightweightGateSystem(
     });
   }
 
-  const gateSystem = new LightweightGateSystem(
-    gateLoader,
-    gateValidator,
-    temporaryGateRegistry
-  );
+  const gateLoader = createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
+  const gateValidator = createGateValidator(logger, gateLoader, options?.llmConfig);
+
+  const gateSystem = new LightweightGateSystem(gateLoader, gateValidator, temporaryGateRegistry);
 
   if (gateSystemManager) {
     gateSystem.setGateSystemManager(gateSystemManager);

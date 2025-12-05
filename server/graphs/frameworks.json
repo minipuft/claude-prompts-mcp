@@ -1,0 +1,215 @@
+{
+  "category": "Framework Orchestration",
+  "description": "Framework manager, methodology guides, integrations, and guidance utilities.",
+  "nodes": {
+    "src/execution/types.ts": [
+      "src/prompts/types.ts"
+    ],
+    "src/frameworks/framework-manager.ts": [
+      "src/frameworks/methodology/index.ts",
+      "src/frameworks/types/index.ts",
+      "src/logging/index.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/framework-state-manager.ts": [
+      "src/frameworks/framework-manager.ts",
+      "src/frameworks/types/index.ts",
+      "src/logging/index.ts"
+    ],
+    "src/frameworks/framework-validator.ts": [
+      "src/frameworks/methodology/framework-registry.ts",
+      "src/frameworks/types/index.ts",
+      "src/logging/index.ts",
+      "src/utils/errorHandling.ts"
+    ],
+    "src/frameworks/index.ts": [
+      "src/frameworks/framework-manager.ts",
+      "src/frameworks/framework-state-manager.ts",
+      "src/frameworks/integration/index.ts",
+      "src/frameworks/methodology/index.ts",
+      "src/frameworks/prompt-guidance/index.ts",
+      "src/frameworks/types/index.ts"
+    ],
+    "src/frameworks/integration/framework-semantic-integration.ts": [
+      "src/frameworks/framework-manager.ts",
+      "src/frameworks/framework-state-manager.ts",
+      "src/frameworks/prompt-guidance/service.ts",
+      "src/frameworks/types/index.ts",
+      "src/logging/index.ts",
+      "src/semantic/configurable-semantic-analyzer.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/integration/index.ts": [
+      "src/frameworks/integration/framework-semantic-integration.ts"
+    ],
+    "src/frameworks/methodology/framework-registry.ts": [
+      "src/frameworks/types/methodology-types.ts",
+      "src/logging/index.ts"
+    ],
+    "src/frameworks/methodology/guides/5w1h-guide.ts": [
+      "src/frameworks/methodology/interfaces.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/methodology/guides/cageerf-guide.ts": [
+      "src/frameworks/methodology/interfaces.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/methodology/guides/react-guide.ts": [
+      "src/frameworks/methodology/interfaces.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/methodology/guides/scamper-guide.ts": [
+      "src/frameworks/methodology/interfaces.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/methodology/index.ts": [
+      "src/frameworks/methodology/guides/5w1h-guide.ts",
+      "src/frameworks/methodology/guides/cageerf-guide.ts",
+      "src/frameworks/methodology/guides/react-guide.ts",
+      "src/frameworks/methodology/guides/scamper-guide.ts",
+      "src/frameworks/methodology/interfaces.ts",
+      "src/frameworks/methodology/registry.ts"
+    ],
+    "src/frameworks/methodology/interfaces.ts": [
+      "src/frameworks/types/methodology-types.ts"
+    ],
+    "src/frameworks/methodology/registry.ts": [
+      "src/frameworks/methodology/guides/5w1h-guide.ts",
+      "src/frameworks/methodology/guides/cageerf-guide.ts",
+      "src/frameworks/methodology/guides/react-guide.ts",
+      "src/frameworks/methodology/guides/scamper-guide.ts",
+      "src/frameworks/types/index.ts",
+      "src/logging/index.ts"
+    ],
+    "src/frameworks/prompt-guidance/gate-instruction-injector.ts": [
+      "src/gates/core/gate-definitions.ts",
+      "src/gates/guidance/GateGuidanceRenderer.ts",
+      "src/logging/index.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/prompt-guidance/index.ts": [
+      "src/frameworks/prompt-guidance/methodology-tracker.ts",
+      "src/frameworks/prompt-guidance/service.ts",
+      "src/frameworks/prompt-guidance/system-prompt-injector.ts",
+      "src/frameworks/prompt-guidance/template-enhancer.ts",
+      "src/frameworks/types/index.ts"
+    ],
+    "src/frameworks/prompt-guidance/methodology-tracker.ts": [
+      "src/frameworks/types/index.ts",
+      "src/logging/index.ts"
+    ],
+    "src/frameworks/prompt-guidance/service.ts": [
+      "src/frameworks/framework-manager.ts",
+      "src/frameworks/prompt-guidance/methodology-tracker.ts",
+      "src/frameworks/prompt-guidance/system-prompt-injector.ts",
+      "src/frameworks/prompt-guidance/template-enhancer.ts",
+      "src/frameworks/types/index.ts",
+      "src/logging/index.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/prompt-guidance/system-prompt-injector.ts": [
+      "src/frameworks/types/index.ts",
+      "src/logging/index.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/prompt-guidance/template-enhancer.ts": [
+      "src/frameworks/types/index.ts",
+      "src/gates/core/index.ts",
+      "src/logging/index.ts",
+      "src/semantic/types.ts",
+      "src/types/index.ts"
+    ],
+    "src/frameworks/types/index.ts": [
+      "src/frameworks/types/integration-types.ts",
+      "src/frameworks/types/methodology-types.ts",
+      "src/frameworks/types/prompt-guidance-types.ts"
+    ],
+    "src/frameworks/types/integration-types.ts": [
+      "src/execution/types.ts",
+      "src/frameworks/types/methodology-types.ts",
+      "src/semantic/types.ts"
+    ],
+    "src/frameworks/types/methodology-types.ts": [
+      "src/execution/types.ts",
+      "src/semantic/types.ts"
+    ],
+    "src/frameworks/types/prompt-guidance-types.ts": [
+      "src/execution/types.ts",
+      "src/frameworks/types/methodology-types.ts"
+    ],
+    "src/gates/core/gate-definitions.ts": [],
+    "src/gates/core/gate-loader.ts": [
+      "src/gates/core/temporary-gate-registry.ts",
+      "src/gates/types.ts",
+      "src/logging/index.ts"
+    ],
+    "src/gates/core/gate-validator.ts": [
+      "src/execution/types.ts",
+      "src/gates/core/gate-loader.ts",
+      "src/gates/types.ts",
+      "src/logging/index.ts",
+      "src/types.ts"
+    ],
+    "src/gates/core/index.ts": [
+      "src/execution/types.ts",
+      "src/gates/core/gate-loader.ts",
+      "src/gates/core/gate-validator.ts",
+      "src/gates/core/temporary-gate-registry.ts",
+      "src/gates/gate-state-manager.ts",
+      "src/gates/types.ts"
+    ],
+    "src/gates/core/temporary-gate-registry.ts": [
+      "src/gates/types.ts",
+      "src/logging/index.ts"
+    ],
+    "src/gates/gate-state-manager.ts": [
+      "src/logging/index.ts"
+    ],
+    "src/gates/guidance/FrameworkGuidanceFilter.ts": [],
+    "src/gates/guidance/GateGuidanceRenderer.ts": [
+      "src/gates/core/gate-definitions.ts",
+      "src/gates/core/gate-loader.ts",
+      "src/gates/core/temporary-gate-registry.ts",
+      "src/gates/guidance/FrameworkGuidanceFilter.ts",
+      "src/gates/types.ts",
+      "src/logging/index.ts"
+    ],
+    "src/gates/types.ts": [
+      "src/execution/types.ts"
+    ],
+    "src/logging/index.ts": [
+      "src/types/index.ts"
+    ],
+    "src/prompts/types.ts": [],
+    "src/semantic/configurable-semantic-analyzer.ts": [
+      "src/execution/types.ts",
+      "src/logging/index.ts",
+      "src/semantic/types.ts",
+      "src/types.ts"
+    ],
+    "src/semantic/types.ts": [],
+    "src/types.ts": [
+      "src/gates/types.ts",
+      "src/prompts/types.ts"
+    ],
+    "src/types/execution.ts": [],
+    "src/types/index.ts": [
+      "src/execution/types.ts",
+      "src/frameworks/types/index.ts",
+      "src/gates/types.ts",
+      "src/prompts/types.ts",
+      "src/types.ts",
+      "src/types/execution.ts"
+    ],
+    "src/utils/errorHandling.ts": []
+  },
+  "circularDependencies": [],
+  "generatedAt": "2025-11-18T23:12:01.612Z"
+}

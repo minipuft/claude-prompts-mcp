@@ -5,11 +5,12 @@
     "port": 9090
   },
   "prompts": {
-    "file": "prompts/promptsConfig.json"
+    "file": "prompts/promptsConfig.json",
+    "registerWithMcp": true
   },
   "analysis": {
     "semanticAnalysis": {
-      "enabled": false,
+      "mode": "structural",
       "llmIntegration": {
         "enabled": false,
         "apiKey": null,
@@ -22,13 +23,34 @@
   },
   "gates": {
     "definitionsDirectory": "src/gates/definitions",
-    "templatesDirectory": "src/gates/templates"
+    "templatesDirectory": "src/gates/templates",
+    "enabled": true
+  },
+  "frameworks": {
+    "enableSystemPromptInjection": true,
+    "enableMethodologyGates": true,
+    "enableDynamicToolDescriptions": true,
+    "systemPromptReinjectionFrequency": 2
+  },
+  "judge": {
+    "enabled": true
   },
   "transports": {
-    "default": "stdio"
+    "default": "stdio",
+    "sse": {
+      "enabled": false
+    },
+    "stdio": {
+      "enabled": true
+    }
   },
   "logging": {
     "directory": "./logs",
     "level": "debug"
+  },
+  "chainSessions": {
+    "sessionTimeoutMinutes": 1440,
+    "reviewTimeoutMinutes": 30,
+    "cleanupIntervalMinutes": 5
   }
 }

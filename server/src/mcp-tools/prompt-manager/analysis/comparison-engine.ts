@@ -1,9 +1,10 @@
+// @lifecycle canonical - Compares old vs new prompts for reviewers.
 /**
  * Before/after analysis comparison engine
  */
 
-import { Logger } from "../../../logging/index.js";
-import { PromptClassification } from "../core/types.js";
+import { Logger } from '../../../logging/index.js';
+import { PromptClassification } from '../core/types.js';
 
 /**
  * Comparison result interface
@@ -53,7 +54,7 @@ export class ComparisonEngine {
         before: before.executionType,
         after: after.executionType,
         impact: this.assessExecutionTypeChange(before.executionType, after.executionType),
-        description: `Execution type changed from ${before.executionType} to ${after.executionType}`
+        description: `Execution type changed from ${before.executionType} to ${after.executionType}`,
       });
     }
 
@@ -64,7 +65,7 @@ export class ComparisonEngine {
         before: before.requiresFramework,
         after: after.requiresFramework,
         impact: after.requiresFramework ? 'positive' : 'neutral',
-        description: `Framework requirement ${after.requiresFramework ? 'added' : 'removed'}`
+        description: `Framework requirement ${after.requiresFramework ? 'added' : 'removed'}`,
       });
     }
 
@@ -79,7 +80,7 @@ export class ComparisonEngine {
         before: before.confidence,
         after: after.confidence,
         impact: after.confidence > before.confidence ? 'positive' : 'negative',
-        description: `Analysis confidence ${after.confidence > before.confidence ? 'improved' : 'decreased'} (${Math.round((after.confidence - before.confidence) * 100)}%)`
+        description: `Analysis confidence ${after.confidence > before.confidence ? 'improved' : 'decreased'} (${Math.round((after.confidence - before.confidence) * 100)}%)`,
       });
     }
 
@@ -87,7 +88,7 @@ export class ComparisonEngine {
       hasChanges: changes.length > 0,
       summary: this.generateSummary(changes),
       changes,
-      recommendations: this.generateRecommendations(changes, before, after)
+      recommendations: this.generateRecommendations(changes, before, after),
     };
   }
 
@@ -99,8 +100,8 @@ export class ComparisonEngine {
     const beforeSet = new Set(beforeGates);
     const afterSet = new Set(afterGates);
 
-    const addedGates = [...afterSet].filter(g => !beforeSet.has(g));
-    const removedGates = [...beforeSet].filter(g => !afterSet.has(g));
+    const addedGates = [...afterSet].filter((g) => !beforeSet.has(g));
+    const removedGates = [...beforeSet].filter((g) => !afterSet.has(g));
 
     if (addedGates.length > 0) {
       changes.push({
@@ -108,7 +109,7 @@ export class ComparisonEngine {
         before: beforeGates,
         after: afterGates,
         impact: 'positive',
-        description: `Added quality gates: ${addedGates.join(', ')}`
+        description: `Added quality gates: ${addedGates.join(', ')}`,
       });
     }
 
@@ -118,7 +119,7 @@ export class ComparisonEngine {
         before: beforeGates,
         after: afterGates,
         impact: 'neutral',
-        description: `Removed gates: ${removedGates.join(', ')}`
+        description: `Removed gates: ${removedGates.join(', ')}`,
       });
     }
 
@@ -134,9 +135,9 @@ export class ComparisonEngine {
   ): 'positive' | 'negative' | 'neutral' {
     // Define execution type hierarchy (complexity order)
     const complexity: Record<string, number> = {
-      'prompt': 1,
-      'template': 2,
-      'chain': 3
+      prompt: 1,
+      template: 2,
+      chain: 3,
     };
 
     const beforeComplexity = complexity[before] || 0;
@@ -156,12 +157,12 @@ export class ComparisonEngine {
    */
   private generateSummary(changes: ComparisonChange[]): string {
     if (changes.length === 0) {
-      return "No significant changes detected";
+      return 'No significant changes detected';
     }
 
-    const typeChanges = changes.filter(c => c.type === 'execution_type');
-    const gateChanges = changes.filter(c => c.type === 'gates');
-    const frameworkChanges = changes.filter(c => c.type === 'framework_requirement');
+    const typeChanges = changes.filter((c) => c.type === 'execution_type');
+    const gateChanges = changes.filter((c) => c.type === 'gates');
+    const frameworkChanges = changes.filter((c) => c.type === 'framework_requirement');
 
     const parts: string[] = [];
 
@@ -177,8 +178,8 @@ export class ComparisonEngine {
     }
 
     if (gateChanges.length > 0) {
-      const addedGates = gateChanges.filter(c => c.description.includes('Added'));
-      const removedGates = gateChanges.filter(c => c.description.includes('Removed'));
+      const addedGates = gateChanges.filter((c) => c.description.includes('Added'));
+      const removedGates = gateChanges.filter((c) => c.description.includes('Removed'));
 
       if (addedGates.length > 0) {
         parts.push(`✅ **Added Gates**`);
@@ -189,7 +190,7 @@ export class ComparisonEngine {
     }
 
     if (parts.length === 0) {
-      return "Analysis metrics updated";
+      return 'Analysis metrics updated';
     }
 
     return `📊 **Analysis Changes**: ${parts.join(' • ')}`;
@@ -206,43 +207,43 @@ export class ComparisonEngine {
     const recommendations: string[] = [];
 
     // Execution type recommendations
-    const typeChanges = changes.filter(c => c.type === 'execution_type');
+    const typeChanges = changes.filter((c) => c.type === 'execution_type');
     if (typeChanges.length > 0) {
       const change = typeChanges[0];
       if (change.after === 'chain' && change.before !== 'chain') {
-        recommendations.push("💡 Consider adding chain validation gates for multi-step execution");
+        recommendations.push('💡 Consider adding chain validation gates for multi-step execution');
       } else if (change.after === 'template' && change.before === 'prompt') {
-        recommendations.push("💡 Framework integration now available for structured analysis");
+        recommendations.push('💡 Framework integration now available for structured analysis');
       } else if (change.after === 'prompt' && change.before !== 'prompt') {
-        recommendations.push("⚡ Simplified execution should improve performance");
+        recommendations.push('⚡ Simplified execution should improve performance');
       }
     }
 
     // Framework recommendations
-    const frameworkChanges = changes.filter(c => c.type === 'framework_requirement');
+    const frameworkChanges = changes.filter((c) => c.type === 'framework_requirement');
     if (frameworkChanges.length > 0) {
       const change = frameworkChanges[0];
       if (change.after && !change.before) {
-        recommendations.push("🎯 Enable CAGEERF or ReACT framework for optimal results");
+        recommendations.push('🎯 Enable CAGEERF or ReACT framework for optimal results');
       } else if (!change.after && change.before) {
-        recommendations.push("🚀 Framework overhead removed - consider basic prompt execution");
+        recommendations.push('🚀 Framework overhead removed - consider basic prompt execution');
       }
     }
 
     // Gate recommendations
-    const gateChanges = changes.filter(c => c.type === 'gates');
-    if (gateChanges.some(c => c.description.includes('Added'))) {
-      recommendations.push("🔒 New quality gates will improve execution reliability");
+    const gateChanges = changes.filter((c) => c.type === 'gates');
+    if (gateChanges.some((c) => c.description.includes('Added'))) {
+      recommendations.push('🔒 New quality gates will improve execution reliability');
     }
 
     // Confidence recommendations
-    const confidenceChanges = changes.filter(c => c.type === 'confidence');
+    const confidenceChanges = changes.filter((c) => c.type === 'confidence');
     if (confidenceChanges.length > 0) {
       const change = confidenceChanges[0];
       if (change.impact === 'negative') {
-        recommendations.push("⚠️ Lower confidence suggests prompt may need refinement");
+        recommendations.push('⚠️ Lower confidence suggests prompt may need refinement');
       } else if (change.impact === 'positive') {
-        recommendations.push("✅ Improved confidence indicates better prompt structure");
+        recommendations.push('✅ Improved confidence indicates better prompt structure');
       }
     }
 
@@ -272,10 +273,7 @@ export class ComparisonEngine {
   /**
    * Track analysis evolution over time
    */
-  trackEvolution(
-    promptId: string,
-    classification: PromptClassification
-  ): void {
+  trackEvolution(promptId: string, classification: PromptClassification): void {
     // Log significant analysis data for evolution tracking
     this.logger.debug(`Analysis evolution for ${promptId}:`, {
       executionType: classification.executionType,
@@ -283,7 +281,7 @@ export class ComparisonEngine {
       confidence: classification.confidence,
       gates: classification.suggestedGates.length,
       analysisMode: classification.analysisMode,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -291,8 +289,8 @@ export class ComparisonEngine {
    * Assess overall improvement direction
    */
   assessImprovement(changes: ComparisonChange[]): 'improved' | 'degraded' | 'neutral' {
-    const positiveChanges = changes.filter(c => c.impact === 'positive').length;
-    const negativeChanges = changes.filter(c => c.impact === 'negative').length;
+    const positiveChanges = changes.filter((c) => c.impact === 'positive').length;
+    const negativeChanges = changes.filter((c) => c.impact === 'negative').length;
 
     if (positiveChanges > negativeChanges) {
       return 'improved';

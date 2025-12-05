@@ -1,0 +1,188 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate Bot configuration for automated dependency updates",
+
+  // Extend from recommended presets
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":preserveSemverRanges",
+    "group:monorepos",
+    "group:recommended",
+    "workarounds:all"
+  ],
+
+  // Repository-specific settings
+  "timezone": "UTC",
+  "baseBranches": ["main", "develop"],
+
+  // Limit concurrent PRs to avoid overwhelming maintainers
+  "prConcurrentLimit": 5,
+  "prCreation": "immediate",
+  "prHourlyLimit": 2,
+
+  // Auto-merge configuration
+  "platformAutomerge": true,
+  "automerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+
+  // PR title and body formatting
+  "commitMessagePrefix": "chore(deps):",
+  "commitMessageAction": "update",
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "to {{#if isPinDigest}}{{{newDigestShort}}}{{else}}{{#if isMajor}}{{prettyNewMajor}}{{else}}{{#if isSingleVersion}}{{prettyNewVersion}}{{else}}{{newValue}}{{/if}}{{/if}}{{/if}}",
+
+  // Package file detection
+  "enabledManagers": ["npm"],
+  "packageRules": [
+    {
+      "description": "Security updates - immediate and auto-merge",
+      "matchUpdateTypes": ["patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
+      "schedule": ["at any time"],
+      "labels": ["dependencies", "security", "auto-merge"],
+      "groupName": "Security patches"
+    },
+    {
+      "description": "Production dependencies - patch and minor updates",
+      "matchDepTypes": ["dependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "schedule": ["before 3am on Monday"],
+      "labels": ["dependencies", "production", "auto-merge"],
+      "groupName": "Production dependencies (minor & patch)"
+    },
+    {
+      "description": "Production dependencies - major updates",
+      "matchDepTypes": ["dependencies"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "schedule": ["before 3am on Monday"],
+      "labels": ["dependencies", "production", "major-update", "needs-review"],
+      "groupName": "Production dependencies (major)",
+      "reviewers": ["minipuft"]
+    },
+    {
+      "description": "Dev dependencies - patch and minor updates",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "schedule": ["before 3am on Monday"],
+      "labels": ["dependencies", "dev", "auto-merge"],
+      "groupName": "Dev dependencies (minor & patch)"
+    },
+    {
+      "description": "Dev dependencies - major updates",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "schedule": ["before 3am on Monday"],
+      "labels": ["dependencies", "dev", "major-update", "needs-review"],
+      "groupName": "Dev dependencies (major)"
+    },
+    {
+      "description": "TypeScript - require manual review",
+      "matchPackageNames": ["typescript"],
+      "automerge": false,
+      "schedule": ["before 3am on Monday"],
+      "labels": ["dependencies", "typescript", "needs-review"],
+      "reviewers": ["minipuft"]
+    },
+    {
+      "description": "MCP SDK - critical dependency",
+      "matchPackageNames": ["@modelcontextprotocol/sdk"],
+      "automerge": false,
+      "schedule": ["at any time"],
+      "labels": ["dependencies", "mcp-sdk", "critical", "needs-review"],
+      "reviewers": ["minipuft"],
+      "groupName": "MCP SDK updates"
+    },
+    {
+      "description": "Testing frameworks - require validation",
+      "matchPackageNames": ["jest", "ts-jest", "@types/jest"],
+      "automerge": false,
+      "schedule": ["before 3am on Monday"],
+      "labels": ["dependencies", "testing", "needs-review"],
+      "groupName": "Testing framework updates"
+    },
+    {
+      "description": "ESLint and Prettier - require validation",
+      "matchPackageNames": ["eslint", "prettier", "@typescript-eslint/eslint-plugin", "@typescript-eslint/parser"],
+      "automerge": false,
+      "schedule": ["before 3am on Monday"],
+      "labels": ["dependencies", "linting", "needs-review"],
+      "groupName": "Linting and formatting tools"
+    },
+    {
+      "description": "Vulnerability fixes - high priority",
+      "matchUpdateTypes": ["patch", "minor"],
+      "isVulnerabilityAlert": true,
+      "prPriority": 10
+    }
+  ],
+
+  // Vulnerability alerts
+  "vulnerabilityAlerts": {
+    "labels": ["security", "vulnerability"],
+    "automerge": true,
+    "schedule": ["at any time"]
+  },
+
+  // Dependency dashboard
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "📦 Dependency Updates Dashboard",
+  "dependencyDashboardHeader": "This dashboard tracks all pending dependency updates. Security updates are processed immediately, while regular updates follow a weekly schedule.",
+  "dependencyDashboardApproval": false,
+
+  // Stability - wait for package to stabilize (renamed from stabilityDays)
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+
+  // Ignore specific packages or update types
+  "ignoreDeps": [],
+  "ignoreTests": false,
+
+  // Lockfile maintenance
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 3am on the first day of the month"],
+    "automerge": true,
+    "commitMessageAction": "refresh",
+    "labels": ["dependencies", "lockfile-maintenance"]
+  },
+
+  // PR body template
+  "prBodyTemplate": "{{{header}}}{{{table}}}{{{notes}}}{{{changelogs}}}{{{configDescription}}}{{{controls}}}{{{footer}}}",
+  "prBodyColumns": [
+    "Package",
+    "Update",
+    "Type",
+    "Change",
+    "Pending"
+  ],
+
+  // Branch naming
+  "branchPrefix": "renovate/",
+  "branchConcurrentLimit": 10,
+
+  // Respect package.json version ranges
+  "rangeStrategy": "auto",
+  "respectLatest": true,
+
+  // Post-upgrade tasks
+  "postUpgradeTasks": {
+    "commands": [
+      "npm run build",
+      "npm run typecheck"
+    ],
+    "fileFilters": [
+      "package-lock.json",
+      "dist/**"
+    ],
+    "executionMode": "branch"
+  }
+}

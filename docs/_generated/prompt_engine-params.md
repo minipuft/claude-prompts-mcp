@@ -1,0 +1,22 @@
+| Name | Type | Status | Required | Description |
+| --- | --- | --- | --- | --- |
+| `chain_id` | string | working | no | Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command. RESUME WORKFLOW: Provide chain_id + user_response (or gate_verdict). Do NOT re-send command parameter. Preferred resume path. Use with user_response or gate_verdict. |
+| `command` | string | working | no | Prompt ID to expand with optional arguments. Format: >>prompt_id key="value".
+
+Chains: >>step1 --> >>step2 (N-1 arrows for N steps).
+Modifiers (place before ID): @Framework \| :: "criteria" \| %clean/%lean.
+
+Do NOT invent IDs - use prompt_manager(action:"list") to discover valid prompts. Operators: `-->` chain, `@` framework, `::` gates, `#style(<id>)` style, `%judge` menu; `%clean`/`%lean` disable framework injection. Modifiers belong at the front and apply to the whole chain. Every chain step must start with a prompt id prefix (`>>` or `/`). Plain text step labels are invalid; use prompt_manager(list/inspect) to find valid ids instead of fabricating them. Free text belongs after the prompt id, quoted ("...") or as key:value pairs. Avoid unquoted bare strings that look like prompt names. Two request shapes: execute (`command` required, optional gates/options); resume (`chain_id` with user_response and/or gate_verdict/gate_action, command optional). Chaining runs all steps back-to-back; issue separate calls if you need to pause between phases. |
+| `force_restart` | boolean | working | no | Restart chain from step 1, ignoring cached state. |
+| `gate_action` | enum | working | no | User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely. Only effective when gate retry limit is exceeded (default: 2 attempts) Use with chain_id to specify which chain session to apply the action to Blocking gates prompt for this choice; advisory/informational gates auto-continue |
+| `gate_verdict` | string | working | no | Gate review verdict with flexible format support. Primary: 'GATE_REVIEW: PASS\|FAIL - reason'. Also accepts: 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason' (minimal). Multiple format variants supported (v3.1+) Case-insensitive matching with hyphen or colon separators Rationale required for all verdicts Takes precedence over verdicts parsed from user_response Minimal format ('PASS - reason') only accepted via this parameter, not from user_response |
+| `gates` | array<string\|{name,description}\|gate> | working | no | Quality gates for output validation. Three formats supported:
+
+**1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.
+
+**2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.
+
+**3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows. RECOMMENDED: Use Quick Gates `{name, description}` when dynamically creating validation - simple to generate, properly named in output. Quick Gates auto-default to severity:medium, type:validation, scope:execution. Full schema supports: id, name, description, severity (critical\|high\|medium\|low), type, scope, criteria[], pass_criteria[], guidance, apply_to_steps[]. Supports mixed types in single array for maximum flexibility. Step-targeted gates: Use target_step_number or apply_to_steps in full gate definitions. |
+| `llm_validation` | boolean | **experimental** | no | Experimental: Advanced LLM-based semantic validation for prompt quality. Currently blocked pending architectural design. Reserved for future implementation of semantic validation features. Currently blocked by validator with migration guidance. May be reintroduced in future version with enhanced gate architecture. Status: Experimental (under development, not yet functional). |
+| `options` | record | working | no | Execution options forwarded downstream. |
+| `user_response` | string | working | no | Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming. |

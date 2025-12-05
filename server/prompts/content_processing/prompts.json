@@ -25,94 +25,6 @@
       ]
     },
     {
-      "id": "format_enhancement",
-      "name": "Format Enhancement Workflow",
-      "category": "content_processing",
-      "description": "Transform existing basic markdown notes to advanced Obsidian formatting standards with professional presentation and interactive elements",
-      "file": "format_enhancement.md",
-      "arguments": [
-        {
-          "name": "existing_content",
-          "description": "The existing note content to enhance with advanced formatting",
-          "required": true
-        },
-        {
-          "name": "domain",
-          "description": "Knowledge domain for appropriate formatting strategy",
-          "required": false
-        },
-        {
-          "name": "enhancement_level",
-          "description": "Enhancement intensity: standard, comprehensive, showcase (default: comprehensive)",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "noteIntegration",
-      "name": "Advanced Note Integration with Content Analysis Chain",
-      "category": "content_processing",
-      "description": "Advanced workflow that runs a comprehensive content analysis chain to transform raw content into publication-ready, interconnected notes optimized for Obsidian knowledge management systems. Uses intelligent defaults - only pass the content argument.",
-      "file": "noteIntegration.md",
-      "arguments": [
-        {
-          "name": "content",
-          "description": "The raw content to be processed and integrated",
-          "required": true
-        },
-        {
-          "name": "existing_notes",
-          "description": "Any existing notes to preserve and integrate with",
-          "required": false
-        },
-        {
-          "name": "vault_context",
-          "description": "Context about the vault structure and existing content",
-          "required": false
-        },
-        {
-          "name": "domain",
-          "description": "Knowledge domain for appropriate formatting strategy (e.g., 'creative_arts', 'technical', 'personal_development')",
-          "required": false
-        },
-        {
-          "name": "analysis_depth",
-          "description": "Analysis depth: 'surface', 'standard', 'comprehensive', 'exhaustive' (default: comprehensive)",
-          "required": false
-        },
-        {
-          "name": "structure_type",
-          "description": "Structure type: 'comprehensive', 'method_focused', 'reference_optimized' (default: comprehensive)",
-          "required": false
-        },
-        {
-          "name": "integration_level",
-          "description": "Integration level: 'basic', 'standard', 'advanced', 'network_optimized' (default: advanced)",
-          "required": false
-        },
-        {
-          "name": "target_readability",
-          "description": "Target readability: 'concise', 'balanced', 'comprehensive' (default: comprehensive)",
-          "required": false
-        },
-        {
-          "name": "metadata_depth",
-          "description": "Metadata depth: 'essential', 'comprehensive', 'advanced', 'network_optimized' (default: advanced)",
-          "required": false
-        },
-        {
-          "name": "quality_standards",
-          "description": "Quality standards: 'basic', 'professional', 'comprehensive', 'academic' (default: comprehensive)",
-          "required": false
-        },
-        {
-          "name": "enhancement_level",
-          "description": "Enhancement intensity: 'standard', 'comprehensive', 'showcase' (default: comprehensive)",
-          "required": false
-        }
-      ]
-    },
-    {
       "id": "vault_related_notes_finder",
       "name": "Vault Related Notes Finder",
       "category": "content_processing",
@@ -140,28 +52,28 @@
       "id": "video_notes_enhanced",
       "name": "Enhanced Video Notes Chain",
       "category": "content_processing",
-      "description": "Comprehensive video processing chain including content analysis, visual extraction, vault integration, and note creation with proper formatting",
+      "description": "Comprehensive video processing chain including content analysis, deep insights, and vault integration.",
       "file": "video_notes_enhanced.md",
       "arguments": [
         {
+          "name": "content",
+          "type": "string",
+          "description": "The transcript or content of the video"
+        },
+        {
           "name": "video_url",
-          "description": "YouTube video URL",
-          "required": true
+          "type": "string",
+          "description": "YouTube video URL"
         },
         {
           "name": "topic",
-          "description": "Main topic/subject",
-          "required": true
+          "type": "string",
+          "description": "Main topic/subject"
         },
         {
           "name": "content_areas",
-          "description": "Key content areas covered",
-          "required": true
-        },
-        {
-          "name": "duration",
-          "description": "Video duration",
-          "required": false
+          "type": "string",
+          "description": "Key content areas covered"
         }
       ]
     }

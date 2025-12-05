@@ -1,21 +1,29 @@
+// @lifecycle canonical - Handles prompt file read/write operations.
 /**
  * File system and category management operations
  */
 
-import * as fs from "fs/promises";
-import { readFile } from "fs/promises";
-import path from "path";
-import { Logger } from "../../../logging/index.js";
-import { ConfigManager } from "../../../config/index.js";
-import { PromptData, PromptsConfigFile } from "../../../types/index.js";
-import { safeWriteFile } from "../../../prompts/promptUtils.js";
+import * as fs from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
+
+import { ConfigManager } from '../../../config/index.js';
+import { Logger } from '../../../logging/index.js';
 import {
-  OperationResult,
-  CategoryResult,
-  FileOperationResult,
-  PromptManagerDependencies
-} from "../core/types.js";
-import { CategoryManager } from "../utils/category-manager.js";
+  cleanupEmptyCategoryOnDisk,
+  ensureCategoryExistsOnDisk,
+  getCategoryStatsFromDisk,
+  validateCategoryStructureOnDisk,
+} from '../../../prompts/category-maintenance.js';
+import {
+  buildPromptBaseContent,
+  buildPromptMarkdownContent,
+  buildGateConfigurationSection,
+  buildChainStepsSection,
+} from '../../../prompts/prompt-writer.js';
+import { safeWriteFile } from '../../../prompts/promptUtils.js';
+import { PromptData, PromptsConfigFile } from '../../../types/index.js';
+import { OperationResult, FileOperationResult, PromptManagerDependencies } from '../core/types.js';
 
 /**
  * File system operations for prompt management
@@ -23,12 +31,10 @@ import { CategoryManager } from "../utils/category-manager.js";
 export class FileOperations {
   private logger: Logger;
   private configManager: ConfigManager;
-  private categoryManager: CategoryManager;
 
   constructor(dependencies: Pick<PromptManagerDependencies, 'logger' | 'configManager'>) {
     this.logger = dependencies.logger;
     this.configManager = dependencies.configManager;
-    this.categoryManager = new CategoryManager(this.logger);
   }
 
   /**
@@ -38,15 +44,19 @@ export class FileOperations {
     const PROMPTS_FILE = this.configManager.getPromptsFilePath();
     const messages: string[] = [];
 
-    const fileContent = await readFile(PROMPTS_FILE, "utf8");
+    const fileContent = await readFile(PROMPTS_FILE, 'utf8');
     const promptsConfig = JSON.parse(fileContent) as PromptsConfigFile;
 
     if (!promptsConfig.categories) promptsConfig.categories = [];
     if (!promptsConfig.imports) promptsConfig.imports = [];
 
     // Ensure category exists
-    const { effectiveCategory, created: categoryCreated } =
-      await this.categoryManager.ensureCategoryExists(promptData.category, promptsConfig, PROMPTS_FILE);
+    const { effectiveCategory, created: categoryCreated } = await ensureCategoryExistsOnDisk({
+      logger: this.logger,
+      category: promptData.category,
+      promptsConfig,
+      promptsFile: PROMPTS_FILE,
+    });
 
     if (categoryCreated) {
       messages.push(`✅ Created category: '${effectiveCategory}'`);
@@ -63,7 +73,7 @@ export class FileOperations {
 
     return {
       message: messages.join('\n'),
-      affectedFiles: [`${promptData.id}.md`]
+      affectedFiles: [`${promptData.id}.md`],
     };
   }
 
@@ -76,7 +86,7 @@ export class FileOperations {
     const messages: string[] = [];
     const affectedFiles: string[] = [];
 
-    const fileContent = await readFile(PROMPTS_FILE, "utf8");
+    const fileContent = await readFile(PROMPTS_FILE, 'utf8');
     const promptsConfig = JSON.parse(fileContent) as PromptsConfigFile;
 
     let promptFound = false;
@@ -86,7 +96,7 @@ export class FileOperations {
       const categoryPath = path.join(promptsConfigDir, categoryImport);
 
       try {
-        const categoryContent = await readFile(categoryPath, "utf8");
+        const categoryContent = await readFile(categoryPath, 'utf8');
         const categoryData = JSON.parse(categoryContent);
 
         const promptIndex = categoryData.prompts.findIndex((p: PromptData) => p.id === id);
@@ -96,7 +106,7 @@ export class FileOperations {
 
           // Remove from category
           categoryData.prompts.splice(promptIndex, 1);
-          await safeWriteFile(categoryPath, JSON.stringify(categoryData, null, 2), "utf8");
+          await safeWriteFile(categoryPath, JSON.stringify(categoryData, null, 2), 'utf8');
 
           // Delete markdown file
           const markdownPath = path.join(path.dirname(categoryPath), promptEntry.file);
@@ -105,7 +115,7 @@ export class FileOperations {
             messages.push(`✅ Deleted prompt file: ${promptEntry.file}`);
             affectedFiles.push(promptEntry.file);
           } catch (unlinkError: any) {
-            if (unlinkError.code !== "ENOENT") {
+            if (unlinkError.code !== 'ENOENT') {
               messages.push(`⚠️ Could not delete file: ${unlinkError.message}`);
             }
           }
@@ -115,9 +125,16 @@ export class FileOperations {
 
           // Automatically clean up empty category
           if (categoryData.prompts.length === 0) {
-            this.logger.info(`Category ${categoryImport} is now empty, performing automatic cleanup`);
-            const cleanupResult = await this.categoryManager.cleanupEmptyCategory(categoryImport, promptsConfig, PROMPTS_FILE);
-            messages.push(`🧹 **Automatic Category Cleanup**:\n${cleanupResult.message}`);
+            this.logger.info(
+              `Category ${categoryImport} is now empty, performing automatic cleanup`
+            );
+            const cleanupMessage = await cleanupEmptyCategoryOnDisk({
+              logger: this.logger,
+              categoryImport,
+              promptsConfig,
+              promptsFile: PROMPTS_FILE,
+            });
+            messages.push(`🧹 **Automatic Category Cleanup**:\n${cleanupMessage}`);
           }
 
           break;
@@ -133,7 +150,7 @@ export class FileOperations {
 
     return {
       message: messages.join('\n'),
-      affectedFiles
+      affectedFiles,
     };
   }
 
@@ -150,59 +167,46 @@ export class FileOperations {
     const promptPath = path.join(categoryDir, promptFilename);
 
     // Create markdown content
-    let content = `# ${promptData.name}\n\n`;
-    content += `## Description\n${promptData.description}\n\n`;
+    const promptBaseContent = buildPromptBaseContent({
+      id: promptData.id,
+      name: promptData.name,
+      description: promptData.description,
+      systemMessage: promptData.systemMessage,
+      userMessageTemplate: promptData.userMessageTemplate,
+    });
 
-    if (promptData.systemMessage) {
-      content += `## System Message\n${promptData.systemMessage}\n\n`;
-    }
-
-    content += `## User Message Template\n${promptData.userMessageTemplate}\n`;
-
-    // Build gate configuration section separately
-    let gateConfigSection = '';
     this.logger.error(`[GATE-TRACE] 💾 FILE-OPS Gate Configuration Check for ${promptData.id}:`, {
       hasGateConfiguration: !!promptData.gateConfiguration,
       gateConfigType: typeof promptData.gateConfiguration,
       gateConfigContent: promptData.gateConfiguration,
-      promptId: promptData.id
+      promptId: promptData.id,
     });
-
-    if (promptData.gateConfiguration) {
-      this.logger.error(`[GATE-TRACE] ✅ Building gate configuration section for prompt ${promptData.id}`);
-      gateConfigSection = `\n## Gate Configuration\n\n`;
-      gateConfigSection += `\`\`\`json\n`;
-      const gateConfigJson = JSON.stringify(promptData.gateConfiguration, null, 2);
-      gateConfigSection += gateConfigJson;
-      gateConfigSection += `\n\`\`\`\n`;
-      this.logger.error(`[GATE-TRACE] 📝 Gate configuration JSON content:`, gateConfigJson);
+    const gateConfigSection = buildGateConfigurationSection(promptData.gateConfiguration);
+    if (gateConfigSection) {
+      this.logger.error(
+        `[GATE-TRACE] ✅ Building gate configuration section for prompt ${promptData.id}`
+      );
+      this.logger.error(
+        `[GATE-TRACE] 📝 Gate configuration JSON content:`,
+        JSON.stringify(promptData.gateConfiguration, null, 2)
+      );
     } else {
       this.logger.error(`[GATE-TRACE] ❌ NO GATE CONFIGURATION FOUND for prompt ${promptData.id}`);
     }
 
-    // Build chain steps section
-    let chainStepsSection = '';
-    if ((promptData.chainSteps?.length ?? 0) > 0) {
-      chainStepsSection = `\n## Chain Steps\n\n`;
-      promptData.chainSteps.forEach((step: any, index: number) => {
-        chainStepsSection += `${index + 1}. **${step.stepName}** (${step.promptId})\n`;
-        if (step.inputMapping) {
-          chainStepsSection += `   - Input Mapping: ${JSON.stringify(step.inputMapping)}\n`;
-        }
-        if (step.outputMapping) {
-          chainStepsSection += `   - Output Mapping: ${JSON.stringify(step.outputMapping)}\n`;
-        }
-        chainStepsSection += `\n`;
-      });
-    }
+    const chainStepsSection = buildChainStepsSection(promptData.chainSteps);
+    let content = promptBaseContent;
 
     // Check if file exists and handle Gate Configuration replacement
-    const existsBefore = await fs.access(promptPath).then(() => true).catch(() => false);
+    const existsBefore = await fs
+      .access(promptPath)
+      .then(() => true)
+      .catch(() => false);
 
     if (existsBefore && gateConfigSection) {
       try {
         // Read existing file to preserve structure and replace Gate Configuration section
-        const existingContent = await readFile(promptPath, "utf8");
+        const existingContent = await readFile(promptPath, 'utf8');
 
         // Remove ALL existing Gate Configuration sections (handles multiple duplicates)
         const gateConfigRegex = /## Gate Configuration\s*\n```json\s*\n[\s\S]*?\n```\s*/g;
@@ -213,37 +217,55 @@ export class FileOperations {
 
         if (chainStepsIndex > 0) {
           // Insert gate config before Chain Steps
-          content = cleanedContent.slice(0, chainStepsIndex).trimEnd() + '\n' +
-                    gateConfigSection + '\n' +
-                    cleanedContent.slice(chainStepsIndex);
-          this.logger.error(`[GATE-TRACE] ✅ Replaced Gate Configuration section (inserted before Chain Steps)`);
+          content =
+            cleanedContent.slice(0, chainStepsIndex).trimEnd() +
+            '\n' +
+            gateConfigSection +
+            '\n' +
+            cleanedContent.slice(chainStepsIndex);
+          this.logger.error(
+            `[GATE-TRACE] ✅ Replaced Gate Configuration section (inserted before Chain Steps)`
+          );
         } else {
           // No Chain Steps - append at end
           content = cleanedContent.trimEnd() + '\n' + gateConfigSection;
-          this.logger.error(`[GATE-TRACE] ✅ Replaced Gate Configuration section (appended at end)`);
+          this.logger.error(
+            `[GATE-TRACE] ✅ Replaced Gate Configuration section (appended at end)`
+          );
         }
       } catch (readError) {
         // If read fails, fall back to full regeneration
-        this.logger.warn(`[GATE-TRACE] ⚠️ Failed to read existing file for section replacement, using full regeneration`, readError);
+        this.logger.warn(
+          `[GATE-TRACE] ⚠️ Failed to read existing file for section replacement, using full regeneration`,
+          readError
+        );
         content += gateConfigSection + chainStepsSection;
       }
     } else {
-      // New file or no gate configuration - use simple append
-      content += gateConfigSection + chainStepsSection;
+      // New file or no gate configuration - regenerate full document
+      content = buildPromptMarkdownContent({
+        id: promptData.id,
+        name: promptData.name,
+        description: promptData.description,
+        systemMessage: promptData.systemMessage,
+        userMessageTemplate: promptData.userMessageTemplate,
+        gateConfiguration: promptData.gateConfiguration,
+        chainSteps: promptData.chainSteps,
+      });
       if (gateConfigSection) {
         this.logger.error(`[GATE-TRACE] ✅ Added Gate Configuration section to new file`);
       }
     }
 
     // Write markdown file
-    await safeWriteFile(promptPath, content, "utf8");
+    await safeWriteFile(promptPath, content, 'utf8');
 
     // Update category prompts.json
-    const categoryPromptsPath = path.join(categoryDir, "prompts.json");
+    const categoryPromptsPath = path.join(categoryDir, 'prompts.json');
     let categoryData: { prompts: PromptData[] };
 
     try {
-      const categoryContent = await readFile(categoryPromptsPath, "utf8");
+      const categoryContent = await readFile(categoryPromptsPath, 'utf8');
       categoryData = JSON.parse(categoryContent);
     } catch {
       categoryData = { prompts: [] };
@@ -255,44 +277,22 @@ export class FileOperations {
       category: effectiveCategory,
       description: promptData.description,
       file: promptFilename,
-      arguments: promptData.arguments || []
+      arguments: promptData.arguments || [],
     };
 
-    const existingIndex = categoryData.prompts.findIndex(p => p.id === promptData.id);
+    const existingIndex = categoryData.prompts.findIndex((p) => p.id === promptData.id);
     if (existingIndex > -1) {
       categoryData.prompts[existingIndex] = promptEntry;
     } else {
       categoryData.prompts.push(promptEntry);
     }
 
-    await safeWriteFile(categoryPromptsPath, JSON.stringify(categoryData, null, 2), "utf8");
+    await safeWriteFile(categoryPromptsPath, JSON.stringify(categoryData, null, 2), 'utf8');
 
     return {
       exists: existsBefore,
-      path: promptPath
+      path: promptPath,
     };
-  }
-
-  /**
-   * Ensure category exists in the configuration
-   */
-  async ensureCategoryExists(
-    category: string,
-    promptsConfig: PromptsConfigFile,
-    promptsFile: string
-  ): Promise<CategoryResult> {
-    return this.categoryManager.ensureCategoryExists(category, promptsConfig, promptsFile);
-  }
-
-  /**
-   * Clean up empty category
-   */
-  async cleanupEmptyCategory(
-    categoryImport: string,
-    promptsConfig: PromptsConfigFile,
-    promptsFile: string
-  ): Promise<OperationResult> {
-    return this.categoryManager.cleanupEmptyCategory(categoryImport, promptsConfig, promptsFile);
   }
 
   /**
@@ -308,15 +308,15 @@ export class FileOperations {
 
     try {
       // Check main config file
-      const fileContent = await readFile(PROMPTS_FILE, "utf8");
+      const fileContent = await readFile(PROMPTS_FILE, 'utf8');
       const promptsConfig = JSON.parse(fileContent) as PromptsConfigFile;
 
       // Validate categories and imports
-      const stats = await this.categoryManager.getCategoryStats(promptsConfig.imports || [], PROMPTS_FILE);
+      const stats = await getCategoryStatsFromDisk(promptsConfig.imports || [], PROMPTS_FILE);
 
       // Check each category structure
       for (const categoryImport of promptsConfig.imports || []) {
-        const validation = await this.categoryManager.validateCategoryStructure(categoryImport, PROMPTS_FILE);
+        const validation = await validateCategoryStructureOnDisk(categoryImport, PROMPTS_FILE);
         if (!validation.valid) {
           issues.push(`Category ${categoryImport}: ${validation.issues.join(', ')}`);
         }
@@ -325,15 +325,16 @@ export class FileOperations {
       return {
         valid: issues.length === 0,
         issues,
-        stats
+        stats,
       };
-
     } catch (error) {
-      issues.push(`Failed to validate file system: ${error instanceof Error ? error.message : String(error)}`);
+      issues.push(
+        `Failed to validate file system: ${error instanceof Error ? error.message : String(error)}`
+      );
       return {
         valid: false,
         issues,
-        stats: {}
+        stats: {},
       };
     }
   }
@@ -357,7 +358,7 @@ export class FileOperations {
     let fileCount = 1;
 
     // Copy all categories and their prompts
-    const fileContent = await readFile(PROMPTS_FILE, "utf8");
+    const fileContent = await readFile(PROMPTS_FILE, 'utf8');
     const promptsConfig = JSON.parse(fileContent) as PromptsConfigFile;
 
     for (const categoryImport of promptsConfig.imports || []) {
@@ -393,7 +394,7 @@ export class FileOperations {
 
     return {
       backupPath: backupDir,
-      fileCount
+      fileCount,
     };
   }
 
@@ -415,16 +416,18 @@ export class FileOperations {
     let diskUsage = 0;
 
     try {
-      const fileContent = await readFile(PROMPTS_FILE, "utf8");
+      const fileContent = await readFile(PROMPTS_FILE, 'utf8');
       const promptsConfig = JSON.parse(fileContent) as PromptsConfigFile;
 
       totalCategories = promptsConfig.categories?.length || 0;
 
-      const stats = await this.categoryManager.getCategoryStats(promptsConfig.imports || [], PROMPTS_FILE);
+      const stats = await getCategoryStatsFromDisk(promptsConfig.imports || [], PROMPTS_FILE);
       totalPrompts = Object.values(stats).reduce((sum, count) => sum + count, 0);
 
       // Count files and calculate disk usage
-      const calculateDirSize = async (dirPath: string): Promise<{ files: number; size: number }> => {
+      const calculateDirSize = async (
+        dirPath: string
+      ): Promise<{ files: number; size: number }> => {
         let files = 0;
         let size = 0;
 
@@ -454,7 +457,6 @@ export class FileOperations {
       const dirStats = await calculateDirSize(promptsDir);
       totalFiles = dirStats.files;
       diskUsage = dirStats.size;
-
     } catch (error) {
       this.logger.warn('Failed to calculate file system stats:', error);
     }
@@ -463,7 +465,7 @@ export class FileOperations {
       totalCategories,
       totalPrompts,
       totalFiles,
-      diskUsage
+      diskUsage,
     };
   }
 }

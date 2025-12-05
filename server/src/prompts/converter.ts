@@ -1,14 +1,44 @@
+// @lifecycle canonical - Converts prompt markdown files into structured prompt data.
 /**
  * Prompt Converter Module
  * Handles converting markdown prompts to JSON structure with validation
  */
 
-import path from "path";
-import { Logger } from "../logging/index.js";
-import type { ConvertedPrompt } from "../execution/types.js";
-import type { PromptData } from "./types.js";
-import { isChainPrompt } from "../utils/chainUtils.js";
-import { PromptLoader } from "./loader.js";
+import * as path from 'node:path';
+
+import { Logger } from '../logging/index.js';
+import { isChainPrompt } from '../utils/chainUtils.js';
+import { PromptLoader } from './loader.js';
+
+import type { ConvertedPrompt } from '../execution/types.js';
+import type { PromptData } from './types.js';
+
+/**
+ * Resolve the registerWithMcp value using the priority chain:
+ * 1. Prompt-level override (highest priority)
+ * 2. Category-level default (from _categoryRegisterWithMcp)
+ * 3. Global config default (from config.json prompts.registerWithMcp)
+ * 4. Hard-coded default: true (register with MCP)
+ */
+function resolveRegisterWithMcp(
+  promptData: PromptData & { _categoryRegisterWithMcp?: boolean },
+  globalRegisterWithMcp?: boolean
+): boolean {
+  // 1. Prompt-level override takes precedence
+  if (promptData.registerWithMcp !== undefined) {
+    return promptData.registerWithMcp;
+  }
+  // 2. Category-level default (attached by loader)
+  if (promptData._categoryRegisterWithMcp !== undefined) {
+    return promptData._categoryRegisterWithMcp;
+  }
+  // 3. Global config default
+  if (globalRegisterWithMcp !== undefined) {
+    return globalRegisterWithMcp;
+  }
+  // 4. Hard-coded default: register with MCP
+  return true;
+}
 
 /**
  * Prompt Converter class
@@ -16,10 +46,19 @@ import { PromptLoader } from "./loader.js";
 export class PromptConverter {
   private logger: Logger;
   private loader: PromptLoader;
+  private globalRegisterWithMcp?: boolean;
 
-  constructor(logger: Logger, loader?: PromptLoader) {
+  constructor(logger: Logger, loader?: PromptLoader, globalRegisterWithMcp?: boolean) {
     this.logger = logger;
     this.loader = loader || new PromptLoader(logger);
+    this.globalRegisterWithMcp = globalRegisterWithMcp;
+  }
+
+  /**
+   * Set the global registerWithMcp default value
+   */
+  setGlobalRegisterWithMcp(value: boolean | undefined): void {
+    this.globalRegisterWithMcp = value;
   }
 
   /**
@@ -31,20 +70,15 @@ export class PromptConverter {
   ): Promise<ConvertedPrompt[]> {
     const convertedPrompts: ConvertedPrompt[] = [];
 
-    this.logger.info(
-      `Converting ${promptsData.length} markdown prompts to JSON structure...`
-    );
+    this.logger.info(`Converting ${promptsData.length} markdown prompts to JSON structure...`);
 
     for (const promptData of promptsData) {
       try {
         // Determine base path for loading files
-        const fileBasePath = basePath || path.join(process.cwd(), "..");
+        const fileBasePath = basePath || path.join(process.cwd(), '..');
 
         // Load the prompt file content using the loader
-        const promptFile = await this.loader.loadPromptFile(
-          promptData.file,
-          fileBasePath
-        );
+        const promptFile = await this.loader.loadPromptFile(promptData.file, fileBasePath);
 
         // Load chain steps from markdown-embedded format
         let chainSteps = promptFile.chainSteps || [];
@@ -64,39 +98,40 @@ export class PromptConverter {
           })),
           // Include chain information from markdown-embedded chainSteps
           chainSteps: chainSteps,
-          // Phase 2: Include gate configuration from prompt file
+          // Include gate configuration from prompt file
           gateConfiguration: promptFile.gateConfiguration,
           tools: promptData.tools || false,
-          onEmptyInvocation:
-            promptData.onEmptyInvocation || "execute_if_possible",
+          onEmptyInvocation: promptData.onEmptyInvocation || 'execute_if_possible',
+          // Resolve MCP registration from prompt/category/global defaults
+          registerWithMcp: resolveRegisterWithMcp(promptData, this.globalRegisterWithMcp),
         };
 
         // NOTE: All chains now use markdown-embedded format
         // Modular chain system has been removed - chains are defined inline within markdown files
         if (isChainPrompt(convertedPrompt) && chainSteps.length === 0) {
-          this.logger.debug(`Chain prompt '${convertedPrompt.id}' has no embedded chain steps - will be treated as single prompt`);
+          this.logger.debug(
+            `Chain prompt '${convertedPrompt.id}' has no embedded chain steps - will be treated as single prompt`
+          );
         }
 
         // Validate the onEmptyInvocation field
         if (
           promptData.onEmptyInvocation &&
-          promptData.onEmptyInvocation !== "return_template" &&
-          promptData.onEmptyInvocation !== "execute_if_possible"
+          promptData.onEmptyInvocation !== 'return_template' &&
+          promptData.onEmptyInvocation !== 'execute_if_possible'
         ) {
           this.logger.warn(
             `Prompt '${promptData.id}' has an invalid 'onEmptyInvocation' value: "${promptData.onEmptyInvocation}". ` +
               `Defaulting to "execute_if_possible". Allowed values are "return_template" or "execute_if_possible".`
           );
-          convertedPrompt.onEmptyInvocation = "execute_if_possible";
+          convertedPrompt.onEmptyInvocation = 'execute_if_possible';
         }
 
         // Validate the converted prompt
         const validation = this.validateConvertedPrompt(convertedPrompt);
         if (!validation.isValid) {
           this.logger.warn(
-            `Prompt ${
-              promptData.id
-            } has validation issues: ${validation.errors.join(", ")}`
+            `Prompt ${promptData.id} has validation issues: ${validation.errors.join(', ')}`
           );
           // Continue processing even with warnings
         }
@@ -108,9 +143,7 @@ export class PromptConverter {
       }
     }
 
-    this.logger.info(
-      `Successfully converted ${convertedPrompts.length} prompts`
-    );
+    this.logger.info(`Successfully converted ${convertedPrompts.length} prompts`);
     return convertedPrompts;
   }
 
@@ -127,26 +160,24 @@ export class PromptConverter {
 
     // Check required fields
     if (!prompt.id) {
-      errors.push("Missing required field: id");
+      errors.push('Missing required field: id');
     }
     if (!prompt.name) {
-      errors.push("Missing required field: name");
+      errors.push('Missing required field: name');
     }
     if (!prompt.category) {
-      errors.push("Missing required field: category");
+      errors.push('Missing required field: category');
     }
 
     // Check that either userMessageTemplate exists or it's a valid chain
     if (!prompt.userMessageTemplate && !((prompt.chainSteps?.length || 0) > 0)) {
-      errors.push(
-        "Either userMessageTemplate must be provided or prompt must be a valid chain"
-      );
+      errors.push('Either userMessageTemplate must be provided or prompt must be a valid chain');
     }
 
     // Validate chain prompts
     if ((prompt.chainSteps?.length || 0) > 0) {
       if (!prompt.chainSteps || prompt.chainSteps.length === 0) {
-        errors.push("Chain prompt must have at least one chain step");
+        errors.push('Chain prompt must have at least one chain step');
       } else {
         // Validate each chain step
         prompt.chainSteps.forEach((step, index) => {
@@ -166,10 +197,8 @@ export class PromptConverter {
         if (!arg.name) {
           errors.push(`Argument ${index + 1} missing name`);
         }
-        if (typeof arg.required !== "boolean") {
-          warnings.push(
-            `Argument ${arg.name || index + 1} has invalid required value`
-          );
+        if (typeof arg.required !== 'boolean') {
+          warnings.push(`Argument ${arg.name || index + 1} has invalid required value`);
         }
       });
     }
@@ -177,18 +206,20 @@ export class PromptConverter {
     // Check for placeholder validation in template
     if (prompt.userMessageTemplate) {
       // Validate template syntax - reject Handlebars syntax
-      if (prompt.userMessageTemplate.includes('{{#if') ||
-          prompt.userMessageTemplate.includes('{{/if') ||
-          prompt.userMessageTemplate.includes('{{#each') ||
-          prompt.userMessageTemplate.includes('{{/each') ||
-          prompt.userMessageTemplate.includes('{{#unless') ||
-          prompt.userMessageTemplate.includes('{{/unless')) {
+      if (
+        prompt.userMessageTemplate.includes('{{#if') ||
+        prompt.userMessageTemplate.includes('{{/if') ||
+        prompt.userMessageTemplate.includes('{{#each') ||
+        prompt.userMessageTemplate.includes('{{/each') ||
+        prompt.userMessageTemplate.includes('{{#unless') ||
+        prompt.userMessageTemplate.includes('{{/unless')
+      ) {
         errors.push(
           `Handlebars syntax detected in template. This system uses Nunjucks syntax.\n` +
-          `Replace: {{#if condition}} → {% if condition %}\n` +
-          `Replace: {{/if}} → {% endif %}\n` +
-          `Replace: {{#each items}} → {% for item in items %}\n` +
-          `Replace: {{/each}} → {% endfor %}`
+            `Replace: {{#if condition}} → {% if condition %}\n` +
+            `Replace: {{/if}} → {% endif %}\n` +
+            `Replace: {{#each items}} → {% for item in items %}\n` +
+            `Replace: {{/each}} → {% endfor %}`
         );
       }
 
@@ -198,27 +229,20 @@ export class PromptConverter {
       // Find placeholders that don't have corresponding arguments
       const orphanedPlaceholders = placeholders.filter(
         (placeholder) =>
-          !argumentNames.includes(placeholder) &&
-          !this.isSpecialPlaceholder(placeholder)
+          !argumentNames.includes(placeholder) && !this.isSpecialPlaceholder(placeholder)
       );
 
       if (orphanedPlaceholders.length > 0) {
         warnings.push(
-          `Template has placeholders without arguments: ${orphanedPlaceholders.join(
-            ", "
-          )}`
+          `Template has placeholders without arguments: ${orphanedPlaceholders.join(', ')}`
         );
       }
 
       // Find arguments that aren't used in the template
-      const unusedArguments = argumentNames.filter(
-        (argName) => !placeholders.includes(argName)
-      );
+      const unusedArguments = argumentNames.filter((argName) => !placeholders.includes(argName));
 
       if (unusedArguments.length > 0) {
-        warnings.push(
-          `Arguments not used in template: ${unusedArguments.join(", ")}`
-        );
+        warnings.push(`Arguments not used in template: ${unusedArguments.join(', ')}`);
       }
     }
 
@@ -252,19 +276,16 @@ export class PromptConverter {
    */
   private isSpecialPlaceholder(placeholder: string): boolean {
     const specialPlaceholders = [
-      "previous_message",
-      "tools_available",
-      "current_step_number",
-      "total_steps",
-      "current_step_name",
-      "step_number",
-      "step_name",
+      'previous_message',
+      'tools_available',
+      'current_step_number',
+      'total_steps',
+      'current_step_name',
+      'step_number',
+      'step_name',
     ];
 
-    return (
-      specialPlaceholders.includes(placeholder) ||
-      placeholder.startsWith("ref:")
-    );
+    return specialPlaceholders.includes(placeholder) || placeholder.startsWith('ref:');
   }
 
   /**
@@ -283,16 +304,12 @@ export class PromptConverter {
   } {
     const chainPrompts = convertedPrompts.filter((p) => isChainPrompt(p)).length;
     const regularPrompts = convertedPrompts.length - chainPrompts;
-    const totalArguments = convertedPrompts.reduce(
-      (sum, p) => sum + p.arguments.length,
-      0
-    );
+    const totalArguments = convertedPrompts.reduce((sum, p) => sum + p.arguments.length, 0);
 
     return {
       totalOriginal: originalCount,
       totalConverted: convertedPrompts.length,
-      successRate:
-        originalCount > 0 ? convertedPrompts.length / originalCount : 0,
+      successRate: originalCount > 0 ? convertedPrompts.length / originalCount : 0,
       chainPrompts,
       regularPrompts,
       totalArguments,

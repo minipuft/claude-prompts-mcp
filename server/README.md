@@ -1,606 +1,250 @@
-# MCP Prompts Server
+# Claude Prompts MCP Server
 
-A comprehensive Model Context Protocol (MCP) server that provides AI prompt management with hot-reloading capabilities, workflow orchestration, and enterprise-grade features.
+[![npm version](https://img.shields.io/npm/v/claude-prompts-server.svg)](https://www.npmjs.com/package/claude-prompts-server)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg)](https://nodejs.org/)
 
-## Overview
+Hot-reloadable Model Context Protocol server for prompts, thinking frameworks, and quality gates. Manage prompt libraries, apply structured reasoning methodologies, and enforce output quality—all through MCP tools.
 
-The MCP Prompts Server implements a modernized execution architecture with three-tier processing that handles different types of prompt execution:
+## Why Use This?
 
-- **Direct Prompt Processing**: Lightning-fast variable substitution via UnifiedPromptProcessor (90% of cases)
-- **LLM-Driven Chain Execution**: Multi-step workflows orchestrated by ConsolidatedPromptEngine (10% of cases)
-- **Framework Integration**: Methodology enhancement (CAGEERF/ReACT/5W1H/SCAMPER) applied contextually
+- **Prompt Library Management** — Create, update, and organize prompts through MCP tools instead of manually editing files
+- **Built-in Thinking Frameworks** — Apply CAGEERF, ReACT, 5W1H, or SCAMPER methodologies to guide structured reasoning
+- **Quality Gates** — Enforce validation criteria on outputs with multi-tier gate systems
+- **Multi-Step Chains** — Build complex workflows with persistent session state that survives restarts
+- **Hot-Reload** — Edit prompts and see changes immediately without restarting the server
+- **Symbolic Command Language** — Express complex workflows with intuitive operators (`-->`, `@`, `::`, `+`)
 
-## Architecture
+## Key Features
 
-### ExecutionCoordinator System
-
-The server uses ExecutionCoordinator as a thin orchestration layer that delegates all execution to ConsolidatedPromptEngine:
-
-```typescript
-// Phase 3: Delegation-based execution routing
-const result = await executionCoordinator.executePrompt(
-  promptId,
-  args,
-  options
-);
-// All execution delegated to ConsolidatedPromptEngine
-```
-
-#### Core Components
-
-1. **ExecutionCoordinator**: Thin orchestration layer with delegation pattern
-2. **UnifiedPromptProcessor**: Handles 90% of prompt processing with fast variable substitution
-3. **ConsolidatedPromptEngine**: Handles 10% of cases with LLM-driven chain execution and intelligent analysis
-
-### Simplified Execution Architecture
-
-The system supports intelligent routing with three primary execution tiers:
-
-| Execution Tier | Framework Integration   | Processing               | Speed          | Best For                              |
-| -------------- | ----------------------- | ------------------------ | -------------- | ------------------------------------- |
-| **Prompt**     | ❌ Bypassed for speed   | UnifiedPromptProcessor   | Lightning Fast | Basic variable substitution           |
-| **Template**   | ✅ Methodology-aware    | ConsolidatedPromptEngine | Smart          | Framework-enhanced content generation |
-| **Chain**      | ✅ Per-step enhancement | ConsolidatedPromptEngine | LLM-Driven     | Multi-step workflows                  |
-
-#### Execution Flow
-
-- **Prompt Execution**: Fast path with direct variable substitution via UnifiedPromptProcessor, **bypasses framework injection** for maximum speed
-- **Template Execution**: Framework-enhanced processing with **automatic methodology injection** via ConsolidatedPromptEngine based on active framework
-- **Chain Execution**: LLM-driven iterative workflows with **per-step framework injection** and state management via ConsolidatedPromptEngine
-- **Framework Selection**: Rule-based framework selection using FrameworkManager based on execution type, complexity, and user preference
-- **Active Framework Management**: FrameworkStateManager maintains current active framework (default: CAGEERF) with runtime switching capabilities
-
-For detailed information about choosing the right execution type, see the [Execution Types Guide](../docs/execution-types-guide.md).
-
-### Key Components
-
-- **Application Orchestrator**: Multi-phase startup with comprehensive health monitoring
-- **ConsolidatedPromptEngine**: Three-tier execution system with intelligent analysis and LLM-driven chains
-- **Template System**: Nunjucks-powered template processing with framework injection
-- **Gate System**: Quality validation with framework-aware evaluation
-- **Hot-Reload System**: Dynamic prompt updates without server restart
-
-### Three-Tier Quality Assurance System
-
-The server implements an intelligent quality assurance model that adapts to execution type:
-
-#### Prompt Execution (No Framework, No Gates)
-
-- **Lightning Fast**: Direct Nunjucks variable substitution
-- **Zero Overhead**: Bypasses framework injection and quality gates
-- **Best For**: Simple formatting, variable replacement, basic templates
-
-#### Template Execution (Framework-Enhanced)
-
-- **Smart Processing**: Rule-based framework selection with conditional injection
-- **Methodology Integration**: CAGEERF, ReACT, 5W1H, or SCAMPER framework enhancement based on active framework
-- **Quality Validation**: Content validation and framework compliance
-- **Best For**: Analysis, reasoning, complex content generation
-
-#### Chain Execution (LLM-Driven Workflows)
-
-- **Iterative Processing**: LLM-guided step-by-step execution with intelligent coordination
-- **Context Management**: Conversation state and inter-step data flow management
-- **Quality Gate Integration**: Framework-aware validation and methodology compliance
-- **Best For**: Multi-step processes requiring sequential reasoning and state management
-
-For detailed gate configuration, see the [Enhanced Gate System Guide](../docs/enhanced-gate-system.md).
-
-### Framework System Architecture
-
-The server implements a sophisticated framework system with systematic methodology application:
-
-#### Framework Components
-
-1. **FrameworkManager** (Stateless): Loads methodology guides and generates framework definitions dynamically
-2. **FrameworkStateManager** (Stateful): Tracks active framework and handles runtime switching with performance monitoring
-3. **FrameworkInjector**: Conditionally injects framework-specific system prompts based on execution tier
-4. **Methodology Guides**: CAGEERF, ReACT, 5W1H, SCAMPER guides providing framework-specific behavior
-
-#### Framework Selection Process
-
-```typescript
-// Rule-based framework selection based on criteria
-const framework = frameworkManager.selectFramework({
-  executionType: "template",
-  complexity: "high",
-  userPreference: "CAGEERF", // User preference is primary selection factor
-});
-
-// Runtime framework switching
-await frameworkStateManager.switchFramework({
-  targetFramework: "ReACT",
-  reason: "User preference change",
-});
-```
-
-#### Conditional Framework Injection
-
-- **Prompt Tier**: Framework injection **bypassed** for maximum execution speed
-- **Template Tier**: **Automatic injection** of active framework's system prompt and methodology guidance
-- **Chain Tier**: **Per-step injection** allowing different frameworks per chain step
-
-#### Available Methodologies
-
-- **CAGEERF**: Comprehensive structured approach (Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework)
-- **ReACT**: Reasoning and Acting pattern for systematic problem-solving
-- **5W1H**: Who, What, When, Where, Why, How systematic analysis
-- **SCAMPER**: Creative problem-solving (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)
+| Feature               | Description                                                           |
+| --------------------- | --------------------------------------------------------------------- |
+| **3 MCP Tools**       | `prompt_engine`, `prompt_manager`, `system_control`                   |
+| **4 Frameworks**      | CAGEERF, ReACT, 5W1H, SCAMPER thinking methodologies                  |
+| **Quality Gates**     | Multi-tier validation with blocking and advisory modes                |
+| **Symbolic Commands** | Chain (`-->`), framework (`@`), gate (`::`), parallel (`+`) operators |
+| **Hot-Reload**        | File watcher auto-reloads prompts on save                             |
+| **Chain Sessions**    | Persistent multi-step workflows with session resumption               |
+| **Judge Mode**        | Interactive guided selection of frameworks, styles, and gates         |
 
 ## Quick Start
 
-### Installation
-
 ```bash
-# Clone or navigate to the project
-cd /path/to/claude-prompts-mcp/server
+# Run without installing
+npx claude-prompts-server --transport=stdio --quiet
 
-# Install dependencies
-npm install
-
-# Build TypeScript
-npm run build
+# See all options
+npx claude-prompts-server --help
 ```
 
-### Claude Desktop Integration (Recommended)
+### Connect to Claude Desktop
 
-1. **Add to Claude Desktop configuration** (typically `~/.claude_desktop_config.json`):
+Add to your Claude Desktop config (`~/.config/claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
-    "claude-prompts-mcp": {
-      "command": "node",
-      "args": ["/absolute/path/to/claude-prompts-mcp/server/dist/index.js"]
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts-server", "--transport=stdio", "--quiet"]
     }
   }
 }
 ```
 
-2. **Restart Claude Desktop** - The server will start automatically when Claude Desktop connects.
+## MCP Tools Overview
 
-### Manual Testing & Development
+### `prompt_engine` — Execute Prompts & Chains
+
+The unified execution engine for running prompts with frameworks and gates.
 
 ```bash
-# Development mode with hot-reloading
-npm run dev
+# Execute a prompt
+prompt_engine(command: "analysis_report content:'Q4 metrics'")
 
-# Type checking only
-npm run typecheck
+# Apply a thinking framework
+prompt_engine(command: "@CAGEERF analysis_report content:'Q4 metrics'")
 
-# Run tests
-npm test
+# Chain multiple steps
+prompt_engine(command: "research --> analysis --> synthesis")
 
-# Manual STDIO mode (for testing without Claude Desktop)
-npm run start:stdio
+# Add quality gates inline
+prompt_engine(command: "security_audit :: 'cite sources, verify claims'")
 
-# Web/SSE mode (for web clients)
-npm run start:sse
+# Combine operators
+prompt_engine(command: "@ReACT step1 --> step2 :: 'check accuracy'")
+```
+
+### `prompt_manager` — Lifecycle Operations
+
+Create, update, delete, and organize prompts without touching files.
+
+```bash
+# List available prompts
+prompt_manager(action: "list")
+
+# Create a new prompt
+prompt_manager(
+  action: "create",
+  id: "code_review",
+  name: "Code Review",
+  description: "Review code for issues",
+  user_message_template: "Review this code: {{code}}"
+)
+
+# Reload prompts after external edits
+prompt_manager(action: "reload")
+```
+
+### `system_control` — Runtime Administration
+
+Manage frameworks, view analytics, and control system behavior.
+
+```bash
+# Check server status
+system_control(action: "status")
+
+# Switch active framework
+system_control(action: "framework", operation: "switch", framework: "CAGEERF")
+
+# View execution analytics
+system_control(action: "analytics")
+```
+
+## Symbolic Command Language
+
+Express complex execution flows with intuitive operators:
+
+| **Symbol** | **Name** | **Pipeline Action** | **Visual Mnemonics** |
+| :---: | :--- | :--- | :--- |
+| `-->` | **Chain** | **Pipes** output from one step to the next | 🔗 **Link** steps together |
+| `@` | **Framework** | Injects **Thinking Models** (CAGEERF, ReACT) | 🧠 **Brain** of the operation |
+| `::` | **Gate** | Enforces **Quality Checks** before proceeding | 🛡️ **Shield** the output |
+| `%` | **Modifier** | Toggles **Execution Modes** (Menu/Clean/Lean) | ⚙️ **Config** the settings |
+| `#` | **Style** | Applies **Persona/Tone** presets | 🎨 **Paint** the response |
+
+### Execution Modifiers
+
+Control framework and gate behavior per execution:
+
+- `%clean` — No framework, no gates (minimal execution)
+- `%guided` — Full framework + gates (maximum guidance)
+- `%lean` — Gates only, skip framework injection
+- `%framework` — Framework only, skip gates
+
+```bash
+# Skip all guidance for quick iteration
+prompt_engine(command: "%clean quick_task input:'test'")
+
+# Full guidance for important work
+prompt_engine(command: "%guided analysis_report content:'annual review'")
+```
+
+## Thinking Frameworks
+
+Four built-in methodologies to guide structured reasoning:
+
+| Framework   | Description                                                 | Best For                   |
+| ----------- | ----------------------------------------------------------- | -------------------------- |
+| **CAGEERF** | Context, Analysis, Goals, Execution, Evaluation, Refinement | Research, deep analysis    |
+| **ReACT**   | Reasoning + Acting cycles                                   | Problem-solving, debugging |
+| **5W1H**    | Who, What, When, Where, Why, How                            | Structured questioning     |
+| **SCAMPER** | Substitute, Combine, Adapt, Modify, Put, Eliminate, Reverse | Innovation, ideation       |
+
+```bash
+# Apply CAGEERF for structured analysis
+prompt_engine(command: "@CAGEERF research_topic subject:'AI safety'")
+
+# Use ReACT for problem-solving
+prompt_engine(command: "@ReACT debug_issue error:'connection timeout'")
+```
+
+## Quality Gates
+
+Enforce validation criteria on outputs:
+
+```bash
+# Inline criteria (simplest approach)
+prompt_engine(command: "report :: 'include citations, verify data, note uncertainties'")
+
+# Multiple gate types
+prompt_engine(
+  command: "security_audit",
+  gates: [
+    "technical-accuracy",                              # Canonical gate ID
+    {"name": "OWASP Check", "description": "OWASP Top 10"},  # Custom check
+    {"id": "temp", "criteria": ["No hardcoded secrets"]}     # Full definition
+  ]
+)
 ```
 
 ## Configuration
 
-### Main Configuration (`config.json`)
+Set `MCP_SERVER_ROOT` to your workspace containing `config.json` and `prompts/`:
+
+```bash
+MCP_SERVER_ROOT=/path/to/workspace npx claude-prompts-server --transport=stdio
+```
+
+Key `config.json` settings:
 
 ```json
 {
-  "server": {
-    "name": "claude-prompts-mcp",
-    "version": "1.0.0"
+  "frameworks": {
+    "enableSystemPromptInjection": true,
+    "enableMethodologyGates": true
+  },
+  "gates": {
+    "enabled": true
   },
   "transports": {
-    "stdio": { "enabled": true },
-    "sse": { "enabled": true, "port": 3000 }
-  },
-  "logging": {
-    "directory": "./logs",
-    "level": "INFO"
-  },
-  "prompts": "./prompts/promptsConfig.json"
+    "default": "stdio"
+  }
 }
 ```
 
-### Prompts Configuration (`prompts/promptsConfig.json`)
+### Environment Variables
 
-```json
-{
-  "categories": [
-    {
-      "name": "analysis",
-      "displayName": "Analysis & Research",
-      "description": "Data analysis and research prompts",
-      "promptsFile": "./prompts/analysis/prompts.json"
-    }
-  ],
-  "registrationMode": "NAME"
-}
-```
+| Variable                  | Purpose                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| `MCP_SERVER_ROOT`         | Server root directory (contains config.json and prompts/) |
+| `MCP_PROMPTS_CONFIG_PATH` | Direct path to prompts config file                        |
+| `LOG_LEVEL`               | Logging verbosity: debug, info, warn, error               |
 
-## Prompt and Template Development
+### CLI Options
 
-### Basic Prompt Structure (Fast Variable Substitution)
+| Option                   | Description                     |
+| ------------------------ | ------------------------------- |
+| `--transport=stdio\|sse` | Transport mode (default: stdio) |
+| `--quiet`                | Minimal logging                 |
+| `--verbose`              | Detailed diagnostics            |
+| `--debug-startup`        | Extra startup tracing           |
+| `--startup-test`         | Boot and exit (sanity check)    |
 
-````markdown
-# Quick Code Formatter
+## Documentation
 
-## System Message
+| Guide                                                                                                       | Description                           |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| [Architecture](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/architecture.md)               | System design and runtime phases      |
+| [MCP Tooling](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/mcp-tooling-guide.md)           | Complete tool reference and workflows |
+| [Prompt Authoring](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/prompt-authoring-guide.md) | Template structure and metadata       |
+| [Chain Workflows](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/chain-workflows.md)         | Multi-step execution patterns         |
+| [Gate System](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/enhanced-gate-system.md)        | Validation and quality control        |
+| [Operations](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/operations-guide.md)             | Deployment and configuration          |
 
-Format code cleanly and consistently.
-
-## User Message Template
-
-Please format this {{language}} code using {{style}} style:
-
-```{{language}}
-{{code}}
-```
-````
-
-## Arguments
-
-- language: Programming language (required)
-- style: Formatting style (required)
-- code: Code to format (required)
-
-````
-
-### Framework-Aware Template Structure (Methodology Enhanced)
-
-```markdown
-# Code Security Analyzer
-
-## System Message
-You are a security expert specialized in code analysis.
-
-## User Message Template
-Analyze this {{language}} code for security vulnerabilities:
-
-```{{language}}
-{{code}}
-````
-
-Provide comprehensive analysis including:
-
-- Vulnerability assessment
-- Risk prioritization
-- Remediation recommendations
-
-## Arguments
-
-- language: Programming language (required)
-- code: Code to analyze (required)
-
-````
-
-### Chain Execution
-
-```json
-{
-  "id": "analysis-chain",
-  "name": "Analysis Chain",
-  "chainSteps": [
-    {
-      "promptId": "data-extraction",
-      "stepName": "Extract Data",
-      "inputMapping": { "source": "input" },
-      "outputMapping": { "extracted_data": "output" }
-    },
-    {
-      "promptId": "data-analysis",
-      "stepName": "Analyze Data",
-      "inputMapping": { "data": "extracted_data" },
-      "outputMapping": { "analysis_result": "output" }
-    }
-  ]
-}
-````
-
-### Enhanced Chain Configuration
-
-```json
-{
-  "id": "analysis-chain",
-  "name": "Enhanced Analysis Chain",
-  "executionMode": "chain",
-  "chainSteps": [
-    {
-      "promptId": "data-validation",
-      "stepName": "Validate Input Data",
-      "inputMapping": { "source": "input" },
-      "outputMapping": { "validated_data": "output" }
-    },
-    {
-      "promptId": "advanced-analysis",
-      "stepName": "Perform Analysis",
-      "inputMapping": { "data": "validated_data" },
-      "outputMapping": { "analysis_result": "output" }
-    }
-  ],
-  "gates": [
-    {
-      "type": "validation",
-      "requirements": [{ "type": "content_length", "criteria": { "min": 50 } }]
-    }
-  ]
-}
-```
-
-## Performance Features
-
-### Caching and Optimization
-
-- **Three-Tier Execution Caching**: Optimized routing between prompt/template/chain execution
-- **Memory Management**: Automatic cleanup and size limits
-- **Performance Monitoring**: Real-time metrics and diagnostics
-- **Consolidated Tool Architecture**: 87.5% reduction in tool complexity
-
-### Monitoring
-
-```typescript
-// Get execution statistics from coordinator
-const stats = executionCoordinator.getExecutionStats();
-
-// Get framework state and analytics
-const analytics = frameworkStateManager.getAnalytics();
-
-// System health monitoring
-const health = applicationOrchestrator.getHealthStatus();
-```
-
-## Development Commands
-
-### Essential Commands
+## Development
 
 ```bash
-# Build TypeScript
-npm run build
-
-# Type checking
-npm run typecheck
-
-# Development mode
-npm run dev
-
-# Run tests
-npm test
-
-# Start production server
-npm start
-```
-
-### Transport-Specific
-
-```bash
-# STDIO transport (Claude Desktop)
+git clone https://github.com/minipuft/claude-prompts-mcp.git
+cd claude-prompts-mcp/server
+npm install && npm run build
 npm run start:stdio
-
-# SSE transport (web clients)
-npm run start:sse
-
-# Development with verbose logging
-npm run start:verbose
-```
-
-### Environment Variables (Optional)
-
-```bash
-# Optional: Optimize server root detection (streamlined detection system)
-export MCP_SERVER_ROOT=/path/to/claude-prompts-mcp/server
-
-# Optional: Direct path to prompts config (automatic detection available)
-export MCP_PROMPTS_CONFIG_PATH=/path/to/claude-prompts-mcp/server/prompts/promptsConfig.json
-```
-
-**Detection Strategy:** The server uses streamlined detection with 3 core strategies:
-
-1. **Script path analysis** (most reliable - works in 99% of cases)
-2. **Module path detection** (reliable fallback for edge cases)
-3. **Common directory patterns** (covers remaining scenarios)
-
-Environment variables provide **guaranteed detection** but are not required for normal operation.
-
-## Troubleshooting
-
-### Common Installation Issues
-
-1. **"Cannot find module" errors**
-
-   ```bash
-   # Ensure you're in the server directory
-   cd /path/to/claude-prompts-mcp/server
-
-   # Clean install
-   rm -rf node_modules package-lock.json
-   npm install
-   npm run build
-   ```
-
-2. **Claude Desktop not connecting**
-
-   - Verify absolute paths in configuration (no relative paths like `./` or `~/`)
-   - Ensure the `dist/index.js` file exists after running `npm run build`
-   - Check Claude Desktop logs for connection errors
-   - Restart Claude Desktop after configuration changes
-
-3. **Permission errors**
-
-   ```bash
-   # Fix file permissions
-   chmod +x dist/index.js
-   ```
-
-4. **TypeScript compilation errors**
-
-   ```bash
-   # Check for syntax errors
-   npm run typecheck
-
-   # Clean build
-   npm run build
-   ```
-
-### Verifying Installation
-
-```bash
-# Test the server manually
-node dist/index.js --help
-
-# Run the test suite
-npm test
-
-# Check if MCP tools are working
-# After connecting to Claude Desktop, try: /mcp
-```
-
-## Testing
-
-### Test Structure
-
-- **Unit Tests**: Individual component testing
-- **Integration Tests**: Full system testing with ConsolidatedPromptEngine
-- **Performance Tests**: Three-tier execution benchmarking
-- **Framework Tests**: CAGEERF, ReACT, 5W1H, SCAMPER validation
-
-### Running Tests
-
-```bash
-# Run all tests
-npm test
-
-# Run specific test suites
-npm test -- --testNamePattern="ConsolidatedPromptEngine"
-
-# Run framework tests
-npm run test:cageerf-framework
-
-# Run MCP tools tests
-npm run test:mcp-tools
-```
-
-## Advanced Integration
-
-### Web Clients (Alternative to Claude Desktop)
-
-For web-based integrations, use SSE transport:
-
-```bash
-# Start SSE server
-npm run start:sse
-```
-
-```javascript
-// Connect to SSE endpoint
-const eventSource = new EventSource("http://localhost:3000/events");
-eventSource.onmessage = function (event) {
-  const data = JSON.parse(event.data);
-  // Handle MCP messages
-};
-```
-
-### Custom MCP Clients
-
-For custom integrations, the server supports both STDIO and SSE transports. See the [MCP Protocol Documentation](https://modelcontextprotocol.io) for implementation details.
-
-## Error Handling
-
-### Graceful Degradation
-
-- **Startup Failures**: Rollback mechanisms for partial initialization
-- **Execution Errors**: Comprehensive error boundaries
-- **Template Errors**: Detailed error reporting with context
-- **Performance Issues**: Automatic optimization and cleanup
-
-### Logging
-
-- **Structured Logging**: JSON-formatted logs with context
-- **Log Levels**: DEBUG, INFO, WARN, ERROR
-- **Transport-Aware**: Prevents STDIO interference
-- **Performance Tracking**: Execution timing and metrics
-
-## API Reference
-
-### Consolidated MCP Tools (87.5% Reduction: 24+ → 3 Tools)
-
-- **prompt_engine**: Universal execution with intelligent analysis, semantic detection, and LLM-driven chain coordination
-- **prompt_manager**: Complete lifecycle management with smart filtering, type analysis, and configurable semantic analysis
-- **system_control**: Framework management, analytics, health monitoring, and comprehensive system administration
-
-### ExecutionCoordinator Methods (Phase 3)
-
-```typescript
-// Execute with delegation to ConsolidatedPromptEngine
-await executionCoordinator.executePrompt(promptId, args, options);
-
-// Get execution statistics (three-tier model)
-const stats = executionCoordinator.getExecutionStats();
-// Returns: { promptExecutions, templateExecutions, chainExecutions, failedExecutions }
-
-// Set consolidated engine for delegation
-executionCoordinator.setConsolidatedEngine(consolidatedPromptEngine);
-```
-
-### ConsolidatedPromptEngine Methods
-
-```typescript
-// Universal execution with intelligent type detection
-const result = await consolidatedPromptEngine.executePrompt(command, options);
-
-// Semantic analysis with configurable analyzer
-const analysis = semanticAnalyzer.analyze(promptData);
-// Returns: { executionType: 'prompt'|'template'|'chain', requiresFramework: boolean }
-```
-
-### Framework System Methods
-
-```typescript
-// Framework selection and management
-const framework = frameworkManager.selectFramework({
-  executionType: "template",
-  complexity: "high",
-});
-
-// Runtime framework switching
-await frameworkStateManager.switchFramework({
-  targetFramework: "CAGEERF",
-  reason: "Complexity requires structured approach",
-});
-
-// Framework injection (conditional based on execution tier)
-const injectionResult = await frameworkInjector.injectFrameworkContext(
-  prompt,
-  semanticAnalysis
-);
-
-// Get current framework state and health
-const state = frameworkStateManager.getCurrentState();
-const health = frameworkStateManager.getSystemHealth();
 ```
 
 ## Contributing
 
-1. Follow TypeScript best practices
-2. Include comprehensive tests
-3. Update documentation
-4. Ensure hot-reloading compatibility
-5. Validate MCP protocol compliance
-
-### Architecture Guidelines
-
-- **Delegation Pattern**: ExecutionCoordinator delegates all execution to ConsolidatedPromptEngine for simplified coordination
-- **Three-Tier Architecture**: Optimized routing between prompt (fast), template (framework-enhanced), and chain (LLM-driven) execution
-- **Conditional Framework Integration**: Framework injection applied selectively based on execution tier requirements
-- **Intelligent Routing**: Implement command routing with built-in detection and multi-strategy parsing
-- **Comprehensive Error Boundaries**: Implement error handling at all orchestration levels
-- **Backward Compatibility**: Maintain compatibility through ExecutionCoordinator interface while leveraging modern delegation architecture
+Issues and pull requests welcome at [GitHub](https://github.com/minipuft/claude-prompts-mcp/issues).
 
 ## License
 
-MIT License - see LICENSE file for details.
-
-## Support
-
-For issues and questions:
-
-- GitHub Issues: Report bugs and feature requests
-- Documentation: See `/docs` for detailed guides
-- Examples: Check `/examples` for usage patterns
+[MIT](LICENSE)

@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+
+# Navigate to server directory and run lint-staged
+cd server && npx lint-staged
+
+# Check exit status and provide feedback
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "⚠️  Pre-commit checks found issues."
+  echo "Review the changes above and confirm if you want to proceed with the commit."
+  exit 1
+fi
