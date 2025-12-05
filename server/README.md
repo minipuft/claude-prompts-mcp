@@ -1,124 +1,250 @@
-# Claude Prompts Server (`/server`)
+# Claude Prompts MCP Server
 
-The Node.js runtime engine that powers the MCP server. It handles prompt orchestration, hot-reloading, and the symbolic execution pipeline.
+[![npm version](https://img.shields.io/npm/v/claude-prompts-server.svg)](https://www.npmjs.com/package/claude-prompts-server)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg)](https://nodejs.org/)
 
-**Role:** Core Runtime & Orchestrator
-**Engine:** Node.js 16+
+Hot-reloadable Model Context Protocol server for prompts, thinking frameworks, and quality gates. Manage prompt libraries, apply structured reasoning methodologies, and enforce output quality—all through MCP tools.
 
-## Quick Start (Dev Loop)
+## Why Use This?
+
+- **Prompt Library Management** — Create, update, and organize prompts through MCP tools instead of manually editing files
+- **Built-in Thinking Frameworks** — Apply CAGEERF, ReACT, 5W1H, or SCAMPER methodologies to guide structured reasoning
+- **Quality Gates** — Enforce validation criteria on outputs with multi-tier gate systems
+- **Multi-Step Chains** — Build complex workflows with persistent session state that survives restarts
+- **Hot-Reload** — Edit prompts and see changes immediately without restarting the server
+- **Symbolic Command Language** — Express complex workflows with intuitive operators (`-->`, `@`, `::`, `+`)
+
+## Key Features
+
+| Feature               | Description                                                           |
+| --------------------- | --------------------------------------------------------------------- |
+| **3 MCP Tools**       | `prompt_engine`, `prompt_manager`, `system_control`                   |
+| **4 Frameworks**      | CAGEERF, ReACT, 5W1H, SCAMPER thinking methodologies                  |
+| **Quality Gates**     | Multi-tier validation with blocking and advisory modes                |
+| **Symbolic Commands** | Chain (`-->`), framework (`@`), gate (`::`), parallel (`+`) operators |
+| **Hot-Reload**        | File watcher auto-reloads prompts on save                             |
+| **Chain Sessions**    | Persistent multi-step workflows with session resumption               |
+| **Judge Mode**        | Interactive guided selection of frameworks, styles, and gates         |
+
+## Quick Start
 
 ```bash
-# 1. Build & Start (Stdio Mode)
+# Run without installing
+npx claude-prompts-server --transport=stdio --quiet
+
+# See all options
+npx claude-prompts-server --help
+```
+
+### Connect to Claude Desktop
+
+Add to your Claude Desktop config (`~/.config/claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts-server", "--transport=stdio", "--quiet"]
+    }
+  }
+}
+```
+
+## MCP Tools Overview
+
+### `prompt_engine` — Execute Prompts & Chains
+
+The unified execution engine for running prompts with frameworks and gates.
+
+```bash
+# Execute a prompt
+prompt_engine(command: "analysis_report content:'Q4 metrics'")
+
+# Apply a thinking framework
+prompt_engine(command: "@CAGEERF analysis_report content:'Q4 metrics'")
+
+# Chain multiple steps
+prompt_engine(command: "research --> analysis --> synthesis")
+
+# Add quality gates inline
+prompt_engine(command: "security_audit :: 'cite sources, verify claims'")
+
+# Combine operators
+prompt_engine(command: "@ReACT step1 --> step2 :: 'check accuracy'")
+```
+
+### `prompt_manager` — Lifecycle Operations
+
+Create, update, delete, and organize prompts without touching files.
+
+```bash
+# List available prompts
+prompt_manager(action: "list")
+
+# Create a new prompt
+prompt_manager(
+  action: "create",
+  id: "code_review",
+  name: "Code Review",
+  description: "Review code for issues",
+  user_message_template: "Review this code: {{code}}"
+)
+
+# Reload prompts after external edits
+prompt_manager(action: "reload")
+```
+
+### `system_control` — Runtime Administration
+
+Manage frameworks, view analytics, and control system behavior.
+
+```bash
+# Check server status
+system_control(action: "status")
+
+# Switch active framework
+system_control(action: "framework", operation: "switch", framework: "CAGEERF")
+
+# View execution analytics
+system_control(action: "analytics")
+```
+
+## Symbolic Command Language
+
+Express complex execution flows with intuitive operators:
+
+| Operator    | Symbol | Example                     | Purpose              |
+| ----------- | ------ | --------------------------- | -------------------- |
+| Chain       | `-->`  | `step1 --> step2 --> step3` | Sequential execution |
+| Framework   | `@`    | `@CAGEERF analysis`         | Apply methodology    |
+| Gate        | `::`   | `report :: 'cite sources'`  | Quality validation   |
+| Parallel    | `+`    | `task1 + task2 + task3`     | Concurrent execution |
+| Conditional | `?`    | `check ? pass : fail`       | Branch execution     |
+
+### Execution Modifiers
+
+Control framework and gate behavior per execution:
+
+- `%clean` — No framework, no gates (minimal execution)
+- `%guided` — Full framework + gates (maximum guidance)
+- `%lean` — Gates only, skip framework injection
+- `%framework` — Framework only, skip gates
+
+```bash
+# Skip all guidance for quick iteration
+prompt_engine(command: "%clean quick_task input:'test'")
+
+# Full guidance for important work
+prompt_engine(command: "%guided analysis_report content:'annual review'")
+```
+
+## Thinking Frameworks
+
+Four built-in methodologies to guide structured reasoning:
+
+| Framework   | Description                                                 | Best For                   |
+| ----------- | ----------------------------------------------------------- | -------------------------- |
+| **CAGEERF** | Context, Analysis, Goals, Execution, Evaluation, Refinement | Research, deep analysis    |
+| **ReACT**   | Reasoning + Acting cycles                                   | Problem-solving, debugging |
+| **5W1H**    | Who, What, When, Where, Why, How                            | Structured questioning     |
+| **SCAMPER** | Substitute, Combine, Adapt, Modify, Put, Eliminate, Reverse | Innovation, ideation       |
+
+```bash
+# Apply CAGEERF for structured analysis
+prompt_engine(command: "@CAGEERF research_topic subject:'AI safety'")
+
+# Use ReACT for problem-solving
+prompt_engine(command: "@ReACT debug_issue error:'connection timeout'")
+```
+
+## Quality Gates
+
+Enforce validation criteria on outputs:
+
+```bash
+# Inline criteria (simplest approach)
+prompt_engine(command: "report :: 'include citations, verify data, note uncertainties'")
+
+# Multiple gate types
+prompt_engine(
+  command: "security_audit",
+  gates: [
+    "technical-accuracy",                              # Canonical gate ID
+    {"name": "OWASP Check", "description": "OWASP Top 10"},  # Custom check
+    {"id": "temp", "criteria": ["No hardcoded secrets"]}     # Full definition
+  ]
+)
+```
+
+## Configuration
+
+Set `MCP_SERVER_ROOT` to your workspace containing `config.json` and `prompts/`:
+
+```bash
+MCP_SERVER_ROOT=/path/to/workspace npx claude-prompts-server --transport=stdio
+```
+
+Key `config.json` settings:
+
+```json
+{
+  "frameworks": {
+    "enableSystemPromptInjection": true,
+    "enableMethodologyGates": true
+  },
+  "gates": {
+    "enabled": true
+  },
+  "transports": {
+    "default": "stdio"
+  }
+}
+```
+
+### Environment Variables
+
+| Variable                  | Purpose                                                   |
+| ------------------------- | --------------------------------------------------------- |
+| `MCP_SERVER_ROOT`         | Server root directory (contains config.json and prompts/) |
+| `MCP_PROMPTS_CONFIG_PATH` | Direct path to prompts config file                        |
+| `LOG_LEVEL`               | Logging verbosity: debug, info, warn, error               |
+
+### CLI Options
+
+| Option                   | Description                     |
+| ------------------------ | ------------------------------- |
+| `--transport=stdio\|sse` | Transport mode (default: stdio) |
+| `--quiet`                | Minimal logging                 |
+| `--verbose`              | Detailed diagnostics            |
+| `--debug-startup`        | Extra startup tracing           |
+| `--startup-test`         | Boot and exit (sanity check)    |
+
+## Documentation
+
+| Guide                                                                                                       | Description                           |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| [Architecture](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/architecture.md)               | System design and runtime phases      |
+| [MCP Tooling](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/mcp-tooling-guide.md)           | Complete tool reference and workflows |
+| [Prompt Authoring](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/prompt-authoring-guide.md) | Template structure and metadata       |
+| [Chain Workflows](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/chain-workflows.md)         | Multi-step execution patterns         |
+| [Gate System](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/enhanced-gate-system.md)        | Validation and quality control        |
+| [Operations](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/operations-guide.md)             | Deployment and configuration          |
+
+## Development
+
+```bash
+git clone https://github.com/minipuft/claude-prompts-mcp.git
+cd claude-prompts-mcp/server
 npm install && npm run build
 npm run start:stdio
-
-# 2. Start with Hot-Reload (SSE Mode)
-npm run dev
 ```
 
-## Directory Structure
+## Contributing
 
-```text
-server/
-├── src/
-│   ├── index.ts              # CLI Entry Point
-│   ├── runtime/              # App Lifecycle (Startup/Shutdown)
-│   ├── execution/            # Pipeline & Logic Core
-│   │   ├── parsers/          # Symbolic Command Parser (>>cmd)
-│   │   └── pipeline/         # Execution Stages (Prompt -> Template -> Chain)
-│   ├── frameworks/           # Methodology Frameworks (CAGEERF)
-│   ├── gates/                # Quality Gate System
-│   ├── mcp-tools/            # MCP Tool Implementations
-│   └── server/               # Transports (STDIO/SSE)
-├── prompts/                  # Prompt Registry (Markdown)
-├── config/                   # Runtime Config
-└── dist/                     # Build Output
-```
+Issues and pull requests welcome at [GitHub](https://github.com/minipuft/claude-prompts-mcp/issues).
 
-## Configuration (`config.json`)
+## License
 
-| Section | Key | Default | Description |
-|---------|-----|---------|-------------|
-| `server` | `port` | `9090` | Port for SSE transport. |
-| `prompts` | `file` | `promptsConfig.json` | Registry config path. |
-| `frameworks` | `enableSystemPromptInjection` | `true` | Inject methodology context (once per execution). |
-| `analysis` | `semanticAnalysis` | - | LLM integration settings. |
-
-**Framework Injection Notes:**
-- Methodology guidance is injected **once per prompt execution**, not continuously
-- Use `%clean` modifier to skip injection for specific executions
-- Use `%guided` for full methodology + gates, `%lean` for gates only
-- Control is per-execution: you decide how often to include the methodology reminder
-
-**Environment Variables:**
-- `MCP_SERVER_ROOT`: Override server root.
-- `MCP_PROMPTS_CONFIG_PATH`: Direct path to prompts config.
-- `LOG_LEVEL`: `debug`, `info`, `warn`, `error`.
-
-### Tool Descriptions (framework-aware)
-- Active runtime file: `config/tool-descriptions.json` is regenerated to mirror the current framework/methodology and fuel hot-reload. Do not hand-edit; it will be overwritten.
-- Fallback seed: `config/tool-descriptions.fallback.json` is the editable baseline for non-methodology text. Ops/devs update this file when adjusting the default copy.
-- Methodology overlays: `methodologies/*/methodology.yaml` provide framework-specific text (SOT for overlays). Contracts under `tooling/contracts/*.json` are the SOT for params/summaries.
-- Regeneration loop: on startup or framework switch, the manager loads the seed → applies active framework/methodology overlays → writes the active file. Manual tweaks to the active file are re-harmonized on the next regeneration.
-
-## Architecture & Logic
-
-### 1. Symbolic Parsing
-The `UnifiedCommandParser` (`src/execution/parsers`) interprets the symbolic language. It normalizes `>>`, detects JSON wrappers, and routes execution:
-- **Chains (`-->`)**: Sequential execution plans.
-- **Frameworks (`@`)**: Injected as context overlays.
-- **Gates (`::`)**: Post-processing validation steps.
-- **Modifiers (`%`)**: Execution flags (e.g., `%guided`).
-
-### 2. Execution Pipeline
-`PromptExecutionPipeline` manages the request lifecycle:
-1.  **Resolution**: Finds prompt/template in registry.
-2.  **Context**: Injects Frameworks + Text References.
-3.  **Execution**: Renders template or executes Chain.
-4.  **Gating**: Runs enabled validators (Methodology/Quality).
-
-## Docker Deployment
-
-Run the server in a containerized environment with SSE transport enabled by default.
-
-### 1. Build the Image
-```bash
-# Build locally
-docker build -f src/Dockerfile -t claude-prompts-server .
-```
-
-### 2. Run the Container
-```bash
-# Run with SSE transport (default) on port 9090
-docker run -p 9090:9090 \
-  -e PORT=9090 \
-  --name mcp-server \
-  claude-prompts-server
-```
-
-### 3. Configuration Overrides
-You can override settings using environment variables:
-```bash
-docker run -p 8080:8080 \
-  -e PORT=8080 \
-  -e LOG_LEVEL=debug \
-  -e MCP_TRANSPORT=sse \
-  claude-prompts-server
-```
-
-### Security & Best Practices
-- **Non-Root User:** The image runs as the `node` user by default for security.
-- **Healthcheck:** A built-in `HEALTHCHECK` monitors the `/sse` endpoint.
-- **ReadOnly Filesystem:** Compatible with read-only root filesystems (mount `/app/logs` and `/tmp` as volumes if needed).
-
-## Development Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run build` | Compile `src/` to `dist/`. |
-| `npm test` | Run Jest unit/integration tests. |
-| `npm run test:watch` | Interactive test runner. |
-| `npm run validate:all` | Full CI suite (Lint, Types, Circular Deps). |
-| `npm run start:stdio` | Manual CLI testing. |
-
-[Full Documentation](../docs/README.md) | [Contributing](../CONTRIBUTING.md)
+[MIT](LICENSE)

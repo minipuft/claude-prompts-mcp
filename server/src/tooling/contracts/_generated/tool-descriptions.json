@@ -1,34 +1,86 @@
 {
-  "version": "2.0.0",
-  "lastUpdated": "2025-12-05T12:01:21.784Z",
+  "version": "3.0.0",
+  "lastUpdated": "2025-12-05T12:20:00.293Z",
   "generatedFrom": "active",
   "tools": {
     "prompt_engine": {
       "description": "🚀 PROMPT ENGINE [CAGEERF]: Expands prompts with C.A.G.E.E.R.F methodology for you to follow.\n\nWHAT IT RETURNS: Prepared prompt + CAGEERF phase instructions (Context→Analysis→Goals→Execution→Evaluation→Refinement).\nWHAT YOU DO: Execute each phase yourself using the returned structure.\n\nSYNTAX: >>prompt_id key=\"value\" | Chain: >>s1 --> >>s2\nOPERATORS: @CAGEERF | :: \"criteria\" | %clean/%lean\n",
-      "shortDescription": "Execute prompts and chains",
+      "shortDescription": "Expand and return prompt templates",
       "category": "execution",
       "parameters": {
-        "command": "Prompt ID to expand. Resulting prompt will include CAGEERF phase guidance for you to apply."
+        "command": "Prompt ID to expand. Resulting prompt will include CAGEERF phase guidance for you to apply.",
+        "chain_id": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command.",
+        "user_response": "Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming.",
+        "gate_verdict": "Gate review verdict with flexible format support. Primary: 'GATE_REVIEW: PASS|FAIL - reason'. Also accepts: 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason' (minimal).",
+        "gate_action": "User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely.",
+        "gates": {
+          "type": "array",
+          "description": "Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions."
+        },
+        "force_restart": "Restart chain from step 1, ignoring cached state.",
+        "llm_validation": "Experimental: Advanced LLM-based semantic validation for prompt quality. Currently blocked pending architectural design.",
+        "options": "Execution options forwarded downstream."
+      },
+      "frameworkAware": {
+        "enabled": "🚀 PROMPT ENGINE [FRAMEWORK]: Returns prompts with methodology guidance injected. You apply the methodology yourself.",
+        "disabled": "🚀 PROMPT ENGINE: Returns prompts without methodology injection. Raw template expansion only."
       }
     },
     "prompt_manager": {
       "description": "📝 PROMPT MANAGER [CAGEERF]: Manages prompt templates. Use action:\"guide\" for phase-appropriate recommendations (Context research vs. Execution updates).\n",
-      "shortDescription": "Manage prompt lifecycle",
+      "shortDescription": "Manage prompt templates",
       "category": "management",
       "parameters": {
-        "action": "Use 'guide' with your current CAGEERF phase for phase-appropriate action recommendations."
+        "action": "Use 'guide' with your current CAGEERF phase for phase-appropriate action recommendations.",
+        "id": "Prompt identifier (required for most actions).",
+        "name": "Human-friendly name (create/update).",
+        "description": "Prompt description (create/update).",
+        "user_message_template": "Prompt body/template (create/update).",
+        "system_message": "Optional system message (create/update).",
+        "category": "Category tag (create/update).",
+        "arguments": {
+          "type": "array",
+          "description": "Prompt arguments metadata (create/update)."
+        },
+        "chain_steps": {
+          "type": "array",
+          "description": "Chain steps definition (create/update for chains)."
+        },
+        "execution_hint": "Hint for execution type on creation.",
+        "section": "Targeted update section.",
+        "section_content": "Content for targeted section updates.",
+        "filter": "List filter query (list action).",
+        "format": "Output format for list/inspect.",
+        "detail": "Inspect detail level.",
+        "confirm": "Safety confirmation (delete).",
+        "reason": "Audit reason (reload/delete)."
+      },
+      "frameworkAware": {
+        "enabled": "📝 PROMPT MANAGER [FRAMEWORK]: Guide recommendations reflect active methodology phases.",
+        "disabled": "📝 PROMPT MANAGER: Standard lifecycle operations without methodology context."
       }
     },
     "system_control": {
       "description": "⚙️ SYSTEM CONTROL [CAGEERF]: System administration. Status shows current CAGEERF phase context.\n",
-      "shortDescription": "Framework, gates, analytics controls",
+      "shortDescription": "System administration",
       "category": "system",
       "parameters": {
-        "action": "Use 'guide' with topic:'framework' for phase-specific operation guidance."
+        "action": "Use 'guide' with topic:'framework' for phase-specific operation guidance.",
+        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list).",
+        "framework": "Target framework for switch operations (CAGEERF, ReACT, 5W1H, SCAMPER).",
+        "reason": "Audit reason for framework/gate toggles or admin actions.",
+        "persist": "When true, gate/framework enable/disable changes are also written to config.json.",
+        "show_details": "Include detailed output (status/analytics/framework/gate reports).",
+        "include_history": "Include recorded history where supported.",
+        "topic": "Guide topic when requesting guidance."
+      },
+      "frameworkAware": {
+        "enabled": "⚙️ SYSTEM CONTROL [FRAMEWORK]: Status includes active methodology context. Guide reflects current framework.",
+        "disabled": "⚙️ SYSTEM CONTROL: Standard system status without methodology context."
       }
     }
   },
   "activeFramework": "CAGEERF",
   "activeMethodology": "CAGEERF",
-  "generatedAt": "2025-12-05T12:01:22.285Z"
+  "generatedAt": "2025-12-05T12:20:09.322Z"
 }

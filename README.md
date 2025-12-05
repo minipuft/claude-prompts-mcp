@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Claude Prompts MCP Server Logo](assets/logo.png)
+<img src="assets/logo.png" alt="Claude Prompts MCP Server Logo" width="200" />
 
 [![npm version](https://img.shields.io/npm/v/claude-prompts-server.svg?style=for-the-badge&logo=npm&color=0066cc)](https://www.npmjs.com/package/claude-prompts-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge&logo=opensource)](https://opensource.org/licenses/MIT)
@@ -109,6 +109,26 @@ prompt_manager list
 This isn't a static file reader. It's a **render pipeline**:
 `Command` -> `Parser` -> `Plan` -> `Framework Injection` -> `Gate Validation` -> `Template Render` -> `LLM`
 
+```mermaid
+flowchart LR
+    User[User Command] --> Parser(Symbolic Parser)
+    Parser --> Plan{Execution Plan}
+    
+    subgraph Pipeline [Render Pipeline]
+        direction TB
+        Plan --> Framework[Inject Framework]
+        Framework --> Gate{Gate Validation}
+        Gate -- Pass --> Render[Render Template]
+        Gate -- Fail --> Retry([Retry/Abort])
+    end
+    
+    Render --> LLM((LLM API))
+    
+    style User fill:#fff,stroke:#333,stroke-width:2px
+    style Pipeline fill:#f9f9f9,stroke:#bbb,stroke-width:2px,stroke-dasharray: 5 5
+    style LLM fill:#d4a5a5,stroke:#333,stroke-width:2px
+```
+
 - **Templates**: Markdown files with Nunjucks (`{{var}}`).
 - **Frameworks**: Thinking methodologies (CAGEERF, ReACT) injected **once per prompt execution** into the system prompt to guide _how_ the AI thinks. You control when and how often this reminder appears using execution modifiers (`%clean`, `%guided`, etc.).
 - **Guidance Resources**: Markdown files (`analytical.md`, `procedural.md`, `creative.md`) containing structural patterns or specific instructions that can be dynamically injected into a prompt based on semantic analysis.
@@ -130,13 +150,13 @@ The `prompt_engine` supports a symbolic language for complex workflows.
 
 ### Symbolic Commands
 
-| Symbol | Name      | Example             | Effect                                         |
-| :----- | :-------- | :------------------ | :--------------------------------------------- |
-| `-->`  | Chain     | `step1 --> step2`   | Pipes output of step1 into step2.              |
-| `@`    | Framework | `@ReACT analysis`   | Wraps 'analysis' in the ReACT methodology.     |
-| `::`   | Gate      | `code :: "no bugs"` | Enforces the "no bugs" criteria on the output. |
-| `#`    | Style     | `#style(analytical)`| Applies a specific output style or persona.    |
-| `%`    | Modifiers | `%judge prompt`     | `%judge` = guided menu; `%clean`/`%lean` disable framework injection. |
+| **Symbol** | **Name** | **Pipeline Action** | **Visual Mnemonics** |
+| :---: | :--- | :--- | :--- |
+| `-->` | **Chain** | **Pipes** output from one step to the next | 🔗 **Link** steps together |
+| `@` | **Framework** | Injects **Thinking Models** (CAGEERF, ReACT) | 🧠 **Brain** of the operation |
+| `::` | **Gate** | Enforces **Quality Checks** before proceeding | 🛡️ **Shield** the output |
+| `%` | **Modifier** | Toggles **Execution Modes** (Menu/Clean/Lean) | ⚙️ **Config** the settings |
+| `#` | **Style** | Applies **Persona/Tone** presets | 🎨 **Paint** the response |
 
 ### Gate Retry & Enforcement (New)
 
