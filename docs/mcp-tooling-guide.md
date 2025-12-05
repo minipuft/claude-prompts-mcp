@@ -35,7 +35,7 @@ The `>>` prefix serves as a **hint to LLMs** that a command should be executed v
 **How it works**:
 - `>>` is automatically stripped from the start of commands and after all symbolic operators
 - Original command is preserved in metadata for debugging
-- Works consistently across chain (`-->`), parallel (`+`), conditional (`?`), framework (`@`), and gate (`::`) operators
+- Works consistently across chain (`-->`), framework (`@`), and gate (`::`) operators
 
 **Examples** (all equivalent):
 ```bash
@@ -60,10 +60,6 @@ prompt_engine(command:"test_prompt input:'value' --> next_step")
 prompt_engine(command:">> @cageerf >>test_prompt input:'value'")
 prompt_engine(command:"@cageerf test_prompt input:'value'")
 
-# Parallel operator - both work
-prompt_engine(command:">>task1 + >>task2")
-prompt_engine(command:"task1 + task2")
-
 # Mixed operators - both work
 prompt_engine(command:">> @react >>p1 --> >>p2 :: 'quality'")
 prompt_engine(command:"@react p1 --> p2 :: 'quality'")
@@ -76,15 +72,15 @@ prompt_engine(command:"{\"command\": \"test_prompt\", \"args\": {\"input\": \"va
 
 ### Symbolic Operators Quick Reference
 
-| Operator | Symbol | Example | Purpose | `>>` Support |
-|----------|--------|---------|---------|--------------|
-| Chain | `-->` | `>>p1 --> >>p2 --> >>p3` | Sequential execution | ✅ Normalized |
-| Framework | `@` | `>> @cageerf >>prompt` | Apply methodology | ✅ Normalized |
-| Gate | `::` | `>>prompt :: "criteria"` | Quality validation | ✅ Normalized |
-| Parallel | `+` | `>>task1 + >>task2` | Concurrent execution | ✅ Normalized |
-| Conditional | `?` | `>>p1 ? "cond" : >>p2` | Branch execution | ✅ Normalized |
+| Operator | Symbol | Example | Purpose | Status |
+|----------|--------|---------|---------|--------|
+| Chain | `-->` | `>>p1 --> >>p2 --> >>p3` | Sequential execution | ✅ Implemented |
+| Framework | `@` | `>> @cageerf >>prompt` | Apply methodology | ✅ Implemented |
+| Gate | `::` | `>>prompt :: "criteria"` | Quality validation | ✅ Implemented |
+| Parallel | `+` | `>>task1 + >>task2` | Concurrent execution | 🔮 Reserved |
+| Conditional | `?` | `>>p1 ? "cond" : >>p2` | Branch execution | 🔮 Reserved |
 
-**Key insight**: The `>>` prefix is now **automatically normalized** across all operators. Use it freely as an LLM hint without worrying about parsing issues.
+**Key insight**: The `>>` prefix is **automatically normalized** across all implemented operators. Parallel (`+`) and conditional (`?`) operators are reserved for future implementation.
 
 ### Inline Quality Criteria with `::` (Recommended) 🎯
 

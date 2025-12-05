@@ -95,12 +95,12 @@ The `prompt_engine` supports a symbolic command language for expressing complex 
 | `-->` | Chain operator (sequential execution) | `>>step1 --> >>step2 --> >>step3` |
 | `@` | Framework operator (apply methodology) | `>>prompt @CAGEERF` |
 | `::` | Gate operator (inline quality criteria) | `>>prompt :: quality-check` |
-| `+` | Parallel operator (concurrent execution) | `>>task1 + >>task2 + >>task3` |
-| `?` | Conditional operator (branching logic) | `>>check ? >>if_true : >>if_false` |
+| `+` | Parallel operator (reserved) | `>>task1 + >>task2 + >>task3` |
+| `?` | Conditional operator (reserved) | `>>check ? >>if_true : >>if_false` |
 
 **Key Features:**
-- Operators can be combined for complex workflows
-- Auto-detects execution mode based on operators used
+- Chain (`-->`), framework (`@`), and gate (`::`) operators are fully implemented
+- Parallel (`+`) and conditional (`?`) operators are reserved for future implementation
 - Supports inline parameters and gate references
 - See `docs/mcp-tooling-guide.md` for detailed syntax and examples
 

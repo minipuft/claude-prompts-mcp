@@ -22,7 +22,7 @@ Hot-reloadable Model Context Protocol server for prompts, thinking frameworks, a
 | **3 MCP Tools**       | `prompt_engine`, `prompt_manager`, `system_control`                   |
 | **4 Frameworks**      | CAGEERF, ReACT, 5W1H, SCAMPER thinking methodologies                  |
 | **Quality Gates**     | Multi-tier validation with blocking and advisory modes                |
-| **Symbolic Commands** | Chain (`-->`), framework (`@`), gate (`::`), parallel (`+`) operators |
+| **Symbolic Commands** | Chain (`-->`), framework (`@`), gate (`::`) operators |
 | **Hot-Reload**        | File watcher auto-reloads prompts on save                             |
 | **Chain Sessions**    | Persistent multi-step workflows with session resumption               |
 | **Judge Mode**        | Interactive guided selection of frameworks, styles, and gates         |
