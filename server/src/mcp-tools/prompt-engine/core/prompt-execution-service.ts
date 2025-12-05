@@ -199,6 +199,9 @@ export class PromptExecutionService {
     );
     this.chainOperatorExecutor = this.createChainOperatorExecutor();
 
+    // Inject GateLoader into ExecutionPlanner for dynamic methodology gate detection
+    this.executionPlanner.setGateLoader(this.lightweightGateSystem.gateLoader);
+
     this.logger.info('[PromptExecutionService] Initialized pipeline dependencies');
   }
 
@@ -477,9 +480,6 @@ export class PromptExecutionService {
         {
           systemPromptInjection: {
             enabled: true,
-            injectionMethod: 'smart',
-            enableTemplateVariables: true,
-            enableContextualEnhancement: true,
           },
           templateEnhancement: {
             enabled: true,
@@ -641,7 +641,8 @@ export class PromptExecutionService {
       ? new FrameworkResolutionStage(
           this.frameworkManager,
           () => this.frameworkStateManager?.isFrameworkSystemEnabled() ?? false,
-          this.logger
+          this.logger,
+          this.lightweightGateSystem.gateLoader
         )
       : {
           name: 'FrameworkResolution',
@@ -672,7 +673,8 @@ export class PromptExecutionService {
       () => this.frameworkManager,
       this.logger,
       () => this.analyticsService,
-      () => this.configManager.getGatesConfig()
+      () => this.configManager.getGatesConfig(),
+      this.lightweightGateSystem.gateLoader
     );
 
     const sessionStage = new SessionManagementStage(this.chainSessionManager, this.logger);

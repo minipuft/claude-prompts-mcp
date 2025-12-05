@@ -42,15 +42,12 @@ export const GATE_SYSTEM_DEFAULTS = {
 } as const;
 
 /**
- * Canonical methodology gate identifiers that should not be duplicated across templates.
+ * @deprecated METHODOLOGY_GATES was removed in favor of dynamic gate_type detection.
+ *
+ * Methodology gates are now identified by their `gate_type: "framework"` field
+ * in the gate definition JSON files. Use `GateLoader.getMethodologyGateIds()`
+ * or `GateLoader.isMethodologyGate(gateId)` for dynamic detection.
+ *
+ * This ensures new methodology gates added to the definitions directory are
+ * automatically recognized without code changes.
  */
-export const METHODOLOGY_GATES = new Set<string>([
-  'framework-compliance',
-  'methodology-validation',
-  'educational-clarity',
-  'research-quality',
-  'technical-accuracy',
-  'content-structure',
-  'code-quality',
-  'security-awareness',
-]);

@@ -1,6 +1,4 @@
 // @lifecycle canonical - Resolves gate references to concrete service implementations.
-import { METHODOLOGY_GATES } from '../constants.js';
-
 import type { GateLoader } from '../core/gate-loader.js';
 
 export type GateReferenceResolution =
@@ -16,6 +14,9 @@ export type GateReferenceResolution =
 /**
  * Resolves inline gate references by checking whether they match
  * canonical gate definitions or should remain inline criteria.
+ *
+ * Gate resolution is now fully dynamic - gates are identified by loading
+ * from the definitions directory via GateLoader. No hardcoded gate sets.
  */
 export class GateReferenceResolver {
   private readonly cache = new Map<string, GateReferenceResolution>();
@@ -49,14 +50,6 @@ export class GateReferenceResolver {
             gateId: gate.id,
           };
         }
-      }
-
-      const normalized = value.toLowerCase();
-      if (METHODOLOGY_GATES.has(normalized)) {
-        return {
-          referenceType: 'registered',
-          gateId: normalized,
-        };
       }
     }
 

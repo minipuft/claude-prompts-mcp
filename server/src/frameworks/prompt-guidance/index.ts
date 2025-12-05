@@ -1,23 +1,20 @@
 // @lifecycle canonical - Barrel exports for the prompt guidance subsystem.
 /**
- * Prompt Guidance System Index - Implementation
+ * Prompt Guidance System Index
  *
  * Central exports for the prompt guidance system that provides intelligent
  * methodology integration for MCP prompts.
  *
- * The prompt guidance system consists of three core components:
- * - SystemPromptInjector: Injects methodology guidance into system prompts
+ * The prompt guidance system consists of:
+ * - PromptGuidanceService: Unified service orchestrating all guidance components
  * - MethodologyTracker: Tracks active methodology state and handles switching
  * - TemplateEnhancer: Enhances user templates with methodology-specific guidance
+ *
+ * Note: SystemPromptInjector was removed - its functionality is now inlined
+ * in PromptGuidanceService.injectMethodologyGuidance()
  */
 
 // Core prompt guidance components
-export {
-  SystemPromptInjector,
-  createSystemPromptInjector,
-  type SystemPromptInjectorConfig,
-} from './system-prompt-injector.js';
-
 export {
   MethodologyTracker,
   createMethodologyTracker,

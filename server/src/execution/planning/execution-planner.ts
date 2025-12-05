@@ -1,11 +1,11 @@
 // @lifecycle canonical - Plans operator execution order and dependencies.
-import { METHODOLOGY_GATES } from '../../gates/constants.js';
 import {
   CategoryExtractor,
   type CategoryExtractionResult,
 } from '../../mcp-tools/prompt-engine/utils/category-extractor.js';
 
 import type { FrameworkManager } from '../../frameworks/framework-manager.js';
+import type { GateLoader } from '../../gates/core/gate-loader.js';
 import type { Logger } from '../../logging/index.js';
 import type { ContentAnalyzer } from '../../semantic/configurable-semantic-analyzer.js';
 import type { ContentAnalysisResult } from '../../semantic/types.js';
@@ -56,7 +56,10 @@ type StrategyResolution = {
  */
 export class ExecutionPlanner {
   private frameworkManager?: FrameworkManager;
+  private gateLoader?: GateLoader;
   private readonly categoryExtractor: CategoryExtractor;
+  /** Cached methodology gate IDs loaded from GateLoader */
+  private methodologyGateIdsCache: Set<string> | null = null;
 
   constructor(
     private readonly semanticAnalyzer: SemanticAnalyzerLike | null,
@@ -67,6 +70,36 @@ export class ExecutionPlanner {
 
   setFrameworkManager(manager?: FrameworkManager): void {
     this.frameworkManager = manager;
+  }
+
+  setGateLoader(loader?: GateLoader): void {
+    this.gateLoader = loader;
+    // Invalidate cache when loader changes
+    this.methodologyGateIdsCache = null;
+  }
+
+  /**
+   * Get methodology gate IDs dynamically from GateLoader.
+   * Caches the result to avoid repeated disk reads.
+   */
+  private async getMethodologyGateIds(): Promise<Set<string>> {
+    if (this.methodologyGateIdsCache) {
+      return this.methodologyGateIdsCache;
+    }
+
+    if (!this.gateLoader) {
+      this.logger.debug('[ExecutionPlanner] No GateLoader available for methodology gate detection');
+      return new Set();
+    }
+
+    try {
+      const ids = await this.gateLoader.getMethodologyGateIds();
+      this.methodologyGateIdsCache = new Set(ids);
+      return this.methodologyGateIdsCache;
+    } catch (error) {
+      this.logger.warn('[ExecutionPlanner] Failed to load methodology gate IDs', { error });
+      return new Set();
+    }
   }
 
   async createPlan(options: ExecutionPlannerOptions): Promise<ExecutionPlan> {
@@ -114,8 +147,10 @@ export class ExecutionPlanner {
       });
     }
 
+    // Filter methodology gates if framework_gates is explicitly disabled
     if (convertedPrompt.enhancedGateConfiguration?.framework_gates === false) {
-      METHODOLOGY_GATES.forEach((gateId: string) => mergedGates.delete(gateId));
+      const methodologyGateIds = await this.getMethodologyGateIds();
+      methodologyGateIds.forEach((gateId: string) => mergedGates.delete(gateId));
     }
 
     // Check for framework override from symbolic operators

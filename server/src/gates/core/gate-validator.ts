@@ -1,11 +1,28 @@
 // @lifecycle canonical - Validates gate definitions before execution.
 /**
  * Core Gate Validator
- * Provides validation capabilities with practical checks for prompt execution
+ *
+ * Provides the validation infrastructure for gate-based quality control.
+ *
+ * DESIGN DECISION: String-based validation removed
+ * ------------------------------------------------
+ * Naive checks like length validation, substring matching, and regex patterns
+ * have been intentionally removed. These don't provide meaningful signal for
+ * LLM-generated content - an output can pass all string checks while being
+ * semantically incorrect, or fail them while being excellent.
+ *
+ * The only validation that can meaningfully assess LLM output is LLM-based
+ * evaluation (llm_self_check). The infrastructure remains in place for when
+ * LLM integration is implemented.
+ *
+ * What's preserved:
+ * - Validation framework and gate loading
+ * - Statistics tracking and retry logic
+ * - LLM self-check stub (TODO for implementation)
+ * - Retry hints generation
  */
 
 import { Logger } from '../../logging/index.js';
-import { validateCompliance } from '../../frameworks/utils/compliance-validator.js';
 
 import type { GateLoader } from './gate-loader.js';
 import type { ValidationResult } from '../../execution/types.js';
@@ -58,7 +75,7 @@ export class GateValidator {
 
     try {
       const gate = await this.gateLoader.loadGate(gateId);
-      if (!gate) {
+      if (gate === null) {
         this.logger.warn(`Gate not found for validation: ${gateId}`);
         return null;
       }
@@ -175,28 +192,41 @@ export class GateValidator {
 
   /**
    * Run a single validation check
+   *
+   * NOTE: String-based checks (content_check, pattern_check, methodology_compliance)
+   * have been intentionally removed. These naive checks (length validation, substring
+   * matching, regex patterns) don't provide meaningful signal for LLM-generated content.
+   *
+   * The only valuable validation for LLM output is LLM-based evaluation, which requires
+   * a separate LLM call. This is the focus of future implementation.
    */
   private async runValidationCheck(
     criteria: GatePassCriteria,
-    context: ValidationContext
+    _context: ValidationContext
   ): Promise<ValidationCheck> {
     try {
-      switch (criteria.type) {
-        case 'content_check':
-          return await this.runContentCheck(criteria, context);
-        case 'pattern_check':
-          return await this.runPatternCheck(criteria, context);
-        case 'llm_self_check':
-          return await this.runLLMSelfCheck(criteria, context);
-        case 'methodology_compliance':
-          return await this.runMethodologyComplianceCheck(criteria, context);
-        default:
-          return {
-            type: criteria.type,
-            passed: false,
-            message: `Unknown validation type: ${criteria.type}`,
-          };
+      // Only LLM self-check provides meaningful validation for LLM content
+      if (criteria.type === 'llm_self_check') {
+        return await this.runLLMSelfCheck(criteria);
       }
+
+      // Other check types auto-pass with explanation
+      // These were removed because string-based checks don't validate LLM output quality
+      this.logger.debug(
+        `[GATE VALIDATOR] Check type '${criteria.type}' auto-passed (string-based validation removed)`
+      );
+
+      return {
+        type: criteria.type,
+        passed: true,
+        score: 1.0,
+        message: `Check type '${criteria.type}' skipped - string-based validation removed (use llm_self_check for meaningful LLM validation)`,
+        details: {
+          skipped: true,
+          reason: 'String-based checks removed as they do not provide meaningful signal for LLM content',
+          recommendation: 'Use llm_self_check with LLM integration for semantic validation',
+        },
+      };
     } catch (error) {
       this.logger.error(`Validation check failed for ${criteria.type}:`, error);
       return {
@@ -208,182 +238,33 @@ export class GateValidator {
   }
 
   /**
-   * Run methodology compliance checks using structured quality indicators when available
-   */
-  private async runMethodologyComplianceCheck(
-    criteria: GatePassCriteria,
-    context: ValidationContext
-  ): Promise<ValidationCheck> {
-    const methodology =
-      criteria.methodology ??
-      (context.metadata?.framework as string | undefined) ??
-      (context.metadata?.methodology as string | undefined) ??
-      'unknown';
-    const minimumScore = criteria.min_compliance_score ?? 0.6;
-    const severity = criteria.severity ?? 'warn';
-    const qualityIndicators =
-      (context.metadata?.qualityIndicators as Record<string, any> | undefined) ??
-      (criteria.quality_indicators as Record<string, any> | undefined);
-
-    // Build validation result using data-driven indicators when available
-    const validation =
-      qualityIndicators && Object.keys(qualityIndicators).length > 0
-        ? validateCompliance(context.content, qualityIndicators)
-        : {
-            compliant: !!methodology && context.content.toLowerCase().includes(methodology.toLowerCase()),
-            complianceScore: !!methodology && context.content.toLowerCase().includes(methodology.toLowerCase())
-              ? 0.5
-              : 0.2,
-            strengths:
-              methodology && context.content.toLowerCase().includes(methodology.toLowerCase())
-                ? [`${methodology} methodology referenced`]
-                : [],
-            improvementAreas:
-              methodology && context.content.toLowerCase().includes(methodology.toLowerCase())
-                ? []
-                : [`Consider applying ${methodology} methodology`],
-            specificSuggestions: [],
-            methodologyGaps: [],
-          };
-
-    const passed = validation.complianceScore >= minimumScore || severity === 'warn';
-
-    return {
-      type: 'methodology_compliance',
-      passed,
-      score: validation.complianceScore,
-      message: passed
-        ? 'Methodology compliance met'
-        : `Methodology compliance below threshold (${validation.complianceScore.toFixed(2)} < ${minimumScore})`,
-      details: {
-        methodology,
-        severity,
-        minimumScore,
-        validation,
-      },
-    };
-  }
-
-  /**
-   * Run basic content checks (length, basic requirements)
-   */
-  private async runContentCheck(
-    criteria: GatePassCriteria,
-    context: ValidationContext
-  ): Promise<ValidationCheck> {
-    const content = context.content;
-    const issues: string[] = [];
-
-    // Length checks
-    if (criteria.min_length && content.length < criteria.min_length) {
-      issues.push(`Content too short: ${content.length} < ${criteria.min_length} characters`);
-    }
-
-    if (criteria.max_length && content.length > criteria.max_length) {
-      issues.push(`Content too long: ${content.length} > ${criteria.max_length} characters`);
-    }
-
-    // Required patterns (simple string matching)
-    if (criteria.required_patterns) {
-      for (const pattern of criteria.required_patterns) {
-        if (!content.toLowerCase().includes(pattern.toLowerCase())) {
-          issues.push(`Missing required content: "${pattern}"`);
-        }
-      }
-    }
-
-    // Forbidden patterns
-    if (criteria.forbidden_patterns) {
-      for (const pattern of criteria.forbidden_patterns) {
-        if (content.toLowerCase().includes(pattern.toLowerCase())) {
-          issues.push(`Contains forbidden content: "${pattern}"`);
-        }
-      }
-    }
-
-    const passed = issues.length === 0;
-
-    return {
-      type: 'content_check',
-      passed,
-      score: passed ? 1.0 : Math.max(0, 1 - issues.length * 0.25),
-      message: passed ? 'Content checks passed' : issues.join('; '),
-      details: {
-        contentLength: content.length,
-        issuesFound: issues.length,
-      },
-    };
-  }
-
-  /**
-   * Run pattern matching checks
-   */
-  private async runPatternCheck(
-    criteria: GatePassCriteria,
-    context: ValidationContext
-  ): Promise<ValidationCheck> {
-    const content = context.content;
-    const issues: string[] = [];
-
-    // Regex pattern matching
-    if (criteria.regex_patterns) {
-      for (const pattern of criteria.regex_patterns) {
-        try {
-          const regex = new RegExp(pattern, 'i');
-          if (!regex.test(content)) {
-            issues.push(`Content doesn't match pattern: ${pattern}`);
-          }
-        } catch (error) {
-          issues.push(`Invalid regex pattern: ${pattern}`);
-        }
-      }
-    }
-
-    // Keyword count checking
-    if (criteria.keyword_count) {
-      for (const [keyword, requiredCount] of Object.entries(criteria.keyword_count)) {
-        const matches = (content.toLowerCase().match(new RegExp(keyword.toLowerCase(), 'g')) || [])
-          .length;
-        if (matches < requiredCount) {
-          issues.push(
-            `Insufficient keyword "${keyword}": found ${matches}, required ${requiredCount}`
-          );
-        }
-      }
-    }
-
-    const passed = issues.length === 0;
-
-    return {
-      type: 'pattern_check',
-      passed,
-      score: passed ? 1.0 : Math.max(0, 1 - issues.length * 0.3),
-      message: passed ? 'Pattern checks passed' : issues.join('; '),
-      details: { issuesFound: issues.length },
-    };
-  }
-
-  /**
    * Run LLM self-check validation
    *
    * TODO: IMPLEMENT LLM API INTEGRATION
-   * This requires connecting to the LLM client configured at:
-   * config.analysis.semanticAnalysis.llmIntegration
    *
-   * Requirements for implementation:
-   * - LLM client instance (from semantic analyzer)
-   * - Validation prompt templates
-   * - Quality assessment criteria
+   * This is the ONLY validation type that can meaningfully assess LLM-generated content.
+   * String-based checks (length, patterns, keywords) have been intentionally removed
+   * because they don't correlate with output quality.
+   *
+   * Implementation requirements:
+   * - LLM client instance (from semantic analyzer or external API)
+   * - Validation prompt templates (quality rubrics, evaluation criteria)
+   * - Structured output parsing (pass/fail with confidence scores)
    * - Confidence threshold enforcement
+   *
+   * Configuration path: config.analysis.semanticAnalysis.llmIntegration
+   *
+   * Example implementation approach:
+   * 1. Format validation prompt with content and criteria
+   * 2. Call LLM with structured output schema (JSON mode)
+   * 3. Parse response: { passed: boolean, score: number, feedback: string }
+   * 4. Apply confidence threshold from criteria.pass_threshold
    *
    * Current behavior: Gracefully skips when LLM not configured
    */
-  private async runLLMSelfCheck(
-    criteria: GatePassCriteria,
-    context: ValidationContext
-  ): Promise<ValidationCheck> {
+  private async runLLMSelfCheck(criteria: GatePassCriteria): Promise<ValidationCheck> {
     // Check if LLM integration is configured and enabled
-    if (!this.llmConfig?.enabled) {
+    if (this.llmConfig?.enabled !== true) {
       this.logger.debug('[LLM GATE] LLM self-check skipped - LLM integration disabled in config');
       return {
         type: 'llm_self_check',
@@ -399,7 +280,7 @@ export class GateValidator {
       };
     }
 
-    if (!this.llmConfig.endpoint) {
+    if (this.llmConfig.endpoint === undefined || this.llmConfig.endpoint === '') {
       this.logger.warn('[LLM GATE] LLM self-check skipped - no endpoint configured');
       return {
         type: 'llm_self_check',
@@ -415,7 +296,6 @@ export class GateValidator {
     }
 
     // TODO: Once LLM API client is available, implement actual validation here
-    // For now, log that it's not yet implemented even though config is enabled
     this.logger.warn('[LLM GATE] LLM self-check requested but API client not yet implemented');
     this.logger.debug(`[LLM GATE] Would validate with template: ${criteria.prompt_template}`);
 
@@ -437,6 +317,11 @@ export class GateValidator {
 
   /**
    * Generate retry hints based on failed checks
+   *
+   * With string-based validation removed, hints now focus on:
+   * 1. Gate-specific guidance (from gate definition)
+   * 2. LLM self-check feedback (when implemented)
+   * 3. Generic quality improvement suggestions
    */
   private generateRetryHints(gate: LightweightGateDefinition, checks: ValidationCheck[]): string[] {
     const hints: string[] = [];
@@ -453,26 +338,14 @@ export class GateValidator {
       hints.push(`Remember the ${gate.name} guidelines:\n${gate.guidance}`);
     }
 
-    // Add specific failure hints
+    // Add LLM self-check specific hints (the only meaningful validation)
     for (const check of failedChecks) {
-      switch (check.type) {
-        case 'content_check':
-          if (check.message.includes('too short')) {
-            hints.push('Add more detail, examples, or explanations to meet length requirements');
-          }
-          if (check.message.includes('too long')) {
-            hints.push('Condense your response by removing redundant information');
-          }
-          if (check.message.includes('Missing required content')) {
-            hints.push(`Ensure your response includes: ${check.message.split(': ')[1]}`);
-          }
-          break;
-        case 'pattern_check':
-          hints.push('Review pattern matching requirements and adjust content structure');
-          break;
-        case 'llm_self_check':
-          hints.push('Review the quality criteria and improve content structure and depth');
-          break;
+      if (check.type === 'llm_self_check') {
+        hints.push('Review the quality criteria and improve content structure and depth');
+        // When LLM validation is implemented, this would include specific feedback
+        if (check.details?.feedback !== undefined) {
+          hints.push(check.details.feedback as string);
+        }
       }
     }
 

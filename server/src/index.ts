@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // @lifecycle canonical - Main MCP server entrypoint.
 /**
  * MCP Claude Prompts Server - Main Entry Point

@@ -8,6 +8,7 @@ import { processTemplate } from '../../utils/jsonUtils.js';
 import type { PromptGuidanceService } from '../../frameworks/prompt-guidance/index.js';
 import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
 import type { ConvertedPrompt } from '../../types/index.js';
+import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 import type {
   ChainStepExecutionInput,
   ChainStepPrompt,
@@ -84,8 +85,12 @@ export class ChainOperatorExecutor {
   ): Promise<ChainStepRenderResult> {
     const { pendingGateReview } = input;
     const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
+    const frameworkInjectionEnabled = this.isFrameworkInjectionEnabledForGates(chainContext);
 
-    this.logger.debug(`[SymbolicChain] Rendering synthetic gate review step`);
+    this.logger.debug(`[SymbolicChain] Rendering synthetic gate review step`, {
+      gateGuidanceEnabled,
+      frameworkInjectionEnabled,
+    });
     const totalSteps = stepPrompts.length + 1;
     const stepNumber = totalSteps;
     const reviewStep = this.resolveReviewStep(stepPrompts, chainContext, pendingGateReview);
@@ -254,10 +259,22 @@ export class ChainOperatorExecutor {
       );
     }
 
-    // Assemble in proper order: Warning → Content → Gates → Metadata
+    // Build framework guidance for gate reviews if enabled
+    let frameworkGuidance = '';
+    if (frameworkInjectionEnabled && targetStep) {
+      const guidance = await this.buildFrameworkGuidance(targetStep);
+      if (guidance) {
+        frameworkGuidance = guidance;
+        this.logger.debug('[SymbolicChain] Added framework guidance to gate review step');
+      }
+    } else if (!frameworkInjectionEnabled) {
+      this.logger.debug('[SymbolicChain] Framework injection suppressed for gate review (target config)');
+    }
+
+    // Assemble in proper order: Framework → Warning → Content → Gates → Metadata
     const reviewPrompt = this.buildManualReviewBody(pendingGateReview) ?? originalContent;
 
-    const contentParts = [gateWarning, reviewPrompt, gateGuidance, supplementalSections.join('\n\n')]
+    const contentParts = [frameworkGuidance, gateWarning, reviewPrompt, gateGuidance, supplementalSections.join('\n\n')]
       .filter((part) => part && part.trim().length > 0);
 
     const reviewContent = contentParts.join('\n\n');
@@ -394,10 +411,8 @@ export class ChainOperatorExecutor {
       }
     }
 
-    // Use injection decision from InjectionControlStage (via chainContext.injectionState)
-    // inject=true means INJECT, inject=false means SKIP
-    const injectionState = chainContext['injectionState'] as { systemPrompt?: { inject: boolean } } | undefined;
-    const suppressFrameworkInjection = injectionState?.systemPrompt?.inject === false;
+    // Use target-aware helper to determine if framework should be suppressed on steps
+    const suppressFrameworkInjection = this.shouldSuppressFrameworkForSteps(chainContext);
     const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
 
     if (!suppressFrameworkInjection && !this.hasFrameworkGuidance(convertedPrompt?.systemMessage)) {
@@ -491,6 +506,46 @@ export class ChainOperatorExecutor {
       | undefined;
 
     return injectionState?.gateGuidance?.inject !== false;
+  }
+
+  /**
+   * Determine whether framework injection is enabled for gate reviews.
+   * Checks both the inject flag and the target configuration.
+   */
+  private isFrameworkInjectionEnabledForGates(chainContext: Record<string, unknown>): boolean {
+    const injectionState = chainContext['injectionState'] as InjectionState | undefined;
+    if (!injectionState?.systemPrompt) {
+      return true; // Default to enabled if no decision exists
+    }
+
+    const decision = injectionState.systemPrompt;
+    if (!decision.inject) {
+      return false; // Explicitly disabled
+    }
+
+    // Check target - 'both' or 'gates' allows injection on gate reviews
+    const target = decision.target ?? 'both';
+    return target === 'both' || target === 'gates';
+  }
+
+  /**
+   * Determine whether framework injection should be suppressed for normal steps.
+   * Returns true if injection should be skipped (target is 'gates' only).
+   */
+  private shouldSuppressFrameworkForSteps(chainContext: Record<string, unknown>): boolean {
+    const injectionState = chainContext['injectionState'] as InjectionState | undefined;
+    if (!injectionState?.systemPrompt) {
+      return false; // Default to not suppressing
+    }
+
+    const decision = injectionState.systemPrompt;
+    if (!decision.inject) {
+      return true; // Explicitly disabled
+    }
+
+    // Check target - 'gates' only means suppress on steps
+    const target = decision.target ?? 'both';
+    return target === 'gates';
   }
 
   private async buildFrameworkGuidance(step: ChainStepPrompt): Promise<string | null> {

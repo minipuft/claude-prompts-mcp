@@ -2,7 +2,7 @@
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../logging/index.js';
-import type { InjectionConfig } from '../decisions/injection/index.js';
+import type { ExecutionContextType, InjectionConfig } from '../decisions/injection/index.js';
 import {
   InjectionDecisionService,
   type InjectionDecisionInput,
@@ -118,6 +118,13 @@ export class InjectionControlStage extends BasePipelineStage {
     // Get modifiers from execution plan
     const modifiers = context.executionPlan?.modifiers;
 
+    // Determine execution context for target filtering
+    // If there's a pending gate review, we're in 'gate_review' context
+    // Otherwise, we're in normal 'step' context
+    const executionContext: ExecutionContextType = context.sessionContext?.pendingReview
+      ? 'gate_review'
+      : 'step';
+
     return {
       currentStep,
       totalSteps,
@@ -131,6 +138,8 @@ export class InjectionControlStage extends BasePipelineStage {
       stepType: this.getStepType(context),
       // previousStepResult from session context (populated by ResponseCaptureStage)
       previousStepResult: context.sessionContext?.previousStepResult,
+      // executionContext for target filtering (step vs gate_review)
+      executionContext,
     };
   }
 

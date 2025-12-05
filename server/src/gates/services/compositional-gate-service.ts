@@ -1,10 +1,4 @@
 // @lifecycle canonical - Aggregates gate evaluations across configured services.
-import {
-  GateInstructionInjector,
-  type GateInstructionEnhancedPrompt,
-  type GateInstructionInjectorConfig,
-} from '../guidance/gate-instruction-injector.js';
-
 import type {
   IGateService,
   GateEnhancementResult,
@@ -21,10 +15,14 @@ const DEFAULT_CONFIG: GateServiceConfig = {
 
 /**
  * Compositional Gate Service - Template rendering only (no server-side validation)
+ *
+ * Simplified to use GateGuidanceRenderer directly, removing the unnecessary
+ * GateInstructionInjector abstraction layer.
  */
 export class CompositionalGateService implements IGateService {
   readonly serviceType = 'compositional' as const;
-  private readonly gateInstructionInjector: GateInstructionInjector;
+  private readonly logger: Logger;
+  private readonly gateGuidanceRenderer: GateGuidanceRenderer;
   private config: GateServiceConfig;
 
   constructor(
@@ -32,12 +30,9 @@ export class CompositionalGateService implements IGateService {
     gateGuidanceRenderer: GateGuidanceRenderer,
     config?: Partial<GateServiceConfig>
   ) {
+    this.logger = logger;
+    this.gateGuidanceRenderer = gateGuidanceRenderer;
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.gateInstructionInjector = new GateInstructionInjector(
-      logger,
-      gateGuidanceRenderer,
-      this.toInjectorConfig(this.config)
-    );
   }
 
   async enhancePrompt(
@@ -45,15 +40,68 @@ export class CompositionalGateService implements IGateService {
     gateIds: string[],
     context: GateContext
   ): Promise<GateEnhancementResult> {
-    const enhanced: GateInstructionEnhancedPrompt =
-      await this.gateInstructionInjector.injectGateInstructions(prompt, gateIds, context);
+    if (!this.config.enabled || gateIds.length === 0) {
+      return {
+        enhancedPrompt: prompt,
+        gateInstructionsInjected: false,
+        injectedGateIds: [],
+      };
+    }
 
-    return {
-      enhancedPrompt: enhanced,
-      gateInstructionsInjected: enhanced.gateInstructionsInjected ?? false,
-      injectedGateIds: enhanced.injectedGateIds ?? [],
-      instructionLength: enhanced.gateInstructionLength,
-    };
+    this.logger.debug('[CompositionalGateService] Rendering gate guidance', {
+      promptId: prompt.id,
+      gateCount: gateIds.length,
+    });
+
+    try {
+      const guidance = await this.gateGuidanceRenderer.renderGuidance(gateIds, {
+        framework: context.framework,
+        category: context.category ?? prompt.category,
+        promptId: context.promptId ?? prompt.id,
+        explicitGateIds: context.explicitGateIds,
+      });
+
+      if (!guidance || guidance.trim().length === 0) {
+        this.logger.debug('[CompositionalGateService] No guidance produced', {
+          promptId: prompt.id,
+        });
+        return {
+          enhancedPrompt: prompt,
+          gateInstructionsInjected: false,
+          injectedGateIds: [],
+        };
+      }
+
+      const template = prompt.userMessageTemplate ?? '';
+      const enhancedTemplate = template.length > 0 ? `${template}\n\n${guidance}` : guidance;
+
+      this.logger.debug('[CompositionalGateService] Gate guidance injected', {
+        promptId: prompt.id,
+        gateCount: gateIds.length,
+        guidanceLength: guidance.length,
+      });
+
+      return {
+        enhancedPrompt: {
+          ...prompt,
+          userMessageTemplate: enhancedTemplate,
+        },
+        gateInstructionsInjected: true,
+        injectedGateIds: gateIds,
+        instructionLength: guidance.length,
+      };
+    } catch (error) {
+      this.logger.error('[CompositionalGateService] Failed to render gate guidance', {
+        error,
+        promptId: prompt.id,
+        gateIds,
+      });
+      return {
+        enhancedPrompt: prompt,
+        gateInstructionsInjected: false,
+        injectedGateIds: [],
+      };
+    }
   }
 
   supportsValidation(): boolean {
@@ -62,12 +110,5 @@ export class CompositionalGateService implements IGateService {
 
   updateConfig(config: Partial<GateServiceConfig>): void {
     this.config = { ...this.config, ...config };
-    this.gateInstructionInjector.updateConfig(this.toInjectorConfig(this.config));
-  }
-
-  private toInjectorConfig(config: GateServiceConfig): Partial<GateInstructionInjectorConfig> {
-    return {
-      enabled: config.enabled,
-    };
   }
 }

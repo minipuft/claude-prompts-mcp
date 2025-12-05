@@ -4,6 +4,7 @@ import type { Logger } from '../../../../logging/index.js';
 import type {
   InjectionRuntimeOverride,
   InjectionSessionState,
+  InjectionTarget,
   InjectionType,
 } from './types.js';
 
@@ -36,11 +37,13 @@ export class SessionOverrideManager {
     enabled: boolean | undefined,
     scope: 'session' | 'chain' | 'step' = 'session',
     scopeId?: string,
-    expiresInMs?: number
+    expiresInMs?: number,
+    target?: InjectionTarget
   ): InjectionRuntimeOverride {
     const override: InjectionRuntimeOverride = {
       type,
       enabled,
+      target,
       scope,
       scopeId,
       setAt: Date.now(),
@@ -53,6 +56,7 @@ export class SessionOverrideManager {
     this.logger.info('[SessionOverrideManager] Override set', {
       type,
       enabled,
+      target,
       scope,
       scopeId,
     });
@@ -132,6 +136,7 @@ export class SessionOverrideManager {
     overrides: Array<{
       type: InjectionType;
       enabled?: boolean;
+      target?: InjectionTarget;
       scope: string;
       setAt: number;
       expiresAt?: number;
@@ -145,6 +150,7 @@ export class SessionOverrideManager {
       overrides: Array.from(activeOverrides.entries()).map(([type, override]) => ({
         type,
         enabled: override.enabled,
+        target: override.target,
         scope: override.scope,
         setAt: override.setAt,
         expiresAt: override.expiresAt,

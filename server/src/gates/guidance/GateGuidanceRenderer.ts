@@ -3,7 +3,6 @@
  * Gate Guidance Renderer - User-Facing Guidance Generation
  *
  * Single responsibility: Generate and format gate guidance for users.
- * Clean dependencies: Only imports what it needs for guidance rendering.
  */
 
 import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './FrameworkGuidanceFilter.js';

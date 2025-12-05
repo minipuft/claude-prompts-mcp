@@ -1,5 +1,5 @@
 // @lifecycle canonical - Evaluates inline gates before heavy execution work.
-import { formatCriteriaAsGuidance } from '../../../gates/utils/gate-guidance-formatter.js';
+import { formatCriteriaAsGuidance } from '../criteria-guidance.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';

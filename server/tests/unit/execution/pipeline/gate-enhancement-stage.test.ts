@@ -3,10 +3,38 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
 import { GateEnhancementStage } from '../../../../src/execution/pipeline/stages/05-gate-enhancement-stage.js';
 
+import type { GateLoader } from '../../../../src/gates/core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../../../../src/gates/core/temporary-gate-registry.js';
 import type { IGateService } from '../../../../src/gates/services/gate-service-interface.js';
 import type { Logger } from '../../../../src/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/types/index.js';
+
+/**
+ * Creates a mock GateLoader that returns specified methodology gate IDs.
+ */
+const createMockGateLoader = (methodologyGateIds: string[] = [
+  'framework-compliance',
+  'methodology-validation',
+  'research-quality',
+  'technical-accuracy',
+]): GateLoader => ({
+  loadGate: jest.fn(),
+  loadGates: jest.fn(),
+  getActiveGates: jest.fn(),
+  listAvailableGates: jest.fn(),
+  listAvailableGateDefinitions: jest.fn(),
+  clearCache: jest.fn(),
+  isGateActive: jest.fn(),
+  getStatistics: jest.fn(),
+  isMethodologyGate: jest.fn().mockImplementation((gateId: string) =>
+    Promise.resolve(methodologyGateIds.includes(gateId))
+  ),
+  isMethodologyGateCached: jest.fn().mockImplementation((gateId: string) =>
+    methodologyGateIds.includes(gateId)
+  ),
+  getMethodologyGateIds: jest.fn().mockResolvedValue(methodologyGateIds),
+  setTemporaryGateRegistry: jest.fn(),
+} as unknown as GateLoader);
 
 const createLogger = (): Logger => ({
   info: jest.fn(),
@@ -128,6 +156,7 @@ describe('GateEnhancementStage', () => {
 
   test('filters methodology gates when disabled in framework config', async () => {
     const gateService = createGateService();
+    const mockGateLoader = createMockGateLoader();
     const stage = new GateEnhancementStage(
       gateService,
       undefined,
@@ -139,7 +168,8 @@ describe('GateEnhancementStage', () => {
       () => undefined, // frameworkManagerProvider
       createLogger(),
       undefined,
-      () => baseGatesConfig
+      () => baseGatesConfig,
+      mockGateLoader
     );
 
     const context = new ExecutionContext({ command: '>>demo' });

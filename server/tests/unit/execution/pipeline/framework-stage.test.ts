@@ -4,6 +4,7 @@ import { ExecutionContext } from '../../../../src/execution/context/execution-co
 import { FrameworkResolutionStage } from '../../../../src/execution/pipeline/stages/06-framework-stage.js';
 
 import type { FrameworkManager } from '../../../../src/frameworks/framework-manager.js';
+import type { GateLoader } from '../../../../src/gates/core/gate-loader.js';
 import type {
   FrameworkExecutionContext,
   FrameworkMethodology,
@@ -16,6 +17,31 @@ const createLogger = () => ({
   error: jest.fn(),
   debug: jest.fn(),
 });
+
+/**
+ * Creates a mock GateLoader that returns specified methodology gate IDs.
+ */
+const createMockGateLoader = (methodologyGateIds: string[] = [
+  'framework-compliance',
+  'methodology-validation',
+]): GateLoader => ({
+  loadGate: jest.fn(),
+  loadGates: jest.fn(),
+  getActiveGates: jest.fn(),
+  listAvailableGates: jest.fn(),
+  listAvailableGateDefinitions: jest.fn(),
+  clearCache: jest.fn(),
+  isGateActive: jest.fn(),
+  getStatistics: jest.fn(),
+  isMethodologyGate: jest.fn().mockImplementation((gateId: string) =>
+    Promise.resolve(methodologyGateIds.includes(gateId))
+  ),
+  isMethodologyGateCached: jest.fn().mockImplementation((gateId: string) =>
+    methodologyGateIds.includes(gateId)
+  ),
+  getMethodologyGateIds: jest.fn().mockResolvedValue(methodologyGateIds),
+  setTemporaryGateRegistry: jest.fn(),
+} as unknown as GateLoader);
 
 const createConvertedPrompt = (overrides: Partial<ConvertedPrompt> = {}): ConvertedPrompt => ({
   id: 'demo',
@@ -36,6 +62,7 @@ const createFrameworkContext = (methodology: FrameworkMethodology): FrameworkExe
 describe('FrameworkResolutionStage', () => {
   let manager: jest.Mocked<FrameworkManager>;
   let frameworkEnabled: jest.Mock<() => boolean>;
+  let mockGateLoader: GateLoader;
   let stage: FrameworkResolutionStage;
 
   beforeEach(() => {
@@ -43,7 +70,8 @@ describe('FrameworkResolutionStage', () => {
       generateExecutionContext: jest.fn(),
     } as unknown as jest.Mocked<FrameworkManager>;
     frameworkEnabled = jest.fn().mockReturnValue(true);
-    stage = new FrameworkResolutionStage(manager, frameworkEnabled, createLogger());
+    mockGateLoader = createMockGateLoader();
+    stage = new FrameworkResolutionStage(manager, frameworkEnabled, createLogger(), mockGateLoader);
   });
 
   test('skips resolution when framework system is disabled', async () => {

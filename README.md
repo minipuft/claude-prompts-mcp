@@ -27,7 +27,9 @@ Stop copy-pasting prompts. This server turns your prompt library into a version-
 
 Get running in 60 seconds.
 
-### 1. Install & Build
+### 1. Install & Build (Recommended for Prompt Management)
+
+For easy access to prompt files (to view, edit, or create your own), we recommend cloning the repository:
 
 ```bash
 git clone https://github.com/minipuft/claude-prompts-mcp.git
@@ -37,11 +39,38 @@ npm install && npm run build
 npm run start:stdio
 ```
 
+### Alternative: Install via NPM Package
+
+If you primarily want to use the server without modifying its bundled prompts, you can install it directly from npm:
+
+```bash
+# Run directly without global installation
+npx claude-prompts-server
+
+# Or install globally for easy access
+npm install -g claude-prompts-server
+claude-prompts-server --help
+```
+**Note on Prompt Management with NPM Package:** When installed via npm, prompt files are located within your `node_modules` directory. While the server supports loading external prompt configurations (via `MCP_SERVER_ROOT` or by placing `config.json` in your current working directory), direct editing of the bundled prompts is not recommended for npm installations.
+
 ### 2. Connect to Claude Desktop
 
 Add this to your `claude_desktop_config.json`:
 
-**Windows:**
+**Using NPM (No Clone Required):**
+
+```json
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts-server", "--transport=stdio"]
+    }
+  }
+}
+```
+
+**Using Source Build (Windows):**
 
 ```json
 {
@@ -54,7 +83,7 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
-**Mac/Linux:**
+**Using Source Build (Mac/Linux):**
 
 ```json
 {
@@ -164,6 +193,27 @@ Customize behavior via `server/config.json`. No rebuild required—just restart.
 | `frameworks` | `enableSystemPromptInjection` | `true` | Auto-injects methodology guidance (CAGEERF, etc.) into system prompts. |
 | `gates` | `definitionsDirectory` | `src/gates/definitions` | Path to custom quality gate definitions (JSON). |
 | `judge` | `enabled` | `true` | Enables the built-in judge phase (`%judge`) that surfaces framework/style/gate options. |
+
+### Injection Target Modes (Advanced)
+
+By default, framework guidance injects on both step execution and gate reviews. To customize WHERE injection occurs, add an `injection` section to your config:
+
+```json
+{
+  "injection": {
+    "system-prompt": { "enabled": true, "target": "steps" },
+    "gate-guidance": { "enabled": true, "target": "gates" }
+  }
+}
+```
+
+| Target | Behavior |
+| :--- | :--- |
+| `both` | Inject on steps and gate reviews (default) |
+| `steps` | Inject only during normal step execution |
+| `gates` | Inject only during gate review steps |
+
+Applies to: `system-prompt`, `gate-guidance`, `style-guidance`
 
 ## Documentation
 

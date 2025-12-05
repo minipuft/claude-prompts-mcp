@@ -4,6 +4,7 @@ import type {
   InjectionConfig,
   InjectionDecisionSource,
   InjectionFrequency,
+  InjectionTarget,
   InjectionType,
   InjectionTypeConfig,
 } from './types.js';
@@ -30,6 +31,12 @@ export const RESOLUTION_PRIORITY: readonly InjectionDecisionSource[] = [
   'global-config',
   'system-default',
 ] as const;
+
+/**
+ * Default target for all injection types.
+ * 'both' ensures injection on both step execution and gate reviews.
+ */
+export const DEFAULT_INJECTION_TARGET: InjectionTarget = 'both';
 
 /**
  * Default frequency for system prompt injection.
@@ -63,6 +70,7 @@ export const DEFAULT_STYLE_GUIDANCE_FREQUENCY: InjectionFrequency = {
 export const DEFAULT_SYSTEM_PROMPT_CONFIG: InjectionTypeConfig = {
   enabled: true,
   frequency: DEFAULT_SYSTEM_PROMPT_FREQUENCY,
+  target: DEFAULT_INJECTION_TARGET,
 } as const;
 
 /**
@@ -71,6 +79,7 @@ export const DEFAULT_SYSTEM_PROMPT_CONFIG: InjectionTypeConfig = {
 export const DEFAULT_GATE_GUIDANCE_CONFIG: InjectionTypeConfig = {
   enabled: true,
   frequency: DEFAULT_GATE_GUIDANCE_FREQUENCY,
+  target: DEFAULT_INJECTION_TARGET,
 } as const;
 
 /**
@@ -79,6 +88,7 @@ export const DEFAULT_GATE_GUIDANCE_CONFIG: InjectionTypeConfig = {
 export const DEFAULT_STYLE_GUIDANCE_CONFIG: InjectionTypeConfig = {
   enabled: true,
   frequency: DEFAULT_STYLE_GUIDANCE_FREQUENCY,
+  target: DEFAULT_INJECTION_TARGET,
 } as const;
 
 /**
@@ -145,4 +155,13 @@ export const DECISION_SOURCE_DESCRIPTIONS: Readonly<Record<InjectionDecisionSour
   'category-config': 'Category-level configuration',
   'global-config': 'Global config.json settings',
   'system-default': 'Built-in system defaults',
+} as const;
+
+/**
+ * Human-readable descriptions for injection targets.
+ */
+export const INJECTION_TARGET_DESCRIPTIONS: Readonly<Record<InjectionTarget, string>> = {
+  steps: 'Inject only on normal step execution (not gate reviews)',
+  gates: 'Inject only on gate review steps (not normal execution)',
+  both: 'Inject on both step execution and gate reviews (default)',
 } as const;

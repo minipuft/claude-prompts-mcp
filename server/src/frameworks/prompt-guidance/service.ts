@@ -1,9 +1,9 @@
 // @lifecycle canonical - Orchestrates prompt guidance components for framework-aware prompts.
 /**
- * Prompt Guidance Service - Implementation
+ * Prompt Guidance Service - Simplified Implementation
  *
- * Unified service that orchestrates all prompt guidance components.
- * Provides a single integration point for MCP tools to access methodology guidance.
+ * Unified service that orchestrates prompt guidance components.
+ * Simplified: System prompt injection is now inlined (was SystemPromptInjector).
  */
 
 import { Logger } from '../../logging/index.js';
@@ -23,13 +23,12 @@ import {
   createMethodologyTracker,
   type MethodologyTrackerConfig,
 } from './methodology-tracker.js';
-import { SystemPromptInjector, createSystemPromptInjector } from './system-prompt-injector.js';
 import { TemplateEnhancer, createTemplateEnhancer } from './template-enhancer.js';
 
 import type { ContentAnalysisResult } from '../../semantic/types.js';
 
 /**
- * Prompt guidance service configuration
+ * Prompt guidance service configuration (simplified)
  */
 type MethodologyTrackingServiceConfig = Partial<MethodologyTrackerConfig> & {
   enabled: boolean;
@@ -38,9 +37,6 @@ type MethodologyTrackingServiceConfig = Partial<MethodologyTrackerConfig> & {
 export interface PromptGuidanceServiceConfig {
   systemPromptInjection: {
     enabled: boolean;
-    injectionMethod: 'template' | 'append' | 'prepend' | 'smart';
-    enableTemplateVariables: boolean;
-    enableContextualEnhancement: boolean;
   };
   templateEnhancement: {
     enabled: boolean;
@@ -67,23 +63,24 @@ export interface PromptGuidanceResult {
     frameworkUsed: string;
     enhancementsApplied: string[];
     confidenceScore: number;
-    // Semantic analysis metadata
     semanticAware?: boolean;
     semanticComplexity?: 'low' | 'medium' | 'high';
     semanticConfidence?: number;
   };
 }
 
+// Alias for backward compatibility
+export type ServicePromptGuidanceResult = PromptGuidanceResult;
+
 /**
  * Prompt Guidance Service
  *
- * Orchestrates all prompt guidance components to provide intelligent
- * methodology-driven prompt enhancement for MCP tools.
+ * Orchestrates prompt guidance: methodology tracking, template enhancement,
+ * and simple system prompt injection (inlined, no separate injector class).
  */
 export class PromptGuidanceService {
   private logger: Logger;
   private config: PromptGuidanceServiceConfig;
-  private systemPromptInjector: SystemPromptInjector;
   private methodologyTracker!: MethodologyTracker;
   private templateEnhancer: TemplateEnhancer;
   private frameworkManager?: FrameworkManager;
@@ -94,9 +91,6 @@ export class PromptGuidanceService {
     this.config = {
       systemPromptInjection: {
         enabled: true,
-        injectionMethod: 'smart',
-        enableTemplateVariables: true,
-        enableContextualEnhancement: true,
       },
       templateEnhancement: {
         enabled: true,
@@ -115,11 +109,6 @@ export class PromptGuidanceService {
       ...config,
     };
 
-    // Initialize components
-    this.systemPromptInjector = createSystemPromptInjector(
-      logger,
-      this.config.systemPromptInjection
-    );
     this.templateEnhancer = createTemplateEnhancer(logger, this.config.templateEnhancement);
   }
 
@@ -135,17 +124,13 @@ export class PromptGuidanceService {
     this.logger.info('Initializing PromptGuidanceService...');
 
     try {
-      // Initialize methodology tracker
       const { enabled: trackingEnabled, ...trackerConfig } = this.config.methodologyTracking;
       this.methodologyTracker = await createMethodologyTracker(this.logger, trackerConfig);
 
       if (!trackingEnabled) {
-        this.logger.info(
-          'Prompt guidance methodology tracking initialized but marked disabled in config'
-        );
+        this.logger.info('Methodology tracking initialized but disabled in config');
       }
 
-      // Set framework manager if provided
       if (frameworkManager) {
         this.frameworkManager = frameworkManager;
       }
@@ -160,7 +145,6 @@ export class PromptGuidanceService {
 
   /**
    * Apply comprehensive prompt guidance to a prompt
-   * Enhanced with semantic analysis integration
    */
   async applyGuidance(
     prompt: ConvertedPrompt,
@@ -179,19 +163,14 @@ export class PromptGuidanceService {
       throw new Error('PromptGuidanceService not initialized. Call initialize() first.');
     }
 
-    this.logger.debug(
-      `Applying prompt guidance for prompt: ${prompt.name}${
-        options.semanticAnalysis ? ' with semantic analysis' : ''
-      }`
-    );
+    this.logger.debug(`Applying prompt guidance for prompt: ${prompt.name}`);
 
     try {
-      // Get current methodology state
       const methodologyState = this.methodologyTracker.getCurrentState();
       const activeFramework = await this.getActiveFramework(options.frameworkOverride);
       const methodologyGuide = await this.getMethodologyGuide(activeFramework.methodology);
 
-      // Surface methodology step guidance (read-only hints; no auto-exec)
+      // Surface methodology guidance (read-only hints)
       const processingGuidance = methodologyGuide.guideTemplateProcessing(
         prompt.userMessageTemplate ?? '',
         'single'
@@ -212,7 +191,6 @@ export class PromptGuidanceService {
           frameworkUsed: activeFramework.methodology,
           enhancementsApplied: [],
           confidenceScore: 0,
-          // Semantic analysis metadata
           semanticAware: options.semanticAnalysis !== undefined,
           semanticComplexity: options.semanticAnalysis?.complexity,
           semanticConfidence: options.semanticAnalysis?.confidence,
@@ -223,27 +201,24 @@ export class PromptGuidanceService {
       let totalConfidence = 0;
       let enhancementCount = 0;
 
-      // Apply system prompt injection if enabled
+      // Apply system prompt injection (inlined - no separate class needed)
       if (
         this.config.systemPromptInjection.enabled &&
         options.includeSystemPromptInjection !== false
       ) {
         try {
-          const injectionResult = this.systemPromptInjector.injectMethodologyGuidance(
+          const injectionResult = this.injectMethodologyGuidance(
             prompt,
             activeFramework,
-            methodologyGuide,
-            options.semanticAnalysis
+            methodologyGuide
           );
 
           result.systemPromptInjection = injectionResult;
 
-          // FIXED: Combine original system message with framework-injected guidance
-          // This preserves the original prompt's system message while adding framework context
+          // Combine: framework guidance first, then original system message
           const originalSystemMessage = prompt.systemMessage || '';
           const frameworkGuidance = injectionResult.enhancedPrompt;
 
-          // Combine both: framework guidance first (sets context), then original system message
           enhancedPrompt.systemMessage = originalSystemMessage
             ? `${frameworkGuidance}\n\n${originalSystemMessage}`
             : frameworkGuidance;
@@ -264,11 +239,8 @@ export class PromptGuidanceService {
       // Apply template enhancement if enabled
       if (this.config.templateEnhancement.enabled && options.includeTemplateEnhancement !== false) {
         try {
-          // Resource-Driven Enhancement
-          // Build semantic analysis with selected resources from Judge Selection Stage
           let effectiveSemanticAnalysis = options.semanticAnalysis;
           if (options.selectedResources?.length && effectiveSemanticAnalysis) {
-            // Inject selected resources into the semantic analysis for the enhancer
             effectiveSemanticAnalysis = {
               ...effectiveSemanticAnalysis,
               executionCharacteristics: {
@@ -276,38 +248,20 @@ export class PromptGuidanceService {
                 advancedChainFeatures: {
                   ...effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures,
                   selected_resources: options.selectedResources,
-                  hasDependencies:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasDependencies ?? false,
-                  hasParallelSteps:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasParallelSteps ?? false,
-                  hasAdvancedStepTypes:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasAdvancedStepTypes ?? false,
-                  hasAdvancedErrorHandling:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasAdvancedErrorHandling ?? false,
-                  hasStepConfigurations:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasStepConfigurations ?? false,
-                  hasCustomTimeouts:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasCustomTimeouts ?? false,
-                  requiresAdvancedExecution:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.requiresAdvancedExecution ?? false,
-                  complexityScore:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.complexityScore ?? 0,
+                  hasDependencies: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasDependencies ?? false,
+                  hasParallelSteps: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasParallelSteps ?? false,
+                  hasAdvancedStepTypes: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasAdvancedStepTypes ?? false,
+                  hasAdvancedErrorHandling: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasAdvancedErrorHandling ?? false,
+                  hasStepConfigurations: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasStepConfigurations ?? false,
+                  hasCustomTimeouts: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasCustomTimeouts ?? false,
+                  requiresAdvancedExecution: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.requiresAdvancedExecution ?? false,
+                  complexityScore: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.complexityScore ?? 0,
                 },
               },
             };
           }
 
-          // Use available resources from the stage, or fall back to empty array
           const availableResources = options.availableResources ?? [];
-
           const enhancementResult = await this.templateEnhancer.enhanceTemplate(
             enhancedPrompt.userMessageTemplate,
             enhancedPrompt,
@@ -318,11 +272,9 @@ export class PromptGuidanceService {
             availableResources
           );
 
-          // Update enhanced prompt with enhanced template
           enhancedPrompt.userMessageTemplate = enhancementResult.enhancedTemplate;
-
           result.metadata.enhancementsApplied.push('template_enhancement');
-          totalConfidence += enhancementResult.validation.score / 100; // Convert to 0-1 scale
+          totalConfidence += enhancementResult.validation.score / 100;
           enhancementCount++;
           result.guidanceApplied = true;
 
@@ -334,17 +286,10 @@ export class PromptGuidanceService {
         }
       }
 
-      // Set enhanced prompt and calculate metrics
       if (result.guidanceApplied) {
         result.enhancedPrompt = enhancedPrompt;
         result.metadata.confidenceScore =
           enhancementCount > 0 ? totalConfidence / enhancementCount : 0;
-      }
-
-      // Attach methodology-derived processing/step guidance (read-only hints)
-      if (processingGuidance || stepGuidance) {
-        result.templateProcessingGuidance = processingGuidance;
-        result.executionStepGuidance = stepGuidance;
       }
 
       result.processingTimeMs = Date.now() - startTime;
@@ -356,11 +301,9 @@ export class PromptGuidanceService {
     } catch (error) {
       this.logger.error('Failed to apply prompt guidance:', error);
 
-      // Return minimal result on error
       return {
         originalPrompt: prompt,
-        activeMethodology:
-          this.methodologyTracker?.getCurrentState()?.activeMethodology || 'CAGEERF',
+        activeMethodology: this.methodologyTracker?.getCurrentState()?.activeMethodology || 'CAGEERF',
         guidanceApplied: false,
         processingTimeMs: Date.now() - startTime,
         metadata: {
@@ -373,8 +316,60 @@ export class PromptGuidanceService {
   }
 
   /**
+   * Inject methodology guidance into system prompt (inlined from SystemPromptInjector)
+   *
+   * Simple implementation: get guidance from methodology guide, combine with template.
+   */
+  private injectMethodologyGuidance(
+    prompt: ConvertedPrompt,
+    framework: FrameworkDefinition,
+    guide: IMethodologyGuide
+  ): SystemPromptInjectionResult {
+    const startTime = Date.now();
+
+    // Get guidance from methodology guide
+    const guidance = guide.getSystemPromptGuidance({
+      promptName: prompt.name,
+      promptCategory: prompt.category,
+      promptType: prompt.chainSteps && prompt.chainSteps.length > 0 ? 'chain' : 'single',
+    });
+
+    // Simple injection: template placeholder or append with header
+    const template = framework.systemPromptTemplate;
+    let enhancedPrompt: string;
+
+    if (template.includes('{METHODOLOGY_GUIDANCE}')) {
+      enhancedPrompt = template.replace('{METHODOLOGY_GUIDANCE}', guidance);
+    } else {
+      enhancedPrompt = `${template}\n\n## ${framework.methodology} Methodology\n\n${guidance}`;
+    }
+
+    // Apply simple variable substitution
+    enhancedPrompt = enhancedPrompt
+      .replace(/\{PROMPT_NAME\}/g, prompt.name || 'Prompt')
+      .replace(/\{PROMPT_CATEGORY\}/g, prompt.category || 'general')
+      .replace(/\{FRAMEWORK_NAME\}/g, framework.name)
+      .replace(/\{METHODOLOGY\}/g, framework.methodology)
+      .replace(/\{PROMPT_TYPE\}/g, prompt.chainSteps?.length ? 'chain' : 'single');
+
+    return {
+      originalPrompt: prompt.userMessageTemplate || '',
+      enhancedPrompt,
+      injectedGuidance: guidance,
+      sourceFramework: framework,
+      metadata: {
+        injectionTime: new Date(),
+        injectionMethod: 'unified',
+        variablesUsed: ['PROMPT_NAME', 'PROMPT_CATEGORY', 'FRAMEWORK_NAME', 'METHODOLOGY', 'PROMPT_TYPE'],
+        confidence: 1.0,
+        processingTimeMs: Date.now() - startTime,
+        validationPassed: true,
+      },
+    };
+  }
+
+  /**
    * Apply runtime enhancement based on LLM judge result
-   * (Self-Loop Implementation)
    */
   async applyRuntimeEnhancement(
     template: string,
@@ -388,17 +383,14 @@ export class PromptGuidanceService {
     }
 
     try {
-      // Map judge result to ContentAnalysisResult
       const semanticAnalysis: ContentAnalysisResult = {
         complexity: judgeResult.complexity || 'low',
         confidence: judgeResult.confidence || 0.5,
         reasoning: [judgeResult.reasoning || 'Runtime judge decision'],
         executionCharacteristics: {
-          hasStructuredReasoning:
-            judgeResult.intent === 'analytical' || judgeResult.intent === 'procedural',
+          hasStructuredReasoning: judgeResult.intent === 'analytical' || judgeResult.intent === 'procedural',
           hasComplexAnalysis: judgeResult.intent === 'analytical',
           hasMethodologyKeywords: judgeResult.intent === 'creative',
-          // Defaults for required fields
           hasConditionals: false,
           hasLoops: false,
           hasChainSteps: false,
@@ -407,7 +399,6 @@ export class PromptGuidanceService {
           hasSystemMessage: false,
           hasUserTemplate: true,
           advancedChainFeatures: {
-            // Pass selected resources through here
             selected_resources: judgeResult.selected_resources || [],
             hasDependencies: false,
             hasParallelSteps: false,
@@ -419,7 +410,6 @@ export class PromptGuidanceService {
             complexityScore: 0,
           },
         },
-        // Required fields with safe defaults
         executionType: 'single',
         requiresExecution: true,
         requiresFramework: true,
@@ -447,11 +437,9 @@ export class PromptGuidanceService {
         },
       };
 
-      // Get active framework and guide
       const activeFramework = await this.getActiveFramework(frameworkOverride);
       const methodologyGuide = await this.getMethodologyGuide(activeFramework.methodology);
 
-      // Call enhancer with mapped semantic analysis AND available resources
       const result = await this.templateEnhancer.enhanceTemplate(
         template,
         {
@@ -459,18 +447,18 @@ export class PromptGuidanceService {
           name: 'Runtime Enhancement',
           userMessageTemplate: template,
           arguments: [],
-        } as unknown as ConvertedPrompt, // Minimal mock for runtime
+        } as unknown as ConvertedPrompt,
         methodologyGuide,
         activeFramework,
         undefined,
         semanticAnalysis,
-        availableResources // Pass resources for injection
+        availableResources
       );
 
       return result.enhancedTemplate;
     } catch (error) {
       this.logger.error('Runtime enhancement failed:', error);
-      return template; // Fallback to original on error
+      return template;
     }
   }
 
@@ -509,7 +497,7 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Enable or disable the entire guidance system
+   * Enable or disable the guidance system
    */
   setGuidanceEnabled(enabled: boolean): void {
     this.config.systemPromptInjection.enabled = enabled;
@@ -525,8 +513,6 @@ export class PromptGuidanceService {
   updateConfig(config: Partial<PromptGuidanceServiceConfig>): void {
     this.config = { ...this.config, ...config };
 
-    // Update component configurations
-    this.systemPromptInjector.updateConfig(config.systemPromptInjection || {});
     this.templateEnhancer.updateConfig(config.templateEnhancement || {});
 
     if (config.methodologyTracking && this.methodologyTracker) {
@@ -543,7 +529,7 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Shutdown the service and cleanup resources
+   * Shutdown the service
    */
   async shutdown(): Promise<void> {
     if (!this.initialized) {
@@ -569,14 +555,14 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Check if service is initialized and ready
+   * Check if service is initialized
    */
   isInitialized(): boolean {
     return this.initialized;
   }
 
   /**
-   * Get current service configuration
+   * Get current configuration
    */
   getConfig(): PromptGuidanceServiceConfig {
     return { ...this.config };

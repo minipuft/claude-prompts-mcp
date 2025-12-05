@@ -21,9 +21,6 @@ export * from './integration/index.js';
 // Prompt guidance system (NEW)
 export * from './prompt-guidance/index.js';
 
-// Pipeline stages for framework control
-export * from './stages/index.js';
-
 // Methodology guides exported from ./methodology/ (single source of truth)
 // Legacy adapters directory removed - no duplication
 

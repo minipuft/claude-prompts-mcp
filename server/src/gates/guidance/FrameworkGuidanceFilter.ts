@@ -6,10 +6,8 @@
  * This is a pure function with no dependencies for maximum reusability.
  */
 
-const DEFAULT_FRAMEWORK_NAMES = ['CAGEERF', 'ReACT', '5W1H', 'SCAMPER'] as const;
-
 function resolveFrameworks(frameworks?: readonly string[]): readonly string[] {
-  return frameworks && frameworks.length > 0 ? frameworks : DEFAULT_FRAMEWORK_NAMES;
+  return frameworks && frameworks.length > 0 ? frameworks : [];
 }
 
 function matchesFrameworkLine(line: string, framework: string): boolean {
@@ -30,6 +28,9 @@ export function filterFrameworkGuidance(
   frameworkNames?: readonly string[]
 ): string {
   const frameworks = resolveFrameworks(frameworkNames);
+  if (frameworks.length === 0) {
+    return guidance;
+  }
   const resolvedFrameworkName =
     frameworks.find((framework) => framework.toLowerCase() === activeFramework.toLowerCase()) ??
     activeFramework;
@@ -75,6 +76,9 @@ export function hasFrameworkSpecificContent(
   frameworkNames?: readonly string[]
 ): boolean {
   const frameworks = resolveFrameworks(frameworkNames);
+  if (frameworks.length === 0) {
+    return false;
+  }
   return frameworks.some(
     (framework) => guidance.includes(`- ${framework}:`) || guidance.includes(`${framework}:`)
   );
@@ -88,5 +92,8 @@ export function getFrameworksInGuidance(
   frameworkNames?: readonly string[]
 ): string[] {
   const frameworks = resolveFrameworks(frameworkNames);
+  if (frameworks.length === 0) {
+    return [];
+  }
   return frameworks.filter((framework) => guidance.includes(`${framework}:`));
 }

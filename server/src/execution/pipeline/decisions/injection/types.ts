@@ -34,6 +34,8 @@ export interface InjectionDecision {
   source: InjectionDecisionSource;
   /** Timestamp when this decision was made. */
   decidedAt: number;
+  /** Target execution contexts for this injection. Propagated from config. */
+  target?: InjectionTarget;
 }
 
 /**
@@ -41,6 +43,22 @@ export interface InjectionDecision {
  * Controls how often content is injected during chain execution.
  */
 export type InjectionFrequencyMode = 'every' | 'first-only' | 'never';
+
+/**
+ * Execution context types for injection targeting.
+ * Determines which execution paths receive injections.
+ */
+export type ExecutionContextType = 'step' | 'gate_review';
+
+/**
+ * Target modes for injection.
+ * Controls WHERE content is injected during chain execution.
+ *
+ * - 'steps': Inject only on normal step execution (not gate reviews)
+ * - 'gates': Inject only on gate review steps (not normal execution)
+ * - 'both': Inject on both step execution and gate reviews (default)
+ */
+export type InjectionTarget = 'steps' | 'gates' | 'both';
 
 /**
  * Frequency configuration for injection.
@@ -86,6 +104,8 @@ export interface InjectionTypeConfig {
   enabled: boolean;
   /** Frequency configuration for chain execution. */
   frequency?: InjectionFrequency;
+  /** Target execution contexts for injection. Default: 'both'. */
+  target?: InjectionTarget;
   /** Conditional rules evaluated in order. First match wins. */
   conditions?: InjectionCondition[];
 }
@@ -121,6 +141,8 @@ export interface InjectionDecisionInput {
   chainId?: string;
   /** Prompt ID for hierarchical lookup. */
   promptId?: string;
+  /** Current execution context type for target filtering. */
+  executionContext?: ExecutionContextType;
 }
 
 /**
@@ -140,6 +162,8 @@ export interface InjectionState {
   lastSystemPromptStep?: number;
   /** Active session overrides. */
   sessionOverrides?: Partial<Record<InjectionType, boolean>>;
+  /** Current execution context type (step or gate_review). */
+  executionContext?: ExecutionContextType;
 }
 
 /**
@@ -180,6 +204,8 @@ export interface InjectionTypeRuleConfig {
   enabled?: boolean;
   /** Frequency configuration for chain execution. */
   frequency?: InjectionFrequency;
+  /** Target execution contexts for injection. Default: 'both'. */
+  target?: InjectionTarget;
   /** Conditional rules. First match wins. */
   conditions?: InjectionCondition[];
 }
@@ -285,6 +311,8 @@ export interface InjectionRuntimeOverride {
   type: InjectionType;
   /** Whether to force inject (true), force skip (false), or clear override (undefined). */
   enabled?: boolean;
+  /** Target execution contexts for injection. Overrides config target when set. */
+  target?: InjectionTarget;
   /** Scope of the override. */
   scope: 'session' | 'chain' | 'step';
   /** Identifier for scoped overrides (chain ID or step number). */

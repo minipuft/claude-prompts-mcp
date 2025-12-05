@@ -6,9 +6,15 @@
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "claude-prompts-server": "./dist/index.js"
+  },
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "src",
+    "config.json",
+    "prompts",
     "README.md",
     "LICENSE"
   ],
@@ -20,6 +26,8 @@
     "typecheck:tests": "tsc --noEmit --project tsconfig.test.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:unused:internal": "ts-prune --project tsconfig.json --ignore \"^src/(?!gates/|execution/).*|/index.ts$|/index$|src/types.ts|src/tooling/contracts/_generated/|src/gates/(index.ts|constants.ts|gate-state-manager.ts|types.ts|services/index.ts|core/(gate-definitions.ts|review-utils.ts|types.ts|llm-review-parser.ts))|src/execution/(types.ts|pipeline/index.ts|pipeline/state/index.ts|pipeline/decisions/index.ts|parsers/index.ts|parsers/argument-schema.ts|operators/index.ts|context/index.ts)\"",
+    "lint:unused:full": "ts-prune --project tsconfig.json --ignore \"src/index.ts|src/types.ts|src/utils/global-resource-tracker.ts|src/mcp-tools/|src/prompts/|src/runtime/|src/tooling/|src/server/|/index.ts$|/index$|src/tooling/contracts/_generated/|src/metrics/|src/performance/|src/config/|src/logging/|src/semantic/|src/frameworks/|src/text-references/|src/chain-session/\"",
     "start": "node dist/index.js",
     "dev": "tsc --project tsconfig.json --watch & node --watch dist/index.js",
     "start:sse": "node dist/index.js --transport=sse",
@@ -48,7 +56,8 @@
     "verify:action-metadata": "node scripts/verify-action-inventory.js",
     "dev:graph": "madge --ts-config ./tsconfig.json --extensions ts src --image graph.svg",
     "dev:graph:json": "madge --ts-config ./tsconfig.json --extensions ts src --json",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "release": "npm run build && npm test && npm publish --access public"
   },
   "repository": {
     "type": "git",
@@ -102,6 +111,7 @@
     "jest": "^29.7.0",
     "madge": "^8.0.0",
     "ts-jest": "^29.1.2",
+    "ts-prune": "^0.10.3",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.48.1",
     "ws": "^8.18.1"

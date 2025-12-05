@@ -252,14 +252,18 @@ export class Application {
     const config = this.configManager.getConfig();
     this.debugLog('Config retrieved successfully');
     this.debugLog('About to create McpServer');
-    this.mcpServer = new McpServer({
-      name: config.server.name,
-      version: config.server.version,
-      capabilities: {
-        prompts: { listChanged: true },
-        tools: { listChanged: true },
+    this.mcpServer = new McpServer(
+      {
+        name: config.server.name,
+        version: config.server.version,
       },
-    });
+      {
+        capabilities: {
+          prompts: { listChanged: true },
+          tools: { listChanged: true },
+        },
+      }
+    );
     this.debugLog('McpServer created successfully');
 
     // Only log completion in verbose mode

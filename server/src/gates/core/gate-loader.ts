@@ -34,7 +34,7 @@ export class GateLoader {
     this.logger = logger;
 
     // If gatesDirectory not provided, try to resolve from import.meta.url
-    if (gatesDirectory) {
+    if (gatesDirectory !== undefined) {
       this.gatesDirectory = gatesDirectory;
     } else {
       // Try import.meta.url resolution (works in production ES modules)
@@ -64,7 +64,7 @@ export class GateLoader {
   async loadGate(gateId: string): Promise<LightweightGateDefinition | null> {
     try {
       const tempGate = this.temporaryGateRegistry?.getTemporaryGate(gateId);
-      if (tempGate) {
+      if (tempGate !== undefined) {
         const lightweight = this.temporaryGateRegistry?.convertToLightweightGate(tempGate);
         if (lightweight) {
           this.gateCache.set(gateId, lightweight);
@@ -73,7 +73,7 @@ export class GateLoader {
       }
 
       const gateFile = await this.findGateFile(gateId);
-      if (!gateFile) {
+      if (gateFile === null) {
         this.logger.warn(`Gate definition not found: ${gateId}`);
         return null;
       }
@@ -81,7 +81,7 @@ export class GateLoader {
       const cachedGate = this.gateCache.get(gateId);
       const loadResult = await this.parseGateFile(gateFile);
 
-      if (!loadResult) {
+      if (loadResult === null) {
         return null;
       }
 
@@ -93,14 +93,14 @@ export class GateLoader {
       }
 
       // Preserve existing cached instance if nothing changed for consistency
-      if (cachedGate && loadResult.fromCache && loadResult.mtime) {
+      if (cachedGate !== undefined && loadResult.fromCache === true && loadResult.mtime !== undefined) {
         this.logger.debug(`Using cached gate definition: ${gateId}`);
         return cachedGate;
       }
 
       this.gateCache.set(gateId, loadResult.gate);
 
-      if (loadResult.mtime) {
+      if (loadResult.mtime !== undefined) {
         this.lastModified.set(gateId, loadResult.mtime);
       }
 
@@ -120,7 +120,7 @@ export class GateLoader {
 
     for (const gateId of gateIds) {
       const gate = await this.loadGate(gateId);
-      if (gate) {
+      if (gate !== null) {
         gates.push(gate);
       }
     }
@@ -149,7 +149,7 @@ export class GateLoader {
         activeGates.push(gate);
 
         // Collect guidance text
-        if (gate.guidance) {
+        if (gate.guidance !== undefined && gate.guidance !== '') {
           guidanceText.push(`**${gate.name}:**\n${gate.guidance}`);
         }
 
@@ -195,7 +195,7 @@ export class GateLoader {
 
       for (const gateId of gateIds) {
         const gate = await this.loadGate(gateId);
-        if (gate) {
+        if (gate !== null) {
           gates.push(gate);
         }
       }
@@ -211,7 +211,7 @@ export class GateLoader {
    * Clear gate cache (for hot-reloading)
    */
   clearCache(gateId?: string): void {
-    if (gateId) {
+    if (gateId !== undefined) {
       this.gateCache.delete(gateId);
       this.lastModified.delete(gateId);
       this.logger.debug(`Cleared cache for gate: ${gateId}`);
@@ -255,14 +255,14 @@ export class GateLoader {
         useCache: true,
       });
 
-      if (!result.success) {
+      if (result.success !== true) {
         this.logger.error(`Failed to load gate file ${filePath}: ${result.error ?? 'unknown error'}`);
         return null;
       }
 
       const validation = validateLightweightGateDefinition(result.data);
 
-      if (!validation.success || !validation.data) {
+      if (validation.success !== true || validation.data === undefined) {
         this.logger.error(
           `Invalid gate definition in ${filePath}: ${validation.errors?.join('; ')}`
         );
@@ -297,28 +297,28 @@ export class GateLoader {
     }
   ): boolean {
     const activation = gate.activation;
-    if (!activation) {
+    if (activation === undefined) {
       // No activation rules means always active
       return true;
     }
 
     // Check explicit request
-    if (activation.explicit_request && !context.explicitRequest) {
+    if (activation.explicit_request === true && context.explicitRequest !== true) {
       return false;
     }
 
     // Check prompt categories (empty array means no restriction)
-    if (activation.prompt_categories?.length && context.promptCategory) {
-      if (!activation.prompt_categories.includes(context.promptCategory)) {
+    if ((activation.prompt_categories?.length ?? 0) > 0 && context.promptCategory !== undefined) {
+      if (activation.prompt_categories?.includes(context.promptCategory) === false) {
         return false;
       }
     }
 
     // Check framework context (empty array means no restriction)
     // Case-insensitive comparison to handle CAGEERF vs cageerf mismatches
-    if (activation.framework_context?.length && context.framework) {
+    if ((activation.framework_context?.length ?? 0) > 0 && context.framework !== undefined) {
       const normalizedFramework = context.framework.toUpperCase();
-      const normalizedContexts = activation.framework_context.map((f) => f.toUpperCase());
+      const normalizedContexts = activation.framework_context?.map((f) => f.toUpperCase()) ?? [];
       if (!normalizedContexts.includes(normalizedFramework)) {
         return false;
       }
@@ -340,6 +340,41 @@ export class GateLoader {
       totalLoads: this.lastModified.size,
       lastAccess: this.lastModified.size > 0 ? new Date() : null,
     };
+  }
+
+  /**
+   * Check if a gate is a methodology/framework gate by loading and inspecting its definition.
+   * Framework gates have gate_type === 'framework' and are filtered when methodology gates are disabled.
+   *
+   * @param gateId - Gate identifier to check
+   * @returns true if gate has gate_type === 'framework', false otherwise
+   */
+  async isMethodologyGate(gateId: string): Promise<boolean> {
+    const gate = await this.loadGate(gateId);
+    return gate?.gate_type === 'framework';
+  }
+
+  /**
+   * Check if a gate ID is a methodology gate using cached data only (synchronous).
+   * Returns false if gate is not in cache - use isMethodologyGate for definitive check.
+   *
+   * @param gateId - Gate identifier to check
+   * @returns true if cached gate has gate_type === 'framework', false otherwise
+   */
+  isMethodologyGateCached(gateId: string): boolean {
+    const cached = this.gateCache.get(gateId) ?? this.gateCache.get(gateId.toLowerCase());
+    return cached?.gate_type === 'framework';
+  }
+
+  /**
+   * Get all methodology gate IDs from loaded definitions.
+   * Scans the definitions directory and returns IDs of gates with gate_type === 'framework'.
+   *
+   * @returns Array of methodology gate IDs
+   */
+  async getMethodologyGateIds(): Promise<string[]> {
+    const allGates = await this.listAvailableGateDefinitions();
+    return allGates.filter((gate) => gate.gate_type === 'framework').map((gate) => gate.id);
   }
 }
 

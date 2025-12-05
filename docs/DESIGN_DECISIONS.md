@@ -67,6 +67,53 @@ We implemented a custom parser for symbolic commands (e.g., `>>analysis --> summ
 - **Why**: **Developer Experience**.
 - Constructing complex JSON payloads manually is slow and breaks flow. A shorthand syntax allows power users to define chains, attach quality gates, and select frameworks in natural language, which the pipeline then hydrates into structured execution objects.
 
-## 4. Summary
+## 4. Dynamic Methodology Gate Detection
+
+**Decision**: Replaced hardcoded `METHODOLOGY_GATES` constant with dynamic detection via `gate_type: "framework"` field in gate definitions.
+
+**Date**: December 2025
+
+### Context
+
+The gate system previously maintained a hardcoded `Set<string>` called `METHODOLOGY_GATES` in `gates/constants.ts` that listed which gates were framework-related. This created maintenance burden: adding new methodology gates required code changes rather than just adding definition files.
+
+### Decision
+
+Gates are now identified as methodology gates dynamically by their `gate_type` field:
+
+```typescript
+// In gate definition JSON files:
+{ "id": "cageerf-compliance", "gate_type": "framework", ... }
+
+// Dynamic detection via GateLoader:
+await gateLoader.isMethodologyGate("cageerf-compliance") // true
+await gateLoader.getMethodologyGateIds() // ["cageerf-compliance", ...]
+```
+
+### Implementation
+
+1. **`LightweightGateDefinition`** interface extended with optional `gate_type?: 'framework' | 'category' | 'custom'`
+2. **`GateLoader`** gained three methods:
+   - `isMethodologyGate(gateId)` - async check with gate loading
+   - `isMethodologyGateCached(gateId)` - sync check against cache
+   - `getMethodologyGateIds()` - returns all methodology gate IDs
+3. **Pipeline stages** (05-GateEnhancement, 06-Framework) now receive `GateLoader` via dependency injection and cache methodology gate IDs at execution start
+4. **`ExecutionPlanner`** uses `GateLoader` for methodology gate filtering
+5. **`GateReferenceResolver`** removed fallback to hardcoded constant, relies solely on `GateLoader`
+
+### Trade-offs
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| Adding gates | Code change required | Just add JSON file |
+| Startup cost | Zero (hardcoded) | Single directory scan (cached) |
+| Consistency | Manual sync risk | Single source of truth |
+| Future extensibility | Limited | YAML/Markdown gates ready |
+
+### Alignment with Vision
+
+This change aligns with the broader goal of making the gate system as dynamic as the framework system—where users can create, register, and manage gates via definition files without code changes.
+
+## 5. Summary
 
 This codebase is an exercise in balancing and learning **strict software engineering patterns** (Pipelines, Zod Validation) with the **flexible nature** of AI agents & workflows. It prioritizes the user's ability to define their own process over enforcing a rigid system structure.

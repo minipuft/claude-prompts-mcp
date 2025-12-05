@@ -57,27 +57,3 @@ export interface GateSelectionResult {
   estimatedExecutionTime: number;
   fallbackGates: string[];
 }
-
-/**
- * Performance metrics for individual gates
- */
-export interface GatePerformanceMetrics {
-  gateId: string;
-  avgExecutionTime: number;
-  successRate: number;
-  retryRate: number;
-  lastUsed: Date;
-  usageCount: number;
-}
-
-/**
- * Overall gate system analytics
- */
-export interface GateSystemAnalytics {
-  totalGates: number;
-  avgExecutionTime: number;
-  overallSuccessRate: number;
-  topPerformingGates: string[];
-  underperformingGates: string[];
-  recommendations: string[];
-}

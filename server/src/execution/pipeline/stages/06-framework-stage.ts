@@ -1,8 +1,8 @@
 // @lifecycle canonical - Applies framework methodology guidance to prompts.
-import { METHODOLOGY_GATES } from '../../../gates/constants.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
+import type { GateLoader } from '../../../gates/core/gate-loader.js';
 import type {
   FrameworkExecutionContext,
   FrameworkMethodology,
@@ -26,17 +26,47 @@ type FrameworkEnabledProvider = () => boolean;
  */
 export class FrameworkResolutionStage extends BasePipelineStage {
   readonly name = 'FrameworkResolution';
+  /** Cached methodology gate IDs loaded from GateLoader */
+  private methodologyGateIdsCache: Set<string> | null = null;
 
   constructor(
     private readonly frameworkManager: FrameworkManager,
     private readonly frameworkEnabled: FrameworkEnabledProvider | null,
-    logger: Logger
+    logger: Logger,
+    private readonly gateLoader?: GateLoader
   ) {
     super(logger);
   }
 
+  /**
+   * Get methodology gate IDs dynamically from GateLoader.
+   * Caches the result to avoid repeated disk reads.
+   */
+  private async getMethodologyGateIds(): Promise<Set<string>> {
+    if (this.methodologyGateIdsCache) {
+      return this.methodologyGateIdsCache;
+    }
+
+    if (!this.gateLoader) {
+      this.logger.debug('[FrameworkResolutionStage] No GateLoader available for methodology gate detection');
+      return new Set();
+    }
+
+    try {
+      const ids = await this.gateLoader.getMethodologyGateIds();
+      this.methodologyGateIdsCache = new Set(ids);
+      return this.methodologyGateIdsCache;
+    } catch (error) {
+      this.logger.warn('[FrameworkResolutionStage] Failed to load methodology gate IDs', { error });
+      return new Set();
+    }
+  }
+
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
+
+    // Initialize methodology gate IDs cache for dynamic checks
+    await this.getMethodologyGateIds();
 
     if (context.metadata['sessionBlueprintRestored']) {
       this.logExit({ skipped: 'Session blueprint restored' });
@@ -288,11 +318,16 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     return false;
   }
 
+  /**
+   * Check if any gates in the array are methodology gates (synchronous check using cache).
+   */
   private hasMethodologyGate(gates?: readonly string[] | null): boolean {
     if (!Array.isArray(gates)) {
       return false;
     }
 
-    return gates.some((gateId) => Boolean(gateId) && METHODOLOGY_GATES.has(gateId as string));
+    return gates.some(
+      (gateId) => Boolean(gateId) && (this.methodologyGateIdsCache?.has(gateId as string) ?? false)
+    );
   }
 }

@@ -54,6 +54,7 @@ export class HierarchyResolver {
       this.logger.debug('[HierarchyResolver] Using runtime override', {
         type: injectionType,
         enabled: runtimeOverride.enabled,
+        target: runtimeOverride.target,
       });
 
       return {
@@ -61,6 +62,8 @@ export class HierarchyResolver {
           enabled: runtimeOverride.enabled ?? true,
           // Runtime overrides don't change frequency - inherit from below
           frequency: this.getFrequencyFromHierarchy(injectionType, input, resolutionPath),
+          // Runtime override target takes precedence, else inherit from hierarchy
+          target: runtimeOverride.target ?? this.getTargetFromHierarchy(injectionType, input),
         },
         source: 'runtime-override',
         resolutionPath,
@@ -333,6 +336,7 @@ export class HierarchyResolver {
     return {
       enabled: partialConfig.enabled ?? defaults.enabled,
       frequency: partialConfig.frequency ?? defaults.frequency,
+      target: partialConfig.target ?? defaults.target ?? 'both',
       conditions: partialConfig.conditions ?? defaults.conditions,
     };
   }
@@ -373,6 +377,38 @@ export class HierarchyResolver {
 
     resolutionPath.push('system-default');
     return DEFAULT_CONFIG_BY_TYPE[injectionType].frequency;
+  }
+
+  /**
+   * Get target configuration from hierarchy (for runtime overrides).
+   * Runtime overrides may not specify target, so we need to find it.
+   */
+  private getTargetFromHierarchy(
+    injectionType: InjectionType,
+    input: InjectionDecisionInput
+  ): InjectionTypeConfig['target'] {
+    // Check step, chain, category, global in order
+    const stepConfig = this.findStepConfig(injectionType, input);
+    if (stepConfig?.[injectionType]?.target) {
+      return (stepConfig[injectionType] as InjectionTypeConfig).target;
+    }
+
+    const chainConfig = this.findChainConfig(injectionType, input);
+    if (chainConfig?.[injectionType]?.target) {
+      return (chainConfig[injectionType] as InjectionTypeConfig).target;
+    }
+
+    const categoryConfig = this.findCategoryConfig(injectionType, input);
+    if (categoryConfig?.[injectionType]?.target) {
+      return (categoryConfig[injectionType] as InjectionTypeConfig).target;
+    }
+
+    const globalConfig = this.config[injectionType];
+    if (globalConfig?.target) {
+      return globalConfig.target;
+    }
+
+    return DEFAULT_CONFIG_BY_TYPE[injectionType].target ?? 'both';
   }
 
   /**

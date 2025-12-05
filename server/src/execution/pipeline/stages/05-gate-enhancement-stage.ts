@@ -1,9 +1,9 @@
 // @lifecycle canonical - Enriches prompts with gate instructions prior to execution.
-import { METHODOLOGY_GATES } from '../../../gates/constants.js';
-import { formatCriteriaAsGuidance } from '../../../gates/utils/gate-guidance-formatter.js';
+import { formatCriteriaAsGuidance } from '../criteria-guidance.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
+import type { GateLoader } from '../../../gates/core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { GateReferenceResolver } from '../../../gates/services/gate-reference-resolver.js';
 import type {
@@ -106,6 +106,8 @@ export class GateEnhancementStage extends BasePipelineStage {
   readonly name = 'GateEnhancement';
   private readonly metricsProvider?: () => MetricsCollector | undefined;
   private readonly gatesConfigProvider?: GatesConfigProvider;
+  /** Cached methodology gate IDs loaded from GateLoader */
+  private methodologyGateIdsCache: Set<string> | null = null;
 
   constructor(
     private readonly gateService: IGateService | null,
@@ -115,11 +117,43 @@ export class GateEnhancementStage extends BasePipelineStage {
     private readonly frameworkManagerProvider: () => FrameworkManager | undefined,
     logger: Logger,
     metricsProvider?: () => MetricsCollector | undefined,
-    gatesConfigProvider?: GatesConfigProvider
+    gatesConfigProvider?: GatesConfigProvider,
+    private readonly gateLoader?: GateLoader
   ) {
     super(logger);
     this.metricsProvider = metricsProvider;
     this.gatesConfigProvider = gatesConfigProvider;
+  }
+
+  /**
+   * Get methodology gate IDs dynamically from GateLoader.
+   * Caches the result to avoid repeated disk reads.
+   */
+  private async getMethodologyGateIds(): Promise<Set<string>> {
+    if (this.methodologyGateIdsCache) {
+      return this.methodologyGateIdsCache;
+    }
+
+    if (!this.gateLoader) {
+      this.logger.debug('[GateEnhancementStage] No GateLoader available for methodology gate detection');
+      return new Set();
+    }
+
+    try {
+      const ids = await this.gateLoader.getMethodologyGateIds();
+      this.methodologyGateIdsCache = new Set(ids);
+      return this.methodologyGateIdsCache;
+    } catch (error) {
+      this.logger.warn('[GateEnhancementStage] Failed to load methodology gate IDs', { error });
+      return new Set();
+    }
+  }
+
+  /**
+   * Check if a gate ID is a methodology gate (synchronous check using cache).
+   */
+  private isMethodologyGate(gateId: string): boolean {
+    return this.methodologyGateIdsCache?.has(gateId) ?? false;
   }
 
   /**
@@ -256,10 +290,10 @@ export class GateEnhancementStage extends BasePipelineStage {
       });
       return gateIds;
     }
-    const hasMethodologyGate = gateIds.some((gate) => METHODOLOGY_GATES.has(gate));
+    const hasMethodologyGate = gateIds.some((gate) => this.isMethodologyGate(gate));
     if (hasMethodologyGate) {
       this.logger.debug('[GateEnhancementStage] ensureDefaultMethodologyGate - already has', {
-        existingGate: gateIds.find((gate) => METHODOLOGY_GATES.has(gate)),
+        existingGate: gateIds.find((gate) => this.isMethodologyGate(gate)),
       });
       return gateIds;
     }
@@ -344,6 +378,9 @@ export class GateEnhancementStage extends BasePipelineStage {
 
     const frameworksConfig = this.frameworksConfigProvider?.();
 
+    // Initialize methodology gate IDs cache for dynamic filtering
+    await this.getMethodologyGateIds();
+
     const registeredGates = await this.registerTemporaryGates(context);
 
     // Type-safe variant resolution
@@ -408,7 +445,7 @@ export class GateEnhancementStage extends BasePipelineStage {
     // Filter methodology gates if disabled
     if (frameworksConfig !== undefined && !frameworksConfig.enableMethodologyGates) {
       const beforeCount = gateIds.length;
-      gateIds = gateIds.filter((gate) => !METHODOLOGY_GATES.has(gate));
+      gateIds = gateIds.filter((gate) => !this.isMethodologyGate(gate));
       if (beforeCount !== gateIds.length) {
         context.diagnostics.info(this.name, 'Methodology gates filtered by config', {
           filtered: beforeCount - gateIds.length,
@@ -555,7 +592,7 @@ export class GateEnhancementStage extends BasePipelineStage {
       gateIds = this.ensureDefaultMethodologyGate(gateIds, frameworksConfig, activeFrameworkId);
 
       if (frameworksConfig !== undefined && !frameworksConfig.enableMethodologyGates) {
-        gateIds = gateIds.filter((gate) => !METHODOLOGY_GATES.has(gate));
+        gateIds = gateIds.filter((gate) => !this.isMethodologyGate(gate));
       }
 
       // Filter gates by step number (for step-specific targeting)

@@ -240,6 +240,11 @@ export interface LightweightGateDefinition {
     explicit_request?: boolean;
     framework_context?: string[];
   };
+  /**
+   * Gate type classification for dynamic identification.
+   * 'framework' gates are methodology-related and can be filtered when frameworks are disabled.
+   */
+  gate_type?: 'framework' | 'category' | 'custom';
 }
 
 /**

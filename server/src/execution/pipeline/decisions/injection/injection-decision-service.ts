@@ -8,12 +8,14 @@ import {
   MODIFIER_EFFECTS,
 } from './constants.js';
 import type {
+  ExecutionContextType,
   InjectionConfig,
   InjectionDecision,
   InjectionDecisionInput,
   InjectionFrequency,
   InjectionRuntimeOverride,
   InjectionState,
+  InjectionTarget,
   InjectionType,
 } from './types.js';
 
@@ -130,6 +132,7 @@ export class InjectionDecisionService {
     const state: InjectionState = {
       currentStep: input.currentStep,
       sessionOverrides: input.sessionOverrides,
+      executionContext: input.executionContext,
     };
 
     for (const type of INJECTION_TYPES) {
@@ -244,6 +247,9 @@ export class InjectionDecisionService {
     const runtimeOverride = this.runtimeOverrides.get(input.injectionType);
     const resolved = this.resolver.resolve(input.injectionType, input, runtimeOverride);
 
+    // Capture target from resolved config for later filtering
+    const target = resolved.config.target ?? 'both';
+
     // Check if globally disabled
     if (!resolved.config.enabled) {
       return {
@@ -251,6 +257,7 @@ export class InjectionDecisionService {
         reason: `Disabled in ${resolved.source}`,
         source: resolved.source,
         decidedAt: timestamp,
+        target,
       };
     }
 
@@ -267,15 +274,21 @@ export class InjectionDecisionService {
           reason: conditionResult.reason,
           source: resolved.source,
           decidedAt: timestamp,
+          target,
         };
       }
       if (conditionResult.action === 'inject') {
-        return {
-          inject: true,
-          reason: conditionResult.reason,
-          source: resolved.source,
-          decidedAt: timestamp,
-        };
+        // Apply target filtering before returning inject decision
+        return this.applyTargetFilter(
+          {
+            inject: true,
+            reason: conditionResult.reason,
+            source: resolved.source,
+            decidedAt: timestamp,
+            target,
+          },
+          input.executionContext
+        );
       }
       // 'inherit' falls through to frequency check
     }
@@ -288,17 +301,72 @@ export class InjectionDecisionService {
         input.totalSteps,
         resolved.config.frequency,
         timestamp,
-        resolved.source
+        resolved.source,
+        target
       );
-      return frequencyDecision;
+      // Apply target filtering to frequency decision
+      return this.applyTargetFilter(frequencyDecision, input.executionContext);
     }
 
-    // Default: inject
+    // Default: inject (with target filtering)
+    return this.applyTargetFilter(
+      {
+        inject: true,
+        reason: `Enabled by ${resolved.source}`,
+        source: resolved.source,
+        decidedAt: timestamp,
+        target,
+      },
+      input.executionContext
+    );
+  }
+
+  /**
+   * Apply target filtering to an injection decision.
+   * If the decision is to inject but the target doesn't match the execution context,
+   * convert it to a skip decision.
+   *
+   * @param decision - The base injection decision
+   * @param executionContext - Current execution context ('step' or 'gate_review')
+   * @returns Modified decision if target doesn't match, original otherwise
+   */
+  private applyTargetFilter(
+    decision: InjectionDecision,
+    executionContext?: ExecutionContextType
+  ): InjectionDecision {
+    // If not injecting, no filtering needed
+    if (!decision.inject) {
+      return decision;
+    }
+
+    const target = decision.target ?? 'both';
+
+    // 'both' always matches
+    if (target === 'both') {
+      return decision;
+    }
+
+    // If no execution context provided, allow injection (backward compatibility)
+    if (!executionContext) {
+      return decision;
+    }
+
+    // Check if target matches execution context
+    const matches =
+      (target === 'steps' && executionContext === 'step') ||
+      (target === 'gates' && executionContext === 'gate_review');
+
+    if (matches) {
+      return decision;
+    }
+
+    // Target doesn't match - convert to skip
     return {
-      inject: true,
-      reason: `Enabled by ${resolved.source}`,
-      source: resolved.source,
-      decidedAt: timestamp,
+      inject: false,
+      reason: `Target '${target}' doesn't match execution context '${executionContext}'`,
+      source: decision.source,
+      decidedAt: decision.decidedAt,
+      target,
     };
   }
 
@@ -356,7 +424,8 @@ export class InjectionDecisionService {
     totalSteps: number | undefined,
     frequency: InjectionFrequency,
     timestamp: number,
-    source: InjectionDecision['source']
+    source: InjectionDecision['source'],
+    target: InjectionTarget = 'both'
   ): InjectionDecision {
     switch (frequency.mode) {
       case 'never':
@@ -365,6 +434,7 @@ export class InjectionDecisionService {
           reason: 'Frequency mode is never',
           source,
           decidedAt: timestamp,
+          target,
         };
 
       case 'first-only':
@@ -374,6 +444,7 @@ export class InjectionDecisionService {
             reason: 'First step (first-only mode)',
             source,
             decidedAt: timestamp,
+            target,
           };
         }
         return {
@@ -381,6 +452,7 @@ export class InjectionDecisionService {
           reason: `Step ${currentStep} > 1 (first-only mode)`,
           source,
           decidedAt: timestamp,
+          target,
         };
 
       case 'every': {
@@ -393,6 +465,7 @@ export class InjectionDecisionService {
             reason: 'First step always injects',
             source,
             decidedAt: timestamp,
+            target,
           };
         }
 
@@ -407,6 +480,7 @@ export class InjectionDecisionService {
             reason: `Step ${currentStep} matches interval ${interval}`,
             source,
             decidedAt: timestamp,
+            target,
           };
         }
 
@@ -415,6 +489,7 @@ export class InjectionDecisionService {
           reason: `Step ${currentStep} doesn't match interval ${interval}`,
           source,
           decidedAt: timestamp,
+          target,
         };
       }
 
@@ -427,6 +502,7 @@ export class InjectionDecisionService {
           reason: 'Unknown frequency mode, defaulting to inject',
           source,
           decidedAt: timestamp,
+          target,
         };
       }
     }

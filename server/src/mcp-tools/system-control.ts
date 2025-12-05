@@ -60,7 +60,6 @@ import {
 } from '../execution/pipeline/decisions/injection/index.js';
 
 import type { GateGuidanceRenderer } from '../gates/guidance/GateGuidanceRenderer.js';
-import type { GatePerformanceAnalyzer } from '../gates/intelligence/GatePerformanceAnalyzer.js';
 import type { ConfigKey } from './config-utils.js';
 import type { FormatterExecutionContext } from './prompt-engine/core/types.js';
 
@@ -142,8 +141,6 @@ export class ConsolidatedSystemControl {
   private responseFormatter: ResponseFormatter;
   // Prompt guidance service
   private promptGuidanceService?: PromptGuidanceService;
-  // Clean architecture gate performance analytics
-  public gatePerformanceAnalyzer?: GatePerformanceAnalyzer;
   private gateGuidanceRenderer?: GateGuidanceRenderer;
   public startTime: number = Date.now();
 
@@ -226,14 +223,6 @@ export class ConsolidatedSystemControl {
   setMCPToolsManager(mcpToolsManager: any): void {
     this.mcpToolsManager = mcpToolsManager;
     this.logger.debug('MCPToolsManager reference configured for dynamic tool updates');
-  }
-
-  /**
-   * Set gate performance analyzer (- Clean Architecture)
-   */
-  setGatePerformanceAnalyzer(analyzer: GatePerformanceAnalyzer): void {
-    this.gatePerformanceAnalyzer = analyzer;
-    this.logger.debug('Gate performance analyzer configured for analytics');
   }
 
   /**
@@ -1280,42 +1269,6 @@ export class ConsolidatedSystemControl {
         : 0
     }%\n`;
 
-    // Clean architecture gate performance analytics
-    if (this.gatePerformanceAnalyzer) {
-      try {
-        const gateAnalytics = this.gatePerformanceAnalyzer.getPerformanceAnalytics();
-        response += `**Advanced Gate System**: Enabled\n`;
-        response += `**Total Gates Tracked**: ${gateAnalytics.totalGates}\n`;
-        response += `**Average Gate Execution Time**: ${Math.round(
-          gateAnalytics.avgExecutionTime
-        )}ms\n`;
-        response += `**Overall Gate Success Rate**: ${Math.round(
-          gateAnalytics.overallSuccessRate * 100
-        )}%\n`;
-
-        if (gateAnalytics.topPerformingGates.length > 0) {
-          response += `**Top Performing Gates**: ${gateAnalytics.topPerformingGates.join(', ')}\n`;
-        }
-
-        if (gateAnalytics.underperformingGates.length > 0) {
-          response += `**Needs Optimization**: ${gateAnalytics.underperformingGates.join(', ')}\n`;
-        }
-
-        if (gateAnalytics.recommendations.length > 0) {
-          response += `\n**Optimization Recommendations**:\n`;
-          gateAnalytics.recommendations.forEach((rec: string, index: number) => {
-            response += `${index + 1}. ${rec}\n`;
-          });
-        }
-      } catch (error) {
-        response += `**Advanced Gate System**: Error retrieving analytics\n`;
-      }
-    } else {
-      response += `**Advanced Gate System**: Not available\n`;
-    }
-
-    response += '\n';
-
     // System Resources
     if (this.systemAnalytics.memoryUsage) {
       response += '## 💾 System Resources\n\n';
@@ -2294,42 +2247,6 @@ class MaintenanceActionHandler extends ActionHandler {
           )
         : 0
     }%\n`;
-
-    // Clean architecture gate performance analytics
-    if (this.systemControl.gatePerformanceAnalyzer) {
-      try {
-        const gateAnalytics = this.systemControl.gatePerformanceAnalyzer.getPerformanceAnalytics();
-        response += `**Advanced Gate System**: Enabled\n`;
-        response += `**Total Gates Tracked**: ${gateAnalytics.totalGates}\n`;
-        response += `**Average Gate Execution Time**: ${Math.round(
-          gateAnalytics.avgExecutionTime
-        )}ms\n`;
-        response += `**Overall Gate Success Rate**: ${Math.round(
-          gateAnalytics.overallSuccessRate * 100
-        )}%\n`;
-
-        if (gateAnalytics.topPerformingGates.length > 0) {
-          response += `**Top Performing Gates**: ${gateAnalytics.topPerformingGates.join(', ')}\n`;
-        }
-
-        if (gateAnalytics.underperformingGates.length > 0) {
-          response += `**Needs Optimization**: ${gateAnalytics.underperformingGates.join(', ')}\n`;
-        }
-
-        if (gateAnalytics.recommendations.length > 0) {
-          response += `\n**Optimization Recommendations**:\n`;
-          gateAnalytics.recommendations.forEach((rec: string, index: number) => {
-            response += `${index + 1}. ${rec}\n`;
-          });
-        }
-      } catch (error) {
-        response += `**Advanced Gate System**: Error retrieving analytics\n`;
-      }
-    } else {
-      response += `**Advanced Gate System**: Not available\n`;
-    }
-
-    response += '\n';
 
     // System Resources
     if (this.systemControl.systemAnalytics.memoryUsage) {
