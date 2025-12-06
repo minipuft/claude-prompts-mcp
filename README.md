@@ -142,8 +142,11 @@ flowchart LR
 ```
 
 - **Templates**: Markdown files with Nunjucks (`{{var}}`).
-- **Frameworks**: Thinking methodologies (CAGEERF, ReACT) automatically injected into the system prompt based on configurable frequency. By default, framework guidance appears on every other chain step (1, 3, 5...) to reinforce the methodology without redundancy.
-- **Guidance Styles**: Instructional templates (`analytical`, `procedural`, `creative`, `reasoning`) in `server/prompts/guidance/` that shape how Claude approaches responses.
+- **Frameworks**: Structured thinking patterns (CAGEERF, ReACT, 5W1H, SCAMPER) that guide HOW Claude reasons through problems. When active, frameworks inject:
+  - **System prompt guidance**: Step-by-step methodology instructions
+  - **Methodology gates**: Auto-applied quality checks specific to the framework's phases
+  - **Tool overlays**: Context-aware tool descriptions showing current methodology state
+- **Guidance Styles**: Instructional templates (`analytical`, `procedural`, `creative`, `reasoning`) in `server/prompts/guidance/` that shape response format.
 - **Gates**: Quality criteria (e.g., "Must cite sources") injected into prompts for Claude to self-check. Use `:: criteria` inline or define in `server/src/gates/definitions/`.
 
 > **Injection Control**: Override defaults with modifiers: `%guided` forces framework injection, `%clean` skips all guidance, `%lean` keeps only gate checks. Configure default frequency in `config.json` under `injection.system-prompt.frequency`. See the [MCP Tooling Guide](docs/mcp-tooling-guide.md#understanding-framework-injection-frequency) for details.
@@ -152,7 +155,7 @@ flowchart LR
 
 - **🔥 Hot Reload**: Edit `server/prompts/my_prompt.md`, save, run `prompt_engine >>my_prompt`. It updates instantly.
 - **🔗 Chains**: Run multi-step logic. `analyze --> critique --> fix`.
-- **🧠 Frameworks**: Apply structured reasoning (ReACT, CAGEERF) to any prompt.
+- **🧠 Frameworks**: Apply proven thinking methodologies to any prompt. Use `@CAGEERF` for comprehensive planning, `@ReACT` for iterative problem-solving, `@5W1H` for thorough analysis, or `@SCAMPER` for creative brainstorming. The framework injects guidance AND auto-applies methodology-specific quality gates.
 - **🛡️ Gates**: Enforce quality standards on outputs.
 - **✨ Judge-Driven Selection**: Use `%judge` to have Claude analyze your task and select the best guidance style, framework, and gates automatically.
 
@@ -162,13 +165,13 @@ The `prompt_engine` supports a symbolic language for complex workflows.
 
 ### Symbolic Commands
 
-| **Symbol** | **Name**      | **Pipeline Action**                           | **Visual Mnemonics**          |
-| :--------: | :------------ | :-------------------------------------------- | :---------------------------- |
-|   `-->`    | **Chain**     | **Pipes** output from one step to the next    | 🔗 **Link** steps together    |
-|    `@`     | **Framework** | Injects **Thinking Models** (CAGEERF, ReACT)  | 🧠 **Brain** of the operation |
-|    `::`    | **Gate**      | Enforces **Quality Checks** before proceeding | 🛡️ **Shield** the output      |
-|    `%`     | **Modifier**  | Toggles **Execution Modes** (Menu/Clean/Lean) | ⚙️ **Config** the settings    |
-|    `#`     | **Style**     | Applies **Persona/Tone** presets              | 🎨 **Paint** the response     |
+| **Symbol** | **Name**      | **Pipeline Action**                                    | **Visual Mnemonics**          |
+| :--------: | :------------ | :----------------------------------------------------- | :---------------------------- |
+|   `-->`    | **Chain**     | **Pipes** output from one step to the next             | 🔗 **Link** steps together    |
+|    `@`     | **Framework** | Injects **Methodology + Auto-Gates** (CAGEERF, ReACT)  | 🧠 **Brain** of the operation |
+|    `::`    | **Gate**      | Enforces **Quality Checks** before proceeding          | 🛡️ **Shield** the output      |
+|    `%`     | **Modifier**  | Toggles **Execution Modes** (Menu/Clean/Lean)          | ⚙️ **Config** the settings    |
+|    `#`     | **Style**     | Applies **Persona/Tone** presets                       | 🎨 **Paint** the response     |
 
 ### Gate Retry & Enforcement (New)
 
@@ -190,22 +193,20 @@ Gates add quality criteria inline with your prompts using the `::` operator:
 Help me refactor this function :: 'keep it under 20 lines' :: 'add error handling'
 ```
 
-**With frameworks — add structured thinking:**
+**With frameworks — structured reasoning + auto-gates:**
+
+Frameworks inject methodology guidance AND auto-apply quality gates specific to the methodology's phases. Use `@` to apply a thinking pattern:
 
 ```text
 @CAGEERF Explain React hooks :: 'include practical examples' :: 'suitable for beginners'
 ```
 
-**Chained — multi-step with gates on each:**
+**Chained — break complex tasks into steps:**
+
+Use `-->` to pipeline outputs. Each step builds on the previous, with optional quality checks between:
 
 ```text
 Research the topic :: 'use recent sources' --> Summarize findings :: 'be concise' --> Create action items
-```
-
-**With style — shape the response format:**
-
-```text
-@ReACT Debug this error #style(analytical) :: 'show your reasoning step by step'
 ```
 
 **Structured — for complex validation:**
@@ -222,6 +223,12 @@ prompt_engine({
   ],
 });
 ```
+
+| Operator      | Symbol  | Value                                                   |
+| ------------- | ------- | ------------------------------------------------------- |
+| **Framework** | `@`     | Injects methodology guidance + auto-applies phase gates |
+| **Chain**     | `-->`   | Breaks complex tasks into manageable steps              |
+| **Gate**      | `::`    | Adds quality criteria Claude will self-check            |
 
 | Gate Format | Syntax                            | Best For                            |
 | ----------- | --------------------------------- | ----------------------------------- |

@@ -10,6 +10,17 @@ This handbook trains Claude Code (and any assistant) to behave like a senior dev
 - **Primary Goal**: Deliver safe, reviewable changes that honor MCP protocol guardrails, hot-reload expectations, and proper documentation maintenance.
 - **Source of Truth**: `server/dist/**`. Always confirm behavior there before describing or modifying functionality.
 
+### Runtime Requirements
+
+| Dependency | Version | Notes |
+|------------|---------|-------|
+| Node.js | `>=24` | LTS (Krypton). CI and Docker use `node:24-alpine`. |
+| TypeScript | `^5.9.3` | Strict mode enabled. |
+| Jest | `^30.0.0` | With `ts-jest` for ESM support. |
+| Express | `^4.18.2` | Migration to v5 pending (high risk). |
+| Zod | `^3.22.4` | Migration to v4 pending (high risk). |
+| MCP SDK | `^1.18.1` | `@modelcontextprotocol/sdk` for protocol compliance. |
+
 ---
 
 ## 2. Core Operating Principles

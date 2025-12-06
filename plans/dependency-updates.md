@@ -22,22 +22,12 @@ Tracking progress on Renovate bot dependency updates from [Issue #16](https://gi
 | TypeScript ^5.3.3 → ^5.9.3 | - | Low | 2025-12-05 | Aligned package.json with installed version |
 | Jest v29 → v30 | - | Medium | 2025-12-05 | All 564 tests passing |
 | @types/jest v29 → v30 | - | Low | 2025-12-05 | Type definitions for Jest 30 |
+| Node engine >=16 → >=24 | - | Medium | 2025-12-05 | LTS alignment, CI+Docker updated |
+| @types/node ^20 → ^24 | - | Low | 2025-12-05 | Aligned with engine constraint |
 
 ---
 
 ## Pending Updates
-
-### Medium Risk (Require Testing)
-
-#### [ ] Node v24 (Engine Constraint)
-- **Current**: `>=16`
-- **Target**: `v24.x` engine requirement
-- **Risk**: Medium - Updates engine constraint and @types/node
-- **Files affected**: `server/package.json`
-- **Pre-merge checklist**:
-  - [ ] Verify CI runs on Node 18+ (current)
-  - [ ] Check for Node 24-specific API usage
-  - [ ] Review @types/node changes
 
 ---
 
@@ -91,6 +81,7 @@ Tracking progress on Renovate bot dependency updates from [Issue #16](https://gi
 | 2025-12-05 | Jest 30 codebase analysis | No deprecated matchers found, Node version OK |
 | 2025-12-05 | TypeScript constraint updated | Package.json ^5.3.3 → ^5.9.3 to match installed version |
 | 2025-12-05 | Jest 30 migration complete | Upgraded jest/types, fixed 1 test expectation, all 564 tests passing |
+| 2025-12-05 | Node 24 engine update | Node 24 LTS (Oct 2025). Updated engine >=24, @types/node ^24, CI workflows, Dockerfile |
 
 ---
 

@@ -19,10 +19,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup Node.js 18
+      - name: Setup Node.js 24
         uses: actions/setup-node@v6
         with:
-          node-version: 18
+          node-version: 24
 
       - name: Install Renovate
         run: npm install -g renovate
