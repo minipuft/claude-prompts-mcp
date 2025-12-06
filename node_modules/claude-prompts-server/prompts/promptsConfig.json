@@ -1,0 +1,50 @@
+{
+  "categories": [
+    {
+      "id": "analysis",
+      "name": "Analysis",
+      "description": "Prompts for analyzing content and data"
+    },
+    {
+      "id": "development",
+      "name": "Development",
+      "description": "Prompts for software development and code quality"
+    },
+    {
+      "id": "documentation",
+      "name": "Documentation",
+      "description": "Prompts related to Documentation"
+    },
+    {
+      "id": "debugging",
+      "name": "debugging",
+      "description": "Prompts related to debugging"
+    },
+    {
+      "id": "content_processing",
+      "name": "content_processing",
+      "description": "Prompts related to content_processing"
+    },
+    {
+      "id": "general",
+      "name": "general",
+      "description": "Prompts related to general"
+    },
+    {
+      "id": "guidance",
+      "name": "Guidance",
+      "description": "Methodology guidance and structural frameworks",
+      "registerWithMcp": false
+    }
+  ],
+  "prompts": [],
+  "imports": [
+    "analysis/prompts.json",
+    "development/prompts.json",
+    "documentation/prompts.json",
+    "debugging/prompts.json",
+    "content_processing/prompts.json",
+    "general/prompts.json",
+    "guidance/prompts.json"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "prompts": [
+    {
+      "id": "readme_improver",
+      "name": "readme_improver",
+      "category": "documentation",
+      "description": "Rewrites documentation to align with the project's 'Builder/Hacker' ethos: practical, concise, quick-start focused, and free of enterprise jargon.",
+      "file": "readme_improver.md",
+      "arguments": [
+        {
+          "name": "content",
+          "type": "string",
+          "description": "The current README content, draft, or feature list to document."
+        },
+        {
+          "name": "context",
+          "type": "string",
+          "description": "The location/purpose of the README (e.g., 'Root', 'Server Internal', 'Component'). affects structure."
+        }
+      ]
+    }
+  ]
+}

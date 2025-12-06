@@ -107,39 +107,49 @@ prompt_manager list
 
 ## Core Concepts
 
-Not a static file reader. It's a template **render pipeline**:
-`User` -> `MCP Client` -> `Parser` -> `Plan` -> `Framework Injection` -> `Gate Check` -> `Template Render` -> `Client`
+Not a static file reader. It's a template **render pipeline** with a feedback loop:
 
 ```mermaid
 %%{init: {'theme': 'neutral', 'themeVariables': {'background':'#0b1224','primaryColor':'#e2e8f0','primaryBorderColor':'#1f2937','primaryTextColor':'#0f172a','lineColor':'#94a3b8','fontFamily':'"DM Sans","Segoe UI",sans-serif','fontSize':'14px','edgeLabelBackground':'#0b1224'}}}%%
-flowchart LR
+flowchart TB
     classDef actor fill:#0f172a,stroke:#cbd5e1,stroke-width:1.5px,color:#f8fafc;
-    classDef parser fill:#111827,stroke:#fbbf24,stroke-width:1.8px,color:#f8fafc;
+    classDef server fill:#111827,stroke:#fbbf24,stroke-width:1.8px,color:#f8fafc;
     classDef process fill:#e2e8f0,stroke:#1f2937,stroke-width:1.6px,color:#0f172a;
-    classDef success fill:#e0f2fe,stroke:#0284c7,stroke-width:1.6px,color:#0f172a;
-    classDef failure fill:#fee2e2,stroke:#ef4444,stroke-width:1.6px,color:#7f1d1d;
     classDef client fill:#f4d0ff,stroke:#a855f7,stroke-width:1.6px,color:#2e1065;
-    classDef container fill:#111827,stroke:#94a3b8,stroke-width:1.2px,stroke-dasharray:7 4,color:#e2e8f0;
+    classDef decision fill:#fef3c7,stroke:#f59e0b,stroke-width:1.6px,color:#78350f;
 
     linkStyle default stroke:#94a3b8,stroke-width:2px
 
-    User["User"]:::actor --> Client["MCP Client"]:::client
-    Client --> Parser["Symbolic Parser"]:::parser
-    Parser --> Plan["Execution Plan"]:::process
+    User["1. User sends command"]:::actor
+    User -->|">>analyze @CAGEERF :: 'cite sources'"| Server
 
-    subgraph Pipeline["Render Pipeline"]
+    subgraph Server["MCP Server"]
         direction TB
-        Plan --> Framework["Inject Framework"]:::process
-        Framework --> Gate{"Gate Check"}:::process
-        Gate -- Pass --> Render["Render Template"]:::success
-        Gate -- Fail --> Retry["Retry / Abort"]:::failure
+        Parse["2. Parse operators"]:::process
+        Inject["3. Inject framework + gates into template"]:::process
+        Render["4. Render final prompt"]:::process
+        Parse --> Inject --> Render
     end
 
-    class Pipeline container
+    Server:::server
+    Render -->|"Returns prompt with gate criteria at bottom"| Client
 
-    Render --> Client
-    Client -.->|"Chain"| Parser
+    Client["5. Claude executes prompt, self-checks gates"]:::client
+    Client -->|"Sends verdict: PASS/FAIL + output"| Decide
+
+    Decide{"6. Server decides"}:::decision
+    Decide -->|"PASS + more chain steps"| Server
+    Decide -->|"FAIL: retry with feedback"| Server
+    Decide -->|"Done"| Result["7. Return to user"]:::actor
 ```
+
+**The loop explained:**
+1. **You send** a command with operators (`@framework`, `:: gates`, `-->` chains)
+2. **Server injects** methodology guidance + gate criteria into the template
+3. **Server returns** the rendered prompt (gates appear as self-check instructions)
+4. **Claude executes** the prompt and evaluates itself against the gate criteria
+5. **Claude responds** with a verdict (PASS/FAIL) and the output
+6. **Server routes**: next chain step (PASS), retry (FAIL), or return result (done)
 
 - **Templates**: Markdown files with Nunjucks (`{{var}}`).
 - **Frameworks**: Structured thinking patterns (CAGEERF, ReACT, 5W1H, SCAMPER) that guide HOW Claude reasons through problems. When active, frameworks inject:

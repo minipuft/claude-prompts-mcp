@@ -1,0 +1,12 @@
+version: 1
+runtime: "container"
+build:
+  dockerfile: "src/Dockerfile"
+  context: "."
+startCommand:
+  type: "http"
+  command: ["node", "dist/index.js", "--transport=sse", "--quiet"]
+  configSchema:
+    type: "object"
+    properties: {}
+

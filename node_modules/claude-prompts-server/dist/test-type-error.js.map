@@ -1,0 +1,1 @@
+{"version":3,"file":"test-type-error.js","sourceRoot":"","sources":["../src/test-type-error.ts"],"names":[],"mappings":"AAAA,qEAAqE;AACrE,6CAA6C;AAE7C,MAAM,CAAC,MAAM,aAAa,GAAG,GAAW,EAAE;IACxC,MAAM,WAAW,GAAW,kBAAkB,CAAC,CAAC,wCAAwC;IACxF,OAAO,WAAW,CAAC;AACrB,CAAC,CAAC"}
