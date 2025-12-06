@@ -56,7 +56,8 @@ export function clearRequireCache(): void {
     delete require.cache[modulePath];
   });
 
-  console.log(`Cleared ${promptPaths.length} prompt-related modules from require cache`);
+  // Use stderr to avoid corrupting STDIO protocol
+  console.error(`Cleared ${promptPaths.length} prompt-related modules from require cache`);
 }
 
 /**
@@ -260,10 +261,11 @@ export function parseArgs(args: string[]): Record<string, string> {
 
 /**
  * Mock logger for testing purposes
+ * Uses stderr to avoid corrupting STDIO protocol
  */
 export class MockLogger {
   info(message: string, ...args: any[]): void {
-    console.log(`[INFO] ${message}`, ...args);
+    console.error(`[INFO] ${message}`, ...args);
   }
 
   error(message: string, ...args: any[]): void {
@@ -275,7 +277,7 @@ export class MockLogger {
   }
 
   debug(message: string, ...args: any[]): void {
-    console.log(`[DEBUG] ${message}`, ...args);
+    console.error(`[DEBUG] ${message}`, ...args);
   }
 
   setTransport(_transport: string): void {

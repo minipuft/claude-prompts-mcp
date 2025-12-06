@@ -6,6 +6,9 @@
  * classification capabilities with clear separation of concerns.
  */
 
+import os from 'node:os';
+import path from 'node:path';
+
 import { createLogger } from '../../../logging/index.js';
 import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
 import { ConvertedPrompt } from '../../../types/index.js';
@@ -13,7 +16,7 @@ import { isChainPrompt } from '../../../utils/chainUtils.js';
 import { PromptClassification } from '../core/types.js';
 
 const logger = createLogger({
-  logFile: '/tmp/prompt-classifier.log',
+  logFile: path.join(os.tmpdir(), 'prompt-classifier.log'),
   transport: 'stdio',
   enableDebug: false,
   configuredLevel: 'info',

@@ -116,40 +116,46 @@ flowchart TB
     classDef server fill:#111827,stroke:#fbbf24,stroke-width:1.8px,color:#f8fafc;
     classDef process fill:#e2e8f0,stroke:#1f2937,stroke-width:1.6px,color:#0f172a;
     classDef client fill:#f4d0ff,stroke:#a855f7,stroke-width:1.6px,color:#2e1065;
+    classDef clientbg fill:#1a0a24,stroke:#a855f7,stroke-width:1.8px,color:#f8fafc;
     classDef decision fill:#fef3c7,stroke:#f59e0b,stroke-width:1.6px,color:#78350f;
 
     linkStyle default stroke:#94a3b8,stroke-width:2px
 
     User["1. User sends command"]:::actor
-    User -->|">>analyze @CAGEERF :: 'cite sources'"| Server
+    User -->|">>analyze @CAGEERF :: 'cite sources'"| Parse
 
     subgraph Server["MCP Server"]
         direction TB
         Parse["2. Parse operators"]:::process
-        Inject["3. Inject framework + gates into template"]:::process
-        Render["4. Render final prompt"]:::process
+        Inject["3. Inject framework + gates"]:::process
+        Render["4. Render template/prompt"]:::process
+        Decide{"6. Route verdict"}:::decision
         Parse --> Inject --> Render
     end
-
     Server:::server
-    Render -->|"Returns prompt with gate criteria at bottom"| Client
 
-    Client["5. Claude executes prompt, self-checks gates"]:::client
-    Client -->|"Sends verdict: PASS/FAIL + output"| Decide
+    subgraph Client["Claude (Client)"]
+        direction TB
+        Execute["5. Execute prompt, self-check gates"]:::client
+    end
+    Client:::clientbg
 
-    Decide{"6. Server decides"}:::decision
-    Decide -->|"PASS + more chain steps"| Server
-    Decide -->|"FAIL: retry with feedback"| Server
+    Render -->|"Prompt with gate criteria"| Execute
+    Execute -->|"Verdict + output"| Decide
+
+    Decide -->|"PASS → render next step"| Render
+    Decide -->|"FAIL → render retry prompt"| Render
     Decide -->|"Done"| Result["7. Return to user"]:::actor
 ```
 
-**The loop explained:**
+**The feedback loop:**
+
 1. **You send** a command with operators (`@framework`, `:: gates`, `-->` chains)
-2. **Server injects** methodology guidance + gate criteria into the template
-3. **Server returns** the rendered prompt (gates appear as self-check instructions)
+2. **Server parses** operators and injects methodology guidance + gate criteria
+3. **Server returns** the rendered prompt (gates appear as self-check instructions at the bottom)
 4. **Claude executes** the prompt and evaluates itself against the gate criteria
-5. **Claude responds** with a verdict (PASS/FAIL) and the output
-6. **Server routes**: next chain step (PASS), retry (FAIL), or return result (done)
+5. **Claude responds** with a verdict (PASS/FAIL) and its output
+6. **Server routes**: renders next chain step (PASS), renders retry with feedback (FAIL), or returns final result (done)
 
 - **Templates**: Markdown files with Nunjucks (`{{var}}`).
 - **Frameworks**: Structured thinking patterns (CAGEERF, ReACT, 5W1H, SCAMPER) that guide HOW Claude reasons through problems. When active, frameworks inject:
@@ -175,13 +181,13 @@ The `prompt_engine` supports a symbolic language for complex workflows.
 
 ### Symbolic Commands
 
-| **Symbol** | **Name**      | **Pipeline Action**                                    | **Visual Mnemonics**          |
-| :--------: | :------------ | :----------------------------------------------------- | :---------------------------- |
-|   `-->`    | **Chain**     | **Pipes** output from one step to the next             | 🔗 **Link** steps together    |
-|    `@`     | **Framework** | Injects **Methodology + Auto-Gates** (CAGEERF, ReACT)  | 🧠 **Brain** of the operation |
-|    `::`    | **Gate**      | Enforces **Quality Checks** before proceeding          | 🛡️ **Shield** the output      |
-|    `%`     | **Modifier**  | Toggles **Execution Modes** (Menu/Clean/Lean)          | ⚙️ **Config** the settings    |
-|    `#`     | **Style**     | Applies **Persona/Tone** presets                       | 🎨 **Paint** the response     |
+| **Symbol** | **Name**      | **Pipeline Action**                                   | **Visual Mnemonics**          |
+| :--------: | :------------ | :---------------------------------------------------- | :---------------------------- |
+|   `-->`    | **Chain**     | **Pipes** output from one step to the next            | 🔗 **Link** steps together    |
+|    `@`     | **Framework** | Injects **Methodology + Auto-Gates** (CAGEERF, ReACT) | 🧠 **Brain** of the operation |
+|    `::`    | **Gate**      | Enforces **Quality Checks** before proceeding         | 🛡️ **Shield** the output      |
+|    `%`     | **Modifier**  | Toggles **Execution Modes** (Menu/Clean/Lean)         | ⚙️ **Config** the settings    |
+|    `#`     | **Style**     | Applies **Persona/Tone** presets                      | 🎨 **Paint** the response     |
 
 ### Gate Retry & Enforcement (New)
 
@@ -234,11 +240,11 @@ prompt_engine({
 });
 ```
 
-| Operator      | Symbol  | Value                                                   |
-| ------------- | ------- | ------------------------------------------------------- |
-| **Framework** | `@`     | Injects methodology guidance + auto-applies phase gates |
-| **Chain**     | `-->`   | Breaks complex tasks into manageable steps              |
-| **Gate**      | `::`    | Adds quality criteria Claude will self-check            |
+| Operator      | Symbol | Value                                                   |
+| ------------- | ------ | ------------------------------------------------------- |
+| **Framework** | `@`    | Injects methodology guidance + auto-applies phase gates |
+| **Chain**     | `-->`  | Breaks complex tasks into manageable steps              |
+| **Gate**      | `::`   | Adds quality criteria Claude will self-check            |
 
 | Gate Format | Syntax                            | Best For                            |
 | ----------- | --------------------------------- | ----------------------------------- |

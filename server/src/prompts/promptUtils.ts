@@ -7,9 +7,10 @@ import { PromptData, PromptsConfigFile } from '../types.js';
 import type { Dirent } from 'node:fs';
 
 // Create a simple logger since we can't import from index.ts
+// Uses stderr to avoid corrupting STDIO protocol
 const log = {
   info: (message: string, ...args: any[]) => {
-    console.log(`[INFO] ${message}`, ...args);
+    console.error(`[INFO] ${message}`, ...args);
   },
   error: (message: string, ...args: any[]) => {
     console.error(`[ERROR] ${message}`, ...args);

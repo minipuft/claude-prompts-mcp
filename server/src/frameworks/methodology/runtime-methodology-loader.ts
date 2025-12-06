@@ -96,7 +96,8 @@ export class RuntimeMethodologyLoader {
     this.debug = config.debug ?? false;
 
     if (this.debug) {
-      console.log(`[RuntimeMethodologyLoader] Using directory: ${this.methodologiesDir}`);
+      // Use stderr to avoid corrupting STDIO protocol
+      console.error(`[RuntimeMethodologyLoader] Using directory: ${this.methodologiesDir}`);
     }
   }
 
@@ -123,7 +124,7 @@ export class RuntimeMethodologyLoader {
 
       if (!existsSync(entryPath)) {
         if (this.debug) {
-          console.log(`[RuntimeMethodologyLoader] Entry point not found: ${entryPath}`);
+          console.error(`[RuntimeMethodologyLoader] Entry point not found: ${entryPath}`);
         }
         return undefined;
       }
@@ -165,7 +166,7 @@ export class RuntimeMethodologyLoader {
       }
 
       if (this.debug) {
-        console.log(`[RuntimeMethodologyLoader] Loaded: ${definition.name} (${normalizedId})`);
+        console.error(`[RuntimeMethodologyLoader] Loaded: ${definition.name} (${normalizedId})`);
       }
 
       return definition;

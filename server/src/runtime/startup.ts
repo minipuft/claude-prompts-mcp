@@ -1,263 +1,359 @@
 // @lifecycle canonical - Handles early startup diagnostics and rollback wiring.
 /**
  * Server Root Detection and Startup Utilities
- * Robust server root directory detection for different execution contexts
+ * Robust server root directory detection for different execution contexts:
+ * - Local development (node dist/index.js)
+ * - Claude Desktop (absolute path invocation)
+ * - Global npm install (npm install -g)
+ * - npx execution (temporary install)
+ * - Local npm install (node_modules/.bin/)
  */
 
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'url';
+
+interface DetectionStrategy {
+  name: string;
+  priority: 'high' | 'medium' | 'low' | 'deprecated';
+  fn: () => Promise<string | null>;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  missing: string[];
+  root: string;
+}
 
 /**
  * Server Root Detector
  * Handles robust server root directory detection using multiple strategies
- * optimized for different execution contexts (direct execution vs Claude Desktop)
+ * optimized for different execution contexts (npm install, Claude Desktop, development)
  */
 export class ServerRootDetector {
+  private hasWarnedEnvDeprecation = false;
+  private isVerbose = false;
+  private isQuiet = false;
+
   /**
    * Determine the server root directory using multiple strategies
-   * This is more robust for different execution contexts (direct execution vs Claude Desktop)
+   * Priority order:
+   * 1. Package Resolution - Find package.json with matching name (npm installs)
+   * 2. Script Entry Point - Resolve symlinks from process.argv[1]
+   * 3. Module URL - Walk up from import.meta.url
+   * 4. Environment Variable - MCP_SERVER_ROOT (deprecated)
+   * 5. CWD Fallback - process.cwd() patterns (last resort)
    */
   async determineServerRoot(): Promise<string> {
-    // Check for debug/verbose logging flags
     const args = process.argv.slice(2);
-    const isVerbose = args.includes('--verbose') || args.includes('--debug-startup');
-    const isQuiet = args.includes('--quiet');
+    this.isVerbose = args.includes('--verbose') || args.includes('--debug-startup');
+    this.isQuiet = args.includes('--quiet');
 
-    // Default to quiet mode (no output) unless verbose is specified
-    const shouldShowOutput = isVerbose;
+    const strategies: DetectionStrategy[] = [
+      {
+        name: 'package-resolution',
+        priority: 'high',
+        fn: () => this.resolveFromPackage(),
+      },
+      {
+        name: 'script-entry-point',
+        priority: 'high',
+        fn: () => this.resolveFromScriptPath(),
+      },
+      {
+        name: 'module-url',
+        priority: 'medium',
+        fn: () => this.resolveFromModuleUrl(),
+      },
+      {
+        name: 'environment-variable',
+        priority: 'deprecated',
+        fn: () => this.resolveFromEnvironment(),
+      },
+      {
+        name: 'cwd-fallback',
+        priority: 'low',
+        fn: () => this.resolveFromCwd(),
+      },
+    ];
 
-    // Early termination: If environment variable is set, use it immediately
-    if (process.env.MCP_SERVER_ROOT) {
-      const envPath = path.resolve(process.env.MCP_SERVER_ROOT);
+    if (this.isVerbose) {
+      this.logDiagnosticInfo();
+    }
+
+    for (const strategy of strategies) {
       try {
-        const configPath = path.join(envPath, 'config.json');
-        const fs = await import('node:fs/promises');
-        await fs.access(configPath);
-
-        if (shouldShowOutput) {
-          console.error(`✓ SUCCESS: MCP_SERVER_ROOT environment variable`);
-          console.error(`  Path: ${envPath}`);
-          console.error(`  Config found: ${configPath}`);
+        const result = await strategy.fn();
+        if (result) {
+          const validation = await this.validateServerRoot(result);
+          if (validation.valid) {
+            if (this.isVerbose) {
+              console.error(`✓ SUCCESS: ${strategy.name}`);
+              console.error(`  Path: ${result}`);
+              console.error(`  Priority: ${strategy.priority}`);
+            }
+            return result;
+          } else if (this.isVerbose) {
+            console.error(`⚠ PARTIAL: ${strategy.name} found ${result}`);
+            console.error(`  Missing: ${validation.missing.join(', ')}`);
+          }
+        } else if (this.isVerbose) {
+          console.error(`✗ SKIP: ${strategy.name} returned null`);
         }
-        return envPath;
       } catch (error) {
-        if (isVerbose) {
-          console.error(`✗ WARNING: MCP_SERVER_ROOT env var set but invalid`);
-          console.error(`  Tried path: ${envPath}`);
+        if (this.isVerbose) {
+          console.error(`✗ FAILED: ${strategy.name}`);
           console.error(`  Error: ${error instanceof Error ? error.message : String(error)}`);
-          console.error(`  Falling back to automatic detection...`);
         }
       }
     }
 
-    // Build strategies in optimal order (most likely to succeed first)
-    const strategies = this.buildDetectionStrategies();
-
-    // Only show diagnostic information in verbose mode
-    if (isVerbose) {
-      this.logDiagnosticInfo(strategies);
-    }
-
-    // Test strategies with optimized flow
-    return await this.testStrategies(strategies, isVerbose, shouldShowOutput);
+    throw new Error(this.generateErrorMessage());
   }
 
   /**
-   * Build detection strategies in optimal order
+   * Strategy 1: Package Resolution (Primary for npm installs)
+   * Walks up from the current module to find package.json with matching name
    */
-  private buildDetectionStrategies() {
-    const strategies = [];
+  private async resolveFromPackage(): Promise<string | null> {
+    try {
+      const __filename = fileURLToPath(import.meta.url);
+      let dir = path.dirname(__filename);
 
-    // Strategy 1: process.argv[1] script location (most successful in Claude Desktop)
-    if (process.argv[1]) {
-      const scriptPath = process.argv[1];
-
-      // Primary strategy: Direct script location to server root
-      strategies.push({
-        name: 'process.argv[1] script location',
-        path: path.dirname(path.dirname(scriptPath)), // Go up from dist to server root
-        source: `script: ${scriptPath}`,
-        priority: 'high',
-      });
+      // Walk up to find package.json (max 5 levels for dist/runtime/startup.js)
+      for (let i = 0; i < 5; i++) {
+        const pkgPath = path.join(dir, 'package.json');
+        try {
+          const content = await fs.readFile(pkgPath, 'utf8');
+          const pkg = JSON.parse(content);
+          if (pkg.name === 'claude-prompts-server') {
+            if (this.isVerbose) {
+              console.error(`  Found package.json at: ${pkgPath}`);
+              console.error(`  Package name matches: ${pkg.name}`);
+            }
+            return dir;
+          }
+        } catch {
+          // Not found at this level, continue walking up
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) break; // Reached filesystem root
+        dir = parent;
+      }
+    } catch {
+      // Strategy failed
     }
+    return null;
+  }
 
-    // Strategy 2: import.meta.url (current module location) - reliable fallback
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    strategies.push({
-      name: 'import.meta.url relative',
-      path: path.join(__dirname, '..', '..'),
-      source: `module: ${__filename}`,
-      priority: 'medium',
-    });
+  /**
+   * Strategy 2: Script Entry Point (Claude Desktop, direct node)
+   * Resolves symlinks to find actual package location
+   */
+  private async resolveFromScriptPath(): Promise<string | null> {
+    if (!process.argv[1]) return null;
 
-    // Strategy 3: Common Claude Desktop patterns (ordered by likelihood)
-    const commonPaths = [
-      { path: path.join(process.cwd(), 'server'), desc: 'cwd/server' },
-      { path: process.cwd(), desc: 'cwd' },
-      { path: path.join(process.cwd(), '..', 'server'), desc: 'parent/server' },
-      { path: path.join(__dirname, '..', '..', '..'), desc: 'module parent' },
+    try {
+      // Resolve symlinks to get actual file location
+      // This handles: /usr/local/bin/claude-prompts-server -> actual package
+      const realPath = await fs.realpath(process.argv[1]);
+      const scriptDir = path.dirname(realPath);
+
+      // Script is in dist/, go up one level to server root
+      const serverRoot = path.dirname(scriptDir);
+
+      if (this.isVerbose) {
+        console.error(`  process.argv[1]: ${process.argv[1]}`);
+        console.error(`  Resolved to: ${realPath}`);
+        console.error(`  Server root: ${serverRoot}`);
+      }
+
+      // Validate config.json exists
+      const configPath = path.join(serverRoot, 'config.json');
+      await fs.access(configPath);
+      return serverRoot;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Strategy 3: Module URL Resolution
+   * Uses import.meta.url to find package root
+   */
+  private async resolveFromModuleUrl(): Promise<string | null> {
+    try {
+      const __filename = fileURLToPath(import.meta.url);
+      // startup.ts is at dist/runtime/startup.js
+      // Need to go up 2 levels: runtime -> dist -> server root
+      const serverRoot = path.resolve(path.dirname(__filename), '..', '..');
+
+      if (this.isVerbose) {
+        console.error(`  Module location: ${__filename}`);
+        console.error(`  Resolved root: ${serverRoot}`);
+      }
+
+      const configPath = path.join(serverRoot, 'config.json');
+      await fs.access(configPath);
+      return serverRoot;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Strategy 4: Environment Variable (Deprecated)
+   * Still works but emits deprecation warning
+   */
+  private async resolveFromEnvironment(): Promise<string | null> {
+    const envPath = process.env.MCP_SERVER_ROOT;
+    if (!envPath) return null;
+
+    try {
+      const resolved = path.resolve(envPath);
+      const configPath = path.join(resolved, 'config.json');
+      await fs.access(configPath);
+
+      // Emit deprecation warning (once per session)
+      if (!this.hasWarnedEnvDeprecation && !this.isQuiet) {
+        console.error(
+          '[DEPRECATION] MCP_SERVER_ROOT environment variable is deprecated.'
+        );
+        console.error(
+          '  Server root is now auto-detected from package location.'
+        );
+        console.error(
+          '  This variable will be removed in v2.0. You can safely remove it.'
+        );
+        this.hasWarnedEnvDeprecation = true;
+      }
+
+      return resolved;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Strategy 5: CWD Fallback (Last resort, development only)
+   */
+  private async resolveFromCwd(): Promise<string | null> {
+    const candidates = [
+      process.cwd(),
+      path.join(process.cwd(), 'server'),
     ];
 
-    for (const { path: commonPath, desc } of commonPaths) {
-      strategies.push({
-        name: `common pattern (${desc})`,
-        path: commonPath,
-        source: `pattern: ${commonPath}`,
-        priority: 'low',
-      });
+    for (const candidate of candidates) {
+      try {
+        const configPath = path.join(candidate, 'config.json');
+        await fs.access(configPath);
+
+        if (this.isVerbose) {
+          console.error(`  Found via cwd: ${candidate}`);
+        }
+        return candidate;
+      } catch {
+        // Try next candidate
+      }
     }
 
-    return strategies;
+    return null;
+  }
+
+  /**
+   * Validate that a directory is a valid server root
+   * Checks for required files and directories
+   */
+  private async validateServerRoot(root: string): Promise<ValidationResult> {
+    const required = [
+      'config.json',
+      'prompts',
+    ];
+
+    // src/gates/definitions is optional (may be in dist for published packages)
+    const optional = [
+      'src/gates/definitions',
+      'dist/gates/definitions',
+    ];
+
+    const missing: string[] = [];
+
+    for (const item of required) {
+      try {
+        await fs.access(path.join(root, item));
+      } catch {
+        missing.push(item);
+      }
+    }
+
+    // Check at least one optional path exists
+    let hasOptional = false;
+    for (const item of optional) {
+      try {
+        await fs.access(path.join(root, item));
+        hasOptional = true;
+        break;
+      } catch {
+        // Continue checking
+      }
+    }
+
+    // Don't require gates directory - it may be bundled differently
+    // Only fail on missing required items
+
+    return {
+      valid: missing.length === 0,
+      missing,
+      root,
+    };
   }
 
   /**
    * Log diagnostic information for troubleshooting
    */
-  private logDiagnosticInfo(strategies: any[]) {
-    console.error('=== SERVER ROOT DETECTION STRATEGIES ===');
-    console.error(`Environment: process.cwd() = ${process.cwd()}`);
-    console.error(`Environment: process.argv[0] = ${process.argv[0]}`);
-    console.error(`Environment: process.argv[1] = ${process.argv[1] || 'undefined'}`);
-    console.error(`Environment: __filename = ${fileURLToPath(import.meta.url)}`);
-    console.error(`Environment: MCP_SERVER_ROOT = ${process.env.MCP_SERVER_ROOT || 'undefined'}`);
-    console.error(`Strategies to test: ${strategies.length}`);
+  private logDiagnosticInfo(): void {
+    console.error('=== SERVER ROOT DETECTION ===');
+    console.error(`process.cwd(): ${process.cwd()}`);
+    console.error(`process.argv[0]: ${process.argv[0]}`);
+    console.error(`process.argv[1]: ${process.argv[1] || 'undefined'}`);
+    console.error(`import.meta.url: ${import.meta.url}`);
+    console.error(`MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || 'undefined'}`);
     console.error('');
   }
 
   /**
-   * Test strategies with optimized flow
+   * Generate actionable error message when all strategies fail
    */
-  private async testStrategies(
-    strategies: any[],
-    isVerbose: boolean,
-    shouldShowOutput: boolean
-  ): Promise<string> {
-    let lastHighPriorityIndex = -1;
-    for (let i = 0; i < strategies.length; i++) {
-      const strategy = strategies[i];
+  private generateErrorMessage(): string {
+    return `
+Unable to detect server root directory.
 
-      // Track where high-priority strategies end for early termination logic
-      if (strategy.priority === 'high') {
-        lastHighPriorityIndex = i;
-      }
+This usually happens when:
+1. The package was not installed correctly
+2. Required files are missing (config.json, prompts/)
+3. Running from an unexpected directory
 
-      try {
-        const resolvedPath = path.resolve(strategy.path);
+SOLUTIONS:
 
-        // Check if config.json exists in this location
-        const configPath = path.join(resolvedPath, 'config.json');
-        const fs = await import('node:fs/promises');
-        await fs.access(configPath);
+If running from source:
+  cd /path/to/claude-prompts-mcp/server
+  node dist/index.js
 
-        // Success! Only log in verbose mode
-        if (shouldShowOutput) {
-          console.error(`✓ SUCCESS: ${strategy.name}`);
-          console.error(`  Path: ${resolvedPath}`);
-          console.error(`  Source: ${strategy.source}`);
-          console.error(`  Config found: ${configPath}`);
+If installed via npm:
+  npm uninstall -g claude-prompts-server
+  npm install -g claude-prompts-server
 
-          // Show efficiency info in verbose mode
-          if (isVerbose) {
-            console.error(
-              `  Strategy #${i + 1}/${strategies.length} (${strategy.priority} priority)`
-            );
-            console.error(`  Skipped ${strategies.length - i - 1} remaining strategies`);
-          }
-        }
-
-        return resolvedPath;
-      } catch (error) {
-        // Only log failures in verbose mode
-        if (isVerbose) {
-          console.error(`✗ FAILED: ${strategy.name}`);
-          console.error(`  Tried path: ${path.resolve(strategy.path)}`);
-          console.error(`  Source: ${strategy.source}`);
-          console.error(`  Priority: ${strategy.priority}`);
-          console.error(`  Error: ${error instanceof Error ? error.message : String(error)}`);
-        }
-
-        // Early termination: If all high-priority strategies fail and we're not in verbose mode,
-        // provide a simplified error message encouraging environment variable usage
-        if (i === lastHighPriorityIndex && !isVerbose && lastHighPriorityIndex >= 0) {
-          if (shouldShowOutput) {
-            console.error(
-              `⚠️  High-priority detection strategies failed. Trying fallback methods...`
-            );
-            console.error(
-              `💡 Tip: Set MCP_SERVER_ROOT environment variable for guaranteed detection`
-            );
-            console.error(`📝 Use --verbose to see detailed strategy testing`);
-          }
-        }
+For Claude Desktop, ensure claude_desktop_config.json uses absolute paths:
+  {
+    "mcpServers": {
+      "claude-prompts-mcp": {
+        "command": "node",
+        "args": ["/full/path/to/server/dist/index.js"]
       }
     }
-
-    // If all strategies fail, provide optimized troubleshooting information
-    const attemptedPaths = strategies
-      .map((s, i) => `  ${i + 1}. ${s.name} (${s.priority}): ${path.resolve(s.path)}`)
-      .join('\n');
-
-    const troubleshootingInfo = this.generateTroubleshootingInfo(attemptedPaths);
-
-    console.error(troubleshootingInfo);
-
-    throw new Error(
-      `Unable to auto-detect server root directory after testing ${strategies.length} strategies.\n\n` +
-        `SOLUTION OPTIONS:\n` +
-        `1. [RECOMMENDED] Set MCP_SERVER_ROOT environment variable for reliable detection\n` +
-        `2. Ensure config.json is present in your server directory\n` +
-        `3. Check file permissions and directory access\n\n` +
-        `See detailed troubleshooting information above.`
-    );
   }
 
-  /**
-   * Generate comprehensive troubleshooting information
-   */
-  private generateTroubleshootingInfo(attemptedPaths: string): string {
-    return `
-TROUBLESHOOTING CLAUDE DESKTOP ISSUES:
-
-🎯 SOLUTION OPTIONS:
-
-1. Set MCP_SERVER_ROOT environment variable (most reliable):
-   Windows: set MCP_SERVER_ROOT=E:\\path\\to\\claude-prompts-mcp\\server
-   macOS/Linux: export MCP_SERVER_ROOT=/path/to/claude-prompts-mcp/server
-
-2. Verify file structure - ensure these files exist:
-   • config.json (main server configuration)
-   • prompts/ directory (with promptsConfig.json)
-   • dist/ directory (compiled JavaScript)
-
-3. Check file permissions and directory access
-
-📁 Claude Desktop Configuration:
-   Update your claude_desktop_config.json:
-   {
-     "mcpServers": {
-       "claude-prompts-mcp": {
-         "command": "node",
-         "args": ["E:\\\\full\\\\path\\\\to\\\\server\\\\dist\\\\index.js", "--transport=stdio"],
-         "env": {
-           "MCP_SERVER_ROOT": "E:\\\\full\\\\path\\\\to\\\\server"
-         }
-       }
-     }
-   }
-
-🔧 Alternative Solutions:
-   1. Create wrapper script that sets working directory before launching server
-   2. Use absolute paths in your Claude Desktop configuration
-   3. Run from the correct working directory (server/)
-
-🐛 Debug Mode:
-   Use --verbose or --debug-startup flag to see detailed strategy testing
-
-📊 Detection Summary:
-   Current working directory: ${process.cwd()}
-   Strategies tested (in order of priority):
-${attemptedPaths}
+For debugging, run with --verbose flag to see detection details.
 `;
   }
 }

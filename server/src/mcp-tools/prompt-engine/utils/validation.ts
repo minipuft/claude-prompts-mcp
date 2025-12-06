@@ -6,12 +6,15 @@
  * validation capabilities with clear separation of concerns.
  */
 
+import os from 'node:os';
+import path from 'node:path';
+
 import { LightweightGateSystem } from '../../../gates/core/index.js';
 import { createLogger } from '../../../logging/index.js';
 import { ConvertedPrompt } from '../../../types/index.js';
 
 const logger = createLogger({
-  logFile: '/tmp/engine-validator.log',
+  logFile: path.join(os.tmpdir(), 'engine-validator.log'),
   transport: 'stdio',
   enableDebug: false,
   configuredLevel: 'info',

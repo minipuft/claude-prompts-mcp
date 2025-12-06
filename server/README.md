@@ -30,8 +30,8 @@ Hot-reloadable Model Context Protocol server for prompts, thinking frameworks, a
 ## Quick Start
 
 ```bash
-# Run without installing
-npx claude-prompts-server --transport=stdio --quiet
+# Run without installing - works out of the box!
+npx claude-prompts-server
 
 # See all options
 npx claude-prompts-server --help
@@ -46,11 +46,13 @@ Add to your Claude Desktop config (`~/.config/claude/claude_desktop_config.json`
   "mcpServers": {
     "claude-prompts": {
       "command": "npx",
-      "args": ["-y", "claude-prompts-server", "--transport=stdio", "--quiet"]
+      "args": ["-y", "claude-prompts-server"]
     }
   }
 }
 ```
+
+**Zero-flag experience**: STDIO transport is the default, and quiet mode is automatically enabled to prevent protocol corruption. Use `--verbose` for debugging.
 
 ## MCP Tools Overview
 
@@ -183,7 +185,7 @@ prompt_engine(
 Set `MCP_SERVER_ROOT` to your workspace containing `config.json` and `prompts/`:
 
 ```bash
-MCP_SERVER_ROOT=/path/to/workspace npx claude-prompts-server --transport=stdio
+MCP_SERVER_ROOT=/path/to/workspace npx claude-prompts-server
 ```
 
 Key `config.json` settings:
@@ -213,13 +215,15 @@ Key `config.json` settings:
 
 ### CLI Options
 
-| Option                   | Description                     |
-| ------------------------ | ------------------------------- |
-| `--transport=stdio\|sse` | Transport mode (default: stdio) |
-| `--quiet`                | Minimal logging                 |
-| `--verbose`              | Detailed diagnostics            |
-| `--debug-startup`        | Extra startup tracing           |
-| `--startup-test`         | Boot and exit (sanity check)    |
+| Option                   | Description                                                   |
+| ------------------------ | ------------------------------------------------------------- |
+| `--transport=stdio\|sse` | Transport mode (default: stdio)                               |
+| `--quiet`                | Minimal logging (auto-enabled for STDIO transport)            |
+| `--verbose`              | Detailed diagnostics (overrides auto-quiet for debugging)     |
+| `--debug-startup`        | Extra startup tracing                                         |
+| `--startup-test`         | Boot and exit (sanity check)                                  |
+
+**Note**: When using STDIO transport (default), quiet mode is automatically enabled to prevent logging from corrupting the MCP JSON-RPC protocol. Use `--verbose` to override this behavior for debugging.
 
 ## Documentation
 

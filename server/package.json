@@ -1,6 +1,6 @@
 {
   "name": "claude-prompts-server",
-  "version": "1.3.1",
+  "version": "1.3.5",
   "description": "Claude Custom Prompts MCP Server",
   "author": "minipuft",
   "license": "MIT",
@@ -10,17 +10,25 @@
     "claude-prompts-server": "./dist/index.js"
   },
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "files": [
     "dist",
     "src",
     "config.json",
     "prompts",
+    "methodologies",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "prebuild": "npm run generate:contracts",
     "build": "tsc --project tsconfig.json",
+    "postbuild": "chmod +x dist/index.js || true",
     "build:watch": "tsc --project tsconfig.json --watch",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "typecheck:tests": "tsc --noEmit --project tsconfig.test.json",

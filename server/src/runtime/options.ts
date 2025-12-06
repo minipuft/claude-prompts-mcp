@@ -34,15 +34,31 @@ export function detectRuntimeTestEnvironment(
 
 /**
  * Parse runtime launch options from CLI arguments.
+ *
+ * Zero-flag experience: When using STDIO transport (default), quiet mode is
+ * automatically enabled unless --verbose is explicitly specified. This prevents
+ * logging output from corrupting the MCP JSON-RPC protocol.
  */
 export function resolveRuntimeLaunchOptions(
   args: string[] = process.argv.slice(2),
   fullArgv: string[] = process.argv
 ): RuntimeLaunchOptions {
+  const isVerbose = args.includes('--verbose') || args.includes('--debug-startup');
+  const explicitQuiet = args.includes('--quiet');
+
+  // Detect transport mode (default is STDIO)
+  const transportArg = args.find((arg) => arg.startsWith('--transport='));
+  const transport = transportArg ? transportArg.split('=')[1] : 'stdio';
+  const isStdioTransport = transport === 'stdio';
+
+  // Auto-enable quiet mode for STDIO transport to prevent protocol corruption
+  // unless --verbose is explicitly specified (for debugging)
+  const autoQuiet = isStdioTransport && !isVerbose;
+
   return {
     args,
-    verbose: args.includes('--verbose') || args.includes('--debug-startup'),
-    quiet: args.includes('--quiet'),
+    verbose: isVerbose,
+    quiet: explicitQuiet || autoQuiet,
     startupTest: args.includes('--startup-test'),
     testEnvironment: detectRuntimeTestEnvironment(fullArgv, args),
   };

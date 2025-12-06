@@ -294,8 +294,8 @@ async function gracefulShutdown(exitCode: number = 0): Promise<void> {
  * Display help information
  */
 function showHelp(): void {
-  console.log(`
-MCP Claude Prompts Server v1.3.0 - Consolidated Architecture with Systematic Framework Application
+  console.error(`
+MCP Claude Prompts Server v1.3.3 - Zero-Flag Experience with STDIO Protocol Safety
 
 USAGE:
   node dist/index.js [OPTIONS]
@@ -403,8 +403,8 @@ async function main(): Promise<void> {
     const isVerbose = runtimeOptions.verbose;
 
     if (isStartupTest && isVerbose) {
-      // In CI mode, use console.log for debug to avoid stderr issues
-      const debugLog = isCI ? console.log : console.error;
+      // Always use stderr to avoid corrupting STDIO protocol
+      const debugLog = console.error;
       debugLog('DEBUG: Running in startup validation mode');
       debugLog(`DEBUG: Platform: ${process.platform}`);
       debugLog(`DEBUG: Node.js version: ${process.version}`);
@@ -418,14 +418,13 @@ async function main(): Promise<void> {
     // Setup error handlers first
     setupErrorHandlers();
 
-    // Use appropriate output stream based on environment - only if verbose
+    // Use stderr for all logging to avoid corrupting STDIO protocol
     if (isVerbose) {
-      const statusLog = isCI ? console.log : console.error;
-      statusLog('Starting MCP Claude Prompts Server...');
+      console.error('Starting MCP Claude Prompts Server...');
     }
 
     // Initialize the application using the orchestrator
-    const debugLog = isCI ? console.log : console.error;
+    const debugLog = console.error;
     if (isVerbose) {
       debugLog('DEBUG: About to call startApplication()...');
     }
@@ -514,12 +513,12 @@ async function main(): Promise<void> {
     // If this is a startup test, exit successfully after validation
     if (isStartupTest) {
       if (isVerbose) {
-        const successLog = isCI ? console.log : console.error;
-        successLog('✅ MCP Claude Prompts Server startup validation completed successfully');
-        successLog(
+        // Always use stderr to avoid corrupting STDIO protocol
+        console.error('✅ MCP Claude Prompts Server startup validation completed successfully');
+        console.error(
           '✅ All phases completed: Foundation → Data Loading → Module Initialization → Server Setup'
         );
-        successLog('✅ Health validation passed - server is ready for operation');
+        console.error('✅ Health validation passed - server is ready for operation');
       }
       await orchestrator.shutdown();
       process.exit(0);

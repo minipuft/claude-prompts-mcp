@@ -6,6 +6,9 @@
  * context building capabilities with clear separation of concerns.
  */
 
+import os from 'node:os';
+import path from 'node:path';
+
 import { ExecutionContext } from '../../../execution/parsers/index.js';
 import { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import { FrameworkStateManager } from '../../../frameworks/framework-state-manager.js';
@@ -15,7 +18,7 @@ import { ConvertedPrompt } from '../../../types/index.js';
 
 const logger = createLogger(
   getDefaultLoggerConfig({
-    logFile: '/tmp/context-builder.log',
+    logFile: path.join(os.tmpdir(), 'context-builder.log'),
     transport: 'stdio',
     enableDebug: false,
   })

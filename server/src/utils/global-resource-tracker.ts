@@ -174,22 +174,23 @@ class GlobalResourceTracker {
 
   /**
    * Log diagnostic information
+   * Uses stderr to avoid corrupting STDIO protocol
    */
   logDiagnostics(): void {
     const diagnostics = this.getDiagnostics();
 
     if (diagnostics.totalResources === 0) {
-      console.log('✅ No active tracked resources');
+      console.error('✅ No active tracked resources');
       return;
     }
 
-    console.log(`⚠️ ${diagnostics.totalResources} active resources preventing process exit:`);
-    console.log('📊 By type:', diagnostics.byType);
-    console.log('📊 By source:', diagnostics.bySource);
+    console.error(`⚠️ ${diagnostics.totalResources} active resources preventing process exit:`);
+    console.error('📊 By type:', diagnostics.byType);
+    console.error('📊 By source:', diagnostics.bySource);
 
     if (diagnostics.oldestResource) {
       const age = Date.now() - diagnostics.oldestResource.createdAt.getTime();
-      console.log(
+      console.error(
         `⏰ Oldest resource: ${diagnostics.oldestResource.id} (${Math.round(age / 1000)}s old) from ${diagnostics.oldestResource.source}`
       );
     }
@@ -200,10 +201,10 @@ class GlobalResourceTracker {
     );
 
     if (longRunning.length > 0) {
-      console.log('🐛 Long-running resources (>10s):');
+      console.error('🐛 Long-running resources (>10s):');
       for (const resource of longRunning) {
         const age = Math.round((Date.now() - resource.createdAt.getTime()) / 1000);
-        console.log(
+        console.error(
           `   ${resource.id}: ${resource.type} from ${resource.source} (${age}s) - ${resource.description || 'no description'}`
         );
       }
@@ -265,7 +266,7 @@ function setupProcessHandlers(): void {
   const cleanup = () => {
     const cleared = globalResourceTracker.emergencyCleanup();
     if (cleared > 0) {
-      console.log(`💀 Emergency cleanup cleared ${cleared} resources`);
+      console.error(`💀 Emergency cleanup cleared ${cleared} resources`);
     }
   };
 

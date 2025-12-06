@@ -7,13 +7,14 @@
 import { EventEmitter } from 'events';
 import { watch, FSWatcher } from 'fs';
 import { readFile } from 'fs/promises';
+import os from 'node:os';
 import path from 'path';
 
 import { createLogger, getDefaultLoggerConfig } from '../logging/index.js';
 
 const logger = createLogger(
   getDefaultLoggerConfig({
-    logFile: '/tmp/config-manager.log',
+    logFile: path.join(os.tmpdir(), 'config-manager.log'),
     transport: 'stdio',
     enableDebug: false,
   })

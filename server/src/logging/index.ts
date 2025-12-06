@@ -154,10 +154,11 @@ export class EnhancedLogger implements Logger {
     }
 
     // Standard logging for non-CI environments
+    // Always use stderr to avoid corrupting STDIO protocol
     if (this.transport !== TransportType.STDIO) {
       switch (level) {
         case LogLevel.INFO:
-          console.log(`[INFO] ${message}`, ...args);
+          console.error(`[INFO] ${message}`, ...args);
           break;
         case LogLevel.ERROR:
           console.error(`[ERROR] ${message}`, ...args);
@@ -166,7 +167,7 @@ export class EnhancedLogger implements Logger {
           console.warn(`[WARN] ${message}`, ...args);
           break;
         case LogLevel.DEBUG:
-          console.log(`[DEBUG] ${message}`, ...args);
+          console.error(`[DEBUG] ${message}`, ...args);
           break;
       }
     }
@@ -275,10 +276,11 @@ export function createSimpleLogger(transport: string = 'sse'): Logger {
   const isVerbose = args.includes('--verbose') || args.includes('--debug-startup');
   const isQuiet = args.includes('--quiet');
 
+  // Always use stderr to avoid corrupting STDIO protocol
   return {
     info: (message: string, ...args: any[]) => {
       if (enableConsole && !isQuiet) {
-        console.log(`[INFO] ${message}`, ...args);
+        console.error(`[INFO] ${message}`, ...args);
       }
     },
     error: (message: string, ...args: any[]) => {
@@ -293,7 +295,7 @@ export function createSimpleLogger(transport: string = 'sse'): Logger {
     },
     debug: (message: string, ...args: any[]) => {
       if (enableConsole && isVerbose) {
-        console.log(`[DEBUG] ${message}`, ...args);
+        console.error(`[DEBUG] ${message}`, ...args);
       }
     },
   };
