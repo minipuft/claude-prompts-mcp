@@ -141,11 +141,11 @@ flowchart LR
 ```
 
 - **Templates**: Markdown files with Nunjucks (`{{var}}`).
-- **Frameworks**: Thinking methodologies (CAGEERF, ReACT) injected **once per prompt execution** into the system prompt to guide _how_ the AI thinks. You control when and how often this reminder appears using execution modifiers (`%clean`, `%guided`, etc.).
+- **Frameworks**: Thinking methodologies (CAGEERF, ReACT) automatically injected into the system prompt based on configurable frequency. By default, framework guidance appears on every other chain step (1, 3, 5...) to reinforce the methodology without redundancy.
 - **Guidance Resources**: Markdown files (`analytical.md`, `procedural.md`, `creative.md`) containing structural patterns or specific instructions that can be dynamically injected into a prompt based on semantic analysis.
 - **Gates**: Quality checks (e.g., "Must cite sources") enforced before or during execution.
 
-> **Framework Injection Frequency**: Methodology guidance is a per-execution reminder, not a continuous injection. Use `@Framework` when starting new analytical work, `%clean` for follow-ups where the methodology is already established. See the [MCP Tooling Guide](docs/mcp-tooling-guide.md#understanding-framework-injection-frequency) for detailed control options.
+> **Injection Control**: Override defaults with modifiers: `%guided` forces framework injection, `%clean` skips all guidance, `%lean` keeps only gate checks. Configure default frequency in `config.json` under `injection.system-prompt.frequency`. See the [MCP Tooling Guide](docs/mcp-tooling-guide.md#understanding-framework-injection-frequency) for details.
 
 ## Features
 
