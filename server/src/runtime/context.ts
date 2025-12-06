@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { ConfigManager } from '../config/index.js';
 import { createLogger, EnhancedLoggingConfig, Logger } from '../logging/index.js';
 import { TransportManager } from '../server/index.js';
+import type { TransportMode } from '../types/index.js';
 import { ServiceManager } from '../utils/service-manager.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { ServerRootDetector } from './startup.js';
@@ -22,7 +23,7 @@ export interface RuntimeFoundation {
   serviceManager: ServiceManager;
   runtimeOptions: RuntimeLaunchOptions;
   serverRoot: string;
-  transport: string;
+  transport: TransportMode;
 }
 
 export interface RuntimeFoundationDependencies {

@@ -39,28 +39,74 @@ export class ServerManager {
   }
 
   /**
-   * Start the server based on transport type
+   * Start the server based on transport mode
+   * Supports 'stdio', 'sse', or 'both' modes
    */
   async startServer(): Promise<void> {
     try {
-      this.logger.info(
-        `Starting server with ${this.transportManager.getTransportType()} transport`
-      );
+      const mode = this.transportManager.getTransportType();
+      this.logger.info(`Starting server with '${mode}' transport mode`);
 
       this.logSystemInfo();
 
-      if (this.transportManager.isStdio()) {
+      if (this.transportManager.isBoth()) {
+        // Dual transport mode: start both STDIO and SSE
+        await this.startBothTransports();
+      } else if (mode === 'stdio') {
+        // STDIO only
         await this.startStdioServer();
-      } else if (this.transportManager.isSse()) {
+      } else if (mode === 'sse') {
+        // SSE only
         await this.startSseServer();
       } else {
-        throw new Error(`Unsupported transport type: ${this.transportManager.getTransportType()}`);
+        throw new Error(`Unsupported transport mode: ${mode}`);
       }
 
       this.logger.info('Server started successfully');
     } catch (error) {
       this.logger.error('Error starting server:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Start server with both STDIO and SSE transports
+   */
+  private async startBothTransports(): Promise<void> {
+    this.logger.info('Starting dual transport mode (STDIO + SSE)');
+
+    // Start STDIO transport first
+    await this.transportManager.setupStdioTransport();
+    this.logger.info('STDIO transport ready');
+
+    // Then start SSE transport if API manager is available
+    if (this.apiManager) {
+      const app = this.apiManager.createApp();
+      this.transportManager.setupSseTransport(app);
+      this.httpServer = createServer(app);
+      this.setupHttpServerEventHandlers();
+
+      await new Promise<void>((resolve, reject) => {
+        this.httpServer!.listen(this.port, () => {
+          this.logger.info(`SSE transport running on http://localhost:${this.port}`);
+          this.logger.info(`Connect to http://localhost:${this.port}/mcp for SSE MCP connections`);
+          resolve();
+        });
+
+        this.httpServer!.on('error', (error: any) => {
+          if (error.code === 'EADDRINUSE') {
+            this.logger.error(
+              `Port ${this.port} is already in use. SSE transport disabled.`
+            );
+            // Don't reject - STDIO is still working
+            resolve();
+          } else {
+            reject(error);
+          }
+        });
+      });
+    } else {
+      this.logger.warn('API Manager not available - SSE transport disabled in dual mode');
     }
   }
 
@@ -213,13 +259,20 @@ export class ServerManager {
    * Check if server is running
    */
   isRunning(): boolean {
-    if (this.transportManager.isStdio()) {
-      // For STDIO, we consider it running if the process is alive
+    const mode = this.transportManager.getTransportType();
+
+    if (mode === 'stdio') {
+      // For STDIO only, we consider it running if the process is alive
       return true;
-    } else {
-      // For SSE, check if HTTP server is listening
+    } else if (mode === 'sse') {
+      // For SSE only, check if HTTP server is listening
       return this.httpServer?.listening || false;
+    } else if (mode === 'both') {
+      // For dual mode, STDIO is always running; HTTP might be optional
+      return true;
     }
+
+    return false;
   }
 
   /**
@@ -231,15 +284,24 @@ export class ServerManager {
     port?: number;
     connections?: number;
     uptime: number;
+    transports?: { stdio: boolean; sse: boolean };
   } {
+    const mode = this.transportManager.getTransportType();
+    const isSseActive = mode === 'sse' || (mode === 'both' && this.httpServer?.listening);
+
     return {
       running: this.isRunning(),
-      transport: this.transportManager.getTransportType(),
-      port: this.transportManager.isSse() ? this.port : undefined,
-      connections: this.transportManager.isSse()
-        ? this.transportManager.getActiveConnectionsCount()
-        : undefined,
+      transport: mode,
+      port: isSseActive ? this.port : undefined,
+      connections: isSseActive ? this.transportManager.getActiveConnectionsCount() : undefined,
       uptime: process.uptime(),
+      // For 'both' mode, provide detailed transport status
+      ...(mode === 'both' && {
+        transports: {
+          stdio: true, // STDIO is always active in 'both' mode
+          sse: this.httpServer?.listening || false,
+        },
+      }),
     };
   }
 

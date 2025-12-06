@@ -11,7 +11,7 @@ import type { ConfigManager } from '../config/index.js';
 import type { Logger } from '../logging/index.js';
 import type { McpToolsManager } from '../mcp-tools/index.js';
 import type { PromptAssetManager } from '../prompts/index.js';
-import type { Category, ConvertedPrompt, PromptData } from '../types/index.js';
+import type { Category, ConvertedPrompt, PromptData, TransportMode } from '../types/index.js';
 import { createApiManager } from '../api/index.js';
 import { createTransportManager, startMcpServer, TransportManager } from '../server/index.js';
 import type { ServerManager } from '../server/index.js';
@@ -24,7 +24,7 @@ export interface ServerStartupParams {
   mcpToolsManager: McpToolsManager;
   mcpServer: McpServer;
   runtimeOptions: RuntimeLaunchOptions;
-  transportType?: string;
+  transportType?: TransportMode;
   promptsData: PromptData[];
   categories: Category[];
   convertedPrompts: ConvertedPrompt[];

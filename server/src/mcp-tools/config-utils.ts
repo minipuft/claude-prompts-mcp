@@ -16,9 +16,7 @@ export const CONFIG_VALID_KEYS = [
   'server.name',
   'server.version',
   'server.port',
-  'transports.default',
-  'transports.stdio.enabled',
-  'transports.sse.enabled',
+  'transport',
   'logging.level',
   'logging.directory',
   'gates.enabled',
@@ -35,9 +33,7 @@ export type ConfigKey = (typeof CONFIG_VALID_KEYS)[number];
 
 export const CONFIG_RESTART_REQUIRED_KEYS: ConfigKey[] = [
   'server.port',
-  'transports.default',
-  'transports.stdio.enabled',
-  'transports.sse.enabled',
+  'transport',
   'analysis.semanticAnalysis.llmIntegration.enabled',
 ];
 
@@ -74,31 +70,15 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
       return { valid: true, convertedValue: trimmed, valueType: 'string' };
     }
 
-    case 'transports.default': {
-      const normalized = value.trim();
-      if (!['stdio', 'sse'].includes(normalized)) {
+    case 'transport': {
+      const normalized = value.trim().toLowerCase();
+      if (!['stdio', 'sse', 'both'].includes(normalized)) {
         return {
           valid: false,
-          error: "Transport must be 'stdio' or 'sse'",
+          error: "Transport mode must be 'stdio', 'sse', or 'both'",
         };
       }
       return { valid: true, convertedValue: normalized, valueType: 'string' };
-    }
-
-    case 'transports.stdio.enabled':
-    case 'transports.sse.enabled': {
-      const boolValue = value.trim().toLowerCase();
-      if (!['true', 'false'].includes(boolValue)) {
-        return {
-          valid: false,
-          error: "Value must be 'true' or 'false'",
-        };
-      }
-      return {
-        valid: true,
-        convertedValue: boolValue === 'true',
-        valueType: 'boolean',
-      };
     }
 
     case 'gates.enabled':
@@ -407,10 +387,10 @@ export class SafeConfigWriter {
   } {
     try {
       // Basic structure validation
-      if (!config.server || !config.transports) {
+      if (!config.server) {
         return {
           valid: false,
-          error: 'Missing required configuration sections',
+          error: 'Missing required server configuration section',
         };
       }
 
@@ -423,19 +403,16 @@ export class SafeConfigWriter {
         return { valid: false, error: 'Invalid server port range' };
       }
 
-      // Transports validation
-      if (!['stdio', 'sse'].includes(config.transports.default)) {
-        return { valid: false, error: 'Invalid default transport' };
+      // Transport validation (new simplified field)
+      if (config.transport && !['stdio', 'sse', 'both'].includes(config.transport)) {
+        return { valid: false, error: "Invalid transport mode (must be 'stdio', 'sse', or 'both')" };
       }
 
-      if (
-        typeof config.transports.stdio?.enabled !== 'boolean' ||
-        typeof config.transports.sse?.enabled !== 'boolean'
-      ) {
-        return {
-          valid: false,
-          error: 'Transport enabled flags must be boolean',
-        };
+      // Legacy transports validation (for backward compatibility)
+      if (config.transports && !config.transport) {
+        if (!['stdio', 'sse', 'both'].includes(config.transports.default)) {
+          return { valid: false, error: 'Invalid legacy transports.default value' };
+        }
       }
 
       // Logging validation (if present)

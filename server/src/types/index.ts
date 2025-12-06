@@ -33,6 +33,7 @@ export type {
   TextMessageContent,
   ToolDescriptionsOptions,
   TransportConfig,
+  TransportMode,
   TransportsConfig,
 } from '../types.js';
 

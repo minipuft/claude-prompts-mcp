@@ -10,6 +10,7 @@ import express, { Request, Response } from 'express';
 
 import { ConfigManager } from '../../config/index.js';
 import { Logger } from '../../logging/index.js';
+import type { TransportMode } from '../../types/index.js';
 
 /**
  * Transport types supported by the server
@@ -17,6 +18,7 @@ import { Logger } from '../../logging/index.js';
 export enum TransportType {
   STDIO = 'stdio',
   SSE = 'sse',
+  BOTH = 'both',
 }
 
 /**
@@ -26,10 +28,10 @@ export class TransportManager {
   private logger: Logger;
   private configManager: ConfigManager;
   private mcpServer: any;
-  private transport: string;
+  private transport: TransportMode;
   private sseTransports: Map<string, SSEServerTransport> = new Map();
 
-  constructor(logger: Logger, configManager: ConfigManager, mcpServer: any, transport: string) {
+  constructor(logger: Logger, configManager: ConfigManager, mcpServer: any, transport: TransportMode) {
     this.logger = logger;
     this.configManager = configManager;
     this.mcpServer = mcpServer;
@@ -37,11 +39,11 @@ export class TransportManager {
   }
 
   /**
-   * Determine transport from command line arguments or configuration
+   * Determine transport mode from command line arguments or configuration
+   * Delegates to ConfigManager for resolution logic
    */
-  static determineTransport(args: string[], configManager: ConfigManager): string {
-    const transportArg = args.find((arg: string) => arg.startsWith('--transport='));
-    return transportArg ? transportArg.split('=')[1] : configManager.getConfig().transports.default;
+  static determineTransport(args: string[], configManager: ConfigManager): TransportMode {
+    return configManager.getTransport(args);
   }
 
   /**
@@ -192,24 +194,33 @@ export class TransportManager {
   }
 
   /**
-   * Get transport type
+   * Get transport mode
    */
-  getTransportType(): string {
+  getTransportType(): TransportMode {
     return this.transport;
   }
 
   /**
-   * Check if transport is STDIO
+   * Check if STDIO transport should be active
+   * True for 'stdio' or 'both' modes
    */
   isStdio(): boolean {
-    return this.transport === TransportType.STDIO;
+    return this.transport === TransportType.STDIO || this.transport === TransportType.BOTH;
   }
 
   /**
-   * Check if transport is SSE
+   * Check if SSE transport should be active
+   * True for 'sse' or 'both' modes
    */
   isSse(): boolean {
-    return this.transport === TransportType.SSE;
+    return this.transport === TransportType.SSE || this.transport === TransportType.BOTH;
+  }
+
+  /**
+   * Check if running in dual transport mode
+   */
+  isBoth(): boolean {
+    return this.transport === TransportType.BOTH;
   }
 
   /**
@@ -235,7 +246,7 @@ export function createTransportManager(
   logger: Logger,
   configManager: ConfigManager,
   mcpServer: any,
-  transport: string
+  transport: TransportMode
 ): TransportManager {
   const transportManager = new TransportManager(logger, configManager, mcpServer, transport);
 

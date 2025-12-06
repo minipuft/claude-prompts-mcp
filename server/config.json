@@ -35,15 +35,7 @@
   "judge": {
     "enabled": true
   },
-  "transports": {
-    "default": "stdio",
-    "sse": {
-      "enabled": false
-    },
-    "stdio": {
-      "enabled": true
-    }
-  },
+  "transport": "stdio",
   "logging": {
     "directory": "./logs",
     "level": "debug"

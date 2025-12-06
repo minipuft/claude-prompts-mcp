@@ -30,6 +30,7 @@ import {
   ChainSessionConfig,
   JudgeConfig,
   GatesConfig,
+  TransportMode,
 } from '../types/index.js';
 import { DEFAULT_INJECTION_CONFIG, type InjectionConfig } from '../execution/pipeline/decisions/injection/index.js';
 // Removed: ToolDescriptionManager import to break circular dependency
@@ -95,6 +96,11 @@ const DEFAULT_JUDGE_CONFIG: JudgeConfig = {
   enabled: true,
 };
 
+/**
+ * Default transport mode - STDIO for Claude Desktop/CLI compatibility
+ */
+const DEFAULT_TRANSPORT_MODE: TransportMode = 'stdio';
+
 const DEFAULT_CONFIG: Config = {
   server: {
     name: 'Claude Custom Prompts',
@@ -108,11 +114,7 @@ const DEFAULT_CONFIG: Config = {
   gates: DEFAULT_GATES_CONFIG,
   frameworks: DEFAULT_FRAMEWORKS_CONFIG,
   chainSessions: DEFAULT_CHAIN_SESSION_CONFIG,
-  transports: {
-    default: 'stdio',
-    sse: { enabled: false },
-    stdio: { enabled: true },
-  },
+  transport: DEFAULT_TRANSPORT_MODE,
 };
 
 /**
@@ -189,10 +191,45 @@ export class ConfigManager extends EventEmitter {
   }
 
   /**
+   * Get the transport mode from config
+   * Priority: CLI args (handled by caller) > config.transport > legacy transports.default > default
+   */
+  getTransportMode(): TransportMode {
+    // New simplified field takes priority
+    if (this.config.transport) {
+      return this.config.transport;
+    }
+
+    // Backward compatibility: check legacy transports.default
+    if (this.config.transports?.default) {
+      const legacyMode = this.config.transports.default;
+      // Validate and map legacy value
+      if (legacyMode === 'stdio' || legacyMode === 'sse' || legacyMode === 'both') {
+        logger.warn(
+          '[ConfigManager] DEPRECATION: transports.default is deprecated. ' +
+            'Use "transport": "' + legacyMode + '" instead. ' +
+            'See docs/operations-guide.md for migration details.'
+        );
+        return legacyMode;
+      }
+    }
+
+    // Default to STDIO for Claude Desktop compatibility
+    return DEFAULT_TRANSPORT_MODE;
+  }
+
+  /**
    * Get transports configuration
+   * @deprecated Use getTransportMode() instead
    */
   getTransportsConfig() {
-    return this.config.transports;
+    // Provide backward-compatible response for legacy consumers
+    const mode = this.getTransportMode();
+    return {
+      default: mode,
+      sse: { enabled: mode === 'sse' || mode === 'both' },
+      stdio: { enabled: mode === 'stdio' || mode === 'both' },
+    };
   }
 
   /**
@@ -349,15 +386,26 @@ export class ConfigManager extends EventEmitter {
   }
 
   /**
-   * Determine transport from command line arguments, environment variable, or configuration
-   * Priority: CLI args > MCP_TRANSPORT env > config.transports.default
+   * Determine transport from command line arguments or configuration
+   * Priority: CLI args > config.transport > default (stdio)
+   *
+   * @deprecated Use getTransportMode() for the raw config value.
+   * This method is kept for backward compatibility with CLI arg parsing.
    */
-  getTransport(args: string[]): string {
+  getTransport(args: string[]): TransportMode {
+    // CLI argument takes highest priority
     const transportArg = args.find((arg: string) => arg.startsWith('--transport='));
     if (transportArg) {
-      return transportArg.split('=')[1];
+      const value = transportArg.split('=')[1];
+      // Validate CLI arg
+      if (value === 'stdio' || value === 'sse' || value === 'both') {
+        return value;
+      }
+      logger.warn(`Invalid --transport value: "${value}". Using config default.`);
     }
-    return process.env['MCP_TRANSPORT'] || this.config.transports.default;
+
+    // Fall back to config value (which handles backward compat internally)
+    return this.getTransportMode();
   }
 
   /**
@@ -439,14 +487,15 @@ export class ConfigManager extends EventEmitter {
       this.config.analysis = this.validateAnalysisConfig(this.config.analysis);
     }
 
-    // Ensure transports config exists
-    if (!this.config.transports) {
-      this.config.transports = DEFAULT_CONFIG.transports;
-    } else {
-      this.config.transports = {
-        ...DEFAULT_CONFIG.transports,
-        ...this.config.transports,
-      };
+    // Ensure transport mode is set
+    // Prioritize new simplified 'transport' field, fall back to legacy 'transports.default'
+    if (!this.config.transport) {
+      if (this.config.transports?.default) {
+        // Legacy config detected - migration handled in getTransportMode()
+        // Don't set transport here to preserve deprecation warning
+      } else {
+        this.config.transport = DEFAULT_TRANSPORT_MODE;
+      }
     }
 
     // Ensure frameworks config exists

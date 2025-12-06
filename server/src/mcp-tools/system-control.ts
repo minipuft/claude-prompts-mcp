@@ -2606,9 +2606,19 @@ class MaintenanceActionHandler extends ActionHandler {
 
     // Transport Configuration
     response += '## 🚀 Transport Configuration\n\n';
-    response += `**Default Transport**: ${config.transports.default}\n`;
-    response += `**STDIO Enabled**: ${config.transports.stdio.enabled ? '✅' : '❌'}\n`;
-    response += `**SSE Enabled**: ${config.transports.sse.enabled ? '✅' : '❌'}\n\n`;
+    const transportMode = config.transport ?? config.transports?.default ?? 'stdio';
+    response += `**Transport Mode**: ${transportMode}\n`;
+    if (transportMode === 'both') {
+      response += '  - STDIO: ✅ Active (Claude Desktop/CLI)\n';
+      response += '  - SSE: ✅ Active (Web clients on port ' + config.server.port + ')\n';
+    } else if (transportMode === 'stdio') {
+      response += '  - STDIO: ✅ Active\n';
+      response += '  - SSE: ❌ Disabled\n';
+    } else {
+      response += '  - STDIO: ❌ Disabled\n';
+      response += '  - SSE: ✅ Active\n';
+    }
+    response += '\n';
 
     // Analysis Configuration
     if (config.analysis) {
@@ -2650,9 +2660,7 @@ class MaintenanceActionHandler extends ActionHandler {
     response += '- `server.version` (string) - Server version\n';
     response += '- `server.port` (number) - HTTP server port ⚠️ *restart required*\n\n';
     response += '**Transport Configuration:**\n';
-    response += '- `transports.default` (string) - Default transport ⚠️ *restart required*\n';
-    response += '- `transports.stdio.enabled` (boolean) - STDIO transport ⚠️ *restart required*\n';
-    response += '- `transports.sse.enabled` (boolean) - SSE transport ⚠️ *restart required*\n\n';
+    response += "- `transport` (string) - Transport mode: 'stdio', 'sse', or 'both' ⚠️ *restart required*\n\n";
     response += '**Logging Configuration:**\n';
     response += '- `logging.level` (string) - Log level: debug, info, warn, error\n';
     response += '- `logging.directory` (string) - Log file directory\n\n';
@@ -2919,9 +2927,7 @@ class MaintenanceActionHandler extends ActionHandler {
       'server.port': 'Try a value like 3000 or 8080',
       'server.name': 'Provide a non-empty string value',
       'server.version': 'Provide a non-empty string value',
-      'transports.default': "Use 'stdio' for desktop clients or 'sse' for web clients",
-      'transports.stdio.enabled': 'Use boolean values: true or false',
-      'transports.sse.enabled': 'Use boolean values: true or false',
+      transport: "Use 'stdio' (default), 'sse' for web clients, or 'both' for dual mode",
       'logging.level': "Use 'debug' for development or 'info' for production",
       'logging.directory': "Provide a valid directory path like './logs'",
       'analysis.semanticAnalysis.llmIntegration.enabled': 'Use boolean values: true or false',

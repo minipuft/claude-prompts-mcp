@@ -34,7 +34,16 @@ export interface ServerConfig {
 // (imported directly above)
 
 /**
+ * Transport mode options
+ * - 'stdio': Standard I/O transport for Claude Desktop/CLI (default)
+ * - 'sse': Server-sent events over HTTP for web clients
+ * - 'both': Run both STDIO and SSE transports simultaneously
+ */
+export type TransportMode = 'stdio' | 'sse' | 'both';
+
+/**
  * Configuration for a transport
+ * @deprecated Use the simplified `transport` field in Config instead
  */
 export interface TransportConfig {
   /** Whether this transport is enabled */
@@ -43,6 +52,7 @@ export interface TransportConfig {
 
 /**
  * Configuration for all transports
+ * @deprecated Use the simplified `transport` field in Config instead
  */
 export interface TransportsConfig {
   /** Name of the default transport to use */
@@ -53,7 +63,6 @@ export interface TransportsConfig {
   stdio: TransportConfig;
   /** Custom transports map */
   customTransports?: Record<string, TransportConfig>;
-  // Removed: Index signature for backwards compatibility - use customTransports instead
 }
 
 /**
@@ -195,8 +204,16 @@ export interface Config {
   judge?: JudgeConfig;
   /** Chain session lifecycle configuration */
   chainSessions?: ChainSessionConfig;
-  /** Transports configuration */
-  transports: TransportsConfig;
+  /**
+   * Transport mode: 'stdio' (default), 'sse', or 'both'
+   * STDIO is used by Claude Desktop/CLI, SSE for web clients
+   */
+  transport?: TransportMode;
+  /**
+   * @deprecated Use simplified `transport` field instead
+   * Kept for backward compatibility - will be removed in future version
+   */
+  transports?: TransportsConfig;
   /** Logging configuration */
   logging?: LoggingConfig;
   /** Tool descriptions configuration */

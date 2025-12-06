@@ -38,7 +38,7 @@ import { startServerWithManagers } from './startup-server.js';
 // Import startup management
 
 // Import types
-import { Category, ConvertedPrompt, FrameworksConfig, PromptData } from '../types/index.js';
+import { Category, ConvertedPrompt, FrameworksConfig, PromptData, TransportMode } from '../types/index.js';
 // Import chain utilities
 import { ServiceManager } from '../utils/service-manager.js';
 
@@ -87,7 +87,7 @@ export class Application {
   private runtimeOptions: RuntimeLaunchOptions;
   private serviceManager: ServiceManager;
   private serverRoot?: string;
-  private transportType?: string;
+  private transportType?: TransportMode;
 
   private frameworksConfigListener?: (
     newConfig: FrameworksConfig,
