@@ -107,36 +107,37 @@ prompt_manager list
 ## Core Concepts
 
 This isn't a static file reader. It's a **render pipeline**:
-`Command` -> `Parser` -> `Plan` -> `Framework Injection` -> `Gate Validation` -> `Template Render` -> `LLM`
+`User` -> `MCP Client` -> `Parser` -> `Plan` -> `Framework Injection` -> `Gate Check` -> `Template Render` -> `Client`
 
 ```mermaid
 %%{init: {'theme': 'neutral', 'themeVariables': {'background':'#0b1224','primaryColor':'#e2e8f0','primaryBorderColor':'#1f2937','primaryTextColor':'#0f172a','lineColor':'#94a3b8','fontFamily':'"DM Sans","Segoe UI",sans-serif','fontSize':'14px','edgeLabelBackground':'#0b1224'}}}%%
 flowchart LR
     classDef actor fill:#0f172a,stroke:#cbd5e1,stroke-width:1.5px,color:#f8fafc;
     classDef parser fill:#111827,stroke:#fbbf24,stroke-width:1.8px,color:#f8fafc;
-    classDef decision fill:#fff7ed,stroke:#fb923c,stroke-width:1.8px,color:#9a3412;
     classDef process fill:#e2e8f0,stroke:#1f2937,stroke-width:1.6px,color:#0f172a;
     classDef success fill:#e0f2fe,stroke:#0284c7,stroke-width:1.6px,color:#0f172a;
     classDef failure fill:#fee2e2,stroke:#ef4444,stroke-width:1.6px,color:#7f1d1d;
-    classDef endpoint fill:#f4d0ff,stroke:#a855f7,stroke-width:1.6px,color:#2e1065;
+    classDef client fill:#f4d0ff,stroke:#a855f7,stroke-width:1.6px,color:#2e1065;
     classDef container fill:#111827,stroke:#94a3b8,stroke-width:1.2px,stroke-dasharray:7 4,color:#e2e8f0;
 
     linkStyle default stroke:#94a3b8,stroke-width:2px
 
-    User["User Command"]:::process --> Parser["Symbolic Parser"]:::parser
-    Parser --> Plan{"Execution Plan"}:::decision
+    User["User"]:::actor --> Client["MCP Client"]:::client
+    Client --> Parser["Symbolic Parser"]:::parser
+    Parser --> Plan["Execution Plan"]:::process
 
     subgraph Pipeline["Render Pipeline"]
         direction TB
         Plan --> Framework["Inject Framework"]:::process
-        Framework --> Gate{"Gate Validation"}:::decision
+        Framework --> Gate{"Gate Check"}:::process
         Gate -- Pass --> Render["Render Template"]:::success
         Gate -- Fail --> Retry["Retry / Abort"]:::failure
     end
 
     class Pipeline container
 
-    Render --> LLM["LLM API"]:::endpoint
+    Render --> Client
+    Client -.->|"Chain"| Parser
 ```
 
 - **Templates**: Markdown files with Nunjucks (`{{var}}`).
