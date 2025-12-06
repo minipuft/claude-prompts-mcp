@@ -318,7 +318,7 @@ export class PromptLoader {
       inline_gate_definitions?: Array<{
         id?: string;
         name: string;
-        type: 'validation' | 'approval' | 'condition';
+        type: 'validation' | 'guidance';
         scope: 'execution' | 'session' | 'chain' | 'step';
         description: string;
         guidance: string;
@@ -356,7 +356,7 @@ export class PromptLoader {
             inline_gate_definitions?: Array<{
               id?: string;
               name: string;
-              type: 'validation' | 'approval' | 'condition';
+              type: 'validation' | 'guidance';
               scope: 'execution' | 'session' | 'chain' | 'step';
               description: string;
               guidance: string;

@@ -63,7 +63,7 @@ export interface Category {
 export interface GateDefinition {
   id: string;
   name: string;
-  type: 'validation' | 'approval' | 'condition' | 'quality';
+  type: 'validation' | 'guidance';
   requirements: any[];
   failureAction: 'stop' | 'retry' | 'skip' | 'rollback';
   retryPolicy?: {

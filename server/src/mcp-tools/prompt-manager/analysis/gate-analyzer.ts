@@ -276,7 +276,7 @@ export class GateAnalyzer {
     if (contentAnalysis.hasResearchRequirements && context.executionType === 'chain') {
       temporaryGates.push({
         name: 'Research Depth Validation',
-        type: 'quality',
+        type: 'validation',
         scope: 'chain',
         description: 'Ensure comprehensive research across all chain steps',
         guidance: 'Each research step must provide multiple perspectives and credible sources',

@@ -210,8 +210,8 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     try {
       const gateId = this.temporaryGateRegistry.createTemporaryGate(
         {
-          name: 'Inline Quality Criteria',
-          type: 'quality',
+          name: 'Inline Validation Criteria',
+          type: 'validation',
           scope: gateScope,
           description,
           guidance,
@@ -407,7 +407,7 @@ export class InlineGateExtractionStage extends BasePipelineStage {
             {
               id: gate.id, // Preserve user-provided ID
               name: gate.name || gate.id,
-              type: (gate.type as any) || 'quality',
+              type: (gate.type as 'validation' | 'guidance') || 'validation',
               scope: (gate.scope as GateScope) || 'execution',
               description: gate.description || `Temporary gate: ${gate.id}`,
               guidance: effectiveGuidance,

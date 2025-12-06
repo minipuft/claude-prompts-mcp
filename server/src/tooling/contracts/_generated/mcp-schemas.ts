@@ -26,7 +26,7 @@ export const promptEngineSchema = z.object({
           description: z.string().optional(),
           criteria: z.array(z.string()).optional(),
           severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
-          type: z.enum(['validation', 'approval', 'condition', 'quality', 'guidance']).optional(),
+          type: z.enum(['validation', 'guidance']).optional(),
           scope: z.enum(['execution', 'session', 'chain', 'step']).optional(),
           template: z.string().optional(),
           pass_criteria: z.array(z.string()).optional(),

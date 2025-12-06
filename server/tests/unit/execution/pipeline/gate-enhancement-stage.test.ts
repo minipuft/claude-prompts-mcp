@@ -635,10 +635,10 @@ describe('GateEnhancementStage', () => {
     // Only string IDs and CustomChecks are converted (full TemporaryGateInput objects are already registered)
     expect(tempGateRegistry.createTemporaryGate).toHaveBeenCalledTimes(2);
 
-    // String ID is converted to inline quality criteria
+    // String ID is converted to inline validation criteria
     expect(tempGateRegistry.createTemporaryGate).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'Inline Quality Criteria',
+        name: 'Inline Validation Criteria',
         pass_criteria: ['toxicity'],
       }),
       expect.any(String)

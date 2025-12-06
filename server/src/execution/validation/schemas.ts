@@ -43,8 +43,7 @@ export const customCheckSchema = z.object(
  * Note: The 'severity' field is currently metadata-only and does not affect execution behavior.
  * Severity-based enforcement is planned for future semantic layer integration.
  *
- * Note: Gate types 'validation' and 'guidance' are actively used. Types 'approval', 'condition',
- * and 'quality' are accepted but currently treated identically to 'validation'.
+ * Gate types: 'validation' runs checks, 'guidance' only provides instructional text.
  */
 const temporaryGateObjectSchema = z
   .object(
@@ -52,7 +51,7 @@ const temporaryGateObjectSchema = z
       id: z.string().min(1, 'Gate ID cannot be empty').optional(),
       template: z.string().trim().min(1, 'Template reference cannot be empty').optional(),
       name: z.string().trim().min(1, 'Gate name cannot be empty').optional(),
-      type: z.enum(['validation', 'approval', 'condition', 'quality', 'guidance']).optional(),
+      type: z.enum(['validation', 'guidance']).optional(),
       scope: gateScopeSchema.optional(),
       criteria: z.array(z.string().min(1, 'Gate criteria cannot be empty')).optional(),
       pass_criteria: z.array(z.string().min(1, 'Pass criteria cannot be empty')).optional(),

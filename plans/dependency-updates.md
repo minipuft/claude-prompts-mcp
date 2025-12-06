@@ -19,23 +19,15 @@ Tracking progress on Renovate bot dependency updates from [Issue #16](https://gi
 | sigstore/cosign-installer v3 → v4 | #28 | Low | 2025-12-05 | GitHub Action major |
 | Remove `@types/handlebars` | - | Low | 2025-12-05 | Deprecated, unused |
 | Remove `handlebars` | - | Low | 2025-12-05 | Not directly used |
+| TypeScript ^5.3.3 → ^5.9.3 | - | Low | 2025-12-05 | Aligned package.json with installed version |
+| Jest v29 → v30 | - | Medium | 2025-12-05 | All 564 tests passing |
+| @types/jest v29 → v30 | - | Low | 2025-12-05 | Type definitions for Jest 30 |
 
 ---
 
 ## Pending Updates
 
 ### Medium Risk (Require Testing)
-
-#### [ ] Jest v29 → v30
-- **Current**: `^29.7.0`
-- **Target**: `v30.x`
-- **Risk**: Medium - Major version, may have breaking changes in test APIs
-- **Files affected**: `server/package.json`, test files
-- **Pre-merge checklist**:
-  - [ ] Review [Jest 30 changelog](https://jestjs.io/blog)
-  - [ ] Run full test suite locally
-  - [ ] Check for deprecated APIs in test files
-  - [ ] Verify ts-jest compatibility
 
 #### [ ] Node v24 (Engine Constraint)
 - **Current**: `>=16`
@@ -95,6 +87,10 @@ Tracking progress on Renovate bot dependency updates from [Issue #16](https://gi
 | 2025-12-05 | Removed handlebars deps | Deprecated @types/handlebars, not directly used |
 | 2025-12-05 | Deferred Express v5 | Requires migration work, high risk |
 | 2025-12-05 | Deferred Zod v4 | Requires migration work, high risk |
+| 2025-12-05 | TypeScript must upgrade before Jest 30 | Jest 30 requires TS 5.4+, currently on 5.3.3 |
+| 2025-12-05 | Jest 30 codebase analysis | No deprecated matchers found, Node version OK |
+| 2025-12-05 | TypeScript constraint updated | Package.json ^5.3.3 → ^5.9.3 to match installed version |
+| 2025-12-05 | Jest 30 migration complete | Upgraded jest/types, fixed 1 test expectation, all 564 tests passing |
 
 ---
 

@@ -32,12 +32,9 @@ export type TemporaryGateInput =
       /** Friendly name (defaults applied server-side) */
       readonly name?: string;
       /**
-       * Optional gate type hint.
-       * @remarks 'validation' and 'guidance' are actively used. Types 'approval', 'condition', and 'quality'
-       * are accepted for forward compatibility but currently treated identically to 'validation'.
-       * Specialized handling planned for future semantic layer.
+       * Gate type: 'validation' runs checks, 'guidance' only provides instructional text.
        */
-      readonly type?: 'validation' | 'approval' | 'condition' | 'quality' | 'guidance';
+      readonly type?: 'validation' | 'guidance';
       /** Desired scope for inline gate */
       readonly scope?: GateScope;
       /** Inline guidance or description */

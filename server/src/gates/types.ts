@@ -85,8 +85,8 @@ export interface GateDefinition {
   id: string;
   /** Human-readable name */
   name: string;
-  /** Gate type */
-  type: 'validation' | 'approval' | 'condition' | 'quality' | 'guidance';
+  /** Gate type: 'validation' runs checks, 'guidance' only provides instructional text */
+  type: 'validation' | 'guidance';
   /** Description of what this gate checks/guides */
   description?: string;
   /** Requirements for this gate */
@@ -273,12 +273,11 @@ export interface StepResult {
 
 /**
  * Gate type enumeration
+ * - VALIDATION: Runs validation checks against content
+ * - GUIDANCE: Only provides instructional text, no validation
  */
 export enum GateType {
   VALIDATION = 'validation',
-  APPROVAL = 'approval',
-  CONDITION = 'condition',
-  QUALITY = 'quality',
   GUIDANCE = 'guidance',
 }
 

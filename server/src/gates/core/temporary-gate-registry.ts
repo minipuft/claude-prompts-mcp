@@ -23,8 +23,8 @@ export interface TemporaryGateDefinition {
   id: string;
   /** Human-readable name */
   name: string;
-  /** Gate type */
-  type: 'validation' | 'approval' | 'condition' | 'quality' | 'guidance';
+  /** Gate type: 'validation' runs checks, 'guidance' only provides instructional text */
+  type: 'validation' | 'guidance';
   /** Scope of the temporary gate */
   scope: 'execution' | 'session' | 'chain' | 'step';
   /** Description of what this gate checks/guides */

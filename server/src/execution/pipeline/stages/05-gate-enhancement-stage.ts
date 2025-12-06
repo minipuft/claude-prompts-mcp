@@ -52,7 +52,7 @@ interface RegisteredGateResult {
  */
 interface NormalizedGateInput {
   name: string;
-  type: 'validation' | 'approval' | 'condition' | 'quality' | 'guidance';
+  type: 'validation' | 'guidance';
   scope: 'execution' | 'session' | 'chain' | 'step';
   criteria?: string[];
   guidance?: string;
@@ -816,11 +816,11 @@ export class GateEnhancementStage extends BasePipelineStage {
     if (typeof gate === 'string') {
       return {
         normalized: {
-          name: 'Inline Quality Criteria',
-          type: 'quality',
+          name: 'Inline Validation Criteria',
+          type: 'validation',
           scope: 'execution',
           criteria: [gate],
-          description: 'Inline quality criteria',
+          description: 'Inline validation criteria',
           source: 'automatic',
           // Smart default: Apply to current step in chain executions
           apply_to_steps: isChainExecution ? [currentStep] : undefined,
@@ -831,16 +831,10 @@ export class GateEnhancementStage extends BasePipelineStage {
 
     // Normalize gate type with fallback
     const normalizeType = (type: string | undefined): NormalizedGateInput['type'] => {
-      const validTypes: NormalizedGateInput['type'][] = [
-        'validation',
-        'approval',
-        'condition',
-        'quality',
-        'guidance',
-      ];
+      const validTypes: NormalizedGateInput['type'][] = ['validation', 'guidance'];
       return validTypes.includes(type as NormalizedGateInput['type'])
         ? (type as NormalizedGateInput['type'])
-        : 'quality';
+        : 'validation';
     };
 
     // Normalize scope with fallback

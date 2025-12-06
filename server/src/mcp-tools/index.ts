@@ -418,7 +418,7 @@ export class ConsolidatedMcpToolsManager {
           id: z.string().min(1, 'Gate ID cannot be empty').optional(),
           template: z.string().min(1, 'Template reference cannot be empty').optional(),
           name: z.string().optional(),
-          type: z.enum(['validation', 'approval', 'condition', 'quality', 'guidance']).optional(),
+          type: z.enum(['validation', 'guidance']).optional(),
           scope: z.enum(['execution', 'session', 'chain', 'step']).optional(),
           description: z.string().optional(),
           guidance: z.string().optional(),
