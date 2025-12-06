@@ -267,9 +267,15 @@ export class RuntimeMethodologyLoader {
       }
     }
 
-    // Priority 2: Walk up from current module location
+    // Priority 2: Find package.json with our package name (works for npx deep cache paths)
+    const pkgResolved = this.resolveFromPackageJson();
+    if (pkgResolved) {
+      return pkgResolved;
+    }
+
+    // Priority 3: Walk up from current module location (fallback for development)
     let current = __dirname;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 10; i++) {
       const candidate = join(current, 'methodologies');
       if (existsSync(candidate) && this.hasYamlFiles(candidate)) {
         return candidate;
@@ -277,7 +283,7 @@ export class RuntimeMethodologyLoader {
       current = dirname(current);
     }
 
-    // Priority 3: Common relative paths from dist
+    // Priority 4: Common relative paths from dist
     const relativePaths = [
       join(__dirname, '..', '..', '..', 'methodologies'),
       join(__dirname, '..', '..', 'methodologies'),
@@ -293,6 +299,34 @@ export class RuntimeMethodologyLoader {
 
     // Fallback (may not exist)
     return join(__dirname, '..', '..', '..', 'methodologies');
+  }
+
+  /**
+   * Resolve methodologies directory by finding our package.json
+   * This handles npx installations where the package is deep in the cache
+   */
+  private resolveFromPackageJson(): string | null {
+    let dir = __dirname;
+    for (let i = 0; i < 15; i++) {
+      const pkgPath = join(dir, 'package.json');
+      try {
+        if (existsSync(pkgPath)) {
+          const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+          if (pkg.name === 'claude-prompts-server') {
+            const methodologiesPath = join(dir, 'methodologies');
+            if (existsSync(methodologiesPath) && this.hasYamlFiles(methodologiesPath)) {
+              return methodologiesPath;
+            }
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return null;
   }
 
   /**

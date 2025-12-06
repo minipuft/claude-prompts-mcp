@@ -22,7 +22,7 @@
     }
   },
   "gates": {
-    "definitionsDirectory": "src/gates/definitions",
+    "definitionsDirectory": "gates",
     "templatesDirectory": "src/gates/templates",
     "enabled": true
   },

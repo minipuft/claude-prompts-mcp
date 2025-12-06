@@ -65,7 +65,7 @@ Add this to your `claude_desktop_config.json`:
   "mcpServers": {
     "claude-prompts": {
       "command": "npx",
-      "args": ["-y", "claude-prompts-server", "--transport=stdio"]
+      "args": ["-y", "claude-prompts-server"]
     }
   }
 }
@@ -122,13 +122,14 @@ flowchart TB
     linkStyle default stroke:#94a3b8,stroke-width:2px
 
     User["1. User sends command"]:::actor
-    User -->|">>analyze @CAGEERF :: 'cite sources'"| Parse
+    Example[">>analyze @CAGEERF :: 'cite sources'"]:::actor
+    User --> Example --> Parse
 
     subgraph Server["MCP Server"]
         direction TB
         Parse["2. Parse operators"]:::process
         Inject["3. Inject framework + gates"]:::process
-        Render["4. Render template/prompt"]:::process
+        Render["4. Render prompt"]:::process
         Decide{"6. Route verdict"}:::decision
         Parse --> Inject --> Render
     end
@@ -136,7 +137,7 @@ flowchart TB
 
     subgraph Client["Claude (Client)"]
         direction TB
-        Execute["5. Execute prompt, self-check gates"]:::client
+        Execute["5. Run prompt + check gates"]:::client
     end
     Client:::clientbg
 
@@ -169,90 +170,143 @@ flowchart TB
 
 ## Features
 
-- **🔥 Hot Reload**: Edit `server/prompts/my_prompt.md`, save, run `prompt_engine >>my_prompt`. It updates instantly.
-- **🔗 Chains**: Run multi-step logic. `analyze --> critique --> fix`.
-- **🧠 Frameworks**: Apply proven thinking methodologies to any prompt. Use `@CAGEERF` for comprehensive planning, `@ReACT` for iterative problem-solving, `@5W1H` for thorough analysis, or `@SCAMPER` for creative brainstorming. The framework injects guidance AND auto-applies methodology-specific quality gates.
-- **🛡️ Gates**: Enforce quality standards on outputs.
-- **✨ Judge-Driven Selection**: Use `%judge` to have Claude analyze your task and select the best guidance style, framework, and gates automatically.
+### 🔥 Hot Reload
+**Problem**: Prompt iteration is slow. Edit file → restart server → test → repeat. And you're the one debugging prompt issues.
 
-## Power User Features
+**Solution**: The server watches `server/prompts/*.md` for changes and reloads instantly. But the real value: **just ask Claude to fix it**. When a prompt underperforms, describe the issue—Claude diagnoses, updates the file via `prompt_manager`, and you test immediately. No manual editing, no restart.
 
-The `prompt_engine` supports a symbolic language for complex workflows.
+```text
+User: "The code_review prompt is too verbose"
+Claude: prompt_manager(action:"update", id:"code_review", ...)  # Claude fixes it
+User: "Test it"
+Claude: prompt_engine(command:">>code_review")                   # Runs updated version instantly
+```
 
-### Symbolic Commands
+**Expect**: Claude iterates on prompts faster than you can. You describe the problem, Claude proposes and applies the fix, you validate. Tight feedback loop.
 
-| **Symbol** | **Name**      | **Pipeline Action**                                   | **Visual Mnemonics**          |
-| :--------: | :------------ | :---------------------------------------------------- | :---------------------------- |
-|   `-->`    | **Chain**     | **Pipes** output from one step to the next            | 🔗 **Link** steps together    |
-|    `@`     | **Framework** | Injects **Methodology + Auto-Gates** (CAGEERF, ReACT) | 🧠 **Brain** of the operation |
-|    `::`    | **Gate**      | Enforces **Quality Checks** before proceeding         | 🛡️ **Shield** the output      |
-|    `%`     | **Modifier**  | Toggles **Execution Modes** (Menu/Clean/Lean)         | ⚙️ **Config** the settings    |
-|    `#`     | **Style**     | Applies **Persona/Tone** presets                      | 🎨 **Paint** the response     |
+---
 
-### Gate Retry & Enforcement (New)
+### 🔗 Chains
+**Problem**: Complex tasks need multiple reasoning steps, but a single prompt tries to do everything at once.
 
-The system now intelligently manages gate failures:
+**Solution**: Break work into discrete steps with `-->`. Each step's output becomes the next step's input. Add quality checks between steps.
 
-- **Retry Limits**: Gates auto-retry up to 2 times (configurable) before pausing.
-- **Enforcement Modes**:
-  - **Blocking**: Must pass to proceed (default for Critical/High severity).
-  - **Advisory**: Logs a warning but allows the chain to continue (Medium/Low severity).
-- **User Choice**: On exhaustion, you can choose to `retry`, `skip`, or `abort`.
+```text
+analyze code --> identify issues --> propose fixes --> generate tests
+```
 
-### Using Gates
+**Expect**: The server executes steps sequentially, passing context forward. You see each step's output and can intervene if something goes wrong mid-chain.
 
-Gates add quality criteria inline with your prompts using the `::` operator:
+---
 
-**Simple — natural language criteria:**
+### 🧠 Frameworks
+**Problem**: Claude's reasoning varies in structure. Sometimes it's thorough, sometimes it skips steps. You want consistent, methodical thinking.
 
+**Solution**: Frameworks inject a **thinking methodology** into the system prompt. The LLM follows a defined reasoning pattern (e.g., "first gather context, then analyze, then plan, then execute"). Each framework also auto-injects **quality gates** specific to its phases.
+
+```text
+@CAGEERF Review this architecture    # Injects structured planning methodology
+@ReACT Debug this error              # Injects iterative reason-act-observe loops
+```
+
+**Expect**: Claude's response follows the methodology's structure. You'll see labeled phases in the output. The framework's gates validate each phase was completed properly.
+
+---
+
+### 🛡️ Gates
+**Problem**: Claude returns plausible-sounding outputs, but you need specific criteria met—and you want Claude to verify this, not you.
+
+**Solution**: Gates inject **quality criteria** into the prompt. Claude self-evaluates against these criteria and reports PASS/FAIL with reasoning. Failed gates can trigger retries or block the chain.
+
+```text
+Summarize this document :: 'must be under 200 words' :: 'must include key statistics'
+```
+
+**Expect**: Claude's response includes a self-assessment section. If criteria aren't met, the server can auto-retry with feedback or pause for your decision.
+
+---
+
+### ✨ Judge Selection
+**Problem**: You have multiple frameworks, styles, and gates available—but you're not sure which combination fits your task.
+
+**Solution**: `%judge` presents Claude with your available resources. Claude analyzes your task and recommends (or auto-applies) the best combination.
+
+```text
+%judge Help me refactor this legacy codebase
+```
+
+**Expect**: Claude returns a resource menu with recommendations, then makes a follow-up call with the selected operators applied.
+
+## Using Gates
+
+Gates inject quality criteria into prompts. Claude self-checks against them and reports PASS/FAIL.
+
+**Inline — quick natural language checks:**
 ```text
 Help me refactor this function :: 'keep it under 20 lines' :: 'add error handling'
 ```
 
-**With frameworks — structured reasoning + auto-gates:**
-
-Frameworks inject methodology guidance AND auto-apply quality gates specific to the methodology's phases. Use `@` to apply a thinking pattern:
-
+**With Framework — methodology + auto-gates:**
 ```text
-@CAGEERF Explain React hooks :: 'include practical examples' :: 'suitable for beginners'
+@CAGEERF Explain React hooks :: 'include practical examples'
 ```
+> The framework injects its phase-specific gates automatically. Your inline gate (`:: 'include practical examples'`) adds on top.
 
-**Chained — break complex tasks into steps:**
-
-Use `-->` to pipeline outputs. Each step builds on the previous, with optional quality checks between:
-
+**Chained — quality checks between steps:**
 ```text
 Research the topic :: 'use recent sources' --> Summarize findings :: 'be concise' --> Create action items
 ```
 
-**Structured — for complex validation:**
+| Gate Format | Syntax | Use Case |
+|-------------|--------|----------|
+| **Inline** | `:: 'criteria text'` | Quick checks, readable commands |
+| **Named** | `:: {name, description}` | Reusable gates with clear intent |
+| **Full** | `:: {name, criteria[], guidance}` | Complex validation, multiple criteria |
 
+**Structured gates (programmatic):**
 ```javascript
 prompt_engine({
   command: ">>code_review",
-  gates: [
-    {
-      name: "Security Check",
-      criteria: ["No hardcoded secrets", "Input validation on user data"],
-      guidance: "Flag vulnerabilities with severity ratings",
-    },
-  ],
+  gates: [{
+    name: "Security Check",
+    criteria: ["No hardcoded secrets", "Input validation on user data"],
+    guidance: "Flag vulnerabilities with severity ratings"
+  }]
 });
 ```
 
-| Operator      | Symbol | Value                                                   |
-| ------------- | ------ | ------------------------------------------------------- |
-| **Framework** | `@`    | Injects methodology guidance + auto-applies phase gates |
-| **Chain**     | `-->`  | Breaks complex tasks into manageable steps              |
-| **Gate**      | `::`   | Adds quality criteria Claude will self-check            |
+For the full gate schema, see [Enhanced Gate System](docs/enhanced-gate-system.md).
 
-| Gate Format | Syntax                            | Best For                            |
-| ----------- | --------------------------------- | ----------------------------------- |
-| **Inline**  | `:: 'criteria text'`              | Quick checks, readable commands     |
-| **Quick**   | `:: {name, description}`          | Named gates with clear intent       |
-| **Full**    | `:: {name, criteria[], guidance}` | Complex validation, multiple checks |
+## Syntax Reference
 
-For full gate schema options, see the [Enhanced Gate System docs](docs/enhanced-gate-system.md).
+The `prompt_engine` uses symbolic operators to compose workflows:
+
+| Symbol | Name | What It Does |
+|:------:|:-----|:-------------|
+| `>>` | **Prompt** | Executes a template by ID (`>>code_review`) |
+| `-->` | **Chain** | Pipes output to next step (`step1 --> step2`) |
+| `@` | **Framework** | Injects methodology + auto-gates (`@CAGEERF`) |
+| `::` | **Gate** | Adds quality criteria (`:: 'cite sources'`) |
+| `%` | **Modifier** | Toggles execution mode (`%clean`, `%lean`, `%judge`) |
+| `#` | **Style** | Applies tone/persona preset (`#analytical`) |
+
+**Modifiers explained:**
+- `%clean` — Skip all framework/gate injection (raw template only)
+- `%lean` — Skip framework guidance, keep gates only
+- `%guided` — Force framework injection even if disabled by frequency settings
+- `%judge` — Claude analyzes task and selects best resources automatically
+
+## Advanced Features
+
+### Gate Retry & Enforcement
+
+The server manages gate failures automatically:
+
+- **Retry Limits**: Failed gates retry up to 2× (configurable) before pausing for input.
+- **Enforcement Modes**:
+  - `blocking` — Must pass to proceed (Critical/High severity gates)
+  - `advisory` — Logs warning, continues anyway (Medium/Low severity)
+- **User Choice**: On retry exhaustion, respond with `retry`, `skip`, or `abort`.
 
 ### Examples
 

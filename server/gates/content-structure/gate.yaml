@@ -1,0 +1,39 @@
+id: content-structure
+name: Content Structure Guidelines
+type: validation
+description: Ensures well-organized, readable content with clear structure
+guidance: |
+  **Content Structure Guidelines:**
+  - Use clear headings and subheadings (## and ###)
+  - Organize content in logical sections
+  - Include bullet points or numbered lists for clarity
+  - Provide examples when explaining concepts
+  - Maintain consistent tone and style
+  - Ensure smooth transitions between sections
+  - Include a summary or conclusion when appropriate
+
+pass_criteria:
+  - type: content_check
+    min_length: 200
+    required_patterns:
+      - '##'
+      - '-'
+      - example
+  - type: pattern_check
+    keyword_count:
+      '##': 2
+    regex_patterns:
+      - '^##\s+.+$'
+      - '^\s*[-*]\s+.+'
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - documentation
+    - content_processing
+    - education
+  explicit_request: false

@@ -1,0 +1,46 @@
+id: educational-clarity
+name: Educational Content Clarity
+type: validation
+description: Ensures educational content is clear, well-structured, and pedagogically sound
+guidance: |
+  **Educational Clarity Guidelines:**
+  - Start with clear learning objectives or goals
+  - Use progressive complexity (simple to advanced)
+  - Include concrete examples for abstract concepts
+  - Provide step-by-step explanations for processes
+  - Use analogies and metaphors to aid understanding
+  - Include practice exercises or applications when appropriate
+  - Anticipate and address common misconceptions
+  - Use clear, jargon-free language with definitions for technical terms
+  - Organize content with logical flow and transitions
+  - Include summary or key takeaways
+
+pass_criteria:
+  - type: content_check
+    min_length: 400
+    required_patterns:
+      - example
+      - step
+      - understand
+      - learn
+  - type: pattern_check
+    keyword_count:
+      example: 2
+      for example: 1
+    regex_patterns:
+      - '^##\s+.*$'
+      - '^\d+\.\s+.*$'
+      - '^\s*[-*]\s+.*$'
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - education
+    - documentation
+    - content_processing
+    - development
+  explicit_request: false

@@ -2,15 +2,17 @@
 /**
  * Gate Loader - Loads gate definitions from YAML/JSON files
  * Provides hot-reloading capabilities similar to prompt system
+ *
+ * Uses RuntimeGateLoader for path resolution to support npx/npm installations.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { fileURLToPath } from 'url';
 
 import { Logger } from '../../logging/index.js';
 import { ResourceLoader } from '../../utils/resource-loader.js';
 import { validateLightweightGateDefinition } from '../utils/gate-definition-schema.js';
+import { getDefaultRuntimeGateLoader } from './runtime-gate-loader.js';
 
 import type { LightweightGateDefinition, GateActivationResult } from '../types.js';
 import type { TemporaryGateRegistry } from './temporary-gate-registry.js';
@@ -33,21 +35,15 @@ export class GateLoader {
   ) {
     this.logger = logger;
 
-    // If gatesDirectory not provided, try to resolve from import.meta.url
+    // If gatesDirectory not provided, use RuntimeGateLoader for path resolution
+    // This handles npx installations where packages are deep in cache paths
     if (gatesDirectory !== undefined) {
       this.gatesDirectory = gatesDirectory;
     } else {
-      // Try import.meta.url resolution (works in production ES modules)
-      try {
-        const __filename = fileURLToPath(eval('import.meta.url') as string);
-        const __dirname = path.dirname(__filename);
-        this.gatesDirectory = path.join(__dirname, '../../gates/definitions');
-      } catch (error) {
-        // Fallback for Jest/test environments where import.meta is unavailable
-        // Use process.cwd() as fallback
-        this.gatesDirectory = path.join(process.cwd(), 'src/gates/definitions');
-        this.logger.debug('[GateLoader] Using fallback gates directory:', this.gatesDirectory);
-      }
+      // Use RuntimeGateLoader's multi-strategy path resolution
+      const runtimeLoader = getDefaultRuntimeGateLoader();
+      this.gatesDirectory = runtimeLoader.getGatesDir();
+      this.logger.debug('[GateLoader] Using resolved gates directory:', this.gatesDirectory);
     }
 
     this.temporaryGateRegistry = temporaryGateRegistry;

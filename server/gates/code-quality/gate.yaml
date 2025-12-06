@@ -1,0 +1,45 @@
+id: code-quality
+name: Code Quality Standards
+type: validation
+description: Ensures generated code follows best practices and quality standards
+guidance: |
+  **Code Quality Standards:**
+  - Include error handling and input validation
+  - Add inline comments for complex logic
+  - Follow consistent naming conventions
+  - Consider edge cases and boundary conditions
+  - Optimize for readability over cleverness
+  - Include basic documentation/docstrings
+  - Follow security best practices (input sanitization, avoid hardcoded secrets)
+
+pass_criteria:
+  - type: content_check
+    min_length: 100
+    required_patterns:
+      - try
+      - catch
+      - //
+      - "*"
+      - function
+      - const
+    forbidden_patterns:
+      - TODO
+      - FIXME
+      - hack
+      - password123
+  - type: pattern_check
+    regex_patterns:
+      - 'function\s+\w+\s*\('
+      - '\/\/.*\w+'
+      - 'try\s*\{'
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - code
+    - development
+  explicit_request: false

@@ -1,0 +1,23 @@
+id: methodology-validation
+name: Methodology Compliance Validation
+type: validation
+gate_type: framework
+description: Validates that responses align with the active framework methodology using configured quality indicators when available.
+guidance: |
+  - Follow the active methodology phases and quality indicators
+  - Make the methodology explicit in your reasoning when possible
+  - Address missing phases with concise rationale
+
+pass_criteria:
+  - type: methodology_compliance
+    min_compliance_score: 0.6
+    severity: warn
+
+activation:
+  prompt_categories: []
+  framework_context:
+    - CAGEERF
+    - ReACT
+    - 5W1H
+    - SCAMPER
+  explicit_request: false

@@ -22,6 +22,14 @@ export {
   createTemporaryGateRegistry,
   type TemporaryGateDefinition as TemporaryGateRegistryDefinition,
 } from './temporary-gate-registry.js';
+export {
+  RuntimeGateLoader,
+  createRuntimeGateLoader,
+  getDefaultRuntimeGateLoader,
+  resetDefaultRuntimeGateLoader,
+  type RuntimeGateLoaderConfig,
+  type GateLoaderStats,
+} from './runtime-gate-loader.js';
 
 export type { ValidationResult } from '../../execution/types.js';
 export type {
