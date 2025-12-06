@@ -122,6 +122,16 @@
       "matchUpdateTypes": ["patch", "minor"],
       "isVulnerabilityAlert": true,
       "prPriority": 10
+    },
+    {
+      "description": "Hold zod at v3.x until LLM ecosystem catches up to v4",
+      "matchPackageNames": ["zod"],
+      "allowedVersions": "<4.0.0"
+    },
+    {
+      "description": "Hold express at v4.x until LLM ecosystem catches up to v5",
+      "matchPackageNames": ["express", "@types/express"],
+      "allowedVersions": "<5.0.0"
     }
   ],
 
