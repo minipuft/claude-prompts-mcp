@@ -100,3 +100,4 @@ plans/future/
 
 # Test prompts
 server/prompts/general/test_*.md
+node_modules/
