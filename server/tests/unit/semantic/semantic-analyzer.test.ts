@@ -11,10 +11,16 @@ const mockLogger = {
   error: jest.fn(),
 } as any;
 
-function createAnalyzer(mode: 'structural' | 'semantic' = 'structural') {
+function createAnalyzer(llmEnabled = false) {
   return new ContentAnalyzer(mockLogger, {
-    mode,
-    llmIntegration: { enabled: false },
+    llmIntegration: {
+      enabled: llmEnabled,
+      apiKey: null,
+      endpoint: null,
+      model: 'gpt-4',
+      maxTokens: 1000,
+      temperature: 0.1,
+    },
   });
 }
 
@@ -31,8 +37,8 @@ function createPrompt(partial: Partial<ConvertedPrompt>): ConvertedPrompt {
   };
 }
 
-describe('ContentAnalyzer (structural mode)', () => {
-  test('classifies simple variable substitution prompts as prompt execution type', async () => {
+describe('ContentAnalyzer (minimal mode - LLM not configured)', () => {
+  test('returns minimal analysis result for simple prompts', async () => {
     const analyzer = createAnalyzer();
     const result = await analyzer.analyzePrompt(
       createPrompt({
@@ -43,49 +49,116 @@ describe('ContentAnalyzer (structural mode)', () => {
 
     expect(result.executionType).toBe('single');
     expect(result.requiresFramework).toBe(false);
-    expect(result.frameworkRecommendation?.requiresUserChoice).toBe(true);
-    expect(result.reasoning.length).toBeGreaterThan(0);
+    expect(result.capabilities.hasSemanticUnderstanding).toBe(false);
+    expect(result.capabilities.canRecommendFramework).toBe(false);
+    expect(result.analysisMetadata.mode).toBe('minimal');
+    expect(result.reasoning).toContain('Minimal analysis - LLM not configured');
   });
 
-  test('detects chain-style structure when multiple sequential steps exist', async () => {
+  test('returns minimal analysis for prompts with chain steps', async () => {
     const analyzer = createAnalyzer();
     const result = await analyzer.analyzePrompt(
       createPrompt({
         id: 'chain',
-        userMessageTemplate: `
-Step 1: Analyze {{input}}
-Step 2: Summarize findings
-Step 3: Recommend actions
-        `,
-      })
-    );
-
-    expect(result.executionType).toBe('chain');
-    expect(result.executionCharacteristics.hasChainSteps).toBe(true);
-    expect(result.suggestedGates.length).toBeGreaterThan(0);
-  });
-
-  test('provides warnings about structural limitations when semantic analysis is unavailable', async () => {
-    const analyzer = createAnalyzer();
-    const result = await analyzer.analyzePrompt(
-      createPrompt({
-        id: 'complex',
-        userMessageTemplate: `
-{% if analysis_type == 'detailed' %}
-Perform detailed analysis of {{content}}
-{% else %}
-Quick analysis
-{% endif %}
-        `,
-        arguments: [
-          { name: 'content', type: 'string', required: true },
-          { name: 'analysis_type', type: 'string', required: false },
+        chainSteps: [
+          { id: 'step1', promptId: 'analyze' },
+          { id: 'step2', promptId: 'summarize' },
         ],
       })
     );
 
-    expect(result.warnings.length).toBeGreaterThan(0);
-    expect(result.capabilities.hasSemanticUnderstanding).toBe(false);
-    expect(result.capabilities.canDetectStructure).toBe(true);
+    expect(result.executionType).toBe('single');
+    expect(result.executionCharacteristics.hasChainSteps).toBe(true);
+    expect(result.analysisMetadata.mode).toBe('minimal');
+  });
+
+  test('reports limitations when LLM not configured', async () => {
+    const analyzer = createAnalyzer();
+    const result = await analyzer.analyzePrompt(
+      createPrompt({
+        id: 'complex',
+        userMessageTemplate: 'Analyze {{content}} with comprehensive methodology',
+      })
+    );
+
+    expect(result.limitations.length).toBeGreaterThan(0);
+    expect(result.limitations).toContain('LLM integration not configured');
+    expect(result.warnings.length).toBe(0); // No warnings in minimal mode
+  });
+
+  test('caches analysis results', async () => {
+    const analyzer = createAnalyzer();
+    const prompt = createPrompt({ id: 'cached' });
+
+    const result1 = await analyzer.analyzePrompt(prompt);
+    expect(result1.analysisMetadata.cacheHit).toBe(false);
+
+    const result2 = await analyzer.analyzePrompt(prompt);
+    expect(result2.analysisMetadata.cacheHit).toBe(true);
+  });
+
+  test('getPerformanceStats returns current cache state', () => {
+    const analyzer = createAnalyzer();
+    const stats = analyzer.getPerformanceStats();
+
+    expect(stats.cacheEnabled).toBe(true);
+    expect(stats.llmIntegrationEnabled).toBe(false);
+    expect(typeof stats.cacheSize).toBe('number');
+  });
+
+  test('clearCache empties the analysis cache', async () => {
+    const analyzer = createAnalyzer();
+
+    await analyzer.analyzePrompt(createPrompt({ id: 'to-clear' }));
+    expect(analyzer.getPerformanceStats().cacheSize).toBe(1);
+
+    analyzer.clearCache();
+    expect(analyzer.getPerformanceStats().cacheSize).toBe(0);
+  });
+
+  test('isLLMEnabled returns false when LLM not configured', () => {
+    const analyzer = createAnalyzer(false);
+    expect(analyzer.isLLMEnabled()).toBe(false);
+  });
+
+  test('isLLMEnabled returns true when LLM configured', () => {
+    const analyzer = createAnalyzer(true);
+    expect(analyzer.isLLMEnabled()).toBe(true);
+  });
+
+  test('suggested gates include basic_validation in minimal mode', async () => {
+    const analyzer = createAnalyzer();
+    const result = await analyzer.analyzePrompt(createPrompt({ id: 'gates-test' }));
+
+    expect(result.suggestedGates).toContain('basic_validation');
+  });
+});
+
+describe('ContentAnalyzer configuration', () => {
+  test('getConfig returns current configuration', () => {
+    const analyzer = createAnalyzer();
+    const config = analyzer.getConfig();
+
+    expect(config.llmIntegration.enabled).toBe(false);
+    expect(config.llmIntegration.model).toBe('gpt-4');
+  });
+
+  test('updateConfig merges new configuration', () => {
+    const analyzer = createAnalyzer();
+
+    analyzer.updateConfig({
+      llmIntegration: {
+        enabled: true,
+        apiKey: 'test-key',
+        endpoint: 'http://localhost:8080',
+        model: 'gpt-3.5-turbo',
+        maxTokens: 500,
+        temperature: 0.5,
+      },
+    });
+
+    const config = analyzer.getConfig();
+    expect(config.llmIntegration.enabled).toBe(true);
+    expect(config.llmIntegration.model).toBe('gpt-3.5-turbo');
   });
 });

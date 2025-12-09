@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
-import { SessionManagementStage } from '../../../../src/execution/pipeline/stages/07-session-stage.js';
 import { GateEnforcementAuthority } from '../../../../src/execution/pipeline/decisions/index.js';
+import { SessionManagementStage } from '../../../../src/execution/pipeline/stages/07-session-stage.js';
 
 import type { ChainSession, ChainSessionService } from '../../../../src/chain-session/types.js';
 import type {
@@ -195,7 +195,7 @@ describe('SessionManagementStage', () => {
 
     expect(manager.createSession).not.toHaveBeenCalled();
     expect(manager.getSessionByChainIdentifier).toHaveBeenCalledWith('chain-chain_prompt#5', {
-      includeLegacy: true,
+      includeDormant: true,
     });
     expect(context.sessionContext).toEqual({
       sessionId: 'sess-from-chain',
@@ -272,10 +272,7 @@ describe('SessionManagementStage', () => {
     context.state.gates.accumulatedGateIds = ['gate-alpha', 'gate-beta'];
 
     // Initialize the authority on context (normally done by DI stage)
-    context.gateEnforcement = new GateEnforcementAuthority(
-      manager as any,
-      createLogger() as any
-    );
+    context.gateEnforcement = new GateEnforcementAuthority(manager as any, createLogger() as any);
 
     const dateSpy = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     manager.getRunHistory.mockReturnValue([]);

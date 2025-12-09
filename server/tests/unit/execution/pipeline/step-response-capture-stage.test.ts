@@ -207,7 +207,7 @@ describe('StepResponseCaptureStage', () => {
       preservePlaceholder: true,
     });
     expect(getChainContext).toHaveBeenCalled();
-    expect(context.metadata['chainContext']).toEqual({ memory: [] });
+    expect(context.state.session.chainContext).toEqual({ memory: [] });
   });
 
   test('captures real user response when placeholder state exists', async () => {

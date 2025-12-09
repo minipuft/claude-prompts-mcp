@@ -2,44 +2,6 @@
 module.exports = {
   forbidden: [
     // ============================================
-    // LEGACY SYSTEM DETECTION
-    // ============================================
-    {
-      name: 'no-legacy-execution-systems',
-      comment: 'Legacy execution systems should not exist. Use PromptExecutionPipeline.',
-      severity: 'error',
-      from: {},
-      to: {
-        path: [
-          'src/execution/engine\\.ts$',
-          'src/execution/execution-coordinator\\.ts$',
-          'src/execution/unified-prompt-processor\\.ts$',
-        ],
-      },
-    },
-    {
-      name: 'no-legacy-parser-files',
-      comment: 'Legacy parser files deleted. Use command-parser.ts and symbolic-operator-parser.ts.',
-      severity: 'error',
-      from: {},
-      to: {
-        path: [
-          'src/execution/parsers/symbolic-command-parser\\.ts$',
-          'src/execution/parsers/unified-command-parser\\.ts$',
-        ],
-      },
-    },
-    {
-      name: 'no-legacy-typescript-methodology-guides',
-      comment: 'TypeScript methodology guides deleted. Use YAML methodologies in /methodologies.',
-      severity: 'error',
-      from: {},
-      to: {
-        path: 'src/frameworks/methodology/guides/.*-guide\\.ts$',
-      },
-    },
-
-    // ============================================
     // ARCHITECTURE BOUNDARIES
     // ============================================
     {
@@ -120,27 +82,6 @@ module.exports = {
       to: {},
     },
     {
-      name: 'no-deprecated-core',
-      comment: 'Do not depend on deprecated Node.js core modules.',
-      severity: 'warn',
-      from: {},
-      to: {
-        dependencyTypes: ['core'],
-        path: [
-          '^(punycode|domain|constants|sys|_linklist|_stream_wrap)$',
-        ],
-      },
-    },
-    {
-      name: 'not-to-unresolvable',
-      comment: 'Do not import modules that cannot be resolved.',
-      severity: 'error',
-      from: {},
-      to: {
-        couldNotResolve: true,
-      },
-    },
-    {
       name: 'no-non-package-json',
       comment: 'Do not depend on modules outside package.json.',
       severity: 'error',
@@ -174,22 +115,6 @@ module.exports = {
       exportsFields: ['exports'],
       conditionNames: ['import', 'require', 'node', 'default'],
       mainFields: ['module', 'main', 'types', 'typings'],
-    },
-    reporterOptions: {
-      dot: {
-        theme: {
-          graph: {
-            splines: 'ortho',
-          },
-        },
-      },
-      archi: {
-        theme: {
-          graph: {
-            splines: 'ortho',
-          },
-        },
-      },
     },
   },
 };

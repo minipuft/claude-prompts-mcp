@@ -4,11 +4,11 @@ import { ExecutionContext } from '../../../../src/execution/context/execution-co
 import { FrameworkResolutionStage } from '../../../../src/execution/pipeline/stages/06-framework-stage.js';
 
 import type { FrameworkManager } from '../../../../src/frameworks/framework-manager.js';
-import type { GateLoader } from '../../../../src/gates/core/gate-loader.js';
 import type {
   FrameworkExecutionContext,
   FrameworkMethodology,
 } from '../../../../src/frameworks/types/index.js';
+import type { GateLoader } from '../../../../src/gates/core/gate-loader.js';
 import type { ConvertedPrompt } from '../../../../src/types/index.js';
 
 const createLogger = () => ({
@@ -21,27 +21,27 @@ const createLogger = () => ({
 /**
  * Creates a mock GateLoader that returns specified methodology gate IDs.
  */
-const createMockGateLoader = (methodologyGateIds: string[] = [
-  'framework-compliance',
-  'methodology-validation',
-]): GateLoader => ({
-  loadGate: jest.fn(),
-  loadGates: jest.fn(),
-  getActiveGates: jest.fn(),
-  listAvailableGates: jest.fn(),
-  listAvailableGateDefinitions: jest.fn(),
-  clearCache: jest.fn(),
-  isGateActive: jest.fn(),
-  getStatistics: jest.fn(),
-  isMethodologyGate: jest.fn().mockImplementation((gateId: string) =>
-    Promise.resolve(methodologyGateIds.includes(gateId))
-  ),
-  isMethodologyGateCached: jest.fn().mockImplementation((gateId: string) =>
-    methodologyGateIds.includes(gateId)
-  ),
-  getMethodologyGateIds: jest.fn().mockResolvedValue(methodologyGateIds),
-  setTemporaryGateRegistry: jest.fn(),
-} as unknown as GateLoader);
+const createMockGateLoader = (
+  methodologyGateIds: string[] = ['framework-compliance']
+): GateLoader =>
+  ({
+    loadGate: jest.fn(),
+    loadGates: jest.fn(),
+    getActiveGates: jest.fn(),
+    listAvailableGates: jest.fn(),
+    listAvailableGateDefinitions: jest.fn(),
+    clearCache: jest.fn(),
+    isGateActive: jest.fn(),
+    getStatistics: jest.fn(),
+    isMethodologyGate: jest
+      .fn()
+      .mockImplementation((gateId: string) => Promise.resolve(methodologyGateIds.includes(gateId))),
+    isMethodologyGateCached: jest
+      .fn()
+      .mockImplementation((gateId: string) => methodologyGateIds.includes(gateId)),
+    getMethodologyGateIds: jest.fn().mockResolvedValue(methodologyGateIds),
+    setTemporaryGateRegistry: jest.fn(),
+  }) as unknown as GateLoader;
 
 const createConvertedPrompt = (overrides: Partial<ConvertedPrompt> = {}): ConvertedPrompt => ({
   id: 'demo',

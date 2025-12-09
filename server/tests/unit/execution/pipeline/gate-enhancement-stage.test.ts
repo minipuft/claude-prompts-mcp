@@ -3,6 +3,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
 import { GateEnhancementStage } from '../../../../src/execution/pipeline/stages/05-gate-enhancement-stage.js';
 
+import type { GateManager } from '../../../../src/gates/gate-manager.js';
 import type { GateLoader } from '../../../../src/gates/core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../../../../src/gates/core/temporary-gate-registry.js';
 import type { IGateService } from '../../../../src/gates/services/gate-service-interface.js';
@@ -12,29 +13,71 @@ import type { ConvertedPrompt } from '../../../../src/types/index.js';
 /**
  * Creates a mock GateLoader that returns specified methodology gate IDs.
  */
-const createMockGateLoader = (methodologyGateIds: string[] = [
-  'framework-compliance',
-  'methodology-validation',
-  'research-quality',
-  'technical-accuracy',
-]): GateLoader => ({
-  loadGate: jest.fn(),
-  loadGates: jest.fn(),
-  getActiveGates: jest.fn(),
-  listAvailableGates: jest.fn(),
-  listAvailableGateDefinitions: jest.fn(),
-  clearCache: jest.fn(),
-  isGateActive: jest.fn(),
-  getStatistics: jest.fn(),
-  isMethodologyGate: jest.fn().mockImplementation((gateId: string) =>
-    Promise.resolve(methodologyGateIds.includes(gateId))
-  ),
-  isMethodologyGateCached: jest.fn().mockImplementation((gateId: string) =>
-    methodologyGateIds.includes(gateId)
-  ),
-  getMethodologyGateIds: jest.fn().mockResolvedValue(methodologyGateIds),
-  setTemporaryGateRegistry: jest.fn(),
-} as unknown as GateLoader);
+const createMockGateLoader = (
+  methodologyGateIds: string[] = [
+    'framework-compliance',
+    'research-quality',
+    'technical-accuracy',
+  ]
+): GateLoader =>
+  ({
+    loadGate: jest.fn(),
+    loadGates: jest.fn(),
+    getActiveGates: jest.fn(),
+    listAvailableGates: jest.fn(),
+    listAvailableGateDefinitions: jest.fn(),
+    clearCache: jest.fn(),
+    isGateActive: jest.fn(),
+    getStatistics: jest.fn(),
+    isMethodologyGate: jest
+      .fn()
+      .mockImplementation((gateId: string) => Promise.resolve(methodologyGateIds.includes(gateId))),
+    isMethodologyGateCached: jest
+      .fn()
+      .mockImplementation((gateId: string) => methodologyGateIds.includes(gateId)),
+    getMethodologyGateIds: jest.fn().mockResolvedValue(methodologyGateIds),
+    setTemporaryGateRegistry: jest.fn(),
+  }) as unknown as GateLoader;
+
+/**
+ * Creates a mock GateManager that returns gates based on category.
+ * Mirrors the old hardcoded getCategoryGates() behavior for test compatibility.
+ */
+const createMockGateManager = (): GateManager => {
+  const categoryGateMapping: Record<string, string[]> = {
+    analysis: ['research-quality', 'technical-accuracy'],
+    research: ['research-quality', 'technical-accuracy'],
+    development: ['code-quality', 'technical-accuracy'],
+    code: ['code-quality', 'technical-accuracy'],
+    documentation: ['content-structure', 'educational-clarity'],
+    architecture: ['technical-accuracy', 'security-awareness'],
+  };
+
+  return {
+    selectGates: jest.fn().mockImplementation(({ promptCategory }: { promptCategory?: string }) => {
+      const gates = promptCategory ? categoryGateMapping[promptCategory] ?? [] : [];
+      return {
+        guides: [],
+        selectedIds: gates,
+        skippedIds: [],
+        metadata: { selectionMethod: 'category', selectionTime: 0 },
+      };
+    }),
+    getGate: jest.fn(),
+    hasGate: jest.fn(),
+    listGates: jest.fn().mockReturnValue([]),
+    getGateEntries: jest.fn().mockReturnValue([]),
+    getActiveGates: jest.fn().mockReturnValue([]),
+    setGateEnabled: jest.fn(),
+    reloadGate: jest.fn(),
+    getGateRegistry: jest.fn(),
+    getRegistryStats: jest.fn().mockReturnValue({ totalGates: 0 }),
+    getStatus: jest.fn(),
+    isGateSystemEnabled: jest.fn().mockReturnValue(true),
+    setStateManager: jest.fn(),
+    initialize: jest.fn(),
+  } as unknown as GateManager;
+};
 
 const createLogger = (): Logger => ({
   info: jest.fn(),
@@ -50,8 +93,7 @@ const baseFrameworkConfig = {
 };
 const baseGatesConfig = {
   enabled: true,
-  definitionsDirectory: 'src/gates/definitions',
-  templatesDirectory: 'src/gates/templates',
+  definitionsDirectory: 'gates',
 };
 
 const createGateService = () => {
@@ -101,7 +143,7 @@ describe('GateEnhancementStage', () => {
 
     const context = new ExecutionContext({
       command: '>>demo',
-      temporary_gates: [
+      gates: [
         {
           name: 'Custom check',
           type: 'quality',
@@ -221,11 +263,12 @@ describe('GateEnhancementStage', () => {
 
     await stage.execute(context);
 
-    expect((gateService.enhancePrompt as jest.Mock)).not.toHaveBeenCalled();
+    expect(gateService.enhancePrompt as jest.Mock).not.toHaveBeenCalled();
   });
 
   test('applies gates per chain step and stores step-level instructions', async () => {
     const gateService = createGateService();
+    const mockGateManager = createMockGateManager();
     const stage = new GateEnhancementStage(
       gateService,
       undefined,
@@ -234,7 +277,9 @@ describe('GateEnhancementStage', () => {
       () => undefined, // frameworkManagerProvider
       createLogger(),
       undefined,
-      () => baseGatesConfig
+      () => baseGatesConfig,
+      undefined, // gateLoader
+      () => mockGateManager // gateManagerProvider - provides category-based gate selection
     );
 
     const firstStepPrompt: ConvertedPrompt = {
@@ -362,7 +407,7 @@ describe('GateEnhancementStage', () => {
 
     const context = new ExecutionContext({
       command: '>>step1 --> >>step2 --> >>step3',
-      temporary_gates: [{ name: 'Step 2 Only', target_step_number: 2, criteria: ['Check step 2'] }],
+      gates: [{ name: 'Step 2 Only', target_step_number: 2, criteria: ['Check step 2'] }],
     } as any);
 
     // Add normalized gates to metadata (mimics normalization stage behavior)
@@ -448,9 +493,7 @@ describe('GateEnhancementStage', () => {
 
     const context = new ExecutionContext({
       command: '>>step1 --> >>step2 --> >>step3',
-      temporary_gates: [
-        { name: 'Steps 1 and 3', apply_to_steps: [1, 3], criteria: ['Check steps'] },
-      ],
+      gates: [{ name: 'Steps 1 and 3', apply_to_steps: [1, 3], criteria: ['Check steps'] }],
     } as any);
 
     // Add normalized gates to metadata (mimics normalization stage behavior)
@@ -536,7 +579,7 @@ describe('GateEnhancementStage', () => {
 
     const context = new ExecutionContext({
       command: '>>step1 --> >>step2',
-      temporary_gates: [{ name: 'All Steps', criteria: ['Check all'] }],
+      gates: [{ name: 'All Steps', criteria: ['Check all'] }],
     } as any);
 
     // Add normalized gates to metadata (mimics normalization stage behavior)
@@ -712,6 +755,7 @@ describe('GateEnhancementStage', () => {
     const temporaryRegistry = {
       createTemporaryGate: jest.fn().mockReturnValue('temp_custom'),
     } as unknown as TemporaryGateRegistry;
+    const mockGateManager = createMockGateManager();
 
     const stage = new GateEnhancementStage(
       gateService,
@@ -721,7 +765,9 @@ describe('GateEnhancementStage', () => {
       () => undefined, // frameworkManagerProvider
       createLogger(),
       undefined,
-      () => baseGatesConfig
+      () => baseGatesConfig,
+      undefined, // gateLoader
+      () => mockGateManager // gateManagerProvider - provides category-based gate selection
     );
 
     const context = new ExecutionContext({ command: '>>demo' });
@@ -739,7 +785,7 @@ describe('GateEnhancementStage', () => {
       gates: ['planned-gate'], // prompt-config source
       requiresFramework: false,
       requiresSession: false,
-      category: 'development', // Will add code-quality, technical-accuracy from category-auto
+      category: 'development', // Will add code-quality, technical-accuracy from registry-auto
     } as any;
     context.parsedCommand = {
       commandType: 'single',
@@ -754,6 +800,7 @@ describe('GateEnhancementStage', () => {
     expect(sourceCounts['inline-operator']).toBeGreaterThanOrEqual(1);
     expect(sourceCounts['client-selection']).toBeGreaterThanOrEqual(1);
     expect(sourceCounts['prompt-config']).toBeGreaterThanOrEqual(1);
-    expect(sourceCounts['category-auto']).toBeGreaterThanOrEqual(1);
+    // registry-auto source: gates selected from GateManager.selectGates() activation rules
+    expect(sourceCounts['registry-auto']).toBeGreaterThanOrEqual(1);
   });
 });

@@ -22,27 +22,27 @@ describe('GateAccumulator', () => {
 
   describe('basic operations', () => {
     test('adds a gate successfully', () => {
-      const added = accumulator.add('research-quality', 'category-auto');
+      const added = accumulator.add('research-quality', 'registry-auto');
       expect(added).toBe(true);
       expect(accumulator.has('research-quality')).toBe(true);
       expect(accumulator.size).toBe(1);
     });
 
     test('returns false for empty or whitespace gate IDs', () => {
-      expect(accumulator.add('', 'category-auto')).toBe(false);
-      expect(accumulator.add('   ', 'category-auto')).toBe(false);
-      expect(accumulator.add(null as any, 'category-auto')).toBe(false);
+      expect(accumulator.add('', 'registry-auto')).toBe(false);
+      expect(accumulator.add('   ', 'registry-auto')).toBe(false);
+      expect(accumulator.add(null as any, 'registry-auto')).toBe(false);
       expect(accumulator.size).toBe(0);
     });
 
     test('trims whitespace from gate IDs', () => {
-      accumulator.add('  code-quality  ', 'category-auto');
+      accumulator.add('  code-quality  ', 'registry-auto');
       expect(accumulator.has('code-quality')).toBe(true);
       expect(accumulator.has('  code-quality  ')).toBe(true);
     });
 
     test('getAll returns all gate IDs', () => {
-      accumulator.add('gate-1', 'category-auto');
+      accumulator.add('gate-1', 'registry-auto');
       accumulator.add('gate-2', 'methodology');
       accumulator.add('gate-3', 'inline-operator');
 
@@ -68,14 +68,14 @@ describe('GateAccumulator', () => {
 
   describe('deduplication', () => {
     test('deduplicates gates from same source', () => {
-      accumulator.add('research-quality', 'category-auto');
-      accumulator.add('research-quality', 'category-auto');
+      accumulator.add('research-quality', 'registry-auto');
+      accumulator.add('research-quality', 'registry-auto');
       expect(accumulator.size).toBe(1);
     });
 
     test('deduplicates gates from different sources with same/lower priority', () => {
       accumulator.add('code-quality', 'methodology'); // priority 40
-      const added = accumulator.add('code-quality', 'category-auto'); // priority 20
+      const added = accumulator.add('code-quality', 'registry-auto'); // priority 20
       expect(added).toBe(false);
       expect(accumulator.size).toBe(1);
 
@@ -85,13 +85,13 @@ describe('GateAccumulator', () => {
 
     test('logs when skipping duplicate gate', () => {
       accumulator.add('code-quality', 'methodology');
-      accumulator.add('code-quality', 'category-auto');
+      accumulator.add('code-quality', 'registry-auto');
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
         '[GateAccumulator] Skipped duplicate gate',
         expect.objectContaining({
           gateId: 'code-quality',
-          attemptedSource: 'category-auto',
+          attemptedSource: 'registry-auto',
           existingSource: 'methodology',
         })
       );
@@ -100,7 +100,7 @@ describe('GateAccumulator', () => {
 
   describe('priority override', () => {
     test('higher priority source overrides lower priority', () => {
-      accumulator.add('code-quality', 'category-auto'); // priority 20
+      accumulator.add('code-quality', 'registry-auto'); // priority 20
       const added = accumulator.add('code-quality', 'inline-operator'); // priority 100
 
       expect(added).toBe(true);
@@ -109,14 +109,14 @@ describe('GateAccumulator', () => {
     });
 
     test('logs when overriding with higher priority source', () => {
-      accumulator.add('code-quality', 'category-auto');
+      accumulator.add('code-quality', 'registry-auto');
       accumulator.add('code-quality', 'inline-operator');
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
         '[GateAccumulator] Overriding gate with higher priority source',
         expect.objectContaining({
           gateId: 'code-quality',
-          oldSource: 'category-auto',
+          oldSource: 'registry-auto',
           newSource: 'inline-operator',
         })
       );
@@ -124,7 +124,7 @@ describe('GateAccumulator', () => {
 
     test('priority order matches GATE_SOURCE_PRIORITY', () => {
       const sources: GateSource[] = [
-        'category-auto', // 20
+        'registry-auto', // 20
         'methodology', // 40
         'chain-level', // 50
         'prompt-config', // 60
@@ -145,8 +145,8 @@ describe('GateAccumulator', () => {
     });
 
     test('same priority uses first-in-wins', () => {
-      // Using category-auto twice via addAll (same priority)
-      accumulator.add('gate-a', 'category-auto', { first: true });
+      // Using registry-auto twice via addAll (same priority)
+      accumulator.add('gate-a', 'registry-auto', { first: true });
 
       // Cannot test same source override since the key is the same
       // Instead test that same priority from same source keeps first
@@ -157,7 +157,7 @@ describe('GateAccumulator', () => {
 
   describe('freeze behavior', () => {
     test('freeze prevents further additions', () => {
-      accumulator.add('gate-1', 'category-auto');
+      accumulator.add('gate-1', 'registry-auto');
       accumulator.freeze();
 
       const added = accumulator.add('gate-2', 'inline-operator');
@@ -173,7 +173,7 @@ describe('GateAccumulator', () => {
     });
 
     test('freeze logs summary', () => {
-      accumulator.add('gate-1', 'category-auto');
+      accumulator.add('gate-1', 'registry-auto');
       accumulator.add('gate-2', 'methodology');
       accumulator.freeze();
 
@@ -199,7 +199,7 @@ describe('GateAccumulator', () => {
     });
 
     test('clear is blocked after freeze', () => {
-      accumulator.add('gate-1', 'category-auto');
+      accumulator.add('gate-1', 'registry-auto');
       accumulator.freeze();
       accumulator.clear();
 
@@ -212,14 +212,14 @@ describe('GateAccumulator', () => {
 
   describe('filtering and queries', () => {
     beforeEach(() => {
-      accumulator.add('gate-1', 'category-auto');
-      accumulator.add('gate-2', 'category-auto');
+      accumulator.add('gate-1', 'registry-auto');
+      accumulator.add('gate-2', 'registry-auto');
       accumulator.add('gate-3', 'methodology');
       accumulator.add('gate-4', 'inline-operator');
     });
 
     test('getBySource filters correctly', () => {
-      const categoryGates = accumulator.getBySource('category-auto');
+      const categoryGates = accumulator.getBySource('registry-auto');
       expect(categoryGates).toHaveLength(2);
       expect(categoryGates).toContain('gate-1');
       expect(categoryGates).toContain('gate-2');
@@ -236,7 +236,7 @@ describe('GateAccumulator', () => {
 
     test('getSourceCounts returns correct counts', () => {
       const counts = accumulator.getSourceCounts();
-      expect(counts['category-auto']).toBe(2);
+      expect(counts['registry-auto']).toBe(2);
       expect(counts['methodology']).toBe(1);
       expect(counts['inline-operator']).toBe(1);
     });
@@ -247,8 +247,8 @@ describe('GateAccumulator', () => {
 
       const gate1Entry = entries.find((e) => e.id === 'gate-1');
       expect(gate1Entry).toBeDefined();
-      expect(gate1Entry?.source).toBe('category-auto');
-      expect(gate1Entry?.priority).toBe(GATE_SOURCE_PRIORITY['category-auto']);
+      expect(gate1Entry?.source).toBe('registry-auto');
+      expect(gate1Entry?.priority).toBe(GATE_SOURCE_PRIORITY['registry-auto']);
       expect(gate1Entry?.addedAt).toBeDefined();
     });
   });
@@ -268,7 +268,7 @@ describe('GateAccumulator', () => {
     });
 
     test('metadata is optional', () => {
-      accumulator.add('gate-no-meta', 'category-auto');
+      accumulator.add('gate-no-meta', 'registry-auto');
       const entry = accumulator.getEntries().find((e) => e.id === 'gate-no-meta');
       expect(entry?.metadata).toBeUndefined();
     });
@@ -276,7 +276,7 @@ describe('GateAccumulator', () => {
 
   describe('clear operation', () => {
     test('clear removes all gates when not frozen', () => {
-      accumulator.add('gate-1', 'category-auto');
+      accumulator.add('gate-1', 'registry-auto');
       accumulator.add('gate-2', 'methodology');
       expect(accumulator.size).toBe(2);
 

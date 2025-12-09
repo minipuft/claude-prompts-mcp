@@ -209,9 +209,9 @@ describe('FrameworkDecisionAuthority', () => {
       expect(decision.reason).toContain('No framework configured');
     });
 
-    test('returns disabled with only guided modifier', () => {
+    test('returns disabled with only judge modifier', () => {
       const input: FrameworkDecisionInput = {
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       };
 
       const decision = authority.decide(input);

@@ -59,11 +59,10 @@ const createExecutionPlan = (overrides: Partial<ExecutionPlan> = {}): ExecutionP
   ...overrides,
 });
 
-const createConfigManager = (judgeEnabled: boolean = true): jest.Mocked<ConfigManager> => ({
-  getJudgeConfig: jest.fn().mockReturnValue({
-    enabled: judgeEnabled,
-  }),
-}) as unknown as jest.Mocked<ConfigManager>;
+const createConfigManager = (judgeEnabled: boolean = true): jest.Mocked<ConfigManager> =>
+  ({
+    isJudgeEnabled: jest.fn().mockReturnValue(judgeEnabled),
+  }) as unknown as jest.Mocked<ConfigManager>;
 
 describe('JudgeSelectionStage', () => {
   let gateLoader: jest.Mocked<GateLoader>;
@@ -91,7 +90,7 @@ describe('JudgeSelectionStage', () => {
   });
 
   describe('Judge Phase Detection', () => {
-    test('skips when guided parameter is not set', async () => {
+    test('skips when judge modifier is not set', async () => {
       const context = new ExecutionContext({ command: '>>demo' });
       context.executionPlan = createExecutionPlan();
 
@@ -113,10 +112,10 @@ describe('JudgeSelectionStage', () => {
       expect(promptsProvider).not.toHaveBeenCalled();
     });
 
-    test('triggers judge phase when %guided modifier is used', async () => {
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+    test('triggers judge phase when %judge modifier is used', async () => {
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       const stylePrompt = createGuidancePrompt('analytical', 'Analytical style');
@@ -133,9 +132,9 @@ describe('JudgeSelectionStage', () => {
       configManager = createConfigManager(false);
       stage = new JudgeSelectionStage(promptsProvider, gateLoader, configManager, createLogger());
 
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       await stage.execute(context);
@@ -147,9 +146,9 @@ describe('JudgeSelectionStage', () => {
 
   describe('Judge Response Format', () => {
     test('includes resource menu in judge response', async () => {
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       const stylePrompt = createGuidancePrompt('analytical', 'Systematic analysis');
@@ -172,9 +171,9 @@ describe('JudgeSelectionStage', () => {
     });
 
     test('includes selection instructions in judge response', async () => {
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       const stylePrompt = createGuidancePrompt('analytical', 'Analysis style');
@@ -187,16 +186,16 @@ describe('JudgeSelectionStage', () => {
       const responseText = (response?.content[0] as { text: string }).text;
 
       expect(responseText).toContain('@<CAGEERF|ReACT|5W1H|SCAMPER>');
-      expect(responseText).toContain('#style(');
+      expect(responseText).toContain('#<analytical|procedural|creative|reasoning>');
       expect(responseText).toContain(':: <gate_id');
     });
   });
 
   describe('Resource Collection', () => {
     test('separates styles from frameworks based on ID patterns', async () => {
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       const analyticalStyle = createGuidancePrompt('analytical', 'Analytical style');
@@ -216,9 +215,9 @@ describe('JudgeSelectionStage', () => {
     });
 
     test('only includes guidance category prompts', async () => {
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       const guidancePrompt = createGuidancePrompt('analytical', 'Guidance');
@@ -237,9 +236,9 @@ describe('JudgeSelectionStage', () => {
     });
 
     test('skips when no resources are available', async () => {
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       promptsProvider.mockReturnValue([]);
@@ -261,9 +260,9 @@ describe('JudgeSelectionStage', () => {
         configManager,
         createLogger()
       );
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       const gate = createGateDefinition('code-quality', 'Quality gate');
@@ -282,9 +281,9 @@ describe('JudgeSelectionStage', () => {
         configManager,
         createLogger()
       );
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       const stylePrompt = createGuidancePrompt('analytical', 'Style');
@@ -303,9 +302,9 @@ describe('JudgeSelectionStage', () => {
         null,
         createLogger()
       );
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
 
       const stylePrompt = createGuidancePrompt('analytical', 'Style');
@@ -319,9 +318,9 @@ describe('JudgeSelectionStage', () => {
     });
 
     test('skips when session blueprint is restored', async () => {
-      const context = new ExecutionContext({ command: '%guided >>demo' });
+      const context = new ExecutionContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       });
       context.state.session.isBlueprintRestored = true;
 

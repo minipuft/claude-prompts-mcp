@@ -1,13 +1,13 @@
 {
-  "name": "claude-prompts-server",
-  "version": "1.3.6",
+  "name": "claude-prompts",
+  "version": "1.1.0",
   "description": "Claude Custom Prompts MCP Server",
   "author": "minipuft",
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "claude-prompts-server": "./dist/index.js"
+    "claude-prompts": "./dist/index.js"
   },
   "types": "dist/index.d.ts",
   "exports": {

@@ -14,8 +14,8 @@ describe('Prompt Engine guide renderer', () => {
 
   test('highlights gate-related parameters when goal mentions gates', () => {
     const output = renderPromptEngineGuide('gate validation');
-    expect(output).toContain('llm_validation');
-    expect(output).toContain('gates'); // New unified parameter
+    expect(output).toContain('gates'); // Unified gates parameter
+    expect(output).toContain('gate_verdict'); // Gate review response parameter
   });
 
   test('surfaces usage pattern details with sample commands and unified gates parameter', () => {
@@ -25,13 +25,4 @@ describe('Prompt Engine guide renderer', () => {
     expect(output).toContain('"gates"'); // New unified parameter
   });
 
-  test('shows unified gates parameter (legacy parameters removed)', () => {
-    const output = renderPromptEngineGuide();
-    // Legacy parameters have been removed from contracts/metadata
-    expect(output).not.toContain('quality_gates');
-    expect(output).not.toContain('temporary_gates');
-    expect(output).not.toContain('custom_checks');
-    // Unified gates parameter is the canonical approach
-    expect(output).toContain('gates');
-  });
 });

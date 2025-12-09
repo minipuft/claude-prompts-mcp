@@ -170,20 +170,6 @@ export default [
           message: 'ConsolidatedPromptEngine is deprecated. Use PromptExecutionPipeline instead.',
         },
       ],
-      'claude/no-session-id': [
-        'error',
-        {
-          allow: [
-            'src/execution/validation/request-validator.ts',
-            'src/execution/validation/schemas.ts',
-            'src/mcp-tools/index.ts',
-            'src/mcp-tools/types/shared-types.ts',
-            'src/mcp-tools/prompt-engine/core/types.ts',
-            'src/tooling/action-metadata',
-            'src/types/execution.ts',
-          ],
-        },
-      ],
     },
   },
 
@@ -323,12 +309,6 @@ export default [
         {
           selector: "Identifier[name='ConsolidatedPromptEngine']",
           message: 'ConsolidatedPromptEngine is deprecated. Use PromptExecutionPipeline instead.',
-        },
-      ],
-      'claude/no-session-id': [
-        'error',
-        {
-          allow: ['tests/unit/mcp-tools/prompt-engine/request-validator.test.ts'],
         },
       ],
     },

@@ -57,6 +57,14 @@
           "description": "Depth level of the documentation (default: intermediate)"
         }
       ]
+    },
+    {
+      "id": "test_prompt",
+      "name": "Test Prompt",
+      "category": "general",
+      "description": "A test prompt to verify the --init workflow",
+      "file": "test_prompt.md",
+      "arguments": []
     }
   ]
 }

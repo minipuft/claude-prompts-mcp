@@ -42,7 +42,13 @@ describe('SessionOverrideManager', () => {
 
     it('should set override with expiration', () => {
       const expiresInMs = 60000; // 1 minute
-      const override = manager.setOverride('style-guidance', false, 'session', undefined, expiresInMs);
+      const override = manager.setOverride(
+        'style-guidance',
+        false,
+        'session',
+        undefined,
+        expiresInMs
+      );
 
       expect(override.expiresAt).toBeDefined();
       expect(override.expiresAt).toBeGreaterThan(Date.now());
@@ -280,17 +286,13 @@ describe('Singleton Functions', () => {
       const manager2 = initSessionOverrideManager(mockLogger);
 
       expect(manager1).toBe(manager2);
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Already initialized')
-      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Already initialized'));
     });
   });
 
   describe('getSessionOverrideManager', () => {
     it('should throw if not initialized', () => {
-      expect(() => getSessionOverrideManager()).toThrow(
-        'SessionOverrideManager not initialized'
-      );
+      expect(() => getSessionOverrideManager()).toThrow('SessionOverrideManager not initialized');
     });
 
     it('should return manager if initialized', () => {

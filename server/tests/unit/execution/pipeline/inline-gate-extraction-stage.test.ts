@@ -225,7 +225,7 @@ describe('InlineGateExtractionStage', () => {
     expect(context.state.gates.temporaryGateIds).toEqual([]);
   });
 
-  test('registers full TemporaryGateInput objects from unified gates parameter', async () => {
+  test('skips TemporaryGateInput objects from unified gates parameter (now handled in gate-enhancement stage)', async () => {
     const { registry, createTemporaryGate } = createRegistry();
     const { resolver } = createResolver();
     const stage = new InlineGateExtractionStage(registry, resolver, createLogger());
@@ -249,21 +249,13 @@ describe('InlineGateExtractionStage', () => {
 
     await stage.execute(context);
 
-    // Full TemporaryGateInput objects (with id) are registered in the temporary gate registry
-    expect(createTemporaryGate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'gdpr-check',
-        pass_criteria: ['no PII'], // Normalized to pass_criteria internally
-        scope: 'execution',
-      }),
-      expect.any(String)
-    );
-
-    // Note: temporaryGateIds metadata is not populated here - gates are registered in the registry
-    // and will be discovered by gate-enhancement-stage when it queries the registry
+    // Stage 02 now focuses only on inline :: gates
+    // All gates from the 'gates' parameter are handled by Stage 05 (GateEnhancementStage)
+    expect(createTemporaryGate).not.toHaveBeenCalled();
+    expect(context.state.gates.temporaryGateIds).toEqual([]);
   });
 
-  test('registers gates from unified gates parameter with mixed specification types', async () => {
+  test('skips all gate types from unified gates parameter (all handled in gate-enhancement stage)', async () => {
     const { registry, createTemporaryGate } = createRegistry();
     const { resolver } = createResolver();
     const stage = new InlineGateExtractionStage(registry, resolver, createLogger());
@@ -271,9 +263,9 @@ describe('InlineGateExtractionStage', () => {
     const context = new ExecutionContext({ command: '>>demo' });
     context.state.gates.requestedOverrides = {
       gates: [
-        'toxicity', // String ID - skipped (handled in gate-enhancement stage)
-        { name: 'red-team', description: 'Confirm exfil path' }, // CustomCheck - skipped (converted to temp gate in gate-enhancement stage)
-        { id: 'gdpr-check', criteria: ['no PII'], severity: 'high' }, // TemporaryGateInput - registered here
+        'toxicity', // String ID
+        { name: 'red-team', description: 'Confirm exfil path' }, // CustomCheck
+        { id: 'gdpr-check', criteria: ['no PII'], severity: 'high' }, // TemporaryGateInput
       ],
     };
     context.parsedCommand = {
@@ -291,15 +283,53 @@ describe('InlineGateExtractionStage', () => {
 
     await stage.execute(context);
 
-    // Only full TemporaryGateInput objects (with id) are registered in this stage
-    // String IDs and CustomCheck objects are handled in gate-enhancement-stage
-    expect(createTemporaryGate).toHaveBeenCalledTimes(1);
+    // Stage 02 now focuses only on inline :: gates
+    // ALL gates from the 'gates' parameter (strings, CustomChecks, and TemporaryGateInputs)
+    // are handled by Stage 05 (GateEnhancementStage) for unified processing
+    expect(createTemporaryGate).not.toHaveBeenCalled();
+    expect(context.state.gates.temporaryGateIds).toEqual([]);
+  });
+
+  // NOTE: Tests for canonical gate handling from 'gates' parameter were removed.
+  // This functionality is now consolidated in Stage 05 (GateEnhancementStage).
+  // Stage 02 focuses solely on extracting inline gates from the :: operator.
+  // See tests/unit/execution/pipeline/gate-enhancement-stage.test.ts for canonical gate tests.
+
+  test('creates named inline gates with explicit IDs from symbolic syntax', async () => {
+    const { registry, createTemporaryGate } = createRegistry();
+    const { resolver } = createResolver();
+    const stage = new InlineGateExtractionStage(registry, resolver, createLogger());
+
+    const context = new ExecutionContext({ command: '>>demo :: security:"no secrets"' });
+    context.parsedCommand = {
+      promptId: 'demo',
+      rawArgs: '',
+      format: 'symbolic',
+      confidence: 0.9,
+      metadata: {
+        originalCommand: '>>demo :: security:"no secrets"',
+        parseStrategy: 'symbolic',
+        detectedFormat: 'symbolic',
+        warnings: [],
+      },
+      namedInlineGates: [
+        { gateId: 'security', criteria: ['no secrets'] },
+        { gateId: 'perf', criteria: ['efficient algorithms'] },
+      ],
+    };
+
+    await stage.execute(context);
+
+    expect(createTemporaryGate).toHaveBeenCalledTimes(2);
     expect(createTemporaryGate).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 'gdpr-check',
-        pass_criteria: ['no PII'],
+        id: 'security',
+        name: 'security',
+        pass_criteria: ['no secrets'],
       }),
       expect.any(String)
     );
+    expect(context.parsedCommand?.inlineGateIds).toContain('temp_gate');
+    expect(context.state.gates.temporaryGateIds?.length).toBeGreaterThan(0);
   });
 });

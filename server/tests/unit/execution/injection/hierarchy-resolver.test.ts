@@ -1,9 +1,13 @@
 // @lifecycle canonical - Unit tests for HierarchyResolver
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-import { HierarchyResolver } from '../../../../src/execution/pipeline/decisions/injection/index.js';
 import { DEFAULT_INJECTION_CONFIG } from '../../../../src/execution/pipeline/decisions/injection/constants.js';
-import type { InjectionConfig, InjectionDecisionInput } from '../../../../src/execution/pipeline/decisions/injection/types.js';
+import { HierarchyResolver } from '../../../../src/execution/pipeline/decisions/injection/index.js';
+
+import type {
+  InjectionConfig,
+  InjectionDecisionInput,
+} from '../../../../src/execution/pipeline/decisions/injection/types.js';
 
 describe('HierarchyResolver', () => {
   let mockLogger: any;

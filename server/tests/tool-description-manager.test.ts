@@ -1,13 +1,15 @@
-import { describe, expect, it, jest } from '@jest/globals';
 import { EventEmitter, once } from 'events';
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { describe, expect, it, jest } from '@jest/globals';
+
+import { createToolDescriptionManager } from '../src/mcp-tools/tool-description-manager.js';
+
 import type { ConfigManager } from '../src/config/index.js';
 import type { FrameworkStateManager } from '../src/frameworks/framework-state-manager.js';
 import type { Logger } from '../src/logging/index.js';
-import { createToolDescriptionManager } from '../src/mcp-tools/tool-description-manager.js';
 import type { FrameworksConfig, ToolDescriptionsConfig } from '../src/types/index.js';
 
 class FakeConfigManager extends EventEmitter {
@@ -77,13 +79,12 @@ const makeLogger = (): Logger =>
     warn: jest.fn(),
     error: jest.fn(),
     debug: jest.fn(),
-  } as unknown as Logger);
+  }) as unknown as Logger;
 
 const baseFrameworksConfig: FrameworksConfig = {
   enableSystemPromptInjection: true,
   enableMethodologyGates: true,
   enableDynamicToolDescriptions: true,
-  systemPromptReinjectionFrequency: 2,
 };
 
 async function setupTempConfigRoot(): Promise<string> {
@@ -98,8 +99,12 @@ async function setupTempConfigRoot(): Promise<string> {
 describe('ToolDescriptionManager (framework-aware active config)', () => {
   it('writes an active config aligned to the current methodology', async () => {
     const root = await setupTempConfigRoot();
-    const configManager = new FakeConfigManager(root, baseFrameworksConfig) as unknown as ConfigManager;
-    const frameworkStateManager = new FakeFrameworkStateManager() as unknown as FrameworkStateManager;
+    const configManager = new FakeConfigManager(
+      root,
+      baseFrameworksConfig
+    ) as unknown as ConfigManager;
+    const frameworkStateManager =
+      new FakeFrameworkStateManager() as unknown as FrameworkStateManager;
     const manager = createToolDescriptionManager(makeLogger(), configManager);
     manager.setFrameworkStateManager(frameworkStateManager);
 
@@ -119,8 +124,12 @@ describe('ToolDescriptionManager (framework-aware active config)', () => {
 
   it('regenerates the active config on framework switch events', async () => {
     const root = await setupTempConfigRoot();
-    const configManager = new FakeConfigManager(root, baseFrameworksConfig) as unknown as ConfigManager;
-    const frameworkStateManager = new FakeFrameworkStateManager() as unknown as FrameworkStateManager;
+    const configManager = new FakeConfigManager(
+      root,
+      baseFrameworksConfig
+    ) as unknown as ConfigManager;
+    const frameworkStateManager =
+      new FakeFrameworkStateManager() as unknown as FrameworkStateManager;
     const manager = createToolDescriptionManager(makeLogger(), configManager);
     manager.setFrameworkStateManager(frameworkStateManager);
     await manager.initialize();

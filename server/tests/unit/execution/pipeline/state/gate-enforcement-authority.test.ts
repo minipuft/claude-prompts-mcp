@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { GateEnforcementAuthority } from '../../../../../src/execution/pipeline/decisions/index.js';
+
 import type {
   GateEnforcementInput,
   EnforcementMode,
@@ -51,7 +52,10 @@ describe('GateEnforcementAuthority', () => {
       });
 
       test('parses FAIL verdict with hyphen separator', () => {
-        const result = authority.parseVerdict('GATE_REVIEW: FAIL - Needs improvement', 'gate_verdict');
+        const result = authority.parseVerdict(
+          'GATE_REVIEW: FAIL - Needs improvement',
+          'gate_verdict'
+        );
         expect(result).toEqual({
           verdict: 'FAIL',
           rationale: 'Needs improvement',

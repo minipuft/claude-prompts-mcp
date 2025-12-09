@@ -7,8 +7,8 @@ import type {
   ArgumentParser,
   ArgumentParsingResult,
 } from '../../../../src/execution/parsers/argument-parser.js';
-import type { SymbolicCommandParseResult } from '../../../../src/execution/parsers/types/operator-types.js';
 import type { UnifiedCommandParser } from '../../../../src/execution/parsers/command-parser.js';
+import type { SymbolicCommandParseResult } from '../../../../src/execution/parsers/types/operator-types.js';
 import type { Logger } from '../../../../src/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/types/index.js';
 

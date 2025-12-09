@@ -144,11 +144,7 @@ describe('ArgumentParser dashed argument names', () => {
 
   test('parses dashed names with equals delimiter', async () => {
     const parser = new ArgumentParser(createLogger());
-    const result = await parser.parseArguments(
-      'output-format="xml"',
-      createDashedPrompt(),
-      {}
-    );
+    const result = await parser.parseArguments('output-format="xml"', createDashedPrompt(), {});
     expect(result.processedArgs['output-format']).toBe('xml');
   });
 });

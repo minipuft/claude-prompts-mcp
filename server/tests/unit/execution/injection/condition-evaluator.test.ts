@@ -5,7 +5,11 @@ import {
   ConditionEvaluator,
   type ConditionEvaluationResult,
 } from '../../../../src/execution/pipeline/decisions/injection/index.js';
-import type { InjectionCondition, InjectionDecisionInput } from '../../../../src/execution/pipeline/decisions/injection/types.js';
+
+import type {
+  InjectionCondition,
+  InjectionDecisionInput,
+} from '../../../../src/execution/pipeline/decisions/injection/types.js';
 
 describe('ConditionEvaluator', () => {
   let mockLogger: any;

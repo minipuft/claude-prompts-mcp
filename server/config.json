@@ -8,32 +8,20 @@
     "file": "prompts/promptsConfig.json",
     "registerWithMcp": true
   },
-  "analysis": {
-    "semanticAnalysis": {
-      "mode": "structural",
-      "llmIntegration": {
-        "enabled": false,
-        "apiKey": null,
-        "endpoint": null,
-        "model": "gpt-4",
-        "maxTokens": 1000,
-        "temperature": 0.1
-      }
-    }
-  },
   "gates": {
+    "enabled": true,
     "definitionsDirectory": "gates",
-    "templatesDirectory": "src/gates/templates",
-    "enabled": true
+    "enableMethodologyGates": true
+  },
+  "execution": {
+    "judge": true
   },
   "frameworks": {
-    "enableSystemPromptInjection": true,
-    "enableMethodologyGates": true,
-    "enableDynamicToolDescriptions": true,
-    "systemPromptReinjectionFrequency": 2
-  },
-  "judge": {
-    "enabled": true
+    "dynamicToolDescriptions": true,
+    "injection": {
+      "systemPrompt": { "enabled": true, "frequency": 2 },
+      "styleGuidance": true
+    }
   },
   "transport": "stdio",
   "logging": {

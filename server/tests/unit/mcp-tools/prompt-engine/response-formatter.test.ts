@@ -24,7 +24,7 @@ describe('ResponseFormatter.formatPromptEngineResponse', () => {
     });
   });
 
-  test('adds structured metadata only for chain executions', () => {
+  test('adds structured metadata only when explicitly enabled for chain executions', () => {
     const context = {
       executionId: 'exec_123',
       executionType: 'chain' as const,
@@ -39,7 +39,9 @@ describe('ResponseFormatter.formatPromptEngineResponse', () => {
       chainProgress: { currentStep: 1, totalSteps: 2, status: 'in_progress' as const },
     };
 
-    const result = formatter.formatPromptEngineResponse('Chain text', context, {});
+    const result = formatter.formatPromptEngineResponse('Chain text', context, {
+      includeStructuredContent: true,
+    });
     expect(result.content[0].text).toBe('Chain text');
     expect(result.structuredContent?.execution).toMatchObject({
       id: 'exec_123',
@@ -55,6 +57,9 @@ describe('ResponseFormatter.formatPromptEngineResponse', () => {
     const promptResult = formatter.formatPromptEngineResponse('Prompt text');
     expect(promptResult.content[0].text).toBe('Prompt text');
     expect(promptResult.structuredContent).toBeUndefined();
+
+    const defaultChainResult = formatter.formatPromptEngineResponse('Chain text (default)', context);
+    expect(defaultChainResult.structuredContent).toBeUndefined();
   });
 
   test('chain metadata omits session identifiers', () => {

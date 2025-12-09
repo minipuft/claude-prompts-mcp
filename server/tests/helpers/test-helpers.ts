@@ -186,8 +186,7 @@ export class MockConfigManager {
     return {
       server: { name: 'test-server', version: '1.0.0' },
       gates: {
-        definitionsDirectory: 'src/gates/definitions',
-        templatesDirectory: 'src/gates/templates',
+        definitionsDirectory: 'gates',
       },
     };
   }

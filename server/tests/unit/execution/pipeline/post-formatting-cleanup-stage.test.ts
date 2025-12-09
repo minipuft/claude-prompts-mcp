@@ -71,7 +71,7 @@ describe('PostFormattingCleanupStage', () => {
     const context = new ExecutionContext({ command: 'noop' });
 
     context.state.session.executionScopeId = 'exec-1';
-    context.metadata['temporaryGateScopes'] = [
+    context.state.gates.temporaryGateScopes = [
       { scope: 'step', scopeId: 'exec-1:step_1' },
       { scope: 'session', scopeId: 'session-1' },
     ];

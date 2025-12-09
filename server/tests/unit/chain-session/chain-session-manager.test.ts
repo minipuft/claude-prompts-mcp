@@ -152,6 +152,8 @@ describe('ChainSessionManager', () => {
     expect(context.chain_run_id).toBe('session-chain-context');
     expect(context.total_steps).toBe(2);
     expect(context.currentStepArgs).toEqual({ input: 'alpha' });
+    // {{input}} exposes current step's arguments for template access
+    expect(context.input).toEqual({ input: 'alpha' });
     expect(context.chain_metadata).toEqual(
       expect.objectContaining({
         chainId: 'chain-alpha',

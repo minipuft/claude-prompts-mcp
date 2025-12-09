@@ -354,46 +354,6 @@ export const rules = {
   'no-legacy-imports': noLegacyImportsRule,
   'require-file-lifecycle': requireLifecycleRule,
   'no-emojis': noEmojiCharactersRule,
-  'no-session-id': {
-    meta: {
-      type: 'problem',
-      docs: {
-        description: 'Disallow session_id usage in source files (chain_id-only resumptions).',
-      },
-      schema: [
-        {
-          type: 'object',
-          properties: {
-            allow: {
-              type: 'array',
-              items: { type: 'string' },
-            },
-          },
-          additionalProperties: false,
-        },
-      ],
-      messages: {
-        forbidden: "'session_id' is deprecated in source files. Use chain_id/resume metadata instead.",
-      },
-    },
-    create(context) {
-      const filename = context.getFilename();
-      const allowList = new Set((context.options[0]?.allow ?? []).map(String));
-      const isAllowed = Array.from(allowList).some((pattern) => filename.includes(pattern));
-
-      if (isAllowed) {
-        return {};
-      }
-
-      return {
-        Identifier(node) {
-          if (node.name === 'session_id') {
-            context.report({ node, messageId: 'forbidden' });
-          }
-        },
-      };
-    },
-  },
 };
 
 export default {

@@ -6,6 +6,7 @@ import {
 } from '../../../src/mcp-tools/prompt-engine/index.js';
 import { createConsolidatedPromptManager } from '../../../src/mcp-tools/prompt-manager/index.js';
 import { createConsolidatedSystemControl } from '../../../src/mcp-tools/system-control.js';
+import type { GateManager } from '../../../src/gates/gate-manager.js';
 import { MockLogger, MockMcpServer, testPrompts } from '../../helpers/test-helpers.js';
 
 describe('Consolidated MCP tool factories', () => {
@@ -51,8 +52,7 @@ describe('Consolidated MCP tool factories', () => {
       getConfig: () => ({
         server: { name: 'test-server', version: '1.0.0' },
         gates: {
-          definitionsDirectory: 'src/gates/definitions',
-          templatesDirectory: 'src/gates/templates',
+          definitionsDirectory: 'gates',
         },
       }),
       getPromptsFilePath: () => '/test/prompts.json',
@@ -98,6 +98,21 @@ describe('Consolidated MCP tool factories', () => {
       systemControl: { handleAction: () => Promise.resolve({ content: [], isError: false }) },
     };
 
+    const stubGateManager: GateManager = {
+      getGate: () => undefined,
+      getActiveGates: () => [],
+      listGates: () => [],
+      getRegistryStats: () => ({
+        totalGates: 0,
+        enabledGates: 0,
+        builtInGates: 0,
+        customGates: 0,
+        bySource: { 'yaml-runtime': 0, custom: 0, temporary: 0 },
+        byType: { validation: 0, guidance: 0 },
+        averageLoadTime: 0,
+      }),
+    } as unknown as GateManager;
+
     promptEngine = createPromptExecutionService(
       logger as any,
       mockMcpServer as any,
@@ -106,6 +121,7 @@ describe('Consolidated MCP tool factories', () => {
       mockSemanticAnalyzer as any,
       mockConversationManager as any,
       mockTextReferenceManager as any,
+      stubGateManager,
       mockMcpToolsManager
     );
 

@@ -51,7 +51,9 @@ describe('ResponseFormattingStage', () => {
     expect(text).toContain('Chain: chain-demo#2');
     expect(text).toContain('✓ Chain complete (2/2)');
     expect(text).toContain('Next: Chain complete. No user_response needed.');
-    expect(response.structuredContent?.chain?.id).toBe('chain-demo#2');
+    // Note: structuredContent is intentionally disabled (includeStructuredContent: false)
+    // to keep model input lean. Chain metadata is included in the text footer instead.
+    expect(response.structuredContent).toBeUndefined();
   });
 
   test('passes simple prompt content through response formatter when no session data is present', async () => {
@@ -91,5 +93,4 @@ describe('ResponseFormattingStage', () => {
     expect(content).not.toContain('Gate Inputs Provided');
     expect(context.response?.structuredContent).toBeUndefined();
   });
-
 });

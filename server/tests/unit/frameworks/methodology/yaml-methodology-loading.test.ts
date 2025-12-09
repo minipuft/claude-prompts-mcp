@@ -10,6 +10,7 @@ import {
   createGenericGuide,
   resetDefaultRuntimeLoader,
 } from '../../../../src/frameworks/methodology/index.js';
+
 import type { IMethodologyGuide } from '../../../../src/frameworks/types/index.js';
 
 describe('YAML Methodology Loading', () => {

@@ -1,9 +1,9 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../src/execution/context/execution-context.js';
-import { GateAccumulator } from '../../../src/execution/pipeline/state/accumulators/gate-accumulator.js';
-import { DiagnosticAccumulator } from '../../../src/execution/pipeline/state/accumulators/diagnostic-accumulator.js';
 import { FrameworkDecisionAuthority } from '../../../src/execution/pipeline/decisions/index.js';
+import { DiagnosticAccumulator } from '../../../src/execution/pipeline/state/accumulators/diagnostic-accumulator.js';
+import { GateAccumulator } from '../../../src/execution/pipeline/state/accumulators/gate-accumulator.js';
 
 import type { ChainStepPrompt } from '../../../src/execution/operators/chain-operator-executor.js';
 import type { ConvertedPrompt } from '../../../src/types/index.js';
@@ -143,7 +143,7 @@ describe('ExecutionContext pipeline state management', () => {
     const context = new ExecutionContext(baseRequest, mockLogger as any);
 
     // Add a gate to trigger logging
-    context.gates.add('test-gate', 'category-auto');
+    context.gates.add('test-gate', 'registry-auto');
 
     // The logger should have been called
     expect(context.gates.has('test-gate')).toBe(true);
@@ -153,10 +153,10 @@ describe('ExecutionContext pipeline state management', () => {
     const context = new ExecutionContext(baseRequest);
 
     // Add from low priority source
-    context.gates.add('test-gate', 'category-auto'); // priority 20
+    context.gates.add('test-gate', 'registry-auto'); // priority 20
 
     // Try to add from same/lower priority - should be rejected
-    const added = context.gates.add('test-gate', 'category-auto');
+    const added = context.gates.add('test-gate', 'registry-auto');
     expect(added).toBe(false);
     expect(context.gates.size).toBe(1);
 

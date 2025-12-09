@@ -59,7 +59,7 @@ const baseAnalysis: ContentAnalysisResult = {
   },
   analysisMetadata: {
     version: 'test',
-    mode: 'structural',
+    mode: 'minimal',
     analysisTime: 5,
     analyzer: 'content',
     cacheHit: false,

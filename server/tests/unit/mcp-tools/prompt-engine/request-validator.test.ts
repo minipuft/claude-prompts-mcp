@@ -64,50 +64,6 @@ describe('McpToolRequestValidator', () => {
       );
     });
 
-    it('should reject legacy session_id usage', () => {
-      const raw = {
-        command: '>>test',
-        session_id: 'session-123',
-      } as any;
-
-      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        "session_id is no longer supported. Use 'chain_id' from the response footer to resume."
-      );
-    });
-
-    it('should reject legacy gate_validation usage', () => {
-      const raw = {
-        command: '>>test',
-        gate_validation: true,
-      } as any;
-
-      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        "gate_validation has been retired. Use 'gates' parameter to specify quality gates."
-      );
-    });
-
-    it('should reject legacy api_validation usage', () => {
-      const raw = {
-        command: '>>test',
-        api_validation: true,
-      } as any;
-
-      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        "api_validation has been removed. Use 'gates' parameter to specify quality gates."
-      );
-    });
-
-    it('should reject experimental llm_validation parameter', () => {
-      const raw = {
-        command: '>>test',
-        llm_validation: true,
-      } as any;
-
-      expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        "llm_validation is experimental and not yet implemented. Use 'gates' parameter with gate_verdict for gate-based validation. See docs/enhanced-gate-system.md for current gate features."
-      );
-    });
-
     it('should reject invalid gate_verdict format', () => {
       const raw = {
         command: '>>test',
@@ -338,16 +294,6 @@ describe('McpToolRequestValidator', () => {
       );
     });
 
-    it('should throw for session_id in partial request', () => {
-      const partial = {
-        session_id: 'invalid!',
-      };
-
-      expect(() => McpToolRequestValidator.validatePartial(partial)).toThrow(
-        "session_id is no longer supported. Use 'chain_id' from the response footer to resume."
-      );
-    });
-
     it('should throw for invalid gate_verdict in partial request', () => {
       const partial = {
         gate_verdict: 'INVALID',
@@ -443,49 +389,7 @@ describe('McpToolRequestValidator', () => {
 
   describe('v3.0.0 Breaking Changes', () => {
     it('validates v3.0.0 parameter requirements', () => {
-      // ============================================
-      // REMOVED PARAMETERS (v2.x → v3.0.0)
-      // ============================================
-
-      // Legacy parameters that throw errors
-      expect(() =>
-        McpToolRequestValidator.validate({
-          command: '>>test',
-          session_id: 'old-session',
-        })
-      ).toThrow('session_id is no longer supported');
-
-      expect(() =>
-        McpToolRequestValidator.validate({
-          command: '>>test',
-          gate_validation: true,
-        })
-      ).toThrow('gate_validation has been retired');
-
-      expect(() =>
-        McpToolRequestValidator.validate({
-          command: '>>test',
-          api_validation: true,
-        })
-      ).toThrow('api_validation has been removed');
-
-      // ============================================
-      // EXPERIMENTAL PARAMETERS (blocked)
-      // ============================================
-
-      // llm_validation is experimental (not yet implemented)
-      expect(() =>
-        McpToolRequestValidator.validate({
-          command: '>>test',
-          llm_validation: true,
-        })
-      ).toThrow('llm_validation is experimental and not yet implemented');
-
-      // ============================================
       // v3.0.0+ UNIFIED GATES PARAMETER
-      // ============================================
-
-      // Modern v3.0.0 style - unified gates parameter
       const modernRequest = McpToolRequestValidator.validate({
         command: '>>test',
         gates: [

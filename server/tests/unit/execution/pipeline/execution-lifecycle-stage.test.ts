@@ -20,7 +20,7 @@ describe('ExecutionLifecycleStage', () => {
     await stage.execute(context);
 
     expect(context.state.session.executionScopeId).toBeDefined();
-    const handlers = context.metadata.lifecycleCleanupHandlers as Array<() => Promise<void>>;
+    const handlers = context.state.lifecycle.cleanupHandlers as Array<() => Promise<void>>;
     expect(Array.isArray(handlers)).toBe(true);
     expect(handlers.length).toBe(1);
 

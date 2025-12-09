@@ -60,7 +60,8 @@ describe('PromptGuidanceStage', () => {
       applyGuidance: jest.fn(),
     } as unknown as jest.Mocked<PromptGuidanceService>;
 
-    stage = new PromptGuidanceStage(service, createLogger());
+    // Pass null for StyleManager - tests use hardcoded fallback styles
+    stage = new PromptGuidanceStage(service, null, createLogger());
   });
 
   test('skips when execution plan does not require frameworks', async () => {
@@ -98,7 +99,7 @@ describe('PromptGuidanceStage', () => {
 
     expect(context.parsedCommand?.convertedPrompt?.systemMessage).toBe('Use CAGEERF');
     expect(
-      (context.metadata['promptGuidanceResults'] as Record<string, unknown>)?.[convertedPrompt.id]
+      (context.state.framework.guidanceResults as Record<string, unknown>)?.[convertedPrompt.id]
     ).toBeDefined();
   });
 
@@ -270,9 +271,7 @@ describe('PromptGuidanceStage', () => {
       // Framework Stage has already processed this
       context.state.framework.systemPromptApplied = true;
 
-      service.applyGuidance.mockResolvedValue(
-        createGuidanceResult(convertedPrompt) as any
-      );
+      service.applyGuidance.mockResolvedValue(createGuidanceResult(convertedPrompt) as any);
 
       await stage.execute(context);
 
@@ -320,9 +319,7 @@ describe('PromptGuidanceStage', () => {
       // JudgeSelectionStage sets this key directly
       context.state.framework.clientOverride = 'CAGEERF';
 
-      service.applyGuidance.mockResolvedValue(
-        createGuidanceResult(convertedPrompt) as any
-      );
+      service.applyGuidance.mockResolvedValue(createGuidanceResult(convertedPrompt) as any);
 
       await stage.execute(context);
 
@@ -342,14 +339,15 @@ describe('PromptGuidanceStage', () => {
       // JudgeSelectionStage sets this key directly
       context.state.framework.clientSelectedGates = ['code-quality', 'security-awareness'];
 
-      service.applyGuidance.mockResolvedValue(
-        createGuidanceResult(convertedPrompt) as any
-      );
+      service.applyGuidance.mockResolvedValue(createGuidanceResult(convertedPrompt) as any);
 
       await stage.execute(context);
 
       // Gate selections should still be present (set by JudgeSelectionStage)
-      expect(context.state.framework.clientSelectedGates).toEqual(['code-quality', 'security-awareness']);
+      expect(context.state.framework.clientSelectedGates).toEqual([
+        'code-quality',
+        'security-awareness',
+      ]);
     });
 
     test('applies style enhancement to single prompt system message', async () => {
@@ -467,9 +465,7 @@ describe('PromptGuidanceStage', () => {
       context.state.framework.clientSelectedGates = ['research-quality'];
       context.state.framework.clientSelectedStyle = 'reasoning';
 
-      service.applyGuidance.mockResolvedValue(
-        createGuidanceResult(convertedPrompt) as any
-      );
+      service.applyGuidance.mockResolvedValue(createGuidanceResult(convertedPrompt) as any);
 
       await stage.execute(context);
 
@@ -493,9 +489,7 @@ describe('PromptGuidanceStage', () => {
       // Unknown style selection
       context.state.framework.clientSelectedStyle = 'unknown-style';
 
-      service.applyGuidance.mockResolvedValue(
-        createGuidanceResult(convertedPrompt) as any
-      );
+      service.applyGuidance.mockResolvedValue(createGuidanceResult(convertedPrompt) as any);
 
       await stage.execute(context);
 

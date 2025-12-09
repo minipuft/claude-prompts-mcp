@@ -19,7 +19,7 @@ const CONTRACTS_DIR = path.join(ROOT, 'tooling', 'contracts');
 const GENERATED_META_DIR = path.join(ROOT, 'src', 'tooling', 'contracts', '_generated');
 const DOCS_DIR = path.join(ROOT, '..', 'docs');
 const GENERATED_DIR = path.join(DOCS_DIR, '_generated');
-const DOC_WITH_MARKERS = path.join(DOCS_DIR, 'mcp-tooling-guide.md');
+const DOC_WITH_MARKERS = path.join(DOCS_DIR, 'mcp-tools.md');
 const DOC_MARKERS = {
   prompt_engine: 'prompt_engine.params',
   prompt_manager: 'prompt_manager.params',

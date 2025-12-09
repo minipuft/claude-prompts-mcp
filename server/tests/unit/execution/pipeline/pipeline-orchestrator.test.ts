@@ -17,9 +17,9 @@ const stageOrder = [
   'InlineGateExtraction',
   'OperatorValidation',
   'ExecutionPlanning',
-  'JudgeSelection',        // Moved before framework/gate stages
-  'GateEnhancement',       // Now runs after judge decision
-  'FrameworkResolution',   // Now uses clientFrameworkOverride from judge flow
+  'JudgeSelection', // Moved before framework/gate stages
+  'GateEnhancement', // Now runs after judge decision
+  'FrameworkResolution', // Now uses clientFrameworkOverride from judge flow
   'SessionManagement',
   'FrameworkInjectionControl', // Controls injection frequency after session provides currentStep
   'PromptGuidance',
@@ -86,18 +86,18 @@ const createPipeline = (
     inlineGateStage,
     operatorValidationStage,
     planningStage,
-    judgeSelectionStage,     // position 8 (before gate/framework)
-    gateStage,               // position 9
-    frameworkStage,          // position 10
-    sessionStage,            // position 11
+    judgeSelectionStage, // position 8 (before gate/framework)
+    gateStage, // position 9
+    frameworkStage, // position 10
+    sessionStage, // position 11
     frameworkInjectionControlStage, // position 12
-    promptGuidanceStage,     // position 13
-    responseCaptureStage,    // position 14
-    executionStage,          // position 15
-    gateReviewStage,         // position 16
-    callToActionStage,       // position 17
-    formattingStage,         // position 18
-    postFormattingStage,     // position 19
+    promptGuidanceStage, // position 13
+    responseCaptureStage, // position 14
+    executionStage, // position 15
+    gateReviewStage, // position 16
+    callToActionStage, // position 17
+    formattingStage, // position 18
+    postFormattingStage, // position 19
   ] = stageInstances;
 
   const pipeline = new PromptExecutionPipeline(

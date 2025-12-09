@@ -1,8 +1,9 @@
 // @lifecycle canonical - Unit tests for InjectionDecisionService
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
-import { InjectionDecisionService } from '../../../../src/execution/pipeline/decisions/injection/injection-decision-service.js';
 import { DEFAULT_INJECTION_CONFIG } from '../../../../src/execution/pipeline/decisions/injection/constants.js';
+import { InjectionDecisionService } from '../../../../src/execution/pipeline/decisions/injection/injection-decision-service.js';
+
 import type {
   InjectionConfig,
   InjectionDecisionInput,
@@ -303,12 +304,12 @@ describe('InjectionDecisionService', () => {
       expect(decision.source).toBe('modifier');
     });
 
-    it('should allow injection with %guided modifier', () => {
+    it('should allow injection with %judge modifier', () => {
       const service = new InjectionDecisionService(DEFAULT_INJECTION_CONFIG, mockLogger);
       const input: InjectionDecisionInput = {
         injectionType: 'system-prompt',
         currentStep: 1,
-        modifiers: { guided: true },
+        modifiers: { judge: true },
       };
 
       const decision = service.decide(input);
