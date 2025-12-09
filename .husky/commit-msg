@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+
+# Strip Claude Code generated tag and Co-Authored-By lines from commit messages
+# This keeps commit history clean while still using AI assistance
+
+COMMIT_MSG_FILE=$1
+
+# Remove the Claude Code generated tag and Co-Authored-By line
+sed -i '/^🤖 Generated with \[Claude Code\]/d' "$COMMIT_MSG_FILE"
+sed -i '/^Co-Authored-By: Claude/d' "$COMMIT_MSG_FILE"
+
+# Remove trailing blank lines
+sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$COMMIT_MSG_FILE"
