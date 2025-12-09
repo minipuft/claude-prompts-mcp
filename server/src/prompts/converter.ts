@@ -6,12 +6,12 @@
 
 import * as path from 'node:path';
 
+import { PromptLoader } from './loader.js';
 import { Logger } from '../logging/index.js';
 import { isChainPrompt } from '../utils/chainUtils.js';
-import { PromptLoader } from './loader.js';
 
-import type { ConvertedPrompt } from '../execution/types.js';
 import type { PromptData } from './types.js';
+import type { ConvertedPrompt } from '../execution/types.js';
 
 /**
  * Resolve the registerWithMcp value using the priority chain:
@@ -100,8 +100,6 @@ export class PromptConverter {
           chainSteps: chainSteps,
           // Include gate configuration from prompt file
           gateConfiguration: promptFile.gateConfiguration,
-          tools: promptData.tools || false,
-          onEmptyInvocation: promptData.onEmptyInvocation || 'execute_if_possible',
           // Resolve MCP registration from prompt/category/global defaults
           registerWithMcp: resolveRegisterWithMcp(promptData, this.globalRegisterWithMcp),
         };
@@ -112,19 +110,6 @@ export class PromptConverter {
           this.logger.debug(
             `Chain prompt '${convertedPrompt.id}' has no embedded chain steps - will be treated as single prompt`
           );
-        }
-
-        // Validate the onEmptyInvocation field
-        if (
-          promptData.onEmptyInvocation &&
-          promptData.onEmptyInvocation !== 'return_template' &&
-          promptData.onEmptyInvocation !== 'execute_if_possible'
-        ) {
-          this.logger.warn(
-            `Prompt '${promptData.id}' has an invalid 'onEmptyInvocation' value: "${promptData.onEmptyInvocation}". ` +
-              `Defaulting to "execute_if_possible". Allowed values are "return_template" or "execute_if_possible".`
-          );
-          convertedPrompt.onEmptyInvocation = 'execute_if_possible';
         }
 
         // Validate the converted prompt
@@ -272,20 +257,23 @@ export class PromptConverter {
   }
 
   /**
-   * Check if a placeholder is a special system placeholder
+   * Check if a placeholder is a special system placeholder.
+   * These are injected at runtime and don't require argument definitions.
    */
   private isSpecialPlaceholder(placeholder: string): boolean {
     const specialPlaceholders = [
-      'previous_message',
-      'tools_available',
-      'current_step_number',
-      'total_steps',
-      'current_step_name',
-      'step_number',
-      'step_name',
+      'previous_message', // Last non-template user message (ConversationManager)
+      // Chain step variables (ChainSessionManager.getChainContext)
+      'chain_id',
+      'input', // Current step's arguments object
+      'previous_step_result',
+      'step_results',
     ];
 
-    return specialPlaceholders.includes(placeholder) || placeholder.startsWith('ref:');
+    // Also match stepN_result patterns (step1_result, step2_result, etc.)
+    const isStepResultPattern = /^step\d+_result$/.test(placeholder);
+
+    return specialPlaceholders.includes(placeholder) || isStepResultPattern || placeholder.startsWith('ref:');
   }
 
   /**

@@ -8,6 +8,10 @@
  */
 
 import type {
+  MethodologyGateDefinition as CanonicalGateDefinition,
+  TemplateSuggestionDefinition,
+} from '../methodology/methodology-definition-types.js';
+import type {
   MethodologyEnhancement,
   TemplateEnhancement,
   QualityGate,
@@ -15,10 +19,6 @@ import type {
 } from '../types/methodology-types.js';
 
 // Import canonical type definitions and re-export for backwards compatibility
-import type {
-  MethodologyGateDefinition as CanonicalGateDefinition,
-  TemplateSuggestionDefinition,
-} from '../methodology/methodology-definition-types.js';
 
 // Re-export canonical types with local aliases for backwards compatibility
 export type MethodologyGateDefinition = CanonicalGateDefinition;

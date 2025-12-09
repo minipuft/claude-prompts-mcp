@@ -8,7 +8,11 @@
 
 // Export methodology registry
 export { MethodologyRegistry, createMethodologyRegistry } from './registry.js';
-export type { MethodologyRegistryConfig, MethodologyGuideEntry, MethodologySource } from './registry.js';
+export type {
+  MethodologyRegistryConfig,
+  MethodologyGuideEntry,
+  MethodologySource,
+} from './registry.js';
 
 // Export methodology interfaces
 export * from './interfaces.js';

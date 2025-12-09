@@ -10,24 +10,22 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // Import all module managers
-import type { ApiManager } from '../api/index.js';
-import { ConfigManager } from '../config/index.js';
-import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
-import { Logger } from '../logging/index.js';
-import type { McpToolsManager } from '../mcp-tools/index.js';
-import type { ToolDescriptionManager } from '../mcp-tools/tool-description-manager.js';
-import { PromptAssetManager } from '../prompts/index.js';
-import { reloadPromptData } from '../prompts/prompt-refresh-service.js';
-import type { ServerManager, TransportManager } from '../server/index.js';
-import { ConversationManager, createConversationManager } from '../text-references/conversation.js';
 import { TextReferenceManager } from '../text-references/index.js';
 import { createRuntimeFoundation } from './context.js';
 import { loadPromptData } from './data-loader.js';
 import { buildHealthReport } from './health.js';
+import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildMethodologyAuxiliaryReloadConfig } from './methodology-hot-reload.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { startServerWithManagers } from './startup-server.js';
+import { ConfigManager } from '../config/index.js';
+import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
+import { GateManager } from '../gates/gate-manager.js';
+import { Logger } from '../logging/index.js';
+import { PromptAssetManager } from '../prompts/index.js';
+import { reloadPromptData } from '../prompts/prompt-refresh-service.js';
+import { ConversationManager, createConversationManager } from '../text-references/conversation.js';
 
 // Import execution modules
 // REMOVED: ExecutionCoordinator and GateEvaluator imports - modular chain and gate systems removed
@@ -38,11 +36,21 @@ import { startServerWithManagers } from './startup-server.js';
 // Import startup management
 
 // Import types
-import { Category, ConvertedPrompt, FrameworksConfig, PromptData, TransportMode } from '../types/index.js';
+import {
+  Category,
+  ConvertedPrompt,
+  FrameworksConfig,
+  PromptData,
+  TransportMode,
+} from '../types/index.js';
 // Import chain utilities
 import { ServiceManager } from '../utils/service-manager.js';
 
+import type { ApiManager } from '../api/index.js';
+import type { McpToolsManager } from '../mcp-tools/index.js';
+import type { ToolDescriptionManager } from '../mcp-tools/tool-description-manager.js';
 import type { HotReloadEvent } from '../prompts/hot-reload-manager.js';
+import type { ServerManager, TransportManager } from '../server/index.js';
 
 /**
  * Application Runtime class
@@ -59,6 +67,7 @@ export class Application {
   private mcpToolsManager!: McpToolsManager;
   private toolDescriptionManager!: ToolDescriptionManager;
   private frameworkStateManager!: FrameworkStateManager;
+  private gateManager?: GateManager;
   private transportManager!: TransportManager;
   private apiManager?: ApiManager;
   private serverManager?: ServerManager;
@@ -330,6 +339,7 @@ export class Application {
     });
 
     this.frameworkStateManager = result.frameworkStateManager;
+    this.gateManager = result.gateManager;
     this.mcpToolsManager = result.mcpToolsManager;
     this.toolDescriptionManager = result.toolDescriptionManager;
 
@@ -664,13 +674,25 @@ export class Application {
         this.serviceManager.register({
           name: serviceName,
           start: async () => {
+            // Build auxiliary reload configs for methodology and gates
             const methodologyAux = buildMethodologyAuxiliaryReloadConfig(
               this.logger,
               this.mcpToolsManager
             );
-            await this.promptManager.startHotReload(this.promptsFilePath!, this.promptHotReloadHandler, {
-              auxiliaryReloads: methodologyAux ? [methodologyAux] : undefined,
-            });
+            const gateAux = buildGateAuxiliaryReloadConfig(this.logger, this.gateManager);
+
+            // Collect all auxiliary reloads
+            const auxiliaryReloads = [methodologyAux, gateAux].filter(
+              (aux): aux is NonNullable<typeof aux> => aux !== undefined
+            );
+
+            await this.promptManager.startHotReload(
+              this.promptsFilePath!,
+              this.promptHotReloadHandler,
+              {
+                auxiliaryReloads: auxiliaryReloads.length > 0 ? auxiliaryReloads : undefined,
+              }
+            );
           },
           stop: async () => {
             await this.promptManager.stopHotReload();
@@ -981,10 +1003,12 @@ export class Application {
   }
 
   private syncFrameworkSystemStateFromConfig(config: FrameworksConfig, reason?: string): void {
+    const gatesConfig = this.configManager.getGatesConfig();
+    const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
     const shouldEnable =
-      config.enableSystemPromptInjection ||
-      config.enableMethodologyGates ||
-      config.enableDynamicToolDescriptions;
+      systemPromptEnabled ||
+      gatesConfig.enableMethodologyGates ||
+      config.dynamicToolDescriptions;
 
     if (!this.frameworkStateManager) {
       this.pendingFrameworkSystemState = shouldEnable;
@@ -1001,14 +1025,16 @@ export class Application {
   }
 
   private describeDisabledFrameworkFeatures(config: FrameworksConfig): string[] {
+    const gatesConfig = this.configManager.getGatesConfig();
     const disabled: string[] = [];
-    if (!config.enableSystemPromptInjection) {
+    const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
+    if (!systemPromptEnabled) {
       disabled.push('system prompt injection');
     }
-    if (!config.enableMethodologyGates) {
+    if (!gatesConfig.enableMethodologyGates) {
       disabled.push('methodology gates');
     }
-    if (!config.enableDynamicToolDescriptions) {
+    if (!config.dynamicToolDescriptions) {
       disabled.push('dynamic tool descriptions');
     }
     return disabled;

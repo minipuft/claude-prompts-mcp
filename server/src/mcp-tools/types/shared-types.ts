@@ -200,7 +200,6 @@ export interface ExecutionData {
   success: boolean;
   duration: number;
   executionType: 'single' | 'chain';
-  legacyExecutionType?: 'prompt' | 'template';
   startTime: number;
   endTime: number;
   framework?: string;
@@ -271,7 +270,6 @@ export interface GateValidationData {
   context: {
     promptId: string;
     executionType: 'single' | 'chain';
-    legacyExecutionType?: 'prompt' | 'template';
     framework?: string;
   };
 }
@@ -365,7 +363,6 @@ export type PromptManagerAction =
 export interface PromptEngineArgs {
   command: string;
   force_restart?: boolean;
-  session_id?: never;
   options?: ExecutionOptions;
 }
 
@@ -375,7 +372,6 @@ export interface PromptEngineArgs {
 export interface ExecutionOptions {
   framework?: 'CAGEERF' | 'ReACT' | '5W1H' | 'SCAMPER';
   llmValidation?: boolean;
-  timeout?: number;
   retryCount?: number;
   debugMode?: boolean;
   stepConfirmation?: boolean;

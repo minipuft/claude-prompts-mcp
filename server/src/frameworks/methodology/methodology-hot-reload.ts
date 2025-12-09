@@ -6,11 +6,12 @@
  * enabling hot reload of methodology definitions when YAML files change.
  */
 
+import { createGenericGuide } from './generic-methodology-guide.js';
+import { RuntimeMethodologyLoader } from './runtime-methodology-loader.js';
+
+import type { MethodologyRegistry } from './registry.js';
 import type { Logger } from '../../logging/index.js';
 import type { HotReloadEvent } from '../../prompts/hot-reload-manager.js';
-import { RuntimeMethodologyLoader } from './runtime-methodology-loader.js';
-import { createGenericGuide } from './generic-methodology-guide.js';
-import type { MethodologyRegistry } from './registry.js';
 
 /**
  * Configuration for MethodologyHotReloadCoordinator
@@ -143,7 +144,9 @@ export class MethodologyHotReloadCoordinator {
       this.stats.lastReloadTime = Date.now();
       this.stats.lastReloadedMethodology = methodologyId;
 
-      this.logger.info(`🔄 Methodology '${definition.name}' (${methodologyId}) hot reloaded successfully`);
+      this.logger.info(
+        `🔄 Methodology '${definition.name}' (${methodologyId}) hot reloaded successfully`
+      );
     } catch (error) {
       this.stats.reloadsFailed++;
       this.logger.error(`Failed to hot reload methodology '${methodologyId}':`, error);
@@ -188,12 +191,7 @@ export function createMethodologyHotReloadRegistration(
   config?: MethodologyHotReloadConfig
 ): MethodologyHotReloadRegistration {
   const runtimeLoader = loader ?? registry.getRuntimeLoader();
-  const coordinator = new MethodologyHotReloadCoordinator(
-    logger,
-    registry,
-    runtimeLoader,
-    config
-  );
+  const coordinator = new MethodologyHotReloadCoordinator(logger, registry, runtimeLoader, config);
 
   return {
     directories: [runtimeLoader.getMethodologiesDir()],

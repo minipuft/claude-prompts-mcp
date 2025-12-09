@@ -7,11 +7,12 @@
 import { access } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import type { RuntimeLaunchOptions } from './options.js';
+import type { PathResolver } from './paths.js';
 import type { ConfigManager } from '../config/index.js';
 import type { Logger } from '../logging/index.js';
 import type { PromptAssetManager } from '../prompts/index.js';
 import type { Category, ConvertedPrompt, PromptData } from '../types/index.js';
-import type { RuntimeLaunchOptions } from './options.js';
 
 export interface PromptDataLoadParams {
   logger: Logger;
@@ -19,6 +20,8 @@ export interface PromptDataLoadParams {
   promptManager: PromptAssetManager;
   runtimeOptions: RuntimeLaunchOptions;
   serverRoot?: string;
+  /** Optional PathResolver for centralized path resolution */
+  pathResolver?: PathResolver;
   mcpToolsManager?: {
     updateData: (
       prompts: PromptData[],
@@ -42,24 +45,26 @@ export interface PromptDataLoadResult {
   promptsFilePath: string;
 }
 
-export async function loadPromptData(
-  params: PromptDataLoadParams
-): Promise<PromptDataLoadResult> {
-  const { logger, configManager, promptManager, runtimeOptions, serverRoot } = params;
+export async function loadPromptData(params: PromptDataLoadParams): Promise<PromptDataLoadResult> {
+  const { logger, configManager, promptManager, runtimeOptions, serverRoot, pathResolver } = params;
   const isVerbose = runtimeOptions.verbose;
   const isQuiet = runtimeOptions.quiet;
 
   // Resolve prompts file path
+  // Priority: PathResolver > ConfigManager
   const config = configManager.getConfig();
-  let promptsFilePath = configManager.getResolvedPromptsFilePath();
+  let promptsFilePath = pathResolver
+    ? pathResolver.getPromptsPath()
+    : configManager.getResolvedPromptsFilePath();
 
   if (!isQuiet) {
     logger.info('Starting prompt loading pipeline...');
     logger.info(`Config prompts.file setting: "${config.prompts.file}"`);
   }
 
-  if (process.env.MCP_PROMPTS_CONFIG_PATH) {
-    logger.info(`🎯 MCP_PROMPTS_CONFIG_PATH override: "${process.env.MCP_PROMPTS_CONFIG_PATH}"`);
+  // Log environment overrides
+  if (process.env.MCP_PROMPTS_PATH) {
+    logger.info(`🎯 MCP_PROMPTS_PATH override: "${process.env.MCP_PROMPTS_PATH}"`);
   }
 
   // Normalize to absolute path if needed

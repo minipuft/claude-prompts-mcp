@@ -128,7 +128,8 @@ const operations: ActionDescriptor[] = [
     category: 'injection',
     status: 'working',
     requiredArgs: ['type'],
-    description: 'Set temporary session override for injection type (system-prompt, gate-guidance, style-guidance).',
+    description:
+      'Set temporary session override for injection type (system-prompt, gate-guidance, style-guidance).',
   },
   {
     id: 'injection:reset',

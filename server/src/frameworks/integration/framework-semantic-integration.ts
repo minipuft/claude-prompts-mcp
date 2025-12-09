@@ -35,7 +35,7 @@ import type { ContentAnalysisResult } from '../../semantic/types.js';
 
 /**
  * Framework-Semantic Integration Engine
- * Coordinates framework selection based on structural analysis and user preference
+ * Coordinates framework selection based on semantic analysis and user preference
  */
 export class FrameworkSemanticIntegration {
   private frameworkManager: FrameworkManager;
@@ -299,17 +299,17 @@ export class FrameworkSemanticIntegration {
 
     // Handle analysis mode specific logic
     if (semanticAnalysis) {
-      // In structural mode, user choice is more important
-      if (semanticAnalysis.analysisMetadata.mode === 'structural') {
+      // In minimal mode (no LLM), user choice is more important
+      if (semanticAnalysis.analysisMetadata.mode === 'minimal' || !semanticAnalysis.analysisMetadata.mode) {
         if (!userPreference && semanticAnalysis.frameworkRecommendation.requiresUserChoice) {
           // Log that user choice is needed
           this.logger.info(
-            'Structural analysis mode - framework selection requires user choice or default'
+            'Minimal analysis mode - framework selection requires user choice or default'
           );
         }
       }
 
-      // In semantic mode, use intelligent recommendations
+      // In semantic mode (with LLM), use intelligent recommendations
       if (
         semanticAnalysis.analysisMetadata.mode === 'semantic' &&
         semanticAnalysis.frameworkRecommendation.shouldUseFramework
@@ -491,12 +491,10 @@ export class FrameworkSemanticIntegration {
     const baseApproach = `Execute as ${semanticAnalysis.executionType} using ${frameworkContext.selectedFramework.name} methodology`;
 
     // Add mode-specific context
-    if (semanticAnalysis.analysisMetadata.mode === 'structural') {
-      return `${baseApproach} (structural analysis mode)`;
-    } else if (semanticAnalysis.analysisMetadata.mode === 'semantic') {
+    if (semanticAnalysis.analysisMetadata.mode === 'semantic') {
       return `${baseApproach} (intelligent semantic analysis)`;
     } else {
-      return `${baseApproach} (fallback analysis mode)`;
+      return `${baseApproach} (minimal analysis)`;
     }
   }
 
@@ -542,12 +540,9 @@ export class FrameworkSemanticIntegration {
     }
 
     // Mode-specific suggestions
-    if (semanticAnalysis.analysisMetadata.mode === 'structural') {
-      suggestions.push(
-        'Consider enabling semantic analysis for intelligent framework recommendations'
-      );
+    if (semanticAnalysis.analysisMetadata.mode !== 'semantic') {
       if (semanticAnalysis.limitations.length > 0) {
-        suggestions.push('Enable LLM integration or Claude hooks for better analysis capabilities');
+        suggestions.push('Configure LLM integration for intelligent semantic analysis');
       }
     }
 
@@ -815,8 +810,8 @@ export class FrameworkSemanticIntegration {
           confidence: 0.9,
         },
         analysisMetadata: {
-          version: '2.0.0',
-          mode: 'structural',
+          version: '3.0.0',
+          mode: 'minimal',
           analysisTime: performance.now() - startTime,
           analyzer: 'content',
           cacheHit: false,

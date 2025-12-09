@@ -17,6 +17,8 @@ type StoredStepResult = {
 export class TextReferenceManager {
   private readonly logger: Logger;
   private readonly chainStepResults: Record<string, Record<number, StoredStepResult>> = {};
+  // Named outputs from outputMapping (e.g., { "chainId": { "findings": "content" } })
+  private readonly namedOutputs: Record<string, Record<string, string>> = {};
 
   constructor(logger: Logger) {
     this.logger = logger;
@@ -25,6 +27,9 @@ export class TextReferenceManager {
   /**
    * Store a chain step result.
    * Canonical entrypoint for pipeline stages to persist user or placeholder output.
+   *
+   * If metadata.outputMapping is provided (e.g., { "findings": "output" }),
+   * the result will also be stored under those named keys for semantic access.
    */
   storeChainStepResult(
     chainId: string,
@@ -45,6 +50,20 @@ export class TextReferenceManager {
     this.logger.debug(
       `[TextReferenceManager] Stored step ${stepNumber} result for chain ${chainId} (${content.length} chars)`
     );
+
+    // Store under named outputs if outputMapping is provided
+    const outputMapping = metadata?.outputMapping as Record<string, string> | undefined;
+    if (outputMapping) {
+      if (!this.namedOutputs[chainId]) {
+        this.namedOutputs[chainId] = {};
+      }
+      for (const outputName of Object.keys(outputMapping)) {
+        this.namedOutputs[chainId][outputName] = content;
+        this.logger.debug(
+          `[TextReferenceManager] Stored named output '${outputName}' for chain ${chainId}`
+        );
+      }
+    }
   }
 
   /**
@@ -70,6 +89,7 @@ export class TextReferenceManager {
 
   /**
    * Build template variables for downstream execution ({{stepN_result}}, {{previous_step_result}}, etc.).
+   * Also includes any named outputs from outputMapping (e.g., {{findings}}).
    */
   buildChainVariables(chainId: string): Record<string, any> {
     const stepResults = this.getChainStepResults(chainId);
@@ -79,11 +99,16 @@ export class TextReferenceManager {
       const stepIndex = Number(stepNum);
       variables[`step${stepIndex + 1}_result`] = content;
       variables[`previous_step_result`] = content;
-      variables[`input`] = content;
     });
 
     variables['chain_id'] = chainId;
     variables['step_results'] = stepResults;
+
+    // Include named outputs from outputMapping
+    const namedOutputs = this.namedOutputs[chainId];
+    if (namedOutputs) {
+      Object.assign(variables, namedOutputs);
+    }
 
     return variables;
   }
@@ -100,6 +125,7 @@ export class TextReferenceManager {
    */
   clearChainStepResults(chainId: string): void {
     delete this.chainStepResults[chainId];
+    delete this.namedOutputs[chainId];
     this.logger.debug(`[TextReferenceManager] Cleared all step results for chain ${chainId}`);
   }
 

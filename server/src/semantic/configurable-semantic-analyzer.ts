@@ -1,33 +1,31 @@
 // @lifecycle canonical - Primary semantic analyzer for prompts and contexts.
 /**
- * Content Analyzer - Honest Analysis with Multiple Modes
+ * Content Analyzer - Semantic Analysis with LLM Integration
  *
- * MODES:
- * - structural: Honest analysis based only on detectable template structure
- * - semantic: LLM-powered intelligent analysis (when integration available)
+ * BEHAVIOR:
+ * - When LLM is configured: Provides intelligent semantic analysis
+ * - When LLM is NOT configured: Returns minimal results immediately
  *
- * HONEST LIMITATIONS:
- * - Clear reporting of what cannot be determined without LLM access
- * - No fake "semantic understanding" without actual intelligence
- * - Transparent fallback mechanisms
+ * DESIGN RATIONALE:
+ * - Structural analysis was removed as it provided zero value
+ * - Chain detection is already handled by the command parser
+ * - Pattern-matching keywords doesn't provide semantic understanding
+ * - LLM infrastructure is preserved for future intelligent analysis
  */
 
 import { ConvertedPrompt } from '../execution/types.js';
 import { Logger } from '../logging/index.js';
-import { SemanticAnalysisConfig, AnalysisMode } from '../types.js';
+import { SemanticAnalysisConfig } from '../types.js';
 
 import type { ContentAnalysisResult, LLMClient } from './types.js';
 
-// Configuration constants - always use best practices
-const FALLBACK_TO_STRUCTURAL = true;
-const WARN_ON_LIMITATIONS = true;
-const HONEST_REPORTING = true;
+// Configuration constants
 const CACHE_ANALYSIS = true;
 const CACHE_EXPIRY_MS = 300000; // 5 minutes
 
 /**
- * Configurable Semantic Analyzer Implementation
- * Provides honest, mode-aware analysis with clear limitations
+ * Content Analyzer Implementation
+ * Returns minimal results when LLM not configured, semantic analysis when LLM available
  */
 export class ContentAnalyzer {
   private logger: Logger;
@@ -72,7 +70,7 @@ export class ContentAnalyzer {
   }
 
   /**
-   * Main analysis method - mode-aware with honest limitations
+   * Main analysis method - returns minimal results or LLM-powered analysis
    */
   async analyzePrompt(prompt: ConvertedPrompt): Promise<ContentAnalysisResult> {
     const startTime = performance.now();
@@ -94,21 +92,20 @@ export class ContentAnalyzer {
     }
 
     try {
-      // Perform mode-specific analysis
-      const analysis = await this.performModeSpecificAnalysis(prompt, startTime);
+      // Perform analysis - LLM if available, minimal otherwise
+      const analysis = await this.performAnalysis(prompt, startTime);
 
       // Cache the result
       if (CACHE_ANALYSIS) {
         this.cacheAnalysis(promptHash, analysis);
       }
 
-      this.logger.debug(
-        `Analysis completed for prompt: ${prompt.id || 'unknown'} (mode: ${this.config.mode})`
-      );
+      const mode = analysis.analysisMetadata.llmUsed ? 'semantic' : 'minimal';
+      this.logger.debug(`Analysis completed for prompt: ${prompt.id || 'unknown'} (mode: ${mode})`);
       return analysis;
     } catch (error) {
-      this.logger.error('Configurable semantic analysis failed:', error);
-      return this.createFallbackAnalysis(prompt, startTime, error);
+      this.logger.error('Semantic analysis failed:', error);
+      return this.createMinimalAnalysis(prompt, startTime);
     }
   }
 
@@ -127,7 +124,6 @@ export class ContentAnalyzer {
     return {
       cacheSize: this.analysisCache.size,
       cacheEnabled: CACHE_ANALYSIS,
-      mode: this.config.mode,
       llmIntegrationEnabled: this.config.llmIntegration.enabled,
     };
   }
@@ -135,53 +131,23 @@ export class ContentAnalyzer {
   // Private implementation methods
 
   /**
-   * Perform analysis based on configured mode
+   * Perform analysis - LLM if available, minimal otherwise
    */
-  private async performModeSpecificAnalysis(
+  private async performAnalysis(
     prompt: ConvertedPrompt,
     startTime: number
   ): Promise<ContentAnalysisResult> {
-    switch (this.config.mode) {
-      case 'semantic':
-        return await this.performSemanticAnalysis(prompt, startTime);
-      case 'structural':
-      default:
-        return this.performStructuralAnalysis(prompt, startTime);
-    }
-  }
-
-  /**
-   * Perform semantic analysis using LLM integration
-   */
-  private async performSemanticAnalysis(
-    prompt: ConvertedPrompt,
-    startTime: number
-  ): Promise<ContentAnalysisResult> {
-    // Try LLM integration
+    // Try LLM integration if configured
     if (this.isLLMEnabled() && this.llmClient) {
       try {
         return await this.performLLMAnalysis(prompt, startTime);
       } catch (error) {
-        this.logger.warn('LLM analysis failed:', error);
+        this.logger.warn('LLM analysis failed, returning minimal results:', error);
       }
     }
 
-    // Fallback to structural analysis with warning
-    if (FALLBACK_TO_STRUCTURAL) {
-      this.logger.info('Falling back to structural analysis - semantic analysis unavailable');
-      const structuralAnalysis = this.performStructuralAnalysis(prompt, startTime);
-
-      // Add fallback warning
-      structuralAnalysis.warnings.push(
-        '⚠️ Semantic analysis unavailable - using structural analysis only',
-        '💡 Configure LLM integration or Claude hooks for intelligent analysis'
-      );
-      structuralAnalysis.analysisMetadata.fallbackUsed = true;
-
-      return structuralAnalysis;
-    }
-
-    throw new Error('Semantic analysis mode enabled but no integration available');
+    // Return minimal results when LLM not available
+    return this.createMinimalAnalysis(prompt, startTime);
   }
 
   /**
@@ -244,262 +210,30 @@ export class ContentAnalyzer {
   }
 
   /**
-   * Perform honest structural analysis - NO FAKE SEMANTIC UNDERSTANDING
-   */
-  private performStructuralAnalysis(
-    prompt: ConvertedPrompt,
-    startTime: number
-  ): ContentAnalysisResult {
-    const structuralCharacteristics = this.analyzeStructuralCharacteristics(prompt);
-    const executionType = this.determineExecutionTypeFromStructure(
-      structuralCharacteristics,
-      prompt
-    );
-    const complexity = this.analyzeStructuralComplexity(structuralCharacteristics);
-
-    const limitations = [
-      'No semantic understanding of prompt content',
-      'Cannot analyze methodology requirements intelligently',
-      'Framework recommendation requires explicit user choice',
-    ];
-
-    const warnings = [];
-    if (WARN_ON_LIMITATIONS) {
-      warnings.push(
-        '⚠️ Using structural analysis only',
-        '💡 Enable semantic analysis for intelligent framework recommendations',
-        '📖 Configure LLM integration or Claude hooks for full capabilities'
-      );
-    }
-
-    return {
-      executionType,
-      requiresExecution: true,
-      requiresFramework: this.shouldUseFrameworkStructurally(
-        executionType,
-        structuralCharacteristics
-      ),
-      confidence: 0.9, // High confidence in structural facts
-      reasoning: [
-        'Analysis based on template structure only',
-        `Detected ${executionType} execution type from structural patterns`,
-        'Framework selection requires explicit user choice or semantic analysis',
-      ],
-
-      capabilities: {
-        canDetectStructure: true,
-        canAnalyzeComplexity: true,
-        canRecommendFramework: false, // HONEST - we can't recommend without understanding
-        hasSemanticUnderstanding: false, // HONEST - no semantic understanding
-      },
-
-      limitations,
-      warnings,
-
-      executionCharacteristics: structuralCharacteristics,
-      complexity,
-      suggestedGates: this.suggestExecutionGates(structuralCharacteristics, complexity),
-
-      frameworkRecommendation: {
-        shouldUseFramework: this.shouldUseFrameworkStructurally(
-          executionType,
-          structuralCharacteristics
-        ),
-        reasoning: [
-          'Framework recommendation unavailable in structural mode',
-          'User should specify preferred framework explicitly',
-        ],
-        confidence: 0.5, // Low confidence - we don't really know
-        requiresUserChoice: true,
-        availableFrameworks: ['CAGEERF', 'ReACT', '5W1H', 'SCAMPER'],
-      },
-
-      analysisMetadata: {
-        version: '3.0.0',
-        mode: 'structural',
-        analysisTime: performance.now() - startTime,
-        analyzer: 'content',
-        cacheHit: false,
-      },
-    };
-  }
-
-  /**
-   * Analyze structural characteristics that can be definitively detected
+   * Analyze basic structural characteristics for LLM context
+   * These are used as baseline information when performing LLM analysis
    */
   private analyzeStructuralCharacteristics(prompt: ConvertedPrompt): any {
     const userTemplate = prompt.userMessageTemplate || '';
     const systemMessage = prompt.systemMessage || '';
-    const combinedText = `${systemMessage} ${userTemplate}`.toLowerCase();
 
-    const characteristics = {
+    return {
       hasConditionals: /\{%.*if.*%\}|\{\{.*if.*\}\}/i.test(userTemplate),
       hasLoops: /\{%.*for.*%\}|\{\{.*each.*\}\}/i.test(userTemplate),
-      hasChainSteps:
-        Boolean(prompt.chainSteps?.length) ||
-        /step.*\d+|phase.*\d+|then.*do|next.*action/i.test(combinedText),
+      hasChainSteps: Boolean(prompt.chainSteps?.length),
       argumentCount: prompt.arguments?.length || 0,
       templateComplexity: this.calculateTemplateComplexity(userTemplate),
       hasSystemMessage: Boolean(systemMessage.trim()),
       hasUserTemplate: Boolean(userTemplate.trim()),
-
-      // Pattern matching (can be done structurally)
-      hasStructuredReasoning: this.detectStructuralReasoningPatterns(combinedText),
-      hasMethodologyKeywords: this.detectMethodologyKeywords(combinedText),
-      hasComplexAnalysis: this.detectStructuralComplexityPatterns(combinedText, prompt),
-      advancedChainFeatures: undefined as any,
+      // These are set to false since we removed structural pattern detection
+      hasStructuredReasoning: false,
+      hasMethodologyKeywords: false,
+      hasComplexAnalysis: false,
+      advancedChainFeatures: undefined,
     };
-
-    // Detect advanced chain features if present
-    if (characteristics.hasChainSteps) {
-      characteristics.advancedChainFeatures = this.detectAdvancedChainFeatures(prompt);
-    }
-
-    return characteristics;
   }
 
-  /**
-   * Detect structural reasoning patterns (not semantic understanding)
-   */
-  private detectStructuralReasoningPatterns(text: string): boolean {
-    const reasoningPatterns = [
-      /analyz/i,
-      /evaluat/i,
-      /assess/i,
-      /compar/i,
-      /review/i,
-      /break down/i,
-      /step.*by.*step/i,
-      /systematic/i,
-      /methodical/i,
-      /context/i,
-      /goals/i,
-      /execution/i,
-      /refin/i,
-      /framework/i,
-      /approach/i,
-      /strategy/i,
-      /process/i,
-      /methodology/i,
-    ];
-
-    return reasoningPatterns.some((pattern) => pattern.test(text));
-  }
-
-  /**
-   * Detect methodology-specific keywords
-   */
-  private detectMethodologyKeywords(text: string): boolean {
-    const methodologyKeywords = [
-      // CAGEERF keywords
-      /context/i,
-      /analysis/i,
-      /goals/i,
-      /execution/i,
-      /evaluation/i,
-      /refinement/i,
-      // ReACT keywords
-      /reasoning/i,
-      /acting/i,
-      /observation/i,
-      /thought/i,
-      /action/i,
-      // 5W1H keywords
-      /who/i,
-      /what/i,
-      /when/i,
-      /where/i,
-      /why/i,
-      /how/i,
-      // SCAMPER keywords
-      /substitute/i,
-      /combine/i,
-      /adapt/i,
-      /modify/i,
-      /eliminate/i,
-      /reverse/i,
-      // General methodology indicators
-      /framework/i,
-      /approach/i,
-      /methodology/i,
-      /systematic/i,
-      /structured/i,
-    ];
-
-    const matchCount = methodologyKeywords.filter((pattern) => pattern.test(text)).length;
-    return matchCount >= 2;
-  }
-
-  /**
-   * Detect structural complexity patterns
-   */
-  private detectStructuralComplexityPatterns(text: string, prompt: ConvertedPrompt): boolean {
-    const complexityIndicators = [
-      text.length > 200,
-      prompt.arguments && prompt.arguments.length > 3,
-      /deep.*analys/i.test(text),
-      /comprehensive/i.test(text),
-      /detailed/i.test(text),
-      /thorough/i.test(text),
-      /multi.*step/i.test(text),
-      /phase/i.test(text),
-      /criteria/i.test(text),
-      /requirements/i.test(text),
-    ];
-
-    return complexityIndicators.filter(Boolean).length >= 2;
-  }
-
-  /**
-   * Determine execution type from structural analysis only
-   */
-  private determineExecutionTypeFromStructure(
-    characteristics: any,
-    prompt: ConvertedPrompt
-  ): 'single' | 'chain' {
-    // CHAIN: Sequential execution indicators
-    if (characteristics.hasChainSteps || prompt.chainSteps?.length) {
-      return 'chain';
-    }
-
-    // CHAIN: Complex orchestration with conditionals AND loops (formerly workflow)
-    if (characteristics.hasConditionals && characteristics.hasLoops) {
-      return 'chain';
-    }
-
-    // CHAIN: Very complex templates (formerly workflow)
-    if (characteristics.argumentCount > 5 && characteristics.templateComplexity > 0.7) {
-      return 'chain';
-    }
-
-    // SINGLE: framework-aware single execution when structural complexity is present
-    if (
-      characteristics.templateComplexity > 0.3 ||
-      characteristics.argumentCount > 2 ||
-      characteristics.hasConditionals ||
-      characteristics.hasLoops
-    ) {
-      return 'single';
-    }
-
-    // SINGLE: Simple execution
-    return 'single';
-  }
-
-  /**
-   * Determine if framework should be used based on structural analysis
-   */
-  private shouldUseFrameworkStructurally(executionType: string, characteristics: any): boolean {
-    // In structural mode, recommend framework for complex or chain-like prompts
-    return (
-      executionType === 'chain' ||
-      characteristics.templateComplexity > 0.3 ||
-      characteristics.argumentCount > 2 ||
-      characteristics.hasMethodologyKeywords
-    );
-  }
-
-  // Helper methods from original SemanticAnalyzer
+  // Helper methods
 
   private calculateTemplateComplexity(template: string): number {
     if (!template) return 0;
@@ -514,82 +248,6 @@ export class ContentAnalyzer {
     complexity += Math.min(template.length / 1000, 0.3);
 
     return Math.min(complexity, 1);
-  }
-
-  private analyzeStructuralComplexity(characteristics: any): 'low' | 'medium' | 'high' {
-    let complexity = 0;
-
-    complexity += characteristics.templateComplexity * 0.3;
-    complexity += (characteristics.argumentCount / 10) * 0.2;
-
-    if (characteristics.hasConditionals) complexity += 0.2;
-    if (characteristics.hasLoops) complexity += 0.2;
-    if (characteristics.hasChainSteps) complexity += 0.3;
-
-    if (characteristics.advancedChainFeatures) {
-      const chainFeatures = characteristics.advancedChainFeatures;
-      if (chainFeatures.hasDependencies) complexity += 0.4;
-      if (chainFeatures.hasParallelSteps) complexity += 0.3;
-      if (chainFeatures.requiresAdvancedExecution) complexity += 0.3;
-      complexity += chainFeatures.complexityScore * 0.3;
-    }
-
-    if (complexity < 0.3) return 'low';
-    if (complexity < 0.7) return 'medium';
-    return 'high';
-  }
-
-  private detectAdvancedChainFeatures(prompt: ConvertedPrompt) {
-    const chainSteps = prompt.chainSteps || [];
-
-    let hasDependencies = false;
-    let hasParallelSteps = false;
-    let hasAdvancedStepTypes = false;
-    let hasAdvancedErrorHandling = false;
-    let hasStepConfigurations = false;
-    let hasCustomTimeouts = false;
-    let complexityScore = 0;
-
-    for (const step of chainSteps) {
-      if ((step as any).dependencies?.length > 0) {
-        hasDependencies = true;
-        complexityScore += 0.3;
-      }
-      if ((step as any).parallelGroup) {
-        hasParallelSteps = true;
-        complexityScore += 0.2;
-      }
-      if ((step as any).stepType && (step as any).stepType !== 'prompt') {
-        hasAdvancedStepTypes = true;
-        complexityScore += 0.2;
-      }
-      if ((step as any).onError || (step as any).retries) {
-        hasAdvancedErrorHandling = true;
-        complexityScore += 0.15;
-      }
-      if ((step as any).config) {
-        hasStepConfigurations = true;
-        complexityScore += 0.1;
-      }
-      if ((step as any).timeout) {
-        hasCustomTimeouts = true;
-        complexityScore += 0.05;
-      }
-    }
-
-    const requiresAdvancedExecution =
-      hasDependencies || hasParallelSteps || hasAdvancedStepTypes || hasAdvancedErrorHandling;
-
-    return {
-      hasDependencies,
-      hasParallelSteps,
-      hasAdvancedStepTypes,
-      hasAdvancedErrorHandling,
-      hasStepConfigurations,
-      hasCustomTimeouts,
-      requiresAdvancedExecution,
-      complexityScore: Math.min(complexityScore, 1.0),
-    };
   }
 
   private suggestExecutionGates(characteristics: any, complexity: string): string[] {
@@ -615,7 +273,7 @@ export class ContentAnalyzer {
       prompt.userMessageTemplate?.length || 0,
       prompt.systemMessage?.length || 0,
       prompt.arguments?.length || 0,
-      this.config.mode,
+      this.config.llmIntegration.enabled ? 'llm' : 'minimal',
     ].join('-');
   }
 
@@ -638,17 +296,17 @@ export class ContentAnalyzer {
     });
   }
 
-  private createFallbackAnalysis(
-    prompt: ConvertedPrompt,
-    startTime: number,
-    error: any
-  ): ContentAnalysisResult {
+  /**
+   * Create minimal analysis result when LLM is not available
+   * Returns safe defaults without attempting pattern matching
+   */
+  private createMinimalAnalysis(prompt: ConvertedPrompt, startTime: number): ContentAnalysisResult {
     return {
       executionType: 'single',
       requiresExecution: true,
       requiresFramework: false,
-      confidence: 0.3,
-      reasoning: ['Fallback analysis due to processing error'],
+      confidence: 0.5,
+      reasoning: ['Minimal analysis - LLM not configured'],
 
       capabilities: {
         canDetectStructure: false,
@@ -657,13 +315,17 @@ export class ContentAnalyzer {
         hasSemanticUnderstanding: false,
       },
 
-      limitations: ['Analysis failed - using minimal fallback', 'No reliable analysis available'],
-      warnings: ['⚠️ Analysis error occurred', '🚨 Using minimal fallback analysis'],
+      limitations: [
+        'LLM integration not configured',
+        'Framework recommendation not available',
+        'Chain detection handled by command parser',
+      ],
+      warnings: [],
 
       executionCharacteristics: {
         hasConditionals: false,
         hasLoops: false,
-        hasChainSteps: false,
+        hasChainSteps: Boolean(prompt.chainSteps?.length),
         argumentCount: prompt.arguments?.length || 0,
         templateComplexity: 0,
         hasSystemMessage: Boolean(prompt.systemMessage),
@@ -679,17 +341,16 @@ export class ContentAnalyzer {
 
       frameworkRecommendation: {
         shouldUseFramework: false,
-        reasoning: ['Fallback analysis - framework processing disabled'],
+        reasoning: ['Configure LLM integration for framework recommendations'],
         confidence: 0.1,
       },
 
       analysisMetadata: {
         version: '3.0.0',
-        mode: this.config.mode || 'structural',
+        mode: 'minimal',
         analysisTime: performance.now() - startTime,
         analyzer: 'content',
         cacheHit: false,
-        fallbackUsed: true,
       },
     };
   }

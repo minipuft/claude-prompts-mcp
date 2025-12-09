@@ -212,6 +212,159 @@ export class ValidationError extends BaseError {
   }
 }
 
+/**
+ * Schema validation issue from ArgumentSchemaValidator
+ */
+export interface SchemaValidationIssue {
+  argument: string;
+  message: string;
+  code?: string;
+}
+
+/**
+ * Prompt definition for retry hint generation
+ */
+export interface PromptDefinitionForError {
+  id: string;
+  arguments: Array<{
+    name: string;
+    type?: string;
+    required: boolean;
+    validation?: {
+      minLength?: number;
+      maxLength?: number;
+      pattern?: string;
+    };
+  }>;
+}
+
+/**
+ * Argument validation error with retry hints
+ * Thrown when schema validation fails (minLength, maxLength, pattern)
+ */
+export class ArgumentValidationError extends BaseError {
+  public readonly issues: SchemaValidationIssue[];
+  public readonly promptDefinition: PromptDefinitionForError;
+
+  constructor(issues: SchemaValidationIssue[], promptDefinition: PromptDefinitionForError) {
+    super(
+      ArgumentValidationError.formatMessage(issues, promptDefinition),
+      'ARGUMENT_VALIDATION_ERROR',
+      {
+        errorType: 'validation',
+        severity: 'medium',
+        tool: 'prompt_engine',
+        action: 'argument_validation',
+        suggestions: issues.map((issue) => `Fix ${issue.argument}: ${issue.message}`),
+        recoveryOptions: [`Retry with corrected arguments`],
+      }
+    );
+    this.issues = issues;
+    this.promptDefinition = promptDefinition;
+  }
+
+  /**
+   * Format error message with issues and retry hint
+   */
+  private static formatMessage(
+    issues: SchemaValidationIssue[],
+    promptDefinition: PromptDefinitionForError
+  ): string {
+    const lines = ['Argument validation failed:'];
+
+    for (const issue of issues) {
+      lines.push(`  - ${issue.argument}: ${issue.message}`);
+    }
+
+    lines.push('');
+    lines.push('Retry with:');
+    lines.push(`  >>${promptDefinition.id} ${this.buildRetryHint(issues, promptDefinition)}`);
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Build example invocation with valid placeholders
+   */
+  private static buildRetryHint(
+    issues: SchemaValidationIssue[],
+    promptDefinition: PromptDefinitionForError
+  ): string {
+    const failedArgs = new Set(issues.map((i) => i.argument));
+
+    return promptDefinition.arguments
+      .filter((arg) => arg.required || failedArgs.has(arg.name))
+      .map((arg) => {
+        const hint = this.getValidValueHint(arg, failedArgs.has(arg.name));
+        return `${arg.name}="${hint}"`;
+      })
+      .join(' ');
+  }
+
+  /**
+   * Generate a helpful placeholder value based on validation rules
+   */
+  private static getValidValueHint(
+    arg: PromptDefinitionForError['arguments'][0],
+    wasFailed: boolean
+  ): string {
+    if (!wasFailed) {
+      return '<your value>';
+    }
+
+    const validation = arg.validation;
+    if (!validation) {
+      return '<valid value>';
+    }
+
+    // Pattern-based hint
+    if (validation.pattern) {
+      if (validation.pattern.includes('https://')) {
+        return 'https://example.com/...';
+      }
+      if (validation.pattern.includes('http')) {
+        return 'http://example.com/...';
+      }
+      return `<value matching ${validation.pattern}>`;
+    }
+
+    // Length-based hint
+    if (validation.minLength && validation.maxLength) {
+      return `<${validation.minLength}-${validation.maxLength} chars>`;
+    }
+    if (validation.minLength) {
+      return `<at least ${validation.minLength} chars>`;
+    }
+    if (validation.maxLength) {
+      return `<max ${validation.maxLength} chars>`;
+    }
+
+    return '<valid value>';
+  }
+
+  /**
+   * Get enhanced message with structured retry guidance
+   */
+  override getEnhancedMessage(): string {
+    let message = `❌ **Argument Validation Failed**\n\n`;
+
+    message += `**Issues Found**:\n`;
+    this.issues.forEach((issue, index) => {
+      message += `${index + 1}. **${issue.argument}**: ${issue.message}\n`;
+    });
+
+    message += `\n**Retry Command**:\n`;
+    message += `\`\`\`\n>>${this.promptDefinition.id} ${ArgumentValidationError.buildRetryHint(this.issues, this.promptDefinition)}\n\`\`\`\n`;
+
+    message += `\n💡 **Tips**:\n`;
+    message += `- Check argument values meet length and pattern requirements\n`;
+    message += `- URL arguments must match the specified pattern\n`;
+    message += `- Required arguments cannot be empty\n`;
+
+    return message;
+  }
+}
+
 // Additional specialized error classes
 export class ConfigError extends BaseError {
   constructor(message: string, context: ErrorContext = {}) {

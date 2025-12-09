@@ -69,16 +69,6 @@ export const SYSTEM_OPERATIONS = {
 } as const;
 
 /**
- * Execution modes for prompt engine
- */
-export const EXECUTION_MODES = {
-  AUTO: 'auto',
-  PROMPT: 'prompt',
-  TEMPLATE: 'template',
-  CHAIN: 'chain',
-} as const;
-
-/**
  * Output formats
  */
 export const OUTPUT_FORMATS = {
@@ -155,7 +145,6 @@ export const LIMITS = {
   MAX_FILTER_RESULTS: 1000,
   DEFAULT_PAGE_SIZE: 20,
   MAX_PAGE_SIZE: 100,
-  EXECUTION_TIMEOUT: 30000, // 30 seconds
   CACHE_TTL: 300000, // 5 minutes
 } as const;
 

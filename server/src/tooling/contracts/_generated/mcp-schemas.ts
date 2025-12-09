@@ -39,11 +39,8 @@ export const promptEngineSchema = z.object({
       ])).optional(),
   /** Restart chain from step 1, ignoring cached state. */
   force_restart: z.boolean().optional(),
-  /** Experimental: Advanced LLM-based semantic validation for prompt quality. Currently blocked pending architectural design. */
-  llm_validation: z.boolean().optional(),
   /** Execution options forwarded downstream. */
   options: z.record(z.unknown()).optional(),
-  // session_id: hidden/blocked - not included in schema
 });
 
 export type promptEngineInput = z.infer<typeof promptEngineSchema>;
@@ -116,6 +113,8 @@ export const systemControlSchema = z.object({
   include_history: z.boolean().optional(),
   /** Guide topic when requesting guidance. */
   topic: z.string().optional(),
+  /** Filter gates by keyword (matches ID, name, or description). Use with gates:list action. */
+  search_query: z.string().optional(),
 });
 
 export type systemControlInput = z.infer<typeof systemControlSchema>;

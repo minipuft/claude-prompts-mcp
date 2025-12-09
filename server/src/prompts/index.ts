@@ -16,26 +16,26 @@ export * from './hot-reload-manager.js';
 
 import * as path from 'node:path';
 
-import { ConfigManager } from '../config/index.js';
-import { Logger } from '../logging/index.js';
-import { ConversationManager } from '../text-references/conversation.js';
-import { TextReferenceManager } from '../text-references/index.js';
-import { Category, CategoryPromptsResult, ConvertedPrompt, PromptData } from '../types/index.js';
 import { PromptConverter } from './converter.js';
 import {
   HotReloadManager,
   createHotReloadManager,
   type AuxiliaryReloadConfig,
   type HotReloadEvent as PromptHotReloadEvent,
+  HotReloadEvent,
 } from './hot-reload-manager.js';
 import { PromptLoader } from './loader.js';
 import { PromptRegistry } from './registry.js';
+import { ConfigManager } from '../config/index.js';
+import { Logger } from '../logging/index.js';
+import { ConversationManager } from '../text-references/conversation.js';
+import { TextReferenceManager } from '../text-references/index.js';
+import { Category, CategoryPromptsResult, ConvertedPrompt, PromptData } from '../types/index.js';
 
 // Import the actual modules
 // TemplateProcessor functionality consolidated into UnifiedPromptProcessor
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { HotReloadEvent } from './hot-reload-manager.js';
 //  Framework capabilities integrated into enhanced HotReloadManager
 
 /**
@@ -254,7 +254,7 @@ export class PromptAssetManager {
     // Hot-reload will be handled via list_changed notifications
 
     // Reinitialize the system
-   return this.initializePromptSystem(configPath, basePath);
+    return this.initializePromptSystem(configPath, basePath);
   }
 
   /**

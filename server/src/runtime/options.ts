@@ -4,12 +4,34 @@
  * Centralizes CLI flag handling so verbose/quiet/test detection stays in sync.
  */
 
+import { parsePathCliOptions, type PathResolverCliOptions } from './paths.js';
+
+/**
+ * Path-related options parsed from CLI flags and environment variables
+ */
+export interface PathOptions {
+  /** Base workspace directory for user assets */
+  workspace?: string;
+  /** Direct path to config.json */
+  configPath?: string;
+  /** Direct path to prompts configuration file */
+  promptsPath?: string;
+  /** Custom methodologies directory */
+  methodologiesPath?: string;
+  /** Custom gates directory */
+  gatesPath?: string;
+}
+
 export interface RuntimeLaunchOptions {
   args: string[];
   verbose: boolean;
   quiet: boolean;
   startupTest: boolean;
   testEnvironment: boolean;
+  /** Path-related options from CLI flags */
+  paths: PathResolverCliOptions;
+  /** Log level override from --log-level flag */
+  logLevel?: string;
 }
 
 const TEST_ARG_HINTS = ['test', 'jest', 'mocha'];
@@ -33,11 +55,34 @@ export function detectRuntimeTestEnvironment(
 }
 
 /**
+ * Parse --log-level flag from arguments
+ */
+function parseLogLevel(args: string[]): string | undefined {
+  const logLevelArg = args.find((arg) => arg.startsWith('--log-level='));
+  if (logLevelArg) {
+    const level = logLevelArg.split('=')[1]?.toLowerCase();
+    const validLevels = ['debug', 'info', 'warn', 'error'];
+    if (validLevels.includes(level)) {
+      return level;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Parse runtime launch options from CLI arguments.
  *
  * Zero-flag experience: When using STDIO transport (default), quiet mode is
  * automatically enabled unless --verbose is explicitly specified. This prevents
  * logging output from corrupting the MCP JSON-RPC protocol.
+ *
+ * Supported path flags:
+ *   --workspace=/path       Base directory for user assets
+ *   --config=/path          Direct path to config.json
+ *   --prompts=/path         Direct path to prompts configuration
+ *   --methodologies=/path   Custom methodologies directory
+ *   --gates=/path           Custom gates directory
+ *   --log-level=LEVEL       Log level (debug, info, warn, error)
  */
 export function resolveRuntimeLaunchOptions(
   args: string[] = process.argv.slice(2),
@@ -55,11 +100,19 @@ export function resolveRuntimeLaunchOptions(
   // unless --verbose is explicitly specified (for debugging)
   const autoQuiet = isStdioTransport && !isVerbose;
 
+  // Parse path-related CLI options
+  const paths = parsePathCliOptions(args);
+
+  // Parse log level
+  const logLevel = parseLogLevel(args);
+
   return {
     args,
     verbose: isVerbose,
     quiet: explicitQuiet || autoQuiet,
     startupTest: args.includes('--startup-test'),
     testEnvironment: detectRuntimeTestEnvironment(fullArgv, args),
+    paths,
+    logLevel,
   };
 }

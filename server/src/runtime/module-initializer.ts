@@ -6,21 +6,27 @@
 
 import * as path from 'node:path';
 
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-
-import { createFrameworkStateManager, FrameworkStateManager } from '../frameworks/framework-state-manager.js';
-import type { Logger } from '../logging/index.js';
+import {
+  createFrameworkStateManager,
+  FrameworkStateManager,
+} from '../frameworks/framework-state-manager.js';
+import { createGateManager, GateManager } from '../gates/gate-manager.js';
 import { createMcpToolsManager, McpToolsManager } from '../mcp-tools/index.js';
-import type { PromptAssetManager } from '../prompts/index.js';
-import { createToolDescriptionManager, ToolDescriptionManager } from '../mcp-tools/tool-description-manager.js';
+import {
+  createToolDescriptionManager,
+  ToolDescriptionManager,
+} from '../mcp-tools/tool-description-manager.js';
+import { isChainPrompt } from '../utils/chainUtils.js';
+
+import type { RuntimeLaunchOptions } from './options.js';
 import type { ConfigManager } from '../config/index.js';
+import type { Logger } from '../logging/index.js';
+import type { PromptAssetManager } from '../prompts/index.js';
 import type { ConversationManager } from '../text-references/conversation.js';
 import type { TextReferenceManager } from '../text-references/index.js';
-import type { Category, ConvertedPrompt, PromptData } from '../types/index.js';
-import type { RuntimeLaunchOptions } from './options.js';
+import type { Category, ConvertedPrompt, PromptData, FrameworksConfig } from '../types/index.js';
 import type { ServiceManager } from '../utils/service-manager.js';
-import { isChainPrompt } from '../utils/chainUtils.js';
-import type { FrameworksConfig } from '../types/index.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 export interface ModuleInitCallbacks {
   fullServerRefresh: () => Promise<void>;
@@ -45,13 +51,12 @@ export interface ModuleInitParams {
 
 export interface ModuleInitResult {
   frameworkStateManager: FrameworkStateManager;
+  gateManager: GateManager;
   mcpToolsManager: McpToolsManager;
   toolDescriptionManager: ToolDescriptionManager;
 }
 
-export async function initializeModules(
-  params: ModuleInitParams
-): Promise<ModuleInitResult> {
+export async function initializeModules(params: ModuleInitParams): Promise<ModuleInitResult> {
   const {
     logger,
     configManager,
@@ -80,6 +85,14 @@ export async function initializeModules(
   const currentFrameworkConfig = configManager.getFrameworksConfig();
   callbacks.handleFrameworkConfigChange(currentFrameworkConfig);
 
+  // Initialize Gate Manager (Phase 4 - registry-based gate system)
+  if (isVerbose) logger.info('🔄 Initializing Gate Manager...');
+  const gateManager = await createGateManager(logger);
+  if (isVerbose) {
+    const stats = gateManager.getRegistryStats();
+    logger.info(`✅ GateManager initialized with ${stats.totalGates} gates`);
+  }
+
   const chainCount = convertedPrompts.filter((p) => isChainPrompt(p)).length;
   if (isVerbose) {
     logger.info(
@@ -97,7 +110,8 @@ export async function initializeModules(
     textReferenceManager,
     serviceManager,
     callbacks.fullServerRefresh,
-    callbacks.restartServer
+    callbacks.restartServer,
+    gateManager
   );
 
   if (isVerbose) logger.info('🔄 Updating MCP tools manager data...');
@@ -122,6 +136,7 @@ export async function initializeModules(
 
   return {
     frameworkStateManager,
+    gateManager,
     mcpToolsManager,
     toolDescriptionManager,
   };

@@ -21,24 +21,18 @@ export interface PromptArgument {
   type?: 'string' | 'number' | 'boolean' | 'object' | 'array';
   /** Default value if not provided */
   defaultValue?: string | number | boolean | null | object | Array<any>;
-  /** Optional CAGEERF component association for framework-aware processing */
-  cageerfComponent?:
-    | 'context'
-    | 'analysis'
-    | 'goals'
-    | 'execution'
-    | 'evaluation'
-    | 'refinement'
-    | 'framework';
   /** Validation rules for the argument */
   validation?: {
-    /** Regex pattern for string validation */
+    /** Regex pattern for string validation (e.g., "^https://" for URL whitelisting) */
     pattern?: string;
-    /** Minimum length for strings */
+    /** Minimum length for strings - ensures sufficient input detail */
     minLength?: number;
-    /** Maximum length for strings */
+    /** Maximum length for strings - prevents oversized payloads */
     maxLength?: number;
-    /** Allowed values for enumeration */
+    /**
+     * @deprecated Removed in v3.0.0 - LLM handles semantic variation better than strict enums.
+     * This field is ignored by the validation system.
+     */
     allowedValues?: Array<string | number | boolean>;
   };
 }
@@ -88,10 +82,6 @@ export interface PromptData {
   file: string;
   /** Arguments accepted by this prompt */
   arguments: PromptArgument[];
-  /** Whether this prompt should use available tools */
-  tools?: boolean;
-  /** Defines behavior when prompt is invoked without its defined arguments */
-  onEmptyInvocation?: 'execute_if_possible' | 'return_template';
   /** Optional gates for validation */
   gates?: GateDefinition[];
   /** Whether to register this prompt with MCP. Overrides category default. */
@@ -110,8 +100,6 @@ export interface PromptFile {
   systemMessage?: string;
   /** Template for generating the user message */
   userMessageTemplate: string;
-  /** Whether this prompt should use available tools */
-  tools?: boolean;
 }
 
 /**
@@ -162,15 +150,24 @@ export interface CategoryPromptsResult {
 }
 
 /**
- * Chain step definition (minimal for prompt context)
+ * Chain step definition
+ *
+ * Defines a single step in a chain workflow with support for:
+ * - inputMapping: Map previous step results to semantic variable names
+ * - outputMapping: Name this step's output for downstream reference
+ * - retries: Per-step retry count for resilient chains
  */
 export interface ChainStep {
+  /** ID of the prompt to execute in this step */
   promptId: string;
+  /** Name/identifier of this step */
   stepName: string;
-  executionType?: 'single' | 'chain';
-  legacyExecutionType?: 'prompt' | 'template';
+  /** Map step results to semantic names (e.g., { "research": "step1_result" }) */
   inputMapping?: Record<string, string>;
+  /** Name this step's output for downstream steps */
   outputMapping?: Record<string, string>;
+  /** Number of retry attempts on failure (default: 0) */
+  retries?: number;
 }
 
 /**

@@ -139,7 +139,9 @@ export function validateCompliance(
 
     if (detection.present) {
       if (detection.quality > 0.7) {
-        strengths.push(`Strong ${capitalizedPhase.toLowerCase()} coverage with comprehensive depth`);
+        strengths.push(
+          `Strong ${capitalizedPhase.toLowerCase()} coverage with comprehensive depth`
+        );
       } else if (detection.quality > 0.4) {
         strengths.push(
           `${capitalizedPhase} awareness present - could be enhanced with more detail`

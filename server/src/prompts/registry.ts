@@ -37,19 +37,10 @@ export class PromptRegistry {
   private async processTemplateDirect(
     template: string,
     args: Record<string, string>,
-    specialContext: Record<string, string> = {},
-    toolsEnabled: boolean = false
+    specialContext: Record<string, string> = {}
   ): Promise<string> {
-    // Import jsonUtils for basic template processing
     const { processTemplate } = await import('../utils/jsonUtils.js');
-    const { getAvailableTools } = await import('../utils/index.js');
-
-    const enhancedSpecialContext = { ...specialContext };
-    if (toolsEnabled) {
-      enhancedSpecialContext['tools_available'] = getAvailableTools();
-    }
-
-    return processTemplate(template, args, enhancedSpecialContext);
+    return processTemplate(template, args, specialContext);
   }
 
   constructor(
@@ -126,10 +117,7 @@ export class PromptRegistry {
             continue;
           } else {
             // Re-throw other errors
-            this.logger.error(
-              `Failed to register prompt '${prompt.id}':`,
-              error.message || error
-            );
+            this.logger.error(`Failed to register prompt '${prompt.id}':`, error.message || error);
             throw error;
           }
         }
@@ -153,41 +141,6 @@ export class PromptRegistry {
   private async executePromptLogic(promptData: ConvertedPrompt, args: any): Promise<any> {
     try {
       this.logger.info(`Executing prompt '${promptData.name}'...`);
-
-      // Check if arguments are effectively empty
-      const effectivelyEmptyArgs = this.areArgumentsEffectivelyEmpty(promptData.arguments, args);
-
-      if (effectivelyEmptyArgs && promptData.onEmptyInvocation === 'return_template') {
-        this.logger.info(
-          `Prompt '${promptData.name}' invoked without arguments and onEmptyInvocation is 'return_template'. Returning template info.`
-        );
-
-        let responseText = `Prompt: '${promptData.name}'\n`;
-        responseText += `Description: ${promptData.description}\n`;
-
-        if (promptData.arguments && promptData.arguments.length > 0) {
-          responseText += `This prompt requires the following arguments:\n`;
-          promptData.arguments.forEach((arg) => {
-            responseText += `  - ${arg.name}${
-              arg.required ? ' (required)' : ' (optional)'
-            }: ${arg.description || 'No description'}\n`;
-          });
-          responseText += `\nExample usage: >>${
-            promptData.id || promptData.name
-          } ${promptData.arguments.map((arg) => `${arg.name}=\"value\"`).join(' ')}`;
-        } else {
-          responseText += 'This prompt does not require any arguments.\n';
-        }
-
-        return {
-          messages: [
-            {
-              role: 'assistant' as const,
-              content: { type: 'text' as const, text: responseText },
-            },
-          ],
-        };
-      }
 
       // Check if this is a chain prompt
       if (isChainPrompt(promptData) && promptData.chainSteps && promptData.chainSteps.length > 0) {
@@ -218,8 +171,7 @@ export class PromptRegistry {
       userMessageText = await this.processTemplateDirect(
         userMessageText,
         args,
-        { previous_message: previousMessageContext },
-        promptData.tools || false
+        { previous_message: previousMessageContext }
       );
 
       // Store in conversation history for future reference
@@ -289,31 +241,6 @@ export class PromptRegistry {
   // Hot-reload is handled through list_changed notifications to clients
 
   /**
-   * Helper function to determine if provided arguments are effectively empty
-   * for the given prompt definition.
-   */
-  private areArgumentsEffectivelyEmpty(
-    promptArgs: Array<{ name: string }>,
-    providedArgs: any
-  ): boolean {
-    if (
-      !providedArgs ||
-      typeof providedArgs !== 'object' ||
-      Object.keys(providedArgs).length === 0
-    ) {
-      return true; // No arguments provided at all
-    }
-    // Check if any of the defined arguments for the prompt have a meaningful value
-    for (const definedArg of promptArgs) {
-      const value = providedArgs[definedArg.name];
-      if (value !== undefined && value !== null && String(value).trim() !== '') {
-        return false; // Found at least one provided argument with a value
-      }
-    }
-    return true; // All defined arguments are missing or have empty values
-  }
-
-  /**
    * Execute a prompt directly (for testing or internal use)
    */
   async executePromptDirectly(
@@ -329,31 +256,15 @@ export class PromptRegistry {
 
       this.logger.debug(`Running prompt directly: ${promptId} with arguments:`, args);
 
-      // Check for missing arguments but treat all as optional
-      const missingArgs = convertedPrompt.arguments
-        .filter((arg) => !args[arg.name])
-        .map((arg) => arg.name);
-
-      if (missingArgs.length > 0) {
-        this.logger.info(
-          `Missing arguments for '${promptId}': ${missingArgs.join(
-            ', '
-          )}. Will attempt to use conversation context.`
-        );
-
-        // Use previous_message for all missing arguments
-        missingArgs.forEach((argName) => {
-          args[argName] = `{{previous_message}}`;
-        });
-      }
+      // Missing arguments are handled by ArgumentParser's default resolution chain
+      // which includes author-defined defaultValue as first priority
 
       // Process template with context
       // Using direct processing since TemplateProcessor was consolidated
       const userMessageText = await this.processTemplateDirect(
         convertedPrompt.userMessageTemplate,
         args,
-        { previous_message: this.conversationManager.getPreviousMessage() },
-        convertedPrompt.tools || false
+        { previous_message: this.conversationManager.getPreviousMessage() }
       );
 
       // Add the message to conversation history
@@ -388,12 +299,10 @@ export class PromptRegistry {
     totalPrompts: number;
     chainPrompts: number;
     regularPrompts: number;
-    toolEnabledPrompts: number;
     categoriesCount: number;
     averageArgumentsPerPrompt: number;
   } {
     const chainPrompts = prompts.filter((p) => isChainPrompt(p)).length;
-    const toolEnabledPrompts = prompts.filter((p) => p.tools).length;
     const categoriesSet = new Set(prompts.map((p) => p.category));
     const totalArguments = prompts.reduce((sum, p) => sum + p.arguments.length, 0);
 
@@ -401,7 +310,6 @@ export class PromptRegistry {
       totalPrompts: prompts.length,
       chainPrompts,
       regularPrompts: prompts.length - chainPrompts,
-      toolEnabledPrompts,
       categoriesCount: categoriesSet.size,
       averageArgumentsPerPrompt: prompts.length > 0 ? totalArguments / prompts.length : 0,
     };

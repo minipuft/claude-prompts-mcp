@@ -12,6 +12,7 @@ const STATUS_PATTERN = /^(>>|\/)?status$/i;
 const FRAMEWORK_PATTERN = /^(>>|\/)?framework\s+(switch|change)\s+(.+)$/i;
 const ANALYTICS_PATTERN = /^(>>|\/)?analytics?$/i;
 const GUIDE_PATTERN = /^(>>|\/)?guide(?:\s+(.*))?$/i;
+const GATES_PATTERN = /^(>>|\/)?gates?(?:\s+(.*))?$/i;
 const ALLOWED_PREFIX_TOKENS = ['@', '%judge', '%clean', '%lean'];
 
 function isPlausiblePromptId(token: string): boolean {
@@ -92,6 +93,22 @@ export function detectToolRoutingCommand(command: string): ToolRoutingResult {
       requiresRouting: true,
       targetTool: 'system_control',
       translatedParams: { action: 'analytics' },
+      originalCommand: command,
+    };
+  }
+
+  // >>gates command - list available canonical gates with optional search
+  const gatesMatch = trimmedCommand.match(GATES_PATTERN);
+  if (gatesMatch) {
+    const searchTerm = (gatesMatch[2] ?? '').trim();
+    return {
+      requiresRouting: true,
+      targetTool: 'system_control',
+      translatedParams: {
+        action: 'gates',
+        operation: 'list',
+        ...(searchTerm && { search_query: searchTerm }),
+      },
       originalCommand: command,
     };
   }

@@ -8,7 +8,7 @@ import type {
   StepState,
 } from '../mcp-tools/prompt-engine/core/types.js';
 
-export type ChainSessionLifecycle = 'legacy' | 'canonical';
+export type ChainSessionLifecycle = 'dormant' | 'canonical';
 
 export interface SessionBlueprint {
   parsedCommand: ParsedCommand;
@@ -68,7 +68,7 @@ export interface PersistedChainRunRegistry {
 }
 
 export interface ChainSessionLookupOptions {
-  includeLegacy?: boolean;
+  includeDormant?: boolean;
 }
 
 export interface ChainSessionService {

@@ -16,12 +16,12 @@ export type { McpToolRequest } from './execution.js';
 // Core configuration and protocol types
 export type {
   AnalysisConfig,
-  AnalysisMode,
   BaseMessageContent,
   ChainSessionConfig,
   Config,
+  ExecutionConfig,
+  FrameworkInjectionConfig,
   FrameworksConfig,
-  JudgeConfig,
   LLMIntegrationConfig,
   LLMProvider,
   LoggingConfig,
@@ -32,9 +32,7 @@ export type {
   ServerConfig,
   TextMessageContent,
   ToolDescriptionsOptions,
-  TransportConfig,
   TransportMode,
-  TransportsConfig,
 } from '../types.js';
 
 // Prompt system types
@@ -61,7 +59,6 @@ export type {
   ChainStep,
   ChainStepResult,
   ConvertedPrompt,
-  EnhancedChainExecutionOptions,
   ExecutionModifier,
   ExecutionModifiers,
   ExecutionStats,
@@ -75,11 +72,7 @@ export type {
 } from '../execution/types.js';
 
 // Import additional types needed for interfaces in this file
-import type {
-  ChainStep,
-  ChainStepResult,
-  EnhancedChainExecutionOptions,
-} from '../execution/types.js';
+import type { ChainStep, ChainStepResult } from '../execution/types.js';
 import type { GateStatus, StepResult } from '../gates/types.js';
 
 // Gate system types
@@ -119,35 +112,6 @@ export interface ConversationHistoryItem {
   content: string;
   timestamp: number;
   isProcessedTemplate?: boolean; // Flag to indicate if this is a processed template rather than original user input
-}
-
-// Advanced Chain Execution Types
-export interface EnhancedChainExecutionContext {
-  chainId: string;
-  chainName: string;
-  startTime: number;
-  executionOptions: EnhancedChainExecutionOptions;
-
-  // Enhanced step tracking
-  allSteps: ChainStep[]; // All steps in the chain
-  completedSteps: Set<string>; // Step IDs that have completed successfully
-  failedSteps: Set<string>; // Step IDs that have failed
-  skippedSteps: Set<string>; // Step IDs that were skipped due to dependencies/conditions
-  stepResults: Record<string, StepResult>; // Detailed results from each step
-
-  // Dependency management
-  executionPlan?: {
-    executionOrder: string[]; // Topologically sorted step execution order
-    parallelGroups: Map<string, string[]>; // Parallel execution groups
-  };
-
-  // Advanced execution state
-  currentPhase: 'planning' | 'executing' | 'completed' | 'failed';
-  activeParallelGroups: Map<string, string[]>; // Currently executing parallel groups
-  retryCount: Record<string, number>; // Retry attempts per step
-
-  // Gate validation tracking
-  gateValidationResults: Record<string, GateStatus[]>; // Gate results per step
 }
 
 // API Response Types

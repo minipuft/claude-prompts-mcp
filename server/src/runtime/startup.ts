@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url';
 
 interface DetectionStrategy {
   name: string;
-  priority: 'high' | 'medium' | 'low' | 'deprecated';
+  priority: 'high' | 'medium' | 'low';
   fn: () => Promise<string | null>;
 }
 
@@ -31,9 +31,9 @@ interface ValidationResult {
  * optimized for different execution contexts (npm install, Claude Desktop, development)
  */
 export class ServerRootDetector {
-  private hasWarnedEnvDeprecation = false;
   private isVerbose = false;
   private isQuiet = false;
+  private hasWarnedEnvDeprecation = false;
 
   /**
    * Determine the server root directory using multiple strategies
@@ -41,8 +41,7 @@ export class ServerRootDetector {
    * 1. Package Resolution - Find package.json with matching name (npm installs)
    * 2. Script Entry Point - Resolve symlinks from process.argv[1]
    * 3. Module URL - Walk up from import.meta.url
-   * 4. Environment Variable - MCP_SERVER_ROOT (deprecated)
-   * 5. CWD Fallback - process.cwd() patterns (last resort)
+   * 4. CWD Fallback - process.cwd() patterns (last resort)
    */
   async determineServerRoot(): Promise<string> {
     const args = process.argv.slice(2);
@@ -64,11 +63,6 @@ export class ServerRootDetector {
         name: 'module-url',
         priority: 'medium',
         fn: () => this.resolveFromModuleUrl(),
-      },
-      {
-        name: 'environment-variable',
-        priority: 'deprecated',
-        fn: () => this.resolveFromEnvironment(),
       },
       {
         name: 'cwd-fallback',
@@ -126,7 +120,7 @@ export class ServerRootDetector {
         try {
           const content = await fs.readFile(pkgPath, 'utf8');
           const pkg = JSON.parse(content);
-          if (pkg.name === 'claude-prompts-server') {
+          if (pkg.name === 'claude-prompts') {
             if (this.isVerbose) {
               console.error(`  Found package.json at: ${pkgPath}`);
               console.error(`  Package name matches: ${pkg.name}`);
@@ -155,7 +149,7 @@ export class ServerRootDetector {
 
     try {
       // Resolve symlinks to get actual file location
-      // This handles: /usr/local/bin/claude-prompts-server -> actual package
+      // This handles: /usr/local/bin/claude-prompts -> actual package
       const realPath = await fs.realpath(process.argv[1]);
       const scriptDir = path.dirname(realPath);
 
@@ -202,46 +196,10 @@ export class ServerRootDetector {
   }
 
   /**
-   * Strategy 4: Environment Variable (Deprecated)
-   * Still works but emits deprecation warning
-   */
-  private async resolveFromEnvironment(): Promise<string | null> {
-    const envPath = process.env.MCP_SERVER_ROOT;
-    if (!envPath) return null;
-
-    try {
-      const resolved = path.resolve(envPath);
-      const configPath = path.join(resolved, 'config.json');
-      await fs.access(configPath);
-
-      // Emit deprecation warning (once per session)
-      if (!this.hasWarnedEnvDeprecation && !this.isQuiet) {
-        console.error(
-          '[DEPRECATION] MCP_SERVER_ROOT environment variable is deprecated.'
-        );
-        console.error(
-          '  Server root is now auto-detected from package location.'
-        );
-        console.error(
-          '  This variable will be removed in v2.0. You can safely remove it.'
-        );
-        this.hasWarnedEnvDeprecation = true;
-      }
-
-      return resolved;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Strategy 5: CWD Fallback (Last resort, development only)
+   * Strategy 4: CWD Fallback (Last resort, development only)
    */
   private async resolveFromCwd(): Promise<string | null> {
-    const candidates = [
-      process.cwd(),
-      path.join(process.cwd(), 'server'),
-    ];
+    const candidates = [process.cwd(), path.join(process.cwd(), 'server')];
 
     for (const candidate of candidates) {
       try {
@@ -265,16 +223,10 @@ export class ServerRootDetector {
    * Checks for required files and directories
    */
   private async validateServerRoot(root: string): Promise<ValidationResult> {
-    const required = [
-      'config.json',
-      'prompts',
-    ];
+    const required = ['config.json', 'prompts'];
 
-    // src/gates/definitions is optional (may be in dist for published packages)
-    const optional = [
-      'src/gates/definitions',
-      'dist/gates/definitions',
-    ];
+    // gates directory is optional (may be bundled differently in some deployments)
+    const optional = ['gates'];
 
     const missing: string[] = [];
 
@@ -317,7 +269,7 @@ export class ServerRootDetector {
     console.error(`process.argv[0]: ${process.argv[0]}`);
     console.error(`process.argv[1]: ${process.argv[1] || 'undefined'}`);
     console.error(`import.meta.url: ${import.meta.url}`);
-    console.error(`MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || 'undefined'}`);
+    console.error(`MCP_WORKSPACE: ${process.env.MCP_WORKSPACE || 'undefined'}`);
     console.error('');
   }
 
@@ -340,8 +292,8 @@ If running from source:
   node dist/index.js
 
 If installed via npm:
-  npm uninstall -g claude-prompts-server
-  npm install -g claude-prompts-server
+  npm uninstall -g claude-prompts
+  npm install -g claude-prompts
 
 For Claude Desktop, ensure claude_desktop_config.json uses absolute paths:
   {

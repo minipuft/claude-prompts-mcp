@@ -10,6 +10,12 @@ import { Logger } from '../../logging/index.js';
 import { ConvertedPrompt } from '../../types/index.js';
 import { FrameworkManager } from '../framework-manager.js';
 import {
+  MethodologyTracker,
+  createMethodologyTracker,
+  type MethodologyTrackerConfig,
+} from './methodology-tracker.js';
+import { TemplateEnhancer, createTemplateEnhancer } from './template-enhancer.js';
+import {
   FrameworkDefinition,
   IMethodologyGuide,
   MethodologyState,
@@ -18,12 +24,6 @@ import {
   StepGuidance,
   SystemPromptInjectionResult,
 } from '../types/index.js';
-import {
-  MethodologyTracker,
-  createMethodologyTracker,
-  type MethodologyTrackerConfig,
-} from './methodology-tracker.js';
-import { TemplateEnhancer, createTemplateEnhancer } from './template-enhancer.js';
 
 import type { ContentAnalysisResult } from '../../semantic/types.js';
 
@@ -248,14 +248,30 @@ export class PromptGuidanceService {
                 advancedChainFeatures: {
                   ...effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures,
                   selected_resources: options.selectedResources,
-                  hasDependencies: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasDependencies ?? false,
-                  hasParallelSteps: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasParallelSteps ?? false,
-                  hasAdvancedStepTypes: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasAdvancedStepTypes ?? false,
-                  hasAdvancedErrorHandling: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasAdvancedErrorHandling ?? false,
-                  hasStepConfigurations: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasStepConfigurations ?? false,
-                  hasCustomTimeouts: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.hasCustomTimeouts ?? false,
-                  requiresAdvancedExecution: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.requiresAdvancedExecution ?? false,
-                  complexityScore: effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures?.complexityScore ?? 0,
+                  hasDependencies:
+                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
+                      ?.hasDependencies ?? false,
+                  hasParallelSteps:
+                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
+                      ?.hasParallelSteps ?? false,
+                  hasAdvancedStepTypes:
+                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
+                      ?.hasAdvancedStepTypes ?? false,
+                  hasAdvancedErrorHandling:
+                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
+                      ?.hasAdvancedErrorHandling ?? false,
+                  hasStepConfigurations:
+                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
+                      ?.hasStepConfigurations ?? false,
+                  hasCustomTimeouts:
+                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
+                      ?.hasCustomTimeouts ?? false,
+                  requiresAdvancedExecution:
+                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
+                      ?.requiresAdvancedExecution ?? false,
+                  complexityScore:
+                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
+                      ?.complexityScore ?? 0,
                 },
               },
             };
@@ -303,7 +319,8 @@ export class PromptGuidanceService {
 
       return {
         originalPrompt: prompt,
-        activeMethodology: this.methodologyTracker?.getCurrentState()?.activeMethodology || 'CAGEERF',
+        activeMethodology:
+          this.methodologyTracker?.getCurrentState()?.activeMethodology || 'CAGEERF',
         guidanceApplied: false,
         processingTimeMs: Date.now() - startTime,
         metadata: {
@@ -360,7 +377,13 @@ export class PromptGuidanceService {
       metadata: {
         injectionTime: new Date(),
         injectionMethod: 'unified',
-        variablesUsed: ['PROMPT_NAME', 'PROMPT_CATEGORY', 'FRAMEWORK_NAME', 'METHODOLOGY', 'PROMPT_TYPE'],
+        variablesUsed: [
+          'PROMPT_NAME',
+          'PROMPT_CATEGORY',
+          'FRAMEWORK_NAME',
+          'METHODOLOGY',
+          'PROMPT_TYPE',
+        ],
         confidence: 1.0,
         processingTimeMs: Date.now() - startTime,
         validationPassed: true,
@@ -388,7 +411,8 @@ export class PromptGuidanceService {
         confidence: judgeResult.confidence || 0.5,
         reasoning: [judgeResult.reasoning || 'Runtime judge decision'],
         executionCharacteristics: {
-          hasStructuredReasoning: judgeResult.intent === 'analytical' || judgeResult.intent === 'procedural',
+          hasStructuredReasoning:
+            judgeResult.intent === 'analytical' || judgeResult.intent === 'procedural',
           hasComplexAnalysis: judgeResult.intent === 'analytical',
           hasMethodologyKeywords: judgeResult.intent === 'creative',
           hasConditionals: false,

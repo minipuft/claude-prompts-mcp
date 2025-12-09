@@ -12,6 +12,7 @@
 
 import * as path from 'path';
 
+import { FileBackedChainRunRegistry, type ChainRunRegistry } from './run-registry.js';
 import { Logger } from '../logging/index.js';
 import {
   PendingGateReview,
@@ -19,9 +20,7 @@ import {
   StepState,
 } from '../mcp-tools/prompt-engine/core/types.js';
 import { ArgumentHistoryTracker, TextReferenceManager } from '../text-references/index.js';
-import { FileBackedChainRunRegistry, type ChainRunRegistry } from './run-registry.js';
 
-import type { ParsedCommand } from '../execution/context/execution-context.js';
 import type {
   ChainSession,
   ChainSessionLookupOptions,
@@ -31,6 +30,7 @@ import type {
   PersistedChainRunRegistry,
   SessionBlueprint,
 } from './types.js';
+import type { ParsedCommand } from '../execution/context/execution-context.js';
 
 interface ChainSessionManagerOptions {
   serverRoot: string;
@@ -162,8 +162,8 @@ export class ChainSessionManager implements ChainSessionService {
           chainSession.state.stepStates = new Map();
         }
 
-        // All persisted sessions become legacy until explicitly resumed
-        chainSession.lifecycle = 'legacy';
+        // All persisted sessions become dormant until explicitly resumed
+        chainSession.lifecycle = 'dormant';
         this.activeSessions.set(sessionId, chainSession);
       }
 
@@ -695,6 +695,8 @@ export class ChainSessionManager implements ChainSessionService {
     const currentStepArgs = this.getCurrentStepArgs(session);
     if (currentStepArgs && Object.keys(currentStepArgs).length > 0) {
       contextData.currentStepArgs = currentStepArgs;
+      // Expose step arguments as {{input}} for template access
+      contextData.input = currentStepArgs;
     }
 
     const chainMetadata = this.buildChainMetadata(session);
@@ -924,7 +926,7 @@ export class ChainSessionManager implements ChainSessionService {
 
     for (const sessionId of sessionIds) {
       const session = this.activeSessions.get(sessionId);
-      if (session && !this.isLegacySession(session)) {
+      if (session && !this.isDormantSession(session)) {
         return true;
       }
     }
@@ -966,7 +968,7 @@ export class ChainSessionManager implements ChainSessionService {
         }
         for (const sessionId of sessionIds) {
           const session = this.activeSessions.get(sessionId);
-          if (session && !this.isLegacySession(session)) {
+          if (session && !this.isDormantSession(session)) {
             return session;
           }
         }
@@ -980,17 +982,17 @@ export class ChainSessionManager implements ChainSessionService {
     chainId: string,
     options?: ChainSessionLookupOptions
   ): ChainSession | undefined {
-    const includeLegacy = options?.includeLegacy ?? false;
+    const includeDormant = options?.includeDormant ?? false;
     const runSession = this.getActiveSessionForChain(chainId);
     if (runSession) {
       return runSession;
     }
 
-    if (includeLegacy) {
-      const legacyRun = this.getLegacySessionForChain(chainId);
-      if (legacyRun) {
-        this.promoteSessionLifecycle(legacyRun, 'explicit chain resume');
-        return legacyRun;
+    if (includeDormant) {
+      const dormantRun = this.getDormantSessionForChain(chainId);
+      if (dormantRun) {
+        this.promoteSessionLifecycle(dormantRun, 'explicit chain resume');
+        return dormantRun;
       }
     }
 
@@ -1000,11 +1002,11 @@ export class ChainSessionManager implements ChainSessionService {
       return latestActive;
     }
 
-    if (includeLegacy) {
-      const legacy = this.getLegacySessionForBaseChain(normalized);
-      if (legacy) {
-        this.promoteSessionLifecycle(legacy, 'explicit base chain resume');
-        return legacy;
+    if (includeDormant) {
+      const dormant = this.getDormantSessionForBaseChain(normalized);
+      if (dormant) {
+        this.promoteSessionLifecycle(dormant, 'explicit base chain resume');
+        return dormant;
       }
     }
 
@@ -1014,7 +1016,7 @@ export class ChainSessionManager implements ChainSessionService {
   listActiveSessions(limit: number = 50): ChainSessionSummary[] {
     const summaries: ChainSessionSummary[] = [];
     for (const session of this.activeSessions.values()) {
-      if (this.isLegacySession(session)) {
+      if (this.isDormantSession(session)) {
         continue;
       }
       summaries.push({
@@ -1051,7 +1053,7 @@ export class ChainSessionManager implements ChainSessionService {
 
     for (const sessionId of sessionIds) {
       const session = this.activeSessions.get(sessionId);
-      if (session && !this.isLegacySession(session) && session.lastActivity > mostRecentActivity) {
+      if (session && !this.isDormantSession(session) && session.lastActivity > mostRecentActivity) {
         mostRecentSession = session;
         mostRecentActivity = session.lastActivity;
       }
@@ -1376,8 +1378,8 @@ export class ChainSessionManager implements ChainSessionService {
     this.logger.info('ChainSessionManager cleanup complete');
   }
 
-  private isLegacySession(session?: ChainSession | null): boolean {
-    return session?.lifecycle === 'legacy';
+  private isDormantSession(session?: ChainSession | null): boolean {
+    return session?.lifecycle === 'dormant';
   }
 
   private promoteSessionLifecycle(session: ChainSession, reason: string): void {
@@ -1391,7 +1393,7 @@ export class ChainSessionManager implements ChainSessionService {
     this.persistSessionsAsync('lifecycle-promotion');
   }
 
-  private getLegacySessionForChain(chainId: string): ChainSession | undefined {
+  private getDormantSessionForChain(chainId: string): ChainSession | undefined {
     const sessionIds = this.chainSessionMapping.get(chainId);
     if (!sessionIds) {
       return undefined;
@@ -1399,25 +1401,25 @@ export class ChainSessionManager implements ChainSessionService {
 
     for (const sessionId of sessionIds) {
       const session = this.activeSessions.get(sessionId);
-      if (session && this.isLegacySession(session)) {
+      if (session && this.isDormantSession(session)) {
         return session;
       }
     }
     return undefined;
   }
 
-  private getLegacySessionForBaseChain(baseChainId: string): ChainSession | undefined {
+  private getDormantSessionForBaseChain(baseChainId: string): ChainSession | undefined {
     const normalized = this.extractBaseChainId(baseChainId);
     const history = this.baseChainMapping.get(normalized) ?? [];
     for (let idx = history.length - 1; idx >= 0; idx -= 1) {
       const runChainId = history[idx];
-      const legacySession = this.getLegacySessionForChain(runChainId);
-      if (legacySession) {
-        return legacySession;
+      const dormantSession = this.getDormantSessionForChain(runChainId);
+      if (dormantSession) {
+        return dormantSession;
       }
     }
 
-    return this.getLegacySessionForChain(normalized);
+    return this.getDormantSessionForChain(normalized);
   }
 
   private buildChainMetadata(session: ChainSession): Record<string, any> | undefined {

@@ -10,7 +10,6 @@
 import * as path from 'node:path';
 
 import { ChainManagementService } from './chain-management.js';
-import { CHAIN_ID_PATTERN } from '../../../utils/index.js';
 import { createChainSessionManager } from '../../../chain-session/manager.js';
 import { ConfigManager } from '../../../config/index.js';
 import { ChainOperatorExecutor } from '../../../execution/operators/chain-operator-executor.js';
@@ -46,7 +45,9 @@ import {
   createPromptGuidanceService,
 } from '../../../frameworks/prompt-guidance/index.js';
 import { FrameworkExecutionContext } from '../../../frameworks/types/index.js';
-import { LightweightGateSystem, createLightweightGateSystem } from '../../../gates/core/index.js';
+import { LightweightGateSystem, createGateValidator, createTemporaryGateRegistry } from '../../../gates/core/index.js';
+import { GateManagerProvider } from '../../../gates/registry/gate-provider-adapter.js';
+import type { GateManager } from '../../../gates/gate-manager.js';
 import {
   GateGuidanceRenderer,
   createGateGuidanceRenderer,
@@ -54,11 +55,13 @@ import {
 import { GateReferenceResolver } from '../../../gates/services/gate-reference-resolver.js';
 import { GateServiceFactory } from '../../../gates/services/gate-service-factory.js';
 import { Logger } from '../../../logging/index.js';
+import { StyleManager, createStyleManager } from '../../../styles/index.js';
 import { PromptAssetManager } from '../../../prompts/index.js';
 import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
 import { ConversationManager } from '../../../text-references/conversation.js';
 import { TextReferenceManager, ArgumentHistoryTracker } from '../../../text-references/index.js';
 import { ConvertedPrompt, PromptData, ToolResponse } from '../../../types/index.js';
+import { CHAIN_ID_PATTERN } from '../../../utils/index.js';
 import { ToolDescriptionManager } from '../../tool-description-manager.js';
 import { ResponseFormatter } from '../processors/response-formatter.js';
 import { renderPromptEngineGuide } from '../utils/guide.js';
@@ -99,6 +102,10 @@ export class PromptExecutionService {
   private analyticsService?: MetricsCollector;
   private promptPipeline?: PromptExecutionPipeline;
   private mcpToolsManager?: any;
+  /** GateManager for registry-based gate selection in pipeline stages */
+  private readonly gateManager: GateManager;
+  /** StyleManager for dynamic style guidance (# operator) */
+  private styleManager?: StyleManager;
 
   private convertedPrompts: ConvertedPrompt[] = [];
   private readonly serverRoot: string;
@@ -111,6 +118,7 @@ export class PromptExecutionService {
     semanticAnalyzer: ContentAnalyzer,
     conversationManager: ConversationManager,
     textReferenceManager: TextReferenceManager,
+    gateManager: GateManager,
     mcpToolsManager?: any,
     promptGuidanceService?: PromptGuidanceService
   ) {
@@ -121,6 +129,7 @@ export class PromptExecutionService {
     this.semanticAnalyzer = semanticAnalyzer;
     this.conversationManager = conversationManager;
     this.textReferenceManager = textReferenceManager;
+    this.gateManager = gateManager; // Store for registry-based gate selection
     this.responseFormatter = new ResponseFormatter();
     this.executionPlanner = new ExecutionPlanner(semanticAnalyzer, logger);
     this.parsingSystem = createParsingSystem(logger);
@@ -161,19 +170,27 @@ export class PromptExecutionService {
       ? path.isAbsolute(config.gates.definitionsDirectory)
         ? config.gates.definitionsDirectory
         : path.resolve(this.serverRoot, config.gates.definitionsDirectory)
-      : path.resolve(this.serverRoot, 'src/gates/definitions');
+      : path.resolve(this.serverRoot, 'gates');
 
     const llmConfig = config.analysis?.semanticAnalysis?.llmIntegration;
-    this.lightweightGateSystem = createLightweightGateSystem(logger, gatesDirectory, undefined, {
-      enableTemporaryGates: true,
+
+    const temporaryGateRegistry = createTemporaryGateRegistry(logger, {
       maxMemoryGates: 100,
       defaultExpirationMs: 30 * 60 * 1000,
-      llmConfig,
     });
+
+    const gateProvider = new GateManagerProvider(gateManager, temporaryGateRegistry);
+    const gateValidator = createGateValidator(logger, gateProvider, llmConfig);
+    this.lightweightGateSystem = new LightweightGateSystem(
+      gateProvider,
+      gateValidator,
+      temporaryGateRegistry
+    );
     this.gateReferenceResolver = new GateReferenceResolver(this.lightweightGateSystem.gateLoader);
     this.gateGuidanceRenderer = createGateGuidanceRenderer(logger, {
       gateLoader: this.lightweightGateSystem.gateLoader,
-      temporaryGateRegistry: this.lightweightGateSystem.getTemporaryGateRegistry?.(),
+      temporaryGateRegistry:
+        this.lightweightGateSystem.getTemporaryGateRegistry?.() ?? temporaryGateRegistry,
       frameworkIdentifierProvider: () => {
         const frameworks = this.frameworkManager?.listFrameworks(false) ?? [];
         const identifiers = new Set<string>();
@@ -201,6 +218,9 @@ export class PromptExecutionService {
 
     // Inject GateLoader into ExecutionPlanner for dynamic methodology gate detection
     this.executionPlanner.setGateLoader(this.lightweightGateSystem.gateLoader);
+
+    // Initialize StyleManager asynchronously
+    void this.initializeStyleManager();
 
     this.logger.info('[PromptExecutionService] Initialized pipeline dependencies');
   }
@@ -293,7 +313,6 @@ export class PromptExecutionService {
   async executePromptCommand(
     args: {
       command?: string; // Optional - not needed for chain resume (chain_id + user_response)
-      llm_validation?: boolean;
       force_restart?: boolean;
       chain_id?: string;
       gate_verdict?: string;
@@ -310,7 +329,7 @@ export class PromptExecutionService {
     const chainIdFromCommand = this.extractChainId(normalizedCommand);
     const hasResumePayload = Boolean(
       (args.user_response && args.user_response.trim().length > 0) ||
-        (args.gate_verdict && args.gate_verdict.trim().length > 0)
+      (args.gate_verdict && args.gate_verdict.trim().length > 0)
     );
     const shouldTreatAsResumeOnly =
       Boolean(chainIdFromCommand) && hasResumePayload && args.force_restart !== true;
@@ -328,7 +347,6 @@ export class PromptExecutionService {
       gate_action: args.gate_action,
       user_response: args.user_response,
       force_restart: args.force_restart,
-      llm_validation: args.llm_validation,
       gates: args.gates,
       options: args.options,
     };
@@ -503,6 +521,26 @@ export class PromptExecutionService {
     }
   }
 
+  private async initializeStyleManager(): Promise<void> {
+    if (this.styleManager) {
+      return;
+    }
+
+    try {
+      this.styleManager = await createStyleManager(this.logger, {
+        loaderConfig: {
+          stylesDir: path.join(this.serverRoot, 'styles'),
+        },
+      });
+      this.logger.info('[PromptExecutionService] StyleManager initialized');
+    } catch (error) {
+      this.logger.warn('[PromptExecutionService] Failed to initialize StyleManager', {
+        error,
+      });
+      // StyleManager is optional - pipeline will fall back to hardcoded styles
+    }
+  }
+
   private resetPipeline(): void {
     this.promptPipeline = undefined;
   }
@@ -657,11 +695,14 @@ export class PromptExecutionService {
       () => this.convertedPrompts,
       this.lightweightGateSystem.gateLoader,
       this.configManager,
-      this.logger
+      this.logger,
+      undefined, // frameworksProvider - uses default methodology loader
+      this.styleManager ?? null
     );
 
     const promptGuidanceStage = new PromptGuidanceStage(
       this.promptGuidanceService ?? null,
+      this.styleManager ?? null,
       this.logger
     );
 
@@ -674,7 +715,8 @@ export class PromptExecutionService {
       this.logger,
       () => this.analyticsService,
       () => this.configManager.getGatesConfig(),
-      this.lightweightGateSystem.gateLoader
+      this.lightweightGateSystem.gateLoader,
+      () => this.gateManager // Provider for registry-based gate selection
     );
 
     const sessionStage = new SessionManagementStage(this.chainSessionManager, this.logger);
@@ -749,6 +791,7 @@ export function createPromptExecutionService(
   semanticAnalyzer: ContentAnalyzer,
   conversationManager: ConversationManager,
   textReferenceManager: TextReferenceManager,
+  gateManager: GateManager,
   mcpToolsManager?: any,
   promptGuidanceService?: PromptGuidanceService
 ): PromptExecutionService {
@@ -760,6 +803,7 @@ export function createPromptExecutionService(
     semanticAnalyzer,
     conversationManager,
     textReferenceManager,
+    gateManager,
     mcpToolsManager,
     promptGuidanceService
   );

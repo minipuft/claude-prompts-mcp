@@ -10,6 +10,7 @@ import express, { Request, Response } from 'express';
 
 import { ConfigManager } from '../../config/index.js';
 import { Logger } from '../../logging/index.js';
+
 import type { TransportMode } from '../../types/index.js';
 
 /**
@@ -31,7 +32,12 @@ export class TransportManager {
   private transport: TransportMode;
   private sseTransports: Map<string, SSEServerTransport> = new Map();
 
-  constructor(logger: Logger, configManager: ConfigManager, mcpServer: any, transport: TransportMode) {
+  constructor(
+    logger: Logger,
+    configManager: ConfigManager,
+    mcpServer: any,
+    transport: TransportMode
+  ) {
     this.logger = logger;
     this.configManager = configManager;
     this.mcpServer = mcpServer;
@@ -40,10 +46,23 @@ export class TransportManager {
 
   /**
    * Determine transport mode from command line arguments or configuration
-   * Delegates to ConfigManager for resolution logic
+   * Priority: CLI args > config.transport > default (stdio)
    */
   static determineTransport(args: string[], configManager: ConfigManager): TransportMode {
-    return configManager.getTransport(args);
+    // CLI argument takes highest priority
+    const transportArg = args.find((arg: string) => arg.startsWith('--transport='));
+    if (transportArg) {
+      const value = transportArg.split('=')[1];
+      // Validate CLI arg
+      if (value === 'stdio' || value === 'sse' || value === 'both') {
+        return value;
+      }
+      // Use stderr to avoid corrupting STDIO protocol
+      console.error(`[TransportManager] Invalid --transport value: "${value}". Using config default.`);
+    }
+
+    // Fall back to config value
+    return configManager.getTransportMode();
   }
 
   /**

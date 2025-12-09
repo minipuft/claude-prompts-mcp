@@ -23,27 +23,26 @@ import {
   type QualityGate,
   type TemplateEnhancement,
 } from '../types/methodology-types.js';
-import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
-import type { ContentAnalysisResult } from '../../semantic/types.js';
-
 import {
   validateCompliance,
   getCombinedText,
   type PhaseQualityIndicators,
 } from '../utils/compliance-validator.js';
 import {
+  createProcessingGuidance,
+  createStepGuidance,
+  type PhasesDefinition,
+} from '../utils/step-generator.js';
+import {
   createMethodologyEnhancement,
   convertTemplateSuggestions,
   convertMethodologyGates,
   convertProcessingSteps,
 } from '../utils/template-enhancer.js';
-import {
-  createProcessingGuidance,
-  createStepGuidance,
-  type PhasesDefinition,
-} from '../utils/step-generator.js';
 
 import type { MethodologyDefinition } from './methodology-definition-types.js';
+import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
+import type { ContentAnalysisResult } from '../../semantic/types.js';
 
 /**
  * GenericMethodologyGuide - Data-driven implementation of IMethodologyGuide
@@ -171,7 +170,10 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
   /**
    * Guide execution steps using methodology phases
    */
-  guideExecutionSteps(prompt: ConvertedPrompt, semanticAnalysis: ContentAnalysisResult): StepGuidance {
+  guideExecutionSteps(
+    prompt: ConvertedPrompt,
+    semanticAnalysis: ContentAnalysisResult
+  ): StepGuidance {
     const phases = this.definition.phases;
 
     if (!phases) {
@@ -189,7 +191,10 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
   /**
    * Enhance execution with methodology-specific improvements
    */
-  enhanceWithMethodology(prompt: ConvertedPrompt, context: Record<string, unknown>): MethodologyEnhancement {
+  enhanceWithMethodology(
+    prompt: ConvertedPrompt,
+    context: Record<string, unknown>
+  ): MethodologyEnhancement {
     // Convert methodology gates from definition
     const methodologyGates: QualityGate[] = this.definition.methodologyGates
       ? convertMethodologyGates(this.definition.methodologyGates)
@@ -221,9 +226,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
    * Validate methodology compliance using quality indicators from JSON
    */
   validateMethodologyCompliance(prompt: ConvertedPrompt): MethodologyValidation {
-    const qualityIndicators = this.definition.phases?.qualityIndicators as
-      | PhaseQualityIndicators
-      | undefined;
+    const qualityIndicators = this.definition.phases?.qualityIndicators;
 
     if (!qualityIndicators || Object.keys(qualityIndicators).length === 0) {
       // No quality indicators defined - return basic validation
@@ -236,7 +239,9 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
         compliant: hasMethodologyMention,
         complianceScore: hasMethodologyMention ? 0.5 : 0.2,
         strengths: hasMethodologyMention ? [`${this.methodology} methodology referenced`] : [],
-        improvementAreas: hasMethodologyMention ? [] : [`Consider applying ${this.methodology} methodology`],
+        improvementAreas: hasMethodologyMention
+          ? []
+          : [`Consider applying ${this.methodology} methodology`],
         specificSuggestions: [],
         methodologyGaps: [],
       };
@@ -259,11 +264,13 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
    */
   getToolDescriptions(): MethodologyToolDescriptions {
     // Return tool descriptions from definition or empty defaults
-    return this.definition.toolDescriptions ?? {
-      prompt_engine: { description: '' },
-      prompt_manager: { description: '' },
-      system_control: { description: '' },
-    };
+    return (
+      this.definition.toolDescriptions ?? {
+        prompt_engine: { description: '' },
+        prompt_manager: { description: '' },
+        system_control: { description: '' },
+      }
+    );
   }
 
   /**
@@ -271,11 +278,13 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
    */
   getJudgePrompt(): JudgePromptDefinition {
     // Return judge prompt from definition or generate a default based on methodology
-    return this.definition.judgePrompt ?? {
-      systemMessage: `You are a ${this.methodology} methodology expert. Select resources that align with ${this.frameworkName} principles.`,
-      userMessageTemplate: `Analyze this task using ${this.methodology} methodology:\n\n**Task:** {{command}}\n\nReturn your selections as JSON with framework, style, gates, and reasoning.`,
-      outputFormat: 'structured',
-    };
+    return (
+      this.definition.judgePrompt ?? {
+        systemMessage: `You are a ${this.methodology} methodology expert. Select resources that align with ${this.frameworkName} principles.`,
+        userMessageTemplate: `Analyze this task using ${this.methodology} methodology:\n\n**Task:** {{command}}\n\nReturn your selections as JSON with framework, style, gates, and reasoning.`,
+        outputFormat: 'structured',
+      }
+    );
   }
 
   /**

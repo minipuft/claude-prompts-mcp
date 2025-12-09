@@ -22,6 +22,8 @@ import {
  * Methodology tracking configuration
  */
 export interface MethodologyTrackerConfig {
+  /** Server root directory for resolving relative paths */
+  serverRoot: string;
   persistStateToDisk: boolean;
   stateFilePath: string;
   enableHealthMonitoring: boolean;
@@ -70,11 +72,13 @@ export class MethodologyTracker extends EventEmitter {
   constructor(logger: Logger, config?: Partial<MethodologyTrackerConfig>) {
     super();
     this.logger = logger;
-    const rootPath = path.resolve(process.env.MCP_SERVER_ROOT || process.cwd());
+    // Use provided serverRoot, fallback to cwd() - no env var dependency
+    const rootPath = path.resolve(config?.serverRoot || process.cwd());
     this.rootPath = rootPath;
     const runtimeStatePath = path.join(rootPath, 'runtime-state', 'framework-state.json');
 
     const defaultConfig: MethodologyTrackerConfig = {
+      serverRoot: rootPath,
       persistStateToDisk: true,
       stateFilePath: runtimeStatePath,
       enableHealthMonitoring: true,

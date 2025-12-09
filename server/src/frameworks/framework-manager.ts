@@ -324,7 +324,7 @@ export class FrameworkManager {
           id: guide.frameworkId.toUpperCase(),
           name: guide.frameworkName,
           description: this.getFrameworkDescription(guide),
-          methodology: guide.methodology as FrameworkMethodology,
+          methodology: guide.methodology,
           systemPromptTemplate,
           executionGuidelines: this.getExecutionGuidelines(guide),
           applicableTypes: this.getApplicableTypes(guide),

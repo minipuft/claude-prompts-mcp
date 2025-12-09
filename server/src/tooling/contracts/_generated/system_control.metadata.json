@@ -71,6 +71,13 @@
       "description": "Guide topic when requesting guidance.",
       "status": "working",
       "compatibility": "canonical"
+    },
+    {
+      "name": "search_query",
+      "type": "string",
+      "description": "Filter gates by keyword (matches ID, name, or description). Use with gates:list action.",
+      "status": "working",
+      "compatibility": "canonical"
     }
   ],
   "commands": [
@@ -177,10 +184,11 @@
     },
     {
       "id": "gates:list",
-      "summary": "List available gates.",
+      "summary": "List available canonical gates with optional search filtering. Shortcut: >>gates [search]",
       "parameters": [
         "action",
-        "operation"
+        "operation",
+        "search_query"
       ],
       "status": "working"
     },

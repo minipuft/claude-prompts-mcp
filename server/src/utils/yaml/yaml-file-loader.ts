@@ -9,7 +9,13 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join, extname, basename } from 'path';
-import { parseYaml, parseYamlOrThrow, type YamlParseOptions, type YamlParseResult } from './yaml-parser.js';
+
+import {
+  parseYaml,
+  parseYamlOrThrow,
+  type YamlParseOptions,
+  type YamlParseResult,
+} from './yaml-parser.js';
 
 /**
  * Options for file-based YAML loading
@@ -242,10 +248,7 @@ export function discoverYamlDirectories(
  * @param options - Check options
  * @returns True if path is a YAML file
  */
-export function isYamlFile(
-  filePath: string,
-  options?: { includeYml?: boolean }
-): boolean {
+export function isYamlFile(filePath: string, options?: { includeYml?: boolean }): boolean {
   const ext = extname(filePath).toLowerCase();
   const includeYml = options?.includeYml ?? true;
 

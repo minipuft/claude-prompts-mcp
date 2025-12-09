@@ -8,10 +8,10 @@ import * as fs from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { Logger } from '../logging/index.js';
-import { CategoryPromptsResult, PromptData, PromptsConfigFile } from '../types/index.js';
 import { CategoryManager, createCategoryManager } from './category-manager.js';
 import { safeWriteFile } from './promptUtils.js';
+import { Logger } from '../logging/index.js';
+import { CategoryPromptsResult, PromptData, PromptsConfigFile } from '../types/index.js';
 
 /**
  * Prompt Loader class
@@ -331,7 +331,6 @@ export class PromptLoader {
     chainSteps?: Array<{
       promptId: string;
       stepName: string;
-      gates?: string[];
       inputMapping?: Record<string, string>;
       outputMapping?: Record<string, string>;
     }>;
@@ -426,59 +425,29 @@ export class PromptLoader {
       let chainSteps: Array<{
         promptId: string;
         stepName: string;
-        gates?: string[];
         inputMapping?: Record<string, string>;
         outputMapping?: Record<string, string>;
       }> = [];
 
       if (chainMatch) {
         const chainContent = chainMatch[1].trim();
-        // Enhanced regex to match markdown format with optional gates
+        // Regex to match markdown chain step format
         const stepMatches = chainContent.matchAll(
-          /(\d+)\.\s*promptId:\s*([^\n]+)\s*\n\s*stepName:\s*([^\n]+)(?:\s*\n\s*gates:\s*([^\n]+))?(?:\s*\n\s*inputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:outputMapping|promptId|\d+\.|$)))?\s*(?:\n\s*outputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:promptId|\d+\.|$)))?\s*/g
+          /(\d+)\.\s*promptId:\s*([^\n]+)\s*\n\s*stepName:\s*([^\n]+)(?:\s*\n\s*inputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:outputMapping|promptId|\d+\.|$)))?\s*(?:\n\s*outputMapping:\s*([\s\S]*?)(?=\s*\n\s*(?:promptId|\d+\.|$)))?\s*/g
         );
 
         for (const match of stepMatches) {
-          const [_, stepNumber, promptId, stepName, gatesStr, inputMappingStr, outputMappingStr] =
-            match;
+          const [_, stepNumber, promptId, stepName, inputMappingStr, outputMappingStr] = match;
 
           const step: {
             promptId: string;
             stepName: string;
-            gates?: string[];
             inputMapping?: Record<string, string>;
             outputMapping?: Record<string, string>;
           } = {
             promptId: promptId.trim(),
             stepName: stepName.trim(),
           };
-
-          // Parse gates if present
-          if (gatesStr) {
-            try {
-              // Handle both JSON array format ["gate1", "gate2"] and simple list format
-              const gatesStrTrimmed = gatesStr.trim();
-              if (gatesStrTrimmed.startsWith('[') && gatesStrTrimmed.endsWith(']')) {
-                // JSON array format
-                step.gates = JSON.parse(gatesStrTrimmed);
-              } else {
-                // Simple comma-separated format: "gate1, gate2"
-                step.gates = gatesStrTrimmed
-                  .split(',')
-                  .map((g) => g.trim())
-                  .filter((g) => g.length > 0);
-              }
-              this.logger.debug(
-                `Loaded ${step.gates?.length || 0} gate(s) for step ${stepNumber}: ${
-                  step.gates?.join(', ') || ''
-                }`
-              );
-            } catch (e) {
-              this.logger.warn(
-                `Invalid gates format in chain step ${stepNumber} of ${filePath}: ${e}`
-              );
-            }
-          }
 
           if (inputMappingStr) {
             try {

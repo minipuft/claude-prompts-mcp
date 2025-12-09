@@ -33,7 +33,6 @@ export interface ArgumentHistoryEntry {
   /** Execution metadata */
   metadata?: {
     executionType?: 'single' | 'chain';
-    legacyExecutionType?: 'prompt' | 'template';
     chainId?: string;
     isPlaceholder?: boolean;
     frameworkUsed?: string;

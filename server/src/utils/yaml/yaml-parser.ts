@@ -194,7 +194,8 @@ export function formatYamlError(error: YamlParseError): string {
   }
 
   if (error.line !== undefined) {
-    const location = error.column !== undefined ? `${error.line + 1}:${error.column}` : `line ${error.line + 1}`;
+    const location =
+      error.column !== undefined ? `${error.line + 1}:${error.column}` : `line ${error.line + 1}`;
     parts.push(`Location: ${location}`);
   }
 

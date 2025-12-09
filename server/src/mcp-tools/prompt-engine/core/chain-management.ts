@@ -147,7 +147,7 @@ export class ChainManagementService {
     }
 
     const session =
-      this.sessionManager.getSessionByChainIdentifier(target, { includeLegacy: true }) ??
+      this.sessionManager.getSessionByChainIdentifier(target, { includeDormant: true }) ??
       (target ? this.sessionManager.getSession(target) : undefined);
     if (session) {
       const context = this.sessionManager.getChainContext(session.sessionId);
@@ -214,7 +214,7 @@ export class ChainManagementService {
   ): Promise<ToolResponse> {
     const prompt = this.findPrompt(target);
     const session =
-      this.sessionManager.getSessionByChainIdentifier(target, { includeLegacy: true }) ??
+      this.sessionManager.getSessionByChainIdentifier(target, { includeDormant: true }) ??
       (target ? this.sessionManager.getSession(target) : undefined);
 
     if (!prompt && !session) {

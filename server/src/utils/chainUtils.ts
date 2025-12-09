@@ -52,7 +52,6 @@ export interface ChainStep {
   promptId: string;
   stepName: string;
   executionType?: 'single' | 'chain';
-  legacyExecutionType?: 'prompt' | 'template';
   inputMapping?: Record<string, string>;
   outputMapping?: Record<string, string>;
   dependencies?: string[];

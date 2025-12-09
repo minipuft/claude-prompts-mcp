@@ -16,16 +16,18 @@
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
+
+import {
+  validateMethodologySchema,
+  type MethodologySchemaValidationResult,
+} from './methodology-schema.js';
 import {
   loadYamlFileSync,
   discoverYamlDirectories,
   type YamlFileLoadOptions,
 } from '../../utils/yaml/index.js';
+
 import type { MethodologyDefinition } from './methodology-definition-types.js';
-import {
-  validateMethodologySchema,
-  type MethodologySchemaValidationResult,
-} from './methodology-schema.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -256,14 +258,24 @@ export class RuntimeMethodologyLoader {
 
   /**
    * Resolve the methodologies directory from multiple possible locations
+   *
+   * Priority:
+   *   1. MCP_METHODOLOGIES_PATH environment variable
+   *   2. Package.json resolution (npm/npx installs)
+   *   3. Walk up from module location (development)
+   *   4. Common relative paths
+   *   5. Fallback
    */
   private resolveMethodologiesDir(): string {
-    // Priority 1: Environment variable
-    const envRoot = process.env.MCP_SERVER_ROOT;
-    if (envRoot) {
-      const envPath = join(envRoot, 'methodologies');
-      if (existsSync(envPath) && this.hasYamlFiles(envPath)) {
-        return envPath;
+    // Priority 1: Direct path environment variable
+    const envMethodologies = process.env.MCP_METHODOLOGIES_PATH;
+    if (envMethodologies) {
+      const resolvedPath = join(envMethodologies); // Normalize
+      if (existsSync(resolvedPath) && this.hasYamlFiles(resolvedPath)) {
+        if (this.debug) {
+          console.error(`[RuntimeMethodologyLoader] Using MCP_METHODOLOGIES_PATH: ${resolvedPath}`);
+        }
+        return resolvedPath;
       }
     }
 
@@ -273,7 +285,7 @@ export class RuntimeMethodologyLoader {
       return pkgResolved;
     }
 
-    // Priority 3: Walk up from current module location (fallback for development)
+    // Priority 4: Walk up from current module location (fallback for development)
     let current = __dirname;
     for (let i = 0; i < 10; i++) {
       const candidate = join(current, 'methodologies');
@@ -283,7 +295,7 @@ export class RuntimeMethodologyLoader {
       current = dirname(current);
     }
 
-    // Priority 4: Common relative paths from dist
+    // Priority 5: Common relative paths from dist
     const relativePaths = [
       join(__dirname, '..', '..', '..', 'methodologies'),
       join(__dirname, '..', '..', 'methodologies'),
@@ -312,7 +324,7 @@ export class RuntimeMethodologyLoader {
       try {
         if (existsSync(pkgPath)) {
           const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-          if (pkg.name === 'claude-prompts-server') {
+          if (pkg.name === 'claude-prompts') {
             const methodologiesPath = join(dir, 'methodologies');
             if (existsSync(methodologiesPath) && this.hasYamlFiles(methodologiesPath)) {
               return methodologiesPath;
@@ -360,7 +372,10 @@ export class RuntimeMethodologyLoader {
             definition.phases = phases;
           }
         } catch (error) {
-          console.warn(`[RuntimeMethodologyLoader] Failed to inline phases from ${phasesPath}:`, error);
+          console.warn(
+            `[RuntimeMethodologyLoader] Failed to inline phases from ${phasesPath}:`,
+            error
+          );
         }
       }
       delete definition.phasesFile;
@@ -374,7 +389,10 @@ export class RuntimeMethodologyLoader {
           const content = readFileSync(judgePath, 'utf-8');
           definition.judgePrompt = this.parseJudgePrompt(content);
         } catch (error) {
-          console.warn(`[RuntimeMethodologyLoader] Failed to inline judge prompt from ${judgePath}:`, error);
+          console.warn(
+            `[RuntimeMethodologyLoader] Failed to inline judge prompt from ${judgePath}:`,
+            error
+          );
         }
       }
       delete definition.judgePromptFile;

@@ -151,8 +151,9 @@ export class ResponseFormatter implements SimpleResponseFormatter {
 
       // Only include structuredContent for chains (step tracking metadata)
       // Prompts and templates should return clean content without metadata clutter
+      // Default to omitting structuredContent so model input stays lean unless explicitly requested.
       const includeStructuredContent =
-        executionContext.executionType === 'chain' && options?.includeStructuredContent !== false;
+        executionContext.executionType === 'chain' && options?.includeStructuredContent === true;
 
       if (includeStructuredContent) {
         const executionDuration = executionContext.endTime - executionContext.startTime;

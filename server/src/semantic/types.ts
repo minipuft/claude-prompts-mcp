@@ -55,7 +55,8 @@ export interface ContentAnalysisResult {
   };
   analysisMetadata: {
     version: string;
-    mode: 'structural' | 'semantic';
+    /** Analysis mode - 'semantic' when LLM used, 'minimal' otherwise */
+    mode?: 'semantic' | 'minimal';
     analysisTime: number;
     analyzer: 'content';
     cacheHit: boolean;

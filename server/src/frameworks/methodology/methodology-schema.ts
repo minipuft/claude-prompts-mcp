@@ -42,35 +42,37 @@ export type TemplateSuggestion = z.infer<typeof TemplateSuggestionSchema>;
 // ============================================
 // Main Methodology Schema
 // ============================================
-export const MethodologySchema = z.object({
-  // Required core fields
-  id: z.string().min(1),
-  name: z.string().min(1),
-  methodology: z.string().min(1),
-  version: z.string().regex(/^\d+\.\d+\.\d+/, 'Must be semver format (e.g., 1.0.0)'),
-  enabled: z.boolean(),
+export const MethodologySchema = z
+  .object({
+    // Required core fields
+    id: z.string().min(1),
+    name: z.string().min(1),
+    methodology: z.string().min(1),
+    version: z.string().regex(/^\d+\.\d+\.\d+/, 'Must be semver format (e.g., 1.0.0)'),
+    enabled: z.boolean(),
 
-  // Optional description
-  description: z.string().optional(),
+    // Optional description
+    description: z.string().optional(),
 
-  // Gate configuration
-  gates: z
-    .object({
-      include: z.array(z.string()).optional(),
-      exclude: z.array(z.string()).optional(),
-    })
-    .optional(),
-  methodologyGates: z.array(MethodologyGateSchema).optional(),
+    // Gate configuration
+    gates: z
+      .object({
+        include: z.array(z.string()).optional(),
+        exclude: z.array(z.string()).optional(),
+      })
+      .optional(),
+    methodologyGates: z.array(MethodologyGateSchema).optional(),
 
-  // File references (validated separately for existence)
-  phasesFile: z.string().optional(),
-  judgePromptFile: z.string().optional(),
+    // File references (validated separately for existence)
+    phasesFile: z.string().optional(),
+    judgePromptFile: z.string().optional(),
 
-  // Guidance
-  systemPromptGuidance: z.string().optional(),
-  toolDescriptions: z.record(z.unknown()).optional(),
-  templateSuggestions: z.array(TemplateSuggestionSchema).optional(),
-}).passthrough(); // Allow additional fields not in schema
+    // Guidance
+    systemPromptGuidance: z.string().optional(),
+    toolDescriptions: z.record(z.unknown()).optional(),
+    templateSuggestions: z.array(TemplateSuggestionSchema).optional(),
+  })
+  .passthrough(); // Allow additional fields not in schema
 
 export type MethodologyYaml = z.infer<typeof MethodologySchema>;
 

@@ -60,27 +60,6 @@ export function clearRequireCache(): void {
   console.error(`Cleared ${promptPaths.length} prompt-related modules from require cache`);
 }
 
-/**
- * Get available tools information for template processing
- */
-export function getAvailableTools(): string {
-  // This is a placeholder implementation. In a real implementation,
-  // you would dynamically fetch available tools from the MCP server.
-  // For now, we'll return a static instruction about tools usage.
-  return `You have access to a set of tools to help solve tasks.
-Use the following format to utilize these tools:
-
-<tool_calls>
-<tool_call name="TOOL_NAME">
-<tool_parameters>
-PARAMETERS_IN_JSON_FORMAT
-</tool_parameters>
-</tool_call>
-</tool_calls>
-
-Always check if a tool is appropriate for the task at hand before using it.
-Use tools only when necessary to complete the task.`;
-}
 
 /**
  * Force garbage collection if available

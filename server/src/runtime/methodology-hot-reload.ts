@@ -1,7 +1,8 @@
 // @lifecycle canonical - Builds methodology hot-reload config for prompt hot-reload manager.
+import { createMethodologyHotReloadRegistration } from '../frameworks/methodology/index.js';
+
 import type { Logger } from '../logging/index.js';
 import type { McpToolsManager } from '../mcp-tools/index.js';
-import { createMethodologyHotReloadRegistration } from '../frameworks/methodology/index.js';
 import type { AuxiliaryReloadConfig } from '../prompts/hot-reload-manager.js';
 
 export function buildMethodologyAuxiliaryReloadConfig(

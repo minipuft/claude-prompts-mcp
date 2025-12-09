@@ -21,6 +21,26 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 // Import generated Zod schemas from contracts (SSOT for parameter validation)
+
+import { ConsolidatedSystemControl, createConsolidatedSystemControl } from './system-control.js';
+import { ToolDescriptionManager } from './tool-description-manager.js';
+import { ConfigManager } from '../config/index.js';
+import { FrameworkManager, createFrameworkManager } from '../frameworks/framework-manager.js';
+import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
+import { GateSystemManager, createGateSystemManager } from '../gates/gate-state-manager.js';
+import type { GateManager } from '../gates/gate-manager.js';
+import { Logger } from '../logging/index.js';
+import { MetricsCollector, createMetricsCollector } from '../metrics/index.js';
+import { PromptAssetManager } from '../prompts/index.js';
+// Gate evaluator removed - now using Framework methodology validation
+import { createContentAnalyzer } from '../semantic/configurable-semantic-analyzer.js';
+import { createSemanticIntegrationFactory } from '../semantic/integrations/index.js';
+import { ConversationManager } from '../text-references/conversation.js';
+import { TextReferenceManager } from '../text-references/index.js';
+import {
+  ConsolidatedPromptManager,
+  createConsolidatedPromptManager,
+} from './prompt-manager/index.js';
 import {
   promptEngineSchema,
   promptManagerSchema,
@@ -29,31 +49,12 @@ import {
   type promptManagerInput,
   type systemControlInput,
 } from '../tooling/contracts/_generated/mcp-schemas.js';
-
-import { ConfigManager } from '../config/index.js';
-import { FrameworkManager, createFrameworkManager } from '../frameworks/framework-manager.js';
-import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
-import { GateSystemManager, createGateSystemManager } from '../gates/gate-state-manager.js';
-import { Logger } from '../logging/index.js';
-import { MetricsCollector, createMetricsCollector } from '../metrics/index.js';
-import { PromptAssetManager } from '../prompts/index.js';
-import { ConsolidatedSystemControl, createConsolidatedSystemControl } from './system-control.js';
-import { ToolDescriptionManager } from './tool-description-manager.js';
-// Gate evaluator removed - now using Framework methodology validation
-import { createContentAnalyzer } from '../semantic/configurable-semantic-analyzer.js';
-import { createSemanticIntegrationFactory } from '../semantic/integrations/index.js';
-import { ConversationManager } from '../text-references/conversation.js';
-import { TextReferenceManager } from '../text-references/index.js';
 import { Category, ConvertedPrompt, PromptData, ToolResponse } from '../types/index.js';
 import { ServiceManager } from '../utils/service-manager.js';
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
 
 // Consolidated tools
 import { PromptExecutionService, createPromptExecutionService } from './prompt-engine/index.js';
-import {
-  ConsolidatedPromptManager,
-  createConsolidatedPromptManager,
-} from './prompt-manager/index.js';
 // Gate system management integration
 
 /**
@@ -82,6 +83,7 @@ export class ConsolidatedMcpToolsManager {
   private textReferenceManager: TextReferenceManager;
   private toolDescriptionManager?: ToolDescriptionManager;
   private gateSystemManager?: GateSystemManager;
+  private gateManager: GateManager;
   private analyticsService!: MetricsCollector;
   private serviceManager?: ServiceManager;
   // Removed executionCoordinator - chains now use LLM-driven execution model
@@ -104,7 +106,8 @@ export class ConsolidatedMcpToolsManager {
     configManager: ConfigManager,
     conversationManager: ConversationManager,
     textReferenceManager: TextReferenceManager,
-    serviceManager?: ServiceManager
+    serviceManager: ServiceManager | undefined,
+    gateManager: GateManager
   ) {
     this.logger = logger;
     this.mcpServer = mcpServer;
@@ -113,6 +116,7 @@ export class ConsolidatedMcpToolsManager {
     this.conversationManager = conversationManager;
     this.textReferenceManager = textReferenceManager;
     this.serviceManager = serviceManager;
+    this.gateManager = gateManager;
   }
 
   /**
@@ -136,7 +140,8 @@ export class ConsolidatedMcpToolsManager {
     this.gateSystemManager = createGateSystemManager(this.logger, runtimeStateDir);
     await this.gateSystemManager.initialize();
 
-    this.logger.info(`Configurable semantic analyzer initialized (mode: ${analysisConfig.mode})`);
+    const analyzerMode = analysisConfig.llmIntegration.enabled ? 'semantic' : 'minimal';
+    this.logger.info(`Semantic analyzer initialized (mode: ${analyzerMode})`);
 
     // Initialize consolidated tools
     this.promptExecutionService = createPromptExecutionService(
@@ -147,6 +152,7 @@ export class ConsolidatedMcpToolsManager {
       this.semanticAnalyzer,
       this.conversationManager,
       this.textReferenceManager,
+      this.gateManager,
       this // Pass manager reference for analytics data flow
       // Removed executionCoordinator - chains now use LLM-driven execution
     );
@@ -432,19 +438,19 @@ export class ConsolidatedMcpToolsManager {
         })
         .refine(
           (value) => {
-            if (value.id || value.template) {
+            if (value.id) {
               return true;
             }
             const hasCriteria = Boolean(value.criteria?.length || value.pass_criteria?.length);
             const hasGuidance = Boolean(
               (value.guidance && value.guidance.trim().length > 0) ||
-                (value.description && value.description.trim().length > 0)
+              (value.description && value.description.trim().length > 0)
             );
             return hasCriteria || hasGuidance;
           },
           {
             message:
-              'Temporary gate entries require an id/template or some inline criteria/guidance',
+              'Temporary gate entries require an id or some inline criteria/guidance',
           }
         );
 
@@ -1126,7 +1132,8 @@ export async function createConsolidatedMcpToolsManager(
   textReferenceManager: TextReferenceManager,
   lifecycleServices: ServiceManager | undefined,
   onRefresh: () => Promise<void>,
-  onRestart: (reason: string) => Promise<void>
+  onRestart: (reason: string) => Promise<void>,
+  gateManager: GateManager
   // Removed executionCoordinator parameter - using LLM-driven chain model
 ): Promise<ConsolidatedMcpToolsManager> {
   const manager = new ConsolidatedMcpToolsManager(
@@ -1136,7 +1143,8 @@ export async function createConsolidatedMcpToolsManager(
     configManager,
     conversationManager,
     textReferenceManager,
-    lifecycleServices
+    lifecycleServices,
+    gateManager
     // Removed executionCoordinator parameter
   );
 

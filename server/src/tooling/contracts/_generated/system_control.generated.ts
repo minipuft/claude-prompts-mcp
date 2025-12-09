@@ -20,7 +20,7 @@ export interface ToolCommand {
   notes?: string[];
 }
 
-export type system_controlParamName = 'action' | 'operation' | 'framework' | 'reason' | 'persist' | 'show_details' | 'include_history' | 'topic';
+export type system_controlParamName = 'action' | 'operation' | 'framework' | 'reason' | 'persist' | 'show_details' | 'include_history' | 'topic' | 'search_query';
 export const system_controlParameters: ToolParameter[] = [
   {
     "name": "action",
@@ -88,6 +88,13 @@ export const system_controlParameters: ToolParameter[] = [
     "name": "topic",
     "type": "string",
     "description": "Guide topic when requesting guidance.",
+    "status": "working",
+    "compatibility": "canonical"
+  },
+  {
+    "name": "search_query",
+    "type": "string",
+    "description": "Filter gates by keyword (matches ID, name, or description). Use with gates:list action.",
     "status": "working",
     "compatibility": "canonical"
   }
@@ -197,10 +204,11 @@ export const system_controlCommands: ToolCommand[] = [
   },
   {
     "id": "gates:list",
-    "summary": "List available gates.",
+    "summary": "List available canonical gates with optional search filtering. Shortcut: >>gates [search]",
     "parameters": [
       "action",
-      "operation"
+      "operation",
+      "search_query"
     ],
     "status": "working"
   },

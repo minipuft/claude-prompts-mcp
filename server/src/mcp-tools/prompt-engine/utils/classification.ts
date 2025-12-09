@@ -26,8 +26,7 @@ const logger = createLogger({
  * PromptClassifier handles all prompt classification and analysis
  *
  * This class provides:
- * - Prompt type detection (prompt, template, chain)
- * - Execution strategy recommendation
+ * - Prompt type detection (single, chain)
  * - Confidence scoring and reasoning
  * - Gate recommendation based on complexity
  * - Framework suggestion for execution
@@ -243,46 +242,5 @@ export class PromptClassifier {
   private countTemplateVariables(content: string): number {
     const matches = content.match(/\{\{\s*\w+\s*\}\}/g);
     return matches ? matches.length : 0;
-  }
-
-  /**
-   * Get execution recommendations based on classification
-   */
-  public getExecutionRecommendations(classification: PromptClassification): {
-    strategy: string;
-    timeout: number;
-    retries: number;
-    enableGates: boolean;
-  } {
-    const recommendations = {
-      strategy: classification.executionType,
-      timeout: 30000, // 30 seconds default
-      retries: 1,
-      enableGates: classification.suggestedGates.length > 0,
-    };
-
-    // Adjust based on execution type
-    switch (classification.executionType) {
-      case 'chain':
-        recommendations.timeout = 120000; // 2 minutes for chains
-        recommendations.retries = 2;
-        break;
-      default:
-        // Keep defaults for prompts
-        break;
-    }
-
-    if (classification.legacyExecutionType === 'template') {
-      recommendations.timeout = 15000; // 15 seconds for template-style flows
-      recommendations.retries = 0;
-    }
-
-    // Adjust based on confidence
-    if (classification.confidence < 70) {
-      recommendations.enableGates = true;
-      recommendations.retries += 1;
-    }
-
-    return recommendations;
   }
 }

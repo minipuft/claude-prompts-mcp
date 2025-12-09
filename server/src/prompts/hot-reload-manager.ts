@@ -6,8 +6,6 @@
 
 import * as path from 'node:path';
 
-import { ConfigManager } from '../config/index.js';
-import { Logger } from '../logging/index.js';
 import { CategoryManager } from './category-manager.js';
 import {
   FileChangeEvent,
@@ -15,6 +13,8 @@ import {
   FileObserverConfig,
   createFileObserver,
 } from './file-observer.js';
+import { ConfigManager } from '../config/index.js';
+import { Logger } from '../logging/index.js';
 
 /**
  * Hot reload event types
@@ -24,6 +24,7 @@ export type HotReloadEventType =
   | 'config_changed'
   | 'category_changed'
   | 'methodology_changed'
+  | 'gate_changed'
   | 'reload_required';
 
 /**
@@ -36,6 +37,8 @@ export interface HotReloadEvent {
   category?: string;
   /** Methodology ID for methodology_changed events */
   methodologyId?: string;
+  /** Gate ID for gate_changed events */
+  gateId?: string;
   timestamp: number;
   requiresFullReload: boolean;
 }
@@ -129,6 +132,7 @@ export class HotReloadManager {
   private categoryManager?: CategoryManager;
   private onReloadCallback?: (event: HotReloadEvent) => Promise<void>;
   private onMethodologyReloadCallback?: (event: HotReloadEvent) => Promise<void>;
+  private onGateReloadCallback?: (event: HotReloadEvent) => Promise<void>;
   private auxiliaryReloads: AuxiliaryReloadConfig[] = [];
   private stats: HotReloadStats;
   private isStarted: boolean = false;
@@ -234,6 +238,15 @@ export class HotReloadManager {
   setMethodologyReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
     this.onMethodologyReloadCallback = callback;
     this.logger.debug('HotReloadManager: Methodology reload callback registered');
+  }
+
+  /**
+   * Set the callback for gate reload events
+   * This callback is invoked when gate YAML files change
+   */
+  setGateReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
+    this.onGateReloadCallback = callback;
+    this.logger.debug('HotReloadManager: Gate reload callback registered');
   }
 
   /**

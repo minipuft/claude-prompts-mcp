@@ -20,9 +20,12 @@ export const CONFIG_VALID_KEYS = [
   'logging.level',
   'logging.directory',
   'gates.enabled',
-  'frameworks.enableSystemPromptInjection',
-  'frameworks.enableMethodologyGates',
-  'frameworks.enableDynamicToolDescriptions',
+  'gates.enableMethodologyGates',
+  'execution.judge',
+  'frameworks.dynamicToolDescriptions',
+  'frameworks.injection.systemPrompt.enabled',
+  'frameworks.injection.systemPrompt.frequency',
+  'frameworks.injection.styleGuidance',
   'analysis.semanticAnalysis.llmIntegration.enabled',
   'analysis.semanticAnalysis.llmIntegration.model',
   'analysis.semanticAnalysis.llmIntegration.maxTokens',
@@ -82,9 +85,11 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
     }
 
     case 'gates.enabled':
-    case 'frameworks.enableSystemPromptInjection':
-    case 'frameworks.enableMethodologyGates':
-    case 'frameworks.enableDynamicToolDescriptions': {
+    case 'gates.enableMethodologyGates':
+    case 'execution.judge':
+    case 'frameworks.dynamicToolDescriptions':
+    case 'frameworks.injection.systemPrompt.enabled':
+    case 'frameworks.injection.styleGuidance': {
       const boolValue = value.trim().toLowerCase();
       if (!['true', 'false'].includes(boolValue)) {
         return {
@@ -97,6 +102,17 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
         convertedValue: boolValue === 'true',
         valueType: 'boolean',
       };
+    }
+
+    case 'frameworks.injection.systemPrompt.frequency': {
+      const freq = parseInt(value, 10);
+      if (isNaN(freq) || freq < 1 || freq > 100) {
+        return {
+          valid: false,
+          error: 'Frequency must be a number between 1-100',
+        };
+      }
+      return { valid: true, convertedValue: freq, valueType: 'number' };
     }
 
     case 'logging.level': {
@@ -403,16 +419,12 @@ export class SafeConfigWriter {
         return { valid: false, error: 'Invalid server port range' };
       }
 
-      // Transport validation (new simplified field)
+      // Transport validation
       if (config.transport && !['stdio', 'sse', 'both'].includes(config.transport)) {
-        return { valid: false, error: "Invalid transport mode (must be 'stdio', 'sse', or 'both')" };
-      }
-
-      // Legacy transports validation (for backward compatibility)
-      if (config.transports && !config.transport) {
-        if (!['stdio', 'sse', 'both'].includes(config.transports.default)) {
-          return { valid: false, error: 'Invalid legacy transports.default value' };
-        }
+        return {
+          valid: false,
+          error: "Invalid transport mode (must be 'stdio', 'sse', or 'both')",
+        };
       }
 
       // Logging validation (if present)

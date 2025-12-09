@@ -15,10 +15,7 @@ import * as path from 'node:path';
 
 import { ConfigManager } from '../config/index.js';
 import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
-import {
-  getDefaultRuntimeLoader,
-  createGenericGuide,
-} from '../frameworks/methodology/index.js';
+import { getDefaultRuntimeLoader, createGenericGuide } from '../frameworks/methodology/index.js';
 import { MethodologyToolDescriptions } from '../frameworks/types/index.js';
 import { Logger } from '../logging/index.js';
 
@@ -129,7 +126,14 @@ export class ToolDescriptionManager extends EventEmitter {
     this.configManager = configManager;
     const serverRoot = configManager.getServerRoot();
     // Generated from contracts - single source of truth
-    this.configPath = path.join(serverRoot, 'src', 'tooling', 'contracts', '_generated', 'tool-descriptions.json');
+    this.configPath = path.join(
+      serverRoot,
+      'src',
+      'tooling',
+      'contracts',
+      '_generated',
+      'tool-descriptions.json'
+    );
     this.activeConfigPath = this.configPath;
     this.fallbackConfigPath = this.configPath; // No separate fallback - contracts are SSOT
     this.legacyFallbackPath = this.configPath;
@@ -141,7 +145,7 @@ export class ToolDescriptionManager extends EventEmitter {
     this.frameworksConfigListener = (newConfig: FrameworksConfig) => {
       this.frameworksConfig = { ...newConfig };
       this.logger.info(
-        `Tool description manager feature toggle updated (dynamicDescriptions: ${this.frameworksConfig.enableDynamicToolDescriptions})`
+        `Tool description manager feature toggle updated (dynamicDescriptions: ${this.frameworksConfig.dynamicToolDescriptions})`
       );
       if (this.isInitialized) {
         void this.synchronizeActiveConfig(
@@ -275,7 +279,7 @@ export class ToolDescriptionManager extends EventEmitter {
     // This should only happen if contracts weren't generated - run `npm run generate:contracts`
     this.logger.warn(
       `[ToolDescriptionManager] Generated tool-descriptions.json not found at ${this.configPath}. ` +
-      `Run 'npm run generate:contracts' to generate from contracts. Using in-memory defaults.`
+        `Run 'npm run generate:contracts' to generate from contracts. Using in-memory defaults.`
     );
     return {
       config: this.createConfigFromMap(this.defaults, 'defaults'),
@@ -287,8 +291,8 @@ export class ToolDescriptionManager extends EventEmitter {
   private setDescriptionsFromConfig(config: ToolDescriptionsConfig): void {
     this.descriptions.clear();
     for (const [name, description] of Object.entries(config.tools)) {
-      this.warnOnMethodologyConfigLeak(name, description as ToolDescription);
-      this.descriptions.set(name, cloneToolDescription(description as ToolDescription));
+      this.warnOnMethodologyConfigLeak(name, description);
+      this.descriptions.set(name, cloneToolDescription(description));
     }
   }
 
@@ -332,12 +336,12 @@ export class ToolDescriptionManager extends EventEmitter {
       activeContext.activeMethodology ?? activeContext.activeFramework
     );
     const dynamicDescriptionsEnabled =
-      this.frameworksConfig.enableDynamicToolDescriptions &&
+      this.frameworksConfig.dynamicToolDescriptions &&
       (activeContext.frameworkSystemEnabled ?? true);
 
     const tools: Record<string, ToolDescription> = {};
     for (const [name, description] of Object.entries(baseConfig.tools)) {
-      const baseDescription = cloneToolDescription(description as ToolDescription);
+      const baseDescription = cloneToolDescription(description);
 
       if (dynamicDescriptionsEnabled && methodologyKey) {
         const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
@@ -493,7 +497,7 @@ export class ToolDescriptionManager extends EventEmitter {
       return `Tool: ${toolName}`;
     }
 
-    if (!this.frameworksConfig.enableDynamicToolDescriptions) {
+    if (!this.frameworksConfig.dynamicToolDescriptions) {
       this.logger.debug(
         `Dynamic tool descriptions disabled; using base description for ${toolName}`
       );
@@ -536,7 +540,6 @@ export class ToolDescriptionManager extends EventEmitter {
         );
         return toolDesc.frameworkAware.disabled;
       }
-
     }
 
     // PRIORITY 3: Basic config file descriptions (LOWER PRIORITY)
@@ -559,7 +562,7 @@ export class ToolDescriptionManager extends EventEmitter {
       return undefined;
     }
 
-    if (!this.frameworksConfig.enableDynamicToolDescriptions) {
+    if (!this.frameworksConfig.dynamicToolDescriptions) {
       const param = toolDesc.parameters?.[paramName];
       return typeof param === 'string' ? param : param?.description;
     }
@@ -627,8 +630,7 @@ export class ToolDescriptionManager extends EventEmitter {
     isInitialized: boolean;
     source: string;
   } {
-    const loadedFromFile =
-      this.lastLoadSource === 'defaults' ? 0 : this.descriptions.size || 0;
+    const loadedFromFile = this.lastLoadSource === 'defaults' ? 0 : this.descriptions.size || 0;
     const defaultCount = this.defaults.size;
     const usingDefaults = this.lastLoadSource === 'defaults' ? defaultCount : 0;
 
@@ -652,9 +654,7 @@ export class ToolDescriptionManager extends EventEmitter {
     }
 
     try {
-      this.logger.info(
-        `🔍 Starting file watcher for tool descriptions: ${this.activeConfigPath}`
-      );
+      this.logger.info(`🔍 Starting file watcher for tool descriptions: ${this.activeConfigPath}`);
 
       this.fileWatcher = watch(this.activeConfigPath, (eventType) => {
         if (eventType === 'change') {

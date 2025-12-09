@@ -7,13 +7,13 @@
  * to create step sequences and enhancements.
  */
 
+import type { ContentAnalysisResult } from '../../semantic/types.js';
 import type {
   ProcessingGuidance,
   StepGuidance,
   ProcessingStep,
   ExecutionStep,
 } from '../types/methodology-types.js';
-import type { ContentAnalysisResult } from '../../semantic/types.js';
 
 /**
  * Execution step definition from methodology YAML
@@ -158,9 +158,7 @@ export function createStepGuidance(
   semanticAnalysis?: ContentAnalysisResult
 ): StepGuidance {
   // #todo: Expose executionSteps via a “methodology_steps” toolcall (akin to %judge) so the client LLM can request structured steps for the user query; currently guidance-only.
-  const executionSteps = phases.executionSteps
-    ? generateExecutionSteps(phases.executionSteps)
-    : [];
+  const executionSteps = phases.executionSteps ? generateExecutionSteps(phases.executionSteps) : [];
 
   const stepEnhancements: Record<string, string[]> = {};
   const stepValidation: Record<string, string[]> = {};

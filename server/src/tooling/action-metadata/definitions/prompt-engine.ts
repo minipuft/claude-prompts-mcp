@@ -23,7 +23,7 @@ const promptEngineContract = {
   tool: 'prompt_engine',
   version: 1,
   summary:
-    'Execute prompts/chains with inline operators. Steps must start with `>>prompt_id` (or `/prompt_id`); place modifiers first: `%judge @Framework #style(...) :: gates`.',
+    'Execute prompts/chains with inline operators. Steps must start with `>>prompt_id` (or `/prompt_id`); place modifiers first: `%judge @Framework #style :: gates`.',
   parameters: prompt_engineParameters,
   commands: prompt_engineCommands,
 };
@@ -41,10 +41,7 @@ const generatedParameters = contractToParameterDescriptors<RequestField>(promptE
 ) satisfies ParameterDescriptor<RequestField>[];
 
 // Parameters from contracts plus any manually tracked deprecated params
-const parameterDescriptors: ParameterDescriptor<RequestField>[] = [
-  ...generatedParameters,
-  // session_id is in contracts as hidden/deprecated, no need to duplicate here
-];
+const parameterDescriptors: ParameterDescriptor<RequestField>[] = [...generatedParameters];
 
 const commandDescriptors: CommandDescriptor[] = [
   ...contractToCommandDescriptors(promptEngineContract),
@@ -64,7 +61,7 @@ const usagePatterns: UsagePatternDescriptor<RequestField>[] = [
       'Show correct operator order: modifiers first, prompt ids on every step, quoted free text after the prompt id.',
     sampleCommand: [
       'prompt_engine({',
-      '  "command": "%judge @CAGEERF #style(analytical) >>analytical \\"overview\\" --> >>procedural \\"edge cases\\" --> >>creative \\"JSON summary\\" :: framework-compliance :: technical-accuracy"',
+      '  "command": "%judge @CAGEERF #analytical >>analytical \\"overview\\" --> >>procedural \\"edge cases\\" --> >>creative \\"JSON summary\\" :: framework-compliance :: technical-accuracy"',
       '})',
     ].join('\n'),
     parameters: ['command'],
@@ -145,10 +142,8 @@ const usagePatterns: UsagePatternDescriptor<RequestField>[] = [
       'Resume an interrupted chain with chain_id, feed a user response, or force a restart from the first step.',
     sampleCommand: [
       'prompt_engine({',
-      '  "command": ">>prompt chain://threat-model#step-3",',
       '  "chain_id": "chain-threat-model#3",',
-      '  "user_response": "Proceed with mitigations A and B.",',
-      '  "force_restart": false',
+      '  "user_response": "Proceed with mitigations A and B."',
       '})',
     ].join('\n'),
     parameters: ['command', 'chain_id', 'user_response', 'force_restart'],

@@ -12,6 +12,7 @@ import { readFile, stat } from 'fs/promises';
 import { extname } from 'path';
 
 import { loadYamlFile, type YamlFileLoadOptions } from './yaml/index.js';
+
 import type { Logger } from '../logging/index.js';
 
 export type ResourceKind = 'json' | 'yaml';

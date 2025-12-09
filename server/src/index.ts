@@ -5,10 +5,14 @@
  * Minimal entry point with comprehensive error handling, health checks, and validation
  */
 
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+
 import { ConfigManager } from './config/index.js';
 import { Logger } from './logging/index.js';
 import { startApplication } from './runtime/application.js';
 import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
+
 import type { HealthReport } from './runtime/health.js';
 
 const EMPTY_HEALTH_REPORT: HealthReport = {
@@ -295,56 +299,187 @@ async function gracefulShutdown(exitCode: number = 0): Promise<void> {
  */
 function showHelp(): void {
   console.error(`
-MCP Claude Prompts Server v1.3.3 - Zero-Flag Experience with STDIO Protocol Safety
+MCP Claude Prompts Server v1.0.0 - Configurable Workspace Support
 
 USAGE:
+  npx claude-prompts [OPTIONS]
   node dist/index.js [OPTIONS]
 
-OPTIONS:
-  --transport=TYPE     Transport type: stdio (default) or sse
-  --quiet             Minimal output mode (production-friendly)
-  --verbose           Detailed diagnostics and strategy information
-  --debug-startup     Alias for --verbose with extra debugging
-  --startup-test      Validate startup and exit (for testing)
-  --help              Show this help message
+QUICK START:
+  npx claude-prompts --init=~/my-prompts    Create a new workspace with starter prompts
+
+  Then add MCP_WORKSPACE to your Claude Desktop config and restart.
+  Claude can update your prompts via prompt_manager - no manual editing needed!
+
+PATH OPTIONS:
+  --workspace=/path       Base directory for user assets (prompts, config, etc.)
+  --config=/path          Direct path to config.json
+  --prompts=/path         Direct path to prompts configuration file
+  --methodologies=/path   Custom methodologies directory
+  --gates=/path           Custom gates directory
+
+RUNTIME OPTIONS:
+  --init=/path            Create a new workspace with starter prompts at the specified path
+  --transport=TYPE        Transport type: stdio (default) or sse
+  --log-level=LEVEL       Log level: debug, info, warn, error
+  --quiet                 Minimal output mode (production-friendly)
+  --verbose               Detailed diagnostics and strategy information
+  --debug-startup         Alias for --verbose with extra debugging
+  --startup-test          Validate startup and exit (for testing)
+  --help                  Show this help message
 
 ENVIRONMENT VARIABLES:
-  MCP_SERVER_ROOT              Override server root directory detection (recommended)
-  MCP_PROMPTS_CONFIG_PATH      Direct path to prompts configuration file
+  MCP_WORKSPACE            Base workspace directory (same as --workspace)
+  MCP_CONFIG_PATH          Direct path to config.json (same as --config)
+  MCP_PROMPTS_PATH         Direct path to prompts config (same as --prompts)
+  MCP_METHODOLOGIES_PATH   Custom methodologies directory
+  MCP_GATES_PATH           Custom gates directory
+  LOG_LEVEL                Override log level (debug, info, warn, error)
 
-OPTIMIZED STARTUP MODES:
-  Production:    node dist/index.js --quiet --transport=stdio
-  Development:   node dist/index.js --verbose --transport=sse
-  Debugging:     node dist/index.js --debug-startup
-  Silent:        node dist/index.js --quiet
+PRIORITY ORDER:
+  CLI flags > Environment variables > Workspace subdirectory > Package defaults
+
+WORKSPACE STRUCTURE:
+  Your workspace can contain:
+    prompts/promptsConfig.json  - Your custom prompts
+    config.json                 - Server configuration overrides
+    methodologies/              - Custom methodology definitions
+    gates/                      - Custom gate definitions
 
 EXAMPLES:
-  # Standard usage
-  node dist/index.js
+  # Use a custom workspace
+  npx claude-prompts --workspace=/home/user/my-prompts
 
-  # Claude Desktop (recommended configuration)
-  node dist/index.js --transport=stdio --quiet
+  # Override specific paths
+  npx claude-prompts --prompts=/path/to/prompts.json
 
-  # Development with detailed logging
-  node dist/index.js --verbose --transport=sse
+  # Via environment variables
+  MCP_WORKSPACE=/home/user/my-prompts npx claude-prompts
 
-  # With environment override (fastest startup)
-  MCP_SERVER_ROOT=/path/to/server node dist/index.js --quiet
+  # Claude Desktop configuration (recommended)
+  # Add to ~/.config/claude/claude_desktop_config.json:
+  {
+    "mcpServers": {
+      "claude-prompts": {
+        "command": "npx",
+        "args": ["-y", "claude-prompts@latest"],
+        "env": {
+          "MCP_WORKSPACE": "/home/user/my-mcp-workspace"
+        }
+      }
+    }
+  }
 
-PERFORMANCE FEATURES:
-  ✓ Optimized strategy ordering (fastest detection first)
-  ✓ Early termination on first success
-  ✓ Environment variable bypass for instant detection
-  ✓ Conditional logging based on verbosity level
-  ✓ Intelligent fallback with user guidance
+STARTUP MODES:
+  Production:    npx claude-prompts --quiet
+  Development:   npx claude-prompts --verbose --transport=sse
+  Debugging:     npx claude-prompts --debug-startup
+  Testing:       npx claude-prompts --startup-test
 
-TROUBLESHOOTING:
-  Use --verbose to see detailed server root detection strategies
-  Set MCP_SERVER_ROOT environment variable for instant path detection
-  Use --quiet in production for clean startup logs
-
-For more information, visit: https://github.com/minipuft/claude-prompts-mcp
+For more information: https://github.com/minipuft/claude-prompts-mcp
 `);
+}
+
+/**
+ * Starter prompts config for new workspaces
+ */
+const STARTER_PROMPTS_CONFIG = {
+  version: '1.0',
+  description: 'My custom prompts workspace - edit these or add your own!',
+  prompts: [
+    {
+      id: 'quick_review',
+      title: 'Quick Code Review',
+      description: 'Fast review focusing on bugs and security issues',
+      content:
+        'Review this code for bugs, security issues, and obvious improvements. Be concise and actionable.\n\n```\n{{code}}\n```',
+    },
+    {
+      id: 'explain',
+      title: 'Explain Code',
+      description: 'Get a clear explanation of how code works',
+      content:
+        'Explain how this code works. Start with a one-sentence summary, then break down the key parts:\n\n```\n{{code}}\n```',
+    },
+    {
+      id: 'improve',
+      title: 'Suggest Improvements',
+      description: 'Get actionable suggestions to improve code quality',
+      content:
+        'Suggest improvements for this code. Focus on:\n- Readability\n- Performance\n- Best practices\n\nProvide before/after examples where helpful.\n\n```\n{{code}}\n```',
+    },
+  ],
+};
+
+/**
+ * Initialize a new workspace with starter prompts
+ */
+function initWorkspace(targetPath: string): { success: boolean; message: string } {
+  try {
+    const workspacePath = resolve(targetPath);
+    const promptsDir = join(workspacePath, 'prompts');
+    const promptsConfigPath = join(promptsDir, 'promptsConfig.json');
+
+    // Check if workspace already exists
+    if (existsSync(promptsConfigPath)) {
+      return {
+        success: false,
+        message: `Workspace already exists at ${workspacePath}\nFound: ${promptsConfigPath}`,
+      };
+    }
+
+    // Create directories
+    mkdirSync(promptsDir, { recursive: true });
+
+    // Write starter prompts config
+    writeFileSync(
+      promptsConfigPath,
+      JSON.stringify(STARTER_PROMPTS_CONFIG, null, 2) + '\n',
+      'utf8'
+    );
+
+    return {
+      success: true,
+      message: `
+✅ Workspace created at: ${workspacePath}
+
+Created files:
+  ${promptsConfigPath}
+
+Next steps:
+
+1. Add to your Claude Desktop config (~/.config/claude/claude_desktop_config.json):
+
+   {
+     "mcpServers": {
+       "claude-prompts": {
+         "command": "npx",
+         "args": ["-y", "claude-prompts@latest"],
+         "env": {
+           "MCP_WORKSPACE": "${workspacePath}"
+         }
+       }
+     }
+   }
+
+2. Restart Claude Desktop
+
+3. Test with: prompt_manager(action: "list")
+
+4. Edit prompts directly or ask Claude:
+   "Update the quick_review prompt to also check for TypeScript errors"
+
+   Claude will use prompt_manager to update your prompts automatically!
+
+📖 Full docs: https://github.com/minipuft/claude-prompts-mcp
+`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Failed to create workspace: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }
 
 /**
@@ -359,12 +494,54 @@ function parseCommandLineArgs(): { shouldExit: boolean; exitCode: number } {
     return { shouldExit: true, exitCode: 0 };
   }
 
+  // Check for init flag
+  const initArg = args.find((arg) => arg.startsWith('--init'));
+  if (initArg) {
+    // Parse the target path
+    let targetPath: string;
+    if (initArg.includes('=')) {
+      targetPath = initArg.split('=')[1];
+    } else {
+      // Check if next argument is a path (not another flag)
+      const initIndex = args.indexOf(initArg);
+      const nextArg = args[initIndex + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        targetPath = nextArg;
+      } else {
+        console.error('Error: --init requires a path. Usage: --init=/path/to/workspace');
+        console.error('Example: npx claude-prompts --init=~/my-prompts');
+        return { shouldExit: true, exitCode: 1 };
+      }
+    }
+
+    // Expand ~ to home directory
+    if (targetPath.startsWith('~')) {
+      const homedir = process.env.HOME || process.env.USERPROFILE || '';
+      targetPath = targetPath.replace('~', homedir);
+    }
+
+    const result = initWorkspace(targetPath);
+    console.log(result.message);
+    return { shouldExit: true, exitCode: result.success ? 0 : 1 };
+  }
+
   // Validate transport argument
   const transportArg = args.find((arg) => arg.startsWith('--transport='));
   if (transportArg) {
     const transport = transportArg.split('=')[1];
     if (!['stdio', 'sse'].includes(transport)) {
       console.error(`Error: Invalid transport '${transport}'. Supported: stdio, sse`);
+      console.error('Use --help for usage information');
+      return { shouldExit: true, exitCode: 1 };
+    }
+  }
+
+  // Validate log-level argument
+  const logLevelArg = args.find((arg) => arg.startsWith('--log-level='));
+  if (logLevelArg) {
+    const level = logLevelArg.split('=')[1]?.toLowerCase();
+    if (!['debug', 'info', 'warn', 'error'].includes(level)) {
+      console.error(`Error: Invalid log level '${level}'. Supported: debug, info, warn, error`);
       console.error('Use --help for usage information');
       return { shouldExit: true, exitCode: 1 };
     }
@@ -378,6 +555,17 @@ function parseCommandLineArgs(): { shouldExit: boolean; exitCode: number } {
     console.error('Error: Cannot use --quiet and --verbose flags together');
     console.error('Use --help for usage information');
     return { shouldExit: true, exitCode: 1 };
+  }
+
+  // Validate path flags have values (not just --workspace without =)
+  const pathFlags = ['--workspace', '--config', '--prompts', '--methodologies', '--gates'];
+  for (const flag of pathFlags) {
+    const matchingArg = args.find((arg) => arg.startsWith(flag));
+    if (matchingArg && !matchingArg.includes('=')) {
+      console.error(`Error: ${flag} requires a value. Use ${flag}=/path/to/directory`);
+      console.error('Use --help for usage information');
+      return { shouldExit: true, exitCode: 1 };
+    }
   }
 
   return { shouldExit: false, exitCode: 0 };
@@ -409,10 +597,8 @@ async function main(): Promise<void> {
       debugLog(`DEBUG: Platform: ${process.platform}`);
       debugLog(`DEBUG: Node.js version: ${process.version}`);
       debugLog(`DEBUG: Working directory: ${process.cwd()}`);
-      debugLog(`DEBUG: MCP_SERVER_ROOT: ${process.env.MCP_SERVER_ROOT || 'not set'}`);
-      debugLog(
-        `DEBUG: MCP_PROMPTS_CONFIG_PATH: ${process.env.MCP_PROMPTS_CONFIG_PATH || 'not set'}`
-      );
+      debugLog(`DEBUG: MCP_WORKSPACE: ${process.env.MCP_WORKSPACE || 'not set'}`);
+      debugLog(`DEBUG: MCP_PROMPTS_PATH: ${process.env.MCP_PROMPTS_PATH || 'not set'}`);
     }
 
     // Setup error handlers first
@@ -454,11 +640,11 @@ async function main(): Promise<void> {
         const fs = await import('fs');
         const path = await import('path');
 
-        const serverRoot = process.env.MCP_SERVER_ROOT || process.cwd();
-        debugLog(`DEBUG: Checking server root: ${serverRoot}`);
-        debugLog(`DEBUG: Server root exists: ${fs.existsSync(serverRoot)}`);
+        const workspace = process.env.MCP_WORKSPACE || process.cwd();
+        debugLog(`DEBUG: Checking workspace: ${workspace}`);
+        debugLog(`DEBUG: Workspace exists: ${fs.existsSync(workspace)}`);
 
-        const configPath = path.join(serverRoot, 'config.json');
+        const configPath = path.join(workspace, 'config.json');
         debugLog(`DEBUG: Config path: ${configPath}`);
         debugLog(`DEBUG: Config exists: ${fs.existsSync(configPath)}`);
 

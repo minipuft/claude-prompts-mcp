@@ -338,7 +338,10 @@ export abstract class BaseMethodologyGuide implements IMethodologyGuide {
     context?: Record<string, any>
   ): PromptCreationGuidance;
 
-  abstract guideTemplateProcessing(template: string, executionType: ExecutionType): ProcessingGuidance;
+  abstract guideTemplateProcessing(
+    template: string,
+    executionType: ExecutionType
+  ): ProcessingGuidance;
 
   abstract guideExecutionSteps(
     prompt: ConvertedPrompt,

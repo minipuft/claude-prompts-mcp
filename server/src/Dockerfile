@@ -24,7 +24,7 @@ WORKDIR /app
 
 # Set production environment
 ENV NODE_ENV=production
-ENV MCP_SERVER_ROOT=/app
+ENV MCP_WORKSPACE=/app
 ENV PORT=9090
 
 # Install production dependencies only
@@ -36,14 +36,12 @@ RUN npm ci --only=production && \
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prompts ./prompts
 COPY --from=builder /app/methodologies ./methodologies
+COPY --from=builder /app/gates ./gates
 # Copy config and potentially other static assets if needed
 COPY --from=builder /app/config.json ./config.json
-# Copy gate definitions if they are not in dist/
-COPY --from=builder /app/src/gates/definitions ./src/gates/definitions
-COPY --from=builder /app/src/gates/templates ./src/gates/templates
 
 # Create logs and runtime-state directories with correct permissions
-RUN mkdir -p logs runtime-state && chown -R node:node logs runtime-state dist prompts methodologies config.json src
+RUN mkdir -p logs runtime-state && chown -R node:node logs runtime-state dist prompts methodologies gates config.json
 
 # Security: Run as non-root user
 USER node

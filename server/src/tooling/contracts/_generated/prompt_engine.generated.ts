@@ -20,7 +20,7 @@ export interface ToolCommand {
   notes?: string[];
 }
 
-export type prompt_engineParamName = 'command' | 'chain_id' | 'user_response' | 'gate_verdict' | 'gate_action' | 'gates' | 'force_restart' | 'llm_validation' | 'options';
+export type prompt_engineParamName = 'command' | 'chain_id' | 'user_response' | 'gate_verdict' | 'gate_action' | 'gates' | 'force_restart' | 'options';
 export const prompt_engineParameters: ToolParameter[] = [
   {
     "name": "command",
@@ -30,12 +30,12 @@ export const prompt_engineParameters: ToolParameter[] = [
     "status": "working",
     "compatibility": "canonical",
     "examples": [
-      "%judge @CAGEERF #style(analytical) >>analytical \"overview\" --> >>procedural \"edge cases\" --> >>creative \"JSON summary\" :: framework-compliance :: technical-accuracy",
-      "@ReACT >>analysis_report topic:'AI safety' :: 'cite sources' #style(analytical)",
-      ">>analysis_report audience:'exec' --> >>summary #style(procedural)"
+      "%judge @CAGEERF #analytical >>analytical \"overview\" --> >>procedural \"edge cases\" --> >>creative \"JSON summary\" :: framework-compliance :: technical-accuracy",
+      "@ReACT >>analysis_report topic:'AI safety' :: 'cite sources' #analytical",
+      ">>analysis_report audience:'exec' --> >>summary #procedural"
     ],
     "notes": [
-      "Operators: `-->` chain, `@` framework, `::` gates, `#style(<id>)` style, `%judge` menu; `%clean`/`%lean` disable framework injection. Modifiers belong at the front and apply to the whole chain.",
+      "Operators: `-->` chain, `@` framework, `::` gates, `#id` style (e.g., #analytical), `%judge` menu; `%clean`/`%lean` disable framework injection. Modifiers belong at the front and apply to the whole chain.",
       "Every chain step must start with a prompt id prefix (`>>` or `/`). Plain text step labels are invalid; use prompt_manager(list/inspect) to find valid ids instead of fabricating them.",
       "Free text belongs after the prompt id, quoted (\"...\") or as key:value pairs. Avoid unquoted bare strings that look like prompt names.",
       "Two request shapes: execute (`command` required, optional gates/options); resume (`chain_id` with user_response and/or gate_verdict/gate_action, command optional).",
@@ -116,19 +116,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     "description": "Restart chain from step 1, ignoring cached state.",
     "status": "working",
     "compatibility": "canonical"
-  },
-  {
-    "name": "llm_validation",
-    "type": "boolean",
-    "description": "Experimental: Advanced LLM-based semantic validation for prompt quality. Currently blocked pending architectural design.",
-    "status": "experimental",
-    "compatibility": "canonical",
-    "notes": [
-      "Reserved for future implementation of semantic validation features.",
-      "Currently blocked by validator with migration guidance.",
-      "May be reintroduced in future version with enhanced gate architecture.",
-      "Status: Experimental (under development, not yet functional)."
-    ]
   },
   {
     "name": "options",

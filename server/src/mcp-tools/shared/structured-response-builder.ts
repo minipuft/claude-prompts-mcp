@@ -203,7 +203,6 @@ export class StructuredResponseBuilder {
     operation: string,
     executionData?: {
       executionType?: 'single' | 'chain';
-      legacyExecutionType?: 'prompt' | 'template';
       executionTime?: number;
       frameworkUsed?: string;
       stepsExecuted?: number;
@@ -309,7 +308,6 @@ export function createExecutionResponse(
   operation: string,
   executionData?: {
     executionType?: 'single' | 'chain';
-    legacyExecutionType?: 'prompt' | 'template';
     executionTime?: number;
     frameworkUsed?: string;
     stepsExecuted?: number;

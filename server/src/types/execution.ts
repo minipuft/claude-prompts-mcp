@@ -23,8 +23,6 @@ export type TemporaryGateInput =
   | {
       /** Optional identifier for referencing canonical gates */
       readonly id?: string;
-      /** Optional template/reference alias */
-      readonly template?: string;
       /** Inline criteria array */
       readonly criteria?: readonly string[];
       /** Alternate pass criteria wording */
@@ -101,11 +99,8 @@ export type GateSpecification =
  * ensuring type safety and validation across the execution pipeline.
  */
 export interface McpToolRequest {
-  /** Primary command to execute. Optional when providing session-only responses. */
+  /** Primary command to execute. Optional when providing chain-only responses. */
   readonly command?: string;
-
-  /** @deprecated Session IDs are archival only and rejected by prompt_engine requests */
-  readonly session_id?: never;
 
   /** Chain identifier (chain-{promptId} or chain-{promptId}#runNumber) for resuming executions */
   readonly chain_id?: string;
@@ -129,29 +124,16 @@ export interface McpToolRequest {
   readonly force_restart?: boolean;
 
   /**
-   * @experimental Advanced LLM-based semantic validation for prompt quality.
-   * Currently blocked pending architectural design.
-   *
-   * Reserved for future implementation of semantic validation features.
-   * Will be reintroduced in future version with enhanced gate architecture.
-   */
-  readonly llm_validation?: boolean;
-
-  /**
-   * Unified gate specifications (PREFERRED).
+   * Unified gate specifications.
    *
    * Accepts mixed array of:
    * - Gate ID strings (e.g., "toxicity")
    * - Simple checks ({name, description})
    * - Full gate definitions (with criteria, severity, etc.)
    *
-   * Replaces quality_gates, custom_checks, and temporary_gates.
-   *
    * @example
    * gates: ["toxicity", {name: "test-coverage", description: "Include unit tests"}]
-   *
-   * @since 2.0.0
-  */
+   */
   readonly gates?: readonly GateSpecification[];
 
   /** Additional execution options forwarded to downstream stages */

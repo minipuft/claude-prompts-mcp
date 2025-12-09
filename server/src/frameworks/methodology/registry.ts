@@ -7,15 +7,15 @@
  * All methodologies must be defined in methodologies/<id>/methodology.yaml.
  */
 
-import { Logger } from '../../logging/index.js';
-import { IMethodologyGuide } from '../types/index.js';
-
-// Data-driven methodology system (YAML-only)
 import { createGenericGuide } from './generic-methodology-guide.js';
 import {
   RuntimeMethodologyLoader,
   type RuntimeMethodologyLoaderConfig,
 } from './runtime-methodology-loader.js';
+import { Logger } from '../../logging/index.js';
+import { IMethodologyGuide } from '../types/index.js';
+
+// Data-driven methodology system (YAML-only)
 
 /**
  * Methodology source type for tracking how a guide was loaded
@@ -254,7 +254,7 @@ export class MethodologyRegistry {
     // Count by source
     const sourceDistribution: Record<MethodologySource, number> = {
       'yaml-runtime': 0,
-      'custom': 0,
+      custom: 0,
     };
     for (const entry of entries) {
       sourceDistribution[entry.source]++;
@@ -318,7 +318,7 @@ export class MethodologyRegistry {
 
     // Discover and load additional methodologies from YAML
     const discoveredIds = this.runtimeLoader.discoverMethodologies();
-    const additionalIds = discoveredIds.filter(id => !builtInIds.includes(id));
+    const additionalIds = discoveredIds.filter((id) => !builtInIds.includes(id));
 
     for (const id of additionalIds) {
       try {

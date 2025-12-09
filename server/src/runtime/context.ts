@@ -9,13 +9,15 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 
+import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
+import { PathResolver, createPathResolver } from './paths.js';
+import { ServerRootDetector } from './startup.js';
 import { ConfigManager } from '../config/index.js';
 import { createLogger, EnhancedLoggingConfig, Logger } from '../logging/index.js';
 import { TransportManager } from '../server/index.js';
-import type { TransportMode } from '../types/index.js';
 import { ServiceManager } from '../utils/service-manager.js';
-import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
-import { ServerRootDetector } from './startup.js';
+
+import type { TransportMode } from '../types/index.js';
 
 export interface RuntimeFoundation {
   logger: Logger;
@@ -24,12 +26,15 @@ export interface RuntimeFoundation {
   runtimeOptions: RuntimeLaunchOptions;
   serverRoot: string;
   transport: TransportMode;
+  /** Centralized path resolver for all configurable paths */
+  pathResolver: PathResolver;
 }
 
 export interface RuntimeFoundationDependencies {
   logger?: Logger;
   configManager?: ConfigManager;
   serviceManager?: ServiceManager;
+  pathResolver?: PathResolver;
 }
 
 export async function createRuntimeFoundation(
@@ -37,8 +42,16 @@ export async function createRuntimeFoundation(
   dependencies: RuntimeFoundationDependencies = {}
 ): Promise<RuntimeFoundation> {
   const options = runtimeOptions ?? resolveRuntimeLaunchOptions();
+
+  // Determine server root (package root) using existing detection
   const serverRoot = await new ServerRootDetector().determineServerRoot();
-  const configPath = path.join(serverRoot, 'config.json');
+
+  // Create PathResolver with CLI options and package root
+  const pathResolver =
+    dependencies.pathResolver ?? createPathResolver(options.args, serverRoot, options.verbose);
+
+  // Use PathResolver for config path (supports workspace override)
+  const configPath = pathResolver.getConfigPath();
 
   const configManager = dependencies.configManager ?? new ConfigManager(configPath);
   await configManager.loadConfig();
@@ -56,6 +69,10 @@ export async function createRuntimeFoundation(
 
   const transport = TransportManager.determineTransport(options.args, configManager);
   const loggingConfig = configManager.getLoggingConfig();
+
+  // Log level can be overridden via CLI flag
+  const effectiveLogLevel = options.logLevel ?? loggingConfig.level;
+
   const logDirectory = path.isAbsolute(loggingConfig.directory)
     ? loggingConfig.directory
     : path.resolve(serverRoot, loggingConfig.directory);
@@ -67,12 +84,17 @@ export async function createRuntimeFoundation(
     logFile,
     transport,
     enableDebug: options.verbose,
-    configuredLevel: loggingConfig.level,
+    configuredLevel: effectiveLogLevel,
   };
 
   const logger = dependencies.logger ?? createLogger(enhancedLoggerConfig);
   if (typeof (logger as any).initLogFile === 'function') {
     await (logger as any).initLogFile();
+  }
+
+  // Log resolved paths if verbose
+  if (options.verbose) {
+    logger.info('PathResolver resolved paths:', pathResolver.getAllPaths());
   }
 
   return {
@@ -82,5 +104,6 @@ export async function createRuntimeFoundation(
     runtimeOptions: options,
     serverRoot,
     transport,
+    pathResolver,
   };
 }

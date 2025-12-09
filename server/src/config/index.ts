@@ -25,44 +25,25 @@ import {
   AnalysisConfig,
   SemanticAnalysisConfig,
   LLMIntegrationConfig,
-  AnalysisMode,
   LoggingConfig,
   FrameworksConfig,
+  ExecutionConfig,
   ChainSessionConfig,
-  JudgeConfig,
   GatesConfig,
   TransportMode,
 } from '../types/index.js';
-import { DEFAULT_INJECTION_CONFIG, type InjectionConfig } from '../execution/pipeline/decisions/injection/index.js';
+import {
+  DEFAULT_INJECTION_CONFIG,
+  type InjectionConfig,
+} from '../execution/pipeline/decisions/injection/index.js';
 // Removed: ToolDescriptionManager import to break circular dependency
 // Now injected via dependency injection pattern
-
-/**
- * Infer the optimal analysis mode based on LLM integration configuration
- */
-function inferAnalysisMode(llmConfig: LLMIntegrationConfig): AnalysisMode {
-  // Use semantic mode if LLM integration is properly configured
-  if (llmConfig.enabled && llmConfig.endpoint) {
-    // For non-localhost endpoints, require API key
-    if (
-      llmConfig.endpoint.includes('localhost') ||
-      llmConfig.endpoint.includes('127.0.0.1') ||
-      llmConfig.apiKey
-    ) {
-      return 'semantic';
-    }
-  }
-
-  // Default to structural mode
-  return 'structural';
-}
 
 /**
  * Default configuration values
  */
 const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   semanticAnalysis: {
-    // mode will be inferred automatically based on LLM integration
     llmIntegration: {
       enabled: false,
       apiKey: null,
@@ -75,16 +56,17 @@ const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
 };
 
 const DEFAULT_FRAMEWORKS_CONFIG: FrameworksConfig = {
-  enableSystemPromptInjection: true,
-  enableMethodologyGates: true,
-  enableDynamicToolDescriptions: true,
-  systemPromptReinjectionFrequency: 2,
+  dynamicToolDescriptions: true,
+  injection: {
+    systemPrompt: { enabled: true, frequency: 2 },
+    styleGuidance: true,
+  },
 };
 
 const DEFAULT_GATES_CONFIG: GatesConfig = {
-  definitionsDirectory: 'src/gates/definitions',
-  templatesDirectory: 'src/gates/templates',
   enabled: true,
+  definitionsDirectory: 'gates',
+  enableMethodologyGates: true,
 };
 
 const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
@@ -93,8 +75,8 @@ const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
   cleanupIntervalMinutes: 5,
 };
 
-const DEFAULT_JUDGE_CONFIG: JudgeConfig = {
-  enabled: true,
+const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
+  judge: true,
 };
 
 /**
@@ -193,44 +175,10 @@ export class ConfigManager extends EventEmitter {
 
   /**
    * Get the transport mode from config
-   * Priority: CLI args (handled by caller) > config.transport > legacy transports.default > default
+   * Priority: CLI args (handled by caller) > config.transport > default
    */
   getTransportMode(): TransportMode {
-    // New simplified field takes priority
-    if (this.config.transport) {
-      return this.config.transport;
-    }
-
-    // Backward compatibility: check legacy transports.default
-    if (this.config.transports?.default) {
-      const legacyMode = this.config.transports.default;
-      // Validate and map legacy value
-      if (legacyMode === 'stdio' || legacyMode === 'sse' || legacyMode === 'both') {
-        logger.warn(
-          '[ConfigManager] DEPRECATION: transports.default is deprecated. ' +
-            'Use "transport": "' + legacyMode + '" instead. ' +
-            'See docs/operations-guide.md for migration details.'
-        );
-        return legacyMode;
-      }
-    }
-
-    // Default to STDIO for Claude Desktop compatibility
-    return DEFAULT_TRANSPORT_MODE;
-  }
-
-  /**
-   * Get transports configuration
-   * @deprecated Use getTransportMode() instead
-   */
-  getTransportsConfig() {
-    // Provide backward-compatible response for legacy consumers
-    const mode = this.getTransportMode();
-    return {
-      default: mode,
-      sse: { enabled: mode === 'sse' || mode === 'both' },
-      stdio: { enabled: mode === 'stdio' || mode === 'both' },
-    };
+    return this.config.transport ?? DEFAULT_TRANSPORT_MODE;
   }
 
   /**
@@ -284,36 +232,43 @@ export class ConfigManager extends EventEmitter {
   }
 
   /**
-   * Get frameworks configuration
+   * Get frameworks configuration (includes injection settings)
    */
   getFrameworksConfig(): FrameworksConfig {
+    const frameworksConfig = this.config.frameworks;
     return {
-      enableSystemPromptInjection:
-        this.config.frameworks?.enableSystemPromptInjection ??
-        DEFAULT_FRAMEWORKS_CONFIG.enableSystemPromptInjection,
-      enableMethodologyGates:
-        this.config.frameworks?.enableMethodologyGates ??
-        DEFAULT_FRAMEWORKS_CONFIG.enableMethodologyGates,
-      enableDynamicToolDescriptions:
-        this.config.frameworks?.enableDynamicToolDescriptions ??
-        DEFAULT_FRAMEWORKS_CONFIG.enableDynamicToolDescriptions,
-      systemPromptReinjectionFrequency:
-        this.config.frameworks?.systemPromptReinjectionFrequency ??
-        DEFAULT_FRAMEWORKS_CONFIG.systemPromptReinjectionFrequency,
+      dynamicToolDescriptions:
+        frameworksConfig?.dynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
+      injection: {
+        systemPrompt: {
+          enabled:
+            frameworksConfig?.injection?.systemPrompt?.enabled ??
+            DEFAULT_FRAMEWORKS_CONFIG.injection?.systemPrompt?.enabled ??
+            true,
+          frequency:
+            frameworksConfig?.injection?.systemPrompt?.frequency ??
+            DEFAULT_FRAMEWORKS_CONFIG.injection?.systemPrompt?.frequency ??
+            2,
+        },
+        styleGuidance:
+          frameworksConfig?.injection?.styleGuidance ??
+          DEFAULT_FRAMEWORKS_CONFIG.injection?.styleGuidance ??
+          true,
+      },
     };
   }
 
   /**
-   * Get gates configuration
+   * Get gates configuration (unified gate settings)
    */
   getGatesConfig(): GatesConfig {
     const gatesConfig: Partial<GatesConfig> = this.config.gates ?? {};
     return {
+      enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
       definitionsDirectory:
         gatesConfig.definitionsDirectory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
-      templatesDirectory:
-        gatesConfig.templatesDirectory ?? DEFAULT_GATES_CONFIG.templatesDirectory,
-      enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
+      enableMethodologyGates:
+        gatesConfig.enableMethodologyGates ?? DEFAULT_GATES_CONFIG.enableMethodologyGates,
     };
   }
 
@@ -333,50 +288,53 @@ export class ConfigManager extends EventEmitter {
   }
 
   /**
-   * Get judge selection system configuration
+   * Get execution strategy configuration
    */
-  getJudgeConfig(): JudgeConfig {
-    const judgeConfig: Partial<JudgeConfig> = this.config.judge ?? {};
+  getExecutionConfig(): ExecutionConfig {
     return {
-      enabled: judgeConfig.enabled ?? DEFAULT_JUDGE_CONFIG.enabled,
+      judge: this.config.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge,
     };
   }
 
   /**
-   * Get injection control configuration.
-   * Supports backward compatibility with frameworks.systemPromptReinjectionFrequency.
+   * Get judge enabled status (convenience method)
+   */
+  isJudgeEnabled(): boolean {
+    return this.getExecutionConfig().judge ?? true;
+  }
+
+  /**
+   * Get injection config for the internal InjectionDecisionService.
+   * Translates from the user-friendly frameworks.injection format to the internal format.
    */
   getInjectionConfig(): InjectionConfig {
-    // If injection config exists, use it directly
-    if (this.config.injection) {
-      return {
-        ...DEFAULT_INJECTION_CONFIG,
-        ...this.config.injection,
-      };
-    }
+    const frameworksConfig = this.getFrameworksConfig();
+    const injection = frameworksConfig.injection;
 
-    // Backward compatibility: map legacy frameworks.systemPromptReinjectionFrequency
-    const legacyFrequency = this.config.frameworks?.systemPromptReinjectionFrequency;
-    if (legacyFrequency !== undefined) {
-      logger.warn(
-        '[ConfigManager] DEPRECATION: frameworks.systemPromptReinjectionFrequency is deprecated. ' +
-          'Use injection.system-prompt.frequency instead. ' +
-          'See docs/architecture.md for migration guide.'
-      );
-
-      return {
-        ...DEFAULT_INJECTION_CONFIG,
-        'system-prompt': {
-          enabled: true,
-          frequency: {
-            mode: legacyFrequency === 0 ? 'first-only' : 'every',
-            interval: legacyFrequency === 0 ? undefined : legacyFrequency,
-          },
+    // Build internal InjectionConfig from user-facing config
+    return {
+      defaults: {
+        'system-prompt': injection?.systemPrompt?.enabled ?? true,
+        'gate-guidance': this.getGatesConfig().enabled, // Follows gates.enabled
+        'style-guidance': injection?.styleGuidance ?? true,
+      },
+      'system-prompt': {
+        enabled: injection?.systemPrompt?.enabled ?? true,
+        frequency: {
+          mode: 'every' as const,
+          interval: injection?.systemPrompt?.frequency ?? 2,
         },
-      };
-    }
-
-    return DEFAULT_INJECTION_CONFIG;
+        target: 'both' as const,
+      },
+      'gate-guidance': {
+        ...DEFAULT_INJECTION_CONFIG['gate-guidance'],
+        enabled: this.getGatesConfig().enabled,
+      },
+      'style-guidance': {
+        ...DEFAULT_INJECTION_CONFIG['style-guidance'],
+        enabled: injection?.styleGuidance ?? true,
+      },
+    };
   }
 
   /**
@@ -384,29 +342,6 @@ export class ConfigManager extends EventEmitter {
    */
   getPort(): number {
     return process.env['PORT'] ? parseInt(process.env['PORT'], 10) : this.config.server.port;
-  }
-
-  /**
-   * Determine transport from command line arguments or configuration
-   * Priority: CLI args > config.transport > default (stdio)
-   *
-   * @deprecated Use getTransportMode() for the raw config value.
-   * This method is kept for backward compatibility with CLI arg parsing.
-   */
-  getTransport(args: string[]): TransportMode {
-    // CLI argument takes highest priority
-    const transportArg = args.find((arg: string) => arg.startsWith('--transport='));
-    if (transportArg) {
-      const value = transportArg.split('=')[1];
-      // Validate CLI arg
-      if (value === 'stdio' || value === 'sse' || value === 'both') {
-        return value;
-      }
-      logger.warn(`Invalid --transport value: "${value}". Using config default.`);
-    }
-
-    // Fall back to config value (which handles backward compat internally)
-    return this.getTransportMode();
   }
 
   /**
@@ -426,22 +361,23 @@ export class ConfigManager extends EventEmitter {
 
   /**
    * Resolve prompts file path with environment overrides and absolute fallback.
-   * Honors MCP_SERVER_ROOT (for relative overrides) and MCP_PROMPTS_CONFIG_PATH.
+   *
+   * Priority:
+   *   1. overridePath parameter
+   *   2. MCP_PROMPTS_PATH environment variable
+   *   3. config.prompts.file setting
+   *
+   * Note: PathResolver is the preferred source of truth for path resolution.
+   * This method exists for backward compatibility and simple use cases.
    */
   getResolvedPromptsFilePath(overridePath?: string): string {
-    const serverRootOverride = process.env['MCP_SERVER_ROOT'];
-    const defaultBaseDir = serverRootOverride
-      ? path.resolve(serverRootOverride)
-      : path.dirname(this.configPath);
+    const baseDir = path.dirname(this.configPath);
 
+    // Priority: overridePath > MCP_PROMPTS_PATH > config
     let resolvedPath =
-      overridePath ?? process.env['MCP_PROMPTS_CONFIG_PATH'] ?? this.getPromptsFilePath();
+      overridePath ?? process.env['MCP_PROMPTS_PATH'] ?? this.getPromptsFilePath();
 
     if (!path.isAbsolute(resolvedPath)) {
-      const baseDir =
-        overridePath || process.env['MCP_PROMPTS_CONFIG_PATH']
-          ? defaultBaseDir
-          : path.dirname(this.configPath);
       resolvedPath = path.resolve(baseDir, resolvedPath);
     }
 
@@ -489,14 +425,8 @@ export class ConfigManager extends EventEmitter {
     }
 
     // Ensure transport mode is set
-    // Prioritize new simplified 'transport' field, fall back to legacy 'transports.default'
     if (!this.config.transport) {
-      if (this.config.transports?.default) {
-        // Legacy config detected - migration handled in getTransportMode()
-        // Don't set transport here to preserve deprecation warning
-      } else {
-        this.config.transport = DEFAULT_TRANSPORT_MODE;
-      }
+      this.config.transport = DEFAULT_TRANSPORT_MODE;
     }
 
     // Ensure frameworks config exists
@@ -525,12 +455,12 @@ export class ConfigManager extends EventEmitter {
       };
     }
 
-    // Ensure judge config exists
-    if (!this.config.judge) {
-      this.config.judge = { ...DEFAULT_JUDGE_CONFIG };
+    // Ensure execution config exists
+    if (!this.config.execution) {
+      this.config.execution = { ...DEFAULT_EXECUTION_CONFIG };
     } else {
-      this.config.judge = {
-        enabled: this.config.judge.enabled ?? DEFAULT_JUDGE_CONFIG.enabled,
+      this.config.execution = {
+        judge: this.config.execution.judge ?? DEFAULT_EXECUTION_CONFIG.judge,
       };
     }
   }
@@ -541,8 +471,8 @@ export class ConfigManager extends EventEmitter {
   private validateAnalysisConfig(analysisConfig: Partial<AnalysisConfig>): AnalysisConfig {
     const semanticAnalysis = analysisConfig.semanticAnalysis || ({} as any);
 
-    // Build LLM integration config first
-    const llmIntegration = {
+    // Build LLM integration config
+    const llmIntegration: LLMIntegrationConfig = {
       enabled:
         semanticAnalysis.llmIntegration?.enabled ??
         DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.enabled,
@@ -563,16 +493,8 @@ export class ConfigManager extends EventEmitter {
         DEFAULT_ANALYSIS_CONFIG.semanticAnalysis.llmIntegration.temperature,
     };
 
-    // Infer analysis mode based on LLM configuration if not explicitly set
-    const validModes: AnalysisMode[] = ['structural', 'semantic'];
-    const mode =
-      semanticAnalysis.mode && validModes.includes(semanticAnalysis.mode as AnalysisMode)
-        ? (semanticAnalysis.mode as AnalysisMode)
-        : inferAnalysisMode(llmIntegration);
-
     return {
       semanticAnalysis: {
-        mode,
         llmIntegration,
       },
     };
@@ -660,10 +582,10 @@ export class ConfigManager extends EventEmitter {
 
   private haveFrameworkConfigsChanged(a: FrameworksConfig, b: FrameworksConfig): boolean {
     return (
-      a.enableSystemPromptInjection !== b.enableSystemPromptInjection ||
-      a.enableMethodologyGates !== b.enableMethodologyGates ||
-      a.enableDynamicToolDescriptions !== b.enableDynamicToolDescriptions ||
-      a.systemPromptReinjectionFrequency !== b.systemPromptReinjectionFrequency
+      a.dynamicToolDescriptions !== b.dynamicToolDescriptions ||
+      a.injection?.systemPrompt?.enabled !== b.injection?.systemPrompt?.enabled ||
+      a.injection?.systemPrompt?.frequency !== b.injection?.systemPrompt?.frequency ||
+      a.injection?.styleGuidance !== b.injection?.styleGuidance
     );
   }
 }

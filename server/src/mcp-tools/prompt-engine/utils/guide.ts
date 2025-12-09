@@ -8,6 +8,12 @@ import type {
 
 export function renderPromptEngineGuide(goal?: string): string {
   const normalizedGoal = typeof goal === 'string' ? goal.trim() : '';
+
+  // Dedicated gates guide with syntax reference
+  if (/^gates?$/i.test(normalizedGoal)) {
+    return renderGatesGuide();
+  }
+
   const parameterList = selectGuideParameters(normalizedGoal);
   const commandList = promptEngineMetadata.data.commands;
   const usagePatterns = promptEngineMetadata.data.usagePatterns ?? [];
@@ -23,7 +29,7 @@ export function renderPromptEngineGuide(goal?: string): string {
   sections.push(
     normalizedGoal
       ? `Requested focus: \`${normalizedGoal}\``
-      : 'Use `>>guide gate controls`, `>>guide chain resume`, etc. for targeted help.'
+      : 'Use `>>guide gates`, `>>guide chain resume`, etc. for targeted help.'
   );
 
   if (parameterList.length > 0) {
@@ -74,7 +80,7 @@ export function renderPromptEngineGuide(goal?: string): string {
   }
 
   sections.push(
-    '💡 Tip: Use the unified `gates` parameter to specify validation criteria. When combined with `llm_validation:true`, you can return `gate_verdict` for gate reviews. The response footer will remind you which verdict format to use.'
+    '💡 Tip: Use the unified `gates` parameter to specify validation criteria. The response footer will include a `gate_verdict` format reminder when gates are active.'
   );
 
   return sections.join('\n\n');
@@ -125,7 +131,7 @@ function computeParameterScore(param: ParameterDescriptor, goal: string): number
     score += 4;
   }
 
-  if (/timeout|performance/.test(goal) && /timeout|performance/.test(param.description)) {
+  if (/performance/.test(goal) && /performance/.test(param.description)) {
     score += 2;
   }
 
@@ -173,4 +179,59 @@ function formatUsagePattern(
   return [header, parameterList, sampleBlock, notes]
     .filter((segment) => segment.length > 0)
     .join('\n\n');
+}
+
+/**
+ * Render comprehensive gates syntax guide
+ */
+function renderGatesGuide(): string {
+  const sections: string[] = [];
+
+  sections.push('🔐 **Gates Syntax Guide**');
+  sections.push(
+    'Quality gates enforce validation criteria during prompt execution. ' +
+      'Use the `::` operator to add gates inline, or the `gates` parameter for registered gates.'
+  );
+
+  sections.push('### Syntax Reference');
+  sections.push(`\`\`\`
+# Canonical gate (registered in gates/ directory)
+:: code-quality
+:: security-awareness
+:: research-quality
+
+# Named inline gate (custom ID for tracking)
+:: security:"validate all user inputs"
+:: perf:"maintain O(n) complexity"
+
+# Anonymous inline gate (auto-generated ID)
+:: "check for edge cases"
+:: "ensure proper error handling"
+
+# Multiple gates (comma-separated criteria)
+:: validation:"check types, validate ranges, handle nulls"
+
+# Combine in single command
+>>prompt :: security:"no secrets" :: perf:"efficient" :: code-quality
+\`\`\``);
+
+  sections.push('### Gate Types');
+  sections.push(`| Type | Syntax | Description |
+|------|--------|-------------|
+| **Canonical** | \`:: code-quality\` | Registered gate with full guidance |
+| **Named** | \`:: id:"criteria"\` | Inline gate with custom ID |
+| **Anonymous** | \`:: "criteria"\` | Inline gate with auto-generated ID |`);
+
+  sections.push('### Discovery Commands');
+  sections.push(`- \`>>gates\` — List all available canonical gates
+- \`>>gates security\` — Search gates by keyword
+- \`>>guide gates\` — This syntax reference`);
+
+  sections.push('### Tips');
+  sections.push(`- Named gates (\`:: security:"..."\`) appear with their ID in output
+- Use canonical gates for consistent, reusable validation
+- Combine multiple criteria: \`:: "check A, verify B"\`
+- Gates work with frameworks: \`@CAGEERF >>prompt :: code-quality\``);
+
+  return sections.join('\n\n');
 }

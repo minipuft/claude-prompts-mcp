@@ -6,9 +6,12 @@
  * metadata used by the framework switching layer.
  */
 
-import type { ConvertedPrompt } from '../execution/types.js';
 import type { ContentAnalysisResult } from './types.js';
-import type { FrameworkDefinition, FrameworkExecutionContext } from '../frameworks/types/methodology-types.js';
+import type { ConvertedPrompt } from '../execution/types.js';
+import type {
+  FrameworkDefinition,
+  FrameworkExecutionContext,
+} from '../frameworks/types/methodology-types.js';
 
 /**
  * Integrated analysis result combining semantic intelligence and framework methodology

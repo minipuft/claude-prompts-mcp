@@ -55,11 +55,3 @@ export type {
   FrameworkUsageMetrics,
   IntegratedAnalysisResult,
 } from '../../semantic/semantic-integration-types.js';
-
-// Legacy type aliases for backward compatibility during migration
-// These will be removed in Phase 4
-export type {
-  FrameworkDefinition as LegacyFrameworkDefinition,
-  FrameworkExecutionContext as LegacyFrameworkExecutionContext,
-  FrameworkSelectionCriteria as LegacyFrameworkSelectionCriteria,
-} from './methodology-types.js';

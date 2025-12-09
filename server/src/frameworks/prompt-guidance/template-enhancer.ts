@@ -11,8 +11,9 @@
  */
 
 import { Logger } from '../../logging/index.js';
-import type { ContentAnalysisResult } from '../../semantic/types.js';
 import { ConvertedPrompt } from '../../types/index.js';
+
+import type { ContentAnalysisResult } from '../../semantic/types.js';
 
 /**
  * Template enhancement configuration
@@ -72,8 +73,8 @@ export class TemplateEnhancer {
       semanticAnalysis?.executionCharacteristics?.advancedChainFeatures?.selected_resources &&
       availableResources
     ) {
-      const selectedIds = semanticAnalysis.executionCharacteristics.advancedChainFeatures
-        .selected_resources as string[];
+      const selectedIds =
+        semanticAnalysis.executionCharacteristics.advancedChainFeatures.selected_resources;
 
       this.logger.debug(`[TemplateEnhancer] Injecting resources: ${selectedIds.join(', ')}`);
 

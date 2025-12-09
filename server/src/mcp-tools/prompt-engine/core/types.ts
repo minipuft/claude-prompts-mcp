@@ -8,11 +8,7 @@
 
 import { ConvertedPrompt, ToolResponse } from '../../../types/index.js';
 
-import type {
-  GateReviewPrompt,
-  TemporaryGateDefinition,
-  TemporaryGateInput,
-} from '../../../execution/types.js';
+import type { GateReviewPrompt, TemporaryGateDefinition } from '../../../execution/types.js';
 
 /**
  * Chain step execution context
@@ -69,22 +65,6 @@ export interface ChainGateInfo {
 export interface ChainExecutionOptions {
   enableGates: boolean;
   force_restart?: boolean;
-  session_id?: never;
-  /**
-   * @deprecated Use unified 'gates' parameter in McpToolRequest instead. Will be removed in v3.0.0.
-   * Execution-time temporary gates (not persisted to prompt configuration)
-   */
-  temporary_gates?: TemporaryGateInput[];
-  /**
-   * @deprecated Use unified 'gates' parameter in McpToolRequest instead. Will be removed in v3.0.0.
-   * Built-in quality gates to apply (by name) - use system_control to discover
-   */
-  quality_gates?: string[];
-  /**
-   * @deprecated Use unified 'gates' parameter in McpToolRequest instead. Will be removed in v3.0.0.
-   * Custom quality checks (simplified: name + description only)
-   */
-  custom_checks?: Array<{ name: string; description: string }>;
 }
 
 /**
@@ -93,7 +73,6 @@ export interface ChainExecutionOptions {
 export interface FormatterExecutionContext {
   executionId: string;
   executionType: 'single' | 'chain';
-  legacyExecutionType?: 'prompt' | 'template';
   startTime: number;
   endTime: number;
   frameworkUsed?: string;
@@ -135,7 +114,6 @@ export interface SimpleResponseFormatter {
  */
 export interface PromptClassification {
   executionType: 'single' | 'chain';
-  legacyExecutionType?: 'prompt' | 'template';
   requiresExecution: boolean;
   confidence: number;
   reasoning: string[];
@@ -148,7 +126,6 @@ export interface PromptClassification {
  */
 export interface ChainExecutionStrategy {
   mode: 'single' | 'chain';
-  legacyExecutionType?: 'prompt' | 'template';
   llmValidation: boolean;
 }
 

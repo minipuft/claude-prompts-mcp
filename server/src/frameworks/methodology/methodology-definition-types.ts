@@ -11,12 +11,12 @@
  * - RuntimeMethodologyLoader loads these types from YAML
  */
 
-import type { PhasesDefinition, PhaseQualityIndicators } from '../utils/index.js';
 import type {
   FrameworkMethodology,
   JudgePromptDefinition,
   MethodologyToolDescriptions,
 } from '../types/methodology-types.js';
+import type { PhasesDefinition, PhaseQualityIndicators } from '../utils/index.js';
 
 /**
  * Complete methodology definition loaded from YAML source

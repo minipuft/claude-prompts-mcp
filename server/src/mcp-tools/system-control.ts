@@ -10,12 +10,29 @@
  * - Configuration management
  */
 
+import {
+  CONFIG_RESTART_REQUIRED_KEYS,
+  CONFIG_VALID_KEYS,
+  SafeConfigWriter,
+  createSafeConfigWriter,
+  validateConfigInput,
+} from './config-utils.js';
 import { ConfigManager } from '../config/index.js';
+import {
+  INJECTION_TYPES,
+  INJECTION_TYPE_DESCRIPTIONS,
+  DECISION_SOURCE_DESCRIPTIONS,
+  isSessionOverrideManagerInitialized,
+  getSessionOverrideManager,
+  initSessionOverrideManager,
+  type InjectionType,
+} from '../execution/pipeline/decisions/injection/index.js';
 import { FrameworkManager } from '../frameworks/framework-manager.js';
 import {
   FrameworkStateManager,
   FrameworkSwitchRequest,
 } from '../frameworks/framework-state-manager.js';
+import { getDefaultRuntimeLoader } from '../frameworks/methodology/index.js';
 import { Logger } from '../logging/index.js';
 import {
   SYSTEM_CONTROL_ACTION_IDS,
@@ -24,13 +41,6 @@ import {
 } from '../tooling/action-metadata/definitions/system-control.js';
 import { ToolResponse } from '../types/index.js';
 import { handleError as utilsHandleError } from '../utils/index.js';
-import {
-  CONFIG_RESTART_REQUIRED_KEYS,
-  CONFIG_VALID_KEYS,
-  SafeConfigWriter,
-  createSafeConfigWriter,
-  validateConfigInput,
-} from './config-utils.js';
 import { ResponseFormatter } from './prompt-engine/processors/response-formatter.js';
 import { ToolDescriptionManager } from './tool-description-manager.js';
 
@@ -46,21 +56,11 @@ import { MetricsCollector } from '../metrics/index.js';
 import { recordActionInvocation } from '../tooling/action-metadata/usage-tracker.js';
 
 // Data-driven methodology system (YAML-only)
-import { getDefaultRuntimeLoader } from '../frameworks/methodology/index.js';
 
 // Injection control system
-import {
-  INJECTION_TYPES,
-  INJECTION_TYPE_DESCRIPTIONS,
-  DECISION_SOURCE_DESCRIPTIONS,
-  isSessionOverrideManagerInitialized,
-  getSessionOverrideManager,
-  initSessionOverrideManager,
-  type InjectionType,
-} from '../execution/pipeline/decisions/injection/index.js';
 
-import type { GateGuidanceRenderer } from '../gates/guidance/GateGuidanceRenderer.js';
 import type { ConfigKey } from './config-utils.js';
+import type { GateGuidanceRenderer } from '../gates/guidance/GateGuidanceRenderer.js';
 import type { FormatterExecutionContext } from './prompt-engine/core/types.js';
 
 function createStructuredResponse(
@@ -301,12 +301,15 @@ export class ConsolidatedSystemControl {
    * Derived calculation: Get execution mode distribution from performance trends
    */
   getExecutionsByMode(): Record<string, number> {
-    return this.systemAnalytics.performanceTrends.reduce((acc, trend) => {
-      if (trend.executionMode) {
-        acc[trend.executionMode] = (acc[trend.executionMode] || 0) + 1;
-      }
-      return acc;
-    }, {} as Record<string, number>);
+    return this.systemAnalytics.performanceTrends.reduce(
+      (acc, trend) => {
+        if (trend.executionMode) {
+          acc[trend.executionMode] = (acc[trend.executionMode] || 0) + 1;
+        }
+        return acc;
+      },
+      {} as Record<string, number>
+    );
   }
 
   /**
@@ -388,9 +391,13 @@ export class ConsolidatedSystemControl {
     }
 
     try {
-      const result = await this.safeConfigWriter.updateConfigValue('gates.enabled', String(enabled), {
-        createBackup: false,
-      });
+      const result = await this.safeConfigWriter.updateConfigValue(
+        'gates.enabled',
+        String(enabled),
+        {
+          createBackup: false,
+        }
+      );
       if (!result.success) {
         return `⚠️ Failed to persist gates.enabled: ${result.message || result.error}`;
       }
@@ -410,9 +417,9 @@ export class ConsolidatedSystemControl {
     }
 
     const keys = [
-      'frameworks.enableSystemPromptInjection',
-      'frameworks.enableMethodologyGates',
-      'frameworks.enableDynamicToolDescriptions',
+      'frameworks.injection.systemPrompt.enabled',
+      'frameworks.dynamicToolDescriptions',
+      'gates.enableMethodologyGates',
     ];
 
     try {
@@ -811,7 +818,10 @@ export class ConsolidatedSystemControl {
     return this.createMinimalSystemResponse(response, 'list_methodologies');
   }
 
-  public async enableFrameworkSystem(args: { reason?: string; persist?: boolean }): Promise<ToolResponse> {
+  public async enableFrameworkSystem(args: {
+    reason?: string;
+    persist?: boolean;
+  }): Promise<ToolResponse> {
     if (!this.frameworkStateManager) {
       throw new Error('Framework state manager not initialized');
     }
@@ -850,7 +860,10 @@ export class ConsolidatedSystemControl {
     return this.createMinimalSystemResponse(response, 'enable_framework_system');
   }
 
-  public async disableFrameworkSystem(args: { reason?: string; persist?: boolean }): Promise<ToolResponse> {
+  public async disableFrameworkSystem(args: {
+    reason?: string;
+    persist?: boolean;
+  }): Promise<ToolResponse> {
     if (!this.frameworkStateManager) {
       throw new Error('Framework state manager not initialized');
     }
@@ -892,7 +905,10 @@ export class ConsolidatedSystemControl {
   /**
    * Enable gate system
    */
-  public async enableGateSystem(args: { reason?: string; persist?: boolean }): Promise<ToolResponse> {
+  public async enableGateSystem(args: {
+    reason?: string;
+    persist?: boolean;
+  }): Promise<ToolResponse> {
     if (!this.gateSystemManager) {
       throw new Error('Gate system manager not initialized');
     }
@@ -929,7 +945,10 @@ export class ConsolidatedSystemControl {
   /**
    * Disable gate system
    */
-  public async disableGateSystem(args: { reason?: string; persist?: boolean }): Promise<ToolResponse> {
+  public async disableGateSystem(args: {
+    reason?: string;
+    persist?: boolean;
+  }): Promise<ToolResponse> {
     if (!this.gateSystemManager) {
       throw new Error('Gate system manager not initialized');
     }
@@ -1051,30 +1070,60 @@ export class ConsolidatedSystemControl {
   }
 
   /**
-   * List all available quality gates
+   * List all available quality gates with optional search filtering
    */
-  async listAvailableGates(): Promise<ToolResponse> {
-    const gates = (await this.gateGuidanceRenderer?.getAvailableGates()) || [];
+  async listAvailableGates(searchQuery?: string): Promise<ToolResponse> {
+    const gateDefinitions = (await this.gateGuidanceRenderer?.getAvailableGateDefinitions()) || [];
 
-    const gateList = gates.length
-      ? gates.map((gate) => `• ${gate}`).join('\n')
-      : '• No quality gates discovered. Ensure gate configuration is available.';
+    // Filter by search query if provided
+    const filteredGates = searchQuery
+      ? gateDefinitions.filter(
+          (gate) =>
+            gate.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            gate.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (gate.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+        )
+      : gateDefinitions;
 
-    const exampleGate = gates[0] || 'gate-name';
+    if (filteredGates.length === 0) {
+      const noResultsMsg = searchQuery
+        ? `No gates found matching "${searchQuery}". Try: \`>>gates\` to list all.`
+        : 'No quality gates discovered. Ensure gate configuration is available.';
 
-    const response = [
-      '📋 **Available Quality Gates**',
-      '',
-      'Discover gates using: `system_control({ action: "gates", operation: "list" })`',
-      '',
-      gateList,
-      '',
-      "**Usage**: Specify gate names in prompt_engine's `gates` parameter (PREFERRED)",
-      `**Example**: \`{ \\\"gates\\\": [\"${exampleGate}\"] }\``,
-      '**Legacy**: Old `quality_gates` parameter still works but is deprecated',
-    ].join('\n');
+      return this.createMinimalSystemResponse(
+        `📋 **Available Quality Gates**\n\n${noResultsMsg}`,
+        'gate_list'
+      );
+    }
 
-    return this.createMinimalSystemResponse(response, 'gate_list');
+    const lines: string[] = ['📋 **Available Quality Gates**', ''];
+
+    if (searchQuery) {
+      lines.push(`🔍 Filtered by: "${searchQuery}"`, '');
+    }
+
+    // Format each gate with name, ID, and description
+    for (const gate of filteredGates) {
+      lines.push(`### ${gate.name}`);
+      lines.push(`**ID**: \`${gate.id}\``);
+      if (gate.description) {
+        lines.push(`${gate.description}`);
+      }
+      lines.push('');
+    }
+
+    // Add usage syntax reference
+    lines.push('---', '');
+    lines.push('**Usage Syntax**:', '');
+    lines.push('```');
+    lines.push(`:: ${filteredGates[0]?.id || 'gate-id'}              # Use canonical gate`);
+    lines.push(`:: security:"validate inputs"   # Named inline gate`);
+    lines.push(`:: "custom criteria"            # Anonymous inline gate`);
+    lines.push('```');
+    lines.push('');
+    lines.push(`**Total Gates**: ${filteredGates.length}${searchQuery ? ` (filtered from ${gateDefinitions.length})` : ''}`);
+
+    return this.createMinimalSystemResponse(lines.join('\n'), 'gate_list');
   }
 
   /**
@@ -1284,11 +1333,14 @@ export class ConsolidatedSystemControl {
       response += '## 📈 Performance Trends\n\n';
 
       // Group trends by metric type for better organization
-      const trendsByMetric = this.systemAnalytics.performanceTrends.reduce((acc, trend) => {
-        if (!acc[trend.metric]) acc[trend.metric] = [];
-        acc[trend.metric].push(trend);
-        return acc;
-      }, {} as Record<string, any[]>);
+      const trendsByMetric = this.systemAnalytics.performanceTrends.reduce(
+        (acc, trend) => {
+          if (!acc[trend.metric]) acc[trend.metric] = [];
+          acc[trend.metric].push(trend);
+          return acc;
+        },
+        {} as Record<string, any[]>
+      );
 
       Object.entries(trendsByMetric).forEach(([metric, trends]) => {
         const recentTrends = trends.slice(-10);
@@ -1442,7 +1494,7 @@ export class ConsolidatedSystemControl {
     const value = config
       ? key
           .split('.')
-          .reduce((obj: any, k) => (obj && obj[k] !== undefined ? obj[k] : undefined), config)
+          .reduce((obj: any, k) => (obj?.[k] !== undefined ? obj[k] : undefined), config)
       : undefined;
     return this.createMinimalSystemResponse(`**${key}**: ${JSON.stringify(value)}`, 'config_get');
   }
@@ -1754,7 +1806,7 @@ class GateActionHandler extends ActionHandler {
       case 'health':
         return await this.systemControl.getGateSystemHealth();
       case 'list':
-        return await this.systemControl.listAvailableGates();
+        return await this.systemControl.listAvailableGates(args.search_query);
       default:
         throw new Error(
           `Unknown gates operation: ${operation}. Valid operations: enable, disable, status, health, list`
@@ -2606,7 +2658,7 @@ class MaintenanceActionHandler extends ActionHandler {
 
     // Transport Configuration
     response += '## 🚀 Transport Configuration\n\n';
-    const transportMode = config.transport ?? config.transports?.default ?? 'stdio';
+    const transportMode = config.transport ?? 'stdio';
     response += `**Transport Mode**: ${transportMode}\n`;
     if (transportMode === 'both') {
       response += '  - STDIO: ✅ Active (Claude Desktop/CLI)\n';
@@ -2660,7 +2712,8 @@ class MaintenanceActionHandler extends ActionHandler {
     response += '- `server.version` (string) - Server version\n';
     response += '- `server.port` (number) - HTTP server port ⚠️ *restart required*\n\n';
     response += '**Transport Configuration:**\n';
-    response += "- `transport` (string) - Transport mode: 'stdio', 'sse', or 'both' ⚠️ *restart required*\n\n";
+    response +=
+      "- `transport` (string) - Transport mode: 'stdio', 'sse', or 'both' ⚠️ *restart required*\n\n";
     response += '**Logging Configuration:**\n';
     response += '- `logging.level` (string) - Log level: debug, info, warn, error\n';
     response += '- `logging.directory` (string) - Log file directory\n\n';
@@ -3387,11 +3440,18 @@ class InjectionActionHandler extends ActionHandler {
         lines.push('_No active session overrides._');
       } else {
         for (const override of status.overrides) {
-          const enabledStr = override.enabled === true ? '✅ Enabled' : override.enabled === false ? '🚫 Disabled' : '❓ Undefined';
+          const enabledStr =
+            override.enabled === true
+              ? '✅ Enabled'
+              : override.enabled === false
+                ? '🚫 Disabled'
+                : '❓ Undefined';
           const expiresStr = override.expiresAt
             ? ` (expires: ${new Date(override.expiresAt).toISOString()})`
             : '';
-          lines.push(`- \`${override.type}\`: ${enabledStr} [scope: ${override.scope}]${expiresStr}`);
+          lines.push(
+            `- \`${override.type}\`: ${enabledStr} [scope: ${override.scope}]${expiresStr}`
+          );
         }
       }
       lines.push('');
@@ -3409,7 +3469,9 @@ class InjectionActionHandler extends ActionHandler {
 
     lines.push('');
     lines.push('**Usage:**');
-    lines.push('- Set override: `system_control action:"injection" operation:"override" type:"system-prompt" enabled:false`');
+    lines.push(
+      '- Set override: `system_control action:"injection" operation:"override" type:"system-prompt" enabled:false`'
+    );
     lines.push('- Clear overrides: `system_control action:"injection" operation:"reset"`');
 
     return this.createMinimalSystemResponse(lines.join('\n'), 'injection_status');

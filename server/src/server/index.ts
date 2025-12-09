@@ -95,9 +95,7 @@ export class ServerManager {
 
         this.httpServer!.on('error', (error: any) => {
           if (error.code === 'EADDRINUSE') {
-            this.logger.error(
-              `Port ${this.port} is already in use. SSE transport disabled.`
-            );
+            this.logger.error(`Port ${this.port} is already in use. SSE transport disabled.`);
             // Don't reject - STDIO is still working
             resolve();
           } else {
