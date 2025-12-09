@@ -294,13 +294,13 @@ The project uses GitHub Actions for automated testing and validation:
 
 **Framework Integration**: No direct coupling (integrate via framework manager), event-driven communication, semantic analysis coordination (informed by, not dependent on), gates adapt to framework (remain framework-agnostic in core)
 
-**Configuration**: Env vars for path overrides (`MCP_SERVER_ROOT`, `MCP_PROMPTS_CONFIG_PATH`), separate server/prompts config, modular imports, absolute paths for Claude Desktop
+**Configuration**: CLI flags and env vars for path overrides (`MCP_WORKSPACE`, `MCP_CONFIG_PATH`, `MCP_PROMPTS_PATH`, `MCP_METHODOLOGIES_PATH`, `MCP_GATES_PATH`), separate server/prompts config, modular imports, absolute paths for Claude Desktop
 
 **Error Handling**: Comprehensive boundaries (all orchestration levels), structured logging (verbose/quiet modes), meaningful error messages (diagnostics), rollback mechanisms (startup failures)
 
 **Testing**: Transport layer (STDIO/SSE), Nunjucks template rendering, hot-reloading, MCP protocol compliance, framework system validation, framework switching, state persistence
 
-**Environment Variables**: `MCP_SERVER_ROOT` (override server root, recommended for Claude Desktop), `MCP_PROMPTS_CONFIG_PATH` (direct path to prompts config, bypasses root detection)
+**Environment Variables**: `MCP_WORKSPACE` (base workspace directory for prompts, config, etc.), `MCP_PROMPTS_PATH` (direct path to prompts config), `MCP_CONFIG_PATH` (direct path to config.json). CLI flags take priority: `--workspace`, `--prompts`, `--config`, `--methodologies`, `--gates`
 
 **Lifecycle Management**: For refactoring and migration work, refer to `~/.claude/REFACTORING.md` domain rules for universal lifecycle state tagging, module boundary enforcement, and deletion criteria patterns.
 
@@ -512,7 +512,7 @@ The project uses GitHub Actions for automated testing and validation:
 
 **Research & Validation**: Citations (official docs, version compatibility, sources documented), Context7 (library/MCP protocol docs lookup), WebSearch (official sources, TypeScript/Node.js patterns), workflow (research → validate → implement), MCP SDK compatibility (all changes)
 
-**Environment & Deployment**: Dev setup (Node.js 16+, TypeScript strict, env vars: `MCP_SERVER_ROOT`, `MCP_PROMPTS_CONFIG_PATH`), transport testing (`start:stdio` Claude Desktop, `start:sse` web clients), CI/CD (cross-platform Ubuntu/Windows/macOS, Node 16/18/20, evidence-based quality gates)
+**Environment & Deployment**: Dev setup (Node.js 24+, TypeScript strict, env vars: `MCP_WORKSPACE`, `MCP_PROMPTS_PATH`), transport testing (`start:stdio` Claude Desktop, `start:sse` web clients), CI/CD (cross-platform Ubuntu/Windows/macOS, evidence-based quality gates)
 
 **Performance Budgets**: Server startup <3s, tool response <500ms, framework switching <100ms, memory <128MB
 

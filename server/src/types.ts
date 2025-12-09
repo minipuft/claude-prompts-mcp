@@ -4,8 +4,8 @@
  */
 
 // Import domain-specific types
-import type { GateDefinition } from './gates/types.js';
 import type { InjectionConfig } from './execution/pipeline/decisions/injection/index.js';
+import type { GateDefinition } from './gates/types.js';
 import type {
   PromptArgument,
   Category,
@@ -42,36 +42,6 @@ export interface ServerConfig {
 export type TransportMode = 'stdio' | 'sse' | 'both';
 
 /**
- * Configuration for a transport
- * @deprecated Use the simplified `transport` field in Config instead
- */
-export interface TransportConfig {
-  /** Whether this transport is enabled */
-  enabled: boolean;
-}
-
-/**
- * Configuration for all transports
- * @deprecated Use the simplified `transport` field in Config instead
- */
-export interface TransportsConfig {
-  /** Name of the default transport to use */
-  default: string;
-  /** Server-sent events transport configuration */
-  sse: TransportConfig;
-  /** Standard I/O transport configuration */
-  stdio: TransportConfig;
-  /** Custom transports map */
-  customTransports?: Record<string, TransportConfig>;
-}
-
-/**
- * Analysis mode for semantic analysis
- * Mode is automatically inferred based on LLM integration configuration
- */
-export type AnalysisMode = 'structural' | 'semantic';
-
-/**
  * LLM provider for semantic analysis
  */
 export type LLMProvider = 'openai' | 'anthropic' | 'custom';
@@ -96,10 +66,11 @@ export interface LLMIntegrationConfig {
 
 /**
  * Semantic analysis configuration
+ * Note: Structural analysis has been removed. When LLM is not configured,
+ * the analyzer returns minimal results. When LLM is configured, it provides
+ * intelligent semantic analysis.
  */
 export interface SemanticAnalysisConfig {
-  /** Analysis mode to use (automatically inferred if not specified) */
-  mode?: AnalysisMode;
   /** LLM integration configuration */
   llmIntegration: LLMIntegrationConfig;
 }
@@ -133,30 +104,35 @@ export interface ToolDescriptionsOptions {
 }
 
 /**
- * Configuration toggles for framework-driven features
+ * Injection configuration for framework-driven content
  */
-export interface FrameworksConfig {
-  /** Enable system prompt injection from frameworks */
-  enableSystemPromptInjection: boolean;
-  /** Enable methodology-specific gate behavior */
-  enableMethodologyGates: boolean;
-  /** Enable dynamic tool descriptions per methodology */
-  enableDynamicToolDescriptions: boolean;
-  /**
-   * Frequency for reinjecting framework system prompt in chain steps.
-   * - 0 = step 1 only (no reinjection)
-   * - N = reappear every N steps after step 1
-   * Default: 2 (every other step)
-   */
-  systemPromptReinjectionFrequency?: number;
+export interface FrameworkInjectionConfig {
+  /** System prompt injection settings */
+  systemPrompt?: {
+    enabled: boolean;
+    /** Inject every N steps (default: 2) */
+    frequency?: number;
+  };
+  /** Style guidance injection (enabled/disabled only, injected per-step as needed) */
+  styleGuidance?: boolean;
 }
 
 /**
- * Configuration for the client-driven judge selection system
+ * Configuration toggles for framework-driven features
  */
-export interface JudgeConfig {
-  /** Whether the judge selection system is enabled */
-  enabled: boolean;
+export interface FrameworksConfig {
+  /** Enable dynamic tool descriptions per methodology */
+  dynamicToolDescriptions: boolean;
+  /** Injection control for framework content */
+  injection?: FrameworkInjectionConfig;
+}
+
+/**
+ * Configuration for execution strategies
+ */
+export interface ExecutionConfig {
+  /** Enable judge mode (LLM-driven step selection) */
+  judge?: boolean;
 }
 
 /**
@@ -175,10 +151,8 @@ export interface ChainSessionConfig {
  * Configuration for gates subsystem
  */
 export interface GatesConfig {
-  /** Directory containing gate definitions */
+  /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
   definitionsDirectory: string;
-  /** Directory containing LLM validation templates */
-  templatesDirectory: string;
   /** Enable/disable the gate subsystem entirely */
   enabled?: boolean;
 }
@@ -190,18 +164,12 @@ export interface Config {
   prompts: PromptsConfig;
   /** Analysis system configuration */
   analysis?: AnalysisConfig;
-  /** Gates system configuration */
+  /** Gates system configuration (quality validation) */
   gates?: GatesConfig;
-  /** Framework feature configuration */
+  /** Execution strategy configuration (judge mode, etc.) */
+  execution?: ExecutionConfig;
+  /** Framework feature configuration (injection, tool descriptions) */
   frameworks?: FrameworksConfig;
-  /**
-   * Modular injection control configuration.
-   * Controls when system prompts, gate guidance, and style guidance are injected.
-   * @see injection/config-types.ts for full schema
-   */
-  injection?: InjectionConfig;
-  /** Judge selection system configuration */
-  judge?: JudgeConfig;
   /** Chain session lifecycle configuration */
   chainSessions?: ChainSessionConfig;
   /**
@@ -209,11 +177,6 @@ export interface Config {
    * STDIO is used by Claude Desktop/CLI, SSE for web clients
    */
   transport?: TransportMode;
-  /**
-   * @deprecated Use simplified `transport` field instead
-   * Kept for backward compatibility - will be removed in future version
-   */
-  transports?: TransportsConfig;
   /** Logging configuration */
   logging?: LoggingConfig;
   /** Tool descriptions configuration */
