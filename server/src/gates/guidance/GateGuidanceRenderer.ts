@@ -9,12 +9,12 @@ import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './Framewor
 
 import type { Logger } from '../../logging/index.js';
 import type { GateContext } from '../core/gate-definitions.js';
-import type { GateLoader } from '../core/gate-loader.js';
+import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { LightweightGateDefinition } from '../types.js';
 
 export interface GateGuidanceRendererOptions {
-  gateLoader: GateLoader;
+  gateLoader: GateDefinitionProvider;
   temporaryGateRegistry?: TemporaryGateRegistry;
   frameworkIdentifierProvider?: () => readonly string[] | undefined;
 }
@@ -24,13 +24,13 @@ export interface GateGuidanceRendererOptions {
  */
 export class GateGuidanceRenderer {
   private readonly logger: Logger;
-  private readonly gateLoader: GateLoader;
+  private readonly gateLoader: GateDefinitionProvider;
   private readonly temporaryGateRegistry?: TemporaryGateRegistry;
   private readonly frameworkIdentifierProvider?: () => readonly string[] | undefined;
 
   constructor(logger: Logger, options: GateGuidanceRendererOptions) {
     if (!options?.gateLoader) {
-      throw new Error('GateGuidanceRenderer requires a GateLoader instance');
+      throw new Error('GateGuidanceRenderer requires a gate loader/provider instance');
     }
 
     this.logger = logger;
@@ -41,7 +41,7 @@ export class GateGuidanceRenderer {
     if (this.temporaryGateRegistry) {
       this.logger.debug('[GATE GUIDANCE RENDERER] Temporary gate registry enabled');
     }
-    this.logger.debug('[GATE GUIDANCE RENDERER] Initialized with shared GateLoader cache');
+    this.logger.debug('[GATE GUIDANCE RENDERER] Initialized with shared gate provider cache');
   }
 
   /**
@@ -202,7 +202,7 @@ export class GateGuidanceRenderer {
     }
 
     // Skip header for auto-generated inline gates - they're already under the section header
-    if (gate.name === 'Inline Quality Criteria') {
+    if (gate.name === 'Inline Quality Criteria' || gate.name === 'Inline Validation Criteria') {
       return guidance;
     }
 
@@ -214,6 +214,13 @@ export class GateGuidanceRenderer {
    */
   async getAvailableGates(): Promise<string[]> {
     return this.gateLoader.listAvailableGates();
+  }
+
+  /**
+   * Get detailed gate definitions for listing/discovery
+   */
+  async getAvailableGateDefinitions(): Promise<LightweightGateDefinition[]> {
+    return this.gateLoader.listAvailableGateDefinitions();
   }
 
   /**

@@ -24,7 +24,7 @@
 
 import { Logger } from '../../logging/index.js';
 
-import type { GateLoader } from './gate-loader.js';
+import type { GateDefinitionProvider } from './gate-loader.js';
 import type { ValidationResult } from '../../execution/types.js';
 import type { LLMIntegrationConfig } from '../../types.js';
 import type {
@@ -50,7 +50,7 @@ export interface GateValidationStatistics {
  */
 export class GateValidator {
   private logger: Logger;
-  private gateLoader: GateLoader;
+  private gateLoader: GateDefinitionProvider;
   private llmConfig?: LLMIntegrationConfig;
   private validationStats: GateValidationStatistics = {
     totalValidations: 0,
@@ -61,7 +61,7 @@ export class GateValidator {
   };
   private validationTimes: number[] = [];
 
-  constructor(logger: Logger, gateLoader: GateLoader, llmConfig?: LLMIntegrationConfig) {
+  constructor(logger: Logger, gateLoader: GateDefinitionProvider, llmConfig?: LLMIntegrationConfig) {
     this.logger = logger;
     this.gateLoader = gateLoader;
     this.llmConfig = llmConfig;
@@ -223,7 +223,8 @@ export class GateValidator {
         message: `Check type '${criteria.type}' skipped - string-based validation removed (use llm_self_check for meaningful LLM validation)`,
         details: {
           skipped: true,
-          reason: 'String-based checks removed as they do not provide meaningful signal for LLM content',
+          reason:
+            'String-based checks removed as they do not provide meaningful signal for LLM content',
           recommendation: 'Use llm_self_check with LLM integration for semantic validation',
         },
       };
@@ -433,7 +434,7 @@ export class GateValidator {
  */
 export function createGateValidator(
   logger: Logger,
-  gateLoader: GateLoader,
+  gateLoader: GateDefinitionProvider,
   llmConfig?: LLMIntegrationConfig
 ): GateValidator {
   return new GateValidator(logger, gateLoader, llmConfig);

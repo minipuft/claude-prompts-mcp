@@ -1,53 +1,75 @@
 // @lifecycle canonical - Loads gate definitions from disk with hot reload support.
 /**
- * Gate Loader - Loads gate definitions from YAML/JSON files
- * Provides hot-reloading capabilities similar to prompt system
+ * Gate Loader - Adapter over GateDefinitionLoader (YAML + guidance.md)
  *
- * Uses RuntimeGateLoader for path resolution to support npx/npm installations.
+ * Uses GateDefinitionLoader for path resolution, validation, and guidance inlining.
  */
 
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-
+import {
+  GateDefinitionLoader,
+  type GateDefinitionLoaderConfig,
+} from './gate-definition-loader.js';
 import { Logger } from '../../logging/index.js';
-import { ResourceLoader } from '../../utils/resource-loader.js';
-import { validateLightweightGateDefinition } from '../utils/gate-definition-schema.js';
-import { getDefaultRuntimeGateLoader } from './runtime-gate-loader.js';
 
-import type { LightweightGateDefinition, GateActivationResult } from '../types.js';
+import type {
+  GateDefinitionYaml,
+  LightweightGateDefinition,
+  GateActivationResult,
+} from '../types.js';
 import type { TemporaryGateRegistry } from './temporary-gate-registry.js';
+
+/**
+ * Minimal provider contract for loading gate definitions.
+ * Implemented by GateLoader (YAML-based) and can be implemented by registry adapters.
+ */
+export interface GateDefinitionProvider {
+  loadGate(gateId: string): Promise<LightweightGateDefinition | null>;
+  loadGates(gateIds: string[]): Promise<LightweightGateDefinition[]>;
+  getActiveGates(
+    gateIds: string[],
+    context: { promptCategory?: string; framework?: string; explicitRequest?: boolean }
+  ): Promise<GateActivationResult>;
+  listAvailableGates(): Promise<string[]>;
+  listAvailableGateDefinitions(): Promise<LightweightGateDefinition[]>;
+  clearCache(gateId?: string): void;
+  isGateActive(
+    gate: LightweightGateDefinition,
+    context: { promptCategory?: string; framework?: string; explicitRequest?: boolean }
+  ): boolean;
+  getStatistics(): { cachedGates: number; totalLoads: number; lastAccess: Date | null };
+  isMethodologyGate(gateId: string): Promise<boolean>;
+  isMethodologyGateCached(gateId: string): boolean;
+  getMethodologyGateIds(): Promise<string[]>;
+}
 
 /**
  * Gate loader with caching and hot-reload support
  */
-export class GateLoader {
+export class GateLoader implements GateDefinitionProvider {
   private gateCache = new Map<string, LightweightGateDefinition>();
   private lastModified = new Map<string, number>();
   private logger: Logger;
   private gatesDirectory: string;
+  private definitionLoader: GateDefinitionLoader;
   private temporaryGateRegistry?: TemporaryGateRegistry;
-  private resourceLoader: ResourceLoader;
 
   constructor(
     logger: Logger,
     gatesDirectory?: string,
-    temporaryGateRegistry?: TemporaryGateRegistry
+    temporaryGateRegistry?: TemporaryGateRegistry,
+    loaderConfig?: Partial<GateDefinitionLoaderConfig>
   ) {
     this.logger = logger;
 
-    // If gatesDirectory not provided, use RuntimeGateLoader for path resolution
-    // This handles npx installations where packages are deep in cache paths
-    if (gatesDirectory !== undefined) {
-      this.gatesDirectory = gatesDirectory;
-    } else {
-      // Use RuntimeGateLoader's multi-strategy path resolution
-      const runtimeLoader = getDefaultRuntimeGateLoader();
-      this.gatesDirectory = runtimeLoader.getGatesDir();
-      this.logger.debug('[GateLoader] Using resolved gates directory:', this.gatesDirectory);
-    }
+    // Prefer explicit directory, otherwise let GateDefinitionLoader resolve.
+    this.definitionLoader = new GateDefinitionLoader({
+      gatesDir: gatesDirectory,
+      ...loaderConfig,
+    });
+    this.gatesDirectory = this.definitionLoader.getGatesDir();
+    this.logger.debug('[GateLoader] Using resolved gates directory:', this.gatesDirectory);
 
     this.temporaryGateRegistry = temporaryGateRegistry;
-    this.resourceLoader = new ResourceLoader({ logger: this.logger });
   }
 
   setTemporaryGateRegistry(temporaryGateRegistry?: TemporaryGateRegistry): void {
@@ -68,40 +90,20 @@ export class GateLoader {
         }
       }
 
-      const gateFile = await this.findGateFile(gateId);
-      if (gateFile === null) {
+      const definition = this.definitionLoader.loadGate(gateId);
+      if (!definition) {
         this.logger.warn(`Gate definition not found: ${gateId}`);
         return null;
       }
 
-      const cachedGate = this.gateCache.get(gateId);
-      const loadResult = await this.parseGateFile(gateFile);
+      // Normalize to lightweight shape used by existing pipeline
+      const gate = this.toLightweightGate(definition);
 
-      if (loadResult === null) {
-        return null;
-      }
-
-      if (loadResult.gate.id !== gateId) {
-        this.logger.error(
-          `Gate ID mismatch in file ${gateFile}: expected ${gateId}, got ${loadResult.gate.id}`
-        );
-        return null;
-      }
-
-      // Preserve existing cached instance if nothing changed for consistency
-      if (cachedGate !== undefined && loadResult.fromCache === true && loadResult.mtime !== undefined) {
-        this.logger.debug(`Using cached gate definition: ${gateId}`);
-        return cachedGate;
-      }
-
-      this.gateCache.set(gateId, loadResult.gate);
-
-      if (loadResult.mtime !== undefined) {
-        this.lastModified.set(gateId, loadResult.mtime);
-      }
+      this.gateCache.set(gateId, gate);
+      this.lastModified.set(gateId, Date.now());
 
       this.logger.debug(`Gate loaded successfully: ${gateId}`);
-      return loadResult.gate;
+      return gate;
     } catch (error) {
       this.logger.error(`Failed to load gate ${gateId}:`, error);
       return null;
@@ -168,12 +170,7 @@ export class GateLoader {
    */
   async listAvailableGates(): Promise<string[]> {
     try {
-      const files = await fs.readdir(this.gatesDirectory);
-      const gateFiles = files.filter(
-        (file) => file.endsWith('.yaml') || file.endsWith('.yml') || file.endsWith('.json')
-      );
-
-      return gateFiles.map((file) => path.basename(file, path.extname(file)));
+      return this.definitionLoader.discoverGates();
     } catch (error) {
       this.logger.error('Failed to list available gates:', error);
       return [];
@@ -186,17 +183,8 @@ export class GateLoader {
    */
   async listAvailableGateDefinitions(): Promise<LightweightGateDefinition[]> {
     try {
-      const gateIds = await this.listAvailableGates();
-      const gates: LightweightGateDefinition[] = [];
-
-      for (const gateId of gateIds) {
-        const gate = await this.loadGate(gateId);
-        if (gate !== null) {
-          gates.push(gate);
-        }
-      }
-
-      return gates;
+      const loaded = this.definitionLoader.loadAllGates();
+      return Array.from(loaded.values()).map((definition) => this.toLightweightGate(definition));
     } catch (error) {
       this.logger.error('Failed to list available gate definitions:', error);
       return [];
@@ -215,64 +203,6 @@ export class GateLoader {
       this.gateCache.clear();
       this.lastModified.clear();
       this.logger.debug('Cleared all gate cache');
-    }
-  }
-
-  /**
-   * Find the gate file for a given ID
-   */
-  private async findGateFile(gateId: string): Promise<string | null> {
-    const extensions = ['.yaml', '.yml', '.json'];
-
-    for (const ext of extensions) {
-      const filePath = path.join(this.gatesDirectory, `${gateId}${ext}`);
-      try {
-        await fs.access(filePath);
-        return filePath;
-      } catch {
-        // File doesn't exist, try next extension
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Parse a gate file (YAML or JSON)
-   */
-  private async parseGateFile(filePath: string): Promise<{
-    gate: LightweightGateDefinition;
-    mtime?: number;
-    fromCache?: boolean;
-  } | null> {
-    try {
-      const result = await this.resourceLoader.load<unknown>(filePath, {
-        kind: 'auto',
-        useCache: true,
-      });
-
-      if (result.success !== true) {
-        this.logger.error(`Failed to load gate file ${filePath}: ${result.error ?? 'unknown error'}`);
-        return null;
-      }
-
-      const validation = validateLightweightGateDefinition(result.data);
-
-      if (validation.success !== true || validation.data === undefined) {
-        this.logger.error(
-          `Invalid gate definition in ${filePath}: ${validation.errors?.join('; ')}`
-        );
-        return null;
-      }
-
-      return {
-        gate: validation.data,
-        mtime: result.mtimeMs,
-        fromCache: result.fromCache,
-      };
-    } catch (error) {
-      this.logger.error(`Failed to parse gate file ${filePath}:`, error);
-      return null;
     }
   }
 
@@ -369,8 +299,40 @@ export class GateLoader {
    * @returns Array of methodology gate IDs
    */
   async getMethodologyGateIds(): Promise<string[]> {
-    const allGates = await this.listAvailableGateDefinitions();
-    return allGates.filter((gate) => gate.gate_type === 'framework').map((gate) => gate.id);
+    const allGates = this.definitionLoader.loadAllGates();
+    return Array.from(allGates.values())
+      .filter((gate) => gate.gate_type === 'framework')
+      .map((gate) => gate.id);
+  }
+
+  /**
+   * Convert GateDefinitionYaml to LightweightGateDefinition shape expected by legacy consumers.
+   */
+  private toLightweightGate(definition: GateDefinitionYaml): LightweightGateDefinition {
+    return {
+      id: definition.id,
+      name: definition.name,
+      type: definition.type,
+      description: definition.description,
+      severity: definition.severity,
+      enforcementMode: definition.enforcementMode,
+      guidance: definition.guidance,
+      pass_criteria: definition.pass_criteria,
+      retry_config: this.normalizeRetryConfig(definition.retry_config),
+      activation: definition.activation,
+      gate_type: definition.gate_type,
+    };
+  }
+
+  private normalizeRetryConfig(
+    retry?: GateDefinitionYaml['retry_config']
+  ): LightweightGateDefinition['retry_config'] {
+    if (!retry) return undefined;
+    return {
+      max_attempts: retry.max_attempts ?? 2,
+      improvement_hints: retry.improvement_hints ?? true,
+      preserve_context: retry.preserve_context ?? true,
+    };
   }
 }
 

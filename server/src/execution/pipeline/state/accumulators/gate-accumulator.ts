@@ -1,8 +1,9 @@
 // @lifecycle canonical - Centralized gate collection with automatic deduplication.
 
+import { GATE_SOURCE_PRIORITY } from '../types.js';
+
 import type { Logger } from '../../../../logging/index.js';
 import type { GateEntry, GateSource, GateSourceCounts } from '../types.js';
-import { GATE_SOURCE_PRIORITY } from '../types.js';
 
 /**
  * Centralized gate collection with automatic deduplication.
@@ -13,7 +14,7 @@ import { GATE_SOURCE_PRIORITY } from '../types.js';
  * @example
  * ```typescript
  * // In a pipeline stage
- * context.gates.add('research-quality', 'category-auto');
+ * context.gates.add('research-quality', 'registry-auto');
  * context.gates.addAll(methodologyGates, 'methodology');
  *
  * // Get final deduplicated list

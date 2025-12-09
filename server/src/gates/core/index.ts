@@ -2,10 +2,15 @@
 /**
  * Core Gate System - Main Exports
  * Provides guidance and validation capabilities for prompt execution
+ *
+ * New registry-based architecture exports:
+ * - GateDefinitionLoader: YAML + MD loading with caching
+ * - Gate schema validation utilities
  */
 
 import { GateSystemManager } from '../gate-state-manager.js';
 import { GateLoader, createGateLoader } from './gate-loader.js';
+import type { GateDefinitionProvider } from './gate-loader.js';
 import { GateValidator, createGateValidator } from './gate-validator.js';
 import {
   TemporaryGateRegistry,
@@ -15,21 +20,44 @@ import {
 
 import type { ValidationResult } from '../../execution/types.js';
 
-export { GateLoader, createGateLoader } from './gate-loader.js';
+export { GateLoader, createGateLoader, type GateDefinitionProvider } from './gate-loader.js';
 export { GateValidator, createGateValidator } from './gate-validator.js';
 export {
   TemporaryGateRegistry,
   createTemporaryGateRegistry,
   type TemporaryGateDefinition as TemporaryGateRegistryDefinition,
 } from './temporary-gate-registry.js';
+// RuntimeGateLoader removed - redundant with GateDefinitionLoader
+// Use GateDefinitionLoader for YAML+MD loading with hot-reload support
+
+// ============================================================================
+// New Registry-Based Architecture (Phase 2)
+// ============================================================================
+
+// Gate Definition Loader - YAML + MD loading with caching
 export {
-  RuntimeGateLoader,
-  createRuntimeGateLoader,
-  getDefaultRuntimeGateLoader,
-  resetDefaultRuntimeGateLoader,
-  type RuntimeGateLoaderConfig,
-  type GateLoaderStats,
-} from './runtime-gate-loader.js';
+  GateDefinitionLoader,
+  createGateDefinitionLoader,
+  getDefaultGateDefinitionLoader,
+  resetDefaultGateDefinitionLoader,
+  type GateDefinitionLoaderConfig,
+  type GateLoaderStats as GateDefinitionLoaderStats,
+  type GateSchemaValidationResult,
+} from './gate-definition-loader.js';
+
+// Gate Schema - Zod validation for gate.yaml files
+export {
+  GateDefinitionSchema,
+  GatePassCriteriaSchema,
+  GateActivationSchema,
+  GateRetryConfigSchema,
+  validateGateSchema,
+  isValidGateDefinition,
+  type GateDefinitionYaml as GateDefinitionYamlSchema,
+  type GatePassCriteriaYaml,
+  type GateActivationYaml,
+  type GateRetryConfigYaml,
+} from './gate-schema.js';
 
 export type { ValidationResult } from '../../execution/types.js';
 export type {
@@ -49,7 +77,7 @@ export class LightweightGateSystem {
   private temporaryGateRegistry?: TemporaryGateRegistry;
 
   constructor(
-    public gateLoader: GateLoader,
+    public gateLoader: GateDefinitionProvider,
     public gateValidator: GateValidator,
     temporaryGateRegistry?: TemporaryGateRegistry
   ) {
@@ -276,6 +304,7 @@ export function createLightweightGateSystem(
   gatesDirectory?: string,
   gateSystemManager?: GateSystemManager,
   options?: {
+    provider?: GateDefinitionProvider;
     enableTemporaryGates?: boolean;
     maxMemoryGates?: number;
     defaultExpirationMs?: number;
@@ -291,7 +320,9 @@ export function createLightweightGateSystem(
     });
   }
 
-  const gateLoader = createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
+  const gateLoader =
+    options?.provider ??
+    createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
   const gateValidator = createGateValidator(logger, gateLoader, options?.llmConfig);
 
   const gateSystem = new LightweightGateSystem(gateLoader, gateValidator, temporaryGateRegistry);

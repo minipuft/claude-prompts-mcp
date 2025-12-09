@@ -1,7 +1,5 @@
 // @lifecycle canonical - Single source of truth for gate enforcement decisions.
 
-import type { Logger } from '../../../../logging/index.js';
-import type { ChainSessionService } from '../../../../chain-session/types.js';
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
 
 import type {
@@ -17,6 +15,8 @@ import type {
   RetryConfig,
   VerdictSource,
 } from './gate-enforcement-types.js';
+import type { ChainSessionService } from '../../../../chain-session/types.js';
+import type { Logger } from '../../../../logging/index.js';
 
 /**
  * Verdict parsing pattern with priority for conflict resolution.
@@ -298,9 +298,12 @@ export class GateEnforcementAuthority {
         };
 
       case 'abort':
-        this.logger.debug(`[GateEnforcementAuthority] User chose to abort chain after gate failure`, {
-          sessionId,
-        });
+        this.logger.debug(
+          `[GateEnforcementAuthority] User chose to abort chain after gate failure`,
+          {
+            sessionId,
+          }
+        );
         return {
           handled: true,
           sessionAborted: true,

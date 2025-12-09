@@ -5,12 +5,36 @@
  * Consolidated types for the gate validation system, including lightweight gates,
  * enhanced validation, and gate orchestration. Combines types from multiple gate
  * system implementations into a unified type system.
+ *
+ * Registry-based gate guide types are exported from ./types/ subfolder.
  */
 
 // Import unified validation types from execution domain (not re-exported to avoid conflicts)
 import type { ValidationResult, ValidationCheck } from '../execution/types.js';
 
 export type { ValidationCheck } from '../execution/types.js';
+
+// ============================================================================
+// Registry-Based Gate Guide Types (Phase 1: Foundation)
+// ============================================================================
+
+// Re-export all gate guide types from the types/ subfolder
+export type {
+  // Core interface
+  IGateGuide,
+  GateActivationRules,
+  GateActivationContext,
+  GateDefinitionYaml,
+  GateRetryConfig,
+  GateValidationResult,
+  // Registry types
+  GateSource,
+  GateGuideEntry,
+  GateRegistryStats,
+  // Selection types
+  GateSelectionContext,
+  GateSelectionResult,
+} from './types/index.js';
 
 /**
  * Gate requirement types - comprehensive enumeration
@@ -224,7 +248,9 @@ export interface LightweightGateDefinition {
   severity?: 'critical' | 'high' | 'medium' | 'low';
   /** Enforcement mode override (defaults to severity-based mapping) */
   enforcementMode?: 'blocking' | 'advisory' | 'informational';
-  /** Guidance text injected into prompts */
+  /** Path to external guidance file (relative to gate directory, e.g., 'guidance.md') */
+  guidanceFile?: string;
+  /** Guidance text injected into prompts (loaded from guidanceFile if specified) */
   guidance?: string;
   /** Pass/fail criteria for validation gates */
   pass_criteria?: GatePassCriteria[];
@@ -248,15 +274,16 @@ export interface LightweightGateDefinition {
 }
 
 /**
- * Gate configuration settings
+ * Unified gate configuration settings.
+ * Consolidates all gate-related config (previously split across gates, frameworks, and injection).
  */
 export interface GatesConfig {
-  /** Directory containing gate definitions */
-  definitionsDirectory: string;
-  /** Directory containing LLM validation templates */
-  templatesDirectory: string;
   /** Enable/disable the gate subsystem entirely */
-  enabled?: boolean;
+  enabled: boolean;
+  /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
+  definitionsDirectory: string;
+  /** Enable methodology-specific gates (auto-added based on active framework) */
+  enableMethodologyGates: boolean;
 }
 
 /**

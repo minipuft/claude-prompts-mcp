@@ -2,17 +2,7 @@ id: security-awareness
 name: Security Best Practices
 type: validation
 description: Ensures security-conscious development practices and prevents common vulnerabilities
-guidance: |
-  **Security Best Practices:**
-  - Never include hardcoded secrets, passwords, or API keys in code
-  - Validate and sanitize all user inputs
-  - Use parameterized queries to prevent SQL injection
-  - Implement proper authentication and authorization
-  - Follow OWASP Top 10 security guidelines
-  - Use HTTPS and secure communication protocols
-  - Implement rate limiting for APIs
-  - Log security events but never log sensitive data
-  - Keep dependencies updated and scan for vulnerabilities
+guidanceFile: guidance.md
 
 pass_criteria:
   - type: content_check

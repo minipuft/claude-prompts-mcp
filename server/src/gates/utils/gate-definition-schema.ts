@@ -9,6 +9,7 @@
 import { z } from 'zod';
 
 import { validateWithSchema, type SchemaValidationResult } from '../../utils/schema-validator.js';
+
 import type { LightweightGateDefinition } from '../types.js';
 
 const activationSchema = z

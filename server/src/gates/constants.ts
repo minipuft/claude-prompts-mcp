@@ -40,14 +40,3 @@ export const GATE_SYSTEM_DEFAULTS = {
   enableValidation: ENABLE_VALIDATION,
   defaultRetryConfig: DEFAULT_GATE_RETRY_CONFIG,
 } as const;
-
-/**
- * @deprecated METHODOLOGY_GATES was removed in favor of dynamic gate_type detection.
- *
- * Methodology gates are now identified by their `gate_type: "framework"` field
- * in the gate definition JSON files. Use `GateLoader.getMethodologyGateIds()`
- * or `GateLoader.isMethodologyGate(gateId)` for dynamic detection.
- *
- * This ensures new methodology gates added to the definitions directory are
- * automatically recognized without code changes.
- */

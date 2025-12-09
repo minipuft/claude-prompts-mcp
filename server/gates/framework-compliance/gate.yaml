@@ -3,14 +3,7 @@ name: Framework Methodology Compliance
 type: validation
 gate_type: framework
 description: Ensures responses follow the active framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER). This is a framework-level gate that applies universally across all categories when a framework is active.
-guidance: |
-  - CAGEERF: Include Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework considerations
-  - ReACT: Show clear Reasoning and Acting phases with systematic problem-solving
-  - 5W1H: Address Who, What, When, Where, Why, How in comprehensive analysis
-  - SCAMPER: Apply creative thinking techniques (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)
-  - Structure responses according to framework principles
-  - Include systematic thinking and methodology awareness
-  - Show iterative improvement and refinement processes
+guidanceFile: guidance.md
 
 pass_criteria:
   - type: content_check

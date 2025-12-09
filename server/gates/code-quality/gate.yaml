@@ -2,15 +2,7 @@ id: code-quality
 name: Code Quality Standards
 type: validation
 description: Ensures generated code follows best practices and quality standards
-guidance: |
-  **Code Quality Standards:**
-  - Include error handling and input validation
-  - Add inline comments for complex logic
-  - Follow consistent naming conventions
-  - Consider edge cases and boundary conditions
-  - Optimize for readability over cleverness
-  - Include basic documentation/docstrings
-  - Follow security best practices (input sanitization, avoid hardcoded secrets)
+guidanceFile: guidance.md
 
 pass_criteria:
   - type: content_check
