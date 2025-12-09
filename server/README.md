@@ -1,6 +1,6 @@
 # Claude Prompts MCP Server
 
-[![npm version](https://img.shields.io/npm/v/claude-prompts-server.svg)](https://www.npmjs.com/package/claude-prompts-server)
+[![npm version](https://img.shields.io/npm/v/claude-prompts.svg)](https://www.npmjs.com/package/claude-prompts)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](https://nodejs.org/)
 
@@ -9,7 +9,7 @@ MCP server for prompt management, thinking frameworks, and quality gates. Hot-re
 ## Quick Start
 
 ```bash
-npx -y claude-prompts-server
+npx -y claude-prompts
 ```
 
 Add to Claude Desktop (`~/.config/claude/claude_desktop_config.json`):
@@ -19,7 +19,7 @@ Add to Claude Desktop (`~/.config/claude/claude_desktop_config.json`):
   "mcpServers": {
     "claude-prompts": {
       "command": "npx",
-      "args": ["-y", "claude-prompts-server"]
+      "args": ["-y", "claude-prompts@latest"]
     }
   }
 }
@@ -113,13 +113,13 @@ system_control(action: "analytics")
 
 ## Syntax Reference
 
-| Symbol | Name | What It Does |
-|:------:|:-----|:-------------|
-| `>>` | **Prompt** | Execute template by ID |
-| `-->` | **Chain** | Pipe output to next step |
-| `@` | **Framework** | Inject methodology + auto-gates |
-| `::` | **Gate** | Add quality criteria |
-| `%` | **Modifier** | Control execution mode |
+| Symbol | Name          | What It Does                    |
+| :----: | :------------ | :------------------------------ |
+|  `>>`  | **Prompt**    | Execute template by ID          |
+| `-->`  | **Chain**     | Pipe output to next step        |
+|  `@`   | **Framework** | Inject methodology + auto-gates |
+|  `::`  | **Gate**      | Add quality criteria            |
+|  `%`   | **Modifier**  | Control execution mode          |
 
 **Modifiers**: `%clean` (skip all injection), `%lean` (gates only), `%guided` (force injection), `%judge` (auto-select resources)
 
@@ -127,28 +127,184 @@ system_control(action: "analytics")
 
 ## Configuration
 
-Point to your workspace with prompts and config:
+### Why Use Custom Prompts?
+
+The package includes example prompts, but the real power comes from **your own prompts**:
+
+- **Project-specific templates** — Code review prompts tailored to your stack
+- **Team workflows** — Standardized analysis chains your whole team uses
+- **Domain expertise** — Prompts encoding your specific domain knowledge
+- **Persistent iteration** — Claude improves your prompts via `prompt_manager`, and they persist
+
+---
+
+### Creating Your First Workspace
+
+**1. Initialize a workspace with starter prompts:**
 
 ```bash
-MCP_SERVER_ROOT=/path/to/workspace npx claude-prompts-server
+npx claude-prompts --init=~/my-prompts
 ```
 
-### CLI Options
+This creates `~/my-prompts/prompts/promptsConfig.json` with three starter prompts.
 
-| Option | Description |
-|--------|-------------|
-| `--transport=stdio\|sse` | Transport mode (default: stdio) |
-| `--verbose` | Detailed logging (overrides auto-quiet) |
-| `--quiet` | Minimal logging (auto-enabled for stdio) |
-| `--debug-startup` | Startup diagnostics |
+**2. Point Claude Desktop to your workspace:**
+
+Edit `~/.config/claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts@latest"],
+      "env": {
+        "MCP_WORKSPACE": "/home/YOUR_USERNAME/my-prompts"
+      }
+    }
+  }
+}
+```
+
+**3. Restart Claude Desktop and test:**
+
+```
+prompt_manager(action: "list")
+prompt_engine(command: ">>quick_review code:'function add(a,b) { return a + b }'")
+```
+
+**4. Let Claude iterate on your prompts:**
+
+```text
+User: "Make the quick_review prompt also check for performance issues"
+Claude: prompt_manager(action:"update", id:"quick_review", ...)
+```
+
+Claude updates your `promptsConfig.json` directly via `prompt_manager`. Changes apply instantly—no restart needed. This is the recommended workflow: **describe what you want, let Claude implement it.**
+
+---
+
+### Workspace Structure
+
+```
+my-workspace/
+├── prompts/
+│   └── promptsConfig.json    # Your custom prompts (required)
+├── config.json               # Server settings (optional)
+├── methodologies/            # Custom thinking frameworks (optional)
+└── gates/                    # Custom quality gates (optional)
+```
+
+**Minimum required:** Just `prompts/promptsConfig.json` with at least one prompt.
+
+---
+
+### Claude Desktop Configurations
+
+**Basic — Use package defaults (good for trying it out):**
+```json
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts@latest"]
+    }
+  }
+}
+```
+
+**Recommended — Your own workspace:**
+```json
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts@latest"],
+      "env": {
+        "MCP_WORKSPACE": "/home/user/my-mcp-workspace"
+      }
+    }
+  }
+}
+```
+
+**Advanced — Per-project prompts:**
+```json
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts@latest"],
+      "env": {
+        "MCP_PROMPTS_PATH": "/home/user/projects/my-app/prompts.json"
+      }
+    }
+  }
+}
+```
+
+---
 
 ### Environment Variables
 
-| Variable | Purpose |
-|----------|---------|
-| `MCP_SERVER_ROOT` | Server root (contains config.json, prompts/) |
-| `MCP_PROMPTS_CONFIG_PATH` | Direct path to prompts config |
-| `LOG_LEVEL` | debug, info, warn, error |
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `MCP_WORKSPACE` | Base directory containing prompts/, config.json | `/home/user/my-prompts` |
+| `MCP_PROMPTS_PATH` | Direct path to prompts config file | `/path/to/promptsConfig.json` |
+| `MCP_METHODOLOGIES_PATH` | Custom methodologies directory | `/path/to/methodologies` |
+| `MCP_GATES_PATH` | Custom gates directory | `/path/to/gates` |
+| `MCP_CONFIG_PATH` | Custom server config.json | `/path/to/config.json` |
+| `LOG_LEVEL` | Logging verbosity | `debug`, `info`, `warn`, `error` |
+
+**Resolution priority:** CLI flags > Environment variables > Workspace subdirectory > Package defaults
+
+---
+
+### CLI Flags
+
+```bash
+# Use a workspace
+npx claude-prompts --workspace=/path/to/workspace
+
+# Override specific paths
+npx claude-prompts --prompts=/path/to/prompts.json
+
+# Debugging
+npx claude-prompts --verbose
+npx claude-prompts --debug-startup
+
+# Validate setup without running
+npx claude-prompts --startup-test --verbose
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--workspace=/path` | Base directory for all user assets |
+| `--prompts=/path` | Direct path to prompts config |
+| `--methodologies=/path` | Custom methodologies directory |
+| `--gates=/path` | Custom gates directory |
+| `--config=/path` | Custom server config.json |
+| `--verbose` | Detailed logging |
+| `--startup-test` | Validate and exit (good for testing setup) |
+
+---
+
+### Troubleshooting
+
+**"No prompts found"**
+- Check `MCP_WORKSPACE` points to directory containing `prompts/promptsConfig.json`
+- Run `npx claude-prompts --startup-test --verbose` to see resolved paths
+
+**"Methodology not found"**
+- Custom methodologies need `methodology.yaml` in each subdirectory
+- Use `MCP_METHODOLOGIES_PATH` to point to your methodologies folder
+
+**"Permission denied"**
+- Ensure the user running Claude Desktop can read your workspace directory
+
+**Changes not appearing**
+- Use `prompt_manager(action: "reload")` after external file edits
+- Or restart Claude Desktop
 
 ---
 
@@ -159,8 +315,8 @@ Full guides in the [main repository](https://github.com/minipuft/claude-prompts-
 - [Architecture](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/architecture.md) — System design
 - [MCP Tooling](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/mcp-tooling-guide.md) — Complete tool reference
 - [Prompt Authoring](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/prompt-authoring-guide.md) — Template structure
-- [Chain Workflows](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/chain-workflows.md) — Multi-step patterns
-- [Gate System](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/enhanced-gate-system.md) — Quality validation
+- [Chains](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/chains.md) — Multi-step patterns
+- [Gates](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/gates.md) — Quality validation
 
 ---
 

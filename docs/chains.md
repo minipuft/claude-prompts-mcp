@@ -1,10 +1,37 @@
-# Chain Workflows Guide
+# Chains
 
-**Use this guide when** you want to orchestrate multi-step MCP workflows—analysis pipelines, code refactors, or any sequence that benefits from persistent session state.
+Break complex tasks into discrete steps. Each step's output becomes the next step's input.
 
-Chains model multi-step workflows executed by the LLM client while the server coordinates instructions, validation, and persistence. This guide describes how to design, modify, and troubleshoot chains using the runtime compiled to `server/dist/chain-session/**`, `server/dist/execution/operators/**`, and `server/dist/mcp-tools/prompt-engine/**`.
+```bash
+# Inline chain syntax
+prompt_engine(command:"research topic:'AI safety' --> analyze --> summarize")
 
-Before you begin: confirm your server setup via the [Operations & Deployment Guide](operations-guide.md), review command syntax in the [MCP Tooling Guide](mcp-tooling-guide.md), and keep the [Prompt & Template Authoring Guide](prompt-authoring-guide.md) handy for the templates each step references. If a chain assumes a specific framework, document it in the chain metadata and switch frameworks manually before execution—framework selection is not automatic and inline gates run regardless of methodology.
+# Resume mid-chain after completing a step
+prompt_engine(chain_id:"chain-research#2", user_response:"Analysis complete: ...")
+```
+
+---
+
+## Why
+
+**Problem**: Complex tasks need multiple reasoning steps, but a single prompt tries to do everything at once.
+
+**Solution**: Chains split work into discrete steps with persistent session state. The server tracks progress, validates dependencies, and routes output between steps.
+
+**Expect**: Each step executes independently. You see intermediate outputs and can intervene if something goes wrong mid-chain.
+
+---
+
+## What This Guide Covers
+
+| Topic | Section |
+|-------|---------|
+| Chain step schema | [Chain Step Schema](#chain-step-schema) |
+| Resuming and managing sessions | [Session Management](#session-management) |
+| Conditional execution and branching | [Conditional Execution](#conditional-execution) |
+| Troubleshooting stuck chains | [Troubleshooting](#troubleshooting) |
+
+**Related**: [MCP Tooling Guide](mcp-tools.md) for command syntax, [Gates](gates.md) for per-step validation.
 
 ## Core Concepts
 
@@ -94,12 +121,12 @@ Each step inside `chainSteps` follows this shape:
 
 How it ties together:
 1. Each `promptId` references Markdown templates authored via the [Prompt & Template Authoring Guide](prompt-authoring-guide.md).
-2. Inline gates are defined in the gate registry—see the [Enhanced Gate System](enhanced-gate-system.md) for precedence.
-3. The MCP client drives progression by calling `prompt_engine >>chain_id` repeatedly; session data lives in `runtime-state/chain-sessions.json`.
+2. Inline gates are defined in the gate registry—see the [Gates Guide](gates.md) for precedence.
+3. The MCP client drives progression by calling `prompt_engine` with `chain_id` + `user_response`; session data lives in `runtime-state/chain-sessions.json`.
 
 ## Lifecycle & Execution Flow
 
-1. **Initialization**: `prompt_engine` receives `>>chain_id ...` (or `chain://` URI). A session ID is created or resumed.
+1. **Initialization**: `prompt_engine` receives a chain command (e.g., `step1 --> step2 --> step3`). A session ID is created or resumed.
 2. **Planning**: Dependencies are sorted and `conditionalExecution` rules evaluated inside `execution/planning/`.
 3. **Instruction Emission**: The executor builds an instruction payload (step details, arguments, dependencies) and returns it to the MCP client.
 4. **LLM Execution**: The MCP client completes the step, posting results back via the same `prompt_engine` tool call.
@@ -177,7 +204,8 @@ Use this as the template for continuing execution. Fill in the latest response c
 
 1. **Inspect the chain**
    ```bash
-   prompt_manager(action:"list", filter:"id:notes_modular", verbose:true)
+   prompt_manager(action:"list", filter:"id:notes_modular")
+   prompt_manager(action:"inspect", id:"notes_modular")
    ```
 2. **Create or update steps**
    ```bash
@@ -189,7 +217,7 @@ Use this as the template for continuing execution. Fill in the latest response c
    ```
 4. **Test end-to-end**
    ```bash
-   prompt_engine(command:"chain://notes_modular?force_restart=true", llm_validation=true)
+   prompt_engine(command:"notes_modular", force_restart:true)
    ```
 
 Always add supporting prompts (`promptId` targets) before referencing them inside chain steps. Chains can only call registered prompt IDs.
@@ -198,21 +226,21 @@ Always add supporting prompts (`promptId` targets) before referencing them insid
 
 - Expressions execute inside a sandbox with helpers (`utils.*`, `steps`, `args`).
 - Use `conditionalExecution.type="skip_if_success"` to run remediation steps only when previous steps fail.
-- Debug by running the chain with `prompt_engine(..., debug=true)`; the executor returns the evaluated expression and result.
+- Debug by checking server logs (`server/logs/`) for planning traces and expression evaluation results.
 
 ## Session Management
 
-- Resume automatically by invoking the same chain without `force_restart`.
-- Override via `prompt_engine(command:"chain://chain_id/session-abc123")` to resume a specific session.
+- Resume automatically by providing `chain_id` and `user_response` without `force_restart`.
+- Start fresh with `force_restart:true` to clear cached session state.
 - Inspect persisted sessions by reading `runtime-state/chain-sessions.json` (for debugging only). Do not edit manually; use `force_restart` to clear state.
 
 ## Diagnostics
 
 | Issue | Resolution |
 | --- | --- |
-| Chain stuck on a step | Check dependencies and conditional expressions. Use `prompt_engine(..., debug=true)` to print planning info. |
-| Session fails to save | Ensure repo root is writable; STDIO transport writes runtime-state next to `server/`. Supervisor mode keeps file handles alive during restarts. |
-| Gate failures | Reference `docs/enhanced-gate-system.md` and update inline gate IDs or prompt content to satisfy the criteria. |
+| Chain stuck on a step | Check dependencies and conditional expressions. Review server logs for planning traces. |
+| Session fails to save | Ensure repo root is writable; STDIO transport writes runtime-state next to `server/`. |
+| Gate failures | See [Gates Guide](gates.md) and update inline gate IDs or prompt content. |
 | Chain edits ignored | Confirm `prompt_manager(action:"reload")` finished; check `server/logs/*` for HotReloadManager output. |
 
 ## Best Practices
@@ -223,4 +251,4 @@ Always add supporting prompts (`promptId` targets) before referencing them insid
 - Prefer relative paths and arguments for vault or filesystem references; avoid hard-coded user paths.
 - When adding asynchronous or long-running steps, extend `timeout` accordingly and reflect expectations in the prompt text.
 
-For prompt formatting or general authoring guidance, see `docs/prompt-authoring-guide.md`. For MCP tool syntax, see `docs/mcp-tooling-guide.md`.
+For prompt formatting or general authoring guidance, see `docs/prompt-authoring-guide.md`. For MCP tool syntax, see `docs/mcp-tools.md`.

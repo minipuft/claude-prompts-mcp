@@ -77,7 +77,7 @@ Only bypass hooks to unblock CI or for emergency hotfixes. Use `HUSKY=0 git comm
 1. Create a descriptive branch.
 2. Make focused, reversible changes; respect prompts/tool guardrails from `AGENTS.md`.
 3. Run tests/validations that match the area you touched (execution, gates, docs, etc.).
-4. Update relevant docs (`docs/operations-guide.md`, `docs/mcp-tooling-guide.md`, etc.).
+4. Update relevant docs (`docs/mcp-tools.md`, `docs/troubleshooting.md`, etc.).
 5. Stage changes and let hooks run.
 6. Open a pull request with context, validation proof, and links to related plans/issues.
 
@@ -87,8 +87,8 @@ Only bypass hooks to unblock CI or for emergency hotfixes. Use `HUSKY=0 git comm
 - **Runtime lifecycle**: Register new modules through the `Application` orchestrator (`server/src/runtime/`).
 - **Transports**: Keep STDIO and SSE behavior in parity; mention both when updating docs.
 - **Prompts**: Only modify via `prompt_manager`. See `docs/prompt-authoring-guide.md` for schema expectations.
-- **Chains**: Define/edit steps via `prompt_manager`. Reference `docs/chain-workflows.md` for schema details.
-- **Gates**: Add definitions under `server/src/gates/definitions/*.json` and update `docs/enhanced-gate-system.md` when behavior changes.
+- **Chains**: Define/edit steps via `prompt_manager`. Reference `docs/chains.md` for schema details.
+- **Gates**: Add definitions under `server/gates/{id}/gate.yaml` and update `docs/gates.md` when behavior changes.
 
 ### Pipeline State Management Patterns
 
@@ -97,7 +97,7 @@ When modifying pipeline stages (`server/src/execution/pipeline/stages/`), use th
 **For Gates**: Use `context.gates` accumulator instead of direct array manipulation:
 ```typescript
 // ✅ Correct: Use accumulator with source tracking
-context.gates.add('research-quality', 'category-auto');
+context.gates.add('research-quality', 'registry-auto');
 context.gates.addAll(methodologyGates, 'methodology');
 const finalGates = context.gates.getAll();
 
@@ -160,7 +160,7 @@ See `docs/architecture.md#pipeline-state-management` for detailed documentation.
 ## 11. Transport-Agnostic Development
 
 - Avoid STDIO-specific assumptions in prompts or code (e.g., `console.log` inside STDIO loops).
-- SSE endpoints should expose equivalent functionality to STDIO flows. When adding a transport-specific feature, update `docs/operations-guide.md` with testing instructions.
+- SSE endpoints should expose equivalent functionality to STDIO flows. When adding a transport-specific feature, update `docs/architecture.md` with testing instructions.
 
 ## 12. Getting Help
 

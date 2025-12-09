@@ -41,12 +41,12 @@ This handbook trains Claude Code (and any assistant) to behave like a senior dev
 | Topic                          | Doc                              |
 | ------------------------------ | -------------------------------- |
 | Architecture & runtime phases  | `docs/architecture.md`           |
-| Operations & transports        | `docs/operations-guide.md`       |
-| MCP tooling workflows          | `docs/mcp-tooling-guide.md`      |
+| MCP tooling workflows          | `docs/mcp-tools.md`              |
 | Prompt/template authoring      | `docs/prompt-authoring-guide.md` |
-| Chain schema & troubleshooting | `docs/chain-workflows.md`        |
-| Gate system                    | `docs/enhanced-gate-system.md`   |
-| Release highlights             | `docs/release-notes.md`          |
+| Chain schema & troubleshooting | `docs/chains.md`                 |
+| Gate system                    | `docs/gates.md`                  |
+| Troubleshooting                | `docs/troubleshooting.md`        |
+| Release highlights             | `CHANGELOG.md`                   |
 | Docs lifecycle overview        | `docs/README.md`                 |
 
 Always read the doc relevant to your task before editing files. Update those docs when behavior changes.
@@ -59,15 +59,17 @@ Always read the doc relevant to your task before editing files. Update those doc
 | ----------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Runtime orchestrator    | `runtime/application.js`, `runtime/startup.js` | Four-phase startup (foundation → data → modules → launch). Manages config, logging, text references, transports.                    |
 | Prompts & hot reload    | `prompts/*.js`, `text-references/*.js`         | PromptManager, Converter, FileObserver, HotReloadManager. Argument tracking, conversation management. Keeps registry + text references synchronized. |
-| Frameworks              | `frameworks/*.js`                              | Framework manager + state manager + methodology guides (CAGEERF/ReACT/5W1H/SCAMPER). State in `runtime-state/framework-state.json`. |
-| Execution               | `mcp-tools/prompt-engine/**`, `execution/**`   | Consolidated prompt engine, symbolic command parser, chain executor, planning/validation pipeline.                                  |
+| Frameworks              | `frameworks/*.js`                              | FrameworkManager + FrameworkStateManager + MethodologyRegistry. Methodologies in `server/methodologies/*/methodology.yaml`. State in `runtime-state/framework-state.json`. |
+| Execution               | `mcp-tools/prompt-engine/**`, `execution/**`   | Consolidated prompt engine, symbolic command parser, chain executor, planning/validation pipeline (stages 00-11).                   |
 | Pipeline state          | `execution/pipeline/state/**`                  | GateAccumulator, DiagnosticAccumulator, FrameworkDecisionAuthority. Centralized state for pipeline stages.                          |
+| Injection decisions     | `execution/pipeline/decisions/injection/**`    | InjectionDecisionService with 7-level hierarchy. Controls system-prompt, gate-guidance, style-guidance injection.                   |
 | Chain sessions          | `chain-session/manager.js`                     | Persists sessions in `runtime-state/chain-sessions.json`. Integrates with conversation/text managers.                               |
-| Gates                   | `gates/**`                                     | Gate loader, category extractor, guidance renderer, validation services. Utils in `gates/utils/` for formatting and guidance.      |
-| Metrics & performance   | `metrics/**`, `performance/**`                 | Analytics service (used by `system_control analytics`) and performance monitor.                                                     |
+| Gates                   | `gates/**`                                     | GateManager orchestrates GateRegistry, GateDefinitionLoader. Definitions in `server/gates/*/gate.yaml` + `guidance.md`. Hot-reloaded. |
+| Styles                  | `styles/**`                                    | StyleManager orchestrates StyleDefinitionLoader. Definitions in `server/styles/*/style.yaml` + `guidance.md`. Hot-reloaded.         |
+| Metrics & performance   | `metrics/**`, `performance/**`                 | MetricsCollector (used by `system_control analytics`) and performance monitor.                                                      |
 | Transports & supervisor | `server/**`, `supervisor/**`                   | STDIO/SSE transport manager, API endpoints, supervisor for zero-downtime restarts.                                                  |
 | Utilities               | `utils/**`                                     | Shared utilities (chain utils, error handling, resource tracking, service management).                                              |
-| Tooling metadata        | `tooling/action-metadata/**`                   | Tool action definitions, parameter schemas, and usage tracking for MCP tools.                                                       |
+| Tooling contracts       | `tooling/contracts/**`                         | Source of truth for MCP parameters. Run `npm run generate:contracts` to regenerate schemas.                                         |
 
 Use these paths to verify implementation details before documenting or reasoning about behavior.
 
@@ -102,19 +104,20 @@ Hooks in `.husky/` (repo root) run subsets automatically. Do not bypass without 
 
 The `prompt_engine` supports a symbolic command language for expressing complex execution flows without JSON:
 
-| Operator | Purpose | Example |
-|----------|---------|---------|
-| `-->` | Chain operator (sequential execution) | `>>step1 --> >>step2 --> >>step3` |
-| `@` | Framework operator (apply methodology) | `>>prompt @CAGEERF` |
-| `::` | Gate operator (inline quality criteria) | `>>prompt :: quality-check` |
-| `+` | Parallel operator (concurrent execution) | `>>task1 + >>task2 + >>task3` |
-| `?` | Conditional operator (branching logic) | `>>check ? >>if_true : >>if_false` |
+| Operator | Purpose | Example | Status |
+|----------|---------|---------|--------|
+| `-->` | Chain operator (sequential execution) | `>>step1 --> >>step2 --> >>step3` | ✅ Implemented |
+| `@` | Framework operator (apply methodology) | `>>prompt @CAGEERF` | ✅ Implemented |
+| `::` | Gate operator (inline quality criteria) | `>>prompt :: 'criteria text'` | ✅ Implemented |
+| `#` | Style operator (response formatting) | `#analytical >>report` | ✅ Implemented |
+| `+` | Parallel operator (concurrent execution) | `>>task1 + >>task2 + >>task3` | 🔮 Reserved |
+| `?` | Conditional operator (branching logic) | `>>p1 ? "cond" : >>p2` | 🔮 Reserved |
 
 **Key Features:**
 - Operators can be combined for complex workflows
-- Auto-detects execution mode based on operators used
-- Supports inline parameters and gate references
-- See `docs/mcp-tooling-guide.md` for detailed syntax and examples
+- `>>` prefix is optional (automatically normalized)
+- Supports inline parameters: `>>prompt key:'value'`
+- See `docs/mcp-tools.md` for detailed syntax and examples
 
 ---
 
@@ -142,9 +145,11 @@ Example session:
 ```bash
 prompt_manager(action:"create", id:"analysis_report", ...)
 prompt_manager(action:"reload")
-prompt_engine(command:">>analysis_report content:'Q4 metrics'", llm_validation=true)
+prompt_engine(command:">>analysis_report content:'Q4 metrics' --> ")
 system_control(action:"status")
 ```
+
+**Note**: `llm_validation` parameter is **blocked** (throws error). Use `gates` parameter for quality validation.
 
 ---
 
@@ -188,6 +193,8 @@ Contracts are now the **single source of truth** for:
 
 This eliminates schema drift - when you update a contract, running `npm run generate:contracts` automatically updates all downstream artifacts including the Zod schemas used in MCP registration.
 
+**⚠️ Warning**: Files in `_generated/` are auto-overwritten on every `npm run generate:contracts`. Never manually edit these files—all changes go to source contracts in `/tooling/contracts/*.json`.
+
 ---
 
 ## 8. Prompt & Chain Authoring Rules
@@ -211,25 +218,183 @@ This eliminates schema drift - when you update a contract, running `npm run gene
 
 ---
 
-## 10. Debugging & Diagnostics Tips
+## 10. Release & Changelog Workflow
 
-- **Startup issues**: Run `node dist/index.js --transport=stdio --verbose --debug-startup` to trace server-root detection, config loading, and prompt registration.
-- **Hot-reload failures**: Check `server/logs/mcp-server.log` for FileObserver/HotReloadManager warnings. Validate JSON/Markdown via MCP tools.
-- **Chain drift**: Inspect `runtime-state/chain-sessions.json` (read-only). Resume with `prompt_engine` session IDs or restart with `force_restart=true`.
-- **Gate noise**: Use `system_control analytics` to inspect gate pass/fail counts. Update gate definitions in `server/src/gates/definitions/*.json`, rebuild, and they'll be loaded from dist at runtime.
+This project uses [Keep a Changelog](https://keepachangelog.com/) format. The changelog lives at `CHANGELOG.md` in the repo root.
+
+### Development Cycle
+
+1. **During development**: Add entries to `[Unreleased]` section as you work
+   ```markdown
+   ## [Unreleased]
+
+   ### Added
+   - New feature X
+
+   ### Fixed
+   - Bug in Y
+   ```
+
+2. **When publishing to NPM**: Move `[Unreleased]` items to a new version section
+   ```markdown
+   ## [Unreleased]
+
+   ## [1.0.2] - 2025-12-07
+
+   ### Added
+   - New feature X
+
+   ### Fixed
+   - Bug in Y
+   ```
+
+3. **Create git tag**: After publishing, tag the release
+   ```bash
+   git tag v1.0.2
+   git push origin v1.0.2
+   ```
+
+### Entry Categories
+
+Use these standard categories (in order):
+
+| Category | When to Use |
+|----------|-------------|
+| `Added` | New features |
+| `Changed` | Changes in existing functionality |
+| `Deprecated` | Soon-to-be removed features |
+| `Removed` | Removed features |
+| `Fixed` | Bug fixes |
+| `Security` | Vulnerability fixes |
+
+### NPM Package
+
+- **Package name**: `claude-prompts`
+- **Registry**: https://www.npmjs.com/package/claude-prompts
+- **Publish from**: `server/` directory
+
+```bash
+cd server
+npm version patch  # or minor/major
+npm publish
+```
+
+### Comparison Links
+
+Keep the footer links updated for GitHub diff navigation:
+
+```markdown
+[Unreleased]: https://github.com/minipuft/claude-prompts-mcp/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/minipuft/claude-prompts-mcp/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/minipuft/claude-prompts-mcp/releases/tag/v1.0.0
+```
 
 ---
 
-## 11. Optimization Backlog (suggested improvements)
+## 11. Debugging & Diagnostics Tips
+
+- **Startup issues**: Run `node dist/index.js --transport=stdio --verbose --debug-startup` to trace server-root detection, config loading, and prompt registration.
+- **Hot-reload failures**: Check `server/logs/mcp-server.log` for FileObserver/HotReloadManager warnings. Validate JSON/Markdown via MCP tools.
+- **Chain drift**: Inspect `runtime-state/chain-sessions.json` (read-only). Resume with `chain_id` or restart with `force_restart=true`.
+- **Gate issues**: Use `system_control(action:"gates", operation:"list")` to inspect gates. Edit definitions in `server/gates/{id}/gate.yaml` (hot-reloaded automatically).
+
+---
+
+## 12. Optimization Backlog (suggested improvements)
 
 1. **Doc path validator** – Script to fail CI when docs reference non-existent `server/dist` files.
 2. **MCP smoke harness** – Automated CLI script to run baseline `prompt_manager/prompt_engine/system_control` commands during CI.
 3. **Chain session inspector** – Developer-only tool to list/trim chain sessions for debugging.
-4. **Gate definition schema check** – Validate `server/src/gates/definitions/*.json` against a schema before runtime load.
-5. **Doc lifecycle badges** – Auto-sync README/doc badges with `docs/README.md` statuses to reduce manual edits.
-6. **Auto-sync MCP schemas from contracts** – Generate Zod schemas from contracts to prevent schema drift (see §7.1).
+4. **Doc lifecycle badges** – Auto-sync README/doc badges with `docs/README.md` statuses to reduce manual edits.
 
 Open follow-up tasks in `plans/` when implementing any of the above.
+
+---
+
+## 13. Critical Architecture Patterns (Remember Across Sessions)
+
+### ExecutionContext is Ephemeral
+
+```
+Request 1:                    Request 2:
+┌─────────────────────┐      ┌─────────────────────┐
+│ new ExecutionContext│      │ new ExecutionContext│
+│ context.state = {}  │      │ context.state = {}  │ ← Fresh instance
+└─────────────────────┘      └─────────────────────┘
+         ↓                            ↓
+    [Pipeline runs]             [Pipeline runs]
+         ↓                            ↓
+    [GC'd after response]       [GC'd after response]
+```
+
+**Never** store state in ExecutionContext expecting it to persist between requests. Use `runtime-state/*.json` files for persistence.
+
+### Injection Control System
+
+Three injection types, each independently controlled:
+
+| Type | What It Adds | Default (Chains) |
+|------|--------------|------------------|
+| `system-prompt` | Framework methodology (CAGEERF, ReACT) | Every 2 steps |
+| `gate-guidance` | Quality validation criteria | Every step |
+| `style-guidance` | Response formatting | First step only |
+
+**7-Level Resolution Hierarchy** (first match wins):
+```
+Modifier → Runtime Override → Step Config → Chain Config → Category Config → Global Config → System Default
+```
+
+**Modifiers**: `%clean` (skip all), `%lean` (gates only), `%guided` (force all), `%framework` (methodology only)
+
+### Gate System Structure
+
+```
+server/gates/
+├── {gate-id}/
+│   ├── gate.yaml      # Configuration (id, name, activation, criteria)
+│   └── guidance.md    # Guidance content (inlined at load time)
+```
+
+Gates are hot-reloaded. No server restart needed after editing.
+
+### Methodology System Structure
+
+```
+server/methodologies/
+├── {methodology-id}/
+│   ├── methodology.yaml   # Configuration (name, description, enabled)
+│   ├── phases.yaml        # Phase definitions
+│   └── system-prompt.md   # Injected guidance content
+```
+
+### Pipeline Stages (00-11)
+
+| Stage | Purpose |
+|-------|---------|
+| 00 | Dependency injection, request normalization |
+| 01 | Command parsing (symbolic → structured) |
+| 02 | Inline gate extraction |
+| 03 | Prompt resolution |
+| 04 | Execution planning |
+| 05 | Gate enhancement |
+| 06 | Framework injection |
+| 06a | Judge selection (if `%judge`) |
+| 06b | Prompt guidance |
+| 07 | Session management |
+| 07b | Injection control |
+| 08 | Response capture |
+| 09 | Execution |
+| 10 | Formatting |
+| 11 | Call-to-action |
+
+### Blocked/Deprecated Parameters
+
+| Parameter | Status | Alternative |
+|-----------|--------|-------------|
+| `session_id` | **BLOCKED** | Use `chain_id` |
+| `execution_mode` | **REMOVED** | Auto-detected from command |
+
+---
 
 ### Key Development Guidelines
 
@@ -249,7 +414,7 @@ Open follow-up tasks in `plans/` when implementing any of the above.
 - **Naming**: Public facades = service names (`InjectionDecisionService`), internal helpers = function-descriptive (`HierarchyResolver`, `ConditionEvaluator`)
 - **Documentation**: ASCII architecture diagrams in barrel files showing facade→helper relationships
 - **Reorganize when**: >7 files with mixed concerns, newcomers confused about entry points, facade pattern emerging, tests importing implementation details
-- **Reference**: See `execution/injection/` for canonical example of `internal/` pattern
+- **Reference**: See `execution/pipeline/decisions/injection/` for canonical example of `internal/` pattern
 
 **Methodology Guide Development**: Implement `IMethodologyGuide` interface (all required methods: `guidePromptCreation`, `guideTemplateProcessing`, `guideExecutionSteps`, `enhanceWithMethodology`, `validateMethodologyCompliance`), framework-specific quality gates, template enhancement suggestions, methodology validation
 
@@ -257,7 +422,7 @@ Open follow-up tasks in `plans/` when implementing any of the above.
 
 **Pipeline State Management**: Use centralized state via `context.gates` (GateAccumulator), `context.frameworkAuthority` (FrameworkDecisionAuthority), and `context.diagnostics` (DiagnosticAccumulator). Never mutate gate arrays directly or resolve framework IDs manually in stages. See `docs/architecture.md#pipeline-state-management` for patterns.
 
-**Configuration**: Env vars for path overrides (`MCP_SERVER_ROOT`, `MCP_PROMPTS_CONFIG_PATH`), separate server/prompts config, modular imports, absolute paths for Claude Desktop
+**Configuration**: CLI flags and env vars for path overrides (`MCP_WORKSPACE`, `MCP_CONFIG_PATH`, `MCP_PROMPTS_PATH`, `MCP_METHODOLOGIES_PATH`, `MCP_GATES_PATH`), separate server/prompts config, modular imports, absolute paths for Claude Desktop
 
 **Error Handling**: Comprehensive boundaries (all orchestration levels), structured logging (verbose/quiet modes), meaningful error messages (diagnostics), rollback mechanisms (startup failures)
 
@@ -280,7 +445,7 @@ Open follow-up tasks in `plans/` when implementing any of the above.
 - `npm run test:watch` during active development for fast feedback
 - Add targeted tests when modifying core subsystems (see Architecture Cheat Sheet §4)
 
-**Environment Variables**: `MCP_SERVER_ROOT` (override server root, recommended for Claude Desktop), `MCP_PROMPTS_CONFIG_PATH` (direct path to prompts config, bypasses root detection)
+**Environment Variables**: `MCP_WORKSPACE` (base workspace directory for prompts, config, etc.), `MCP_PROMPTS_PATH` (direct path to prompts config), `MCP_CONFIG_PATH` (direct path to config.json), `MCP_STYLES_PATH` (direct path to styles directory). CLI flags take priority: `--workspace`, `--prompts`, `--config`, `--methodologies`, `--gates`, `--styles`
 
 **Lifecycle Management**: For refactoring and migration work, refer to `~/.claude/REFACTORING.md` domain rules for universal lifecycle state tagging, module boundary enforcement, and deletion criteria patterns.
 

@@ -6,5 +6,6 @@
 | `operation` | string | working | no | Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list). |
 | `persist` | boolean | working | no | When true, gate/framework enable/disable changes are also written to config.json. Applies to gate operations (enable/disable) and framework system enable/disable. Uses SafeConfigWriter; falls back to runtime-only if unavailable. |
 | `reason` | string | working | no | Audit reason for framework/gate toggles or admin actions. |
+| `search_query` | string | working | no | Filter gates by keyword (matches ID, name, or description). Use with gates:list action. |
 | `show_details` | boolean | working | no | Include detailed output (status/analytics/framework/gate reports). |
 | `topic` | string | working | no | Guide topic when requesting guidance. |

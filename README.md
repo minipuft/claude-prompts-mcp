@@ -4,74 +4,97 @@
 
 <img src="assets/logo.png" alt="Claude Prompts MCP Server Logo" width="200" />
 
-[![npm version](https://img.shields.io/npm/v/claude-prompts-server.svg?style=for-the-badge&logo=npm&color=0066cc)](https://www.npmjs.com/package/claude-prompts-server)
+[![npm version](https://img.shields.io/npm/v/claude-prompts.svg?style=for-the-badge&logo=npm&color=0066cc)](https://www.npmjs.com/package/claude-prompts)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge&logo=opensource)](https://opensource.org/licenses/MIT)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Compatible-ff6b35?style=for-the-badge&logo=anthropic)](https://modelcontextprotocol.io)
 
-**Hot-reloadable prompts, structured reasoning, and chain workflows for your AI assistant.**
+**Hot-reloadable prompts, structured reasoning, and chain workflows for your AI assistant. Built for Claude, works everywhere.**
 
-[Quick Start](#quick-start) • [Features](#features) • [Power Usage](#power-user-features) • [Docs](docs/README.md)
+[Quick Start](#quick-start) • [What You Get](#what-you-get) • [Syntax](#syntax-reference) • [Docs](#docs)
 
 </div>
 
-## Why This Exists
+## Why
 
-Stop copy-pasting prompts. This server turns your prompt library into a version-controlled, programmable engine.
+Stop copy-pasting prompts. This server turns your prompt library into a programmable engine.
 
-1.  **Version Control**: Manage prompts as Markdown code in git.
-2.  **Hot Reload**: Edit a template and use it instantly—no restarts.
-3.  **Structured Execution**: It's not just text. The server parses your command, injects methodology (Frameworks), enforces quality (Gates), and renders a final template for the LLM.
-4.  **Pluggable Analysis**: The `analysis` block in `server/config.json` is reserved for future third-party LLM-powered semantic analysis; it’s not active today.
+- **Version Control** — Prompts are Markdown files in git. Track changes, review diffs, branch experiments.
+- **Hot Reload** — Edit a template, run it immediately. No restarts.
+- **Structured Execution** — Not just text. The server parses operators, injects methodology, enforces quality gates, renders the final prompt.
 
 ## Quick Start
 
-Get running in 60 seconds.
+MCP clients launch the server automatically—you just configure and connect.
 
-### 1. Install & Build (Recommended for Prompt Management)
+### Option 1: NPM (Fastest)
 
-For easy access to prompt files (to view, edit, or create your own), we recommend cloning the repository:
-
-```bash
-git clone https://github.com/minipuft/claude-prompts-mcp.git
-cd claude-prompts-mcp/server
-npm install && npm run build
-# Verify it works (STDIO mode)
-npm run start:stdio
-```
-
-### Alternative: Install via NPM Package
-
-If you primarily want to use the server without modifying its bundled prompts, you can install it directly from npm:
-
-```bash
-# Run directly without global installation
-npx claude-prompts-server
-
-# Or install globally for easy access
-npm install -g claude-prompts-server
-claude-prompts-server --help
-```
-
-**Note on Prompt Management with NPM Package:** When installed via npm, prompt files are located within your `node_modules` directory. While the server supports loading external prompt configurations (via `MCP_SERVER_ROOT` or by placing `config.json` in your current working directory), direct editing of the bundled prompts is not recommended for npm installations.
-
-### 2. Connect to Claude Desktop
-
-Add this to your `claude_desktop_config.json`:
-
-**Using NPM (No Clone Required):**
+Add to your `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "claude-prompts": {
       "command": "npx",
-      "args": ["-y", "claude-prompts-server"]
+      "args": ["-y", "claude-prompts@latest"]
     }
   }
 }
 ```
 
-**Using Source Build (Windows):**
+Restart Claude Desktop. Test with: `prompt_manager(action: "list")`
+
+**That's it.** The client handles the rest.
+
+---
+
+### Option 1b: NPM with Custom Prompts
+
+Want your own prompts without cloning the repo? Create a workspace:
+
+```bash
+npx claude-prompts --init=~/my-prompts
+```
+
+This creates a workspace with starter prompts. Then point Claude Desktop to it:
+
+```json
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts@latest"],
+      "env": {
+        "MCP_WORKSPACE": "/home/YOUR_USERNAME/my-prompts"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop. Your prompts are now hot-reloadable—edit them directly, or ask Claude to update them:
+
+```text
+User: "Make the quick_review prompt also check for TypeScript errors"
+Claude: prompt_manager(action:"update", id:"quick_review", ...)  # Updates automatically
+```
+
+See the [server README](server/README.md#configuration) for all configuration options.
+
+---
+
+### Option 2: From Source (For Customization)
+
+Clone if you want to edit prompts, create custom frameworks, gates or contribute:
+
+```bash
+git clone https://github.com/minipuft/claude-prompts-mcp.git
+cd claude-prompts-mcp/server
+npm install && npm run build
+```
+
+Then configure Claude Desktop to use your local build:
+
+**Windows:**
 
 ```json
 {
@@ -84,7 +107,7 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
-**Using Source Build (Mac/Linux):**
+**Mac/Linux:**
 
 ```json
 {
@@ -97,7 +120,9 @@ Add this to your `claude_desktop_config.json`:
 }
 ```
 
-### 3. Try It
+---
+
+### Verify It Works
 
 Restart Claude Desktop. In the input bar, type:
 
@@ -105,9 +130,9 @@ Restart Claude Desktop. In the input bar, type:
 prompt_manager list
 ```
 
-## Core Concepts
+## How It Works
 
-Not a static file reader. It's a template **render pipeline** with a feedback loop:
+Not a static file reader. It's a **render pipeline** with a feedback loop:
 
 ```mermaid
 %%{init: {'theme': 'neutral', 'themeVariables': {'background':'#0b1224','primaryColor':'#e2e8f0','primaryBorderColor':'#1f2937','primaryTextColor':'#0f172a','lineColor':'#94a3b8','fontFamily':'"DM Sans","Segoe UI",sans-serif','fontSize':'14px','edgeLabelBackground':'#0b1224'}}}%%
@@ -166,11 +191,12 @@ flowchart TB
 - **Guidance Styles**: Instructional templates (`analytical`, `procedural`, `creative`, `reasoning`) in `server/prompts/guidance/` that shape response format.
 - **Gates**: Quality criteria (e.g., "Must cite sources") injected into prompts for Claude to self-check. Use `:: criteria` inline or define in `server/src/gates/definitions/`.
 
-> **Injection Control**: Override defaults with modifiers: `%guided` forces framework injection, `%clean` skips all guidance, `%lean` keeps only gate checks. Configure default frequency in `config.json` under `injection.system-prompt.frequency`. See the [MCP Tooling Guide](docs/mcp-tooling-guide.md#understanding-framework-injection-frequency) for details.
+> **Injection Control**: Override defaults with modifiers: `%guided` forces framework injection, `%clean` skips all guidance, `%lean` keeps only gate checks. Configure default frequency in `config.json` under `injection.system-prompt.frequency`. See the [MCP Tooling Guide](docs/mcp-tools.md#understanding-framework-injection-frequency) for details.
 
-## Features
+## What You Get
 
 ### 🔥 Hot Reload
+
 **Problem**: Prompt iteration is slow. Edit file → restart server → test → repeat. And you're the one debugging prompt issues.
 
 **Solution**: The server watches `server/prompts/*.md` for changes and reloads instantly. But the real value: **just ask Claude to fix it**. When a prompt underperforms, describe the issue—Claude diagnoses, updates the file via `prompt_manager`, and you test immediately. No manual editing, no restart.
@@ -187,6 +213,7 @@ Claude: prompt_engine(command:">>code_review")                   # Runs updated 
 ---
 
 ### 🔗 Chains
+
 **Problem**: Complex tasks need multiple reasoning steps, but a single prompt tries to do everything at once.
 
 **Solution**: Break work into discrete steps with `-->`. Each step's output becomes the next step's input. Add quality checks between steps.
@@ -200,6 +227,7 @@ analyze code --> identify issues --> propose fixes --> generate tests
 ---
 
 ### 🧠 Frameworks
+
 **Problem**: Claude's reasoning varies in structure. Sometimes it's thorough, sometimes it skips steps. You want consistent, methodical thinking.
 
 **Solution**: Frameworks inject a **thinking methodology** into the system prompt. The LLM follows a defined reasoning pattern (e.g., "first gather context, then analyze, then plan, then execute"). Each framework also auto-injects **quality gates** specific to its phases.
@@ -214,6 +242,7 @@ analyze code --> identify issues --> propose fixes --> generate tests
 ---
 
 ### 🛡️ Gates
+
 **Problem**: Claude returns plausible-sounding outputs, but you need specific criteria met—and you want Claude to verify this, not you.
 
 **Solution**: Gates inject **quality criteria** into the prompt. Claude self-evaluates against these criteria and reports PASS/FAIL with reasoning. Failed gates can trigger retries or block the chain.
@@ -227,6 +256,7 @@ Summarize this document :: 'must be under 200 words' :: 'must include key statis
 ---
 
 ### ✨ Judge Selection
+
 **Problem**: You have multiple frameworks, styles, and gates available—but you're not sure which combination fits your task.
 
 **Solution**: `%judge` presents Claude with your available resources. Claude analyzes your task and recommends (or auto-applies) the best combination.
@@ -242,55 +272,63 @@ Summarize this document :: 'must be under 200 words' :: 'must include key statis
 Gates inject quality criteria into prompts. Claude self-checks against them and reports PASS/FAIL.
 
 **Inline — quick natural language checks:**
+
 ```text
 Help me refactor this function :: 'keep it under 20 lines' :: 'add error handling'
 ```
 
 **With Framework — methodology + auto-gates:**
+
 ```text
 @CAGEERF Explain React hooks :: 'include practical examples'
 ```
+
 > The framework injects its phase-specific gates automatically. Your inline gate (`:: 'include practical examples'`) adds on top.
 
 **Chained — quality checks between steps:**
+
 ```text
 Research the topic :: 'use recent sources' --> Summarize findings :: 'be concise' --> Create action items
 ```
 
-| Gate Format | Syntax | Use Case |
-|-------------|--------|----------|
-| **Inline** | `:: 'criteria text'` | Quick checks, readable commands |
-| **Named** | `:: {name, description}` | Reusable gates with clear intent |
-| **Full** | `:: {name, criteria[], guidance}` | Complex validation, multiple criteria |
+| Gate Format | Syntax                            | Use Case                              |
+| ----------- | --------------------------------- | ------------------------------------- |
+| **Inline**  | `:: 'criteria text'`              | Quick checks, readable commands       |
+| **Named**   | `:: {name, description}`          | Reusable gates with clear intent      |
+| **Full**    | `:: {name, criteria[], guidance}` | Complex validation, multiple criteria |
 
 **Structured gates (programmatic):**
+
 ```javascript
 prompt_engine({
   command: ">>code_review",
-  gates: [{
-    name: "Security Check",
-    criteria: ["No hardcoded secrets", "Input validation on user data"],
-    guidance: "Flag vulnerabilities with severity ratings"
-  }]
+  gates: [
+    {
+      name: "Security Check",
+      criteria: ["No hardcoded secrets", "Input validation on user data"],
+      guidance: "Flag vulnerabilities with severity ratings",
+    },
+  ],
 });
 ```
 
-For the full gate schema, see [Enhanced Gate System](docs/enhanced-gate-system.md).
+For the full gate schema, see [Gates](docs/gates.md).
 
 ## Syntax Reference
 
 The `prompt_engine` uses symbolic operators to compose workflows:
 
-| Symbol | Name | What It Does |
-|:------:|:-----|:-------------|
-| `>>` | **Prompt** | Executes a template by ID (`>>code_review`) |
-| `-->` | **Chain** | Pipes output to next step (`step1 --> step2`) |
-| `@` | **Framework** | Injects methodology + auto-gates (`@CAGEERF`) |
-| `::` | **Gate** | Adds quality criteria (`:: 'cite sources'`) |
-| `%` | **Modifier** | Toggles execution mode (`%clean`, `%lean`, `%judge`) |
-| `#` | **Style** | Applies tone/persona preset (`#analytical`) |
+| Symbol | Name          | What It Does                                         |
+| :----: | :------------ | :--------------------------------------------------- |
+|  `>>`  | **Prompt**    | Executes a template by ID (`>>code_review`)          |
+| `-->`  | **Chain**     | Pipes output to next step (`step1 --> step2`)        |
+|  `@`   | **Framework** | Injects methodology + auto-gates (`@CAGEERF`)        |
+|  `::`  | **Gate**      | Adds quality criteria (`:: 'cite sources'`)          |
+|  `%`   | **Modifier**  | Toggles execution mode (`%clean`, `%lean`, `%judge`) |
+|  `#`   | **Style**     | Applies tone/persona preset (`#analytical`)          |
 
 **Modifiers explained:**
+
 - `%clean` — Skip all framework/gate injection (raw template only)
 - `%lean` — Skip framework guidance, keep gates only
 - `%guided` — Force framework injection even if disabled by frequency settings
@@ -378,12 +416,13 @@ By default, framework guidance injects on both step execution and gate reviews. 
 
 Applies to: `system-prompt`, `gate-guidance`, `style-guidance`
 
-## Documentation
+## Docs
 
-- **[Architecture](docs/architecture.md)**: Deep dive into the execution pipeline.
-- **[Tooling Guide](docs/mcp-tooling-guide.md)**: Full command reference.
-- **[Authoring Guide](docs/prompt-authoring-guide.md)**: Creating templates and gates.
-- **[Chains](docs/chain-workflows.md)**: Building multi-step flows.
+- [Architecture](docs/architecture.md) — Execution pipeline deep dive
+- [Tooling Guide](docs/mcp-tools.md) — Full command reference
+- [Authoring Guide](docs/prompt-authoring-guide.md) — Creating templates and gates
+- [Chains](docs/chains.md) — Multi-step workflows
+- [Gates](docs/gates.md) — Quality validation
 
 ## Contributing
 

@@ -30,12 +30,12 @@ This handbook trains Claude Code (and any assistant) to behave like a senior dev
 | Topic                          | Doc                              |
 | ------------------------------ | -------------------------------- |
 | Architecture & runtime phases  | `docs/architecture.md`           |
-| Operations & transports        | `docs/operations-guide.md`       |
-| MCP tooling workflows          | `docs/mcp-tooling-guide.md`      |
+| Troubleshooting                | `docs/troubleshooting.md`        |
+| MCP tooling workflows          | `docs/mcp-tools.md`      |
 | Prompt/template authoring      | `docs/prompt-authoring-guide.md` |
-| Chain schema & troubleshooting | `docs/chain-workflows.md`        |
-| Gate system                    | `docs/enhanced-gate-system.md`   |
-| Release highlights             | `docs/release-notes.md`          |
+| Chain schema & troubleshooting | `docs/chains.md`                 |
+| Gate system                    | `docs/gates.md`                  |
+| Release highlights             | `CHANGELOG.md`                   |
 | Docs lifecycle overview        | `docs/README.md`                 |
 
 Always read the doc relevant to your task before editing files. Update those docs when behavior changes.
@@ -102,7 +102,7 @@ The `prompt_engine` supports a symbolic command language for expressing complex 
 - Chain (`-->`), framework (`@`), and gate (`::`) operators are fully implemented
 - Parallel (`+`) and conditional (`?`) operators are reserved for future implementation
 - Supports inline parameters and gate references
-- See `docs/mcp-tooling-guide.md` for detailed syntax and examples
+- See `docs/mcp-tools.md` for detailed syntax and examples
 
 ---
 
@@ -148,7 +148,7 @@ When adding or modifying MCP tool parameters, follow this mandatory workflow to 
 
 2. **Regenerate Artifacts**: Run `npm run generate:contracts`
    - Generates TypeScript/JSON under `src/tooling/contracts/_generated/`
-   - Generates Markdown snippets injected into `docs/mcp-tooling-guide.md`
+   - Generates Markdown snippets injected into `docs/mcp-tools.md`
 
 3. **Sync Action Metadata**: Run `npm run sync:action-metadata`
    - Updates `src/tooling/action-metadata/*.json` files
@@ -247,7 +247,7 @@ Open follow-up tasks in `plans/` when implementing any of the above.
 
 **Framework Integration**: No direct coupling (integrate via framework manager), event-driven communication, semantic analysis coordination (informed by, not dependent on), gates adapt to framework (remain framework-agnostic in core)
 
-**Configuration**: Env vars for path overrides (`MCP_SERVER_ROOT`, `MCP_PROMPTS_CONFIG_PATH`), separate server/prompts config, modular imports, absolute paths for Claude Desktop
+**Configuration**: CLI flags and env vars for path overrides (`MCP_WORKSPACE`, `MCP_CONFIG_PATH`, `MCP_PROMPTS_PATH`, `MCP_METHODOLOGIES_PATH`, `MCP_GATES_PATH`), separate server/prompts config, modular imports, absolute paths for Claude Desktop
 
 **Error Handling**: Comprehensive boundaries (all orchestration levels), structured logging (verbose/quiet modes), meaningful error messages (diagnostics), rollback mechanisms (startup failures)
 
@@ -270,7 +270,7 @@ Open follow-up tasks in `plans/` when implementing any of the above.
 - `npm run test:watch` during active development for fast feedback
 - Add targeted tests when modifying core subsystems (see Architecture Cheat Sheet §4)
 
-**Environment Variables**: `MCP_SERVER_ROOT` (override server root, recommended for Claude Desktop), `MCP_PROMPTS_CONFIG_PATH` (direct path to prompts config, bypasses root detection)
+**Environment Variables**: `MCP_WORKSPACE` (base workspace directory for prompts, config, etc.), `MCP_PROMPTS_PATH` (direct path to prompts config), `MCP_CONFIG_PATH` (direct path to config.json). CLI flags take priority: `--workspace`, `--prompts`, `--config`, `--methodologies`, `--gates`
 
 **Lifecycle Management**: For refactoring and migration work, refer to `~/.claude/REFACTORING.md` domain rules for universal lifecycle state tagging, module boundary enforcement, and deletion criteria patterns.
 
