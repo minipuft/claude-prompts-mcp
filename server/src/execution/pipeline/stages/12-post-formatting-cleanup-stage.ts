@@ -80,7 +80,7 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
   }
 
   private getTrackedScopes(context: ExecutionContext): TrackedScope[] {
-    const scopesMetadata = context.metadata['temporaryGateScopes'];
+    const scopesMetadata = context.state.gates.temporaryGateScopes;
     if (!Array.isArray(scopesMetadata)) {
       return [];
     }

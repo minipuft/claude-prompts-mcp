@@ -29,7 +29,7 @@ export class OperatorValidationStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    if (context.metadata['sessionBlueprintRestored']) {
+    if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
       return;
     }

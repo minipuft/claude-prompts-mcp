@@ -66,10 +66,8 @@ export class ExecutionPlanningStage extends BasePipelineStage {
 
     context.executionPlan = plan;
 
-    // Store semantic analysis in metadata for downstream stages (e.g., Judge Selection)
-    if (plan.semanticAnalysis) {
-      context.metadata['semanticAnalysis'] = plan.semanticAnalysis;
-    }
+    // Note: semanticAnalysis is stored in context.executionPlan.semanticAnalysis
+    // No need to duplicate in metadata - downstream stages read from executionPlan directly
 
     // Record diagnostic for execution plan creation
     context.diagnostics.info(this.name, 'Execution plan created for single prompt', {
@@ -147,7 +145,6 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     const overrides = context.state.gates.requestedOverrides as Record<string, any> | undefined;
 
     return {
-      llmValidation: overrides?.llmValidation ?? context.mcpRequest.llm_validation,
       gates: overrides?.gates ?? context.mcpRequest.gates,
     };
   }

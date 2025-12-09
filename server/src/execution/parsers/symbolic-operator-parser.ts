@@ -1,4 +1,5 @@
 // @lifecycle canonical - Parses symbolic command expressions into operators.
+import { stripStyleOperators } from './parser-utils.js';
 import {
   type ChainOperator,
   type ChainStep,
@@ -14,7 +15,6 @@ import {
 } from './types/operator-types.js';
 import { Logger } from '../../logging/index.js';
 import { ValidationError } from '../../utils/index.js';
-import { stripStyleOperators } from './parser-utils.js';
 
 /**
  * Parser responsible for detecting and structuring symbolic command operators.
@@ -27,14 +27,23 @@ export class SymbolicCommandParser {
 
   private readonly OPERATOR_PATTERNS = {
     chain: /-->/g,
-    // Gate pattern: matches :: "value" OR :: value (quoted or unquoted)
-    // Uses /g flag to capture multiple gates in a single command
-    gate: /\s+(::|=)\s*(?:["']([^"']+)["']|([^\s"']+))/g,
+    /**
+     * Enhanced gate pattern supporting named inline gates.
+     * Formats supported:
+     * - `:: id:"criteria"` - Named gate with colon separator (Group 2=id, 3=text)
+     * - `:: "criteria"` - Anonymous inline criteria (Group 4=text)
+     * - `:: code-quality` - Canonical gate reference (Group 5=ref)
+     * - `= value` - Deprecated syntax (Group 1 detects =)
+     *
+     * Groups: 1=operator, 2=namedColonId, 3=namedColonText, 4=anonQuoted, 5=canonicalOrUnquoted
+     */
+    gate: /\s+(::|=)\s*(?:([a-z][a-z0-9_-]*):["']([^"']+)["']|["']([^"']+)["']|([^\s"']+))/gi,
     // Framework pattern: matches @FRAMEWORK at start OR after whitespace
     // Uses non-capturing group for word boundary at start or after space
     framework: /(?:^|\s)@([A-Za-z0-9_-]+)(?=\s|$)/,
-    // Style pattern: matches #style:<id> or #style(<id>) anywhere
-    style: /(?:^|\s)#style(?:[:=]|\()([A-Za-z0-9_-]+)\)?/i,
+    // Style pattern: matches #styleid (e.g., #analytical, #procedural)
+    // Must start with letter to avoid matching things like #123
+    style: /(?:^|\s)#([A-Za-z][A-Za-z0-9_-]*)(?=\s|$)/,
     parallel: /\s*\+\s*/g,
     conditional: /\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-9_-]+)/,
   } as const;
@@ -81,28 +90,58 @@ export class SymbolicCommandParser {
     if (gateMatches.length > 0) {
       operatorTypes.push('gate');
 
-      // Merge all gate criteria into a single GateOperator
-      const allCriteria: string[] = [];
+      // Track anonymous criteria separately for merging
+      const anonymousCriteria: string[] = [];
+
       for (const match of gateMatches) {
         const operatorToken = match[1];
-        // Group 2 = quoted value, Group 3 = unquoted value
-        const criteria = match[2] || match[3];
+        const namedColonId = match[2];
+        const namedColonText = match[3];
+        const anonQuoted = match[4];
+        const canonicalOrUnquoted = match[5];
 
         if (operatorToken === '=') {
           this.logger.warn('[SymbolicParser] Gate operator "=" is deprecated. Use "::" instead.');
         }
 
-        allCriteria.push(...this.parseCriteria(criteria));
+        // Named gate with colon syntax: :: id:"criteria"
+        if (namedColonId && namedColonText) {
+          const parsedCriteria = this.parseCriteria(namedColonText);
+          operators.push({
+            type: 'gate',
+            gateId: namedColonId,
+            criteria: namedColonText,
+            parsedCriteria,
+            scope: 'execution',
+            retryOnFailure: true,
+            maxRetries: 1,
+          });
+          continue;
+        }
+
+        // Anonymous quoted criteria: :: "criteria text"
+        if (anonQuoted) {
+          anonymousCriteria.push(...this.parseCriteria(anonQuoted));
+          continue;
+        }
+
+        // Canonical reference or unquoted criteria: :: code-quality
+        if (canonicalOrUnquoted) {
+          anonymousCriteria.push(...this.parseCriteria(canonicalOrUnquoted));
+        }
       }
 
-      operators.push({
-        type: 'gate',
-        criteria: allCriteria.join(', '),
-        parsedCriteria: allCriteria,
-        scope: 'execution',
-        retryOnFailure: true,
-        maxRetries: 1,
-      });
+      // Merge anonymous/canonical criteria into single GateOperator (preserves backward compat)
+      if (anonymousCriteria.length > 0) {
+        operators.push({
+          type: 'gate',
+          criteria: anonymousCriteria.join(', '),
+          parsedCriteria: anonymousCriteria,
+          scope: 'execution',
+          retryOnFailure: true,
+          maxRetries: 1,
+        });
+      }
     }
 
     const parallelMatches = command.match(this.OPERATOR_PATTERNS.parallel);
@@ -165,7 +204,9 @@ export class SymbolicCommandParser {
 
       const stepMatch = cleanedStep.match(/^(?:>>)?([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
       if (!stepMatch) {
-        this.logger.error(`[parseChainOperator] Failed to match step: "${stepStr}" (cleaned: "${cleanedStep}")`);
+        this.logger.error(
+          `[parseChainOperator] Failed to match step: "${stepStr}" (cleaned: "${cleanedStep}")`
+        );
         throw new ValidationError(`Invalid chain step format: ${stepStr}`);
       }
 
@@ -193,14 +234,14 @@ export class SymbolicCommandParser {
   /**
    * Clean operators from a chain step string before validation.
    * Strips %modifiers and @framework operators that may appear on individual steps.
-   * This allows syntax like: %judge/%guided @CAGEERF >>step1 --> %lean @ReACT >>step2
+   * This allows syntax like: %judge @CAGEERF >>step1 --> %lean @ReACT >>step2
    * Note: Operators apply at execution-level, not per-step. This method only
    * removes them for parsing validation purposes.
    */
   private cleanStepOperators(stepStr: string): string {
     let cleaned = stepStr.trim();
 
-    // Strip modifier prefix (e.g., %clean, %judge/%guided, %lean, %framework)
+    // Strip modifier prefix (e.g., %clean, %judge, %lean, %framework)
     cleaned = cleaned.replace(/^%\s*[a-zA-Z_-]+\s*/, '');
 
     // Strip framework operator prefix (e.g., @CAGEERF, @ReACT)

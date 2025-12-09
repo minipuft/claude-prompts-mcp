@@ -17,11 +17,19 @@ import type {
 // Re-export gate-related types for convenience
 export type { CustomCheck, GateScope, GateSpecification, TemporaryGateInput };
 
-export type ExecutionModifier = 'clean' | 'guided' | 'lean' | 'framework';
+/**
+ * Execution modifiers control pipeline behavior.
+ * - clean: Skip all injection (system-prompt, gate-guidance, style-guidance)
+ * - judge: Trigger judge selection phase for resource menu (%judge in command)
+ * - lean: Skip system-prompt and style-guidance, keep gate-guidance only
+ * - framework: Force framework methodology injection
+ */
+export type ExecutionModifier = 'clean' | 'judge' | 'lean' | 'framework';
 
 export interface ExecutionModifiers {
   clean?: boolean;
-  guided?: boolean;
+  /** Triggers judge selection phase. Use %judge in command. */
+  judge?: boolean;
   lean?: boolean;
   framework?: boolean;
 }
@@ -57,24 +65,24 @@ export interface ExecutionPlan {
 export type ExecutionType = 'single' | 'chain' | 'auto';
 
 /**
- * Enhanced chain step definition
+ * Chain step definition
+ *
+ * Defines a single step in a chain workflow with support for:
+ * - inputMapping: Map previous step results to semantic variable names
+ * - outputMapping: Name this step's output for downstream reference
+ * - retries: Per-step retry count for resilient chains
  */
 export interface ChainStep {
-  // Core chain step properties
-  promptId: string; // ID of the prompt to execute in this step
-  stepName: string; // Name of this step
-  executionType?: 'single' | 'chain';
-  legacyExecutionType?: 'prompt' | 'template';
-  inputMapping?: Record<string, string>; // Maps chain inputs to this step's inputs
-  outputMapping?: Record<string, string>; // Maps this step's outputs to chain outputs
-  qualityGates?: GateDefinition[]; // Optional custom quality gates for this step
-
-  // Advanced chain capabilities (optional - preserves backward compatibility)
-  dependencies?: string[]; // Step IDs that must complete before this step (enables dependency resolution)
-  parallelGroup?: string; // Group ID for parallel execution (steps with same group run concurrently)
-  timeout?: number; // Step-specific timeout in milliseconds
-  retries?: number; // Number of retries for this step
-  stepType?: 'prompt' | 'tool' | 'gate' | 'condition'; // Extended step types beyond prompt execution
+  /** ID of the prompt to execute in this step */
+  promptId: string;
+  /** Name/identifier of this step */
+  stepName: string;
+  /** Map step results to semantic names (e.g., { "research": "step1_result" }) */
+  inputMapping?: Record<string, string>;
+  /** Name this step's output for downstream steps */
+  outputMapping?: Record<string, string>;
+  /** Number of retry attempts on failure (default: 0) */
+  retries?: number;
 }
 
 /**
@@ -91,9 +99,6 @@ export interface ConvertedPrompt {
   arguments: PromptArgument[];
   // Chain-related properties (isChain removed - now derived from chainSteps presence)
   chainSteps?: ChainStep[];
-  tools?: boolean; // Whether this prompt should use available tools
-  /** Defines behavior when prompt is invoked without its defined arguments */
-  onEmptyInvocation?: 'execute_if_possible' | 'return_template';
   // Gate validation properties
   gates?: GateDefinition[];
   /** Whether to register this prompt with MCP. Resolved from prompt/category/global defaults. */
@@ -257,26 +262,6 @@ export interface PerformanceMetrics {
   };
 }
 
-/**
- * Enhanced Chain Execution Options
- * Extends basic chain execution with optional advanced capabilities
- * All advanced options are optional to preserve backward compatibility
- */
-export interface EnhancedChainExecutionOptions {
-  // Existing basic options (maintained for backward compatibility)
-  allowStepFailures?: boolean; // Allow individual steps to fail without stopping chain
-  trackStepResults?: boolean; // Track results from each step for use in subsequent steps
-  useConversationContext?: boolean; // Include conversation history in step execution
-  processTemplates?: boolean; // Process Nunjucks templates in step prompts
-
-  // NEW: Advanced execution options (all optional - default to false/simple behavior)
-  enableDependencyResolution?: boolean; // Enable step dependency resolution and topological ordering
-  enableParallelExecution?: boolean; // Enable parallel execution of steps in same parallel group
-  executionTimeout?: number; // Chain-wide timeout in milliseconds (overrides individual step timeouts)
-  advancedGateValidation?: boolean; // Use comprehensive gate validation
-  stepConfirmation?: boolean; // Require confirmation before executing each step
-  continueOnFailure?: boolean; // Continue chain execution even if non-critical steps fail
-}
 
 /**
  * Chain execution state
@@ -294,7 +279,6 @@ export interface ChainExecutionState {
  */
 export interface TemplateContext {
   specialContext?: Record<string, string>;
-  toolsEnabled?: boolean;
 }
 
 /**

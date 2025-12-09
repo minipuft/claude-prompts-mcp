@@ -1,14 +1,15 @@
 // @lifecycle canonical - Implements two-phase client-driven judge selection for resource enhancement.
+import { getDefaultRuntimeLoader } from '../../../frameworks/methodology/index.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { ConfigManager } from '../../../config/index.js';
-import type { GateLoader } from '../../../gates/core/gate-loader.js';
+import type { MethodologyDefinition } from '../../../frameworks/methodology/methodology-definition-types.js';
+import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { LightweightGateDefinition } from '../../../gates/types.js';
 import type { Logger } from '../../../logging/index.js';
+import type { StyleManager } from '../../../styles/index.js';
 import type { ConvertedPrompt, ToolResponse } from '../../../types/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
-import type { MethodologyDefinition } from '../../../frameworks/methodology/methodology-definition-types.js';
-import { getDefaultRuntimeLoader } from '../../../frameworks/methodology/index.js';
 
 /**
  * Provider function to get all converted prompts.
@@ -46,7 +47,7 @@ interface OperatorContext {
  *
  * This stage implements a two-phase resource selection system:
  *
- * ** - Judge Phase** (triggered by `%judge` / `%guided`):
+ * ** - Judge Phase** (triggered by `%judge`):
  * - Collects all available resources (styles, frameworks, gates)
  * - Returns a judge prompt with resource menu for Claude to analyze
  * - Pipeline terminates early with the judge response
@@ -65,10 +66,11 @@ export class JudgeSelectionStage extends BasePipelineStage {
 
   constructor(
     private readonly promptsProvider: PromptsProvider | null,
-    private readonly gateLoader: GateLoader | null,
+    private readonly gateLoader: GateDefinitionProvider | null,
     private readonly configManager: ConfigManager | null,
     logger: Logger,
-    private readonly frameworksProvider?: FrameworkResourceProvider | null
+    private readonly frameworksProvider?: FrameworkResourceProvider | null,
+    private readonly styleManager?: StyleManager | null
   ) {
     super(logger);
   }
@@ -97,8 +99,8 @@ export class JudgeSelectionStage extends BasePipelineStage {
 
     // === JUDGE PHASE ===
     // Check if judge system is enabled in config
-    const judgeConfig = this.configManager?.getJudgeConfig();
-    if (judgeConfig && !judgeConfig.enabled) {
+    const isJudgeEnabled = this.configManager?.isJudgeEnabled() ?? true;
+    if (!isJudgeEnabled) {
       this.logExit({ skipped: 'Judge system disabled in config' });
       return;
     }
@@ -166,11 +168,11 @@ export class JudgeSelectionStage extends BasePipelineStage {
    * Determine if this request should trigger the judge phase.
    *
    * Judge phase is triggered when:
-   * - `%judge` (or legacy `%guided`) modifier is used
+   * - `%judge` modifier is used
    */
   private shouldTriggerJudgePhase(context: ExecutionContext): boolean {
     const modifiers = context.getExecutionModifiers();
-    return modifiers?.guided === true;
+    return modifiers?.judge === true;
   }
 
   /**
@@ -215,7 +217,7 @@ export class JudgeSelectionStage extends BasePipelineStage {
   private getCleanCommandForDisplay(context: ExecutionContext): string {
     const command = context.mcpRequest?.command ?? '';
 
-    // Strip % modifiers at start (%judge/%guided, %clean, %lean, etc.)
+    // Strip % modifiers at start (%judge, %clean, %lean, etc.)
     let clean = command.replace(/^%[a-z]+\s+/i, '');
 
     // Strip framework operator (@FRAMEWORK anywhere in the command)
@@ -343,13 +345,13 @@ export class JudgeSelectionStage extends BasePipelineStage {
       `prompt_engine({`,
       `  command: "${escapedCommand}${
         operatorContext.hasFrameworkOperator ? '' : ' @<CAGEERF|ReACT|5W1H|SCAMPER>'
-      } :: <gate_id or criteria> #style(<analytical|procedural|creative|reasoning>)"`,
+      } :: <gate_id or criteria> #<analytical|procedural|creative|reasoning>"`,
       `})`,
       '```',
       '',
       '**Notes:**',
-      '- Use `@Framework` to set methodology, `::` for gates, and `#style(<id>)` for response style.',
-      '- Keep `%judge` (alias %guided) only for the judge phase; follow-up calls should rely on inline operators.',
+      '- Use `@Framework` to set methodology, `::` for gates, and `#id` for response style (e.g., `#analytical`).',
+      '- Use `%judge` only for the judge phase; follow-up calls should rely on inline operators.',
     ];
 
     const responseText = responseLines.filter((line) => line !== undefined).join('\n');
@@ -389,13 +391,8 @@ export class JudgeSelectionStage extends BasePipelineStage {
    * Collect all available resources from styles, frameworks, and gates.
    */
   private async collectAllResources(): Promise<ResourceMenu> {
-    const allPrompts = this.promptsProvider?.() ?? [];
-
-    // Filter guidance prompts by category
-    const guidancePrompts = allPrompts.filter((p) => p.category === 'guidance');
-
-    // Styles come from guidance Markdown (hot-reloadable)
-    const styles = guidancePrompts.filter((p) => !this.isFrameworkPromptId(p.id));
+    // Styles come from StyleManager (YAML definitions) - single source of truth
+    const styles = await this.loadAllStyles();
 
     // Frameworks come from methodology definitions (single source of truth)
     const frameworks = await this.collectFrameworkResources();
@@ -404,6 +401,36 @@ export class JudgeSelectionStage extends BasePipelineStage {
     const gates = await this.loadAllGates();
 
     return { styles, frameworks, gates };
+  }
+
+  /**
+   * Load all styles from StyleManager, converting to ConvertedPrompt format for consistency.
+   */
+  private async loadAllStyles(): Promise<ConvertedPrompt[]> {
+    if (!this.styleManager) {
+      // Fallback to prompt-based styles if no StyleManager
+      const allPrompts = this.promptsProvider?.() ?? [];
+      const guidancePrompts = allPrompts.filter((p) => p.category === 'guidance');
+      return guidancePrompts.filter((p) => !this.isFrameworkPromptId(p.id));
+    }
+
+    try {
+      const styleIds = this.styleManager.listStyles();
+      return styleIds.map((id) => {
+        const style = this.styleManager!.getStyle(id);
+        return {
+          id,
+          name: style?.name ?? id,
+          description: style?.description ?? '',
+          category: 'style',
+          userMessageTemplate: '',
+          arguments: [],
+        };
+      });
+    } catch (error) {
+      this.logger.warn('[JudgeSelectionStage] Failed to load styles from StyleManager:', error);
+      return [];
+    }
   }
 
   /**
@@ -431,9 +458,12 @@ export class JudgeSelectionStage extends BasePipelineStage {
           return provided;
         }
       } catch (error) {
-        this.logger.warn('[JudgeSelectionStage] Framework provider failed, falling back to loader', {
-          error,
-        });
+        this.logger.warn(
+          '[JudgeSelectionStage] Framework provider failed, falling back to loader',
+          {
+            error,
+          }
+        );
       }
     }
 

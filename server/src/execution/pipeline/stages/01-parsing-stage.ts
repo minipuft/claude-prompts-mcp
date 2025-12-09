@@ -11,11 +11,11 @@ import type {
   ArgumentParser,
   ExecutionContext as ArgumentExecutionContext,
 } from '../../parsers/argument-parser.js';
+import type { UnifiedCommandParser } from '../../parsers/command-parser.js';
 import type {
   GateOperator,
   SymbolicCommandParseResult,
 } from '../../parsers/types/operator-types.js';
-import type { UnifiedCommandParser } from '../../parsers/command-parser.js';
 import type { ExecutionPlan } from '../../types.js';
 
 type ParsedArgumentsResult = {
@@ -121,6 +121,9 @@ export class CommandParsingStage extends BasePipelineStage {
           args: argResult.processedArgs, // Use parsed arguments from command
           variableName: step.stepName ?? `step_${index + 1}`,
           convertedPrompt,
+          inputMapping: step.inputMapping,
+          outputMapping: step.outputMapping,
+          retries: step.retries,
         })) as ChainStepPrompt[];
       }
 
@@ -188,16 +191,20 @@ export class CommandParsingStage extends BasePipelineStage {
       fallbackArgs?.processedArgs
     );
 
+    // Collect both anonymous and named gates
+    const { anonymousCriteria, namedGates } = this.collectGateCriteria(parseResult);
+
     const inlineCriteria =
       resolvedArgs.inlineCriteria.length > 0
         ? resolvedArgs.inlineCriteria
-        : this.collectGlobalInlineCriteria(parseResult);
+        : anonymousCriteria;
 
     return {
       ...parseResult,
       convertedPrompt,
       promptArgs: resolvedArgs.processedArgs,
       inlineGateCriteria: inlineCriteria,
+      namedInlineGates: namedGates.length > 0 ? namedGates : undefined,
       styleSelection: parseResult.executionPlan.styleSelection,
       steps: undefined,
     };
@@ -211,8 +218,9 @@ export class CommandParsingStage extends BasePipelineStage {
 
     const argumentInputs = parseResult.executionPlan.argumentInputs ?? [];
 
-    // Collect global gate criteria from gate operator (::)
-    const globalGateCriteria = this.collectGlobalInlineCriteria(parseResult);
+    // Collect both anonymous and named gate criteria from gate operator (::)
+    const { anonymousCriteria: globalGateCriteria, namedGates } =
+      this.collectGateCriteria(parseResult);
 
     for (const [index, step] of parseResult.executionPlan.steps.entries()) {
       if (!step.promptId) {
@@ -258,6 +266,7 @@ export class CommandParsingStage extends BasePipelineStage {
       convertedPrompt: undefined,
       steps: stepPrompts,
       promptArgs: commandArgs,
+      namedInlineGates: namedGates.length > 0 ? namedGates : undefined,
       styleSelection: parseResult.executionPlan.styleSelection,
     };
   }
@@ -356,23 +365,54 @@ export class CommandParsingStage extends BasePipelineStage {
     }
   }
 
-  private collectGlobalInlineCriteria(parseResult: SymbolicCommandParseResult): string[] {
+  /**
+   * Separates gate operators into named and anonymous criteria.
+   * Named gates (with gateId) are returned separately for explicit ID registration.
+   * Anonymous criteria are merged together for backward-compatible temp gate creation.
+   */
+  private collectGateCriteria(parseResult: SymbolicCommandParseResult): {
+    anonymousCriteria: string[];
+    namedGates: Array<{ gateId: string; criteria: string[] }>;
+  } {
     const operators = parseResult.operators?.operators;
     if (!Array.isArray(operators)) {
-      return [];
+      return { anonymousCriteria: [], namedGates: [] };
     }
 
-    const criteria = operators
-      .filter((op): op is GateOperator => op.type === 'gate')
-      .flatMap((gate) =>
-        Array.isArray(gate.parsedCriteria) && gate.parsedCriteria.length
-          ? gate.parsedCriteria
-          : [gate.criteria]
-      )
-      .map((item) => item?.trim())
-      .filter((item): item is string => Boolean(item));
+    const anonymousCriteria: string[] = [];
+    const namedGates: Array<{ gateId: string; criteria: string[] }> = [];
 
-    return Array.from(new Set(criteria));
+    for (const op of operators) {
+      if (op.type !== 'gate') continue;
+      const gate = op as GateOperator;
+
+      const criteria = Array.isArray(gate.parsedCriteria) && gate.parsedCriteria.length
+        ? gate.parsedCriteria
+        : [gate.criteria];
+
+      const cleanedCriteria = criteria
+        .map((item) => item?.trim())
+        .filter((item): item is string => Boolean(item));
+
+      if (gate.gateId) {
+        // Named gate - keep ID association
+        namedGates.push({ gateId: gate.gateId, criteria: cleanedCriteria });
+      } else {
+        // Anonymous gate - merge with others
+        anonymousCriteria.push(...cleanedCriteria);
+      }
+    }
+
+    return {
+      anonymousCriteria: Array.from(new Set(anonymousCriteria)),
+      namedGates,
+    };
+  }
+
+  /** @deprecated Use collectGateCriteria for named gate support */
+  private collectGlobalInlineCriteria(parseResult: SymbolicCommandParseResult): string[] {
+    const { anonymousCriteria } = this.collectGateCriteria(parseResult);
+    return anonymousCriteria;
   }
 
   private restoreFromBlueprint(context: ExecutionContext): void {
@@ -387,7 +427,7 @@ export class CommandParsingStage extends BasePipelineStage {
       const requestedChainId = context.mcpRequest.chain_id;
       if (requestedChainId) {
         const session = this.chainSessionManager.getSessionByChainIdentifier(requestedChainId, {
-          includeLegacy: true,
+          includeDormant: true,
         });
         if (session) {
           sessionId = session.sessionId;

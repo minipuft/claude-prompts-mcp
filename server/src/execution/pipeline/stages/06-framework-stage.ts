@@ -2,11 +2,11 @@
 import { BasePipelineStage } from '../stage.js';
 
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
-import type { GateLoader } from '../../../gates/core/gate-loader.js';
 import type {
   FrameworkExecutionContext,
   FrameworkMethodology,
 } from '../../../frameworks/types/index.js';
+import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
@@ -33,7 +33,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     private readonly frameworkManager: FrameworkManager,
     private readonly frameworkEnabled: FrameworkEnabledProvider | null,
     logger: Logger,
-    private readonly gateLoader?: GateLoader
+    private readonly gateLoader?: GateDefinitionProvider
   ) {
     super(logger);
   }
@@ -48,7 +48,9 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     }
 
     if (!this.gateLoader) {
-      this.logger.debug('[FrameworkResolutionStage] No GateLoader available for methodology gate detection');
+      this.logger.debug(
+        '[FrameworkResolutionStage] No GateLoader available for methodology gate detection'
+      );
       return new Set();
     }
 
@@ -68,7 +70,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     // Initialize methodology gate IDs cache for dynamic checks
     await this.getMethodologyGateIds();
 
-    if (context.metadata['sessionBlueprintRestored']) {
+    if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
       return;
     }
@@ -96,7 +98,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       // Allow @ operator override even when framework system is globally disabled
       const hasFrameworkOverride = Boolean(
         context.parsedCommand?.executionPlan?.frameworkOverride ||
-          context.state.framework.clientOverride
+        context.state.framework.clientOverride
       );
 
       if (!this.frameworkEnabled?.() && !hasFrameworkOverride) {
@@ -146,7 +148,10 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       : false;
 
     const requiresFramework = Boolean(
-      plan.requiresFramework || chainRequiresFramework || singleRequiresFramework || decision.shouldApply
+      plan.requiresFramework ||
+      chainRequiresFramework ||
+      singleRequiresFramework ||
+      decision.shouldApply
     );
 
     if (!requiresFramework) {

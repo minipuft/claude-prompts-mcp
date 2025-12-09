@@ -12,14 +12,8 @@
  * - Command validation and sanitization
  */
 
-import {
-  stripStyleOperators,
-  normalizeSymbolicPrefixes,
-} from './parser-utils.js';
-import {
-  SymbolicCommandParser,
-  createSymbolicCommandParser,
-} from './symbolic-operator-parser.js';
+import { stripStyleOperators, normalizeSymbolicPrefixes } from './parser-utils.js';
+import { SymbolicCommandParser, createSymbolicCommandParser } from './symbolic-operator-parser.js';
 import { Logger } from '../../logging/index.js';
 import { ValidationError, PromptError, safeJsonParse } from '../../utils/index.js';
 
@@ -37,10 +31,12 @@ export type CommandParseResult = CommandParseResultBase<
   SymbolicExecutionPlan
 >;
 
+/**
+ * Maps user-facing modifier names to canonical ExecutionModifier values.
+ */
 const VALID_MODIFIERS: Record<string, ExecutionModifier> = {
   clean: 'clean',
-  guided: 'guided',
-  judge: 'guided', // alias for guided judge menu
+  judge: 'judge',
   lean: 'lean',
   framework: 'framework',
 };
@@ -97,7 +93,7 @@ export class UnifiedCommandParser {
 
     if (!modifier) {
       throw new ValidationError(
-        `Unknown execution modifier "%${modifierKey}". Supported modifiers: %clean, %judge (alias %guided), %lean, %framework.`
+        `Unknown execution modifier "%${modifierKey}". Supported modifiers: %clean, %judge, %lean, %framework.`
       );
     }
 
@@ -117,7 +113,7 @@ export class UnifiedCommandParser {
     }
     return {
       clean: modifier === 'clean',
-      guided: modifier === 'guided',
+      judge: modifier === 'judge',
       lean: modifier === 'lean',
       framework: modifier === 'framework',
     };
@@ -249,10 +245,10 @@ export class UnifiedCommandParser {
         // - @FRAMEWORK at start OR after whitespace
         // - + (parallel)
         // - ? (conditional)
-        // - #style:<id> or #style(<id>) selector
+        // - #id style selector (e.g., #analytical, #procedural)
         return (
           /-->|(::|=)\s*\S|\s@[A-Za-z0-9_-]+|^@[A-Za-z0-9_-]+|\+|\?/.test(command) ||
-          /#style(?:[:=(])/i.test(command)
+          /(?:^|\s)#[A-Za-z][A-Za-z0-9_-]*(?=\s|$|>>)/.test(command)
         );
       },
       parse: (command: string): SymbolicCommandParseResult | null => {
@@ -263,8 +259,15 @@ export class UnifiedCommandParser {
 
         // Strip framework operator from anywhere in command
         let cleanCommand = command.replace(/(?:^|\s)@[A-Za-z0-9_-]+\s*/g, ' ');
-        // Strip ALL gate operators (quoted or unquoted) - uses /g flag to handle multiple :: operators
-        cleanCommand = cleanCommand.replace(/\s+(::|=)\s*(?:["']([^"']+)["']|([^\s"']+))/g, '');
+        // Strip ALL gate operators - handles both named and anonymous formats:
+        // - Named colon: :: id:"criteria" or :: id:'criteria'
+        // - Named paren: :: id(criteria)
+        // - Anonymous quoted: :: "criteria" or :: 'criteria'
+        // - Anonymous unquoted: :: criteria (canonical refs or plain text)
+        cleanCommand = cleanCommand.replace(
+          /\s+(::|=)\s*(?:[a-z][a-z0-9_-]*:["'][^"']+["']|[a-z][a-z0-9_-]*\([^)]+\)|["'][^"']+["']|[^\s"']+)/gi,
+          ''
+        );
         // Strip style selector to avoid polluting base args
         cleanCommand = stripStyleOperators(cleanCommand);
 
@@ -442,6 +445,8 @@ export class UnifiedCommandParser {
       'health',
       'analytics',
       'metrics',
+      'gates',
+      'gate',
     ];
     return builtinCommands.includes(promptId.toLowerCase());
   }
@@ -549,7 +554,8 @@ export class UnifiedCommandParser {
           message +=
             '   Execution modifiers (%) and framework operators (@) apply to the ENTIRE chain.\n';
           message += '   Place them at the start, not on individual steps.\n';
-          message += '   ✅ %judge @CAGEERF >>step1 --> >>step2   ❌ >>step1 --> %lean @ReACT >>step2\n\n';
+          message +=
+            '   ✅ %judge @CAGEERF >>step1 --> >>step2   ❌ >>step1 --> %lean @ReACT >>step2\n\n';
         }
       }
     } else if (command.startsWith('{')) {

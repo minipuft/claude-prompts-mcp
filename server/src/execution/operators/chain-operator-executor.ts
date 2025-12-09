@@ -5,10 +5,6 @@ import { Logger } from '../../logging/index.js';
 import { safeJsonParse } from '../../utils/index.js';
 import { processTemplate } from '../../utils/jsonUtils.js';
 
-import type { PromptGuidanceService } from '../../frameworks/prompt-guidance/index.js';
-import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
-import type { ConvertedPrompt } from '../../types/index.js';
-import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 import type {
   ChainStepExecutionInput,
   ChainStepPrompt,
@@ -16,6 +12,10 @@ import type {
   GateReviewInput,
   NormalStepInput,
 } from './types.js';
+import type { PromptGuidanceService } from '../../frameworks/prompt-guidance/index.js';
+import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
+import type { ConvertedPrompt } from '../../types/index.js';
+import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 
 /**
  * Type guard for gate review input
@@ -113,7 +113,7 @@ export class ChainOperatorExecutor {
       : fallbackIndex;
     const targetStep =
       reviewStep ??
-      (lastStepIndex >= 0 ? stepPrompts[lastStepIndex] : stepPrompts[fallbackIndex] ?? undefined);
+      (lastStepIndex >= 0 ? stepPrompts[lastStepIndex] : (stepPrompts[fallbackIndex] ?? undefined));
 
     // Build concise PASS/FAIL warning at top
     const gateWarning = [
@@ -268,14 +268,21 @@ export class ChainOperatorExecutor {
         this.logger.debug('[SymbolicChain] Added framework guidance to gate review step');
       }
     } else if (!frameworkInjectionEnabled) {
-      this.logger.debug('[SymbolicChain] Framework injection suppressed for gate review (target config)');
+      this.logger.debug(
+        '[SymbolicChain] Framework injection suppressed for gate review (target config)'
+      );
     }
 
     // Assemble in proper order: Framework → Warning → Content → Gates → Metadata
     const reviewPrompt = this.buildManualReviewBody(pendingGateReview) ?? originalContent;
 
-    const contentParts = [frameworkGuidance, gateWarning, reviewPrompt, gateGuidance, supplementalSections.join('\n\n')]
-      .filter((part) => part && part.trim().length > 0);
+    const contentParts = [
+      frameworkGuidance,
+      gateWarning,
+      reviewPrompt,
+      gateGuidance,
+      supplementalSections.join('\n\n'),
+    ].filter((part) => part && part.trim().length > 0);
 
     const reviewContent = contentParts.join('\n\n');
 
@@ -337,6 +344,19 @@ export class ChainOperatorExecutor {
       ...chainContext,
       ...stepArgs,
     };
+
+    // Apply inputMapping to create semantic variable names
+    // e.g., { "research": "step1_result" } allows template to use {{research}} instead of {{step1_result}}
+    if (step.inputMapping) {
+      for (const [semanticName, sourceVar] of Object.entries(step.inputMapping)) {
+        if (templateContext[sourceVar] !== undefined) {
+          templateContext[semanticName] = templateContext[sourceVar];
+          this.logger.debug(
+            `[SymbolicChain] Applied inputMapping: ${semanticName} <- ${sourceVar}`
+          );
+        }
+      }
+    }
 
     const totalSteps = stepPrompts.length;
     const previousStepIndex = currentStepIndex - 1;
@@ -436,9 +456,12 @@ export class ChainOperatorExecutor {
     ) {
       lines.push(step.metadata['gateInstructions']);
     } else if (!gateGuidanceEnabled && step.metadata?.['gateInstructions']) {
-      this.logger.debug('[SymbolicChain] Skipped gate instructions (gate-guidance injection disabled)', {
-        step: step.stepNumber,
-      });
+      this.logger.debug(
+        '[SymbolicChain] Skipped gate instructions (gate-guidance injection disabled)',
+        {
+          step: step.stepNumber,
+        }
+      );
     }
 
     const callToAction = !isFinalStep

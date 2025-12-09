@@ -122,13 +122,14 @@ export const DEFAULT_CONFIG_BY_TYPE: Readonly<Record<InjectionType, InjectionTyp
 export const MODIFIER_EFFECTS: Readonly<Record<string, readonly InjectionType[]>> = {
   clean: ['system-prompt', 'gate-guidance', 'style-guidance'],
   lean: ['system-prompt', 'style-guidance'],
-  guided: [], // Actually enables/forces injection
+  judge: [], // Enables/forces injection (triggers judge selection phase)
 } as const;
 
 /**
  * Modifiers that force injection regardless of config.
+ * %judge triggers judge selection phase.
  */
-export const FORCE_INJECT_MODIFIERS: readonly string[] = ['guided'] as const;
+export const FORCE_INJECT_MODIFIERS: readonly string[] = ['judge'] as const;
 
 /**
  * Modifiers that disable injection.
@@ -148,7 +149,7 @@ export const INJECTION_TYPE_DESCRIPTIONS: Readonly<Record<InjectionType, string>
  * Human-readable descriptions for decision sources.
  */
 export const DECISION_SOURCE_DESCRIPTIONS: Readonly<Record<InjectionDecisionSource, string>> = {
-  modifier: 'Command modifier (%clean, %lean, %guided)',
+  modifier: 'Command modifier (%clean, %lean, %judge)',
   'runtime-override': 'Runtime session override via system_control',
   'step-config': 'Step-specific configuration',
   'chain-config': 'Chain-level configuration',

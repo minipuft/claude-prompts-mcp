@@ -5,7 +5,7 @@ import {
 } from '../../mcp-tools/prompt-engine/utils/category-extractor.js';
 
 import type { FrameworkManager } from '../../frameworks/framework-manager.js';
-import type { GateLoader } from '../../gates/core/gate-loader.js';
+import type { GateDefinitionProvider } from '../../gates/core/gate-loader.js';
 import type { Logger } from '../../logging/index.js';
 import type { ContentAnalyzer } from '../../semantic/configurable-semantic-analyzer.js';
 import type { ContentAnalysisResult } from '../../semantic/types.js';
@@ -56,7 +56,7 @@ type StrategyResolution = {
  */
 export class ExecutionPlanner {
   private frameworkManager?: FrameworkManager;
-  private gateLoader?: GateLoader;
+  private gateLoader?: GateDefinitionProvider;
   private readonly categoryExtractor: CategoryExtractor;
   /** Cached methodology gate IDs loaded from GateLoader */
   private methodologyGateIdsCache: Set<string> | null = null;
@@ -72,7 +72,7 @@ export class ExecutionPlanner {
     this.frameworkManager = manager;
   }
 
-  setGateLoader(loader?: GateLoader): void {
+  setGateLoader(loader?: GateDefinitionProvider): void {
     this.gateLoader = loader;
     // Invalidate cache when loader changes
     this.methodologyGateIdsCache = null;
@@ -88,7 +88,9 @@ export class ExecutionPlanner {
     }
 
     if (!this.gateLoader) {
-      this.logger.debug('[ExecutionPlanner] No GateLoader available for methodology gate detection');
+      this.logger.debug(
+        '[ExecutionPlanner] No GateLoader available for methodology gate detection'
+      );
       return new Set();
     }
 
@@ -313,7 +315,7 @@ export class ExecutionPlanner {
   private buildModifiers(modifier: ExecutionModifier): ExecutionModifiers {
     return {
       clean: modifier === 'clean',
-      guided: modifier === 'guided',
+      judge: modifier === 'judge',
       lean: modifier === 'lean',
       framework: modifier === 'framework',
     };
@@ -322,7 +324,7 @@ export class ExecutionPlanner {
   private stripModifierFlags(modifiers: ExecutionModifiers): ExecutionModifiers {
     return {
       clean: modifiers.clean === true,
-      guided: modifiers.guided === true,
+      judge: modifiers.judge === true,
       lean: modifiers.lean === true,
       framework: modifiers.framework === true,
     };
@@ -335,7 +337,7 @@ export class ExecutionPlanner {
 
     const enabled: ExecutionModifier[] = [];
     if (modifiers.clean) enabled.push('clean');
-    if (modifiers.guided) enabled.push('guided');
+    if (modifiers.judge) enabled.push('judge');
     if (modifiers.lean) enabled.push('lean');
     if (modifiers.framework) enabled.push('framework');
 
@@ -376,7 +378,7 @@ export class ExecutionPlanner {
       return { gates, requiresFramework: false };
     }
 
-    if (normalized.guided) {
+    if (normalized.judge) {
       return { gates, requiresFramework: true };
     }
 

@@ -17,5 +17,5 @@
 //
 // These are implementation details. Import from '../index.js' for public API.
 
-export { HierarchyResolver, DecisionResolver } from './hierarchy-resolver.js';
+export { HierarchyResolver } from './hierarchy-resolver.js';
 export { ConditionEvaluator, type ConditionEvaluationResult } from './condition-evaluator.js';

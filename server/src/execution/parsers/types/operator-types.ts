@@ -20,10 +20,19 @@ export interface ChainStep {
 
 /**
  * Quality gate operator for inline validation
+ *
+ * When gateId is present, creates a named inline gate.
+ * When absent, behavior depends on criteria:
+ * - Quoted string: anonymous temp gate with criteria
+ * - Unquoted identifier: canonical gate lookup (fallback to criteria if not found)
  */
 export interface GateOperator {
   type: 'gate';
+  /** Optional explicit gate ID for named inline gates (e.g., `:: my-check:"criteria"`) */
+  gateId?: string;
+  /** The criteria text or canonical gate reference */
   criteria: string;
+  /** Parsed criteria as array (split on commas) */
   parsedCriteria: string[];
   scope: 'execution' | 'step' | 'chain';
   retryOnFailure: boolean;
@@ -92,8 +101,10 @@ export interface OperatorDetectionResult {
   parseComplexity: 'simple' | 'moderate' | 'complex';
 }
 
-export interface SymbolicCommandParseResult
-  extends CommandParseResultBase<OperatorDetectionResult, SymbolicExecutionPlan> {
+export interface SymbolicCommandParseResult extends CommandParseResultBase<
+  OperatorDetectionResult,
+  SymbolicExecutionPlan
+> {
   format: 'symbolic';
   operators: OperatorDetectionResult;
   executionPlan: SymbolicExecutionPlan;

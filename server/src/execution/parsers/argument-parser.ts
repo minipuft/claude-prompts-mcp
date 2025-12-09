@@ -9,12 +9,18 @@
  * - Type-aware argument coercion based on prompt definitions
  * - Smart default resolution (replaces hardcoded {{previous_message}})
  * - Multi-source context aggregation
- * - Argument validation cascading
+ * - Argument validation cascading (minLength, maxLength, pattern)
  * - Context-aware placeholder resolution
+ * - Fail-fast validation with actionable retry hints
  */
 
+import { ArgumentSchemaValidator } from './argument-schema.js';
 import { Logger } from '../../logging/index.js';
-import { safeJsonParse, validateJsonArguments } from '../../utils/index.js';
+import {
+  safeJsonParse,
+  validateJsonArguments,
+  ArgumentValidationError,
+} from '../../utils/index.js';
 
 import type { ConvertedPrompt, PromptArgument } from '../../types/index.js';
 import type { ValidationResult, ValidationError, ValidationWarning } from '../types.js';
@@ -67,6 +73,7 @@ interface ProcessingStrategy {
 export class ArgumentParser {
   private logger: Logger;
   private strategies: ProcessingStrategy[];
+  private schemaValidator: ArgumentSchemaValidator;
 
   // Processing statistics
   private stats = {
@@ -81,8 +88,9 @@ export class ArgumentParser {
   constructor(logger: Logger) {
     this.logger = logger;
     this.strategies = this.initializeStrategies();
+    this.schemaValidator = new ArgumentSchemaValidator();
     this.logger.debug(
-      `ArgumentParser initialized with ${this.strategies.length} processing strategies`
+      `ArgumentParser initialized with ${this.strategies.length} processing strategies and schema validation`
     );
   }
 
@@ -521,22 +529,31 @@ export class ArgumentParser {
   }
 
   /**
-   * Enhanced contextual default resolver with more intelligence
+   * Get default from argument's defaultValue definition
+   * This is the highest priority source for defaults - author-defined values
+   */
+  private getFromArgumentDefault(arg: PromptArgument): { value: any; source: string } {
+    if (arg.defaultValue !== undefined) {
+      return { value: arg.defaultValue, source: 'argument_default' };
+    }
+    return { value: null, source: 'none' };
+  }
+
+  /**
+   * Enhanced contextual default resolver
+   * Simplified priority chain - no magic inference
    */
   private resolveEnhancedContextualDefault(
     arg: PromptArgument,
     context: ExecutionContext,
-    userContent: string,
-    promptData: PromptDefinition
+    _userContent: string,
+    _promptData: PromptDefinition
   ): { value: any; source: string } {
-    // Enhanced strategies with content-aware defaults
+    // Clean priority order - no guessing
     const strategies = [
-      () => this.getFromPromptDefaults(arg, context.promptDefaults),
-      () => this.getFromEnvironment(arg, context.environmentVars),
-      () => this.getFromConversationHistory(arg, context.conversationHistory),
-      () => this.getFromSystemContext(arg, context.systemContext),
-      () => this.generateContentAwareDefault(arg, userContent, promptData),
-      () => this.generateSmartDefault(arg),
+      () => this.getFromArgumentDefault(arg), // Author-defined defaultValue
+      () => this.getFromPromptDefaults(arg, context.promptDefaults), // Runtime overrides
+      () => this.getFromEnvironment(arg, context.environmentVars), // Environment config
     ];
 
     for (const strategy of strategies) {
@@ -546,114 +563,23 @@ export class ArgumentParser {
       }
     }
 
-    // Enhanced fallback with more semantic defaults
-    return this.generateSemanticFallback(arg);
-  }
-
-  /**
-   * Generate content-aware defaults based on user input and prompt context
-   */
-  private generateContentAwareDefault(
-    arg: PromptArgument,
-    userContent: string,
-    promptData: PromptDefinition
-  ): { value: any; source: string } {
-    const argName = arg.name.toLowerCase();
-    const userLower = userContent.toLowerCase();
-
-    // Generate defaults based on argument semantics and user content
-    if (argName.includes('level') || argName.includes('depth')) {
-      if (userLower.includes('simple') || userLower.includes('basic')) {
-        return { value: 'beginner', source: 'content_inference' };
-      } else if (userLower.includes('complex') || userLower.includes('advanced')) {
-        return { value: 'expert', source: 'content_inference' };
-      }
-      return { value: 'intermediate', source: 'content_inference' };
-    }
-
-    if (argName.includes('format') || argName.includes('type')) {
-      if (userLower.includes('json') || userContent.includes('{')) {
-        return { value: 'json', source: 'content_inference' };
-      } else if (userLower.includes('list') || userLower.includes('bullet')) {
-        return { value: 'list', source: 'content_inference' };
-      }
-      return { value: 'text', source: 'content_inference' };
-    }
-
-    if (argName.includes('style') || argName.includes('tone')) {
-      if (userLower.includes('formal') || userLower.includes('professional')) {
-        return { value: 'formal', source: 'content_inference' };
-      } else if (userLower.includes('casual') || userLower.includes('friendly')) {
-        return { value: 'casual', source: 'content_inference' };
-      }
-      return { value: 'neutral', source: 'content_inference' };
-    }
-
-    if (argName.includes('length') || argName.includes('size')) {
-      const wordCount = userContent.split(/\s+/).length;
-      if (wordCount > 100) {
-        return { value: 'detailed', source: 'content_inference' };
-      } else if (wordCount < 20) {
-        return { value: 'brief', source: 'content_inference' };
-      }
-      return { value: 'moderate', source: 'content_inference' };
-    }
-
-    return { value: null, source: 'no_content_match' };
-  }
-
-  /**
-   * Generate semantic fallback defaults
-   */
-  private generateSemanticFallback(arg: PromptArgument): { value: any; source: string } {
-    const argName = arg.name.toLowerCase();
-
-    // Common semantic defaults
-    const semanticDefaults: Record<string, string> = {
-      level: 'intermediate',
-      depth: 'moderate',
-      format: 'text',
-      style: 'neutral',
-      tone: 'professional',
-      length: 'moderate',
-      type: 'analysis',
-      mode: 'standard',
-      approach: 'systematic',
-      focus: 'comprehensive',
-    };
-
-    for (const [keyword, defaultValue] of Object.entries(semanticDefaults)) {
-      if (argName.includes(keyword)) {
-        return { value: defaultValue, source: 'semantic_fallback' };
-      }
-    }
-
-    // Description-based fallback
-    if (arg.description) {
-      const desc = arg.description.toLowerCase();
-      if (desc.includes('required') || desc.includes('must')) {
-        return { value: '[Please specify]', source: 'required_placeholder' };
-      }
-    }
-
-    // Final fallback
+    // No value found - return empty, let template conditionals handle it
     return { value: '', source: 'empty_fallback' };
   }
 
   /**
-   * Resolve contextual default for an argument (legacy method)
+   * Resolve contextual default for an argument
+   * Simplified priority chain - no magic inference
    */
   private resolveContextualDefault(
     arg: PromptArgument,
     context: ExecutionContext
   ): { value: any; source: string } {
-    // Priority order for context resolution
+    // Clean priority order - no guessing
     const strategies = [
-      () => this.getFromPromptDefaults(arg, context.promptDefaults),
-      () => this.getFromEnvironment(arg, context.environmentVars),
-      () => this.getFromConversationHistory(arg, context.conversationHistory),
-      () => this.getFromSystemContext(arg, context.systemContext),
-      () => this.generateSmartDefault(arg),
+      () => this.getFromArgumentDefault(arg), // Author-defined defaultValue
+      () => this.getFromPromptDefaults(arg, context.promptDefaults), // Runtime overrides
+      () => this.getFromEnvironment(arg, context.environmentVars), // Environment config
     ];
 
     for (const strategy of strategies) {
@@ -663,7 +589,7 @@ export class ArgumentParser {
       }
     }
 
-    // Final fallback
+    // No value found - return empty, let template conditionals handle it
     return { value: '', source: 'empty_fallback' };
   }
 
@@ -694,70 +620,6 @@ export class ArgumentParser {
       }
     }
     return { value: null, source: 'none' };
-  }
-
-  /**
-   * Get default from conversation history
-   */
-  private getFromConversationHistory(
-    arg: PromptArgument,
-    conversationHistory?: any[]
-  ): { value: any; source: string } {
-    if (conversationHistory && conversationHistory.length > 0) {
-      const lastMessage = conversationHistory[conversationHistory.length - 1];
-      if (lastMessage?.content) {
-        // For content-like arguments, use last message
-        const contentArgs = ['content', 'text', 'input', 'message', 'query'];
-        if (contentArgs.some((keyword) => arg.name.toLowerCase().includes(keyword))) {
-          return { value: lastMessage.content, source: 'conversation_history' };
-        }
-      }
-    }
-    return { value: null, source: 'none' };
-  }
-
-  /**
-   * Get default from system context
-   */
-  private getFromSystemContext(
-    arg: PromptArgument,
-    systemContext?: Record<string, string | number | boolean | null>
-  ): { value: any; source: string } {
-    if (systemContext?.[arg.name] !== undefined) {
-      return { value: systemContext[arg.name], source: 'system_context' };
-    }
-    return { value: null, source: 'none' };
-  }
-
-  /**
-   * Generate smart default based on argument characteristics
-   */
-  private generateSmartDefault(arg: PromptArgument): { value: any; source: string } {
-    // Generate contextual placeholders based on argument name and description
-    const name = arg.name.toLowerCase();
-    const description = (arg.description || '').toLowerCase();
-
-    if (name.includes('content') || name.includes('text') || name.includes('input')) {
-      return { value: '[Content will be provided]', source: 'smart_placeholder' };
-    }
-
-    if (name.includes('file') || name.includes('path')) {
-      return { value: '[File path will be specified]', source: 'smart_placeholder' };
-    }
-
-    if (name.includes('count') || name.includes('number')) {
-      return { value: '1', source: 'smart_default' };
-    }
-
-    if (name.includes('format') || name.includes('style')) {
-      return { value: 'default', source: 'smart_default' };
-    }
-
-    // Generic placeholder
-    return {
-      value: `[${arg.name} to be provided]`,
-      source: 'generic_placeholder',
-    };
   }
 
   /**
@@ -911,14 +773,59 @@ export class ArgumentParser {
 
   /**
    * Enrich processing result with additional validation and context
+   *
+   * Runs schema validation if prompt has validation rules (minLength, maxLength, pattern).
+   * Throws ArgumentValidationError with retry hints on validation failure.
    */
   private async enrichResult(
     result: ArgumentParsingResult,
     promptData: PromptDefinition,
     context: ExecutionContext
   ): Promise<ArgumentParsingResult> {
-    // Add any additional enrichment logic here
-    // For now, just return the result as-is
+    // Check if prompt has validation rules that need enforcement
+    const hasValidationRules = promptData.arguments.some(
+      (arg) =>
+        arg.validation &&
+        (arg.validation.minLength !== undefined ||
+          arg.validation.maxLength !== undefined ||
+          arg.validation.pattern !== undefined)
+    );
+
+    if (hasValidationRules) {
+      // Build a ConvertedPrompt-compatible object for the validator
+      const promptForValidation = {
+        id: promptData.id,
+        arguments: promptData.arguments,
+        name: promptData.id,
+        description: '',
+        category: '',
+        filePath: '',
+        fileContent: '',
+        systemMessage: '',
+        userMessageTemplate: '',
+      };
+
+      const validation = this.schemaValidator.validate(promptForValidation, result.processedArgs);
+
+      if (!validation.success) {
+        this.logger.debug(
+          `Schema validation failed for prompt "${promptData.id}": ${validation.issues.length} issues`
+        );
+
+        throw new ArgumentValidationError(validation.issues, {
+          id: promptData.id,
+          arguments: promptData.arguments.map((arg) => ({
+            name: arg.name,
+            type: arg.type,
+            required: arg.required,
+            validation: arg.validation,
+          })),
+        });
+      }
+
+      this.logger.debug(`Schema validation passed for prompt "${promptData.id}"`);
+    }
+
     return result;
   }
 

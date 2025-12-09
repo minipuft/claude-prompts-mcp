@@ -8,6 +8,7 @@ import type {
 import type { FrameworkMethodology } from '../../../frameworks/types/index.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ContentAnalysisResult } from '../../../semantic/types.js';
+import type { StyleManager } from '../../../styles/index.js';
 import type { ConvertedPrompt } from '../../../types/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
 import type { FrameworkDecisionInput } from '../decisions/index.js';
@@ -31,6 +32,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
 
   constructor(
     private readonly promptGuidanceService: PromptGuidanceService | null,
+    private readonly styleManager: StyleManager | null,
     logger: Logger
   ) {
     super(logger);
@@ -95,14 +97,17 @@ export class PromptGuidanceStage extends BasePipelineStage {
   }
 
   /**
-   * Check if client has provided resource selections from judge phase.
+   * Check if client has provided resource selections from judge phase or operator-based style.
    * JudgeSelectionStage sets: clientFrameworkOverride, clientSelectedGates, clientSelectedStyle
+   * Symbolic operators set: context.parsedCommand.executionPlan.styleSelection
    */
   private hasClientSelections(context: ExecutionContext): boolean {
+    const operatorStyle = context.parsedCommand?.executionPlan?.styleSelection;
     return Boolean(
       context.state.framework.clientOverride ||
-        context.state.framework.clientSelectedGates ||
-        context.state.framework.clientSelectedStyle
+      context.state.framework.clientSelectedGates ||
+      context.state.framework.clientSelectedStyle ||
+      operatorStyle
     );
   }
 
@@ -110,13 +115,19 @@ export class PromptGuidanceStage extends BasePipelineStage {
    * Apply client selections to the execution context.
    * JudgeSelectionStage already set the metadata keys that downstream stages check.
    * This stage only needs to apply style enhancement (not covered by other stages).
+   *
+   * Style priority (highest first):
+   * 1. Operator-based style (#analytical in command)
+   * 2. Client-selected style (from judge phase)
    */
   private applyClientSelections(context: ExecutionContext): void {
     const selectedFramework = context.state.framework.clientOverride;
     const selectedGates = context.state.framework.clientSelectedGates;
-    const selectedStyle = context.state.framework.clientSelectedStyle;
+    const clientStyle = context.state.framework.clientSelectedStyle;
+    const operatorStyle = context.parsedCommand?.executionPlan?.styleSelection;
 
-    // Apply style enhancement if style selected (framework and gates handled by their respective stages)
+    // Apply style enhancement - operator takes priority over client selection
+    const selectedStyle = operatorStyle ?? clientStyle;
     if (selectedStyle) {
       this.applyStyleEnhancement(context, selectedStyle);
     }
@@ -125,6 +136,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
       framework: selectedFramework,
       gates: selectedGates?.length ?? 0,
       style: selectedStyle,
+      styleSource: operatorStyle ? 'operator' : clientStyle ? 'client' : 'none',
     });
   }
 
@@ -183,15 +195,29 @@ export class PromptGuidanceStage extends BasePipelineStage {
 
   /**
    * Get guidance instructions for a style type.
+   * Uses StyleManager if available, falls back to hardcoded styles for backward compatibility.
    */
   private getStyleGuidance(style: string): string | null {
-    const styles: Record<string, string> = {
-      analytical: 'Structure your response with systematic analysis. Use data-driven reasoning, present evidence clearly, and organize findings logically with clear sections.',
-      procedural: 'Provide step-by-step instructions. Number each step, explain prerequisites, and include verification points. Focus on actionable guidance.',
-      creative: 'Approach this with innovative thinking. Explore unconventional solutions, brainstorm alternatives, and encourage novel perspectives.',
-      reasoning: 'Apply logical decomposition. Break down the problem, show your reasoning chain, identify assumptions, and evaluate conclusions systematically.',
+    // Try StyleManager first (dynamic YAML-based styles)
+    if (this.styleManager) {
+      const guidance = this.styleManager.getStyleGuidance(style);
+      if (guidance) {
+        return guidance;
+      }
+    }
+
+    // Fallback to hardcoded styles for backward compatibility
+    const legacyStyles: Record<string, string> = {
+      analytical:
+        'Structure your response with systematic analysis. Use data-driven reasoning, present evidence clearly, and organize findings logically with clear sections.',
+      procedural:
+        'Provide step-by-step instructions. Number each step, explain prerequisites, and include verification points. Focus on actionable guidance.',
+      creative:
+        'Approach this with innovative thinking. Explore unconventional solutions, brainstorm alternatives, and encourage novel perspectives.',
+      reasoning:
+        'Apply logical decomposition. Break down the problem, show your reasoning chain, identify assumptions, and evaluate conclusions systematically.',
     };
-    return styles[style.toLowerCase()] ?? null;
+    return legacyStyles[style.toLowerCase()] ?? null;
   }
 
   /**
@@ -202,7 +228,9 @@ export class PromptGuidanceStage extends BasePipelineStage {
     if (base.includes(styleGuidance)) {
       return base; // Already contains guidance
     }
-    return base ? `${base}\n\n**Response Style:** ${styleGuidance}` : `**Response Style:** ${styleGuidance}`;
+    return base
+      ? `${base}\n\n**Response Style:** ${styleGuidance}`
+      : `**Response Style:** ${styleGuidance}`;
   }
 
   private async applyGuidanceToChain(context: ExecutionContext): Promise<number> {
@@ -247,18 +275,16 @@ export class PromptGuidanceStage extends BasePipelineStage {
       const includeSystemPrompt =
         (injectionDecision?.inject ?? true) && context.state.framework.systemPromptApplied !== true;
 
-      // Get semantic analysis and selected resources from Judge Selection Stage
-      const semanticAnalysis = context.metadata['semanticAnalysis'] as
+      // Get semantic analysis from execution plan (set by Planning Stage)
+      const semanticAnalysis = context.executionPlan?.semanticAnalysis as
         | ContentAnalysisResult
         | undefined;
-      const selectedResources = context.metadata['selectedResources'] as string[] | undefined;
-      const availableResources = context.metadata['availableGuidanceResources'] as
+      const selectedResources = context.state.framework.selectedResources;
+      const availableResources = context.state.framework.availableResources as
         | ConvertedPrompt[]
         | undefined;
 
-      const guidanceOptions: Parameters<
-        PromptGuidanceService['applyGuidance']
-      >[1] = {
+      const guidanceOptions: Parameters<PromptGuidanceService['applyGuidance']>[1] = {
         includeSystemPromptInjection: includeSystemPrompt,
         includeTemplateEnhancement: true,
         frameworkOverride: this.getFrameworkOverride(context),
@@ -274,10 +300,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
         guidanceOptions.availableResources = availableResources;
       }
 
-      const guidance = await this.promptGuidanceService!.applyGuidance(
-        prompt,
-        guidanceOptions
-      );
+      const guidance = await this.promptGuidanceService!.applyGuidance(prompt, guidanceOptions);
 
       this.recordGuidanceResult(context, promptId, guidance);
       return guidance;
@@ -300,11 +323,11 @@ export class PromptGuidanceStage extends BasePipelineStage {
   }
 
   private getGuidanceStore(context: ExecutionContext): GuidanceStore {
-    if (context.metadata['promptGuidanceResults'] === undefined) {
-      context.metadata['promptGuidanceResults'] = {};
+    if (context.state.framework.guidanceResults === undefined) {
+      context.state.framework.guidanceResults = {};
     }
 
-    return context.metadata['promptGuidanceResults'] as GuidanceStore;
+    return context.state.framework.guidanceResults as GuidanceStore;
   }
 
   /**

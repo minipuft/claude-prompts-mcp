@@ -1,8 +1,4 @@
 // @lifecycle canonical - Controls all injection decisions using the modular injection system.
-import { BasePipelineStage } from '../stage.js';
-
-import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContextType, InjectionConfig } from '../decisions/injection/index.js';
 import {
   InjectionDecisionService,
   type InjectionDecisionInput,
@@ -11,7 +7,11 @@ import {
   getSessionOverrideManager,
   isSessionOverrideManagerInitialized,
 } from '../decisions/injection/index.js';
+import { BasePipelineStage } from '../stage.js';
+
+import type { Logger } from '../../../logging/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContextType, InjectionConfig } from '../decisions/injection/index.js';
 
 type InjectionConfigProvider = () => InjectionConfig;
 
@@ -56,7 +56,7 @@ export class InjectionControlStage extends BasePipelineStage {
     this.logEntry(context);
 
     // Skip if session blueprint was restored (decisions already made)
-    if (context.metadata['sessionBlueprintRestored']) {
+    if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
       return;
     }
@@ -220,9 +220,7 @@ export class InjectionControlStage extends BasePipelineStage {
   /**
    * Retrieve active session overrides from the SessionOverrideManager if available.
    */
-  private getSessionOverrides():
-    | Map<InjectionType, InjectionRuntimeOverride>
-    | undefined {
+  private getSessionOverrides(): Map<InjectionType, InjectionRuntimeOverride> | undefined {
     if (!isSessionOverrideManagerInitialized()) {
       return undefined;
     }

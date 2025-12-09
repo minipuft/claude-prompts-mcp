@@ -20,7 +20,6 @@ export type {
   CategoryInjectionConfig,
   ChainInjectionConfig,
   ExecutionContextType,
-  InjectionBackwardCompatConfig,
   InjectionCondition,
   InjectionConditionWhen,
   InjectionConfig,
@@ -63,15 +62,11 @@ export {
 } from './constants.js';
 
 // Public service classes
-export {
-  InjectionDecisionService,
-  InjectionDecisionAuthority,
-} from './injection-decision-service.js';
+export { InjectionDecisionService } from './injection-decision-service.js';
 
 // Internal implementation (exported for testing and advanced usage)
 export {
   HierarchyResolver,
-  DecisionResolver, // Deprecated alias for HierarchyResolver
   ConditionEvaluator,
   type ConditionEvaluationResult,
 } from './internal/index.js';

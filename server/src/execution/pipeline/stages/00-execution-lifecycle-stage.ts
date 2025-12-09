@@ -3,11 +3,10 @@ import { randomUUID } from 'crypto';
 
 import { BasePipelineStage } from '../stage.js';
 
+import type { CleanupHandler } from '../../context/internal-state.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
-
-type CleanupHandler = () => void | Promise<void>;
 
 /**
  * Canonical Pipeline Stage 0.3: Execution Lifecycle
@@ -44,16 +43,16 @@ export class ExecutionLifecycleStage extends BasePipelineStage {
       }
     });
 
-    context.metadata['executionStartTimestamp'] = Date.now();
+    context.state.lifecycle.startTimestamp = Date.now();
 
     this.logExit({ scopeId });
   }
 
   private ensureCleanupHandlers(context: ExecutionContext): CleanupHandler[] {
-    if (!Array.isArray(context.metadata['lifecycleCleanupHandlers'])) {
-      context.metadata['lifecycleCleanupHandlers'] = [];
+    if (!Array.isArray(context.state.lifecycle.cleanupHandlers)) {
+      context.state.lifecycle.cleanupHandlers = [];
     }
-    return context.metadata['lifecycleCleanupHandlers'] as CleanupHandler[];
+    return context.state.lifecycle.cleanupHandlers;
   }
 
   private resolveScopeId(context: ExecutionContext): string {

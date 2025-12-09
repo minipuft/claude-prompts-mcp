@@ -4,8 +4,8 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
-import type { GateAction } from '../decisions/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
+import type { GateAction } from '../decisions/index.js';
 
 const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
 
@@ -66,9 +66,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     };
 
     // Always refresh chain variables for downstream template rendering
-    context.metadata['chainContext'] = this.chainSessionManager.getChainContext(sessionId);
+    context.state.session.chainContext = this.chainSessionManager.getChainContext(sessionId);
 
-    const lifecycleDecision = context.metadata['sessionLifecycleDecision'] as string | undefined;
+    const lifecycleDecision = context.state.session.lifecycleDecision;
     if (lifecycleDecision === 'create-new' || lifecycleDecision === 'create-force-restart') {
       this.logExit({ skipped: 'New session, nothing to capture' });
       return;
@@ -119,7 +119,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         });
 
         // Add detection metadata for transparency and debugging
-        context.metadata['gateVerdictDetection'] = {
+        context.state.gates.verdictDetection = {
           verdict: verdictPayload.verdict,
           source: verdictPayload.source,
           rationale: verdictPayload.rationale,
@@ -226,7 +226,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           `User response detected for step ${targetStepNumber}, replacing placeholder with real content`
         );
 
-        await this.captureRealResponse(sessionId, session.chainId, targetStepNumber, userResponse!);
+        const outputMapping = this.getStepOutputMapping(context, targetStepNumber);
+        await this.captureRealResponse(sessionId, session.chainId, targetStepNumber, userResponse!, outputMapping);
 
         const updatedSession = this.chainSessionManager.getSession(sessionId);
         if (updatedSession) {
@@ -235,7 +236,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
             currentStep: updatedSession.state.currentStep,
             totalSteps: updatedSession.state.totalSteps,
           };
-          context.metadata['chainContext'] = this.chainSessionManager.getChainContext(sessionId);
+          context.state.session.chainContext = this.chainSessionManager.getChainContext(sessionId);
         }
 
         this.logExit({
@@ -255,7 +256,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       // Check for user response before creating placeholder
       if (hasUserResponse) {
         // User provided explicit response
-        await this.captureRealResponse(sessionId, session.chainId, targetStepNumber, userResponse!);
+        const outputMapping = this.getStepOutputMapping(context, targetStepNumber);
+        await this.captureRealResponse(sessionId, session.chainId, targetStepNumber, userResponse!, outputMapping);
       } else {
         // No response - create placeholder
         await this.capturePlaceholder(
@@ -273,7 +275,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           currentStep: updatedSession.state.currentStep,
           totalSteps: updatedSession.state.totalSteps,
         };
-        context.metadata['chainContext'] = this.chainSessionManager.getChainContext(sessionId);
+        context.state.session.chainContext = this.chainSessionManager.getChainContext(sessionId);
       }
 
       const responseType = userResponse ? 'user_response' : 'placeholder';
@@ -320,7 +322,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     sessionId: string,
     chainId: string,
     stepNumber: number,
-    responseContent: string
+    responseContent: string,
+    outputMapping?: Record<string, string>
   ): Promise<void> {
     this.logger.debug(
       `Capturing real response for step ${stepNumber} in chain ${chainId}: ${responseContent.substring(0, 50)}...`
@@ -330,6 +333,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       isPlaceholder: false,
       source: 'user_response',
       capturedAt: Date.now(),
+      outputMapping, // Pass through for named output storage
     });
 
     await this.chainSessionManager.completeStep(sessionId, stepNumber, {
@@ -337,6 +341,16 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     });
 
     this.logger.debug(`Step ${stepNumber} completed with real response, advancing to next step`);
+  }
+
+  private getStepOutputMapping(
+    context: ExecutionContext,
+    stepNumber: number
+  ): Record<string, string> | undefined {
+    const steps = context.parsedCommand?.steps;
+    if (!steps) return undefined;
+    const step = steps.find((s) => s.stepNumber === stepNumber);
+    return step?.outputMapping;
   }
 
   private buildPlaceholderContent(chainId: string, stepNumber: number, totalSteps: number): string {

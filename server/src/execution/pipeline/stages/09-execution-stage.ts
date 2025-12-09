@@ -180,9 +180,12 @@ export class StepExecutionStage extends BasePipelineStage {
       sections.push(context.frameworkContext.systemPrompt.trim());
       this.logger.debug('StepExecution: Added framework system prompt from context');
     } else if (injectionSuppressed) {
-      this.logger.debug('StepExecution: Skipped framework injection (suppressed by injection decision)', {
-        source: injectionDecision?.source,
-      });
+      this.logger.debug(
+        'StepExecution: Skipped framework injection (suppressed by injection decision)',
+        {
+          source: injectionDecision?.source,
+        }
+      );
     } else if (systemMessageHasFramework) {
       this.logger.debug(
         'StepExecution: Skipped framework context injection (already in prompt.systemMessage)'
@@ -232,5 +235,4 @@ export class StepExecutionStage extends BasePipelineStage {
       generatedAt: Date.now(),
     };
   }
-
 }

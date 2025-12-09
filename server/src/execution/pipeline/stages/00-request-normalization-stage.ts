@@ -134,7 +134,6 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
 
     // Store gate overrides from request
     context.state.gates.requestedOverrides = {
-      llmValidation: context.mcpRequest.llm_validation === true,
       gates: context.mcpRequest.gates ? [...context.mcpRequest.gates] : undefined,
     };
 

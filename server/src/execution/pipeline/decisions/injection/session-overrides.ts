@@ -1,12 +1,12 @@
 // @lifecycle canonical - Runtime session overrides for injection control.
 
-import type { Logger } from '../../../../logging/index.js';
 import type {
   InjectionRuntimeOverride,
   InjectionSessionState,
   InjectionTarget,
   InjectionType,
 } from './types.js';
+import type { Logger } from '../../../../logging/index.js';
 
 /**
  * Manages runtime session overrides for injection control.
@@ -201,7 +201,9 @@ export function initSessionOverrideManager(logger: Logger): SessionOverrideManag
  */
 export function getSessionOverrideManager(): SessionOverrideManager {
   if (!sessionOverrideManager) {
-    throw new Error('SessionOverrideManager not initialized. Call initSessionOverrideManager first.');
+    throw new Error(
+      'SessionOverrideManager not initialized. Call initSessionOverrideManager first.'
+    );
   }
   return sessionOverrideManager;
 }

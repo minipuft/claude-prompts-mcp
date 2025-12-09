@@ -2,9 +2,25 @@ import type { GateEnforcementMode } from '../../gates/types.js';
 import type { InjectionState } from '../pipeline/decisions/injection/index.js';
 
 /**
+ * Cleanup handler function type for lifecycle management.
+ */
+export type CleanupHandler = () => void | Promise<void>;
+
+/**
  * Typed internal state for the execution pipeline.
  */
 export interface PipelineInternalState {
+  /**
+   * State related to execution lifecycle management.
+   */
+  lifecycle: {
+    /** Timestamp when pipeline execution started */
+    startTimestamp?: number;
+    /** Unique metric ID for this execution */
+    metricId?: string;
+    /** Cleanup handlers registered during execution */
+    cleanupHandlers?: CleanupHandler[];
+  };
   /**
    * State related to modular injection control.
    * Controls when system prompts, gate guidance, and style guidance are injected.
@@ -30,6 +46,12 @@ export interface PipelineInternalState {
     systemPromptApplied?: boolean;
     /** The specific style guidance text applied */
     selectedStyleGuidance?: string;
+    /** Resources selected during judge phase for prompt guidance */
+    selectedResources?: string[];
+    /** Available guidance resources from judge selection stage */
+    availableResources?: unknown[];
+    /** Results from prompt guidance service, keyed by prompt ID */
+    guidanceResults?: Record<string, unknown>;
   };
 
   /**
@@ -66,6 +88,8 @@ export interface PipelineInternalState {
     aborted?: boolean;
     /** Whether the chain has already advanced past the final step */
     chainComplete?: boolean;
+    /** Chain variables for template rendering (from ChainSessionManager) */
+    chainContext?: Record<string, unknown>;
   };
 
   /**
@@ -106,5 +130,13 @@ export interface PipelineInternalState {
     accumulatedGateIds?: string[];
     /** Whether blocking gates are present that require review */
     hasBlockingGates?: boolean;
+    /** Parsed verdict detection metadata from gate review processing */
+    verdictDetection?: {
+      verdict: 'PASS' | 'FAIL';
+      source: 'gate_verdict' | 'user_response';
+      rationale?: string;
+      pattern?: string;
+      outcome?: string;
+    };
   };
 }

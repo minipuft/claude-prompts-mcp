@@ -182,7 +182,7 @@ export class PromptExecutionPipeline {
   private registerStages(): void {
     // Stage order is critical for the two-phase judge selection flow:
     // JudgeSelectionStage must run BEFORE framework/gate stages so that:
-    // 1. Judge phase (guided: true) returns clean resource menu without framework/gate injection
+    // 1. Judge phase (%judge) returns clean resource menu without framework/gate injection
     // 2. Execution phase with selections has clientFrameworkOverride set before FrameworkResolutionStage
     //
     // Stage ordering for injection control:
@@ -197,12 +197,12 @@ export class PromptExecutionPipeline {
       this.inlineGateStage,
       this.operatorValidationStage,
       this.planningStage,
-      this.judgeSelectionStage,    // Moved before framework/gate stages for two-phase flow
-      this.gateStage,              // Now runs after judge decision
-      this.frameworkStage,         // Now uses clientFrameworkOverride from judge flow
-      this.sessionStage,           // MOVED: Session management (populates currentStep)
+      this.judgeSelectionStage, // Moved before framework/gate stages for two-phase flow
+      this.gateStage, // Now runs after judge decision
+      this.frameworkStage, // Now uses clientFrameworkOverride from judge flow
+      this.sessionStage, // MOVED: Session management (populates currentStep)
       this.frameworkInjectionControlStage, // MOVED: Injection decisions (needs currentStep, controls guidance)
-      this.promptGuidanceStage,    // NOW AFTER: Uses injection decisions from state.injection
+      this.promptGuidanceStage, // NOW AFTER: Uses injection decisions from state.injection
       this.responseCaptureStage,
       this.executionStage,
       this.gateReviewStage,
@@ -266,7 +266,7 @@ export class PromptExecutionPipeline {
   }
 
   private async runLifecycleCleanupHandlers(context: ExecutionContext): Promise<void> {
-    const handlers = context.metadata['lifecycleCleanupHandlers'];
+    const handlers = context.state.lifecycle.cleanupHandlers;
     if (!Array.isArray(handlers)) {
       return;
     }

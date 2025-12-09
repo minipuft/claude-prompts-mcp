@@ -20,6 +20,12 @@ export interface ChainStepPrompt {
   metadata?: Record<string, unknown>; // For storing step-specific data like gate instructions
   executionPlan?: ExecutionPlan;
   frameworkContext?: FrameworkExecutionContext;
+  /** Map step results to semantic names (e.g., { "research": "step1_result" }) */
+  inputMapping?: Record<string, string>;
+  /** Name this step's output for downstream steps */
+  outputMapping?: Record<string, string>;
+  /** Number of retry attempts on failure (default: 0) */
+  retries?: number;
 }
 
 /**

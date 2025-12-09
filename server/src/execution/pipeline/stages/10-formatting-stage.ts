@@ -124,7 +124,7 @@ export class ResponseFormattingStage extends BasePipelineStage {
         responseContent,
         formatterContext,
         {
-          includeStructuredContent: executionType === 'chain',
+          includeStructuredContent: false, // Keep model input lean; clients can opt-in when needed
         }
       );
 
@@ -248,7 +248,9 @@ export class ResponseFormattingStage extends BasePipelineStage {
 
     const hasPendingReview = context.hasPendingReview();
     if (hasPendingReview) {
-      lines.push(`Next: chain_id="${chainIdentifier}", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`);
+      lines.push(
+        `Next: chain_id="${chainIdentifier}", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
+      );
     } else if (sessionContext.currentStep && sessionContext.totalSteps) {
       const isComplete = sessionContext.currentStep >= sessionContext.totalSteps;
       if (isComplete) {

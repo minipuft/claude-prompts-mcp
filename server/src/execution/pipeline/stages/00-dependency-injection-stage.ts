@@ -1,6 +1,6 @@
 // @lifecycle canonical - Initializes shared dependencies for downstream stages.
-import { BasePipelineStage } from '../stage.js';
 import { GateEnforcementAuthority } from '../decisions/index.js';
+import { BasePipelineStage } from '../stage.js';
 
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
@@ -39,10 +39,7 @@ export class DependencyInjectionStage extends BasePipelineStage {
     const analyticsService = this.metricsProvider?.();
 
     // Initialize gate enforcement authority for downstream stages
-    context.gateEnforcement = new GateEnforcementAuthority(
-      this.chainSessionManager,
-      this.logger
-    );
+    context.gateEnforcement = new GateEnforcementAuthority(this.chainSessionManager, this.logger);
 
     context.metadata['pipelineDependencies'] = {
       frameworkEnabled,
@@ -53,7 +50,6 @@ export class DependencyInjectionStage extends BasePipelineStage {
 
     if (!context.metadata['executionOptions']) {
       context.metadata['executionOptions'] = {
-        llmValidation: context.hasLlmValidation(),
         options: context.mcpRequest.options,
       };
     }

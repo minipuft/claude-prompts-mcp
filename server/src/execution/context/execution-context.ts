@@ -1,23 +1,18 @@
 // @lifecycle canonical - Holds runtime execution context data and helpers.
-import { McpToolRequestValidator } from '../validation/request-validator.js';
-import { GateAccumulator } from '../pipeline/state/accumulators/gate-accumulator.js';
-import { DiagnosticAccumulator } from '../pipeline/state/accumulators/diagnostic-accumulator.js';
 import { FrameworkDecisionAuthority } from '../pipeline/decisions/index.js';
+import { DiagnosticAccumulator } from '../pipeline/state/accumulators/diagnostic-accumulator.js';
+import { GateAccumulator } from '../pipeline/state/accumulators/gate-accumulator.js';
+import { McpToolRequestValidator } from '../validation/request-validator.js';
 
-import type { GateEnforcementAuthority } from '../pipeline/decisions/index.js';
-
-import type { Logger } from '../../logging/index.js';
+import type { PipelineInternalState } from './internal-state.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
+import type { Logger } from '../../logging/index.js';
 import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
 import type { ConvertedPrompt, ToolResponse, McpToolRequest } from '../../types/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 import type { CommandParseResult } from '../parsers/command-parser.js';
-import type {
-  ExecutionModifier,
-  ExecutionModifiers,
-  ExecutionPlan,
-} from '../types.js';
-import type { PipelineInternalState } from './internal-state.js';
+import type { GateEnforcementAuthority } from '../pipeline/decisions/index.js';
+import type { ExecutionModifier, ExecutionModifiers, ExecutionPlan } from '../types.js';
 
 /**
  * No-op logger for tests and cases where logging isn't needed.
@@ -77,8 +72,19 @@ export class ExecutionContext {
   public readonly state: PipelineInternalState;
 
   /**
-   * Legacy metadata bag.
-   * @deprecated Use `state` for pipeline coordination properties.
+   * Legacy metadata bag - INFRASTRUCTURE USE ONLY.
+   *
+   * @deprecated Pipeline coordination properties have moved to `state`.
+   * Only infrastructure keys remain here:
+   * - `pipelineDependencies` - Runtime dependency injection
+   * - `executionOptions` - Request-level options passed through
+   *
+   * For typed state access, use:
+   * - `state.lifecycle` - Execution timing and cleanup handlers
+   * - `state.injection` - System prompt/gate/style injection control
+   * - `state.framework` - Framework selection and guidance results
+   * - `state.session` - Chain session and lifecycle decisions
+   * - `state.gates` - Gate enforcement and validation state
    */
   public metadata: Record<string, unknown> = {};
 
@@ -107,6 +113,9 @@ export class ExecutionContext {
 
     // Initialize typed state with defaults
     this.state = {
+      // Lifecycle state for execution timing and cleanup
+      lifecycle: {},
+
       // Modular injection state - controlled by InjectionControlStage (07b)
       injection: {},
 
@@ -139,17 +148,14 @@ export class ExecutionContext {
    * @returns Session ID if present and valid, undefined otherwise
    */
   getSessionId(): string | undefined {
-    const sessionId =
-      this.state.session.resumeSessionId ?? this.sessionContext?.sessionId;
+    const sessionId = this.state.session.resumeSessionId ?? this.sessionContext?.sessionId;
     if (!sessionId) return undefined;
     return sessionId;
   }
 
   getRequestedChainId(): string | undefined {
     const chainId =
-      this.mcpRequest.chain_id ??
-      this.state.session.resumeChainId ??
-      this.sessionContext?.chainId;
+      this.mcpRequest.chain_id ?? this.state.session.resumeChainId ?? this.sessionContext?.chainId;
     if (!chainId) {
       return undefined;
     }
@@ -188,15 +194,6 @@ export class ExecutionContext {
     }
 
     return Boolean(this.parsedCommand?.chainId || this.parsedCommand?.steps?.length);
-  }
-
-  /**
-   * Check if LLM validation hints are enabled
-   *
-   * @returns True only when llm_validation is explicitly true
-   */
-  hasLlmValidation(): boolean {
-    return this.mcpRequest.llm_validation === true;
   }
 
   /**
@@ -346,14 +343,27 @@ export class ExecutionContext {
 // Import from centralized types instead
 
 /**
+ * Named inline gate from symbolic syntax (e.g., `:: security:"no secrets"`)
+ */
+export interface NamedInlineGate {
+  /** Explicit gate ID from symbolic syntax */
+  gateId: string;
+  /** Criteria associated with this named gate */
+  criteria: string[];
+}
+
+/**
  * Parsed command representation shared between parsing and planning stages.
  */
 export interface ParsedCommand extends CommandParseResult {
   commandType?: 'single' | 'chain';
   convertedPrompt?: ConvertedPrompt;
   promptArgs?: Record<string, unknown>;
+  /** Anonymous inline criteria (merged from `:: "criteria"` without explicit ID) */
   inlineGateCriteria?: string[];
   inlineGateIds?: string[];
+  /** Named inline gates with explicit IDs from symbolic syntax (e.g., `:: id:"criteria"`) */
+  namedInlineGates?: NamedInlineGate[];
   chainId?: string;
   steps?: ChainStepPrompt[];
   modifier?: ExecutionModifier;

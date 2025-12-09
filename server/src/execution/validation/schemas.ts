@@ -71,12 +71,12 @@ const temporaryGateObjectSchema = z
     }
   )
   .superRefine((value, ctx) => {
-    const hasIdentifier = Boolean(value.id || value.template);
+    const hasIdentifier = Boolean(value.id);
     const hasContent = Boolean(
       (value.criteria && value.criteria.length > 0) ||
-        (value.pass_criteria && value.pass_criteria.length > 0) ||
-        (value.guidance && value.guidance.trim().length > 0) ||
-        (value.description && value.description.trim().length > 0)
+      (value.pass_criteria && value.pass_criteria.length > 0) ||
+      (value.guidance && value.guidance.trim().length > 0) ||
+      (value.description && value.description.trim().length > 0)
     );
 
     if (!hasIdentifier && !hasContent) {

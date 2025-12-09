@@ -30,8 +30,7 @@ export class CallToActionStage extends BasePipelineStage {
     const pendingReview = Boolean(context.sessionContext?.pendingReview);
     const finalChainStep = this.isFinalChainStep(context);
     const callToAction =
-      (metadata['callToAction'] as string | undefined) ||
-      context.state.gates.reviewCallToAction;
+      (metadata['callToAction'] as string | undefined) || context.state.gates.reviewCallToAction;
 
     if (!callToAction || callToAction.trim().length === 0) {
       if (finalChainStep && !pendingReview) {

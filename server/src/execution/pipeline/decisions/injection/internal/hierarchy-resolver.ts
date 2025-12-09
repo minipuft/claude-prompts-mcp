@@ -1,7 +1,8 @@
 // @lifecycle canonical - Hierarchical resolution for injection configuration.
 
-import type { Logger } from '../../../../../logging/index.js';
 import { DEFAULT_CONFIG_BY_TYPE, RESOLUTION_PRIORITY } from '../constants.js';
+
+import type { Logger } from '../../../../../logging/index.js';
 import type {
   CategoryInjectionConfig,
   ChainInjectionConfig,
@@ -418,9 +419,3 @@ export class HierarchyResolver {
     return RESOLUTION_PRIORITY;
   }
 }
-
-/**
- * @deprecated Use HierarchyResolver instead.
- * Alias for backward compatibility during migration.
- */
-export const DecisionResolver = HierarchyResolver;

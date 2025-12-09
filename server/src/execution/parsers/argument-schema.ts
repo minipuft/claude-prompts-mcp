@@ -151,15 +151,18 @@ export class ArgumentSchemaValidator {
     return this.applyCommonConstraints(arg, schema);
   }
 
-  private applyCommonConstraints<T extends ZodTypeAny>(arg: PromptArgument, schema: T): ZodTypeAny {
-    let refined: ZodTypeAny = schema;
-    if (arg.validation?.allowedValues?.length) {
-      const allowed = new Set(arg.validation.allowedValues.map((value) => value?.toString()));
-      refined = refined.refine((value) => allowed.has(String(value)), {
-        message: `Value must be one of: ${arg.validation.allowedValues.join(', ')}`,
-      });
-    }
-    return refined;
+  /**
+   * Apply common constraints to any schema type.
+   * Note: allowedValues was removed in v3.0.0 - LLM handles semantic variation better
+   * than strict enum enforcement.
+   */
+  private applyCommonConstraints<T extends ZodTypeAny>(
+    _arg: PromptArgument,
+    schema: T
+  ): ZodTypeAny {
+    // Currently no common constraints apply to all types.
+    // minLength/maxLength/pattern are string-specific and handled in applyStringConstraints.
+    return schema;
   }
 
   private applyStringConstraints(arg: PromptArgument, schema: z.ZodString): ZodTypeAny {
@@ -189,12 +192,8 @@ export class ArgumentSchemaValidator {
       });
     }
 
-    if (validation?.allowedValues?.length) {
-      const allowed = new Set(validation.allowedValues.map((value) => value?.toString()));
-      return refined.refine((value) => allowed.has(value), {
-        message: `Value must be one of: ${validation.allowedValues.join(', ')}`,
-      });
-    }
+    // Note: allowedValues support was removed in v3.0.0
+    // LLM handles semantic variation (e.g., "urgent" vs "high") better than strict enums
 
     return refined;
   }

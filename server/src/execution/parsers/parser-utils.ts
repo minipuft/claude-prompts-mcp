@@ -43,10 +43,16 @@ export function normalizeSymbolicPrefixes(command: string): {
 
 /**
  * Remove style operators from a command segment to avoid polluting prompt args.
+ * Handles new #styleid syntax (e.g., #analytical, #procedural)
  */
 export function stripStyleOperators(input: string): string {
   if (!input) {
     return input;
   }
-  return input.replace(/#style(?:[:=]|\()([A-Za-z0-9_-]+)\)?/gi, ' ').trim();
+  // Match #styleid where styleid starts with a letter
+  // Also handle legacy #style(id) syntax for backward compatibility
+  return input
+    .replace(/#style(?:[:=]|\()([A-Za-z0-9_-]+)\)?/gi, ' ')
+    .replace(/(?:^|\s)#[A-Za-z][A-Za-z0-9_-]*(?=\s|$)/g, ' ')
+    .trim();
 }

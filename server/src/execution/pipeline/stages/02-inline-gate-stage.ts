@@ -76,10 +76,9 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       return;
     }
 
-    // Register temporary gates from MCP request BEFORE resolving gate references
-    // This ensures gates are available when the gate reference resolver tries to find them
-    // Uses shared formatCriteriaAsGuidance() utility for proper criteria formatting
-    await this.registerTemporaryGatesFromRequest(context);
+    // Stage 02 focuses on inline gate extraction from :: operator
+    // Temporary gates from 'gates' parameter are handled by Stage 05 (GateEnhancementStage)
+    // which has comprehensive canonical resolution and normalization
 
     const parsedCommand = context.parsedCommand;
     if (!parsedCommand) {
@@ -90,7 +89,26 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     const createdIds: string[] = [];
     const registeredIds: string[] = [];
 
-    // Validate and create inline gate for the main command
+    // Process named inline gates (e.g., `:: security:"no secrets"`)
+    // These have explicit IDs from the symbolic parser
+    if (Array.isArray(parsedCommand.namedInlineGates) && parsedCommand.namedInlineGates.length > 0) {
+      for (const namedGate of parsedCommand.namedInlineGates) {
+        if (namedGate.gateId && isValidGateCriteria(namedGate.criteria)) {
+          const gateId = this.createNamedInlineGate(
+            context,
+            namedGate.gateId,
+            namedGate.criteria,
+            { promptId: parsedCommand.promptId }
+          );
+          if (gateId) {
+            parsedCommand.inlineGateIds = this.appendGateId(parsedCommand.inlineGateIds, gateId);
+            createdIds.push(gateId);
+          }
+        }
+      }
+    }
+
+    // Validate and create inline gate for the main command (anonymous criteria)
     if (isValidGateCriteria(parsedCommand.inlineGateCriteria)) {
       const result = await this.applyGateCriteria(context, parsedCommand.inlineGateCriteria, {
         promptId: parsedCommand.promptId,
@@ -125,6 +143,7 @@ export class InlineGateExtractionStage extends BasePipelineStage {
 
     this.logExit({
       temporaryInlineGates: createdIds.length,
+      namedInlineGates: parsedCommand.namedInlineGates?.length ?? 0,
       registeredInlineGates: registeredIds.length,
     });
   }
@@ -183,6 +202,9 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     return [...existing, gateId];
   }
 
+  /**
+   * Creates an inline gate with auto-generated ID for anonymous criteria.
+   */
   private createInlineGate(
     context: ExecutionContext,
     criteria: readonly string[],
@@ -226,6 +248,65 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     } catch (error) {
       this.logger.warn('[InlineGateExtractionStage] Failed to register inline gate', {
         error,
+        criteria,
+        scope,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Creates a named inline gate with explicit ID from symbolic syntax.
+   * Name is derived from ID for display (e.g., "security" displays as "security").
+   */
+  private createNamedInlineGate(
+    context: ExecutionContext,
+    explicitId: string,
+    criteria: readonly string[],
+    scope: InlineGateScope
+  ): string | null {
+    if (!explicitId || !isValidGateCriteria(criteria)) {
+      this.logger.warn('[InlineGateExtractionStage] Invalid named gate input', {
+        explicitId,
+        criteria,
+        scope,
+      });
+      return null;
+    }
+
+    const guidance = formatCriteriaAsGuidance(criteria);
+    const description = `Named inline gate "${explicitId}" from symbolic syntax`;
+    const gateScope: GateScope = scope.stepNumber !== undefined ? 'step' : 'execution';
+    const scopeId = this.getScopeId(context, scope.stepNumber);
+
+    try {
+      // Pass explicit ID - registry will use it as-is if valid
+      const gateId = this.temporaryGateRegistry.createTemporaryGate(
+        {
+          id: explicitId, // Explicit ID from symbolic syntax
+          name: explicitId, // Use ID as display name (will be enhanced by Stage 05 normalization)
+          type: 'validation',
+          scope: gateScope,
+          description,
+          guidance,
+          pass_criteria: [...criteria],
+          source: 'automatic',
+        } as any, // Cast needed because facade type doesn't include optional id
+        scopeId
+      );
+
+      this.logger.debug('[InlineGateExtractionStage] Created named inline gate', {
+        requestedId: explicitId,
+        actualId: gateId,
+        criteria,
+      });
+
+      this.trackTemporaryGateScope(context, gateScope, scopeId);
+      return gateId;
+    } catch (error) {
+      this.logger.warn('[InlineGateExtractionStage] Failed to create named inline gate', {
+        error,
+        explicitId,
         criteria,
         scope,
       });
@@ -296,6 +377,14 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       return;
     }
 
+    // Log fuzzy match suggestions if available (helps users discover typos)
+    if (resolution.suggestions && resolution.suggestions.length > 0) {
+      this.logger.warn(
+        `[InlineGateExtractionStage] Unknown gate "${resolution.criteria}". ` +
+          `Did you mean: ${resolution.suggestions.join(', ')}?`
+      );
+    }
+
     if (resolution.criteria) {
       inlineCriteria.push(resolution.criteria);
     }
@@ -337,103 +426,10 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     }
   }
 
-  /**
-   * Register temporary gates from MCP request before gate reference resolution.
-   * Uses shared formatCriteriaAsGuidance() utility for proper criteria formatting.
-   * This ensures gates are available when the gate reference resolver tries to find them.
-   *
-   * Uses normalized gates from metadata (supports unified 'gates' parameter and legacy parameters).
-   */
-  private async registerTemporaryGatesFromRequest(context: ExecutionContext): Promise<void> {
-    // Use normalized gates from metadata (already merged by normalization stage)
-    const overrides = context.state.gates.requestedOverrides as Record<string, any> | undefined;
-    const normalizedGates = overrides?.gates as
-      | import('../../../types/execution.js').GateSpecification[]
-      | undefined;
-
-    if (!normalizedGates || normalizedGates.length === 0 || !this.temporaryGateRegistry) {
-      return;
-    }
-
-    const scopeId =
-      context.getSessionId?.() ||
-      context.mcpRequest.chain_id ||
-      context.mcpRequest.command ||
-      'execution';
-
-    for (const gate of normalizedGates) {
-      try {
-        // Handle string shorthand (gate ID references) - skip these
-        if (typeof gate === 'string') {
-          this.logger.debug('[InlineGateExtractionStage] Skipping shorthand gate reference', {
-            gate,
-          });
-          continue;
-        }
-
-        // Handle CustomCheck objects (simple name/description pairs)
-        if (
-          typeof gate === 'object' &&
-          gate !== null &&
-          'name' in gate &&
-          'description' in gate &&
-          !('id' in gate)
-        ) {
-          this.logger.debug(
-            '[InlineGateExtractionStage] Skipping CustomCheck (will be converted to temporary gate)',
-            { gate }
-          );
-          continue;
-        }
-
-        // Handle template-based gates - skip these
-        if (typeof gate === 'object' && gate !== null && 'template' in gate) {
-          this.logger.debug('[InlineGateExtractionStage] Skipping template-based gate', { gate });
-          continue;
-        }
-
-        // Register full gate definitions with proper criteria formatting
-        if (typeof gate === 'object' && gate !== null && 'id' in gate && gate.id) {
-          const criteria = Array.from(gate.pass_criteria || gate.criteria || []);
-
-          // Use shared utility to format criteria as guidance (if not explicitly provided)
-          const effectiveGuidance =
-            gate.guidance ||
-            (criteria.length > 0 ? formatCriteriaAsGuidance(criteria) : undefined) ||
-            gate.description ||
-            `Review output against ${gate.id} criteria`;
-
-          const registeredId = this.temporaryGateRegistry.createTemporaryGate(
-            {
-              id: gate.id, // Preserve user-provided ID
-              name: gate.name || gate.id,
-              type: (gate.type as 'validation' | 'guidance') || 'validation',
-              scope: (gate.scope as GateScope) || 'execution',
-              description: gate.description || `Temporary gate: ${gate.id}`,
-              guidance: effectiveGuidance,
-              pass_criteria: criteria,
-              source: 'manual',
-            },
-            scopeId
-          );
-
-          this.logger.debug(
-            '[InlineGateExtractionStage] Registered temporary gate with formatted guidance',
-            {
-              requestedId: gate.id,
-              registeredId: registeredId,
-              scopeId,
-              criteriaCount: criteria.length,
-              guidanceLength: effectiveGuidance.length,
-            }
-          );
-        }
-      } catch (error) {
-        this.logger.warn('[InlineGateExtractionStage] Failed to register temporary gate', {
-          error,
-          gate,
-        });
-      }
-    }
-  }
+  // NOTE: registerTemporaryGatesFromRequest() was removed as part of consolidation.
+  // All temporary gate registration from the 'gates' parameter is now handled by
+  // Stage 05 (GateEnhancementStage.registerTemporaryGates()) which provides:
+  // - Comprehensive canonical gate resolution
+  // - Unified normalization logic
+  // - Better deduplication and validation
 }

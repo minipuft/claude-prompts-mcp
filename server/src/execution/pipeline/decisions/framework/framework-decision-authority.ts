@@ -12,7 +12,7 @@ export interface FrameworkDecisionInput {
   modifiers?: {
     clean?: boolean;
     lean?: boolean;
-    guided?: boolean;
+    judge?: boolean;
   };
   /** Framework override from @ operator in command */
   operatorOverride?: string;

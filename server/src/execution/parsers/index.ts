@@ -5,6 +5,7 @@
  * Centralizes all parsing infrastructure exports including:
  * - Unified Command Parser with multi-strategy parsing
  * - Argument Processing Pipeline with validation and enrichment
+ * - Schema Validation (minLength, maxLength, pattern enforcement)
  * - Compatibility Wrapper for backward compatibility
  */
 
@@ -21,6 +22,13 @@ export {
   type ArgumentParsingResult,
   type ExecutionContext,
 } from './argument-parser.js';
+
+export {
+  ArgumentSchemaValidator,
+  type SchemaValidationIssue,
+  type SchemaValidationResult,
+  type PromptSchemaOverrides,
+} from './argument-schema.js';
 
 // Context resolution system
 export {

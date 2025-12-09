@@ -11,13 +11,13 @@ export type InjectionType = 'system-prompt' | 'gate-guidance' | 'style-guidance'
  * Listed in resolution priority order (highest to lowest).
  */
 export type InjectionDecisionSource =
-  | 'modifier'           // %clean, %lean, %guided modifiers
-  | 'runtime-override'   // session_overrides via system_control
-  | 'step-config'        // step-specific rules in chain
-  | 'chain-config'       // chain-level rules
-  | 'category-config'    // category-level rules
-  | 'global-config'      // config.json defaults
-  | 'system-default';    // hardcoded fallbacks
+  | 'modifier' // %clean, %lean, %judge modifiers
+  | 'runtime-override' // session_overrides via system_control
+  | 'step-config' // step-specific rules in chain
+  | 'chain-config' // chain-level rules
+  | 'category-config' // category-level rules
+  | 'global-config' // config.json defaults
+  | 'system-default'; // hardcoded fallbacks
 
 /**
  * Clear, unambiguous injection decision.
@@ -131,7 +131,7 @@ export interface InjectionDecisionInput {
   modifiers?: {
     clean?: boolean;
     lean?: boolean;
-    guided?: boolean;
+    judge?: boolean;
   };
   /** Session-level overrides from runtime. */
   sessionOverrides?: Partial<Record<InjectionType, boolean>>;
@@ -332,16 +332,4 @@ export interface InjectionSessionState {
   overrides: Map<InjectionType, InjectionRuntimeOverride>;
   /** Override history for debugging/analytics. */
   history: InjectionRuntimeOverride[];
-}
-
-/**
- * Backward compatibility mapping configuration.
- * Maps old config keys to new injection config structure.
- */
-export interface InjectionBackwardCompatConfig {
-  /**
-   * Legacy systemPromptReinjectionFrequency from frameworks config.
-   * Maps to: injection.system-prompt.frequency
-   */
-  legacyFrequency?: number;
 }

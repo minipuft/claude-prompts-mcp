@@ -47,9 +47,7 @@ export type {
 // Injection decisions
 export {
   InjectionDecisionService,
-  InjectionDecisionAuthority,
   HierarchyResolver,
-  DecisionResolver,
   ConditionEvaluator,
   SessionOverrideManager,
   initSessionOverrideManager,
@@ -77,7 +75,6 @@ export type {
   CategoryInjectionConfig,
   ChainInjectionConfig,
   ConditionEvaluationResult,
-  InjectionBackwardCompatConfig,
   InjectionCondition,
   InjectionConditionWhen,
   InjectionConfig,

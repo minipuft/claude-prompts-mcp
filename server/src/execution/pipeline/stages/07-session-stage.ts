@@ -62,7 +62,7 @@ export class SessionManagementStage extends BasePipelineStage {
         const chainSession = this.chainSessionManager.getSessionByChainIdentifier(
           requestedChainId,
           {
-            includeLegacy: explicitChainResume,
+            includeDormant: explicitChainResume,
           }
         );
         if (chainSession) {
@@ -169,12 +169,19 @@ export class SessionManagementStage extends BasePipelineStage {
       return;
     }
 
+    // Get step-level retry override if available
+    const currentStepNumber = sessionContext.currentStep ?? 1;
+    const steps = context.parsedCommand?.steps;
+    const currentStep = steps?.find((s) => s.stepNumber === currentStepNumber);
+    const stepRetries = currentStep?.retries;
+
     const pendingReview = authority.createPendingReview({
       gateIds,
       instructions: context.gateInstructions ?? '',
+      maxAttempts: stepRetries, // Override default if step defines retries
       metadata: {
         sessionId: sessionContext.sessionId,
-        stepNumber: sessionContext.currentStep,
+        stepNumber: currentStepNumber,
       },
     });
 
@@ -197,8 +204,7 @@ export class SessionManagementStage extends BasePipelineStage {
   }
 
   private getBaseChainId(context: ExecutionContext): string {
-    const requestedChainId =
-      context.mcpRequest.chain_id ?? context.state.session.resumeChainId;
+    const requestedChainId = context.mcpRequest.chain_id ?? context.state.session.resumeChainId;
     if (requestedChainId) {
       return this.stripRunCounter(requestedChainId);
     }

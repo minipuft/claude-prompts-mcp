@@ -1,12 +1,13 @@
 // @lifecycle canonical - Single source of truth for all injection decisions.
 
-import type { Logger } from '../../../../logging/index.js';
 import {
   DISABLE_INJECT_MODIFIERS,
   FORCE_INJECT_MODIFIERS,
   INJECTION_TYPES,
   MODIFIER_EFFECTS,
 } from './constants.js';
+import { ConditionEvaluator, HierarchyResolver } from './internal/index.js';
+
 import type {
   ExecutionContextType,
   InjectionConfig,
@@ -18,8 +19,7 @@ import type {
   InjectionTarget,
   InjectionType,
 } from './types.js';
-
-import { ConditionEvaluator, HierarchyResolver } from './internal/index.js';
+import type { Logger } from '../../../../logging/index.js';
 
 /**
  * Single source of truth for all injection decisions.
@@ -29,7 +29,7 @@ import { ConditionEvaluator, HierarchyResolver } from './internal/index.js';
  * once per injection type and cached for the duration of the request.
  *
  * Resolution Priority:
- * 1. Modifiers (%clean, %lean, %guided) - highest priority
+ * 1. Modifiers (%clean, %lean, %judge) - highest priority
  * 2. Runtime overrides (session_control injection:override)
  * 3. Step config (step-specific rules)
  * 4. Chain config (chain-level rules)
@@ -262,10 +262,7 @@ export class InjectionDecisionService {
     }
 
     // Check conditional rules
-    const conditionResult = this.conditionEvaluator.evaluate(
-      resolved.config.conditions,
-      input
-    );
+    const conditionResult = this.conditionEvaluator.evaluate(resolved.config.conditions, input);
 
     if (conditionResult.matched) {
       if (conditionResult.action === 'skip') {
@@ -382,11 +379,11 @@ export class InjectionDecisionService {
       return null;
     }
 
-    // Check force-inject modifiers (e.g., %guided)
+    // Check force-inject modifiers (e.g., %judge)
     for (const modifier of FORCE_INJECT_MODIFIERS) {
       if (input.modifiers[modifier as keyof typeof input.modifiers]) {
-        // %guided only affects system-prompt
-        if (modifier === 'guided' && input.injectionType === 'system-prompt') {
+        // %judge only affects system-prompt (forces injection for judge selection phase)
+        if (modifier === 'judge' && input.injectionType === 'system-prompt') {
           return {
             inject: true,
             reason: `Forced by %${modifier} modifier`,
@@ -508,9 +505,3 @@ export class InjectionDecisionService {
     }
   }
 }
-
-/**
- * @deprecated Use InjectionDecisionService instead.
- * This alias exists for backward compatibility during migration.
- */
-export const InjectionDecisionAuthority = InjectionDecisionService;
