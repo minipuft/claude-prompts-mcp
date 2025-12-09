@@ -11,7 +11,7 @@ RUN npm ci
 COPY . .
 
 # Create dummy docs to satisfy build script
-RUN mkdir -p /docs && touch /docs/mcp-tooling-guide.md
+RUN mkdir -p /docs && touch /docs/mcp-tools.md
 
 # Build the application
 RUN npm run build
@@ -37,11 +37,12 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prompts ./prompts
 COPY --from=builder /app/methodologies ./methodologies
 COPY --from=builder /app/gates ./gates
+COPY --from=builder /app/styles ./styles
 # Copy config and potentially other static assets if needed
 COPY --from=builder /app/config.json ./config.json
 
 # Create logs and runtime-state directories with correct permissions
-RUN mkdir -p logs runtime-state && chown -R node:node logs runtime-state dist prompts methodologies gates config.json
+RUN mkdir -p logs runtime-state && chown -R node:node logs runtime-state dist prompts methodologies gates styles config.json
 
 # Security: Run as non-root user
 USER node

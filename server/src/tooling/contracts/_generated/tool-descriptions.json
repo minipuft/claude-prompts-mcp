@@ -1,14 +1,14 @@
 {
   "version": "3.0.0",
   "lastUpdated": "2025-12-09T01:22:23.906Z",
-  "generatedFrom": "contracts",
+  "generatedFrom": "active",
   "tools": {
     "prompt_engine": {
-      "description": "🚀 PROMPT ENGINE: Expands prompt templates and returns structured instructions for you to follow.\n\nRetrieves prompt by ID → fills arguments → applies methodology context → returns prepared prompt.\n\nSYNTAX: >>prompt_id key=\"value\" | Chain: >>s1 --> >>s2 (N-1 arrows for N steps)\nOPERATORS: @Framework (methodology) | :: \"criteria\" (gates) | %clean/%lean (disable framework)\n\nChain resumption: chain_id + user_response (your step output).",
+      "description": "🚀 PROMPT ENGINE [CAGEERF]: Expands prompts with C.A.G.E.E.R.F methodology for you to follow.\n\nWHAT IT RETURNS: Prepared prompt + CAGEERF phase instructions (Context→Analysis→Goals→Execution→Evaluation→Refinement).\nWHAT YOU DO: Execute each phase yourself using the returned structure.\n\nSYNTAX: >>prompt_id key=\"value\" | Chain: >>s1 --> >>s2\nOPERATORS: @CAGEERF | :: \"criteria\" | %clean/%lean\n",
       "shortDescription": "Expand and return prompt templates",
       "category": "execution",
       "parameters": {
-        "command": "Prompt ID to expand with optional arguments. Format: >>prompt_id key=\"value\".\n\nChains: >>step1 --> >>step2 (N-1 arrows for N steps).\nModifiers (place before ID): @Framework | :: \"criteria\" | %clean/%lean.\n\nDo NOT invent IDs - use prompt_manager(action:\"list\") to discover valid prompts.",
+        "command": "Prompt ID to expand. Resulting prompt will include CAGEERF phase guidance for you to apply.",
         "chain_id": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command.",
         "user_response": "Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming.",
         "gate_verdict": "Gate review verdict with flexible format support. Primary: 'GATE_REVIEW: PASS|FAIL - reason'. Also accepts: 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason' (minimal).",
@@ -26,11 +26,11 @@
       }
     },
     "prompt_manager": {
-      "description": "📝 PROMPT MANAGER: Creates, updates, lists, and inspects prompt templates in the registry.\n\nACTIONS: create | update | delete | list | inspect | analyze_type | analyze_gates | reload | guide\n\nReturns: Operation confirmation, prompt metadata, or action recommendations.\n\nUse action:\"list\" to discover prompt IDs before using prompt_engine.",
+      "description": "📝 PROMPT MANAGER [CAGEERF]: Manages prompt templates. Use action:\"guide\" for phase-appropriate recommendations (Context research vs. Execution updates).\n",
       "shortDescription": "Manage prompt templates",
       "category": "management",
       "parameters": {
-        "action": "The operation to perform: create (new prompt), update (modify existing), delete (remove), list (discover IDs), inspect (view details), analyze_type/analyze_gates (get recommendations), reload (refresh from disk), guide (get action suggestions).",
+        "action": "Use 'guide' with your current CAGEERF phase for phase-appropriate action recommendations.",
         "id": "Prompt identifier (required for most actions).",
         "name": "Human-friendly name (create/update).",
         "description": "Prompt description (create/update).",
@@ -60,11 +60,11 @@
       }
     },
     "system_control": {
-      "description": "⚙️ SYSTEM CONTROL: Retrieves system status, switches frameworks, manages gates, and provides analytics.\n\nACTIONS: status | framework | gates | analytics | config | maintenance | guide\n\nReturns: Current state, configurations, or operation confirmations.",
+      "description": "⚙️ SYSTEM CONTROL [CAGEERF]: System administration. Status shows current CAGEERF phase context.\n",
       "shortDescription": "System administration",
       "category": "system",
       "parameters": {
-        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations).",
+        "action": "Use 'guide' with topic:'framework' for phase-specific operation guidance.",
         "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list).",
         "framework": "Target framework for switch operations (CAGEERF, ReACT, 5W1H, SCAMPER).",
         "reason": "Audit reason for framework/gate toggles or admin actions.",
@@ -79,5 +79,8 @@
         "disabled": "⚙️ SYSTEM CONTROL: Standard system status without methodology context."
       }
     }
-  }
+  },
+  "activeFramework": "CAGEERF",
+  "activeMethodology": "CAGEERF",
+  "generatedAt": "2025-12-09T01:31:08.067Z"
 }
