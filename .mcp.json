@@ -1,0 +1,7 @@
+{
+  "claude-prompts": {
+    "command": "npx",
+    "args": ["-y", "claude-prompts"],
+    "env": {}
+  }
+}

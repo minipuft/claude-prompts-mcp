@@ -36,6 +36,8 @@ test-results/
 # Editor and IDE Files
 .vscode/
 .cursor/
+.history/
+is/
 
 # Operating System Files
 .DS_Store
@@ -79,11 +81,11 @@ heapdump-*
 plans/archive/
 CLAUDE.md
 .codex/
-AGENTS.md
 .claude/
 server/.claude/
 .clinerules/
 
+.agent/
 # Temporary test files
 test_*.js
 test_*.ts
@@ -95,6 +97,11 @@ test_*.ts
 # Temporary directories
 opencodetmp/
 
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
 # Future planning
 plans/future/
 
@@ -102,3 +109,4 @@ plans/future/
 server/prompts/general/test_*.md
 node_modules/
 *.tgz
+.osgrep
