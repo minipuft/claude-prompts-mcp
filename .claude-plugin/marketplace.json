@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "claude-prompts-mcp",
-      "source": ".",
+      "source": "./",
       "version": "1.0.0",
       "description": "MCP server for prompt engineering with chains, gates, and quality validation",
       "author": {
