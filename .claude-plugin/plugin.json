@@ -1,12 +1,14 @@
 {
-  "name": "claude-prompts-mcp",
-  "version": "1.0.0",
-  "description": "CAGEERF prompt engineering with chains, gates, and quality validation",
-  "author": { "name": "minipuft" },
-  "homepage": "https://github.com/minipuft/claude-prompts-mcp",
-  "repository": "https://github.com/minipuft/claude-prompts-mcp",
-  "license": "MIT",
-  "keywords": ["mcp", "prompts", "cageerf", "gates", "chains"],
-  "hooks": "./hooks/hooks.json",
-  "mcpServers": "./.mcp.json"
+    "name": "claude-prompts-mcp",
+    "version": "1.0.0",
+    "description": "CAGEERF prompt engineering with chains, gates, and quality validation",
+    "author": { "name": "minipuft" },
+    "homepage": "https://github.com/minipuft/claude-prompts-mcp",
+    "repository": "https://github.com/minipuft/claude-prompts-mcp",
+    "license": "MIT",
+    "keywords": ["mcp", "prompts", "cageerf", "gates", "chains"],
+    "hooks": "./hooks/hooks.json",
+    "mcpServers": "./mcp.json",
+    "skills": "./skills",
+    "commands": "./commands"
 }

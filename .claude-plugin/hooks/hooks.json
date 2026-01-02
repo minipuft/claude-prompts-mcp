@@ -1,0 +1,38 @@
+{
+  "SessionStart": [{
+    "matcher": "*",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/hooks/dev-sync.py"
+      },
+      {
+        "type": "command",
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/hooks/detect-skills.py"
+      }
+    ]
+  }],
+  "UserPromptSubmit": [{
+    "matcher": "*",
+    "hooks": [{
+      "type": "command",
+      "command": "python3 ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/hooks/prompt-suggest.py"
+    }]
+  }],
+  "PostToolUse": [{
+    "matcher": "*prompt_engine*",
+    "hooks": [{
+      "type": "command",
+      "command": "python3 ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/hooks/post-prompt-engine.py"
+    }]
+  }],
+  "PreToolUse": [
+    {
+      "matcher": "ExitPlanMode",
+      "hooks": [{
+        "type": "command",
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/hooks/plan-review.py"
+      }]
+    }
+  ]
+}

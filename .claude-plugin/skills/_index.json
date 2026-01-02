@@ -1,0 +1,35 @@
+{
+  "skills": {
+    "typescript": {
+      "projectMarkers": ["tsconfig.json", "tsconfig.base.json"],
+      "packages": ["typescript"],
+      "hint": "Use /typescript for TS patterns"
+    },
+    "react": {
+      "packages": ["react", "react-dom"],
+      "hint": "Use /react for React patterns"
+    },
+    "python": {
+      "projectMarkers": ["requirements.txt", "pyproject.toml", "setup.py"],
+      "hint": "Use /python for Python patterns"
+    },
+    "javascript": {
+      "projectMarkers": ["package.json"],
+      "hint": "Use /javascript for JS patterns"
+    },
+    "mcp-patterns": {
+      "directoryPatterns": ["mcp-*", "*-mcp"],
+      "projectMarkers": ["server/package.json"],
+      "hint": "Use /mcp for MCP server patterns"
+    },
+    "spicetify": {
+      "directoryPatterns": ["spicetify-*"],
+      "hint": "Use /spicetify for Spicetify theme/extension patterns"
+    },
+    "prompt-authoring": {
+      "projectMarkers": [".claude-plugin/plugin.json"],
+      "packages": ["claude-prompts"],
+      "hint": "Use /prompt-authoring for prompt creation guidance"
+    }
+  }
+}
