@@ -1,15 +1,27 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "minipuft-marketplace",
   "owner": {
     "name": "minipuft"
   },
   "metadata": {
-    "description": "Claude Prompts MCP plugins"
+    "description": "Claude Prompts MCP plugins",
+    "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "claude-prompts-mcp",
+      "description": "CAGEERF prompt engineering with chains, gates, and quality validation",
+      "version": "1.0.0",
+      "author": {
+        "name": "minipuft"
+      },
       "source": "./",
+      "category": "productivity",
+      "homepage": "https://github.com/minipuft/claude-prompts-mcp",
+      "repository": "https://github.com/minipuft/claude-prompts-mcp",
+      "license": "MIT",
+      "keywords": ["mcp", "prompts", "cageerf", "gates", "chains", "quality"],
       "strict": true
     }
   ]
