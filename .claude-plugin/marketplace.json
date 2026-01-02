@@ -1,0 +1,12 @@
+{
+  "name": "minipuft-marketplace",
+  "description": "Claude Prompts MCP plugins",
+  "plugins": [
+    {
+      "name": "claude-prompts-mcp",
+      "version": "1.0.0",
+      "description": "MCP server for prompt engineering with chains, gates, and quality validation",
+      "path": "."
+    }
+  ]
+}
