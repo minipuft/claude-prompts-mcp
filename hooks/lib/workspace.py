@@ -35,10 +35,11 @@ def get_workspace_root() -> Path | None:
             return plugin_path
 
     # 3. Self-resolution from script location
-    # hooks/lib/workspace.py -> hooks/lib -> hooks -> project_root
+    # .claude-plugin/hooks/lib/workspace.py -> lib -> hooks -> .claude-plugin -> project_root
     script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent.parent
-    if (project_root / "server").exists() or (project_root / ".claude-plugin").exists():
+    plugin_dir = script_dir.parent.parent  # .claude-plugin
+    project_root = plugin_dir.parent       # repo root
+    if (project_root / "server").exists():
         return project_root
 
     return None
@@ -64,5 +65,5 @@ def get_skills_dir(fallback: Path) -> Path:
     """Get the skills directory containing _index.json."""
     workspace = get_workspace_root()
     if workspace:
-        return workspace / "skills"
+        return workspace / ".claude-plugin" / "skills"
     return fallback

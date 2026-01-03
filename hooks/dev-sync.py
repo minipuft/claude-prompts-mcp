@@ -3,7 +3,7 @@
 SessionStart hook: Auto-sync plugin source to Claude Code cache.
 
 Runs on every session start to ensure hooks and cache are up-to-date.
-Only syncs if running from development source (not marketplace install).
+Only syncs if running from separate resources source (not marketplace install).
 """
 
 import json
