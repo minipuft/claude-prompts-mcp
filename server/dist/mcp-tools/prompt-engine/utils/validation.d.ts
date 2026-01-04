@@ -1,0 +1,68 @@
+/**
+ * Engine Validator - Handles engine-specific validation
+ *
+ * Extracted from PromptExecutionService to provide focused
+ * validation capabilities with clear separation of concerns.
+ */
+import { LightweightGateSystem } from '../../../gates/core/index.js';
+import { ConvertedPrompt } from '../../../types/index.js';
+export interface ValidationResult {
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+    score: number;
+}
+export interface GateValidationResult {
+    passed: boolean;
+    results: Array<{
+        gate: string;
+        passed: boolean;
+        message: string;
+        score?: number;
+    }>;
+}
+/**
+ * EngineValidator handles all engine-specific validation
+ *
+ * This class provides:
+ * - Prompt validation and quality checking
+ * - Gate validation coordination
+ * - Execution readiness assessment
+ * - Quality scoring and recommendations
+ */
+export declare class EngineValidator {
+    private gateSystem;
+    constructor(gateSystem?: LightweightGateSystem);
+    /**
+     * Validate prompt for execution readiness
+     */
+    validatePrompt(convertedPrompt: ConvertedPrompt, promptArgs?: Record<string, any>): ValidationResult;
+    /**
+     * Validate prompt content quality
+     */
+    private validateContent;
+    /**
+     * Validate template syntax
+     */
+    private validateTemplateSyntax;
+    /**
+     * Validate content structure
+     */
+    private validateContentStructure;
+    /**
+     * Calculate maximum nesting level
+     */
+    private calculateMaxNesting;
+    /**
+     * Validate arguments against prompt requirements
+     */
+    private validateArguments;
+    /**
+     * Validate argument type
+     */
+    private isValidArgumentType;
+    /**
+     * Validate execution with gates
+     */
+    validateWithGates(convertedPrompt: ConvertedPrompt, promptArgs: Record<string, any>, suggestedGates?: string[], processedContent?: string): Promise<GateValidationResult>;
+}

@@ -1,0 +1,91 @@
+import type { PromptManagerMetadataData, ToolMetadata } from './types.js';
+declare const promptManagerActions: readonly [{
+    readonly id: "create";
+    readonly displayName: "Create Prompt";
+    readonly category: "lifecycle";
+    readonly status: "working";
+    readonly requiredArgs: readonly ["id", "name", "description", "user_message_template"];
+    readonly description: "Create or overwrite a prompt or chain with gate_configuration inline.";
+    readonly issues: readonly [];
+}, {
+    readonly id: "update";
+    readonly displayName: "Update Prompt";
+    readonly category: "lifecycle";
+    readonly status: "working";
+    readonly requiredArgs: readonly ["id"];
+    readonly description: "Full metadata replacement including gate_configuration.";
+}, {
+    readonly id: "delete";
+    readonly displayName: "Delete Prompt";
+    readonly category: "lifecycle";
+    readonly status: "working";
+    readonly requiredArgs: readonly ["id"];
+    readonly description: "Removes prompt and cleans empty categories.";
+}, {
+    readonly id: "list";
+    readonly displayName: "List Prompts";
+    readonly category: "discovery";
+    readonly status: "working";
+    readonly requiredArgs: readonly [];
+    readonly description: "Filter/search interface powered by semantic analyzer.";
+}, {
+    readonly id: "reload";
+    readonly displayName: "Reload Prompts";
+    readonly category: "operations";
+    readonly status: "working";
+    readonly requiredArgs: readonly [];
+    readonly description: "Hot reload or full restart of prompt registry.";
+}, {
+    readonly id: "inspect";
+    readonly displayName: "Inspect Prompt";
+    readonly category: "discovery";
+    readonly status: "working";
+    readonly requiredArgs: readonly ["id"];
+    readonly description: "Display prompt details, arguments, gates, and chain steps for a single prompt.";
+    readonly issues: readonly [];
+}, {
+    readonly id: "analyze_type";
+    readonly displayName: "Analyze Prompt Type";
+    readonly category: "analysis";
+    readonly status: "working";
+    readonly requiredArgs: readonly ["id"];
+    readonly description: "Runs semantic analyzer to recommend single vs chain execution with % modifier hints.";
+}, {
+    readonly id: "analyze_gates";
+    readonly displayName: "Analyze Gates";
+    readonly category: "analysis";
+    readonly status: "working";
+    readonly requiredArgs: readonly ["id"];
+    readonly description: "Suggests gate configurations via GateAnalyzer.";
+}, {
+    readonly id: "guide";
+    readonly displayName: "Guide";
+    readonly category: "discovery";
+    readonly status: "working";
+    readonly requiredArgs: readonly [];
+    readonly description: "Explains available actions, expected arguments, and known risks using metadata-driven summaries.";
+}, {
+    readonly id: "history";
+    readonly displayName: "Version History";
+    readonly category: "versioning";
+    readonly status: "working";
+    readonly requiredArgs: readonly ["id"];
+    readonly description: "View version history for a prompt. Shows past versions with timestamps and diffs.";
+}, {
+    readonly id: "rollback";
+    readonly displayName: "Rollback Version";
+    readonly category: "versioning";
+    readonly status: "working";
+    readonly requiredArgs: readonly ["id", "version"];
+    readonly description: "Rollback a prompt to a previous version. Requires confirm:true. Current state is saved before rollback.";
+}, {
+    readonly id: "compare";
+    readonly displayName: "Compare Versions";
+    readonly category: "versioning";
+    readonly status: "working";
+    readonly requiredArgs: readonly ["id", "from_version", "to_version"];
+    readonly description: "Compare two versions of a prompt showing unified diff between snapshots.";
+}];
+export type PromptManagerActionId = (typeof promptManagerActions)[number]['id'];
+export declare const promptManagerMetadata: ToolMetadata<PromptManagerMetadataData>;
+export {};

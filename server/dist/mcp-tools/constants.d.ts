@@ -1,0 +1,196 @@
+/**
+ * Constants for MCP Tools
+ *
+ * Centralized constants to avoid duplication and improve maintainability.
+ */
+/**
+ * Tool names (MCP-registered tools only)
+ */
+export declare const TOOL_NAMES: {
+    readonly PROMPT_ENGINE: "prompt_engine";
+    readonly SYSTEM_CONTROL: "system_control";
+    readonly RESOURCE_MANAGER: "resource_manager";
+};
+/**
+ * Action types for each tool
+ */
+export declare const ACTIONS: {
+    readonly RESOURCE_MANAGER: {
+        readonly CREATE: "create";
+        readonly UPDATE: "update";
+        readonly DELETE: "delete";
+        readonly RELOAD: "reload";
+        readonly LIST: "list";
+        readonly INSPECT: "inspect";
+        readonly ANALYZE_TYPE: "analyze_type";
+        readonly ANALYZE_GATES: "analyze_gates";
+        readonly GUIDE: "guide";
+        readonly SWITCH: "switch";
+    };
+    readonly SYSTEM_CONTROL: {
+        readonly STATUS: "status";
+        readonly FRAMEWORK: "framework";
+        readonly ANALYTICS: "analytics";
+        readonly CONFIG: "config";
+        readonly MAINTENANCE: "maintenance";
+    };
+};
+/**
+ * Operation types for system control
+ */
+export declare const SYSTEM_OPERATIONS: {
+    readonly STATUS: {
+        readonly OVERVIEW: "overview";
+        readonly HEALTH: "health";
+        readonly DIAGNOSTICS: "diagnostics";
+        readonly FRAMEWORK_STATUS: "framework_status";
+    };
+    readonly FRAMEWORK: {
+        readonly SWITCH: "switch";
+        readonly LIST: "list";
+        readonly ENABLE: "enable";
+        readonly DISABLE: "disable";
+    };
+    readonly ANALYTICS: {
+        readonly VIEW: "view";
+        readonly RESET: "reset";
+        readonly HISTORY: "history";
+    };
+    readonly CONFIG: {
+        readonly GET: "get";
+        readonly SET: "set";
+        readonly LIST: "list";
+        readonly VALIDATE: "validate";
+        readonly RESTORE: "restore";
+    };
+    readonly MAINTENANCE: {
+        readonly RESTART: "restart";
+    };
+};
+/**
+ * Output formats
+ */
+export declare const OUTPUT_FORMATS: {
+    readonly COMPACT: "compact";
+    readonly DETAILED: "detailed";
+    readonly JSON: "json";
+    readonly MARKDOWN: "markdown";
+};
+/**
+ * Detail levels for inspection
+ */
+export declare const DETAIL_LEVELS: {
+    readonly OVERVIEW: "overview";
+    readonly STEPS: "steps";
+    readonly STRUCTURE: "structure";
+    readonly GATES: "gates";
+    readonly FLOW: "flow";
+    readonly ANALYSIS: "analysis";
+    readonly RAW: "raw";
+    readonly FULL: "full";
+};
+/**
+ * Filter operators
+ */
+export declare const FILTER_OPERATORS: {
+    readonly EQUALS: "=";
+    readonly GREATER_THAN: ">";
+    readonly LESS_THAN: "<";
+    readonly GREATER_EQUAL: ">=";
+    readonly LESS_EQUAL: "<=";
+    readonly CONTAINS: "~";
+    readonly REGEX: "/";
+    readonly AND: "AND";
+    readonly OR: "OR";
+    readonly NOT: "NOT";
+};
+/**
+ * Validation patterns
+ */
+export declare const VALIDATION_PATTERNS: {
+    readonly PROMPT_ID: RegExp;
+    readonly SESSION_ID: RegExp;
+    readonly ARGUMENT_NAME: RegExp;
+    readonly EMAIL: RegExp;
+    readonly URL: RegExp;
+};
+/**
+ * Error codes
+ */
+export declare const ERROR_CODES: {
+    readonly VALIDATION_ERROR: "VALIDATION_ERROR";
+    readonly CONFIG_ERROR: "CONFIG_ERROR";
+    readonly FRAMEWORK_ERROR: "FRAMEWORK_ERROR";
+    readonly EXECUTION_ERROR: "EXECUTION_ERROR";
+    readonly NOT_FOUND: "NOT_FOUND";
+    readonly PERMISSION_DENIED: "PERMISSION_DENIED";
+    readonly TIMEOUT: "TIMEOUT";
+    readonly UNKNOWN_ERROR: "UNKNOWN_ERROR";
+};
+/**
+ * Default limits and constraints
+ */
+export declare const LIMITS: {
+    readonly MAX_NAME_LENGTH: 100;
+    readonly MIN_NAME_LENGTH: 1;
+    readonly MAX_DESCRIPTION_LENGTH: 500;
+    readonly MIN_DESCRIPTION_LENGTH: 10;
+    readonly MAX_STEP_NAME_LENGTH: 50;
+    readonly MAX_FILTER_RESULTS: 1000;
+    readonly DEFAULT_PAGE_SIZE: 20;
+    readonly MAX_PAGE_SIZE: 100;
+    readonly CACHE_TTL: 300000;
+};
+/**
+ * Framework types
+ */
+export declare const FRAMEWORKS: {
+    readonly CAGEERF: "CAGEERF";
+    readonly REACT: "ReACT";
+    readonly FIVE_W_ONE_H: "5W1H";
+    readonly SCAMPER: "SCAMPER";
+};
+/**
+ * Category types
+ */
+export declare const CATEGORIES: {
+    readonly ANALYSIS: "analysis";
+    readonly DEVELOPMENT: "development";
+    readonly CONTENT_PROCESSING: "content_processing";
+    readonly DEBUGGING: "debugging";
+    readonly DOCUMENTATION: "documentation";
+    readonly EDUCATION: "education";
+    readonly RESEARCH: "research";
+    readonly SYSTEM: "system";
+};
+/**
+ * Common error messages
+ */
+export declare const ERROR_MESSAGES: {
+    readonly REQUIRED_FIELD: (field: string) => string;
+    readonly INVALID_FORMAT: (field: string, format: string) => string;
+    readonly LENGTH_CONSTRAINT: (field: string, min: number, max: number) => string;
+    readonly UNKNOWN_ACTION: (action: string, validActions: string[]) => string;
+    readonly UNKNOWN_OPERATION: (operation: string, validOperations: string[]) => string;
+    readonly NOT_FOUND: (type: string, id: string) => string;
+    readonly ALREADY_EXISTS: (type: string, id: string) => string;
+};
+/**
+ * Success messages
+ */
+export declare const SUCCESS_MESSAGES: {
+    readonly CREATED: (type: string, id: string) => string;
+    readonly UPDATED: (type: string, id: string) => string;
+    readonly DELETED: (type: string, id: string) => string;
+    readonly OPERATION_COMPLETE: (operation: string) => string;
+};
+/**
+ * Documentation URLs (when available)
+ */
+export declare const DOCUMENTATION: {
+    readonly PROMPT_CREATION: "/docs/prompts/creation";
+    readonly CHAIN_CREATION: "/docs/prompts/chains";
+    readonly FILTERING: "/docs/prompts/filtering";
+    readonly FRAMEWORKS: "/docs/frameworks";
+    readonly TROUBLESHOOTING: "/docs/troubleshooting";
+};

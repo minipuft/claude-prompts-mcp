@@ -1,0 +1,40 @@
+/**
+ * Gate System Constants
+ *
+ * Centralized behavioral settings for the gate system.
+ * These were previously configurable but are now set as sensible defaults.
+ */
+/**
+ * Default retry limit for failed validations
+ * @remarks Changed from 3 to 2 per gate-retry-enforcement.md plan
+ */
+export declare const DEFAULT_RETRY_LIMIT = 2;
+/**
+ * Default retry configuration for gates that don't specify their own
+ */
+export declare const DEFAULT_GATE_RETRY_CONFIG: {
+    readonly max_attempts: 2;
+    readonly improvement_hints: true;
+    readonly preserve_context: true;
+};
+/**
+ * Whether to inject gate guidance into prompts by default
+ */
+export declare const ENABLE_GUIDANCE_INJECTION = true;
+/**
+ * Whether to perform gate validation by default
+ */
+export declare const ENABLE_VALIDATION = true;
+/**
+ * Default gate system behavioral configuration
+ */
+export declare const GATE_SYSTEM_DEFAULTS: {
+    readonly defaultRetryLimit: 2;
+    readonly enableGuidanceInjection: true;
+    readonly enableValidation: true;
+    readonly defaultRetryConfig: {
+        readonly max_attempts: 2;
+        readonly improvement_hints: true;
+        readonly preserve_context: true;
+    };
+};

@@ -1,0 +1,56 @@
+/**
+ * Text Reference System (Canonical Chain Step Store)
+ *
+ * Provides a single source of truth for chain step results so every pipeline
+ * stage, session manager, and template renderer reads from the same snapshot.
+ */
+import { Logger } from '../logging/index.js';
+export declare class TextReferenceManager {
+    private readonly logger;
+    private readonly chainStepResults;
+    private readonly namedOutputs;
+    constructor(logger: Logger);
+    /**
+     * Store a chain step result.
+     * Canonical entrypoint for pipeline stages to persist user or placeholder output.
+     *
+     * If metadata.outputMapping is provided (e.g., { "findings": "output" }),
+     * the result will also be stored under those named keys for semantic access.
+     */
+    storeChainStepResult(chainId: string, stepNumber: number, content: string, metadata?: Record<string, any>): void;
+    /**
+     * Retrieve all step results for a chain as a map of step -> content.
+     */
+    getChainStepResults(chainId: string): Record<number, string>;
+    /**
+     * Retrieve a specific step result.
+     */
+    getChainStepResult(chainId: string, stepNumber: number): string | null;
+    /**
+     * Build template variables for downstream execution ({{stepN_result}}, {{previous_step_result}}, etc.).
+     * Also includes any named outputs from outputMapping (e.g., {{findings}}).
+     */
+    buildChainVariables(chainId: string): Record<string, any>;
+    /**
+     * Retrieve metadata stored for a specific step result.
+     */
+    getChainStepMetadata(chainId: string, stepNumber: number): Record<string, any> | null;
+    /**
+     * Clear all stored step results for a chain (used when sessions reset).
+     */
+    clearChainStepResults(chainId: string): void;
+    /**
+     * Aggregate statistics about stored chains and steps.
+     */
+    getChainStats(): {
+        totalChains: number;
+        totalSteps: number;
+        chainsWithSteps: string[];
+    };
+    /**
+     * Canonical stats accessor used by diagnostics.
+     */
+    getStats(): ReturnType<TextReferenceManager['getChainStats']>;
+}
+export { ArgumentHistoryTracker } from './argument-history-tracker.js';
+export type { ArgumentHistoryEntry, ReviewContext, PersistedArgumentHistory } from './types.js';

@@ -1,0 +1,41 @@
+// @lifecycle canonical - Central hub that re-exports domain-specific type modules.
+/**
+ * Consolidated Type Index for MCP Prompts Server
+ *
+ * This module serves as the central type export hub, importing from domain-specific
+ * type files and re-exporting them for easy consumption. Types are now organized
+ * by domain for better maintainability and reduced duplication.
+ *
+ * Architecture: Domain-specific types -> This index -> Consumer modules
+ */
+export { DEFAULT_VERSIONING_CONFIG } from '../versioning/types.js';
+// Constants and Enums
+export const MAX_HISTORY_SIZE = 100;
+export var LogLevel;
+(function (LogLevel) {
+    LogLevel["DEBUG"] = "DEBUG";
+    LogLevel["INFO"] = "INFO";
+    LogLevel["WARN"] = "WARN";
+    LogLevel["ERROR"] = "ERROR";
+})(LogLevel || (LogLevel = {}));
+export var TransportType;
+(function (TransportType) {
+    TransportType["STDIO"] = "stdio";
+    TransportType["SSE"] = "sse";
+})(TransportType || (TransportType = {}));
+export var StepStatus;
+(function (StepStatus) {
+    StepStatus["PENDING"] = "pending";
+    StepStatus["RUNNING"] = "running";
+    StepStatus["COMPLETED"] = "completed";
+    StepStatus["FAILED"] = "failed";
+    StepStatus["SKIPPED"] = "skipped";
+})(StepStatus || (StepStatus = {}));
+// ===== End of Consolidated Type Definitions =====
+// Types are now organized by domain for better maintainability:
+// - Core types: ../types.js
+// - Prompt types: ../prompts/types.js
+// - Execution types: ../execution/types.js
+// - Gate types: ../gates/types.js
+// - Framework types: ../frameworks/types/index.js
+//# sourceMappingURL=index.js.map

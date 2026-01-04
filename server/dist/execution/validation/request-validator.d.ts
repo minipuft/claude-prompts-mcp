@@ -1,0 +1,64 @@
+import type { McpToolRequest } from '../../types/execution.js';
+export declare class McpToolRequestValidator {
+    /**
+     * Validates an unknown input against the McpToolRequest schema
+     *
+     * @param raw - Raw input to validate
+     * @returns Validated and typed McpToolRequest
+     * @throws {Error} If validation fails with detailed error messages
+     */
+    static validate(raw: unknown): McpToolRequest;
+    /**
+     * Type guard to check if a value is a valid command string
+     *
+     * @param command - Value to check
+     * @returns True if command is a non-empty string
+     */
+    static isValidCommand(command: unknown): command is string;
+    /**
+     * Type guard to check if a value is a valid chain ID
+     *
+     * @param chainId - Value to check
+     * @returns True if chain ID matches required pattern
+     */
+    static isValidChainId(chainId: unknown): chainId is string;
+    /**
+     * Type guard to check if a value is a valid gate verdict
+     *
+     * @param gateVerdict - Value to check
+     * @returns True if gate verdict matches required format
+     */
+    static isValidGateVerdict(gateVerdict: unknown): gateVerdict is string;
+    /**
+     * Validates a command string specifically
+     *
+     * @param command - Command to validate
+     * @returns Validated command string
+     * @throws {Error} If command is invalid
+     */
+    static validateCommand(command: unknown): string;
+    /**
+     * Validates a chain ID string specifically
+     *
+     * @param chainId - Chain ID to validate
+     * @returns Validated chain ID string
+     * @throws {Error} If chain ID is invalid
+     */
+    static validateChainId(chainId: unknown): string;
+    /**
+     * Validates a gate verdict string specifically
+     *
+     * @param gateVerdict - Gate verdict to validate
+     * @returns Validated gate verdict string
+     * @throws {Error} If gate verdict is invalid
+     */
+    static validateGateVerdict(gateVerdict: unknown): string;
+    /**
+     * Performs partial validation for optional fields
+     *
+     * @param partialRequest - Partial request object to validate
+     * @returns Validated partial request
+     * @throws {Error} If any provided fields are invalid
+     */
+    static validatePartial(partialRequest: Partial<McpToolRequest>): Partial<McpToolRequest>;
+}

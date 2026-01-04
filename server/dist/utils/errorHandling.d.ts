@@ -1,0 +1,212 @@
+/**
+ * Consolidated Error Handling System
+ * Combines basic error classes with MCP structured response capabilities
+ */
+interface StructuredToolResponse {
+    content: Array<{
+        type: 'text';
+        text: string;
+    }>;
+    isError?: boolean;
+    metadata?: {
+        tool: string;
+        action: string;
+        timestamp: string;
+        executionTime?: number;
+        framework?: string;
+        errorType?: string;
+        errorCode?: string;
+        [key: string]: unknown;
+    };
+}
+export interface ErrorContext {
+    tool?: string;
+    action?: string;
+    operation?: string;
+    userInput?: unknown;
+    suggestions?: string[];
+    recoveryOptions?: string[];
+    framework?: string;
+    systemState?: {
+        framework?: string;
+        memoryUsage?: number;
+        uptime?: number;
+    };
+    errorType?: 'validation' | 'execution' | 'system' | 'client' | 'configuration';
+    severity?: 'low' | 'medium' | 'high' | 'critical';
+    suggestedActions?: string[];
+    relatedComponents?: string[];
+    details?: any;
+}
+export interface ValidationResult {
+    valid: boolean;
+    errors?: Array<{
+        field: string;
+        message: string;
+        code: string;
+        suggestion?: string;
+        example?: string;
+    }>;
+    warnings?: Array<{
+        field: string;
+        message: string;
+        suggestion?: string;
+    }>;
+}
+/**
+ * Base error class with MCP structured response capability
+ */
+export declare abstract class BaseError extends Error {
+    readonly code: string;
+    readonly context: ErrorContext;
+    readonly timestamp: string;
+    constructor(message: string, code: string, context?: ErrorContext);
+    /**
+     * Get structured error response for MCP protocol
+     */
+    toStructuredResponse(): StructuredToolResponse;
+    /**
+     * Get enhanced error message with context and suggestions
+     */
+    getEnhancedMessage(): string;
+}
+export declare class PromptError extends BaseError {
+    constructor(message: string, context?: ErrorContext);
+}
+export declare class ArgumentError extends BaseError {
+    constructor(message: string, context?: ErrorContext);
+}
+export declare class ValidationError extends BaseError {
+    readonly validationResult?: ValidationResult;
+    readonly validationErrors?: string[];
+    constructor(message: string, validationErrorsOrContext?: string[] | ErrorContext, validationResult?: ValidationResult);
+    getEnhancedMessage(): string;
+}
+/**
+ * Schema validation issue from ArgumentSchemaValidator
+ */
+export interface SchemaValidationIssue {
+    argument: string;
+    message: string;
+    code?: string;
+}
+/**
+ * Prompt definition for retry hint generation
+ */
+export interface PromptDefinitionForError {
+    id: string;
+    arguments: Array<{
+        name: string;
+        type?: string;
+        required: boolean;
+        validation?: {
+            minLength?: number;
+            maxLength?: number;
+            pattern?: string;
+        };
+    }>;
+}
+/**
+ * Argument validation error with retry hints
+ * Thrown when schema validation fails (minLength, maxLength, pattern)
+ */
+export declare class ArgumentValidationError extends BaseError {
+    readonly issues: SchemaValidationIssue[];
+    readonly promptDefinition: PromptDefinitionForError;
+    constructor(issues: SchemaValidationIssue[], promptDefinition: PromptDefinitionForError);
+    /**
+     * Format error message with issues and retry hint
+     */
+    private static formatMessage;
+    /**
+     * Build example invocation with valid placeholders
+     */
+    private static buildRetryHint;
+    /**
+     * Generate a helpful placeholder value based on validation rules
+     */
+    private static getValidValueHint;
+    /**
+     * Get enhanced message with structured retry guidance
+     */
+    getEnhancedMessage(): string;
+}
+export declare class ConfigError extends BaseError {
+    constructor(message: string, context?: ErrorContext);
+}
+export declare class FrameworkError extends BaseError {
+    constructor(message: string, context?: ErrorContext);
+}
+export declare class ExecutionError extends BaseError {
+    readonly executionContext: Record<string, unknown> | undefined;
+    constructor(message: string, context?: ErrorContext, executionContext?: Record<string, unknown>);
+    getEnhancedMessage(): string;
+}
+export interface Logger {
+    info: (message: string, ...args: any[]) => void;
+    error: (message: string, ...args: any[]) => void;
+    warn: (message: string, ...args: any[]) => void;
+    debug: (message: string, ...args: any[]) => void;
+}
+/**
+ * Enhanced error handler with recovery strategies and MCP support
+ */
+export declare class ErrorHandler {
+    private static instance;
+    private retryStrategies;
+    private constructor();
+    static getInstance(): ErrorHandler;
+    /**
+     * Handle error with context and return structured response
+     */
+    handleError(error: unknown, context: ErrorContext): StructuredToolResponse;
+    /**
+     * Create validation error with enhanced context
+     */
+    createValidationError(message: string, context: ErrorContext, validationResult?: ValidationResult): ValidationError;
+    /**
+     * Add retry strategy for specific error patterns
+     */
+    addRetryStrategy(errorCode: string, strategy: (error: BaseError) => boolean): void;
+    /**
+     * Check if error is retryable
+     */
+    isRetryable(error: BaseError): boolean;
+    /**
+     * Setup default retry strategies
+     */
+    private setupDefaultRetryStrategies;
+}
+/**
+ * Validation helper functions
+ */
+export declare class ValidationHelpers {
+    /**
+     * Create validation result from errors
+     */
+    static createValidationResult(errors: Array<{
+        field: string;
+        message: string;
+        code: string;
+        suggestion?: string;
+        example?: string;
+    }>): ValidationResult;
+    /**
+     * Validate required fields with enhanced messages
+     */
+    static validateRequiredFields(data: Record<string, unknown>, requiredFields: string[]): ValidationResult;
+    /**
+     * Create "did you mean" suggestions for typos
+     */
+    static createDidYouMeanSuggestion(input: string, validOptions: string[]): string | undefined;
+    /**
+     * Calculate Levenshtein distance for typo detection
+     */
+    private static levenshteinDistance;
+}
+export declare const errorHandler: ErrorHandler;
+export declare function handleError(error: unknown, context: string, logger: Logger): {
+    message: string;
+    isError: boolean;
+};
+export {};

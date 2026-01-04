@@ -1,0 +1,76 @@
+/**
+ * Gate Guidance Renderer - User-Facing Guidance Generation
+ *
+ * Single responsibility: Generate and format gate guidance for users.
+ */
+import type { Logger } from '../../logging/index.js';
+import type { GateContext } from '../core/gate-definitions.js';
+import type { GateDefinitionProvider } from '../core/gate-loader.js';
+import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
+import type { LightweightGateDefinition } from '../types.js';
+export interface GateGuidanceRendererOptions {
+    gateLoader: GateDefinitionProvider;
+    temporaryGateRegistry?: TemporaryGateRegistry;
+    frameworkIdentifierProvider?: () => readonly string[] | undefined;
+}
+/**
+ * Gate guidance renderer with framework-specific filtering and temporary gate support
+ */
+export declare class GateGuidanceRenderer {
+    private readonly logger;
+    private readonly gateLoader;
+    private readonly temporaryGateRegistry;
+    private readonly frameworkIdentifierProvider;
+    constructor(logger: Logger, options: GateGuidanceRendererOptions);
+    /**
+     * Generate formatted gate guidance for display to users
+     *
+     * @param gateIds - Array of gate IDs to render
+     * @param context - Context for gate activation and framework filtering
+     * @returns Formatted guidance text ready for display
+     */
+    renderGuidance(gateIds: string[], context?: GateContext): Promise<string>;
+    private isInlineGate;
+    /**
+     * Load gate definition via the shared gate loader
+     *
+     * Note: GateLoader already checks the temporary registry, so no fallback needed here.
+     * This eliminates duplication and trusts the loader to handle all gate sources.
+     */
+    private loadGateDefinition;
+    /**
+     * Check if gate should be activated for current context
+     *
+     * Framework gates (gate_type: "framework") bypass category checks and activate
+     * based on framework context alone. This ensures framework methodology guidance
+     * applies universally across all categories.
+     */
+    private isGateActive;
+    /**
+     * Format gate guidance for display with framework-specific filtering
+     */
+    private formatGateGuidance;
+    /**
+     * Get available gate IDs (for testing and diagnostics)
+     */
+    getAvailableGates(): Promise<string[]>;
+    /**
+     * Get detailed gate definitions for listing/discovery
+     */
+    getAvailableGateDefinitions(): Promise<LightweightGateDefinition[]>;
+    /**
+     * Clear cache (for hot-reloading support)
+     */
+    clearCache(): void;
+    /**
+     * Get renderer statistics (for monitoring)
+     */
+    getStatistics(): {
+        cachedGates: number;
+        gatesDirectory: string;
+    };
+}
+/**
+ * Factory function for creating gate guidance renderer
+ */
+export declare function createGateGuidanceRenderer(logger: Logger, options: GateGuidanceRendererOptions): GateGuidanceRenderer;
