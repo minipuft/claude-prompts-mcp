@@ -90,6 +90,8 @@ The plugin adds hooks that fix common issues:
 
 Raw MCP works, but models sometimes miss the syntax. The hooks catch that. → [hooks/README.md](hooks/README.md)
 
+**User Data**: Your custom prompts are stored in `~/.local/share/claude-prompts/` and persist across plugin updates.
+
 ### Other MCP Clients
 
 <details>
