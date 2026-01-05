@@ -1,5 +1,11 @@
 {
   "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/setup.sh"
+      }]
+    }],
     "UserPromptSubmit": [{
       "matcher": "*",
       "hooks": [{
