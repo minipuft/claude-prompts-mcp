@@ -1,0 +1,30 @@
+id: research-quality
+name: Research Quality Guidelines
+type: validation
+description: Ensures thorough research with proper citations and credible sources
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: content_check
+    min_length: 300
+    required_patterns:
+      - according to
+      - source
+      - published
+      - research
+      - study
+  - type: pattern_check
+    keyword_count:
+      according to: 1
+      source: 2
+
+retry_config:
+  max_attempts: 3
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - research
+    - analysis
+  explicit_request: true

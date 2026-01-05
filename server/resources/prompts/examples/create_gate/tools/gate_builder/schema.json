@@ -1,0 +1,163 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Gate Builder Input",
+  "description": "Schema for gate definitions matching the gate.yaml structure",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Lowercase-hyphenated identifier (e.g., 'code-quality', 'api-docs')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable gate name"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["validation", "guidance"],
+      "description": "Gate type: validation (pass/fail) or guidance (advisory)"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Brief description of what the gate validates"
+    },
+    "guidanceFile": {
+      "type": "string",
+      "description": "Path to guidance.md file"
+    },
+    "guidance": {
+      "type": "string",
+      "description": "Inline guidance content (alternative to guidanceFile)"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low"],
+      "default": "medium",
+      "description": "Gate severity level"
+    },
+    "enforcementMode": {
+      "type": "string",
+      "enum": ["blocking", "advisory", "informational"],
+      "description": "How the gate is enforced"
+    },
+    "pass_criteria": {
+      "type": "array",
+      "description": "Validation criteria definitions",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "content_check",
+              "pattern_check",
+              "llm_self_check",
+              "methodology_compliance"
+            ],
+            "description": "Type of validation check"
+          },
+          "min_length": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Minimum content length"
+          },
+          "max_length": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Maximum content length"
+          },
+          "required_patterns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Patterns that must be present"
+          },
+          "forbidden_patterns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Patterns that must not be present"
+          },
+          "regex_patterns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Regex patterns to match"
+          },
+          "keyword_count": {
+            "type": "object",
+            "additionalProperties": { "type": "integer" },
+            "description": "Required keyword frequencies"
+          },
+          "prompt_template": {
+            "type": "string",
+            "description": "LLM prompt template for self-check"
+          },
+          "pass_threshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Pass threshold for LLM check"
+          },
+          "methodology": {
+            "type": "string",
+            "description": "Methodology ID for compliance check"
+          },
+          "min_compliance_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Minimum compliance score"
+          }
+        },
+        "required": ["type"]
+      }
+    },
+    "retry_config": {
+      "type": "object",
+      "description": "Retry behavior configuration",
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 2,
+          "description": "Maximum retry attempts"
+        },
+        "improvement_hints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include improvement hints"
+        },
+        "preserve_context": {
+          "type": "boolean",
+          "default": true,
+          "description": "Preserve context between retries"
+        }
+      }
+    },
+    "activation": {
+      "type": "object",
+      "description": "When to activate the gate",
+      "properties": {
+        "prompt_categories": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Categories that trigger this gate"
+        },
+        "frameworks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Frameworks that trigger this gate"
+        },
+        "explicit_request": {
+          "type": "boolean",
+          "default": false,
+          "description": "Only activate when explicitly requested"
+        }
+      }
+    }
+  },
+  "required": ["id", "name", "type", "description"],
+  "additionalProperties": false
+}

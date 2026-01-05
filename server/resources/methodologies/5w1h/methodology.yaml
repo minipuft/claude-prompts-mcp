@@ -1,0 +1,215 @@
+id: 5w1h
+name: 5W1H Framework
+type: 5W1H
+methodology: 5W1H # Deprecated: use 'type' instead
+version: 1.0.0
+enabled: true
+systemPromptGuidance: >
+  Apply the 5W1H methodology systematically:
+
+
+  **Who**: Identify all stakeholders, actors, and people involved or affected
+
+  **What**: Define exactly what needs to be accomplished and deliverables
+
+  **When**: Establish timing, deadlines, and sequence requirements
+
+  **Where**: Determine location, context, and environmental constraints
+
+  **Why**: Understand underlying purposes, motivations, and fundamental
+  importance
+
+  **How**: Plan specific methods, approaches, and implementation strategies
+
+
+  Use systematic questioning to ensure comprehensive coverage and uncover hidden
+  requirements. Address each question thoroughly to build complete understanding
+  and effective solutions.
+gates:
+  include:
+    - framework-compliance
+methodologyGates:
+  - id: stakeholder_completeness
+    name: Stakeholder Completeness
+    description: Verify comprehensive stakeholder identification and analysis
+    methodologyArea: Who
+    priority: high
+    validationCriteria:
+      - All relevant stakeholders identified
+      - Roles and responsibilities defined
+      - Stakeholder interests and concerns considered
+  - id: objective_specificity
+    name: Objective Specificity
+    description: Ensure objectives are specific, measurable, and well-defined
+    methodologyArea: What
+    priority: high
+    validationCriteria:
+      - Objectives are specific and clear
+      - Deliverables are measurable
+      - Success criteria are defined
+  - id: timing_comprehensiveness
+    name: Timing Comprehensiveness
+    description: Validate thorough timing and scheduling consideration
+    methodologyArea: When
+    priority: medium
+    validationCriteria:
+      - Timeline is realistic and detailed
+      - Dependencies and constraints considered
+      - Milestones and checkpoints defined
+  - id: context_thoroughness
+    name: Context Thoroughness
+    description: Assess comprehensive context and environmental analysis
+    methodologyArea: Where
+    priority: medium
+    validationCriteria:
+      - Environmental factors considered
+      - Contextual constraints identified
+      - Location and situational factors addressed
+  - id: purpose_depth
+    name: Purpose Depth
+    description: Verify deep understanding of underlying motivations
+    methodologyArea: Why
+    priority: high
+    validationCriteria:
+      - Fundamental purposes understood
+      - Underlying motivations explored
+      - Value and importance articulated
+  - id: method_practicality
+    name: Method Practicality
+    description: Ensure methods and approaches are practical and detailed
+    methodologyArea: How
+    priority: medium
+    validationCriteria:
+      - Methods are specific and actionable
+      - Implementation approach is practical
+      - Resources and capabilities considered
+templateSuggestions:
+  - section: system
+    type: addition
+    description: Add 5W1H methodology guidance
+    content: >
+      Apply the 5W1H methodology systematically: Who (stakeholders), What
+      (objectives), When (timing), Where (context), Why (purpose), How
+      (methods). Ensure comprehensive coverage of all questions for thorough
+      analysis.
+    methodologyJustification: Ensures systematic application of comprehensive questioning
+    impact: high
+  - section: user
+    type: structure
+    description: Structure response using 5W1H questions
+    content: >
+      Please structure your response addressing: 1) Who is involved or affected,
+      2) What needs to be accomplished, 3) When this should happen, 4) Where
+      this takes place, 5) Why this is important, 6) How this should be done.
+    methodologyJustification: Guides comprehensive analysis through systematic questioning
+    impact: medium
+methodologyElements:
+  requiredSections:
+    - Who
+    - What
+    - When
+    - Where
+    - Why
+    - How
+  optionalSections:
+    - Validation
+    - Dependencies
+  sectionDescriptions:
+    Who: Identify stakeholders, actors, and people involved or affected
+    What: Define exactly what needs to be accomplished and deliverables
+    When: Establish timing, deadlines, and sequence requirements
+    Where: Determine location, context, and environmental constraints
+    Why: Understand underlying purposes, motivations, and importance
+    How: Plan specific methods, approaches, and implementation strategies
+argumentSuggestions:
+  - name: stakeholders
+    type: array
+    description: People, roles, or entities involved or affected
+    methodologyReason: 5W1H 'Who' question requires comprehensive stakeholder identification
+    examples:
+      - users
+      - developers
+      - managers
+      - customers
+  - name: objectives
+    type: string
+    description: Specific goals and deliverables to accomplish
+    methodologyReason: 5W1H 'What' question needs clear objective definition
+    examples:
+      - improve user experience
+      - reduce processing time
+      - increase sales
+  - name: timeline
+    type: string
+    description: When this should be completed or timing requirements
+    methodologyReason: 5W1H 'When' question establishes timing and urgency
+    examples:
+      - by end of quarter
+      - within 2 weeks
+      - before product launch
+  - name: context
+    type: string
+    description: Where this takes place or contextual constraints
+    methodologyReason: 5W1H 'Where' question identifies location and context factors
+    examples:
+      - web application
+      - mobile platform
+      - enterprise environment
+  - name: purpose
+    type: string
+    description: Why this is important and underlying motivations
+    methodologyReason: 5W1H 'Why' question uncovers fundamental motivations
+    examples:
+      - improve customer satisfaction
+      - reduce operational costs
+      - meet compliance
+toolDescriptions:
+  prompt_engine:
+    description: >
+      🚀 PROMPT ENGINE [5W1H]: Expands prompts with Who/What/When/Where/Why/How
+      questioning framework for you to apply.
+
+
+      WHAT IT RETURNS: Prepared prompt + 5W1H question structure.
+
+      WHAT YOU DO: Answer each question yourself using the returned framework.
+
+
+      SYNTAX: >>prompt_id key="value" | Chain: >>s1 --> >>s2
+
+      OPERATORS: @5W1H | :: "criteria" | %clean/%lean
+    parameters:
+      command: >-
+        Prompt ID to expand. Resulting prompt will include 5W1H questioning
+        guidance for you to apply.
+  resource_manager:
+    description: >
+      🗂️ RESOURCE MANAGER [5W1H]: Unified CRUD for prompts, gates, and
+      methodologies.
+
+
+      USAGE: resource_manager(resource_type:"prompt|gate|methodology",
+      action:"...", ...)
+
+      RESOURCE TYPES: prompt (templates), gate (quality criteria), methodology
+      (frameworks)
+
+      ACTIONS: create | update | delete | list | inspect | reload | switch
+      (methodology only)
+
+
+      Use action:"guide" with goal:"who/what/when/where/why/how" for
+      question-specific recommendations.
+    parameters:
+      resource_type: "Type of resource: 'prompt', 'gate', or 'methodology'"
+      action: >-
+        Use 'guide' with goal:'who/what/when/where/why/how' for
+        question-specific recommendations.
+  system_control:
+    description: >
+      ⚙️ SYSTEM CONTROL [5W1H]: System administration. Use topic:"why" to get
+      context on why an operation matters.
+    parameters:
+      action: Use 'guide' with topic:'why' to understand the purpose before acting.
+phasesFile: phases.yaml
+judgePromptFile: judge-prompt.md

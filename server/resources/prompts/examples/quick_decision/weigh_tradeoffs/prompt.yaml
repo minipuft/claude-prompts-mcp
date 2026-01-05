@@ -1,0 +1,5 @@
+id: weigh_tradeoffs
+name: Weigh Tradeoffs
+category: examples
+description: Analyze pros/cons of each option
+userMessageTemplateFile: user-message.md

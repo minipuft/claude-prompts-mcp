@@ -1,0 +1,5 @@
+id: code-quality
+name: Code Quality Standards
+type: validation
+description: Ensures generated code follows best practices and quality standards
+guidanceFile: guidance.md

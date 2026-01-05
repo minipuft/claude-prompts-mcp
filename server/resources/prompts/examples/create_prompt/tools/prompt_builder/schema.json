@@ -1,0 +1,169 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Prompt Builder Input",
+  "description": "Schema for prompt definitions matching the prompt.yaml structure",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Lowercase-underscored identifier (e.g., 'code_review', 'deep_analysis')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable prompt name"
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Prompt category (e.g., 'development', 'analysis')"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Brief description of what the prompt does"
+    },
+    "systemMessage": {
+      "type": "string",
+      "description": "Inline system message content"
+    },
+    "systemMessageFile": {
+      "type": "string",
+      "description": "Path to system-message.md file"
+    },
+    "userMessageTemplate": {
+      "type": "string",
+      "description": "Inline user message template with {{variable}} placeholders"
+    },
+    "userMessageTemplateFile": {
+      "type": "string",
+      "description": "Path to user-message.md file"
+    },
+    "arguments": {
+      "type": "array",
+      "description": "Argument definitions for the prompt",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Argument name in snake_case"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["string", "number", "boolean", "array", "object"],
+            "description": "Argument data type"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this argument provides"
+          },
+          "required": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether the argument is required"
+          },
+          "defaultValue": {
+            "description": "Default value if not provided"
+          },
+          "validation": {
+            "type": "object",
+            "properties": {
+              "pattern": { "type": "string" },
+              "minLength": { "type": "integer" },
+              "maxLength": { "type": "integer" }
+            }
+          }
+        },
+        "required": ["name", "type", "description"]
+      }
+    },
+    "gateConfiguration": {
+      "type": "object",
+      "description": "Gate configuration for the prompt",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Gate IDs to include"
+        },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Gate IDs to exclude"
+        },
+        "framework_gates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include active framework's gates"
+        },
+        "inline_gate_definitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "scope": { "type": "string" },
+              "description": { "type": "string" },
+              "pass_criteria": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "required": ["name", "description"]
+          }
+        }
+      }
+    },
+    "chainSteps": {
+      "type": "array",
+      "description": "Chain step definitions for multi-step prompts",
+      "items": {
+        "type": "object",
+        "properties": {
+          "promptId": {
+            "type": "string",
+            "description": "ID of prompt to execute in this step"
+          },
+          "stepName": {
+            "type": "string",
+            "description": "Display name for this step"
+          },
+          "inputMapping": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Map previous output to input arguments"
+          },
+          "outputMapping": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Extract fields from response"
+          },
+          "retries": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5,
+            "default": 0,
+            "description": "Number of retry attempts"
+          }
+        },
+        "required": ["promptId", "stepName"]
+      }
+    },
+    "registerWithMcp": {
+      "type": "boolean",
+      "default": false,
+      "description": "Register this prompt as an MCP tool"
+    },
+    "tools": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Script tool IDs to use with this prompt"
+    }
+  },
+  "required": ["id", "name", "category", "description"],
+  "additionalProperties": false
+}

@@ -1,0 +1,203 @@
+# ReACT Phases Definition
+# Processing steps, execution steps, and quality indicators
+
+processingSteps:
+  - id: reasoning_phase
+    name: Reasoning Phase
+    description: Think through the problem systematically and develop approach
+    methodologyBasis: ReACT Reasoning phase
+    order: 1
+    required: true
+
+  - id: action_planning
+    name: Action Planning
+    description: Plan specific, purposeful actions based on reasoning
+    methodologyBasis: ReACT Action phase
+    order: 2
+    required: true
+
+  - id: action_execution
+    name: Action Execution
+    description: Execute planned actions systematically
+    methodologyBasis: ReACT Action phase
+    order: 3
+    required: true
+
+  - id: observation_analysis
+    name: Observation Analysis
+    description: Analyze results, feedback, and outcomes
+    methodologyBasis: ReACT Observe phase
+    order: 4
+    required: true
+
+  - id: reasoning_adjustment
+    name: Reasoning Adjustment
+    description: Adjust approach based on observations
+    methodologyBasis: ReACT cycle continuation
+    order: 5
+    required: false
+
+  - id: cycle_evaluation
+    name: Cycle Evaluation
+    description: Evaluate if objective is achieved or cycle should continue
+    methodologyBasis: ReACT cycle management
+    order: 6
+    required: false
+
+executionSteps:
+  - id: systematic_reasoning
+    name: Systematic Reasoning
+    action: Think through the problem systematically and develop initial approach
+    methodologyPhase: Reason
+    dependencies: []
+    expected_output: Clear reasoning about problem and planned approach
+
+  - id: purposeful_action
+    name: Purposeful Action
+    action: Take specific, measurable actions based on reasoning
+    methodologyPhase: Act
+    dependencies:
+      - systematic_reasoning
+    expected_output: Concrete actions taken with clear objectives
+
+  - id: result_observation
+    name: Result Observation
+    action: Observe and analyze results, feedback, and outcomes
+    methodologyPhase: Observe
+    dependencies:
+      - purposeful_action
+    expected_output: Detailed analysis of action results and feedback
+
+  - id: reasoning_adjustment
+    name: Reasoning Adjustment
+    action: Adjust reasoning and approach based on observations
+    methodologyPhase: Adjust
+    dependencies:
+      - result_observation
+    expected_output: Updated reasoning and modified approach
+
+  - id: cycle_continuation
+    name: Cycle Continuation
+    action: Determine if objective is achieved or if cycle should continue
+    methodologyPhase: Continue
+    dependencies:
+      - reasoning_adjustment
+    expected_output: Decision on cycle completion or continuation
+
+executionTypeEnhancements:
+  chain:
+    advancedChain:
+      reasoning_adjustment:
+        - Define decision points and branching logic
+        - Plan workflow state transitions based on observations
+        - Establish error handling for failed actions
+    simpleChain:
+      systematic_reasoning:
+        - Plan reasoning steps in sequence
+        - Define dependencies between reasoning phases
+        - Establish clear handoff points between steps
+
+templateEnhancements:
+  systemPromptAdditions:
+    - Apply ReACT methodology with reasoning-action cycles
+    - Think systematically before taking actions
+    - Observe and analyze results after each action
+    - Adjust approach based on observations
+  userPromptModifications:
+    - Structure response using Reason-Act-Observe cycles
+    - Make reasoning explicit and traceable
+    - Include observation and adjustment phases
+  contextualHints:
+    - Focus on systematic problem-solving approach
+    - Emphasize learning from action outcomes
+    - Apply iterative reasoning improvement
+
+executionFlow:
+  preProcessingSteps:
+    - Validate problem definition clarity
+    - Confirm available actions are specified
+    - Verify observation mechanisms are defined
+  postProcessingSteps:
+    - Review reasoning-action alignment
+    - Assess observation completeness
+    - Evaluate cycle termination criteria
+  validationSteps:
+    - Reasoning quality check
+    - Action specificity verification
+    - Observation mechanism validation
+    - Cycle completion assessment
+
+qualityIndicators:
+  reason:
+    keywords:
+      - reason
+      - think
+      - analyze
+      - consider
+      - approach
+      - systematic
+      - plan
+    patterns:
+      - systematic|structured|methodical
+      - problem.{0,20}analysis|approach
+      - reasoning|thought.{0,10}process
+      - plan|strategy|method
+
+  act:
+    keywords:
+      - act
+      - action
+      - implement
+      - execute
+      - do
+      - perform
+      - take
+    patterns:
+      - action|step|task
+      - implement|execute|perform
+      - specific|concrete|measurable
+      - purposeful|deliberate
+
+  observe:
+    keywords:
+      - observe
+      - result
+      - outcome
+      - feedback
+      - measure
+      - assess
+      - analyze
+    patterns:
+      - result|outcome|feedback
+      - observe|monitor|track
+      - measure|assess|evaluate
+      - analysis|review
+
+  adjust:
+    keywords:
+      - adjust
+      - modify
+      - change
+      - improve
+      - refine
+      - adapt
+      - update
+    patterns:
+      - adjust|modify|refine
+      - improve|enhance|optimize
+      - based.{0,10}on|according.{0,10}to
+      - learn|adapt|evolve
+
+  continue:
+    keywords:
+      - continue
+      - repeat
+      - cycle
+      - iterate
+      - loop
+      - ongoing
+    patterns:
+      - continue|repeat|iterate
+      - cycle|loop|round
+      - until|complete|achieve
+      - next.{0,10}step|iteration

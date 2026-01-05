@@ -1,0 +1,173 @@
+# CAGEERF Methodology Definition
+# This YAML file is the source of truth for the CAGEERF framework (runtime-loaded; no build artifacts).
+
+id: cageerf
+name: C.A.G.E.E.R.F Framework
+type: CAGEERF
+methodology: CAGEERF # Deprecated: use 'type' instead
+version: 2.0.0
+enabled: true
+
+# System prompt guidance injected when framework is active
+systemPromptGuidance: |
+  Apply the C.A.G.E.E.R.F methodology systematically:
+
+  **Context**: Establish comprehensive situational awareness and environmental factors
+  **Analysis**: Apply structured, systematic examination of the problem or opportunity
+  **Goals**: Define specific, measurable, actionable objectives with clear success criteria
+  **Execution**: Develop practical, implementable approach with detailed action steps
+  **Evaluation**: Create robust success metrics and assessment methods
+  **Refinement**: Enable continuous improvement and iteration processes
+
+  Ensure each phase builds logically on the previous phases while maintaining focus on practical, actionable outcomes. Consider stakeholder perspectives, resource constraints, and environmental factors throughout the methodology application.
+
+# Reference to phases file (inlined at build time)
+phasesFile: phases.yaml
+
+# Reference to judge prompt (inlined at build time)
+judgePromptFile: judge-prompt.md
+
+# Gate configurations
+gates:
+  include:
+    - framework-compliance
+
+# Methodology-specific quality gates
+methodologyGates:
+  - id: context_completeness
+    name: Context Completeness
+    description: Verify comprehensive situational context is established
+    methodologyArea: Context
+    priority: high
+    validationCriteria:
+      - Environmental factors identified
+      - Stakeholders and constraints defined
+      - Background information sufficient
+
+  - id: analysis_depth
+    name: Analysis Depth
+    description: Ensure systematic and thorough analytical approach
+    methodologyArea: Analysis
+    priority: high
+    validationCriteria:
+      - Multiple perspectives considered
+      - Root cause analysis performed
+      - Data and evidence evaluated
+
+  - id: goal_specificity
+    name: Goal Specificity
+    description: Validate goals are specific, measurable, and actionable
+    methodologyArea: Goals
+    priority: high
+    validationCriteria:
+      - Goals are quantifiable
+      - Success criteria defined
+      - Timeline established
+
+  - id: execution_feasibility
+    name: Execution Feasibility
+    description: Assess practical implementability of proposed approach
+    methodologyArea: Execution
+    priority: medium
+    validationCriteria:
+      - Resources and capabilities considered
+      - Risk factors identified
+      - Implementation steps detailed
+
+# Template enhancement suggestions
+templateSuggestions:
+  - section: system
+    type: addition
+    description: Add CAGEERF methodology guidance
+    content: |
+      Apply the C.A.G.E.E.R.F methodology: establish Context, perform systematic Analysis, define clear Goals, plan Execution, create Evaluation criteria, and enable Refinement.
+    methodologyJustification: Ensures systematic application of CAGEERF principles
+    impact: high
+
+  - section: user
+    type: structure
+    description: Structure response using CAGEERF phases
+    content: |
+      Please structure your response addressing: 1) Context establishment, 2) Systematic analysis, 3) Specific goals, 4) Execution approach, 5) Success evaluation, 6) Refinement opportunities.
+    methodologyJustification: Guides comprehensive thinking through all CAGEERF phases
+    impact: medium
+
+# Methodology elements for prompt creation guidance
+methodologyElements:
+  requiredSections:
+    - Context
+    - Analysis
+    - Goals
+    - Execution
+  optionalSections:
+    - Evaluation
+    - Refinement
+    - Framework
+  sectionDescriptions:
+    Context: Establish situational awareness and environmental factors
+    Analysis: Systematic examination of the problem or opportunity
+    Goals: Clear, specific, measurable objectives
+    Execution: Actionable steps and implementation approach
+    Evaluation: Success criteria and measurement methods
+    Refinement: Iteration and improvement processes
+    Framework: Overarching methodology and principles
+
+# Argument suggestions for prompt creation
+argumentSuggestions:
+  - name: context
+    type: string
+    description: Situational context and background information
+    methodologyReason: CAGEERF Context phase requires clear situational awareness
+    examples:
+      - business context
+      - technical environment
+      - user scenario
+
+  - name: analysis_focus
+    type: string
+    description: Specific analytical focus areas
+    methodologyReason: CAGEERF Analysis phase needs defined scope
+    examples:
+      - performance analysis
+      - risk assessment
+      - opportunity identification
+
+  - name: goals
+    type: array
+    description: Specific, measurable objectives
+    methodologyReason: CAGEERF Goals phase requires clear, actionable targets
+    examples:
+      - increase efficiency by 20%
+      - reduce errors
+      - improve user satisfaction
+
+# Tool description overlays when this framework is active
+toolDescriptions:
+  prompt_engine:
+    description: |
+      🚀 PROMPT ENGINE [CAGEERF]: Expands prompts with C.A.G.E.E.R.F methodology for you to follow.
+
+      WHAT IT RETURNS: Prepared prompt + CAGEERF phase instructions (Context→Analysis→Goals→Execution→Evaluation→Refinement).
+      WHAT YOU DO: Execute each phase yourself using the returned structure.
+
+      SYNTAX: >>prompt_id key="value" | Chain: >>s1 --> >>s2
+      OPERATORS: @CAGEERF | :: "criteria" | %clean/%lean
+    parameters:
+      command: 'Prompt ID to expand. Resulting prompt will include CAGEERF phase guidance for you to apply.'
+  resource_manager:
+    description: |
+      🗂️ RESOURCE MANAGER [CAGEERF]: Unified CRUD for prompts, gates, and methodologies.
+
+      USAGE: resource_manager(resource_type:"prompt|gate|methodology", action:"...", ...)
+      RESOURCE TYPES: prompt (templates), gate (quality criteria), methodology (frameworks)
+      ACTIONS: create | update | delete | list | inspect | reload | switch (methodology only)
+
+      Use action:"guide" with resource_type:"prompt" for phase-appropriate recommendations.
+    parameters:
+      resource_type: "Type of resource: 'prompt', 'gate', or 'methodology'"
+      action: "Use 'guide' with your current CAGEERF phase for phase-appropriate action recommendations."
+  system_control:
+    description: |
+      ⚙️ SYSTEM CONTROL [CAGEERF]: System administration. Status shows current CAGEERF phase context.
+    parameters:
+      action: "Use 'guide' with topic:'framework' for phase-specific operation guidance."

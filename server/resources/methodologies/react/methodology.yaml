@@ -1,0 +1,161 @@
+# ReACT Methodology Definition
+# Reasoning and Acting cycles for systematic problem-solving
+
+id: react
+name: ReACT Framework
+type: ReACT
+methodology: ReACT # Deprecated: use 'type' instead
+version: '1.0.0'
+enabled: true
+
+systemPromptGuidance: |
+  Apply the ReACT methodology systematically:
+
+  **Reason**: Think through the problem systematically and develop a clear approach
+  **Act**: Take specific, purposeful actions based on your reasoning
+  **Observe**: Analyze results, feedback, and outcomes of your actions carefully
+  **Adjust**: Modify your reasoning and approach based on observations
+  **Continue**: Repeat the cycle until the objective is achieved
+
+  Focus on explicit reasoning, measurable actions, systematic observation, and continuous improvement through reasoning-action cycles. Each cycle should build upon learnings from previous cycles.
+
+gates:
+  include:
+    - framework-compliance
+
+methodologyGates:
+  - id: reasoning_quality
+    name: Reasoning Quality
+    description: Verify systematic and logical reasoning approach
+    methodologyArea: Reason
+    priority: high
+    validationCriteria:
+      - Problem analysis is systematic and thorough
+      - Reasoning is explicit and traceable
+      - Approach is logically structured
+
+  - id: action_specificity
+    name: Action Specificity
+    description: Ensure actions are specific, purposeful, and measurable
+    methodologyArea: Act
+    priority: high
+    validationCriteria:
+      - Actions are concrete and specific
+      - Actions have clear objectives
+      - Actions are measurable and observable
+
+  - id: observation_completeness
+    name: Observation Completeness
+    description: Validate comprehensive observation and analysis of results
+    methodologyArea: Observe
+    priority: high
+    validationCriteria:
+      - Results are observed systematically
+      - Feedback is analyzed thoroughly
+      - Outcomes are measured against objectives
+
+  - id: cycle_effectiveness
+    name: Cycle Effectiveness
+    description: Assess effectiveness of reasoning-action cycles
+    methodologyArea: Continue
+    priority: medium
+    validationCriteria:
+      - Cycles show learning and improvement
+      - Adjustments are based on observations
+      - Progress toward objective is evident
+
+templateSuggestions:
+  - section: system
+    type: addition
+    description: Add ReACT methodology guidance
+    content: |
+      Apply the ReACT methodology: Reason through the problem systematically, take specific purposeful Actions, Observe results and feedback, then adjust your reasoning based on observations. Continue cycles until the objective is achieved.
+    methodologyJustification: Ensures systematic application of reasoning-action cycles
+    impact: high
+
+  - section: user
+    type: structure
+    description: Structure response using ReACT cycles
+    content: |
+      Please structure your response using ReACT cycles: 1) Reasoning about the problem, 2) Specific actions to take, 3) Observations of results, 4) Reasoning adjustments, 5) Continuation decision.
+    methodologyJustification: Guides systematic problem-solving through reasoning-action cycles
+    impact: medium
+
+methodologyElements:
+  requiredSections:
+    - Reason
+    - Act
+    - Observe
+  optionalSections:
+    - Adjust
+    - Continue
+  sectionDescriptions:
+    Reason: Think through the problem systematically and plan approach
+    Act: Take specific, purposeful actions based on reasoning
+    Observe: Analyze results, feedback, and outcomes of actions
+    Adjust: Modify reasoning and approach based on observations
+    Continue: Repeat cycles until objective is achieved
+
+argumentSuggestions:
+  - name: problem
+    type: string
+    description: The problem or challenge to address systematically
+    methodologyReason: ReACT requires clear problem definition for effective reasoning
+    examples:
+      - performance optimization
+      - user experience issue
+      - technical implementation
+
+  - name: actions
+    type: array
+    description: Potential actions that can be taken
+    methodologyReason: ReACT methodology emphasizes specific, purposeful actions
+    examples:
+      - analyze metrics
+      - test hypothesis
+      - implement solution
+
+  - name: success_criteria
+    type: string
+    description: Clear criteria for when the objective is achieved
+    methodologyReason: ReACT cycles need defined completion points
+    examples:
+      - performance improves by 20%
+      - user satisfaction increases
+      - tests pass
+
+toolDescriptions:
+  prompt_engine:
+    description: |
+      🚀 PROMPT ENGINE [ReACT]: Expands prompts with Reason→Act→Observe→Adjust cycle guidance for you to follow.
+
+      WHAT IT RETURNS: Prepared prompt + ReACT cycle instructions.
+      WHAT YOU DO: Reason, act, observe, and adjust yourself using the returned structure.
+
+      SYNTAX: >>prompt_id key="value" | Chain: >>s1 --> >>s2
+      OPERATORS: @ReACT | :: "criteria" | %clean/%lean
+    parameters:
+      command: 'Prompt ID to expand. Resulting prompt will include ReACT cycle guidance for you to apply.'
+  resource_manager:
+    description: |
+      🗂️ RESOURCE MANAGER [ReACT]: Unified CRUD for prompts, gates, and methodologies.
+
+      USAGE: resource_manager(resource_type:"prompt|gate|methodology", action:"...", ...)
+      RESOURCE TYPES: prompt (templates), gate (quality criteria), methodology (frameworks)
+      ACTIONS: create | update | delete | list | inspect | reload | switch (methodology only)
+
+      Use action:"guide" with goal:"observe" for evidence-gathering recommendations before acting.
+    parameters:
+      resource_type: "Type of resource: 'prompt', 'gate', or 'methodology'"
+      action: "Use 'guide' with goal:'observe' to favor actions that gather evidence before modifying."
+  system_control:
+    description: |
+      ⚙️ SYSTEM CONTROL [ReACT]: System administration. Use action:"guide" topic:"observe" for observation-focused operation guidance.
+    parameters:
+      action: "Use 'guide' with topic:'observe' to surface observation/telemetry operations before acting."
+
+# Reference to phases file (inlined at build time)
+phasesFile: phases.yaml
+
+# Reference to judge prompt file (inlined at build time)
+judgePromptFile: judge-prompt.md

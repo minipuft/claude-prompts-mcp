@@ -1,0 +1,21 @@
+id: reasoning
+name: Reasoning Response Style
+description: Logical decomposition with explicit reasoning chains and assumption tracking
+
+guidanceFile: guidance.md
+
+priority: 0
+enabled: true
+enhancementMode: prepend
+
+activation:
+  prompt_categories:
+    - logic
+    - problem-solving
+    - decision
+    - evaluation
+
+compatibleFrameworks:
+  - ReACT
+  - CAGEERF
+  - 5W1H

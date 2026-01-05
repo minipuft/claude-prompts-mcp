@@ -1,0 +1,70 @@
+id: create_prompt
+name: Create Prompt
+description: Guided prompt/chain creation with examples and validation. Outputs structured JSON for resource_manager.
+category: prompt-authoring
+userMessageTemplateFile: user-message.md
+
+# Script tools for validation and auto-execution
+tools:
+  - prompt_builder
+
+arguments:
+  # Design workflow arguments
+  - name: name
+    type: string
+    description: Prompt name (e.g., "Code Review", "Research Summary")
+    required: false
+  - name: purpose
+    type: string
+    description: Core purpose in 1-2 sentences
+    required: false
+  - name: prompt_type
+    type: string
+    description: "'single' for one-shot or 'chain' for multi-step"
+    required: false
+
+  # Validation workflow - flat args matching schema.json for script tool detection
+  - name: id
+    type: string
+    description: Lowercase-underscored identifier (e.g., 'code_review', 'research_summary')
+    required: false
+  - name: category
+    type: string
+    description: Prompt category (e.g., 'development', 'analysis', 'documentation')
+    required: false
+  - name: description
+    type: string
+    description: Brief description of what the prompt does
+    required: false
+  - name: systemMessage
+    type: string
+    description: System message content (inline)
+    required: false
+  - name: systemMessageFile
+    type: string
+    description: Path to system-message.md file
+    required: false
+  - name: userMessageTemplate
+    type: string
+    description: User message template with {{variable}} placeholders
+    required: false
+  - name: userMessageTemplateFile
+    type: string
+    description: Path to user-message.md file
+    required: false
+  - name: arguments
+    type: array
+    description: Argument definitions array
+    required: false
+  - name: gateConfiguration
+    type: object
+    description: Gate configuration object
+    required: false
+  - name: chainSteps
+    type: array
+    description: Chain step definitions (for chain prompts)
+    required: false
+  - name: registerWithMcp
+    type: boolean
+    description: Register as MCP tool (default false)
+    required: false

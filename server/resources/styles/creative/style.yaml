@@ -1,0 +1,20 @@
+id: creative
+name: Creative Response Style
+description: Innovative thinking with unconventional solutions and brainstorming
+
+guidanceFile: guidance.md
+
+priority: 0
+enabled: true
+enhancementMode: prepend
+
+activation:
+  prompt_categories:
+    - brainstorm
+    - ideation
+    - design
+    - innovation
+
+compatibleFrameworks:
+  - SCAMPER
+  - CAGEERF

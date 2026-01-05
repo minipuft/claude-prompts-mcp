@@ -1,0 +1,21 @@
+id: api-documentation
+name: API Documentation Standards
+type: validation
+description: >-
+  Ensures API documentation includes all required sections and follows best
+  practices
+guidanceFile: guidance.md
+pass_criteria:
+  - type: content_check
+    min_length: 150
+    required_patterns:
+      - endpoint
+      - parameter
+      - response
+      - example
+activation:
+  prompt_categories:
+    - documentation
+    - api
+    - development
+  explicit_request: false

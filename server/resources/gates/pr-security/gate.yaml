@@ -1,0 +1,37 @@
+id: pr-security
+name: PR Security Audit
+type: validation
+severity: critical
+enforcementMode: blocking
+description: Blocks PR approval if security vulnerabilities are detected. Must pass before merge.
+guidanceFile: guidance.md
+gate_type: category
+
+pass_criteria:
+  - type: content_check
+    forbidden_patterns:
+      - 'eval('
+      - 'innerHTML ='
+      - 'dangerouslySetInnerHTML'
+      - 'SELECT * FROM'
+      - 'exec('
+      - 'child_process'
+      - 'password='
+      - 'secret='
+      - 'api_key='
+      - '--no-verify'
+  - type: pattern_check
+    regex_patterns:
+      - parameterized|prepared|sanitize|escape
+      - validation|validator
+      - authentication|authorization
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - pr-review
+  explicit_request: true

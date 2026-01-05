@@ -1,0 +1,35 @@
+id: educational-clarity
+name: Educational Content Clarity
+type: validation
+description: Ensures educational content is clear, well-structured, and pedagogically sound
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: content_check
+    min_length: 400
+    required_patterns:
+      - example
+      - step
+      - understand
+      - learn
+  - type: pattern_check
+    keyword_count:
+      example: 2
+      for example: 1
+    regex_patterns:
+      - '^##\s+.*$'
+      - '^\d+\.\s+.*$'
+      - '^\s*[-*]\s+.*$'
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - education
+    - documentation
+    - content_processing
+    - development
+  explicit_request: false

@@ -1,0 +1,6 @@
+id: creative
+name: Creative Framework
+category: guidance
+description: Creative thinking framework guidance
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md

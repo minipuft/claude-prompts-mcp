@@ -1,0 +1,22 @@
+id: plan-quality
+name: Plan Quality Standards
+type: validation
+severity: high
+description: Ensures implementation plans are complete, actionable, and risk-aware
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: content_check
+    min_length: 150
+    required_patterns:
+      - file
+      - step
+  - type: pattern_check
+    keyword_count:
+      risk: 1
+
+activation:
+  prompt_categories:
+    - planning
+    - development
+  explicit_request: false

@@ -1,0 +1,199 @@
+# SCAMPER Methodology Definition
+# Creative problem-solving: Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse
+
+id: scamper
+name: SCAMPER Framework
+type: SCAMPER
+methodology: SCAMPER # Deprecated: use 'type' instead
+version: '1.0.0'
+enabled: true
+
+systemPromptGuidance: |
+  Apply the SCAMPER creative problem-solving methodology systematically:
+
+  **Substitute**: What can be substituted, replaced, or swapped with alternatives?
+  **Combine**: What can be combined, merged, or integrated together?
+  **Adapt**: What can be adapted, borrowed, or learned from other contexts?
+  **Modify**: What can be modified, enhanced, or emphasized differently?
+  **Put to other uses**: How else can this be used or applied in different contexts?
+  **Eliminate**: What can be removed, simplified, or made unnecessary?
+  **Reverse**: What can be rearranged, reversed, or approached from opposite direction?
+
+  Use these creative techniques to generate innovative solutions and explore unconventional approaches. Each technique should be applied systematically to maximize creative potential and discover breakthrough alternatives.
+
+gates:
+  include:
+    - framework-compliance
+
+methodologyGates:
+  - id: substitution_creativity
+    name: Substitution Creativity
+    description: Verify creative and viable substitution alternatives
+    methodologyArea: Substitute
+    priority: medium
+    validationCriteria:
+      - Substitution alternatives are creative and innovative
+      - Alternatives are viable and practical
+      - Substitution benefits are clearly articulated
+
+  - id: combination_synergy
+    name: Combination Synergy
+    description: Ensure combinations create synergistic value
+    methodologyArea: Combine
+    priority: medium
+    validationCriteria:
+      - Combinations create added value beyond individual parts
+      - Integration approaches are feasible
+      - Synergistic benefits are measurable
+
+  - id: adaptation_relevance
+    name: Adaptation Relevance
+    description: Validate relevance and applicability of adapted solutions
+    methodologyArea: Adapt
+    priority: high
+    validationCriteria:
+      - Adapted solutions are contextually relevant
+      - Cross-domain insights are meaningful
+      - Implementation approaches are defined
+
+  - id: modification_enhancement
+    name: Modification Enhancement
+    description: Assess enhancement value of proposed modifications
+    methodologyArea: Modify
+    priority: medium
+    validationCriteria:
+      - Modifications provide clear improvements
+      - Enhancements are measurable and significant
+      - Implementation complexity is justified
+
+  - id: alternative_use_viability
+    name: Alternative Use Viability
+    description: Evaluate viability of alternative applications
+    methodologyArea: Put to other uses
+    priority: low
+    validationCriteria:
+      - Alternative uses are practical and viable
+      - New applications create value
+      - Market or user need exists for alternatives
+
+  - id: elimination_benefit
+    name: Elimination Benefit
+    description: Verify benefits of elimination and simplification
+    methodologyArea: Eliminate
+    priority: medium
+    validationCriteria:
+      - Eliminations maintain essential functionality
+      - Simplifications provide clear benefits
+      - Complexity reduction is meaningful
+
+  - id: reversal_innovation
+    name: Reversal Innovation
+    description: Assess innovation potential of reversal approaches
+    methodologyArea: Reverse
+    priority: low
+    validationCriteria:
+      - Reversals provide new perspectives
+      - Rearrangements create innovative approaches
+      - Opposite approaches offer unique advantages
+
+templateSuggestions:
+  - section: system
+    type: addition
+    description: Add SCAMPER creative methodology guidance
+    content: |
+      Apply the SCAMPER creative problem-solving methodology: Substitute (replace elements), Combine (merge ideas), Adapt (borrow from other contexts), Modify (enhance existing), Put to other uses (find new applications), Eliminate (simplify by removing), Reverse (rearrange or opposite approach).
+    methodologyJustification: Ensures systematic application of creative problem-solving techniques
+    impact: high
+
+  - section: user
+    type: structure
+    description: Structure response using SCAMPER techniques
+    content: |
+      Please explore creative alternatives using SCAMPER: 1) What can be substituted, 2) What can be combined, 3) What can be adapted from elsewhere, 4) What can be modified, 5) How else can this be used, 6) What can be eliminated, 7) What can be reversed or rearranged.
+    methodologyJustification: Guides systematic creative exploration through structured techniques
+    impact: medium
+
+methodologyElements:
+  requiredSections:
+    - Substitute
+    - Combine
+    - Adapt
+    - Modify
+    - Put to other uses
+    - Eliminate
+    - Reverse
+  optionalSections:
+    - Creative Synthesis
+    - Innovation Potential
+  sectionDescriptions:
+    Substitute: What can be substituted, replaced, or swapped with alternatives?
+    Combine: What can be combined, merged, or integrated together?
+    Adapt: What can be adapted, borrowed, or learned from other contexts?
+    Modify: What can be modified, enhanced, or emphasized differently?
+    Put to other uses: How else can this be used or applied in different contexts?
+    Eliminate: What can be removed, simplified, or made unnecessary?
+    Reverse: What can be rearranged, reversed, or approached from opposite direction?
+
+argumentSuggestions:
+  - name: current_solution
+    type: string
+    description: Existing solution or approach to be enhanced
+    methodologyReason: SCAMPER requires a baseline solution to apply creative techniques
+    examples:
+      - current process
+      - existing design
+      - traditional method
+
+  - name: creative_constraints
+    type: array
+    description: Limitations or constraints for creative exploration
+    methodologyReason: SCAMPER creativity works within defined boundaries
+    examples:
+      - budget limits
+      - time constraints
+      - technical restrictions
+
+  - name: reference_domains
+    type: array
+    description: Other domains or fields to draw inspiration from
+    methodologyReason: SCAMPER Adapt technique requires external reference points
+    examples:
+      - nature
+      - other industries
+      - different technologies
+
+toolDescriptions:
+  prompt_engine:
+    description: |
+      🚀 PROMPT ENGINE [SCAMPER]: Expands prompts with Substitute/Combine/Adapt/Modify/Put-to-other-uses/Eliminate/Reverse creative techniques for you to apply.
+
+      WHAT IT RETURNS: Prepared prompt + SCAMPER technique prompts.
+      WHAT YOU DO: Apply each creative technique yourself using the returned framework.
+
+      SYNTAX: >>prompt_id key="value" | Chain: >>s1 --> >>s2
+      OPERATORS: @SCAMPER | :: "criteria" | %clean/%lean
+    parameters:
+      command: 'Prompt ID to expand. Resulting prompt will include SCAMPER creative techniques for you to apply.'
+  resource_manager:
+    description: |
+      🗂️ RESOURCE MANAGER [SCAMPER]: Unified CRUD for prompts, gates, and methodologies.
+
+      USAGE: resource_manager(resource_type:"prompt|gate|methodology", action:"...", ...)
+      RESOURCE TYPES: prompt (templates), gate (quality criteria), methodology (frameworks)
+      ACTIONS: create | update | delete | list | inspect | reload | switch (methodology only)
+
+      Use action:"guide" with goal:"substitute/combine/adapt/modify/eliminate/reverse" for technique-specific recommendations.
+    parameters:
+      resource_type: "Type of resource: 'prompt', 'gate', or 'methodology'"
+      action: "Use 'guide' with goal:'substitute/combine/adapt/modify/eliminate/reverse' for technique-specific recommendations."
+  system_control:
+    description: |
+      ⚙️ SYSTEM CONTROL [SCAMPER]: System administration. Use topic:"reverse" for rollback/reversal operation guidance.
+    parameters:
+      action: "Use 'guide' with topic:'reverse' for rollback and reversal options."
+
+# Reference to phases file (inlined at build time)
+phasesFile: phases.yaml
+
+# Reference to judge prompt file (inlined at build time)
+judgePromptFile: judge-prompt.md

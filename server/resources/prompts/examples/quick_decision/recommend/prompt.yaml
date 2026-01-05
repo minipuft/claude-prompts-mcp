@@ -1,0 +1,5 @@
+id: recommend
+name: Recommendation
+category: examples
+description: Provide final recommendation with rationale
+userMessageTemplateFile: user-message.md

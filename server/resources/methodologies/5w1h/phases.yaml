@@ -1,0 +1,202 @@
+processingSteps:
+  - id: stakeholder_identification
+    name: Stakeholder Identification (Who)
+    description: Identify all relevant stakeholders, actors, and people involved
+    methodologyBasis: 5W1H Who question
+    order: 1
+    required: true
+  - id: objective_definition
+    name: Objective Definition (What)
+    description: Define exactly what needs to be accomplished and deliverables
+    methodologyBasis: 5W1H What question
+    order: 2
+    required: true
+  - id: timing_establishment
+    name: Timing Establishment (When)
+    description: Establish timing, deadlines, and sequence requirements
+    methodologyBasis: 5W1H When question
+    order: 3
+    required: true
+  - id: context_determination
+    name: Context Determination (Where)
+    description: Determine location, context, and environmental constraints
+    methodologyBasis: 5W1H Where question
+    order: 4
+    required: true
+  - id: purpose_understanding
+    name: Purpose Understanding (Why)
+    description: Understand underlying purposes, motivations, and importance
+    methodologyBasis: 5W1H Why question
+    order: 5
+    required: true
+  - id: method_planning
+    name: Method Planning (How)
+    description: Plan specific methods, approaches, and implementation strategies
+    methodologyBasis: 5W1H How question
+    order: 6
+    required: true
+executionSteps:
+  - id: comprehensive_who_analysis
+    name: Comprehensive Who Analysis
+    action: Identify and analyze all stakeholders, actors, and affected parties
+    methodologyPhase: Who
+    dependencies: []
+    expected_output: Complete stakeholder map with roles and responsibilities
+  - id: specific_what_definition
+    name: Specific What Definition
+    action: Define exactly what needs to be accomplished with measurable deliverables
+    methodologyPhase: What
+    dependencies:
+      - comprehensive_who_analysis
+    expected_output: Clear, specific, measurable objectives and deliverables
+  - id: detailed_when_planning
+    name: Detailed When Planning
+    action: Establish comprehensive timing, deadlines, and sequence requirements
+    methodologyPhase: When
+    dependencies:
+      - specific_what_definition
+    expected_output: Detailed timeline with milestones and dependencies
+  - id: contextual_where_assessment
+    name: Contextual Where Assessment
+    action: Determine location, context, environment, and situational constraints
+    methodologyPhase: Where
+    dependencies:
+      - detailed_when_planning
+    expected_output: Comprehensive context analysis with constraints identified
+  - id: fundamental_why_exploration
+    name: Fundamental Why Exploration
+    action: Uncover underlying purposes, motivations, and fundamental importance
+    methodologyPhase: Why
+    dependencies:
+      - contextual_where_assessment
+    expected_output: Deep understanding of motivations and fundamental purposes
+  - id: specific_how_planning
+    name: Specific How Planning
+    action: Develop detailed methods, approaches, and implementation strategies
+    methodologyPhase: How
+    dependencies:
+      - fundamental_why_exploration
+    expected_output: Comprehensive implementation plan with specific methods
+executionTypeEnhancements:
+  chain:
+    simpleChain:
+      specific_how_planning:
+        - Plan sequential implementation steps
+        - Define clear handoff points between phases
+        - Establish validation checkpoints for each step
+templateEnhancements:
+  systemPromptAdditions:
+    - Apply 5W1H systematic questioning methodology
+    - Address Who, What, When, Where, Why, How comprehensively
+    - Ensure complete coverage of all stakeholders and requirements
+    - Use systematic questioning to uncover hidden requirements
+  userPromptModifications:
+    - Structure response addressing all 5W1H questions
+    - Provide comprehensive stakeholder analysis
+    - Include detailed implementation planning
+  contextualHints:
+    - Focus on comprehensive requirement gathering
+    - Emphasize stakeholder perspective consideration
+    - Apply systematic analysis to ensure nothing is missed
+executionFlow:
+  preProcessingSteps:
+    - Validate 5W1H question completeness
+    - Confirm stakeholder identification scope
+    - Verify objective clarity and measurability
+  postProcessingSteps:
+    - Review 5W1H coverage completeness
+    - Assess stakeholder consideration adequacy
+    - Evaluate implementation plan specificity
+  validationSteps:
+    - Who question completeness check
+    - What question specificity verification
+    - When question timing validation
+    - Where question context assessment
+    - Why question motivation analysis
+    - How question method evaluation
+qualityIndicators:
+  who:
+    keywords:
+      - who
+      - stakeholder
+      - actor
+      - people
+      - person
+      - role
+      - user
+      - team
+    patterns:
+      - stakeholder|actor|participant
+      - role|responsibility|accountab
+      - user|customer|client
+      - team|group|department
+  what:
+    keywords:
+      - what
+      - objective
+      - goal
+      - deliverable
+      - accomplish
+      - achieve
+      - outcome
+    patterns:
+      - objective|goal|target
+      - deliverable|output|result
+      - accomplish|achieve|complete
+      - success.{0,10}criteria|metric
+  when:
+    keywords:
+      - when
+      - timing
+      - deadline
+      - schedule
+      - time
+      - date
+      - timeline
+    patterns:
+      - deadline|timeline|schedule
+      - timing|sequence|order
+      - milestone|checkpoint
+      - date|time|period
+  where:
+    keywords:
+      - where
+      - location
+      - context
+      - environment
+      - place
+      - setting
+      - platform
+    patterns:
+      - location|place|site
+      - context|environment|setting
+      - platform|system|infrastructure
+      - constraint|limitation|boundary
+  why:
+    keywords:
+      - why
+      - purpose
+      - reason
+      - motivation
+      - importance
+      - value
+      - benefit
+    patterns:
+      - purpose|reason|rationale
+      - motivation|driver|cause
+      - importance|value|benefit
+      - justify|explain|ground
+  how:
+    keywords:
+      - how
+      - method
+      - approach
+      - strategy
+      - process
+      - implementation
+      - technique
+    patterns:
+      - method|approach|technique
+      - strategy|process|procedure
+      - implementation|execution|plan
+      - step|phase|stage
