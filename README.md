@@ -77,6 +77,10 @@ flowchart TB
 ### Claude Code (Recommended)
 
 ```bash
+# First time only: add the marketplace
+/plugin marketplace add minipuft
+
+# Install the plugin
 /plugin install claude-prompts@minipuft
 ```
 
