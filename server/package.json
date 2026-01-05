@@ -20,9 +20,7 @@
     "dist",
     "src",
     "config.json",
-    "prompts",
-    "methodologies",
-    "gates",
+    "resources",
     "README.md",
     "LICENSE"
   ],
@@ -31,10 +29,14 @@
     "build": "tsc --project tsconfig.json",
     "postbuild": "chmod +x dist/index.js || true",
     "build:watch": "tsc --project tsconfig.json --watch",
-    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "validate:execution-modifiers": "node scripts/validate-execution-modifiers.js",
+    "typecheck": "npm run validate:execution-modifiers && tsc --noEmit --project tsconfig.json",
     "typecheck:tests": "tsc --noEmit --project tsconfig.test.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:ratchet": "node scripts/eslint-ratchet.js check",
+    "lint:ratchet:baseline": "node scripts/eslint-ratchet.js update-baseline",
+    "lint:staged": "lint-staged",
     "lint:unused:internal": "ts-prune --project tsconfig.json --ignore \"^src/(?!gates/|execution/).*|/index.ts$|/index$|src/types.ts|src/tooling/contracts/_generated/|src/gates/(index.ts|constants.ts|gate-state-manager.ts|types.ts|services/index.ts|core/(gate-definitions.ts|review-utils.ts|types.ts|llm-review-parser.ts))|src/execution/(types.ts|pipeline/index.ts|pipeline/state/index.ts|pipeline/decisions/index.ts|parsers/index.ts|parsers/argument-schema.ts|operators/index.ts|context/index.ts)\"",
     "lint:unused:full": "ts-prune --project tsconfig.json --ignore \"src/index.ts|src/types.ts|src/utils/global-resource-tracker.ts|src/mcp-tools/|src/prompts/|src/runtime/|src/tooling/|src/server/|/index.ts$|/index$|src/tooling/contracts/_generated/|src/metrics/|src/performance/|src/config/|src/logging/|src/semantic/|src/frameworks/|src/text-references/|src/chain-session/\"",
     "start": "node dist/index.js",
@@ -53,13 +55,17 @@
     "test:unit": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --runInBand tests/unit",
     "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --watch tests/unit",
     "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage tests/unit",
+    "test:integration": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --runInBand tests/integration",
+    "test:e2e": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --runInBand tests/e2e",
+    "test:all": "npm run test:unit && npm run test:integration",
     "test:ci": "npm run test:unit",
     "validate": "npm run test:ci",
     "validate:arch": "depcruise --config .dependency-cruiser.cjs src",
     "validate:filesize": "node scripts/validate-filesize.js",
     "validate:metadata": "npm run verify:action-metadata",
-    "generate:contracts": "node scripts/generate-contracts.js",
-    "validate:contracts": "node scripts/generate-contracts.js --check",
+    "validate:build": "npm run build && npm run start:test",
+    "generate:contracts": "tsx scripts/generate-contracts.ts",
+    "validate:contracts": "tsx scripts/generate-contracts.ts --check",
     "validate:methodologies": "node scripts/validate-methodologies.js",
     "validate:all": "npm run lint && npm run validate:arch && npm run validate:filesize && npm run validate:metadata && npm run validate:contracts && npm run validate:methodologies",
     "verify:action-metadata": "node scripts/verify-action-inventory.js",
@@ -67,6 +73,14 @@
     "dev:graph:json": "madge --ts-config ./tsconfig.json --extensions ts src --json",
     "prepublishOnly": "npm run build",
     "release": "npm run build && npm test && npm publish --access public"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,cjs,mjs}": [
+      "eslint --fix"
+    ],
+    "*.{json,md,yaml,yml}": [
+      "prettier --write"
+    ]
   },
   "repository": {
     "type": "git",
@@ -86,7 +100,7 @@
     "server"
   ],
   "engines": {
-    "node": ">=24"
+    "node": ">=18.18.0"
   },
   "publishConfig": {
     "access": "public"
@@ -95,6 +109,7 @@
     "@modelcontextprotocol/sdk": "^1.18.1",
     "@types/nunjucks": "^3.2.6",
     "cors": "^2.8.5",
+    "diff": "^8.0.2",
     "express": "^4.18.2",
     "js-yaml": "^4.1.1",
     "nunjucks": "^3.2.4",
@@ -103,6 +118,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/cors": "^2.8.17",
+    "@types/diff": "^7.0.2",
     "@types/express": "^4.17.21",
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
@@ -116,9 +132,12 @@
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-prettier": "^5.5.4",
     "jest": "^30.0.0",
+    "lint-staged": "^16.2.7",
     "madge": "^8.0.0",
+    "prettier": "^3.7.4",
     "ts-jest": "^29.1.2",
     "ts-prune": "^0.10.3",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.48.1",
     "ws": "^8.18.1"
