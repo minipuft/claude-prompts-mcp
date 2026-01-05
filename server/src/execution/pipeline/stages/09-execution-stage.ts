@@ -1,13 +1,15 @@
 // @lifecycle canonical - Runs operator executors and orchestrates outputs.
 import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
-import { processTemplate } from '../../../utils/jsonUtils.js';
+import { processTemplateWithRefs } from '../../../utils/jsonUtils.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
+import type { IScriptReferenceResolver } from '../../../utils/jsonUtils.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 import type { ChainStepRenderResult } from '../../operators/types.js';
+import type { PromptReferenceResolver } from '../../reference/prompt-reference-resolver.js';
 
 /**
  * Pipeline Stage 9: Step Execution
@@ -25,7 +27,9 @@ export class StepExecutionStage extends BasePipelineStage {
   constructor(
     private readonly chainOperatorExecutor: ChainOperatorExecutor,
     private readonly chainSessionManager: ChainSessionService,
-    logger: Logger
+    logger: Logger,
+    private readonly referenceResolver?: PromptReferenceResolver,
+    private readonly scriptReferenceResolver?: IScriptReferenceResolver
   ) {
     super(logger);
   }
@@ -106,6 +110,10 @@ export class StepExecutionStage extends BasePipelineStage {
     }
 
     const currentStep = steps[currentStepIndex];
+    if (!currentStep) {
+      this.handleError(new Error('Current step not found during execution'));
+      return;
+    }
     const chainContextSnapshot = this.chainSessionManager.getChainContext(session.sessionId);
 
     const normalizedStepArgs = currentStep.args ?? {};
@@ -160,8 +168,21 @@ export class StepExecutionStage extends BasePipelineStage {
       throw new Error('Execution plan not available for single prompt execution');
     }
 
-    const args = context.getPromptArgs();
-    const renderedTemplate = processTemplate(prompt.userMessageTemplate, args, {});
+    // Build template args, enriched with script tool results if available
+    const args = this.buildTemplateArgs(context);
+
+    // Resolve {{ref:...}} and {{script:...}} references and render template
+    const templateResult = await processTemplateWithRefs(
+      prompt.userMessageTemplate,
+      args,
+      {},
+      this.referenceResolver,
+      {
+        scriptResolver: this.scriptReferenceResolver,
+        promptDir: prompt.promptDir, // Enables prompt-local script lookup
+      }
+    );
+    const renderedTemplate = templateResult.content;
     const sections: string[] = [];
 
     // Use injection decision from InjectionControlStage (state.injection)
@@ -233,6 +254,59 @@ export class StepExecutionStage extends BasePipelineStage {
         callToAction: renderResult.callToAction,
       },
       generatedAt: Date.now(),
+    };
+  }
+
+  /**
+   * Build template arguments with script tool results and auto-execute results.
+   *
+   * Script results are exposed as {{tool_<id>}} in templates.
+   * Auto-execute results are exposed as {{tool_<id>_result}} in templates.
+   *
+   * For example:
+   * - A tool with id 'methodology_builder' would be available as {{tool_methodology_builder}}
+   * - Its auto-execute result would be available as {{tool_methodology_builder_result}}
+   */
+  private buildTemplateArgs(context: ExecutionContext): Record<string, unknown> {
+    const baseArgs = context.getPromptArgs();
+    const scriptResults = context.state.scripts?.results;
+    const autoExecuteResults = context.state.scripts?.autoExecuteResults;
+
+    const hasScriptResults = scriptResults && scriptResults.size > 0;
+    const hasAutoExecuteResults = autoExecuteResults && autoExecuteResults.size > 0;
+
+    if (!hasScriptResults && !hasAutoExecuteResults) {
+      return baseArgs;
+    }
+
+    // Merge script tool outputs into template context
+    const scriptArgs: Record<string, unknown> = {};
+
+    if (hasScriptResults) {
+      for (const [toolId, result] of scriptResults) {
+        // Only include successful tool outputs
+        if (result.success && result.output !== null) {
+          scriptArgs[`tool_${toolId}`] = result.output;
+        }
+      }
+    }
+
+    // Merge auto-execute results into template context
+    if (hasAutoExecuteResults) {
+      for (const [toolId, result] of autoExecuteResults) {
+        // Extract text content from ToolResponse for template use
+        const textContent = result.content?.find((c: { type: string }) => c.type === 'text');
+        scriptArgs[`tool_${toolId}_result`] = {
+          isError: result.isError,
+          text: (textContent as { text?: string })?.text ?? '',
+          content: result.content,
+        };
+      }
+    }
+
+    return {
+      ...baseArgs,
+      ...scriptArgs,
     };
   }
 }

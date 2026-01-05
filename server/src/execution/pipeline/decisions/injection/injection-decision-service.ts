@@ -129,11 +129,16 @@ export class InjectionDecisionService {
    * Useful for pipeline stages that need all decisions.
    */
   decideAll(input: Omit<InjectionDecisionInput, 'injectionType'>): InjectionState {
-    const state: InjectionState = {
-      currentStep: input.currentStep,
-      sessionOverrides: input.sessionOverrides,
-      executionContext: input.executionContext,
-    };
+    const state: InjectionState = {};
+    if (input.currentStep !== undefined) {
+      state.currentStep = input.currentStep;
+    }
+    if (input.sessionOverrides) {
+      state.sessionOverrides = input.sessionOverrides;
+    }
+    if (input.executionContext) {
+      state.executionContext = input.executionContext;
+    }
 
     for (const type of INJECTION_TYPES) {
       const decision = this.decide({ ...input, injectionType: type });

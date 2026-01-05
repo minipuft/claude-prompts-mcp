@@ -92,11 +92,11 @@ export class StructuredResponseBuilder {
     };
 
     if (metadata.analytics) {
-      response.structuredContent!.analytics = metadata.analytics;
+      response.structuredContent!['analytics'] = metadata.analytics;
     }
 
     if (metadata.gateValidation) {
-      response.structuredContent!.gateValidation = metadata.gateValidation;
+      response.structuredContent!['gateValidation'] = metadata.gateValidation;
     }
 
     if (metadata.operationData) {
@@ -218,17 +218,30 @@ export class StructuredResponseBuilder {
       };
     }
 
-    return this.createToolResponse(content, {
+    const responseMetadata: ResponseMetadata = {
       tool: 'prompt_engine',
       operation,
       executionType: executionData?.executionType || 'single',
-      executionTime: executionData?.executionTime,
       frameworkEnabled: !!executionData?.frameworkUsed,
-      frameworkUsed: executionData?.frameworkUsed,
-      stepsExecuted: executionData?.stepsExecuted,
-      sessionId: executionData?.sessionId,
-      gateValidation: executionData?.gateResults,
-    });
+    };
+
+    if (executionData?.executionTime !== undefined) {
+      responseMetadata.executionTime = executionData.executionTime;
+    }
+    if (executionData?.frameworkUsed !== undefined) {
+      responseMetadata.frameworkUsed = executionData.frameworkUsed;
+    }
+    if (executionData?.stepsExecuted !== undefined) {
+      responseMetadata.stepsExecuted = executionData.stepsExecuted;
+    }
+    if (executionData?.sessionId !== undefined) {
+      responseMetadata.sessionId = executionData.sessionId;
+    }
+    if (executionData?.gateResults !== undefined) {
+      responseMetadata.gateValidation = executionData.gateResults;
+    }
+
+    return this.createToolResponse(content, responseMetadata);
   }
 
   /**

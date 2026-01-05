@@ -82,10 +82,10 @@ export class PromptAnalyzer {
         suggestedGates: analysis.suggestedGates,
         framework: 'configurable',
         // Enhanced configurable analysis information
-        analysisMode: analysis.analysisMetadata.mode,
         capabilities: analysis.capabilities,
         limitations: analysis.limitations,
         warnings: analysis.warnings,
+        ...(analysis.analysisMetadata.mode ? { analysisMode: analysis.analysisMetadata.mode } : {}),
       };
     } catch (error) {
       this.logger.error(`Configurable semantic analysis failed for ${prompt.id}:`, error);

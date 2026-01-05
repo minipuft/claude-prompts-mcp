@@ -15,6 +15,7 @@ import type {
   SessionContext,
 } from '../../context/execution-context.js';
 import type { ExecutionPlan } from '../../types.js';
+import type { CreateReviewOptions } from '../decisions/gates/gate-enforcement-types.js';
 
 /**
  * Pipeline Stage 7: Session Management
@@ -94,8 +95,11 @@ export class SessionManagementStage extends BasePipelineStage {
           isChainExecution: true,
           currentStep: existingSession.state.currentStep,
           totalSteps: existingSession.state.totalSteps,
-          pendingReview: this.chainSessionManager.getPendingGateReview(resolvedSessionId),
         };
+        const pendingReview = this.chainSessionManager.getPendingGateReview(resolvedSessionId);
+        if (pendingReview) {
+          sessionContext.pendingReview = pendingReview;
+        }
         context.state.session.resumeSessionId = resolvedSessionId;
         context.state.session.resumeChainId = existingSession.chainId;
         if (context.hasExplicitChainId()) {
@@ -107,12 +111,15 @@ export class SessionManagementStage extends BasePipelineStage {
         const totalSteps = this.getTotalSteps(context);
         const chainId = this.buildChainId(baseChainId, isRestart);
 
+        const blueprint = this.buildSessionBlueprint(context);
+        const options = blueprint ? { blueprint } : undefined;
+
         await this.chainSessionManager.createSession(
           resolvedSessionId,
           chainId,
           totalSteps,
           context.getPromptArgs(),
-          { blueprint: this.buildSessionBlueprint(context) }
+          options
         );
 
         sessionContext = {
@@ -175,15 +182,17 @@ export class SessionManagementStage extends BasePipelineStage {
     const currentStep = steps?.find((s) => s.stepNumber === currentStepNumber);
     const stepRetries = currentStep?.retries;
 
-    const pendingReview = authority.createPendingReview({
+    const reviewOptions: CreateReviewOptions = {
       gateIds,
       instructions: context.gateInstructions ?? '',
-      maxAttempts: stepRetries, // Override default if step defines retries
+      ...(stepRetries !== undefined ? { maxAttempts: stepRetries } : {}),
       metadata: {
         sessionId: sessionContext.sessionId,
         stepNumber: currentStepNumber,
       },
-    });
+    };
+
+    const pendingReview = authority.createPendingReview(reviewOptions);
 
     // Persist to session manager and update context via authority
     await authority.setPendingReview(sessionContext.sessionId, pendingReview);
@@ -205,12 +214,15 @@ export class SessionManagementStage extends BasePipelineStage {
 
   private getBaseChainId(context: ExecutionContext): string {
     const requestedChainId = context.mcpRequest.chain_id ?? context.state.session.resumeChainId;
-    if (requestedChainId) {
+    if (typeof requestedChainId === 'string' && requestedChainId.length > 0) {
       return this.stripRunCounter(requestedChainId);
     }
-    if (context.parsedCommand?.chainId) {
-      return this.stripRunCounter(context.parsedCommand.chainId);
+
+    const parsedChainId = context.parsedCommand?.chainId;
+    if (typeof parsedChainId === 'string' && parsedChainId.length > 0) {
+      return this.stripRunCounter(parsedChainId);
     }
+
     if (context.parsedCommand?.promptId) {
       return `chain-${context.parsedCommand.promptId}`;
     }
@@ -246,6 +258,9 @@ export class SessionManagementStage extends BasePipelineStage {
     }
 
     const lastRunId = runHistory[runHistory.length - 1];
+    if (!lastRunId) {
+      return runHistory.length + 1;
+    }
     const lastRunNumber = this.extractRunNumber(lastRunId);
     if (typeof lastRunNumber === 'number') {
       return lastRunNumber + 1;
@@ -259,7 +274,7 @@ export class SessionManagementStage extends BasePipelineStage {
 
   private extractRunNumber(chainId: string): number | undefined {
     const match = chainId.match(/#(\d+)$/);
-    if (!match) {
+    if (match?.[1] === undefined) {
       return undefined;
     }
     return Number.parseInt(match[1], 10);
@@ -282,11 +297,16 @@ export class SessionManagementStage extends BasePipelineStage {
     const parsedClone = this.cloneParsedCommand(context.parsedCommand);
     const planClone = this.cloneExecutionPlan(context.executionPlan);
 
-    return {
+    const blueprint: SessionBlueprint = {
       parsedCommand: parsedClone,
       executionPlan: planClone,
-      gateInstructions: context.gateInstructions,
     };
+
+    if (context.gateInstructions !== undefined) {
+      blueprint.gateInstructions = context.gateInstructions;
+    }
+
+    return blueprint;
   }
 
   private cloneParsedCommand(parsed: ParsedCommand): ParsedCommand {

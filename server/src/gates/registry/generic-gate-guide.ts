@@ -186,10 +186,7 @@ export class GenericGateGuide implements IGateGuide {
    * Note: This is a basic implementation. The actual validation logic
    * will be enhanced when integrating with GateValidator.
    */
-  async validate(
-    content: string,
-    context: ValidationContext
-  ): Promise<GateValidationResult> {
+  async validate(content: string, context: ValidationContext): Promise<GateValidationResult> {
     // Guidance-only gates always pass
     if (this.type === 'guidance') {
       return {

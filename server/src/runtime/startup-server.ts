@@ -75,9 +75,14 @@ export async function startServerWithManagers(
 
   logger.info('Server started successfully');
 
-  return {
+  const startupResult: ServerStartupResult = {
     transportManager,
-    apiManager,
     serverManager,
   };
+
+  if (apiManager) {
+    startupResult.apiManager = apiManager;
+  }
+
+  return startupResult;
 }

@@ -69,13 +69,15 @@ export class GateAccumulator {
       });
     }
 
-    this.gates.set(trimmedId, {
+    const entry: GateEntry = {
       id: trimmedId,
       source,
       priority,
       addedAt: Date.now(),
-      metadata,
-    });
+      ...(metadata ? { metadata } : {}),
+    };
+
+    this.gates.set(trimmedId, entry);
 
     return true;
   }

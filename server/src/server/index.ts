@@ -21,7 +21,7 @@ export class ServerManager {
   private logger: Logger;
   private configManager: ConfigManager;
   private transportManager: TransportManager;
-  private apiManager?: ApiManager;
+  private apiManager: ApiManager | undefined;
   private httpServer?: Server;
   private port: number;
 
@@ -287,20 +287,32 @@ export class ServerManager {
     const mode = this.transportManager.getTransportType();
     const isSseActive = mode === 'sse' || (mode === 'both' && this.httpServer?.listening);
 
-    return {
+    const status: {
+      running: boolean;
+      transport: string;
+      port?: number;
+      connections?: number;
+      uptime: number;
+      transports?: { stdio: boolean; sse: boolean };
+    } = {
       running: this.isRunning(),
       transport: mode,
-      port: isSseActive ? this.port : undefined,
-      connections: isSseActive ? this.transportManager.getActiveConnectionsCount() : undefined,
       uptime: process.uptime(),
-      // For 'both' mode, provide detailed transport status
-      ...(mode === 'both' && {
-        transports: {
-          stdio: true, // STDIO is always active in 'both' mode
-          sse: this.httpServer?.listening || false,
-        },
-      }),
     };
+
+    if (isSseActive) {
+      status.port = this.port;
+      status.connections = this.transportManager.getActiveConnectionsCount();
+    }
+
+    if (mode === 'both') {
+      status.transports = {
+        stdio: true,
+        sse: this.httpServer?.listening || false,
+      };
+    }
+
+    return status;
   }
 
   /**

@@ -34,14 +34,19 @@ class GlobalResourceTracker {
     if (!this.enabled) return '';
 
     const id = `timeout_${this.nextId++}`;
-    this.resources.set(id, {
+    const tracked: TrackedResource = {
       id,
       type: 'timeout',
       handle,
       source,
       createdAt: new Date(),
-      description,
-    });
+    };
+
+    if (description !== undefined) {
+      tracked.description = description;
+    }
+
+    this.resources.set(id, tracked);
     return id;
   }
 
@@ -52,14 +57,19 @@ class GlobalResourceTracker {
     if (!this.enabled) return '';
 
     const id = `interval_${this.nextId++}`;
-    this.resources.set(id, {
+    const tracked: TrackedResource = {
       id,
       type: 'interval',
       handle,
       source,
       createdAt: new Date(),
-      description,
-    });
+    };
+
+    if (description !== undefined) {
+      tracked.description = description;
+    }
+
+    this.resources.set(id, tracked);
     return id;
   }
 
@@ -70,14 +80,19 @@ class GlobalResourceTracker {
     if (!this.enabled) return '';
 
     const id = `immediate_${this.nextId++}`;
-    this.resources.set(id, {
+    const tracked: TrackedResource = {
       id,
       type: 'immediate',
       handle,
       source,
       createdAt: new Date(),
-      description,
-    });
+    };
+
+    if (description !== undefined) {
+      tracked.description = description;
+    }
+
+    this.resources.set(id, tracked);
     return id;
   }
 
@@ -108,7 +123,7 @@ class GlobalResourceTracker {
       this.resources.delete(id);
       return true;
     } catch (error) {
-      console.warn(`Failed to clear resource ${id}:`, error);
+      process.stderr.write(`Failed to clear resource ${id}: ${String(error)}\n`);
       return false;
     }
   }
@@ -132,7 +147,9 @@ class GlobalResourceTracker {
         }
         cleared++;
       } catch (error) {
-        console.warn(`Failed to clear resource ${id} during emergency cleanup:`, error);
+        process.stderr.write(
+          `Failed to clear resource ${id} during emergency cleanup: ${String(error)}\n`
+        );
       }
     }
 
@@ -159,17 +176,25 @@ class GlobalResourceTracker {
       bySource[resource.source] = (bySource[resource.source] || 0) + 1;
     }
 
-    const oldestResource = resources.sort(
-      (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
-    )[0];
-
-    return {
+    const sortedResources = resources.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const diagnostics: {
+      totalResources: number;
+      byType: Record<string, number>;
+      bySource: Record<string, number>;
+      oldestResource?: TrackedResource;
+      resources: TrackedResource[];
+    } = {
       totalResources: resources.length,
       byType,
       bySource,
-      oldestResource,
-      resources: resources.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+      resources: sortedResources,
     };
+
+    if (sortedResources[0]) {
+      diagnostics.oldestResource = sortedResources[0];
+    }
+
+    return diagnostics;
   }
 
   /**
@@ -180,18 +205,22 @@ class GlobalResourceTracker {
     const diagnostics = this.getDiagnostics();
 
     if (diagnostics.totalResources === 0) {
-      console.error('✅ No active tracked resources');
+      process.stderr.write('✅ No active tracked resources\n');
       return;
     }
 
-    console.error(`⚠️ ${diagnostics.totalResources} active resources preventing process exit:`);
-    console.error('📊 By type:', diagnostics.byType);
-    console.error('📊 By source:', diagnostics.bySource);
+    process.stderr.write(
+      `⚠️ ${diagnostics.totalResources} active resources preventing process exit:\n`
+    );
+    process.stderr.write(`📊 By type: ${JSON.stringify(diagnostics.byType)}\n`);
+    process.stderr.write(`📊 By source: ${JSON.stringify(diagnostics.bySource)}\n`);
 
     if (diagnostics.oldestResource) {
       const age = Date.now() - diagnostics.oldestResource.createdAt.getTime();
-      console.error(
-        `⏰ Oldest resource: ${diagnostics.oldestResource.id} (${Math.round(age / 1000)}s old) from ${diagnostics.oldestResource.source}`
+      process.stderr.write(
+        `⏰ Oldest resource: ${diagnostics.oldestResource.id} (${Math.round(
+          age / 1000
+        )}s old) from ${diagnostics.oldestResource.source}\n`
       );
     }
 
@@ -201,11 +230,13 @@ class GlobalResourceTracker {
     );
 
     if (longRunning.length > 0) {
-      console.error('🐛 Long-running resources (>10s):');
+      process.stderr.write('🐛 Long-running resources (>10s):\n');
       for (const resource of longRunning) {
         const age = Math.round((Date.now() - resource.createdAt.getTime()) / 1000);
-        console.error(
-          `   ${resource.id}: ${resource.type} from ${resource.source} (${age}s) - ${resource.description || 'no description'}`
+        process.stderr.write(
+          `   ${resource.id}: ${resource.type} from ${resource.source} (${age}s) - ${
+            resource.description || 'no description'
+          }\n`
         );
       }
     }
@@ -266,7 +297,7 @@ function setupProcessHandlers(): void {
   const cleanup = () => {
     const cleared = globalResourceTracker.emergencyCleanup();
     if (cleared > 0) {
-      console.error(`💀 Emergency cleanup cleared ${cleared} resources`);
+      process.stderr.write(`💀 Emergency cleanup cleared ${cleared} resources\n`);
     }
   };
 
@@ -275,12 +306,12 @@ function setupProcessHandlers(): void {
   process.on('SIGTERM', cleanup);
   process.on('SIGINT', cleanup);
   process.on('uncaughtException', (error) => {
-    console.error('Uncaught exception:', error);
+    process.stderr.write(`Uncaught exception: ${String(error)}\n`);
     cleanup();
     process.exit(1);
   });
   process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled rejection at:', promise, 'reason:', reason);
+    process.stderr.write(`Unhandled rejection at: ${String(promise)} reason: ${String(reason)}\n`);
     cleanup();
     process.exit(1);
   });

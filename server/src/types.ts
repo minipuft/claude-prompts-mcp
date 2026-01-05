@@ -181,6 +181,8 @@ export interface Config {
   logging?: LoggingConfig;
   /** Tool descriptions configuration */
   toolDescriptions?: ToolDescriptionsOptions;
+  /** Version history configuration for resources */
+  versioning?: import('./versioning/types.js').VersioningConfig;
 }
 
 // ===== Prompt Types =====

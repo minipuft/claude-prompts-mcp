@@ -8,8 +8,13 @@
  * @see GateHotReloadCoordinator for the pattern this follows
  */
 
-import type { StyleDefinitionLoader, StyleDefinitionYaml } from '../core/index.js';
 import type { Logger } from '../../logging/index.js';
+import type { StyleDefinitionLoader, StyleDefinitionYaml } from '../core/index.js';
+
+/**
+ * File change operation types for hot reload events
+ */
+export type FileChangeOperation = 'added' | 'modified' | 'removed';
 
 /**
  * Hot reload event for styles
@@ -20,6 +25,8 @@ export interface StyleHotReloadEvent {
   reason: string;
   affectedFiles: string[];
   styleId?: string;
+  /** The type of file change (added, modified, removed) */
+  changeType?: FileChangeOperation;
   timestamp: number;
   requiresFullReload: boolean;
 }
@@ -84,18 +91,20 @@ export class StyleHotReloadCoordinator {
     Pick<StyleHotReloadConfig, 'onReload'>;
   private stats: StyleHotReloadStats;
 
-  constructor(
-    logger: Logger,
-    loader: StyleDefinitionLoader,
-    config: StyleHotReloadConfig = {}
-  ) {
+  constructor(logger: Logger, loader: StyleDefinitionLoader, config: StyleHotReloadConfig = {}) {
     this.logger = logger;
     this.loader = loader;
-    this.config = {
+    const normalizedConfig: Required<Omit<StyleHotReloadConfig, 'onReload'>> &
+      Pick<StyleHotReloadConfig, 'onReload'> = {
       debug: config.debug ?? false,
       reloadTimeoutMs: config.reloadTimeoutMs ?? 5000,
-      onReload: config.onReload,
     };
+
+    if (config.onReload) {
+      normalizedConfig.onReload = config.onReload;
+    }
+
+    this.config = normalizedConfig;
     this.stats = {
       reloadsAttempted: 0,
       reloadsSucceeded: 0,
@@ -106,10 +115,8 @@ export class StyleHotReloadCoordinator {
   /**
    * Handle a style file change event
    *
-   * This method:
-   * 1. Clears the style from the loader cache
-   * 2. Reloads the definition from YAML
-   * 3. Invokes the reload callback if provided
+   * For 'removed' events: clears the style from cache (no registry to unregister from)
+   * For other events: reloads the definition from YAML and invokes callback
    *
    * @param event - Hot reload event from the file watcher
    */
@@ -124,9 +131,45 @@ export class StyleHotReloadCoordinator {
     }
 
     if (this.config.debug) {
-      this.logger.debug(`Processing style hot reload for: ${styleId}`);
+      this.logger.debug(
+        `Processing style hot reload for: ${styleId} (changeType: ${event.changeType ?? 'unknown'})`
+      );
     }
 
+    // Handle deletion events
+    if (event.changeType === 'removed') {
+      return this.handleStyleDeletion(styleId);
+    }
+
+    // Handle add/modify events
+    return this.handleStyleReload(styleId);
+  }
+
+  /**
+   * Handle style deletion - clear from cache
+   * Note: Styles don't have a registry, just a loader cache
+   */
+  private async handleStyleDeletion(styleId: string): Promise<void> {
+    try {
+      // Clear loader cache
+      this.loader.clearCache(styleId);
+
+      this.stats.reloadsSucceeded++;
+      this.stats.lastReloadTime = Date.now();
+      this.stats.lastReloadedStyle = styleId;
+
+      this.logger.info(`🗑️ Style '${styleId}' cache cleared (files deleted)`);
+    } catch (error) {
+      this.stats.reloadsFailed++;
+      this.logger.error(`Failed to clear cache for deleted style '${styleId}':`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle style reload - reload from YAML and invoke callback
+   */
+  private async handleStyleReload(styleId: string): Promise<void> {
     try {
       // Step 1: Clear loader cache for this style
       this.loader.clearCache(styleId);
@@ -158,7 +201,7 @@ export class StyleHotReloadCoordinator {
         }
       }
 
-      this.logger.info(`Style '${definition.name}' (${styleId}) hot reloaded successfully`);
+      this.logger.info(`🔄 Style '${definition.name}' (${styleId}) hot reloaded successfully`);
     } catch (error) {
       this.stats.reloadsFailed++;
       this.logger.error(`Failed to hot reload style '${styleId}':`, error);

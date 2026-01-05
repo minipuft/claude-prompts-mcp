@@ -1,0 +1,75 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: startsWith(github.event.release.tag_name, 'claude-prompts-v')
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Verify tag/version/changelog alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ github.event.release.tag_name }}'
+          sha="$(git rev-parse HEAD)"
+
+          if [[ ! "$tag" =~ ^claude-prompts-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unexpected tag format: $tag"
+            exit 1
+          fi
+
+          version_from_tag="${tag#claude-prompts-v}"
+          version_from_pkg="$(node -p "require('./server/package.json').version")"
+
+          if [[ "$version_from_pkg" != "$version_from_tag" ]]; then
+            echo "Version mismatch: tag=$version_from_tag package.json=$version_from_pkg"
+            exit 1
+          fi
+
+          if ! grep -q "## \\[${version_from_tag}\\]" server/CHANGELOG.md; then
+            echo "Missing changelog entry for ${version_from_tag} in server/CHANGELOG.md"
+            exit 1
+          fi
+
+          # Guardrail: only publish releases whose tag commit is contained in main.
+          git fetch origin main --depth=1
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "Refusing to publish: tag commit is not on main (sha=$sha)"
+            exit 1
+          fi
+
+      - name: Install
+        working-directory: server
+        run: npm ci
+
+      - name: Build
+        working-directory: server
+        run: npm run build
+
+      - name: Test
+        working-directory: server
+        run: npm run test:ci
+
+      - name: Publish
+        working-directory: server
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public

@@ -58,12 +58,31 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     }
 
     // Keep pipeline session context aligned with manager state (important for gate reviews)
-    context.sessionContext = {
-      ...sessionContext,
-      currentStep: session.state.currentStep,
-      totalSteps: session.state.totalSteps,
-      pendingReview: session.pendingGateReview ?? sessionContext.pendingReview,
+    const updatedSessionContext: import('../../context/execution-context.js').SessionContext = {
+      sessionId,
+      isChainExecution: sessionContext.isChainExecution,
     };
+    if (sessionContext.chainId !== undefined) {
+      updatedSessionContext.chainId = sessionContext.chainId;
+    }
+    if (session.state.currentStep !== undefined) {
+      updatedSessionContext.currentStep = session.state.currentStep;
+    }
+    if (session.state.totalSteps !== undefined) {
+      updatedSessionContext.totalSteps = session.state.totalSteps;
+    }
+    const pendingReview = session.pendingGateReview ?? sessionContext.pendingReview;
+    if (pendingReview !== undefined) {
+      updatedSessionContext.pendingReview = pendingReview;
+    }
+    if (sessionContext.previousStepResult !== undefined) {
+      updatedSessionContext.previousStepResult = sessionContext.previousStepResult;
+    }
+    if (sessionContext.previousStepQualityScore !== undefined) {
+      updatedSessionContext.previousStepQualityScore = sessionContext.previousStepQualityScore;
+    }
+
+    context.sessionContext = updatedSessionContext;
 
     // Always refresh chain variables for downstream template rendering
     context.state.session.chainContext = this.chainSessionManager.getChainContext(sessionId);
@@ -86,7 +105,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     // Handle gate_action parameter (retry/skip/abort) when retry limit exceeded
     // Delegate to GateEnforcementAuthority for consistent action handling
-    const gateAction = context.mcpRequest.gate_action as GateAction | undefined;
+    const gateAction = context.mcpRequest.gate_action;
     const authority = context.gateEnforcement;
     const isRetryLimitExceeded = authority
       ? authority.isRetryLimitExceeded(sessionId)
@@ -119,18 +138,29 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         });
 
         // Add detection metadata for transparency and debugging
-        context.state.gates.verdictDetection = {
+        const verdictDetection: NonNullable<typeof context.state.gates.verdictDetection> = {
           verdict: verdictPayload.verdict,
           source: verdictPayload.source,
-          rationale: verdictPayload.rationale,
-          pattern: verdictPayload.detectedPattern,
-          outcome: outcome,
         };
+        if (verdictPayload.rationale !== undefined) {
+          verdictDetection.rationale = verdictPayload.rationale;
+        }
+        if (verdictPayload.detectedPattern !== undefined) {
+          verdictDetection.pattern = verdictPayload.detectedPattern;
+        }
+        verdictDetection.outcome = outcome;
+
+        context.state.gates.verdictDetection = verdictDetection;
 
         if (outcome === 'cleared') {
-          sessionContext.pendingReview = undefined;
+          delete sessionContext.pendingReview;
         } else {
-          sessionContext.pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+          const pending = this.chainSessionManager.getPendingGateReview(sessionId);
+          if (pending !== undefined) {
+            sessionContext.pendingReview = pending;
+          } else {
+            delete sessionContext.pendingReview;
+          }
 
           // Get enforcement mode (defaults to 'blocking')
           const enforcementMode = context.state.gates.enforcementMode ?? 'blocking';
@@ -164,7 +194,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 });
                 // Clear pending review to allow step advancement
                 await this.chainSessionManager.clearPendingGateReview(sessionId);
-                sessionContext.pendingReview = undefined;
+                delete sessionContext.pendingReview;
                 break;
 
               case 'informational':
@@ -174,7 +204,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 });
                 // Clear pending review to allow step advancement
                 await this.chainSessionManager.clearPendingGateReview(sessionId);
-                sessionContext.pendingReview = undefined;
+                delete sessionContext.pendingReview;
                 break;
             }
           }
@@ -227,7 +257,13 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         );
 
         const outputMapping = this.getStepOutputMapping(context, targetStepNumber);
-        await this.captureRealResponse(sessionId, session.chainId, targetStepNumber, userResponse!, outputMapping);
+        await this.captureRealResponse(
+          sessionId,
+          session.chainId,
+          targetStepNumber,
+          userResponse!,
+          outputMapping
+        );
 
         const updatedSession = this.chainSessionManager.getSession(sessionId);
         if (updatedSession) {
@@ -257,7 +293,13 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       if (hasUserResponse) {
         // User provided explicit response
         const outputMapping = this.getStepOutputMapping(context, targetStepNumber);
-        await this.captureRealResponse(sessionId, session.chainId, targetStepNumber, userResponse!, outputMapping);
+        await this.captureRealResponse(
+          sessionId,
+          session.chainId,
+          targetStepNumber,
+          userResponse!,
+          outputMapping
+        );
       } else {
         // No response - create placeholder
         await this.capturePlaceholder(
@@ -389,10 +431,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
             sessionId,
           });
         } else if (result.reviewCleared) {
-          context.sessionContext = {
-            ...sessionContext,
-            pendingReview: undefined,
-          };
+          const clearedContext = { ...sessionContext };
+          delete clearedContext.pendingReview;
+          context.sessionContext = clearedContext;
           context.diagnostics.warn(this.name, 'User chose to skip failed gate', {
             sessionId,
             skippedGates: context.state.gates.retryExhaustedGateIds,
@@ -423,10 +464,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         await this.chainSessionManager.clearPendingGateReview(sessionId);
         context.state.gates.retryLimitExceeded = false;
         context.state.gates.awaitingUserChoice = false;
-        context.sessionContext = {
-          ...sessionContext,
-          pendingReview: undefined,
-        };
+        const clearedContext = { ...sessionContext };
+        delete clearedContext.pendingReview;
+        context.sessionContext = clearedContext;
         context.diagnostics.warn(this.name, 'User chose to skip failed gate', {
           sessionId,
           skippedGates: context.state.gates.retryExhaustedGateIds,
@@ -485,7 +525,11 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
       const match = raw.match(regex);
       if (match) {
-        const rationale = match[2]?.trim();
+        const [, verdictRaw, rationaleRaw] = match;
+        if (!verdictRaw) {
+          continue;
+        }
+        const rationale = rationaleRaw?.trim();
 
         // Validation: Require non-empty rationale
         if (!rationale) {
@@ -496,7 +540,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         }
 
         return {
-          verdict: match[1].toUpperCase() as 'PASS' | 'FAIL',
+          verdict: verdictRaw.toUpperCase() as 'PASS' | 'FAIL',
           rationale,
           raw,
           source,

@@ -3,7 +3,6 @@ import { stripStyleOperators } from './parser-utils.js';
 import {
   type ChainOperator,
   type ChainStep,
-  type SymbolicExecutionPlan,
   type ExecutionStep,
   type FrameworkOperator,
   type GateOperator,
@@ -11,6 +10,7 @@ import {
   type ParallelOperator,
   type StyleOperator,
   type SymbolicCommandParseResult,
+  type SymbolicExecutionPlan,
   type SymbolicOperator,
 } from './types/operator-types.js';
 import { Logger } from '../../logging/index.js';
@@ -58,25 +58,31 @@ export class SymbolicCommandParser {
 
     const frameworkMatch = command.match(this.OPERATOR_PATTERNS.framework);
     if (frameworkMatch) {
-      operatorTypes.push('framework');
-      operators.push({
-        type: 'framework',
-        frameworkId: frameworkMatch[1],
-        normalizedId: frameworkMatch[1].toUpperCase(),
-        temporary: true,
-        scopeType: 'execution',
-      });
+      const matchedId = frameworkMatch[1];
+      if (matchedId) {
+        operatorTypes.push('framework');
+        operators.push({
+          type: 'framework',
+          frameworkId: matchedId,
+          normalizedId: matchedId.toUpperCase(),
+          temporary: true,
+          scopeType: 'execution',
+        });
+      }
     }
 
     const styleMatch = command.match(this.OPERATOR_PATTERNS.style);
     if (styleMatch) {
-      operatorTypes.push('style');
-      operators.push({
-        type: 'style',
-        styleId: styleMatch[1],
-        normalizedId: styleMatch[1].toLowerCase(),
-        scope: 'execution',
-      });
+      const matchedId = styleMatch[1];
+      if (matchedId) {
+        operatorTypes.push('style');
+        operators.push({
+          type: 'style',
+          styleId: matchedId,
+          normalizedId: matchedId.toLowerCase(),
+          scope: 'execution',
+        });
+      }
     }
 
     const chainMatches = command.match(this.OPERATOR_PATTERNS.chain);
@@ -156,19 +162,22 @@ export class SymbolicCommandParser {
 
     const conditionalMatch = command.match(this.OPERATOR_PATTERNS.conditional);
     if (conditionalMatch) {
-      operatorTypes.push('conditional');
+      const condition = conditionalMatch[1];
+      const rawTrueBranch = conditionalMatch[2];
+      if (condition && rawTrueBranch) {
+        operatorTypes.push('conditional');
 
-      // Defense-in-depth: Strip optional >> prefix from branch prompts
-      // Centralized normalization strips ": >>" patterns, but this handles edge cases
-      const trueBranch = conditionalMatch[2].replace(/^>>\s*/, '');
+        // Defense-in-depth: Strip optional >> prefix from branch prompts
+        // Centralized normalization strips ": >>" patterns, but this handles edge cases
+        const trueBranch = rawTrueBranch.replace(/^>>\s*/, '');
 
-      operators.push({
-        type: 'conditional',
-        condition: conditionalMatch[1],
-        conditionType: 'presence',
-        trueBranch,
-        falseBranch: undefined,
-      });
+        operators.push({
+          type: 'conditional',
+          condition,
+          conditionType: 'presence',
+          trueBranch,
+        } as const);
+      }
     }
 
     const complexity = this.calculateComplexity(operators);
@@ -210,12 +219,17 @@ export class SymbolicCommandParser {
         throw new ValidationError(`Invalid chain step format: ${stepStr}`);
       }
 
+      const promptId = stepMatch[1];
+      if (!promptId) {
+        throw new ValidationError(`Invalid chain step format: missing prompt ID in ${stepStr}`);
+      }
+
       this.logger.debug(
-        `[parseChainOperator] Step ${index + 1}: promptId="${stepMatch[1]}", args="${stepMatch[2]?.trim() ?? ''}"`
+        `[parseChainOperator] Step ${index + 1}: promptId="${promptId}", args="${stepMatch[2]?.trim() ?? ''}"`
       );
 
       return {
-        promptId: stepMatch[1],
+        promptId,
         args: stepMatch[2]?.trim() ?? '',
         position: index,
         variableName: `step${index + 1}_result`,
@@ -315,8 +329,15 @@ export class SymbolicCommandParser {
         throw new ValidationError(`Invalid parallel prompt format: ${promptStr}`);
       }
 
+      const promptId = promptMatch[1];
+      if (!promptId) {
+        throw new ValidationError(
+          `Invalid parallel prompt format: missing prompt ID in ${promptStr}`
+        );
+      }
+
       return {
-        promptId: promptMatch[1],
+        promptId,
         args: promptMatch[2]?.trim() ?? '',
         position: index,
       };
@@ -398,9 +419,9 @@ export class SymbolicCommandParser {
 
     return {
       steps,
-      frameworkOverride,
-      finalValidation,
-      styleSelection,
+      ...(frameworkOverride !== undefined && { frameworkOverride }),
+      ...(finalValidation !== undefined && { finalValidation }),
+      ...(styleSelection !== undefined && { styleSelection }),
       estimatedComplexity: detection.operators.length,
       requiresSessionState: steps.length > 1,
     };

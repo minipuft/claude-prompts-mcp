@@ -96,13 +96,22 @@ export class ArgumentHistoryTracker {
     const entry: ArgumentHistoryEntry = {
       entryId,
       timestamp: Date.now(),
-      sessionId,
       promptId,
       originalArgs: { ...originalArgs }, // Defensive copy
-      stepNumber,
-      stepResult,
-      metadata: metadata ? { ...metadata } : undefined,
     };
+
+    if (sessionId !== undefined) {
+      entry.sessionId = sessionId;
+    }
+    if (stepNumber !== undefined) {
+      entry.stepNumber = stepNumber;
+    }
+    if (stepResult !== undefined) {
+      entry.stepResult = stepResult;
+    }
+    if (metadata) {
+      entry.metadata = { ...metadata };
+    }
 
     // Get or create chain history
     if (!this.chainHistory.has(chainId)) {
@@ -179,6 +188,9 @@ export class ArgumentHistoryTracker {
 
     // Return the most recent entry's arguments
     const latestEntry = history[history.length - 1];
+    if (!latestEntry) {
+      return null;
+    }
     return { ...latestEntry.originalArgs }; // Defensive copy
   }
 
@@ -196,16 +208,28 @@ export class ArgumentHistoryTracker {
     const history = this.getSessionHistory(sessionId);
 
     if (history.length === 0) {
-      return {
+      const reviewContext: ReviewContext = {
         originalArgs: {},
         previousResults: {},
-        currentStep: currentStepNumber,
-        totalSteps: undefined,
       };
+      if (currentStepNumber !== undefined) {
+        reviewContext.currentStep = currentStepNumber;
+      }
+      return reviewContext;
     }
 
     // Extract original arguments from latest entry
     const latestEntry = history[history.length - 1];
+    if (!latestEntry) {
+      const reviewContext: ReviewContext = {
+        originalArgs: {},
+        previousResults: {},
+      };
+      if (currentStepNumber !== undefined) {
+        reviewContext.currentStep = currentStepNumber;
+      }
+      return reviewContext;
+    }
     const originalArgs = { ...latestEntry.originalArgs };
 
     // Build previous results map from step results
@@ -222,12 +246,18 @@ export class ArgumentHistoryTracker {
     // Determine total steps (max step number + 1, assuming 1-indexed)
     const totalSteps = maxStepNumber >= 0 ? maxStepNumber + 1 : undefined;
 
-    return {
+    const reviewContext: ReviewContext = {
       originalArgs,
       previousResults,
-      currentStep: currentStepNumber,
-      totalSteps,
     };
+    if (currentStepNumber !== undefined) {
+      reviewContext.currentStep = currentStepNumber;
+    }
+    if (totalSteps !== undefined) {
+      reviewContext.totalSteps = totalSteps;
+    }
+
+    return reviewContext;
   }
 
   /**

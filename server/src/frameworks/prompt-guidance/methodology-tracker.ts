@@ -341,10 +341,12 @@ export class MethodologyTracker extends EventEmitter {
       return true; // Not an error, but no switch needed
     }
 
-    // Validate methodology exists (basic validation)
-    const validMethodologies = ['CAGEERF', 'ReACT', '5W1H', 'SCAMPER'];
-    if (!validMethodologies.includes(request.targetMethodology)) {
-      this.logger.error(`Invalid methodology: ${request.targetMethodology}`);
+    // Note: Framework validity is validated by FrameworkManager.getFramework()
+    // which supports both built-in and custom frameworks from the registry.
+    // MethodologyTracker accepts any non-empty string; actual validation
+    // happens before reaching this layer.
+    if (!request.targetMethodology || request.targetMethodology.trim() === '') {
+      this.logger.error('Invalid methodology: empty or undefined');
       return false;
     }
 

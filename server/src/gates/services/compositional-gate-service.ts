@@ -54,12 +54,19 @@ export class CompositionalGateService implements IGateService {
     });
 
     try {
-      const guidance = await this.gateGuidanceRenderer.renderGuidance(gateIds, {
-        framework: context.framework,
+      const guidanceContext: GateContext = {
         category: context.category ?? prompt.category,
         promptId: context.promptId ?? prompt.id,
-        explicitGateIds: context.explicitGateIds,
-      });
+      };
+
+      if (context.framework) {
+        guidanceContext.framework = context.framework;
+      }
+      if (context.explicitGateIds) {
+        guidanceContext.explicitGateIds = context.explicitGateIds;
+      }
+
+      const guidance = await this.gateGuidanceRenderer.renderGuidance(gateIds, guidanceContext);
 
       if (!guidance || guidance.trim().length === 0) {
         this.logger.debug('[CompositionalGateService] No guidance produced', {

@@ -4,11 +4,7 @@ import { LightweightGateSystem } from '../../../gates/core/index.js';
 import { ConvertedPrompt, ToolResponse } from '../../../types/index.js';
 import { ResponseFormatter } from '../processors/response-formatter.js';
 
-import type {
-  ChainSession,
-  ChainSessionService,
-  ChainSessionSummary,
-} from '../../../chain-session/types.js';
+import type { ChainSession, ChainSessionService } from '../../../chain-session/types.js';
 
 /**
  * Detects whether an incoming command is a chain management operation.
@@ -44,7 +40,7 @@ export function detectChainManagementCommand(command: string): ChainManagementCo
 
         return {
           action,
-          target: targetName,
+          target: targetName ?? '',
           parameters,
         };
       }
@@ -154,7 +150,7 @@ export class ChainManagementService {
       const metadata = context['chain_metadata'] as Record<string, any> | undefined;
       const lines: string[] = [
         `## 🔁 Active Chain Run`,
-        `**Chain**: ${metadata?.name ?? session.chainId}`,
+        `**Chain**: ${metadata?.['name'] ?? session.chainId}`,
         `**Chain ID**: ${session.chainId}`,
         `**Resume With**: \`chain_id=${session.chainId}\``,
         `**Progress**: ${session.state.currentStep}/${session.state.totalSteps}`,
@@ -162,8 +158,9 @@ export class ChainManagementService {
         `**Archive Run ID**: ${session.sessionId} (history only)`,
       ];
 
-      if (metadata?.gates && Array.isArray(metadata.gates) && metadata.gates.length > 0) {
-        lines.push(`**Gate IDs**: ${metadata.gates.join(', ')}`);
+      const gates = metadata?.['gates'];
+      if (gates && Array.isArray(gates) && gates.length > 0) {
+        lines.push(`**Gate IDs**: ${gates.join(', ')}`);
       }
 
       return this.responseFormatter.formatPromptEngineResponse(lines.join('\n'), undefined, {
@@ -176,14 +173,16 @@ export class ChainManagementService {
       });
     }
 
-    const scope = parameters.scope ? ` for "${parameters.scope}"` : '';
+    const scopeParam = parameters['scope'];
+    const scope = scopeParam ? ` for "${scopeParam}"` : '';
     return this.responseFormatter.formatErrorResponse(
       `Chain "${target || '<unspecified>'}" not found${scope}.`
     );
   }
 
   private async handleList(parameters: Record<string, any>): Promise<ToolResponse> {
-    const limit = parameters.limit ? Number(parameters.limit) : 20;
+    const limitParam = parameters['limit'];
+    const limit = limitParam ? Number(limitParam) : 20;
     const activeSessions = this.sessionManager.listActiveSessions(limit);
 
     if (activeSessions.length === 0) {
@@ -321,6 +320,9 @@ function parseKeyValueParams(paramString: string): Record<string, any> {
 
   while ((match = keyValuePattern.exec(paramString)) !== null) {
     const [, key, value] = match;
+    if (key === undefined || value === undefined) {
+      continue;
+    }
 
     if (value.toLowerCase() === 'true') {
       params[key] = true;

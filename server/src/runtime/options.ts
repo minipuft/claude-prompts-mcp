@@ -44,11 +44,11 @@ export function detectRuntimeTestEnvironment(
   args: string[] = process.argv.slice(2)
 ): boolean {
   return (
-    process.env.NODE_ENV === 'test' ||
+    process.env['NODE_ENV'] === 'test' ||
     args.includes('--suppress-debug') ||
     args.includes('--test-mode') ||
-    process.env.GITHUB_ACTIONS === 'true' ||
-    process.env.CI === 'true' ||
+    process.env['GITHUB_ACTIONS'] === 'true' ||
+    process.env['CI'] === 'true' ||
     fullArgv.some((arg) => TEST_ARG_HINTS.some((hint) => arg.includes(hint))) ||
     (fullArgv[1] ?? '').includes('tests/scripts/')
   );
@@ -62,7 +62,7 @@ function parseLogLevel(args: string[]): string | undefined {
   if (logLevelArg) {
     const level = logLevelArg.split('=')[1]?.toLowerCase();
     const validLevels = ['debug', 'info', 'warn', 'error'];
-    if (validLevels.includes(level)) {
+    if (level && validLevels.includes(level)) {
       return level;
     }
   }
@@ -106,13 +106,18 @@ export function resolveRuntimeLaunchOptions(
   // Parse log level
   const logLevel = parseLogLevel(args);
 
-  return {
+  const runtimeOptions: RuntimeLaunchOptions = {
     args,
     verbose: isVerbose,
     quiet: explicitQuiet || autoQuiet,
     startupTest: args.includes('--startup-test'),
     testEnvironment: detectRuntimeTestEnvironment(fullArgv, args),
     paths,
-    logLevel,
   };
+
+  if (logLevel) {
+    runtimeOptions.logLevel = logLevel;
+  }
+
+  return runtimeOptions;
 }

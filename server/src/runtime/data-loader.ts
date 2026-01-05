@@ -4,7 +4,7 @@
  * Reuses existing PromptAssetManager behavior without duplicating transport/config logic.
  */
 
-import { access } from 'node:fs/promises';
+import { access, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import type { RuntimeLaunchOptions } from './options.js';
@@ -50,50 +50,56 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   const isVerbose = runtimeOptions.verbose;
   const isQuiet = runtimeOptions.quiet;
 
-  // Resolve prompts file path
-  // Priority: PathResolver > ConfigManager
+  // Resolve prompts path (directory or file)
+  // Priority: PathResolver > ConfigManager.getPromptsDirectory()
   const config = configManager.getConfig();
-  let promptsFilePath = pathResolver
+  let promptsPath = pathResolver
     ? pathResolver.getPromptsPath()
-    : configManager.getResolvedPromptsFilePath();
+    : configManager.getPromptsDirectory();
 
   if (!isQuiet) {
     logger.info('Starting prompt loading pipeline...');
-    logger.info(`Config prompts.file setting: "${config.prompts.file}"`);
+    logger.info(`Config prompts.directory setting: "${config.prompts.directory}"`);
   }
 
   // Log environment overrides
-  if (process.env.MCP_PROMPTS_PATH) {
-    logger.info(`🎯 MCP_PROMPTS_PATH override: "${process.env.MCP_PROMPTS_PATH}"`);
+  if (process.env['MCP_PROMPTS_PATH']) {
+    logger.info(`🎯 MCP_PROMPTS_PATH override: "${process.env['MCP_PROMPTS_PATH']}"`);
   }
 
   // Normalize to absolute path if needed
-  if (!path.isAbsolute(promptsFilePath)) {
+  if (!path.isAbsolute(promptsPath)) {
     const baseRoot = serverRoot ?? configManager.getServerRoot?.() ?? process.cwd();
-    promptsFilePath = path.resolve(baseRoot, promptsFilePath);
+    promptsPath = path.resolve(baseRoot, promptsPath);
     if (isVerbose) {
-      logger.info(`🔧 Converting prompts path to absolute: ${promptsFilePath}`);
+      logger.info(`🔧 Converting prompts path to absolute: ${promptsPath}`);
     }
   }
 
-  // Verify file exists
-  await access(promptsFilePath).catch((error) => {
-    logger.error(`✗ Prompts configuration file NOT FOUND: ${promptsFilePath}`);
+  // Verify path exists (can be directory or file for backward compatibility)
+  await access(promptsPath).catch((error) => {
+    logger.error(`✗ Prompts path NOT FOUND: ${promptsPath}`);
     if (isVerbose) {
       logger.error(`File access error:`, error);
-      logger.error(`Is path absolute? ${path.isAbsolute(promptsFilePath)}`);
-      logger.error(`Normalized path: ${path.normalize(promptsFilePath)}`);
+      logger.error(`Is path absolute? ${path.isAbsolute(promptsPath)}`);
+      logger.error(`Normalized path: ${path.normalize(promptsPath)}`);
     }
-    throw new Error(`Prompts configuration file not found: ${promptsFilePath}`);
+    throw new Error(`Prompts path not found: ${promptsPath}`);
   });
 
+  // Determine if path is directory or file
+  const pathStats = await stat(promptsPath);
+  const isDirectory = pathStats.isDirectory();
+
   if (isVerbose) {
-    logger.info(`✓ Prompts configuration file exists: ${promptsFilePath}`);
+    const pathType = isDirectory ? 'directory' : 'file';
+    logger.info(`✓ Prompts ${pathType} exists: ${promptsPath}`);
   }
 
+  // Load prompts - loadAndConvertPrompts handles both directory and file paths
   const result = await promptManager.loadAndConvertPrompts(
-    promptsFilePath,
-    path.dirname(promptsFilePath)
+    promptsPath,
+    isDirectory ? promptsPath : path.dirname(promptsPath)
   );
 
   const promptsData = result.promptsData;
@@ -120,6 +126,6 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
     promptsData,
     categories,
     convertedPrompts,
-    promptsFilePath,
+    promptsFilePath: promptsPath,
   };
 }

@@ -76,7 +76,6 @@ export class PromptClassifier {
           `Classification failed: ${error instanceof Error ? error.message : String(error)}`,
         ],
         suggestedGates: [],
-        framework: undefined,
       };
     }
   }
@@ -149,14 +148,19 @@ export class PromptClassifier {
       }
     }
 
-    return {
+    const classification: PromptClassification = {
       executionType,
       requiresExecution,
       confidence,
       reasoning,
       suggestedGates,
-      framework,
     };
+
+    if (framework) {
+      classification.framework = framework;
+    }
+
+    return classification;
   }
 
   /**

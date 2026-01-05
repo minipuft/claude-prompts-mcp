@@ -73,13 +73,16 @@ export class InjectionControlStage extends BasePipelineStage {
     this.injectionService.syncRuntimeOverrides(sessionOverrides ?? new Map());
 
     // Build decision input from context
-    const input = this.buildDecisionInput(context, this.toSessionOverrideRecord(sessionOverrides));
+    const overrideRecord = this.toSessionOverrideRecord(sessionOverrides);
+    const input = this.buildDecisionInput(context, overrideRecord);
 
     // Get decisions for all injection types
     const injectionState = this.injectionService.decideAll(input);
 
     // Persist active session overrides for downstream diagnostics/status
-    injectionState.sessionOverrides = this.toSessionOverrideRecord(sessionOverrides);
+    if (overrideRecord) {
+      injectionState.sessionOverrides = overrideRecord;
+    }
 
     // Store injection decisions in state (authoritative source for downstream stages)
     context.state.injection = injectionState;
@@ -105,42 +108,56 @@ export class InjectionControlStage extends BasePipelineStage {
     sessionOverrides?: Partial<Record<InjectionType, boolean>>
   ): Omit<InjectionDecisionInput, 'injectionType'> {
     const currentStep = context.sessionContext?.currentStep ?? 1;
-    const totalSteps = context.sessionContext?.totalSteps;
-
-    // Build gate statuses map from context if available
-    const gateStatuses = this.buildGateStatusMap(context);
-
-    // Get category and chain info for hierarchical lookup
-    const categoryId = this.getCategoryId(context);
-    const chainId = context.getRequestedChainId();
-    const promptId = context.parsedCommand?.promptId;
-
-    // Get modifiers from execution plan
-    const modifiers = context.executionPlan?.modifiers;
-
-    // Determine execution context for target filtering
-    // If there's a pending gate review, we're in 'gate_review' context
-    // Otherwise, we're in normal 'step' context
-    const executionContext: ExecutionContextType = context.sessionContext?.pendingReview
-      ? 'gate_review'
-      : 'step';
-
-    return {
+    const input: Omit<InjectionDecisionInput, 'injectionType'> = {
       currentStep,
-      totalSteps,
-      gateStatuses,
-      modifiers,
-      sessionOverrides,
-      categoryId,
-      chainId,
-      promptId,
-      // stepType could be extracted from chain step metadata if needed
-      stepType: this.getStepType(context),
-      // previousStepResult from session context (populated by ResponseCaptureStage)
-      previousStepResult: context.sessionContext?.previousStepResult,
-      // executionContext for target filtering (step vs gate_review)
-      executionContext,
+      executionContext: context.sessionContext?.pendingReview ? 'gate_review' : 'step',
     };
+
+    const totalSteps = context.sessionContext?.totalSteps;
+    if (totalSteps !== undefined) {
+      input.totalSteps = totalSteps;
+    }
+
+    const gateStatuses = this.buildGateStatusMap(context);
+    if (gateStatuses) {
+      input.gateStatuses = gateStatuses;
+    }
+
+    const categoryId = this.getCategoryId(context);
+    if (categoryId) {
+      input.categoryId = categoryId;
+    }
+
+    const chainId = context.getRequestedChainId();
+    if (chainId) {
+      input.chainId = chainId;
+    }
+
+    const promptId = context.parsedCommand?.promptId;
+    if (promptId) {
+      input.promptId = promptId;
+    }
+
+    const modifiers = context.executionPlan?.modifiers;
+    if (modifiers) {
+      input.modifiers = modifiers;
+    }
+
+    const stepType = this.getStepType(context);
+    if (stepType) {
+      input.stepType = stepType;
+    }
+
+    const previousStepResult = context.sessionContext?.previousStepResult;
+    if (previousStepResult) {
+      input.previousStepResult = previousStepResult;
+    }
+
+    if (sessionOverrides) {
+      input.sessionOverrides = sessionOverrides;
+    }
+
+    return input;
   }
 
   /**

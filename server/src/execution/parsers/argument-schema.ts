@@ -50,8 +50,9 @@ export class ArgumentSchemaValidator {
   }
 
   private getSchema(prompt: ConvertedPrompt): ZodTypeAny | null {
-    if (this.overrides[prompt.id]) {
-      return this.overrides[prompt.id];
+    const override = this.overrides[prompt.id];
+    if (override) {
+      return override;
     }
 
     if (this.cache.has(prompt.id)) {

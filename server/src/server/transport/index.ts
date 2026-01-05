@@ -58,7 +58,9 @@ export class TransportManager {
         return value;
       }
       // Use stderr to avoid corrupting STDIO protocol
-      console.error(`[TransportManager] Invalid --transport value: "${value}". Using config default.`);
+      console.error(
+        `[TransportManager] Invalid --transport value: "${value}". Using config default.`
+      );
     }
 
     // Fall back to config value

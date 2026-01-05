@@ -87,37 +87,64 @@ export function parseYaml<T>(content: string, options?: YamlParseOptions): YamlP
       },
     }) as T;
 
-    return {
+    const result: YamlParseResult<T> = {
       success: true,
       data,
-      warnings: warnings.length > 0 ? warnings : undefined,
     };
+
+    if (warnings.length > 0) {
+      result.warnings = warnings;
+    }
+
+    return result;
   } catch (error) {
     if (error instanceof yaml.YAMLException) {
-      return {
-        success: false,
-        error: {
-          message: error.message,
-          filename: options?.filename,
-          line: error.mark?.line,
-          column: error.mark?.column,
-          snippet: error.mark?.snippet,
-          cause: error,
-        },
-        warnings: warnings.length > 0 ? warnings : undefined,
+      const errorDetails: YamlParseError = {
+        message: error.message,
+        line: error.mark?.line,
+        column: error.mark?.column,
+        snippet: error.mark?.snippet,
+        cause: error,
       };
+
+      if (options?.filename) {
+        errorDetails.filename = options.filename;
+      }
+
+      const errorResult: YamlParseResult<T> = {
+        success: false,
+        error: errorDetails,
+      };
+
+      if (warnings.length > 0) {
+        errorResult.warnings = warnings;
+      }
+
+      return errorResult;
     }
 
     // Handle unexpected errors
-    return {
-      success: false,
-      error: {
-        message: error instanceof Error ? error.message : String(error),
-        filename: options?.filename,
-        cause: error instanceof Error ? error : undefined,
-      },
-      warnings: warnings.length > 0 ? warnings : undefined,
+    const errorDetails: YamlParseError = {
+      message: error instanceof Error ? error.message : String(error),
     };
+
+    if (options?.filename) {
+      errorDetails.filename = options.filename;
+    }
+    if (error instanceof Error) {
+      errorDetails.cause = error;
+    }
+
+    const errorResult: YamlParseResult<T> = {
+      success: false,
+      error: errorDetails,
+    };
+
+    if (warnings.length > 0) {
+      errorResult.warnings = warnings;
+    }
+
+    return errorResult;
   }
 }
 

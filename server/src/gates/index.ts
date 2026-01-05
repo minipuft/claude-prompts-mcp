@@ -18,6 +18,18 @@ export * from './core/index.js';
 // Export registry-based architecture (Phase 3)
 export * from './registry/index.js';
 
+// Export gate services (Phase 3)
+export {
+  type IGateService,
+  type GateEnhancementResult,
+  type GateValidationResult as ServiceGateValidationResult,
+  type GateServiceConfig,
+  CompositionalGateService,
+  SemanticGateService,
+  GateServiceFactory,
+  GateReferenceResolver,
+} from './services/index.js';
+
 // Export gate guide types (Phase 1)
 export * from './types/index.js';
 

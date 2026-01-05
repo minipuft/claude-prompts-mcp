@@ -8,6 +8,7 @@
 export * from './converter.js';
 export * from './loader.js';
 export * from './registry.js';
+export * from './prompt-schema.js';
 // Template processor moved to /execution/processor/template-processor.js for better organization
 export * from './category-manager.js';
 export * from './file-observer.js';
@@ -46,14 +47,14 @@ export class PromptAssetManager {
   private textReferenceManager: TextReferenceManager;
   private conversationManager: ConversationManager;
   private configManager: ConfigManager;
-  private mcpServer?: McpServer;
+  private mcpServer: McpServer | undefined;
 
   // Individual module instances
   private converter: PromptConverter;
   private loader: PromptLoader;
-  private registry?: PromptRegistry;
+  private registry: PromptRegistry | undefined;
   // templateProcessor removed - functionality consolidated into UnifiedPromptProcessor
-  private hotReloadManager?: HotReloadManager;
+  private hotReloadManager: HotReloadManager | undefined;
   // Framework-aware components removed in simplification
 
   constructor(
@@ -67,7 +68,6 @@ export class PromptAssetManager {
     this.textReferenceManager = textReferenceManager;
     this.conversationManager = conversationManager;
     this.configManager = configManager;
-    this.mcpServer = mcpServer;
     // Framework initialization removed in simplification
 
     // Initialize individual modules
@@ -81,6 +81,7 @@ export class PromptAssetManager {
     );
 
     if (mcpServer) {
+      this.mcpServer = mcpServer;
       this.registry = new PromptRegistry(
         logger,
         mcpServer,
@@ -118,9 +119,25 @@ export class PromptAssetManager {
 
   /**
    * Load prompts from category-specific configuration files
+   * @deprecated Use loadFromDirectories() for pure YAML-based loading
    */
   async loadCategoryPrompts(configPath: string): Promise<CategoryPromptsResult> {
     return this.loader.loadCategoryPrompts(configPath);
+  }
+
+  /**
+   * Load prompts using directory-based discovery (recommended).
+   *
+   * This is the modern approach that treats the directory structure as the source of truth:
+   * - Each subdirectory under promptsDir is a category
+   * - Category metadata is derived from directory name (or category.yaml if present)
+   * - Prompts are discovered via YAML files (both directory and single-file formats)
+   * - No JSON registry files (prompts.json, promptsConfig.json) required
+   *
+   * @param promptsDir - Base directory containing category subdirectories
+   */
+  async loadFromDirectories(promptsDir: string): Promise<CategoryPromptsResult> {
+    return this.loader.loadFromDirectories(promptsDir);
   }
 
   /**
@@ -157,10 +174,16 @@ export class PromptAssetManager {
   }
 
   /**
-   * Load and convert prompts in one operation
+   * Load and convert prompts in one operation.
+   *
+   * Uses directory-based discovery by default (YAML-only, no JSON registry).
+   * Falls back to legacy config-based loading only if explicitly requested.
+   *
+   * @param configPathOrDir - Either a path to promptsConfig.json (legacy) or the prompts directory
+   * @param basePath - Optional base path for resolving prompt file references
    */
   async loadAndConvertPrompts(
-    configPath: string,
+    configPathOrDir: string,
     basePath?: string
   ): Promise<{
     promptsData: PromptData[];
@@ -168,18 +191,19 @@ export class PromptAssetManager {
     convertedPrompts: ConvertedPrompt[];
   }> {
     try {
-      this.logger.info(`📁 PromptAssetManager: Loading prompts from: ${configPath}`);
+      // Determine if this is a directory or config file path
+      const isConfigFile = configPathOrDir.endsWith('.json');
+      const promptsDir = isConfigFile ? path.dirname(configPathOrDir) : configPathOrDir;
 
-      await this.logConfigFileDiagnostics(configPath);
+      this.logger.info(`📁 PromptAssetManager: Loading prompts from: ${promptsDir}`);
 
-      this.logger.info('🔄 Calling PromptLoader.loadCategoryPrompts()...');
+      // Use directory-based discovery (modern YAML-only approach)
+      this.logger.info('🔄 Using directory-based prompt discovery (YAML-only)...');
+      const { promptsData, categories } = await this.loadFromDirectories(promptsDir);
 
-      // Load the raw prompt data
-      const { promptsData, categories } = await this.loadCategoryPrompts(configPath);
-
-      this.logger.info('✅ PromptLoader.loadCategoryPrompts() completed successfully');
+      this.logger.info('✅ Directory-based loading completed successfully');
       this.logger.info(
-        `📊 Raw data loaded: ${promptsData.length} prompts from ${categories.length} categories`
+        `📊 Loaded: ${promptsData.length} prompts from ${categories.length} categories`
       );
 
       this.logCategoryBreakdown(categories, promptsData);
@@ -187,7 +211,11 @@ export class PromptAssetManager {
       this.logger.info('🔄 Converting prompts to JSON structure...');
 
       // Convert to JSON structure
-      const convertedPrompts = await this.convertMarkdownPromptsToJson(promptsData, basePath);
+      const effectiveBasePath = basePath || promptsDir;
+      const convertedPrompts = await this.convertMarkdownPromptsToJson(
+        promptsData,
+        effectiveBasePath
+      );
 
       this.logConversionSummary(promptsData, convertedPrompts);
 
@@ -203,6 +231,14 @@ export class PromptAssetManager {
       );
       throw error;
     }
+  }
+
+  /**
+   * Clear the loader's file cache.
+   * Call this before reloading prompts to ensure fresh content is read from disk.
+   */
+  clearLoaderCache(): void {
+    this.loader.clearCache();
   }
 
   /**
@@ -308,7 +344,11 @@ export class PromptAssetManager {
     watchTargets.set(promptsDir, { path: promptsDir }); // Main prompts directory
 
     for (const dir of promptsCategoryDirs) {
-      watchTargets.set(dir.path, { path: dir.path, category: dir.category });
+      const target: { path: string; category?: string } = { path: dir.path };
+      if (dir.category) {
+        target.category = dir.category;
+      }
+      watchTargets.set(dir.path, target);
     }
 
     if (options?.methodologyHotReload?.directories) {
@@ -347,7 +387,8 @@ export class PromptAssetManager {
   }
 
   /**
-   * Discover prompt directories for watching
+   * Discover prompt directories for watching.
+   * Categories are identified by containing YAML prompt files (no JSON registry required).
    */
   private async discoverPromptDirectories(
     promptsDir: string
@@ -359,16 +400,22 @@ export class PromptAssetManager {
       const entries = await fs.readdir(promptsDir, { withFileTypes: true });
 
       for (const entry of entries) {
-        if (entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.')) {
+        if (
+          entry.isDirectory() &&
+          entry.name !== 'node_modules' &&
+          entry.name !== 'backup' &&
+          !entry.name.startsWith('.') &&
+          !entry.name.startsWith('_')
+        ) {
           const fullPath = path.join(promptsDir, entry.name);
 
-          // Check if this directory contains prompts.json (indicating it's a category directory)
-          try {
-            const categoryPromptsPath = path.join(fullPath, 'prompts.json');
-            await fs.access(categoryPromptsPath);
+          // A directory is a category if it contains YAML prompts
+          // (either {id}/prompt.yaml subdirectories or {id}.yaml files)
+          const hasYamlPrompts = this.loader.hasYamlPrompts(fullPath);
+          if (hasYamlPrompts) {
             directories.push({ path: fullPath, category: entry.name });
-          } catch {
-            // Directory doesn't have prompts.json, but still watch it
+          } else {
+            // Watch directory anyway (might add prompts later)
             directories.push({ path: fullPath });
           }
         }

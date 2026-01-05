@@ -17,6 +17,7 @@ interface StructuredToolResponse {
     timestamp: string;
     executionTime?: number;
     framework?: string;
+    errorType?: string;
     errorCode?: string;
     [key: string]: unknown;
   };
@@ -30,6 +31,7 @@ export interface ErrorContext {
   userInput?: unknown;
   suggestions?: string[];
   recoveryOptions?: string[];
+  framework?: string;
 
   // Extended properties for MCP compatibility
   systemState?: {
@@ -82,6 +84,20 @@ export abstract class BaseError extends Error {
    * Get structured error response for MCP protocol
    */
   toStructuredResponse(): StructuredToolResponse {
+    const metadata: StructuredToolResponse['metadata'] = {
+      tool: this.context.tool || 'unknown',
+      action: this.context.action || 'unknown',
+      timestamp: this.timestamp,
+      errorCode: this.code,
+    };
+
+    if (this.context.framework !== undefined) {
+      metadata.framework = this.context.framework;
+    }
+    if (this.context.errorType !== undefined) {
+      metadata.errorType = this.context.errorType;
+    }
+
     return {
       content: [
         {
@@ -90,12 +106,7 @@ export abstract class BaseError extends Error {
         },
       ],
       isError: true,
-      metadata: {
-        tool: this.context.tool || 'unknown',
-        action: this.context.action || 'unknown',
-        timestamp: this.timestamp,
-        errorCode: this.code,
-      },
+      metadata,
     };
   }
 
@@ -172,8 +183,12 @@ export class ValidationError extends BaseError {
     }
 
     super(message, 'VALIDATION_ERROR', context);
-    this.validationErrors = validationErrors;
-    this.validationResult = validationResult;
+    if (validationErrors !== undefined) {
+      this.validationErrors = validationErrors;
+    }
+    if (validationResult !== undefined) {
+      this.validationResult = validationResult;
+    }
   }
 
   getEnhancedMessage(): string {
@@ -391,7 +406,7 @@ export class FrameworkError extends BaseError {
 }
 
 export class ExecutionError extends BaseError {
-  public readonly executionContext?: Record<string, unknown>;
+  public readonly executionContext: Record<string, unknown> | undefined;
 
   constructor(
     message: string,
@@ -524,10 +539,14 @@ export class ValidationHelpers {
       example?: string;
     }>
   ): ValidationResult {
-    return {
-      valid: errors.length === 0,
-      errors: errors.length > 0 ? errors : undefined,
+    const hasErrors = errors.length > 0;
+    const result: ValidationResult = {
+      valid: !hasErrors,
     };
+    if (hasErrors) {
+      result.errors = errors;
+    }
+    return result;
   }
 
   /**
@@ -578,30 +597,55 @@ export class ValidationHelpers {
    * Calculate Levenshtein distance for typo detection
    */
   private static levenshteinDistance(str1: string, str2: string): number {
-    const matrix = Array(str2.length + 1)
-      .fill(null)
-      .map(() => Array(str1.length + 1).fill(null));
+    const matrix: number[][] = Array.from({ length: str2.length + 1 }, () =>
+      Array.from({ length: str1.length + 1 }, () => 0)
+    );
 
     for (let i = 0; i <= str1.length; i += 1) {
-      matrix[0][i] = i;
+      const firstRow = matrix[0];
+      if (!firstRow) {
+        continue;
+      }
+      firstRow[i] = i;
     }
 
     for (let j = 0; j <= str2.length; j += 1) {
-      matrix[j][0] = j;
+      const row = matrix[j];
+      if (!row) {
+        continue;
+      }
+      row[0] = j;
     }
 
     for (let j = 1; j <= str2.length; j += 1) {
+      const currentRow = matrix[j];
+      const previousRow = matrix[j - 1];
+      if (!currentRow || !previousRow) {
+        continue;
+      }
+
       for (let i = 1; i <= str1.length; i += 1) {
+        const left = currentRow[i - 1];
+        const top = previousRow[i];
+        const diagonal = previousRow[i - 1];
+        if (left === undefined || top === undefined || diagonal === undefined) {
+          continue;
+        }
         const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
-        matrix[j][i] = Math.min(
-          matrix[j][i - 1] + 1, // deletion
-          matrix[j - 1][i] + 1, // insertion
-          matrix[j - 1][i - 1] + indicator // substitution
+        currentRow[i] = Math.min(
+          left + 1, // deletion
+          top + 1, // insertion
+          diagonal + indicator // substitution
         );
       }
     }
 
-    return matrix[str2.length][str1.length];
+    const lastRow = matrix[str2.length];
+    if (!lastRow) {
+      return 0;
+    }
+    const lastValue = lastRow[str1.length];
+    return lastValue ?? 0;
   }
 }
 

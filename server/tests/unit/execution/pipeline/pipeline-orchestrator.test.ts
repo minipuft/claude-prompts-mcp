@@ -108,6 +108,8 @@ const createPipeline = (
     inlineGateStage,
     operatorValidationStage,
     planningStage,
+    null, // scriptExecutionStage (optional - null to skip)
+    null, // scriptAutoExecuteStage (optional - null to skip)
     frameworkStage,
     judgeSelectionStage,
     promptGuidanceStage,

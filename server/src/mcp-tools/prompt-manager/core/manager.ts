@@ -6,8 +6,11 @@
  * while delegating operations to specialized modules for improved maintainability.
  */
 
+import * as path from 'node:path';
+
 import { PromptManagerDependencies, PromptManagerData, PromptClassification } from './types.js';
 import { ConfigManager } from '../../../config/index.js';
+import { PromptReferenceValidator } from '../../../execution/reference/index.js';
 import { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import { FrameworkStateManager } from '../../../frameworks/framework-state-manager.js';
 import { Logger } from '../../../logging/index.js';
@@ -20,15 +23,19 @@ import {
   PromptError,
   handleError as utilsHandleError,
 } from '../../../utils/index.js';
+import { VersionHistoryService } from '../../../versioning/index.js';
 
 // Modular components
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { GateAnalyzer } from '../analysis/gate-analyzer.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
+import { TextDiffService } from '../analysis/text-diff-service.js';
 import { FileOperations } from '../operations/file-operations.js';
 import { FilterParser } from '../search/filter-parser.js';
 import { PromptMatcher } from '../search/prompt-matcher.js';
-import { validateRequiredFields } from '../utils/validation.js';
+import { validateRequiredFields, validateToolDefinitions } from '../utils/validation.js';
+
+// Reference validation
 
 import type { PromptManagerActionId } from '../../../tooling/action-metadata/definitions/prompt-manager.js';
 import type { ActionDescriptor } from '../../../tooling/action-metadata/definitions/types.js';
@@ -70,9 +77,11 @@ export class ConsolidatedPromptManager {
   private promptAnalyzer: PromptAnalyzer;
   private comparisonEngine: ComparisonEngine;
   private gateAnalyzer: GateAnalyzer;
+  private textDiffService: TextDiffService;
   private filterParser: FilterParser;
   private promptMatcher: PromptMatcher;
   private fileOperations: FileOperations;
+  private versionHistoryService: VersionHistoryService;
 
   // Data references
   private promptsData: PromptData[] = [];
@@ -93,8 +102,12 @@ export class ConsolidatedPromptManager {
     this.mcpServer = mcpServer;
     this.configManager = configManager;
     this.semanticAnalyzer = semanticAnalyzer;
-    this.frameworkStateManager = frameworkStateManager;
-    this.frameworkManager = frameworkManager;
+    if (frameworkStateManager) {
+      this.frameworkStateManager = frameworkStateManager;
+    }
+    if (frameworkManager) {
+      this.frameworkManager = frameworkManager;
+    }
     this.onRefresh = onRefresh;
     this.onRestart = onRestart;
 
@@ -104,18 +117,23 @@ export class ConsolidatedPromptManager {
       mcpServer,
       configManager,
       semanticAnalyzer,
-      frameworkStateManager,
-      frameworkManager,
       onRefresh,
       onRestart,
+      ...(frameworkStateManager ? { frameworkStateManager } : {}),
+      ...(frameworkManager ? { frameworkManager } : {}),
     };
 
     this.promptAnalyzer = new PromptAnalyzer(dependencies);
     this.comparisonEngine = new ComparisonEngine(logger);
     this.gateAnalyzer = new GateAnalyzer(dependencies);
+    this.textDiffService = new TextDiffService();
     this.filterParser = new FilterParser(logger);
     this.promptMatcher = new PromptMatcher(logger);
     this.fileOperations = new FileOperations(dependencies);
+    this.versionHistoryService = new VersionHistoryService({
+      logger,
+      configManager,
+    });
 
     this.logger.debug('ConsolidatedPromptManager initialized with modular architecture');
   }
@@ -175,7 +193,7 @@ export class ConsolidatedPromptManager {
     // USING ERROR LEVEL FOR GUARANTEED VISIBILITY IN LOGS
     this.logger.error(`[GATE-TRACE] 🚀 ENTRY POINT: handleAction called with action "${action}"`);
     this.logger.error(
-      `[GATE-TRACE] Gate config present: ${!!args.gate_configuration}, Type: ${typeof args.gate_configuration}`
+      `[GATE-TRACE] Gate config present: ${!!args['gate_configuration']}, Type: ${typeof args['gate_configuration']}`
     );
     this.logger.info(`📝 Prompt Manager: Executing action "${action}"`);
 
@@ -221,6 +239,18 @@ export class ConsolidatedPromptManager {
           response = await this.guidePromptActions(args);
           break;
 
+        case 'history':
+          response = await this.handleHistory(args);
+          break;
+
+        case 'rollback':
+          response = await this.handleRollback(args);
+          break;
+
+        case 'compare':
+          response = await this.handleCompare(args);
+          break;
+
         default:
           recordActionInvocation('prompt_manager', action, 'unknown');
           throw new ValidationError(`Unknown action: ${action}`);
@@ -243,6 +273,51 @@ export class ConsolidatedPromptManager {
   private async createPrompt(args: any): Promise<ToolResponse> {
     validateRequiredFields(args, ['id', 'name', 'description', 'user_message_template']);
 
+    // Validate {{ref:...}} references before file creation (strict mode)
+    const typedArgs = args as {
+      id: string;
+      user_message_template: string;
+      system_message?: string;
+    };
+    const refValidator = new PromptReferenceValidator(this.convertedPrompts);
+    const refValidation = refValidator.validate(
+      typedArgs.id,
+      typedArgs.user_message_template,
+      typedArgs.system_message
+    );
+
+    if (!refValidation.valid) {
+      const errorDetails = refValidation.errors
+        .map((e) => `• **${e.type}**: ${e.details}`)
+        .join('\n');
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `❌ **Prompt creation blocked** due to reference errors:\n\n${errorDetails}\n\n💡 Ensure all referenced prompts exist before creating this prompt.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Validate tool definitions if provided
+    if (args.tools && args.tools.length > 0) {
+      const toolErrors = validateToolDefinitions(args.tools);
+      if (toolErrors.length > 0) {
+        const errorDetails = toolErrors.map((e) => `• ${e}`).join('\n');
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `❌ **Prompt creation blocked** due to tool validation errors:\n\n${errorDetails}\n\n💡 Check tool definitions for required fields (id, name, script) and valid values.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
     // Create prompt data with enhanced gate configuration support
     const promptData: any = {
       id: args.id,
@@ -254,7 +329,8 @@ export class ConsolidatedPromptManager {
       arguments: args.arguments || [],
       isChain: args.is_chain || false,
       chainSteps: args.chain_steps || [],
-      gateConfiguration: args.gate_configuration || args.gates,
+      tools: args.tools || [],
+      gateConfiguration: args['gate_configuration'] || args.gates,
     };
 
     // USING ERROR LEVEL FOR GUARANTEED VISIBILITY
@@ -318,6 +394,18 @@ export class ConsolidatedPromptManager {
       }
     }
 
+    // Report tools created
+    if (promptData.tools && promptData.tools.length > 0) {
+      response += `\n🔧 **Script Tools Created**: ${promptData.tools.length} tool(s)\n`;
+      for (const tool of promptData.tools) {
+        response += `- \`${tool.id}\`: ${tool.name}`;
+        if (tool.trigger && tool.trigger !== 'schema_match') {
+          response += ` (trigger: ${tool.trigger})`;
+        }
+        response += '\n';
+      }
+    }
+
     await this.handleSystemRefresh(args.full_restart, `Prompt created: ${args.id}`);
 
     return {
@@ -336,8 +424,28 @@ export class ConsolidatedPromptManager {
     const currentPrompt = this.convertedPrompts.find((p) => p.id === args.id);
     let beforeAnalysis: PromptClassification | null = null;
 
+    // Capture full content before update for diff generation
+    const beforeContent = currentPrompt !== undefined ? { ...currentPrompt } : null;
+
     if (currentPrompt) {
       beforeAnalysis = await this.promptAnalyzer.analyzePrompt(currentPrompt);
+    }
+
+    // Validate tool definitions if provided
+    if (args.tools && args.tools.length > 0) {
+      const toolErrors = validateToolDefinitions(args.tools);
+      if (toolErrors.length > 0) {
+        const errorDetails = toolErrors.map((e) => `• ${e}`).join('\n');
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `❌ **Prompt update blocked** due to tool validation errors:\n\n${errorDetails}\n\n💡 Check tool definitions for required fields (id, name, script) and valid values.`,
+            },
+          ],
+          isError: true,
+        };
+      }
     }
 
     // Update prompt data with enhanced gate configuration support
@@ -350,16 +458,108 @@ export class ConsolidatedPromptManager {
       userMessageTemplate: args.user_message_template || currentPrompt?.userMessageTemplate || '',
       arguments: args.arguments || currentPrompt?.arguments || [],
       chainSteps: args.chain_steps || currentPrompt?.chainSteps || [],
-      gateConfiguration: args.gate_configuration || args.gates || currentPrompt?.gateConfiguration,
+      tools: args.tools, // Only include if explicitly provided (undefined = no change)
+      gateConfiguration:
+        args['gate_configuration'] || args.gates || currentPrompt?.gateConfiguration,
     };
+
+    // Validate {{ref:...}} references before file update (strict mode)
+    // Only validate if template content is being changed
+    const typedArgsForRef = args as {
+      id: string;
+      user_message_template?: string;
+      system_message?: string;
+    };
+    const hasTemplateChange =
+      typeof typedArgsForRef.user_message_template === 'string' ||
+      typeof typedArgsForRef.system_message === 'string';
+    if (hasTemplateChange) {
+      const typedPromptData = promptData as {
+        userMessageTemplate: string;
+        systemMessage?: string;
+      };
+      const refValidator = new PromptReferenceValidator(this.convertedPrompts);
+      const refValidation = refValidator.validate(
+        typedArgsForRef.id,
+        typedPromptData.userMessageTemplate,
+        typedPromptData.systemMessage
+      );
+
+      if (!refValidation.valid) {
+        const errorDetails = refValidation.errors
+          .map((e) => `• **${e.type}**: ${e.details}`)
+          .join('\n');
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `❌ **Prompt update blocked** due to reference errors:\n\n${errorDetails}\n\n💡 Ensure all referenced prompts exist before updating this prompt.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+
+    // Save version before update (auto-versioning)
+    let versionSaved: number | undefined;
+    const skipVersion = args.skip_version === true;
+    if (
+      beforeContent !== null &&
+      this.versionHistoryService.isAutoVersionEnabled() &&
+      !skipVersion
+    ) {
+      const promptsDir = this.configManager.getPromptsDirectory();
+      const effectiveCategory = (promptData.category ?? 'general')
+        .toLowerCase()
+        .replace(/\s+/g, '-');
+      const promptDir = path.join(promptsDir, effectiveCategory, promptData.id);
+
+      const diffForVersion = this.textDiffService.generatePromptDiff(beforeContent, promptData);
+      const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
+
+      const versionResult = await this.versionHistoryService.saveVersion(
+        promptDir,
+        'prompt',
+        promptData.id,
+        beforeContent as Record<string, unknown>,
+        {
+          description: args.version_description ?? 'Update via resource_manager',
+          diff_summary: diffSummary,
+        }
+      );
+
+      if (versionResult.success) {
+        versionSaved = versionResult.version;
+        this.logger.debug(`Saved version ${versionSaved} for prompt ${promptData.id}`);
+      } else {
+        this.logger.warn(
+          `Failed to save version for prompt ${promptData.id}: ${versionResult.error}`
+        );
+      }
+    }
 
     const result = await this.fileOperations.updatePromptImplementation(promptData);
 
     // Perform analysis comparison
     const afterAnalysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
+    // Generate unified diff between before and after states
+    const diffResult = this.textDiffService.generatePromptDiff(beforeContent, promptData);
+
     let response = `✅ **Prompt Updated**: ${promptData.name} (${args.id})\n\n`;
     response += `${result.message}\n\n`;
+
+    // Include version info if saved
+    if (versionSaved !== undefined) {
+      response += `📜 **Version ${versionSaved}** saved (use \`action:"history"\` to view)\n\n`;
+    }
+
+    // Include diff view if there are changes
+    if (diffResult.hasChanges) {
+      response += `${diffResult.formatted}\n\n`;
+    }
+
     response += `${afterAnalysis.feedback}\n`;
 
     // Add comparison if we have before analysis
@@ -760,7 +960,9 @@ export class ConsolidatedPromptManager {
       sections.push('Set `include_legacy:true` to see full details on advanced actions.');
     }
 
-    sections.push('💡 Use `prompt_manager(action:"<id>", ...)` with the required arguments above.');
+    sections.push(
+      '💡 Use `resource_manager(resource_type:"prompt", action:"<id>", ...)` with the required arguments above.'
+    );
 
     return {
       content: [{ type: 'text' as const, text: sections.join('\n\n') }],
@@ -883,13 +1085,206 @@ export class ConsolidatedPromptManager {
     return {
       ...response,
       content: [{ type: 'text' as const, text: `${originalText}${note}` }],
-      isError: response.isError,
+      isError: response.isError ?? false,
     };
   }
 
   private handleError(error: unknown, context: string): ToolResponse {
     const { message, isError } = utilsHandleError(error, context, this.logger);
     return { content: [{ type: 'text' as const, text: message }], isError: true };
+  }
+
+  // ============================================================================
+  // Versioning Actions
+  // ============================================================================
+
+  private async handleHistory(args: any): Promise<ToolResponse> {
+    validateRequiredFields(args, ['id']);
+    const { id, limit } = args;
+
+    const prompt = this.convertedPrompts.find((p) => p.id === id);
+    if (!prompt) {
+      return {
+        content: [{ type: 'text' as const, text: `Prompt not found: ${id}` }],
+        isError: true,
+      };
+    }
+
+    const promptsDir = this.configManager.getPromptsDirectory();
+    const effectiveCategory = (prompt.category ?? 'general').toLowerCase().replace(/\s+/g, '-');
+    const promptDir = path.join(promptsDir, effectiveCategory, id);
+
+    const history = await this.versionHistoryService.loadHistory(promptDir);
+
+    if (!history || history.versions.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `📜 No version history for prompt '${id}'\n\n` +
+              `💡 Version history is created automatically when updates are made.`,
+          },
+        ],
+        isError: false,
+      };
+    }
+
+    const formatted = this.versionHistoryService.formatHistoryForDisplay(history, limit ?? 10);
+    return {
+      content: [{ type: 'text' as const, text: formatted }],
+      isError: false,
+    };
+  }
+
+  private async handleRollback(args: any): Promise<ToolResponse> {
+    validateRequiredFields(args, ['id', 'version']);
+    const { id, version, confirm } = args;
+
+    if (!confirm) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `⚠️ Rollback requires confirmation.\n\n` +
+              `To rollback prompt '${id}' to version ${version}, set confirm: true`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const currentPrompt = this.convertedPrompts.find((p) => p.id === id);
+    if (!currentPrompt) {
+      return {
+        content: [{ type: 'text' as const, text: `Prompt not found: ${id}` }],
+        isError: true,
+      };
+    }
+
+    const promptsDir = this.configManager.getPromptsDirectory();
+    const effectiveCategory = (currentPrompt.category ?? 'general')
+      .toLowerCase()
+      .replace(/\s+/g, '-');
+    const promptDir = path.join(promptsDir, effectiveCategory, id);
+
+    // Perform rollback
+    const result = await this.versionHistoryService.rollback(
+      promptDir,
+      'prompt',
+      id,
+      version,
+      currentPrompt as unknown as Record<string, unknown>
+    );
+
+    if (!result.success) {
+      return {
+        content: [{ type: 'text' as const, text: `❌ Rollback failed: ${result.error}` }],
+        isError: true,
+      };
+    }
+
+    // Restore the snapshot using file operations
+    const snapshot = result.snapshot;
+    if (!snapshot) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: '❌ Rollback failed: No snapshot found in target version',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    // Rebuild prompt data from snapshot
+    const promptData = {
+      id,
+      name: snapshot['name'] ?? currentPrompt.name,
+      category: snapshot['category'] ?? currentPrompt.category,
+      description: snapshot['description'] ?? currentPrompt.description,
+      systemMessage: snapshot['systemMessage'] ?? currentPrompt.systemMessage,
+      userMessageTemplate: snapshot['userMessageTemplate'] ?? currentPrompt.userMessageTemplate,
+      arguments: snapshot['arguments'] ?? currentPrompt.arguments,
+      chainSteps: snapshot['chainSteps'] ?? currentPrompt.chainSteps,
+      gateConfiguration: snapshot['gateConfiguration'] ?? currentPrompt.gateConfiguration,
+    };
+
+    // Write restored prompt
+    await this.fileOperations.updatePromptImplementation(promptData);
+
+    // Reload prompts
+    await this.onRefresh();
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text:
+            `✅ Prompt '${id}' rolled back to version ${version}\n\n` +
+            `📜 Current state saved as version ${result.saved_version}\n` +
+            `🔄 Prompts reloaded`,
+        },
+      ],
+      isError: false,
+    };
+  }
+
+  private async handleCompare(args: any): Promise<ToolResponse> {
+    validateRequiredFields(args, ['id', 'from_version', 'to_version']);
+    const { id, from_version, to_version } = args;
+
+    const prompt = this.convertedPrompts.find((p) => p.id === id);
+    if (!prompt) {
+      return {
+        content: [{ type: 'text' as const, text: `Prompt not found: ${id}` }],
+        isError: true,
+      };
+    }
+
+    const promptsDir = this.configManager.getPromptsDirectory();
+    const effectiveCategory = (prompt.category ?? 'general').toLowerCase().replace(/\s+/g, '-');
+    const promptDir = path.join(promptsDir, effectiveCategory, id);
+
+    const result = await this.versionHistoryService.compareVersions(
+      promptDir,
+      from_version,
+      to_version
+    );
+
+    if (!result.success) {
+      return {
+        content: [{ type: 'text' as const, text: `❌ Compare failed: ${result.error}` }],
+        isError: true,
+      };
+    }
+
+    // Generate diff between versions
+    const diffResult = this.textDiffService.generateObjectDiff(
+      result.from!.snapshot,
+      result.to!.snapshot,
+      `${id}/prompt.yaml`
+    );
+
+    let response =
+      `📊 **Version Comparison**: ${id}\n\n` +
+      `| Property | Version ${from_version} | Version ${to_version} |\n` +
+      `|----------|-----------|------------|\n` +
+      `| Date | ${new Date(result.from!.date).toLocaleString()} | ${new Date(result.to!.date).toLocaleString()} |\n` +
+      `| Description | ${result.from!.description} | ${result.to!.description} |\n\n`;
+
+    if (diffResult.hasChanges) {
+      response += `${diffResult.formatted}\n`;
+    } else {
+      response += `No differences found between versions.\n`;
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: response }],
+      isError: false,
+    };
   }
 }
 

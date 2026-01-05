@@ -83,9 +83,31 @@ export class CommandParsingStage extends BasePipelineStage {
         parseResult.format === 'symbolic' &&
         (parseResult as SymbolicCommandParseResult).executionPlan
       ) {
-        context.parsedCommand = await this.buildSymbolicCommand(
+        const symbolicCommand = await this.buildSymbolicCommand(
           parseResult as SymbolicCommandParseResult
         );
+
+        // Merge requestOptions into promptArgs for symbolic commands
+        // Options values override empty/falsy placeholder values from prompt definitions
+        // but inline args (truthy values) still take precedence
+        const requestOptions = context.state.normalization.requestOptions;
+        if (requestOptions && typeof requestOptions === 'object' && symbolicCommand.promptArgs) {
+          const mergedArgs = symbolicCommand.promptArgs;
+          for (const [key, value] of Object.entries(requestOptions)) {
+            // Merge if key missing OR existing value is falsy (empty placeholder)
+            const existing = mergedArgs[key];
+            const isFalsyOrEmpty =
+              existing === undefined ||
+              existing === null ||
+              existing === '' ||
+              (Array.isArray(existing) && existing.length === 0);
+            if (!(key in mergedArgs) || isFalsyOrEmpty) {
+              mergedArgs[key] = value;
+            }
+          }
+        }
+
+        context.parsedCommand = symbolicCommand;
         this.logExit({
           promptId: parseResult.promptId,
           format: parseResult.format,
@@ -104,6 +126,26 @@ export class CommandParsingStage extends BasePipelineStage {
         convertedPrompt,
         this.createArgumentContext()
       );
+
+      // Merge requestOptions into processedArgs (options parameter from prompt_engine call)
+      // Options values override empty/falsy placeholder values from prompt definitions
+      // but inline args (truthy values) still take precedence
+      const requestOptions = context.state.normalization.requestOptions;
+      if (requestOptions && typeof requestOptions === 'object') {
+        const mergedArgs = argResult.processedArgs as Record<string, unknown>;
+        for (const [key, value] of Object.entries(requestOptions)) {
+          // Merge if key missing OR existing value is falsy (empty placeholder)
+          const existing = mergedArgs[key];
+          const isFalsyOrEmpty =
+            existing === undefined ||
+            existing === null ||
+            existing === '' ||
+            (Array.isArray(existing) && existing.length === 0);
+          if (!(key in mergedArgs) || isFalsyOrEmpty) {
+            mergedArgs[key] = value;
+          }
+        }
+      }
 
       const parsedCommand: ParsedCommand = {
         ...parseResult,
@@ -195,19 +237,23 @@ export class CommandParsingStage extends BasePipelineStage {
     const { anonymousCriteria, namedGates } = this.collectGateCriteria(parseResult);
 
     const inlineCriteria =
-      resolvedArgs.inlineCriteria.length > 0
-        ? resolvedArgs.inlineCriteria
-        : anonymousCriteria;
+      resolvedArgs.inlineCriteria.length > 0 ? resolvedArgs.inlineCriteria : anonymousCriteria;
 
-    return {
+    const parsedCommand: ParsedCommand = {
       ...parseResult,
       convertedPrompt,
       promptArgs: resolvedArgs.processedArgs,
       inlineGateCriteria: inlineCriteria,
-      namedInlineGates: namedGates.length > 0 ? namedGates : undefined,
-      styleSelection: parseResult.executionPlan.styleSelection,
-      steps: undefined,
     };
+
+    if (namedGates.length > 0) {
+      parsedCommand.namedInlineGates = namedGates;
+    }
+    if (parseResult.executionPlan.styleSelection !== undefined) {
+      parsedCommand.styleSelection = parseResult.executionPlan.styleSelection;
+    }
+
+    return parsedCommand;
   }
 
   private async buildSymbolicChain(
@@ -261,14 +307,20 @@ export class CommandParsingStage extends BasePipelineStage {
       });
     }
 
-    return {
+    const parsedCommand: ParsedCommand = {
       ...parseResult,
-      convertedPrompt: undefined,
       steps: stepPrompts,
       promptArgs: commandArgs,
-      namedInlineGates: namedGates.length > 0 ? namedGates : undefined,
-      styleSelection: parseResult.executionPlan.styleSelection,
     };
+
+    if (namedGates.length > 0) {
+      parsedCommand.namedInlineGates = namedGates;
+    }
+    if (parseResult.executionPlan.styleSelection !== undefined) {
+      parsedCommand.styleSelection = parseResult.executionPlan.styleSelection;
+    }
+
+    return parsedCommand;
   }
 
   private createArgumentContext(): ArgumentExecutionContext {
@@ -384,11 +436,12 @@ export class CommandParsingStage extends BasePipelineStage {
 
     for (const op of operators) {
       if (op.type !== 'gate') continue;
-      const gate = op as GateOperator;
+      const gate = op;
 
-      const criteria = Array.isArray(gate.parsedCriteria) && gate.parsedCriteria.length
-        ? gate.parsedCriteria
-        : [gate.criteria];
+      const criteria =
+        Array.isArray(gate.parsedCriteria) && gate.parsedCriteria.length
+          ? gate.parsedCriteria
+          : [gate.criteria];
 
       const cleanedCriteria = criteria
         .map((item) => item?.trim())
@@ -452,8 +505,11 @@ export class CommandParsingStage extends BasePipelineStage {
       context.gateInstructions = blueprint.gateInstructions;
     }
     context.state.session.resumeSessionId = sessionId;
-    context.state.session.resumeChainId =
+    const resolvedResumeChainId =
       context.state.session.resumeChainId ?? blueprint.parsedCommand.chainId;
+    if (resolvedResumeChainId !== undefined) {
+      context.state.session.resumeChainId = resolvedResumeChainId;
+    }
     context.state.session.isBlueprintRestored = true;
   }
 
@@ -466,11 +522,16 @@ export class CommandParsingStage extends BasePipelineStage {
   }
 
   private cloneBlueprint(blueprint: SessionBlueprint): SessionBlueprint {
-    return {
+    const cloned: SessionBlueprint = {
       parsedCommand: this.cloneParsedCommand(blueprint.parsedCommand),
       executionPlan: this.cloneExecutionPlan(blueprint.executionPlan),
-      gateInstructions: blueprint.gateInstructions,
     };
+
+    if (blueprint.gateInstructions !== undefined) {
+      cloned.gateInstructions = blueprint.gateInstructions;
+    }
+
+    return cloned;
   }
 
   private getStepArgumentInput(

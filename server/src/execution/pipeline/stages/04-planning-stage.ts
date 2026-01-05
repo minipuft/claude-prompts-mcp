@@ -4,6 +4,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
 import type { ExecutionPlanner } from '../../planning/execution-planner.js';
+import type { ExecutionPlan } from '../../types.js';
 
 type FrameworkEnabledProvider = () => boolean;
 
@@ -110,15 +111,19 @@ export class ExecutionPlanningStage extends BasePipelineStage {
       requiresFramework = requiresFramework || plan.requiresFramework;
     });
 
-    context.executionPlan = {
+    const executionPlan: ExecutionPlan = {
       ...chainPlan,
       strategy: 'chain',
       gates: Array.from(aggregatedGates),
       requiresFramework,
       requiresSession: true,
-      modifier: chainPlan.modifier,
-      modifiers: chainPlan.modifiers,
     };
+
+    if (chainPlan.modifiers !== undefined) {
+      executionPlan.modifiers = chainPlan.modifiers;
+    }
+
+    context.executionPlan = executionPlan;
 
     // Record diagnostic for chain execution plan creation
     context.diagnostics.info(this.name, 'Execution plan created for chain', {
@@ -145,7 +150,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     const overrides = context.state.gates.requestedOverrides as Record<string, any> | undefined;
 
     return {
-      gates: overrides?.gates ?? context.mcpRequest.gates,
+      gates: overrides?.['gates'] ?? context.mcpRequest.gates,
     };
   }
 }

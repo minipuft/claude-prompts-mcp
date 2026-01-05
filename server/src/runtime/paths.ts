@@ -4,12 +4,19 @@
  *
  * Provides centralized resolution of all configurable paths with a clear priority order:
  *   1. CLI flags (highest priority)
- *   2. Specific environment variables
- *   3. Workspace subdirectory
- *   4. Legacy environment variables (backward compatibility)
- *   5. Package defaults (lowest priority)
+ *   2. MCP_*_PATH env vars (individual resource overrides)
+ *   3. MCP_RESOURCES_PATH env var (unified resources base directory)
+ *   4. MCP_WORKSPACE/resources (workspace subdirectory)
+ *   5. Package defaults (lowest priority - npx fallback)
  *
- * Supports both environment variables (deployment) and CLI flags (runtime customization).
+ * Environment Variables:
+ * - MCP_WORKSPACE: Full plugin/workspace directory (server/, hooks/, etc.)
+ * - MCP_RESOURCES_PATH: Just the resources directory (prompts/, gates/, etc.)
+ * - MCP_*_PATH: Individual resource overrides (MCP_PROMPTS_PATH, etc.)
+ *
+ * User Customization:
+ * - Set MCP_RESOURCES_PATH to point to a directory with your custom resources
+ * - The directory should contain subdirs: prompts/, gates/, methodologies/, etc.
  */
 
 import { existsSync, readdirSync } from 'fs';
@@ -24,6 +31,7 @@ export interface PathResolverCliOptions {
   prompts?: string;
   methodologies?: string;
   gates?: string;
+  scripts?: string;
 }
 
 /**
@@ -43,10 +51,13 @@ export interface PathResolverConfig {
  */
 export interface ResolvedPaths {
   workspace: string;
+  resources: string;
   config: string;
   prompts: string;
   methodologies: string;
   gates: string;
+  scripts: string;
+  styles: string;
 }
 
 /**
@@ -84,8 +95,8 @@ export class PathResolver {
    *
    * Priority:
    *   1. --workspace CLI flag
-   *   2. MCP_WORKSPACE environment variable
-   *   3. Package root (default)
+   *   2. MCP_WORKSPACE environment variable (user-defined or set by plugin hooks)
+   *   3. Package root (default - npx fallback)
    */
   getWorkspace(): string {
     if (this.cache.workspace) return this.cache.workspace;
@@ -98,12 +109,12 @@ export class PathResolver {
       resolved = this.resolvePath(this.config.cli.workspace);
       source = 'CLI flag --workspace';
     }
-    // 2. Environment variable
-    else if (process.env.MCP_WORKSPACE) {
-      resolved = this.resolvePath(process.env.MCP_WORKSPACE);
+    // 2. MCP_WORKSPACE environment variable (primary workspace config)
+    else if (process.env['MCP_WORKSPACE']) {
+      resolved = this.resolvePath(process.env['MCP_WORKSPACE']);
       source = 'MCP_WORKSPACE env var';
     }
-    // 3. Package root (default)
+    // 3. Package root (default - npx fallback)
     else {
       resolved = this.config.packageRoot;
       source = 'package root (default)';
@@ -111,6 +122,48 @@ export class PathResolver {
 
     this.cache.workspace = resolved;
     this.logResolution('workspace', resolved, source);
+    return resolved;
+  }
+
+  /**
+   * Get the resources base directory
+   *
+   * Priority:
+   *   1. MCP_RESOURCES_PATH environment variable (user's custom resources)
+   *   2. ${workspace}/resources (workspace subdirectory)
+   *   3. ${packageRoot}/resources (default)
+   *
+   * This is used as the base for all resource types (prompts, gates, etc.)
+   * unless individually overridden via MCP_*_PATH variables.
+   */
+  getResourcesPath(): string {
+    if (this.cache.resources) return this.cache.resources;
+
+    let resolved: string;
+    let source: string;
+
+    // 1. MCP_RESOURCES_PATH environment variable (user's custom resources location)
+    if (process.env['MCP_RESOURCES_PATH']) {
+      resolved = this.resolvePath(process.env['MCP_RESOURCES_PATH']);
+      source = 'MCP_RESOURCES_PATH env var';
+    }
+    // 2. Workspace resources directory
+    else {
+      const workspace = this.getWorkspace();
+      const workspaceResources = join(workspace, 'resources');
+
+      if (existsSync(workspaceResources)) {
+        resolved = workspaceResources;
+        source = 'workspace resources/';
+      } else {
+        // 3. Package default
+        resolved = join(this.config.packageRoot, 'resources');
+        source = 'package resources/ (default)';
+      }
+    }
+
+    this.cache.resources = resolved;
+    this.logResolution('resources', resolved, source);
     return resolved;
   }
 
@@ -135,8 +188,8 @@ export class PathResolver {
       source = 'CLI flag --config';
     }
     // 2. Environment variable
-    else if (process.env.MCP_CONFIG_PATH) {
-      resolved = this.resolvePath(process.env.MCP_CONFIG_PATH);
+    else if (process.env['MCP_CONFIG_PATH']) {
+      resolved = this.resolvePath(process.env['MCP_CONFIG_PATH']);
       source = 'MCP_CONFIG_PATH env var';
     }
     // 3. Workspace config.json (if different from package and exists)
@@ -160,13 +213,14 @@ export class PathResolver {
   }
 
   /**
-   * Get prompts configuration file path
+   * Get prompts directory path
    *
    * Priority:
    *   1. --prompts CLI flag
    *   2. MCP_PROMPTS_PATH environment variable
-   *   3. ${workspace}/prompts/promptsConfig.json (if exists)
-   *   4. ${packageRoot}/prompts/promptsConfig.json (default)
+   *   3. ${resources}/prompts/ (from MCP_RESOURCES_PATH or workspace)
+   *   4. ${workspace}/prompts/ (legacy, if exists)
+   *   5. ${packageRoot}/resources/prompts/ (default)
    */
   getPromptsPath(): string {
     if (this.cache.prompts) return this.cache.prompts;
@@ -179,23 +233,29 @@ export class PathResolver {
       resolved = this.resolvePath(this.config.cli.prompts);
       source = 'CLI flag --prompts';
     }
-    // 2. Environment variable
-    else if (process.env.MCP_PROMPTS_PATH) {
-      resolved = this.resolvePath(process.env.MCP_PROMPTS_PATH);
+    // 2. Individual environment variable
+    else if (process.env['MCP_PROMPTS_PATH']) {
+      resolved = this.resolvePath(process.env['MCP_PROMPTS_PATH']);
       source = 'MCP_PROMPTS_PATH env var';
     }
-    // 3. Workspace prompts (if exists)
+    // 3. Resources base + prompts/
     else {
+      const resourcesBase = this.getResourcesPath();
+      const resourcesPrompts = join(resourcesBase, 'prompts');
       const workspace = this.getWorkspace();
-      const workspacePrompts = join(workspace, 'prompts', 'promptsConfig.json');
+      const workspacePrompts = join(workspace, 'prompts');
 
-      if (existsSync(workspacePrompts)) {
+      if (existsSync(resourcesPrompts)) {
+        resolved = resourcesPrompts;
+        source = 'resources/prompts/';
+      } else if (existsSync(workspacePrompts)) {
+        // 4. Legacy workspace prompts
         resolved = workspacePrompts;
-        source = 'workspace prompts/promptsConfig.json';
+        source = 'workspace prompts/ (legacy)';
       } else {
         // 5. Package default
-        resolved = join(this.config.packageRoot, 'prompts', 'promptsConfig.json');
-        source = 'package prompts (default)';
+        resolved = join(this.config.packageRoot, 'resources', 'prompts');
+        source = 'package resources/prompts (default)';
       }
     }
 
@@ -210,8 +270,9 @@ export class PathResolver {
    * Priority:
    *   1. --methodologies CLI flag
    *   2. MCP_METHODOLOGIES_PATH environment variable
-   *   3. ${workspace}/methodologies (if exists and has YAML files)
-   *   4. ${packageRoot}/methodologies (default)
+   *   3. ${resources}/methodologies (from MCP_RESOURCES_PATH or workspace)
+   *   4. ${workspace}/methodologies (legacy, if exists)
+   *   5. ${packageRoot}/resources/methodologies (default)
    */
   getMethodologiesPath(): string {
     if (this.cache.methodologies) return this.cache.methodologies;
@@ -224,27 +285,35 @@ export class PathResolver {
       resolved = this.resolvePath(this.config.cli.methodologies);
       source = 'CLI flag --methodologies';
     }
-    // 2. Environment variable
-    else if (process.env.MCP_METHODOLOGIES_PATH) {
-      resolved = this.resolvePath(process.env.MCP_METHODOLOGIES_PATH);
+    // 2. Individual environment variable
+    else if (process.env['MCP_METHODOLOGIES_PATH']) {
+      resolved = this.resolvePath(process.env['MCP_METHODOLOGIES_PATH']);
       source = 'MCP_METHODOLOGIES_PATH env var';
     }
-    // 3. Workspace methodologies (if exists and valid)
+    // 3. Resources base + methodologies/
     else {
+      const resourcesBase = this.getResourcesPath();
+      const resourcesMethodologies = join(resourcesBase, 'methodologies');
       const workspace = this.getWorkspace();
       const workspaceMethodologies = join(workspace, 'methodologies');
 
       if (
-        workspace !== this.config.packageRoot &&
+        existsSync(resourcesMethodologies) &&
+        this.hasMethodologyFiles(resourcesMethodologies)
+      ) {
+        resolved = resourcesMethodologies;
+        source = 'resources/methodologies/';
+      } else if (
         existsSync(workspaceMethodologies) &&
         this.hasMethodologyFiles(workspaceMethodologies)
       ) {
+        // 4. Legacy workspace methodologies
         resolved = workspaceMethodologies;
-        source = 'workspace methodologies/';
+        source = 'workspace methodologies/ (legacy)';
       } else {
-        // 4. Package default
-        resolved = join(this.config.packageRoot, 'methodologies');
-        source = 'package methodologies (default)';
+        // 5. Package default
+        resolved = join(this.config.packageRoot, 'resources', 'methodologies');
+        source = 'package resources/methodologies (default)';
       }
     }
 
@@ -259,8 +328,9 @@ export class PathResolver {
    * Priority:
    *   1. --gates CLI flag
    *   2. MCP_GATES_PATH environment variable
-   *   3. ${workspace}/gates (if exists and has gate files)
-   *   4. ${packageRoot}/gates (default)
+   *   3. ${resources}/gates (from MCP_RESOURCES_PATH or workspace)
+   *   4. ${workspace}/gates (legacy, if exists)
+   *   5. ${packageRoot}/resources/gates (default)
    */
   getGatesPath(): string {
     if (this.cache.gates) return this.cache.gates;
@@ -273,27 +343,29 @@ export class PathResolver {
       resolved = this.resolvePath(this.config.cli.gates);
       source = 'CLI flag --gates';
     }
-    // 2. Environment variable
-    else if (process.env.MCP_GATES_PATH) {
-      resolved = this.resolvePath(process.env.MCP_GATES_PATH);
+    // 2. Individual environment variable
+    else if (process.env['MCP_GATES_PATH']) {
+      resolved = this.resolvePath(process.env['MCP_GATES_PATH']);
       source = 'MCP_GATES_PATH env var';
     }
-    // 3. Workspace gates (if exists and valid)
+    // 3. Resources base + gates/
     else {
+      const resourcesBase = this.getResourcesPath();
+      const resourcesGates = join(resourcesBase, 'gates');
       const workspace = this.getWorkspace();
       const workspaceGates = join(workspace, 'gates');
 
-      if (
-        workspace !== this.config.packageRoot &&
-        existsSync(workspaceGates) &&
-        this.hasGateFiles(workspaceGates)
-      ) {
+      if (existsSync(resourcesGates) && this.hasGateFiles(resourcesGates)) {
+        resolved = resourcesGates;
+        source = 'resources/gates/';
+      } else if (existsSync(workspaceGates) && this.hasGateFiles(workspaceGates)) {
+        // 4. Legacy workspace gates
         resolved = workspaceGates;
-        source = 'workspace gates/';
+        source = 'workspace gates/ (legacy)';
       } else {
-        // 4. Package default
-        resolved = join(this.config.packageRoot, 'gates');
-        source = 'package gates (default)';
+        // 5. Package default
+        resolved = join(this.config.packageRoot, 'resources', 'gates');
+        source = 'package resources/gates (default)';
       }
     }
 
@@ -303,15 +375,116 @@ export class PathResolver {
   }
 
   /**
+   * Get scripts directory path
+   *
+   * Priority:
+   *   1. --scripts CLI flag
+   *   2. MCP_SCRIPTS_PATH environment variable
+   *   3. ${resources}/scripts (from MCP_RESOURCES_PATH or workspace)
+   *   4. ${workspace}/scripts (legacy, if exists)
+   *   5. ${packageRoot}/resources/scripts (default)
+   */
+  getScriptsPath(): string {
+    if (this.cache.scripts) return this.cache.scripts;
+
+    let resolved: string;
+    let source: string;
+
+    // 1. CLI flag (highest priority)
+    if (this.config.cli.scripts) {
+      resolved = this.resolvePath(this.config.cli.scripts);
+      source = 'CLI flag --scripts';
+    }
+    // 2. Individual environment variable
+    else if (process.env['MCP_SCRIPTS_PATH']) {
+      resolved = this.resolvePath(process.env['MCP_SCRIPTS_PATH']);
+      source = 'MCP_SCRIPTS_PATH env var';
+    }
+    // 3. Resources base + scripts/
+    else {
+      const resourcesBase = this.getResourcesPath();
+      const resourcesScripts = join(resourcesBase, 'scripts');
+      const workspace = this.getWorkspace();
+      const workspaceScripts = join(workspace, 'scripts');
+
+      if (existsSync(resourcesScripts) && this.hasScriptFiles(resourcesScripts)) {
+        resolved = resourcesScripts;
+        source = 'resources/scripts/';
+      } else if (existsSync(workspaceScripts) && this.hasScriptFiles(workspaceScripts)) {
+        // 4. Legacy workspace scripts
+        resolved = workspaceScripts;
+        source = 'workspace scripts/ (legacy)';
+      } else {
+        // 5. Package default
+        resolved = join(this.config.packageRoot, 'resources', 'scripts');
+        source = 'package resources/scripts (default)';
+      }
+    }
+
+    this.cache.scripts = resolved;
+    this.logResolution('scripts', resolved, source);
+    return resolved;
+  }
+
+  /**
+   * Get styles directory path
+   *
+   * Priority:
+   *   1. MCP_STYLES_PATH environment variable
+   *   2. ${resources}/styles (from MCP_RESOURCES_PATH or workspace)
+   *   3. ${workspace}/styles (legacy, if exists)
+   *   4. ${packageRoot}/resources/styles (default)
+   */
+  getStylesPath(): string {
+    if (this.cache.styles) return this.cache.styles;
+
+    let resolved: string;
+    let source: string;
+
+    // 1. Individual environment variable
+    if (process.env['MCP_STYLES_PATH']) {
+      resolved = this.resolvePath(process.env['MCP_STYLES_PATH']);
+      source = 'MCP_STYLES_PATH env var';
+    }
+    // 2. Resources base + styles/
+    else {
+      const resourcesBase = this.getResourcesPath();
+      const resourcesStyles = join(resourcesBase, 'styles');
+      const workspace = this.getWorkspace();
+      const workspaceStyles = join(workspace, 'styles');
+
+      if (existsSync(resourcesStyles)) {
+        resolved = resourcesStyles;
+        source = 'resources/styles/';
+      } else if (existsSync(workspaceStyles)) {
+        // 3. Legacy workspace styles
+        resolved = workspaceStyles;
+        source = 'workspace styles/ (legacy)';
+      } else {
+        // 4. Package default
+        resolved = join(this.config.packageRoot, 'resources', 'styles');
+        source = 'package resources/styles (default)';
+      }
+    }
+
+    this.cache.styles = resolved;
+    this.logResolution('styles', resolved, source);
+    return resolved;
+  }
+
+  /**
    * Get all resolved paths at once
    */
   getAllPaths(): ResolvedPaths {
     return {
       workspace: this.getWorkspace(),
+      resources: this.getResourcesPath(),
       config: this.getConfigPath(),
       prompts: this.getPromptsPath(),
       methodologies: this.getMethodologiesPath(),
       gates: this.getGatesPath(),
+      scripts: this.getScriptsPath(),
+      styles: this.getStylesPath(),
     };
   }
 
@@ -392,6 +565,23 @@ export class PathResolver {
   }
 
   /**
+   * Check if a directory contains valid script files
+   * (subdirectories with tool.yaml)
+   */
+  private hasScriptFiles(dirPath: string): boolean {
+    try {
+      const entries = readdirSync(dirPath, { withFileTypes: true });
+      return entries.some((entry) => {
+        if (!entry.isDirectory()) return false;
+        const toolYamlPath = join(dirPath, entry.name, 'tool.yaml');
+        return existsSync(toolYamlPath);
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Log resolution result if debug mode is enabled
    */
   private logResolution(name: string, resolved: string, source: string): void {
@@ -415,6 +605,7 @@ export class PathResolver {
  *   --prompts=/path
  *   --methodologies=/path
  *   --gates=/path
+ *   --scripts=/path
  *
  * @param args - Command line arguments (typically process.argv.slice(2))
  * @returns Parsed CLI options
@@ -433,6 +624,8 @@ export function parsePathCliOptions(args: string[]): PathResolverCliOptions {
       options.methodologies = arg.slice('--methodologies='.length);
     } else if (arg.startsWith('--gates=')) {
       options.gates = arg.slice('--gates='.length);
+    } else if (arg.startsWith('--scripts=')) {
+      options.scripts = arg.slice('--scripts='.length);
     }
   }
 
@@ -467,6 +660,10 @@ export function validatePathCliOptions(options: PathResolverCliOptions): string[
 
   if (options.gates && !existsSync(options.gates)) {
     errors.push(`Gates directory does not exist: ${options.gates}`);
+  }
+
+  if (options.scripts && !existsSync(options.scripts)) {
+    errors.push(`Scripts directory does not exist: ${options.scripts}`);
   }
 
   return errors;

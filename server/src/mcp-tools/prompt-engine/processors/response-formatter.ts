@@ -14,9 +14,50 @@ import type { ToolResponse } from '../../../types/index.js';
 const fallbackLogger: Logger = {
   info: () => {},
   debug: () => {},
-  warn: (...args: any[]) => console.warn('[ResponseFormatter]', ...args),
-  error: (...args: any[]) => console.error('[ResponseFormatter]', ...args),
+  warn: (...args: unknown[]) => console.warn('[ResponseFormatter]', ...args),
+  error: (...args: unknown[]) => console.error('[ResponseFormatter]', ...args),
 };
+
+/**
+ * Analytics service interface for execution tracking
+ */
+interface AnalyticsService {
+  trackExecution?(data: {
+    executionId: string;
+    executionType: string;
+    duration: number;
+    frameworkUsed?: string;
+    stepsExecuted?: number;
+    success: boolean;
+    sessionId?: string;
+  }): void;
+  trackError?(data: {
+    executionId: string;
+    executionType: string;
+    errorType: string;
+    errorMessage: string;
+    sessionId?: string;
+  }): void;
+}
+
+/**
+ * Gate validation result interface
+ */
+interface GateValidationResult {
+  passed: boolean;
+  gateResults?: Array<{ passed: boolean; name?: string; message?: string }>;
+  executionTime?: number;
+  retryRequired?: boolean;
+}
+
+/**
+ * Response format options
+ */
+interface ResponseFormatOptions {
+  includeStructuredContent?: boolean;
+  includeMetadata?: boolean;
+  metadata?: Record<string, unknown>;
+}
 
 /**
  * ResponseFormatter handles all response-related formatting and coordination
@@ -27,43 +68,47 @@ const fallbackLogger: Logger = {
  * - Analytics integration and tracking
  * - Structured response building
  */
-function normalizeToolResponse(payload: any, defaultIsError = false): ToolResponse {
+function normalizeToolResponse(payload: unknown, defaultIsError = false): ToolResponse {
   if (payload && typeof payload === 'object') {
-    if (Array.isArray(payload.content)) {
+    const obj = payload as Record<string, unknown>;
+    if (Array.isArray(obj['content'])) {
       const normalized: ToolResponse = {
-        content: payload.content,
-        isError: payload.isError ?? defaultIsError,
+        content: obj['content'] as ToolResponse['content'],
+        isError: (obj['isError'] as boolean | undefined) ?? defaultIsError,
       };
-      if (payload.structuredContent !== undefined) {
-        normalized.structuredContent = payload.structuredContent;
+      if (obj['structuredContent'] !== undefined) {
+        normalized.structuredContent = obj['structuredContent'] as Record<string, unknown>;
       }
-      if (payload.metadata !== undefined) {
-        (normalized as any).metadata = payload.metadata;
+      if (obj['metadata'] !== undefined) {
+        (normalized as unknown as Record<string, unknown>)['metadata'] = obj['metadata'];
       }
       return normalized;
     }
 
-    if (typeof payload.content === 'string') {
+    if (typeof obj['content'] === 'string') {
+      const structuredContent = obj['structuredContent'] as Record<string, unknown> | undefined;
       return {
-        content: [{ type: 'text' as const, text: payload.content }],
-        isError: payload.isError ?? defaultIsError,
-        structuredContent: payload.structuredContent,
+        content: [{ type: 'text' as const, text: obj['content'] }],
+        isError: (obj['isError'] as boolean | undefined) ?? defaultIsError,
+        ...(structuredContent !== undefined && { structuredContent }),
       };
     }
 
-    if (typeof payload.text === 'string') {
+    if (typeof obj['text'] === 'string') {
+      const structuredContent = obj['structuredContent'] as Record<string, unknown> | undefined;
       return {
-        content: [{ type: 'text' as const, text: payload.text }],
-        isError: payload.isError ?? defaultIsError,
-        structuredContent: payload.structuredContent,
+        content: [{ type: 'text' as const, text: obj['text'] }],
+        isError: (obj['isError'] as boolean | undefined) ?? defaultIsError,
+        ...(structuredContent !== undefined && { structuredContent }),
       };
     }
 
-    if (typeof payload.message === 'string') {
+    if (typeof obj['message'] === 'string') {
+      const structuredContent = obj['structuredContent'] as Record<string, unknown> | undefined;
       return {
-        content: [{ type: 'text' as const, text: payload.message }],
-        isError: payload.isError ?? defaultIsError,
-        structuredContent: payload.structuredContent,
+        content: [{ type: 'text' as const, text: obj['message'] }],
+        isError: (obj['isError'] as boolean | undefined) ?? defaultIsError,
+        ...(structuredContent !== undefined && { structuredContent }),
       };
     }
   }
@@ -77,7 +122,7 @@ function normalizeToolResponse(payload: any, defaultIsError = false): ToolRespon
 }
 
 export class ResponseFormatter implements SimpleResponseFormatter {
-  private analyticsService?: any;
+  private analyticsService?: AnalyticsService;
   private readonly logger: Logger;
 
   constructor(logger: Logger = fallbackLogger) {
@@ -87,7 +132,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
   /**
    * Set analytics service for tracking
    */
-  public setAnalyticsService(service: any): void {
+  public setAnalyticsService(service: AnalyticsService): void {
     this.analyticsService = service;
     this.logger.debug('📊 [ResponseFormatter] Analytics service set');
   }
@@ -95,7 +140,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
   /**
    * Format general response content
    */
-  public formatResponse(content: any): ToolResponse {
+  public formatResponse(content: unknown): ToolResponse {
     try {
       this.logger.debug('🔧 [ResponseFormatter] Formatting general response');
       return normalizeToolResponse(content, false);
@@ -111,7 +156,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
    * Format prompt engine response with execution context
    */
   public formatPromptEngineResponse(
-    response: any,
+    response: unknown,
     executionContext: FormatterExecutionContext = {
       executionId: `exec_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
       executionType: 'single',
@@ -120,8 +165,8 @@ export class ResponseFormatter implements SimpleResponseFormatter {
       frameworkEnabled: false,
       success: true,
     },
-    options: Record<string, any> = {},
-    gateResults?: any
+    options: ResponseFormatOptions = {},
+    gateResults?: GateValidationResult
   ): ToolResponse {
     // IMPORTANT: keep the rendered template text inside `content`. Structured metadata is
     // optional and should never replace the main instructions, otherwise the LLM will only
@@ -153,11 +198,12 @@ export class ResponseFormatter implements SimpleResponseFormatter {
       // Prompts and templates should return clean content without metadata clutter
       // Default to omitting structuredContent so model input stays lean unless explicitly requested.
       const includeStructuredContent =
-        executionContext.executionType === 'chain' && options?.includeStructuredContent === true;
+        executionContext.executionType === 'chain' &&
+        options?.['includeStructuredContent'] === true;
 
       if (includeStructuredContent) {
         const executionDuration = executionContext.endTime - executionContext.startTime;
-        const structuredContent: Record<string, any> = {
+        const structuredContent: Record<string, unknown> = {
           execution: {
             id: executionContext.executionId,
             type: executionContext.executionType,
@@ -168,7 +214,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
         };
 
         if (executionContext.chainId) {
-          structuredContent.chain = {
+          structuredContent['chain'] = {
             id: executionContext.chainId,
             status: executionContext.chainProgress?.status ?? 'in_progress',
             current_step: executionContext.chainProgress?.currentStep ?? null,
@@ -176,39 +222,40 @@ export class ResponseFormatter implements SimpleResponseFormatter {
           };
         }
 
-        if (gateResults) {
-          structuredContent.gates = {
+        if (gateResults !== undefined) {
+          const gateResultsArray = gateResults.gateResults ?? [];
+          structuredContent['gates'] = {
             enabled: true,
             passed: gateResults.passed,
-            total: gateResults.gateResults?.length ?? 0,
-            failed: gateResults.gateResults?.filter((g: any) => !g.passed) ?? [],
+            total: gateResultsArray.length,
+            failed: gateResultsArray.filter((g) => !g.passed),
             execution_ms: gateResults.executionTime ?? 0,
-            retries: gateResults.retryRequired ? 1 : 0,
+            retries: gateResults.retryRequired === true ? 1 : 0,
           };
         }
 
         toolResponse.structuredContent = structuredContent;
       }
 
-      if (options?.includeMetadata || options?.metadata) {
-        const defaultMetadata: Record<string, any> = {
+      if (options?.['includeMetadata'] === true || options?.['metadata'] !== undefined) {
+        const defaultMetadata: Record<string, unknown> = {
           executionType: executionContext.executionType,
           frameworkUsed: executionContext.frameworkUsed,
         };
-        if (executionContext.chainId) {
-          defaultMetadata.chainId = executionContext.chainId;
+        if (executionContext.chainId !== undefined && executionContext.chainId !== '') {
+          defaultMetadata['chainId'] = executionContext.chainId;
         }
-        if (executionContext.chainProgress) {
+        if (executionContext.chainProgress !== undefined) {
           if (typeof executionContext.chainProgress.currentStep === 'number') {
-            defaultMetadata.currentStep = executionContext.chainProgress.currentStep;
+            defaultMetadata['currentStep'] = executionContext.chainProgress.currentStep;
           }
           if (typeof executionContext.chainProgress.totalSteps === 'number') {
-            defaultMetadata.totalSteps = executionContext.chainProgress.totalSteps;
+            defaultMetadata['totalSteps'] = executionContext.chainProgress.totalSteps;
           }
         }
-        (toolResponse as any).metadata = {
+        (toolResponse as unknown as Record<string, unknown>)['metadata'] = {
           ...defaultMetadata,
-          ...(options?.metadata ?? {}),
+          ...(options?.['metadata'] ?? {}),
         };
       }
 
@@ -228,9 +275,9 @@ export class ResponseFormatter implements SimpleResponseFormatter {
    * Format error response
    */
   public formatErrorResponse(
-    error: any,
+    error: unknown,
     executionContext?: FormatterExecutionContext,
-    _options?: Record<string, any>
+    _options?: ResponseFormatOptions
   ): ToolResponse {
     try {
       this.logger.debug('🚨 [ResponseFormatter] Formatting error response', {
@@ -288,7 +335,7 @@ export class ResponseFormatter implements SimpleResponseFormatter {
    * Format chain execution response
    */
   public formatChainResponse(
-    response: any,
+    response: unknown,
     chainId: string,
     currentStep: number,
     totalSteps: number,
@@ -326,10 +373,16 @@ export class ResponseFormatter implements SimpleResponseFormatter {
           executionId: executionContext.executionId,
           executionType: executionContext.executionType,
           duration: executionContext.endTime - executionContext.startTime,
-          frameworkUsed: executionContext.frameworkUsed,
-          stepsExecuted: executionContext.stepsExecuted,
+          ...(executionContext.frameworkUsed !== undefined && {
+            frameworkUsed: executionContext.frameworkUsed,
+          }),
+          ...(executionContext.stepsExecuted !== undefined && {
+            stepsExecuted: executionContext.stepsExecuted,
+          }),
           success: executionContext.success,
-          sessionId: executionContext.sessionId,
+          ...(executionContext.sessionId !== undefined && {
+            sessionId: executionContext.sessionId,
+          }),
         });
       }
     } catch (error) {
@@ -342,15 +395,17 @@ export class ResponseFormatter implements SimpleResponseFormatter {
   /**
    * Track error for analytics
    */
-  private trackError(error: any, executionContext: FormatterExecutionContext): void {
+  private trackError(error: unknown, executionContext: FormatterExecutionContext): void {
     try {
-      if (this.analyticsService?.trackError) {
+      if (this.analyticsService?.trackError !== undefined) {
         this.analyticsService.trackError({
           executionId: executionContext.executionId,
           executionType: executionContext.executionType,
           errorType: error instanceof Error ? error.constructor.name : 'Unknown',
           errorMessage: error instanceof Error ? error.message : String(error),
-          sessionId: executionContext.sessionId,
+          ...(executionContext.sessionId !== undefined && {
+            sessionId: executionContext.sessionId,
+          }),
         });
       }
     } catch (trackingError) {

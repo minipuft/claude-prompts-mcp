@@ -1,8 +1,8 @@
 // @lifecycle canonical - Builds gate hot-reload config for prompt hot-reload manager.
 import { createGateHotReloadRegistration } from '../gates/hot-reload/index.js';
 
-import type { Logger } from '../logging/index.js';
 import type { GateManager } from '../gates/gate-manager.js';
+import type { Logger } from '../logging/index.js';
 import type { AuxiliaryReloadConfig } from '../prompts/hot-reload-manager.js';
 
 /**
@@ -35,11 +35,18 @@ export function buildGateAuxiliaryReloadConfig(
       directories: registration.directories,
       handler: async (event) => {
         // Extract gate ID from file path and add to event
-        const gateId = extractGateIdFromPath(event.affectedFiles[0]);
+        const firstFile = event.affectedFiles[0];
+        const gateId = firstFile ? extractGateIdFromPath(firstFile) : undefined;
+        if (!gateId) {
+          logger.warn('Unable to determine gate ID for hot reload event', event);
+          return;
+        }
         const gateEvent = {
           ...event,
           type: 'gate_changed' as const,
           gateId,
+          // Pass through changeType for deletion handling (only if defined)
+          ...(event.changeType ? { changeType: event.changeType } : {}),
         };
         await registration.handler(gateEvent);
       },

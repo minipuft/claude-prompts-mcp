@@ -45,8 +45,9 @@ export function parseLLMReview(response: string | null | undefined): LLMReviewPa
   }
 
   const explicitMatch = normalized.match(EXPLICIT_REVIEW_REGEX);
-  if (explicitMatch?.index !== undefined) {
-    const decision = explicitMatch[1].toLowerCase() === 'pass' ? 'pass' : 'fail';
+  if (explicitMatch?.index !== undefined && explicitMatch[1] !== undefined) {
+    const [, decisionToken] = explicitMatch;
+    const decision = decisionToken.toLowerCase() === 'pass' ? 'pass' : 'fail';
     const remainder = normalized.slice(explicitMatch.index + explicitMatch[0].length).trim();
     const reasoning = extractReasoningSnippet(remainder || normalized);
 

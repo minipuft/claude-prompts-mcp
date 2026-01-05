@@ -183,12 +183,29 @@ export class FrameworkResolutionStage extends BasePipelineStage {
    * This extracts all relevant data for the centralized framework decision.
    */
   private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
-    return {
-      modifiers: context.executionPlan?.modifiers,
-      operatorOverride: context.parsedCommand?.executionPlan?.frameworkOverride,
-      clientOverride: context.state.framework.clientOverride,
-      globalActiveFramework: context.frameworkContext?.selectedFramework?.id,
-    };
+    const decisionInput: FrameworkDecisionInput = {};
+
+    const modifiers = context.executionPlan?.modifiers;
+    if (modifiers) {
+      decisionInput.modifiers = modifiers;
+    }
+
+    const operatorOverride = context.parsedCommand?.executionPlan?.frameworkOverride;
+    if (operatorOverride) {
+      decisionInput.operatorOverride = operatorOverride;
+    }
+
+    const clientOverride = context.state.framework.clientOverride;
+    if (clientOverride) {
+      decisionInput.clientOverride = clientOverride;
+    }
+
+    const globalActiveFramework = context.frameworkContext?.selectedFramework?.id;
+    if (globalActiveFramework) {
+      decisionInput.globalActiveFramework = globalActiveFramework;
+    }
+
+    return decisionInput;
   }
 
   /**
@@ -203,7 +220,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     const prompt = context.requireConvertedPrompt();
 
     // Use framework ID from authority decision (already resolved with proper priority)
-    const frameworkOverride = authorityFrameworkId as FrameworkMethodology | undefined;
+    const frameworkOverride = authorityFrameworkId;
 
     const frameworkContext: FrameworkExecutionContext =
       this.frameworkManager.generateExecutionContext(
@@ -241,20 +258,20 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     const steps = context.requireChainSteps();
 
     // Use framework ID from authority decision (already resolved with proper priority)
-    const frameworkOverride = authorityFrameworkId as FrameworkMethodology | undefined;
+    const frameworkOverride = authorityFrameworkId;
     const resolvedSteps: string[] = [];
 
     for (const step of steps) {
       // Check step-level modifiers for per-step framework control
       if (this.stepHasDisablingModifiers(step)) {
-        step.frameworkContext = undefined;
+        delete step.frameworkContext;
         continue;
       }
 
       const requiresFrameworkForStep = this.stepRequiresFramework(step);
 
       if (!requiresFrameworkForStep) {
-        step.frameworkContext = undefined;
+        delete step.frameworkContext;
         continue;
       }
 
@@ -272,10 +289,12 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     }
 
     // Surface the first resolved framework context for downstream telemetry/formatting
-    context.frameworkContext =
-      resolvedSteps.length > 0
-        ? steps.find((step) => step.frameworkContext)?.frameworkContext
-        : undefined;
+    if (resolvedSteps.length > 0) {
+      const resolvedContext = steps.find((step) => step.frameworkContext)?.frameworkContext;
+      if (resolvedContext) {
+        context.frameworkContext = resolvedContext;
+      }
+    }
 
     // InjectionControlStage (07b) controls injection frequency for chains.
     // It runs after SessionStage (07) when currentStep is known.

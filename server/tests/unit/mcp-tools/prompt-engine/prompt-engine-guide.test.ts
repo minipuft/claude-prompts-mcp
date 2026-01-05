@@ -24,5 +24,4 @@ describe('Prompt Engine guide renderer', () => {
     expect(output).toContain('```json');
     expect(output).toContain('"gates"'); // New unified parameter
   });
-
 });

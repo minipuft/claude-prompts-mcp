@@ -223,41 +223,42 @@ export class ServerRootDetector {
    * Checks for required files and directories
    */
   private async validateServerRoot(root: string): Promise<ValidationResult> {
-    const required = ['config.json', 'prompts'];
-
-    // gates directory is optional (may be bundled differently in some deployments)
-    const optional = ['gates'];
-
     const missing: string[] = [];
 
-    for (const item of required) {
-      try {
-        await fs.access(path.join(root, item));
-      } catch {
-        missing.push(item);
-      }
+    // config.json is always required
+    try {
+      await fs.access(path.join(root, 'config.json'));
+    } catch {
+      missing.push('config.json');
     }
 
-    // Check at least one optional path exists
-    let hasOptional = false;
-    for (const item of optional) {
-      try {
-        await fs.access(path.join(root, item));
-        hasOptional = true;
-        break;
-      } catch {
-        // Continue checking
-      }
+    // Prompts: check resources/prompts (new structure) OR prompts (legacy)
+    const hasResourcesPrompts = await this.pathExists(path.join(root, 'resources', 'prompts'));
+    const hasLegacyPrompts = await this.pathExists(path.join(root, 'prompts'));
+    if (!hasResourcesPrompts && !hasLegacyPrompts) {
+      missing.push('prompts (or resources/prompts)');
     }
 
-    // Don't require gates directory - it may be bundled differently
-    // Only fail on missing required items
+    // gates directory is optional (may be bundled differently in some deployments)
+    // No need to check - it's not required for validation
 
     return {
       valid: missing.length === 0,
       missing,
       root,
     };
+  }
+
+  /**
+   * Check if a path exists (file or directory)
+   */
+  private async pathExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -269,7 +270,7 @@ export class ServerRootDetector {
     console.error(`process.argv[0]: ${process.argv[0]}`);
     console.error(`process.argv[1]: ${process.argv[1] || 'undefined'}`);
     console.error(`import.meta.url: ${import.meta.url}`);
-    console.error(`MCP_WORKSPACE: ${process.env.MCP_WORKSPACE || 'undefined'}`);
+    console.error(`MCP_WORKSPACE: ${process.env['MCP_WORKSPACE'] || 'undefined'}`);
     console.error('');
   }
 
@@ -282,7 +283,7 @@ Unable to detect server root directory.
 
 This usually happens when:
 1. The package was not installed correctly
-2. Required files are missing (config.json, prompts/)
+2. Required files are missing (config.json, resources/prompts/ or prompts/)
 3. Running from an unexpected directory
 
 SOLUTIONS:

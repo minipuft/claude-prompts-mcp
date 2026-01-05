@@ -168,11 +168,9 @@ export class PromptRegistry {
 
       // Process the template with special context
       // Using direct processing since TemplateProcessor was consolidated
-      userMessageText = await this.processTemplateDirect(
-        userMessageText,
-        args,
-        { previous_message: previousMessageContext }
-      );
+      userMessageText = await this.processTemplateDirect(userMessageText, args, {
+        previous_message: previousMessageContext,
+      });
 
       // Store in conversation history for future reference
       this.conversationManager.addToConversationHistory({

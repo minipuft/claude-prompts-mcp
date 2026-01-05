@@ -5,7 +5,6 @@ import { InlineGateExtractionStage } from '../../../../dist/execution/pipeline/s
 import { OperatorValidationStage } from '../../../../dist/execution/pipeline/stages/03-operator-validation-stage.js';
 import { SessionManagementStage } from '../../../../dist/execution/pipeline/stages/07-session-stage.js';
 import { FrameworkValidator } from '../../../../dist/frameworks/framework-validator.js';
-import { FrameworkRegistry } from '../../../../dist/frameworks/methodology/framework-registry.js';
 
 import type { ChainSessionManager } from '../../../../dist/chain-session/manager.js';
 import type {
@@ -13,6 +12,7 @@ import type {
   ParsedCommand,
 } from '../../../../dist/execution/context/execution-context.js';
 import type { ChainStepPrompt } from '../../../../dist/execution/operators/chain-operator-executor.js';
+import type { FrameworkManager } from '../../../../dist/frameworks/framework-manager.js';
 import type { FrameworkDefinition } from '../../../../dist/frameworks/types/index.js';
 import type { Logger } from '../../../../dist/logging/index.js';
 
@@ -25,9 +25,8 @@ const createLogger = (): Logger => ({
 
 const buildFrameworkValidator = (): FrameworkValidator => {
   const logger = createLogger();
-  const registry = new FrameworkRegistry(logger, { defaultFrameworkId: 'CAGEERF' });
-  const definitions: FrameworkDefinition[] = [
-    {
+  const frameworks: Record<string, FrameworkDefinition> = {
+    CAGEERF: {
       id: 'CAGEERF',
       name: 'CAGEERF',
       description: 'Default methodology',
@@ -37,7 +36,7 @@ const buildFrameworkValidator = (): FrameworkValidator => {
       priority: 1,
       enabled: true,
     },
-    {
+    SCAMPER: {
       id: 'SCAMPER',
       name: 'SCAMPER',
       description: 'Creative framework',
@@ -47,10 +46,34 @@ const buildFrameworkValidator = (): FrameworkValidator => {
       priority: 2,
       enabled: true,
     },
-  ];
+  };
 
-  definitions.forEach((definition) => registry.registerDefinition(definition));
-  return new FrameworkValidator(registry, logger);
+  // Create mock FrameworkManager with the methods FrameworkValidator uses
+  const mockFrameworkManager = {
+    getFramework: jest.fn((id: string) => frameworks[id.toUpperCase()]),
+    isFrameworkEnabled: jest.fn((id: string) => {
+      const fw = frameworks[id.toUpperCase()];
+      return fw?.enabled ?? false;
+    }),
+    getFrameworkIds: jest.fn((enabledOnly: boolean) => {
+      const ids = Object.keys(frameworks);
+      return enabledOnly ? ids.filter((id) => frameworks[id].enabled) : ids;
+    }),
+    validateIdentifier: jest.fn((id: string) => {
+      const normalizedId = id.trim().toUpperCase();
+      const framework = frameworks[normalizedId];
+      if (framework) {
+        return { valid: true, normalizedId: framework.id };
+      }
+      return {
+        valid: false,
+        error: `Framework '${id}' not found`,
+        suggestions: Object.keys(frameworks),
+      };
+    }),
+  } as unknown as FrameworkManager;
+
+  return new FrameworkValidator(mockFrameworkManager, logger);
 };
 
 const createResolver = () => ({

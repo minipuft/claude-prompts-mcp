@@ -1,33 +1,50 @@
 # Documentation Index
 
-This is the map for the Claude Prompts MCP server. All canonical guides live here.
+> Status: canonical
 
-## Learning Path
+This is the map for the Claude Prompts MCP server. Canonical operational docs live under
+`docs/architecture/`, `docs/guides/`, and `docs/reference/`. Narrative/portfolio docs live under
+`docs/portfolio/`.
 
-If you are new, follow this sequence:
+## Start Here (Learning Path)
 
-1.  **[Main README](../README.md)**: Quick Start with NPM or from source.
-2.  **[MCP Tooling Guide](mcp-tools.md)**: Learn the commands (`prompt_engine`, `prompt_manager`, `system_control`).
-3.  **[Authoring Guide](prompt-authoring-guide.md)**: Write your first hot-reloadable prompt template.
-4.  **[Chains](chains.md)**: Connect prompts into multi-step workflows.
-5.  **[Architecture](architecture.md)**: Deep dive into the runtime, transports, and pipeline.
+1. **[Main README](../README.md)**: Quick start and installation options.
+2. **[MCP Tooling Guide](reference/mcp-tools.md)**: Tool surface (`prompt_engine`, `prompt_manager`, `system_control`).
+3. **[Prompt Authoring Guide](guides/prompt-authoring-guide.md)**: Prompt/template structure and schema.
+4. **[Chains](guides/chains.md)**: Multi-step workflows and step mapping.
+5. **[Architecture Overview](architecture/overview.md)**: Runtime, transports, pipeline, and state.
 
-## Reference Manual
+## Guides (How-To)
 
-| Doc                                          | Purpose                                                   |
-| -------------------------------------------- | --------------------------------------------------------- |
-| [Architecture Overview](architecture.md)     | Runtime lifecycle, execution pipeline, and transport map. |
-| [MCP Tooling Guide](mcp-tools.md)    | API reference for all MCP tools.                          |
-| [Authoring Guide](prompt-authoring-guide.md) | Markdown schemas, Nunjucks templates, and arguments.      |
-| [Chains](chains.md)                          | Defining steps, branching logic, and state.               |
-| [Gates](gates.md)                            | Configuring quality gates and validation.                 |
-| [Troubleshooting](troubleshooting.md)        | Common issues and how to fix them.                        |
-| [Changelog](../CHANGELOG.md)                 | Version history and migration notes.                      |
-| [Contributing](../CONTRIBUTING.md)           | How to build, test, and submit PRs.                       |
+- `docs/guides/prompt-authoring-guide.md`
+- `docs/guides/script-tools.md`
+- `docs/guides/chains.md`
+- `docs/guides/gates.md`
+- `docs/guides/troubleshooting.md`
+
+## Reference (Stable Surfaces)
+
+- `docs/reference/mcp-tools.md`
+- `docs/_generated/` (generated param tables)
+
+## Architecture
+
+- `docs/architecture/overview.md`
+
+## Decisions (ADR)
+
+- `docs/adr/README.md`
+
+## Portfolio / Narrative
+
+- `docs/portfolio/case-study.md`
+- `docs/portfolio/design-decisions.md`
 
 ## Meta
 
-- **[Plans](../plans/)**: Implementation plans and roadmap for LLM context.
-- **[TODO](TODO.md)**: Official task list.
+- `docs/TODO.md`
+- `plans/`
+- `server/CHANGELOG.md`
+- `CONTRIBUTING.md`
 
-**Note**: If you find a discrepancy between these docs and the code in `server/src/`, the code is the source of truth. Please submit a PR to fix the doc.
+**Note**: If you find a discrepancy between docs and `server/src/`, the code is the source of truth. Please submit a PR to fix the doc.

@@ -6,8 +6,9 @@ import {
 } from '../../../src/mcp-tools/prompt-engine/index.js';
 import { createConsolidatedPromptManager } from '../../../src/mcp-tools/prompt-manager/index.js';
 import { createConsolidatedSystemControl } from '../../../src/mcp-tools/system-control.js';
-import type { GateManager } from '../../../src/gates/gate-manager.js';
 import { MockLogger, MockMcpServer, testPrompts } from '../../helpers/test-helpers.js';
+
+import type { GateManager } from '../../../src/gates/gate-manager.js';
 
 describe('Consolidated MCP tool factories', () => {
   let logger: MockLogger;
@@ -56,12 +57,18 @@ describe('Consolidated MCP tool factories', () => {
         },
       }),
       getPromptsFilePath: () => '/test/prompts.json',
+      getPromptsDirectory: () => '/test/prompts',
       getFrameworksConfig: () => ({
         enableSystemPromptInjection: false,
         enableMethodologyGates: false,
         enableDynamicToolDescriptions: false,
       }),
       getServerRoot: () => process.cwd(),
+      getVersioningConfig: () => ({
+        enabled: true,
+        max_versions: 50,
+        auto_version: true,
+      }),
       on: () => {},
     };
 

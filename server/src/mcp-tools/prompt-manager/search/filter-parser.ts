@@ -48,7 +48,9 @@ export class FilterParser {
         `Filter parsing error: ${error instanceof Error ? error.message : String(error)}`
       );
       // Return text-only filter as fallback
-      filters.text = filterText;
+      if (filterText) {
+        filters.text = filterText;
+      }
     }
 
     return filters;
@@ -59,11 +61,10 @@ export class FilterParser {
    */
   private parseTypeFilter(filterText: string, filters: SmartFilters): void {
     const typeMatch = filterText.match(/type:(\w+)/i);
-    if (typeMatch) {
-      const type = typeMatch[1].toLowerCase();
-      if (['prompt', 'template', 'chain'].includes(type)) {
-        filters.type = type;
-      }
+    const type = typeMatch?.[1]?.toLowerCase();
+
+    if (type && ['prompt', 'template', 'chain'].includes(type)) {
+      filters.type = type;
     }
   }
 
@@ -72,8 +73,10 @@ export class FilterParser {
    */
   private parseCategoryFilter(filterText: string, filters: SmartFilters): void {
     const categoryMatch = filterText.match(/category:([a-z-_]+)/i);
-    if (categoryMatch) {
-      filters.category = categoryMatch[1].toLowerCase();
+    const category = categoryMatch?.[1]?.toLowerCase();
+
+    if (category) {
+      filters.category = category;
     }
   }
 
@@ -82,8 +85,10 @@ export class FilterParser {
    */
   private parseIntentFilter(filterText: string, filters: SmartFilters): void {
     const intentMatch = filterText.match(/intent:([a-z-_\s]+)/i);
-    if (intentMatch) {
-      filters.intent = intentMatch[1].trim().toLowerCase();
+    const intent = intentMatch?.[1];
+
+    if (intent) {
+      filters.intent = intent.trim().toLowerCase();
     }
   }
 

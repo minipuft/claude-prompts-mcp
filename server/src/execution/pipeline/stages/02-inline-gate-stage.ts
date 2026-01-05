@@ -91,15 +91,15 @@ export class InlineGateExtractionStage extends BasePipelineStage {
 
     // Process named inline gates (e.g., `:: security:"no secrets"`)
     // These have explicit IDs from the symbolic parser
-    if (Array.isArray(parsedCommand.namedInlineGates) && parsedCommand.namedInlineGates.length > 0) {
+    if (
+      Array.isArray(parsedCommand.namedInlineGates) &&
+      parsedCommand.namedInlineGates.length > 0
+    ) {
       for (const namedGate of parsedCommand.namedInlineGates) {
         if (namedGate.gateId && isValidGateCriteria(namedGate.criteria)) {
-          const gateId = this.createNamedInlineGate(
-            context,
-            namedGate.gateId,
-            namedGate.criteria,
-            { promptId: parsedCommand.promptId }
-          );
+          const gateId = this.createNamedInlineGate(context, namedGate.gateId, namedGate.criteria, {
+            promptId: parsedCommand.promptId,
+          });
           if (gateId) {
             parsedCommand.inlineGateIds = this.appendGateId(parsedCommand.inlineGateIds, gateId);
             createdIds.push(gateId);
@@ -163,9 +163,15 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       }
     }
 
+    if (temporaryGateId !== undefined) {
+      return {
+        registeredGateIds: partitioned.registeredGateIds,
+        temporaryGateId,
+      };
+    }
+
     return {
       registeredGateIds: partitioned.registeredGateIds,
-      temporaryGateId,
     };
   }
 

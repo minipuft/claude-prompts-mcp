@@ -21,6 +21,16 @@ export interface MethodologyHotReloadConfig {
   debug?: boolean;
   /** Reload timeout in ms */
   reloadTimeoutMs?: number;
+  /**
+   * Callback invoked when a methodology is deleted.
+   * Use this to notify FrameworkManager to clear its frameworks Map.
+   */
+  onMethodologyDeleted?: (methodologyId: string) => Promise<void> | void;
+  /**
+   * Callback invoked when a methodology is reloaded (added/modified).
+   * Use this to notify FrameworkManager to refresh its framework definition.
+   */
+  onMethodologyReloaded?: (methodologyId: string) => Promise<void> | void;
 }
 
 /**
@@ -62,11 +72,21 @@ export interface MethodologyHotReloadRegistration {
  * );
  * ```
  */
+/**
+ * Internal config type with required defaults but optional callbacks
+ */
+interface StoredHotReloadConfig {
+  debug: boolean;
+  reloadTimeoutMs: number;
+  onMethodologyDeleted?: (methodologyId: string) => Promise<void> | void;
+  onMethodologyReloaded?: (methodologyId: string) => Promise<void> | void;
+}
+
 export class MethodologyHotReloadCoordinator {
   private logger: Logger;
   private registry: MethodologyRegistry;
   private loader: RuntimeMethodologyLoader;
-  private config: Required<MethodologyHotReloadConfig>;
+  private config: StoredHotReloadConfig;
   private stats: MethodologyHotReloadStats;
 
   constructor(
@@ -81,6 +101,8 @@ export class MethodologyHotReloadCoordinator {
     this.config = {
       debug: config.debug ?? false,
       reloadTimeoutMs: config.reloadTimeoutMs ?? 5000,
+      onMethodologyDeleted: config.onMethodologyDeleted,
+      onMethodologyReloaded: config.onMethodologyReloaded,
     };
     this.stats = {
       reloadsAttempted: 0,
@@ -92,10 +114,8 @@ export class MethodologyHotReloadCoordinator {
   /**
    * Handle a methodology file change event
    *
-   * This method:
-   * 1. Clears the methodology from the loader cache
-   * 2. Reloads the definition from YAML
-   * 3. Re-registers the guide with the registry
+   * For 'removed' events: unregisters the methodology from the registry
+   * For other events: reloads the definition from YAML and re-registers
    *
    * @param event - Hot reload event from the file watcher
    */
@@ -110,9 +130,57 @@ export class MethodologyHotReloadCoordinator {
     }
 
     if (this.config.debug) {
-      this.logger.debug(`Processing methodology hot reload for: ${methodologyId}`);
+      this.logger.debug(
+        `Processing methodology hot reload for: ${methodologyId} (changeType: ${event.changeType ?? 'unknown'})`
+      );
     }
 
+    // Handle deletion events
+    if (event.changeType === 'removed') {
+      return this.handleMethodologyDeletion(methodologyId);
+    }
+
+    // Handle add/modify events
+    return this.handleMethodologyReload(methodologyId);
+  }
+
+  /**
+   * Handle methodology deletion - unregister from registry and notify framework manager
+   */
+  private async handleMethodologyDeletion(methodologyId: string): Promise<void> {
+    try {
+      // Step 1: Clear loader cache
+      this.loader.clearCache(methodologyId);
+
+      // Step 2: Unregister from registry
+      const removed = this.registry.unregisterGuide(methodologyId);
+
+      // Step 3: Notify framework manager to clear its frameworks Map
+      if (this.config.onMethodologyDeleted) {
+        await this.config.onMethodologyDeleted(methodologyId);
+      }
+
+      if (removed) {
+        this.stats.reloadsSucceeded++;
+        this.stats.lastReloadTime = Date.now();
+        this.stats.lastReloadedMethodology = methodologyId;
+
+        this.logger.info(`🗑️ Methodology '${methodologyId}' unregistered (files deleted)`);
+      } else {
+        this.logger.debug(`Methodology '${methodologyId}' was not registered, nothing to remove`);
+        this.stats.reloadsSucceeded++; // Not a failure, just nothing to do
+      }
+    } catch (error) {
+      this.stats.reloadsFailed++;
+      this.logger.error(`Failed to unregister methodology '${methodologyId}':`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle methodology reload - reload from YAML and re-register
+   */
+  private async handleMethodologyReload(methodologyId: string): Promise<void> {
     try {
       // Step 1: Clear loader cache for this methodology
       this.loader.clearCache(methodologyId);
@@ -137,6 +205,11 @@ export class MethodologyHotReloadCoordinator {
       const success = await this.registry.registerGuide(guide, true, 'yaml-runtime');
       if (!success) {
         throw new Error(`Failed to re-register methodology '${methodologyId}' with registry`);
+      }
+
+      // Step 5: Notify framework manager to refresh its framework definition
+      if (this.config.onMethodologyReloaded) {
+        await this.config.onMethodologyReloaded(methodologyId);
       }
 
       // Update stats

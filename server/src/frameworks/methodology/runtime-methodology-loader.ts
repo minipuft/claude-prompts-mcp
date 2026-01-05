@@ -263,12 +263,12 @@ export class RuntimeMethodologyLoader {
    *   1. MCP_METHODOLOGIES_PATH environment variable
    *   2. Package.json resolution (npm/npx installs)
    *   3. Walk up from module location (development)
-   *   4. Common relative paths
+   *   4. Common relative paths (resources/methodologies first, then legacy)
    *   5. Fallback
    */
   private resolveMethodologiesDir(): string {
     // Priority 1: Direct path environment variable
-    const envMethodologies = process.env.MCP_METHODOLOGIES_PATH;
+    const envMethodologies = process.env['MCP_METHODOLOGIES_PATH'];
     if (envMethodologies) {
       const resolvedPath = join(envMethodologies); // Normalize
       if (existsSync(resolvedPath) && this.hasYamlFiles(resolvedPath)) {
@@ -285,9 +285,15 @@ export class RuntimeMethodologyLoader {
       return pkgResolved;
     }
 
-    // Priority 4: Walk up from current module location (fallback for development)
+    // Priority 3: Walk up from current module location (fallback for development)
     let current = __dirname;
     for (let i = 0; i < 10; i++) {
+      // Check resources/methodologies first (new structure)
+      const resourcesCandidate = join(current, 'resources', 'methodologies');
+      if (existsSync(resourcesCandidate) && this.hasYamlFiles(resourcesCandidate)) {
+        return resourcesCandidate;
+      }
+      // Then check legacy location
       const candidate = join(current, 'methodologies');
       if (existsSync(candidate) && this.hasYamlFiles(candidate)) {
         return candidate;
@@ -295,8 +301,13 @@ export class RuntimeMethodologyLoader {
       current = dirname(current);
     }
 
-    // Priority 5: Common relative paths from dist
+    // Priority 4: Common relative paths from dist (resources/methodologies first)
     const relativePaths = [
+      join(__dirname, '..', '..', '..', 'resources', 'methodologies'),
+      join(__dirname, '..', '..', 'resources', 'methodologies'),
+      join(process.cwd(), 'resources', 'methodologies'),
+      join(process.cwd(), 'server', 'resources', 'methodologies'),
+      // Legacy paths
       join(__dirname, '..', '..', '..', 'methodologies'),
       join(__dirname, '..', '..', 'methodologies'),
       join(process.cwd(), 'methodologies'),
@@ -309,8 +320,8 @@ export class RuntimeMethodologyLoader {
       }
     }
 
-    // Fallback (may not exist)
-    return join(__dirname, '..', '..', '..', 'methodologies');
+    // Fallback to new structure (may not exist)
+    return join(__dirname, '..', '..', '..', 'resources', 'methodologies');
   }
 
   /**
@@ -325,6 +336,15 @@ export class RuntimeMethodologyLoader {
         if (existsSync(pkgPath)) {
           const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
           if (pkg.name === 'claude-prompts') {
+            // Check resources/methodologies first (new structure)
+            const resourcesMethodologiesPath = join(dir, 'resources', 'methodologies');
+            if (
+              existsSync(resourcesMethodologiesPath) &&
+              this.hasYamlFiles(resourcesMethodologiesPath)
+            ) {
+              return resourcesMethodologiesPath;
+            }
+            // Then check legacy location
             const methodologiesPath = join(dir, 'methodologies');
             if (existsSync(methodologiesPath) && this.hasYamlFiles(methodologiesPath)) {
               return methodologiesPath;

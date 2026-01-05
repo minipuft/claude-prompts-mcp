@@ -49,7 +49,7 @@ export class EnhancedLogger implements Logger {
     this.logFile = config.logFile;
     this.transport = config.transport;
     this.enableDebug = config.enableDebug || false;
-    this.isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
+    this.isCI = process.env['CI'] === 'true' || process.env['NODE_ENV'] === 'test';
 
     // Map config level to LogLevel enum with fallback to INFO
     this.configuredLevel = this.parseLogLevel(config.configuredLevel || 'info');

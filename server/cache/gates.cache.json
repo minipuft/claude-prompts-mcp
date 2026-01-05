@@ -1,0 +1,226 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-01-05T16:02:04.416Z",
+  "gates": {
+    "api-documentation": {
+      "id": "api-documentation",
+      "name": "API Documentation Standards",
+      "type": "validation",
+      "description": "Ensures API documentation includes all required sections and follows best practices",
+      "triggers": [
+        "api",
+        "documentation",
+        "standards",
+        "ensures",
+        "includes",
+        "required",
+        "sections",
+        "follows",
+        "best",
+        "practices"
+      ]
+    },
+    "code-quality": {
+      "id": "code-quality",
+      "name": "Code Quality Standards",
+      "type": "validation",
+      "description": "Ensures generated code follows best practices and quality standards",
+      "triggers": [
+        "code",
+        "quality",
+        "standards",
+        "ensures",
+        "generated",
+        "follows",
+        "best",
+        "practices"
+      ]
+    },
+    "content-structure": {
+      "id": "content-structure",
+      "name": "Content Structure Guidelines",
+      "type": "validation",
+      "description": "Ensures well-organized, readable content with clear structure",
+      "triggers": [
+        "content",
+        "structure",
+        "guidelines",
+        "ensures",
+        "well",
+        "organized",
+        "readable",
+        "clear"
+      ]
+    },
+    "educational-clarity": {
+      "id": "educational-clarity",
+      "name": "Educational Content Clarity",
+      "type": "validation",
+      "description": "Ensures educational content is clear, well-structured, and pedagogically sound",
+      "triggers": [
+        "educational",
+        "content",
+        "clarity",
+        "ensures",
+        "clear",
+        "well",
+        "structured",
+        "pedagogically",
+        "sound"
+      ]
+    },
+    "framework-compliance": {
+      "id": "framework-compliance",
+      "name": "Framework Methodology Compliance",
+      "type": "validation",
+      "description": "Ensures responses follow the active framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER). This is a framework-level gate that applies universally acr",
+      "triggers": [
+        "framework",
+        "methodology",
+        "compliance",
+        "ensures",
+        "responses",
+        "follow",
+        "active",
+        "cageerf",
+        "react",
+        "scamper"
+      ]
+    },
+    "plan-quality": {
+      "id": "plan-quality",
+      "name": "Plan Quality Standards",
+      "type": "validation",
+      "description": "Ensures implementation plans are complete, actionable, and risk-aware",
+      "triggers": [
+        "plan",
+        "quality",
+        "standards",
+        "ensures",
+        "implementation",
+        "plans",
+        "complete",
+        "actionable",
+        "risk",
+        "aware"
+      ]
+    },
+    "pr-performance": {
+      "id": "pr-performance",
+      "name": "PR Performance Check",
+      "type": "validation",
+      "description": "Flags performance concerns without blocking. Warns but allows merge.",
+      "triggers": [
+        "performance",
+        "check",
+        "flags",
+        "concerns",
+        "without",
+        "blocking",
+        "warns",
+        "allows",
+        "merge"
+      ]
+    },
+    "pr-security": {
+      "id": "pr-security",
+      "name": "PR Security Audit",
+      "type": "validation",
+      "description": "Blocks PR approval if security vulnerabilities are detected. Must pass before merge.",
+      "triggers": [
+        "security",
+        "audit",
+        "blocks",
+        "approval",
+        "vulnerabilities",
+        "detected",
+        "pass",
+        "merge"
+      ]
+    },
+    "research-quality": {
+      "id": "research-quality",
+      "name": "Research Quality Guidelines",
+      "type": "validation",
+      "description": "Ensures thorough research with proper citations and credible sources",
+      "triggers": [
+        "research",
+        "quality",
+        "guidelines",
+        "ensures",
+        "thorough",
+        "proper",
+        "citations",
+        "credible",
+        "sources"
+      ]
+    },
+    "security-awareness": {
+      "id": "security-awareness",
+      "name": "Security Best Practices",
+      "type": "validation",
+      "description": "Ensures security-conscious development practices and prevents common vulnerabilities",
+      "triggers": [
+        "security",
+        "best",
+        "practices",
+        "ensures",
+        "conscious",
+        "development",
+        "prevents",
+        "common",
+        "vulnerabilities"
+      ]
+    },
+    "technical-accuracy": {
+      "id": "technical-accuracy",
+      "name": "Technical Accuracy Standards",
+      "type": "validation",
+      "description": "Ensures technical correctness, fact-checking, and precision in technical content",
+      "triggers": [
+        "technical",
+        "accuracy",
+        "standards",
+        "ensures",
+        "correctness",
+        "fact",
+        "checking",
+        "precision",
+        "content"
+      ]
+    },
+    "test-coverage": {
+      "id": "test-coverage",
+      "name": "Test Coverage Standards",
+      "type": "validation",
+      "description": "Ensures code changes include appropriate test coverage",
+      "triggers": [
+        "test",
+        "coverage",
+        "standards",
+        "ensures",
+        "code",
+        "changes",
+        "include",
+        "appropriate"
+      ]
+    }
+  },
+  "by_type": {
+    "validation": [
+      "api-documentation",
+      "code-quality",
+      "content-structure",
+      "educational-clarity",
+      "framework-compliance",
+      "plan-quality",
+      "pr-performance",
+      "pr-security",
+      "research-quality",
+      "security-awareness",
+      "technical-accuracy",
+      "test-coverage"
+    ]
+  },
+  "count": 12
+}

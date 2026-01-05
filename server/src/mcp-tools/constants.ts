@@ -6,25 +6,29 @@
  */
 
 /**
- * Tool names
+ * Tool names (MCP-registered tools only)
  */
 export const TOOL_NAMES = {
   PROMPT_ENGINE: 'prompt_engine',
-  PROMPT_MANAGER: 'prompt_manager',
   SYSTEM_CONTROL: 'system_control',
+  RESOURCE_MANAGER: 'resource_manager',
 } as const;
 
 /**
  * Action types for each tool
  */
 export const ACTIONS = {
-  PROMPT_MANAGER: {
+  RESOURCE_MANAGER: {
     CREATE: 'create',
     UPDATE: 'update',
     DELETE: 'delete',
     RELOAD: 'reload',
     LIST: 'list',
     INSPECT: 'inspect',
+    ANALYZE_TYPE: 'analyze_type',
+    ANALYZE_GATES: 'analyze_gates',
+    GUIDE: 'guide',
+    SWITCH: 'switch',
   },
   SYSTEM_CONTROL: {
     STATUS: 'status',

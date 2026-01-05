@@ -1,0 +1,15 @@
+{
+  "packages": {
+    "server": {
+      "release-type": "node",
+      "component": "claude-prompts",
+      "package-name": "claude-prompts",
+      "changelog-path": "server/CHANGELOG.md",
+      "include-component-in-tag": true,
+      "include-v-in-tag": true,
+      "tag-separator": "-",
+      "draft": true
+    }
+  }
+}
+

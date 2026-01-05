@@ -14,13 +14,15 @@
  * @see MethodologyRegistry for the pattern this follows
  */
 
+import { createGenericGateGuide } from './generic-gate-guide.js';
 import { Logger } from '../../logging/index.js';
 import {
   GateDefinitionLoader,
   type GateDefinitionLoaderConfig,
 } from '../core/gate-definition-loader.js';
-import { createGenericGateGuide } from './generic-gate-guide.js';
+
 import type {
+  GateDefinitionYaml,
   IGateGuide,
   GateSource,
   GateGuideEntry,
@@ -71,11 +73,14 @@ export class GateRegistry {
       autoLoadBuiltIn: config.autoLoadBuiltIn ?? true,
       customGuides: config.customGuides ?? [],
       validateOnRegistration: config.validateOnRegistration ?? true,
-      loaderConfig: config.loaderConfig,
+      ...(config.loaderConfig !== undefined ? { loaderConfig: config.loaderConfig } : {}),
     };
 
     // Create the definition loader
-    this.loader = new GateDefinitionLoader(this.config.loaderConfig);
+    this.loader =
+      this.config.loaderConfig !== undefined
+        ? new GateDefinitionLoader(this.config.loaderConfig)
+        : new GateDefinitionLoader();
   }
 
   /**
@@ -156,15 +161,12 @@ export class GateRegistry {
         metadata: {
           loadTime: performance.now() - startTime,
           validationStatus: this.config.validateOnRegistration ? 'passed' : 'not_validated',
-          lastUsed: undefined,
         },
       };
 
       this.guides.set(normalizedId, entry);
 
-      this.logger.debug(
-        `Registered gate guide: ${guide.name} (${guide.gateId}) [${source}]`
-      );
+      this.logger.debug(`Registered gate guide: ${guide.name} (${guide.gateId}) [${source}]`);
       return true;
     } catch (error) {
       this.logger.error(`Failed to register guide ${guide.gateId}:`, error);
@@ -265,18 +267,37 @@ export class GateRegistry {
   }
 
   /**
+   * Unregister a guide from the registry
+   *
+   * @param gateId - The gate ID to unregister
+   * @returns true if the guide was found and removed
+   */
+  unregisterGuide(gateId: string): boolean {
+    const normalizedId = gateId.toLowerCase();
+
+    if (!this.guides.has(normalizedId)) {
+      this.logger.warn(`Cannot unregister unknown gate: ${gateId}`);
+      return false;
+    }
+
+    this.guides.delete(normalizedId);
+    this.logger.info(`Gate '${gateId}' unregistered from registry`);
+    return true;
+  }
+
+  /**
    * Get registry statistics
    */
   getRegistryStats(): GateRegistryStats {
     let totalLoadTime = 0;
     const bySource: Record<GateSource, number> = {
       'yaml-runtime': 0,
-      'custom': 0,
-      'temporary': 0,
+      custom: 0,
+      temporary: 0,
     };
     const byType: Record<'validation' | 'guidance', number> = {
-      'validation': 0,
-      'guidance': 0,
+      validation: 0,
+      guidance: 0,
     };
 
     let enabledCount = 0;
@@ -325,7 +346,7 @@ export class GateRegistry {
     this.loader.clearCache(normalizedId);
 
     // Load fresh definition
-    const definition = this.loader.loadGate(normalizedId);
+    const definition = this.loader.loadGate(normalizedId) as GateDefinitionYaml;
     if (!definition) {
       this.logger.warn(`Failed to reload gate '${gateId}': definition not found`);
       return false;
@@ -344,7 +365,7 @@ export class GateRegistry {
       metadata: {
         loadTime: 0, // Will be updated
         validationStatus: 'passed',
-        lastUsed: existingEntry?.metadata.lastUsed,
+        ...(existingEntry?.metadata.lastUsed ? { lastUsed: existingEntry.metadata.lastUsed } : {}),
       },
     };
 
@@ -367,7 +388,7 @@ export class GateRegistry {
 
     for (const gateId of gateIds) {
       const startTime = performance.now();
-      const definition = this.loader.loadGate(gateId);
+      const definition = this.loader.loadGate(gateId) as GateDefinitionYaml | undefined;
 
       if (!definition) {
         this.logger.warn(`Failed to load gate definition: ${gateId}`);

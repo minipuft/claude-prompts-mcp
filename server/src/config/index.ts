@@ -31,6 +31,8 @@ import {
   ChainSessionConfig,
   GatesConfig,
   TransportMode,
+  VersioningConfig,
+  DEFAULT_VERSIONING_CONFIG,
 } from '../types/index.js';
 import {
   DEFAULT_INJECTION_CONFIG,
@@ -91,13 +93,14 @@ const DEFAULT_CONFIG: Config = {
     port: 3456,
   },
   prompts: {
-    file: 'prompts/promptsConfig.json',
+    directory: 'resources/prompts',
   },
   analysis: DEFAULT_ANALYSIS_CONFIG,
   gates: DEFAULT_GATES_CONFIG,
   frameworks: DEFAULT_FRAMEWORKS_CONFIG,
   chainSessions: DEFAULT_CHAIN_SESSION_CONFIG,
   transport: DEFAULT_TRANSPORT_MODE,
+  versioning: DEFAULT_VERSIONING_CONFIG,
 };
 
 /**
@@ -107,9 +110,9 @@ export class ConfigManager extends EventEmitter {
   private config: Config;
   private configPath: string;
   // Removed: private toolDescriptionManager - now injected via dependency injection
-  private fileWatcher?: FSWatcher;
+  private fileWatcher: FSWatcher | undefined;
   private watching: boolean = false;
-  private reloadDebounceTimer?: NodeJS.Timeout;
+  private reloadDebounceTimer: NodeJS.Timeout | undefined;
   private frameworksConfigCache: FrameworksConfig;
 
   constructor(configPath: string) {
@@ -238,7 +241,8 @@ export class ConfigManager extends EventEmitter {
     const frameworksConfig = this.config.frameworks;
     return {
       dynamicToolDescriptions:
-        frameworksConfig?.dynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
+        frameworksConfig?.dynamicToolDescriptions ??
+        DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
       injection: {
         systemPrompt: {
           enabled:
@@ -291,9 +295,11 @@ export class ConfigManager extends EventEmitter {
    * Get execution strategy configuration
    */
   getExecutionConfig(): ExecutionConfig {
-    return {
-      judge: this.config.execution?.judge ?? DEFAULT_EXECUTION_CONFIG.judge,
-    };
+    const judgeValue = this.config.execution?.judge;
+    if (judgeValue !== undefined) {
+      return { judge: judgeValue };
+    }
+    return { judge: DEFAULT_EXECUTION_CONFIG.judge ?? true };
   }
 
   /**
@@ -301,6 +307,18 @@ export class ConfigManager extends EventEmitter {
    */
   isJudgeEnabled(): boolean {
     return this.getExecutionConfig().judge ?? true;
+  }
+
+  /**
+   * Get versioning configuration for resource history tracking
+   */
+  getVersioningConfig(): VersioningConfig {
+    const versioningConfig: Partial<VersioningConfig> = this.config.versioning ?? {};
+    return {
+      enabled: versioningConfig.enabled ?? DEFAULT_VERSIONING_CONFIG.enabled,
+      max_versions: versioningConfig.max_versions ?? DEFAULT_VERSIONING_CONFIG.max_versions,
+      auto_version: versioningConfig.auto_version ?? DEFAULT_VERSIONING_CONFIG.auto_version,
+    };
   }
 
   /**
@@ -352,20 +370,30 @@ export class ConfigManager extends EventEmitter {
   }
 
   /**
-   * Get prompts file path relative to config directory
+   * Get prompts directory path relative to config directory
+   * @deprecated Use getPromptsDirectory() for YAML-based prompt discovery
    */
   getPromptsFilePath(): string {
     const configDir = path.dirname(this.configPath);
-    return path.join(configDir, this.config.prompts.file);
+    return path.join(configDir, this.config.prompts.directory);
   }
 
   /**
-   * Resolve prompts file path with environment overrides and absolute fallback.
+   * Get prompts directory path (for YAML-based prompt discovery)
+   * Resolves the prompts directory from config
+   */
+  getPromptsDirectory(): string {
+    const configDir = path.dirname(this.configPath);
+    return path.join(configDir, this.config.prompts.directory);
+  }
+
+  /**
+   * Resolve prompts directory path with environment overrides and absolute fallback.
    *
    * Priority:
    *   1. overridePath parameter
    *   2. MCP_PROMPTS_PATH environment variable
-   *   3. config.prompts.file setting
+   *   3. config.prompts.directory setting
    *
    * Note: PathResolver is the preferred source of truth for path resolution.
    * This method exists for backward compatibility and simple use cases.
@@ -374,8 +402,7 @@ export class ConfigManager extends EventEmitter {
     const baseDir = path.dirname(this.configPath);
 
     // Priority: overridePath > MCP_PROMPTS_PATH > config
-    let resolvedPath =
-      overridePath ?? process.env['MCP_PROMPTS_PATH'] ?? this.getPromptsFilePath();
+    let resolvedPath = overridePath ?? process.env['MCP_PROMPTS_PATH'] ?? this.getPromptsFilePath();
 
     if (!path.isAbsolute(resolvedPath)) {
       resolvedPath = path.resolve(baseDir, resolvedPath);
@@ -389,6 +416,15 @@ export class ConfigManager extends EventEmitter {
    */
   getServerRoot(): string {
     return path.dirname(this.configPath);
+  }
+
+  /**
+   * Get gates directory path (for gate definitions)
+   * Resolves to resources/gates relative to config directory
+   */
+  getGatesDirectory(): string {
+    const configDir = path.dirname(this.configPath);
+    return path.join(configDir, 'resources', 'gates');
   }
 
   // Removed: ToolDescriptionManager methods - now handled via dependency injection in runtime/application.ts
@@ -457,12 +493,20 @@ export class ConfigManager extends EventEmitter {
 
     // Ensure execution config exists
     if (!this.config.execution) {
-      this.config.execution = { ...DEFAULT_EXECUTION_CONFIG };
+      this.config.execution = { judge: DEFAULT_EXECUTION_CONFIG.judge ?? true };
     } else {
-      this.config.execution = {
-        judge: this.config.execution.judge ?? DEFAULT_EXECUTION_CONFIG.judge,
-      };
+      const judgeValue = this.config.execution.judge;
+      this.config.execution =
+        judgeValue !== undefined
+          ? { judge: judgeValue }
+          : { judge: DEFAULT_EXECUTION_CONFIG.judge ?? true };
     }
+
+    // Ensure versioning config exists with all required fields
+    this.config.versioning = {
+      ...DEFAULT_VERSIONING_CONFIG,
+      ...this.config.versioning,
+    };
   }
 
   /**

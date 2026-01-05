@@ -1,4 +1,6 @@
 import type { GateEnforcementMode } from '../../gates/types.js';
+import type { ScriptExecutionResult, ConfirmationRequired } from '../../scripts/types.js';
+import type { ToolResponse } from '../../types/index.js';
 import type { InjectionState } from '../pipeline/decisions/injection/index.js';
 
 /**
@@ -138,5 +140,39 @@ export interface PipelineInternalState {
       pattern?: string;
       outcome?: string;
     };
+  };
+
+  /**
+   * State related to Script Tool Execution.
+   * Holds results from script tools executed during pipeline processing.
+   */
+  scripts?: {
+    /** Results from executed script tools, keyed by tool ID */
+    results?: Map<string, ScriptExecutionResult>;
+    /** Results from auto-executed MCP tools, keyed by script tool ID */
+    autoExecuteResults?: Map<string, ToolResponse>;
+    /** Tool IDs skipped due to mode: manual (without explicit request) */
+    toolsSkipped?: string[];
+    /** Tool IDs awaiting user confirmation (mode: confirm) */
+    toolsPendingConfirmation?: string[];
+    /** Structured confirmation response when tools require user approval */
+    confirmationRequired?: ConfirmationRequired;
+    /**
+     * Validation errors from script tools with autoApproveOnValid: true.
+     * When validation fails (valid: false), these errors are captured
+     * and the auto_execute is blocked.
+     */
+    validationErrors?: string[];
+    /**
+     * Validation warnings from script tools with autoApproveOnValid: true.
+     * When validation passes with warnings, these are captured and shown
+     * to the user while still proceeding with auto_execute.
+     */
+    validationWarnings?: string[];
+    /**
+     * Tool IDs that were auto-approved via autoApproveOnValid mechanism.
+     * Tracked for diagnostics and logging purposes.
+     */
+    autoApprovedTools?: string[];
   };
 }

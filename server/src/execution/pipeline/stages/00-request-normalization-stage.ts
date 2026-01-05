@@ -96,7 +96,11 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
       return;
     }
 
-    context.state.normalization.normalizedCommand = command || undefined;
+    if (command) {
+      context.state.normalization.normalizedCommand = command;
+    } else {
+      delete context.state.normalization.normalizedCommand;
+    }
     context.state.normalization.completed = true;
 
     this.logExit({
@@ -132,10 +136,12 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
       context.state.session.isExplicitChainResume = true;
     }
 
-    // Store gate overrides from request
-    context.state.gates.requestedOverrides = {
-      gates: context.mcpRequest.gates ? [...context.mcpRequest.gates] : undefined,
-    };
+    // Store gate overrides from request when provided
+    if (context.mcpRequest.gates) {
+      context.state.gates.requestedOverrides = {
+        gates: [...context.mcpRequest.gates],
+      };
+    }
 
     if (context.mcpRequest.options) {
       context.state.normalization.requestOptions = { ...context.mcpRequest.options };

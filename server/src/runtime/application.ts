@@ -7,17 +7,24 @@
  * focused on runtime concerns while delegating execution to the execution engine.
  */
 
+import * as path from 'node:path';
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // Import all module managers
-import { TextReferenceManager } from '../text-references/index.js';
+import {
+  buildClaudeCodeCacheAuxiliaryReloadConfig,
+  generateCacheOnStartup,
+} from './claude-code-cache-hot-reload.js';
 import { createRuntimeFoundation } from './context.js';
+import type { PathResolver } from './paths.js';
 import { loadPromptData } from './data-loader.js';
-import { buildHealthReport } from './health.js';
 import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
+import { buildHealthReport } from './health.js';
 import { buildMethodologyAuxiliaryReloadConfig } from './methodology-hot-reload.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
+import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
 import { startServerWithManagers } from './startup-server.js';
 import { ConfigManager } from '../config/index.js';
 import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
@@ -26,6 +33,7 @@ import { Logger } from '../logging/index.js';
 import { PromptAssetManager } from '../prompts/index.js';
 import { reloadPromptData } from '../prompts/prompt-refresh-service.js';
 import { ConversationManager, createConversationManager } from '../text-references/conversation.js';
+import { TextReferenceManager } from '../text-references/index.js';
 
 // Import execution modules
 // REMOVED: ExecutionCoordinator and GateEvaluator imports - modular chain and gate systems removed
@@ -68,9 +76,10 @@ export class Application {
   private toolDescriptionManager!: ToolDescriptionManager;
   private frameworkStateManager!: FrameworkStateManager;
   private gateManager?: GateManager;
+  private pathResolver!: PathResolver;
   private transportManager!: TransportManager;
-  private apiManager?: ApiManager;
-  private serverManager?: ServerManager;
+  private apiManager: ApiManager | undefined;
+  private serverManager: ServerManager | undefined;
   //  Framework capabilities integrated into base components
   // No separate framework observers needed
 
@@ -83,11 +92,11 @@ export class Application {
   private _convertedPrompts: ConvertedPrompt[] = [];
   private promptsFilePath?: string;
   private hotReloadInitialized = false;
-  private promptReloadInProgress?: Promise<void>;
+  private promptReloadInProgress: Promise<void> | undefined;
   private promptHotReloadHandler = (event: HotReloadEvent) => this.handlePromptHotReload(event);
 
   // Performance monitoring
-  private memoryOptimizationInterval?: NodeJS.Timeout;
+  private memoryOptimizationInterval: NodeJS.Timeout | undefined;
 
   // Server root detector
 
@@ -98,11 +107,10 @@ export class Application {
   private serverRoot?: string;
   private transportType?: TransportMode;
 
-  private frameworksConfigListener?: (
-    newConfig: FrameworksConfig,
-    previousConfig: FrameworksConfig
-  ) => void;
-  private pendingFrameworkSystemState?: boolean;
+  private frameworksConfigListener:
+    | ((newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void)
+    | undefined;
+  private pendingFrameworkSystemState: boolean | undefined;
 
   /**
    * Conditional debug logging to prevent output flood during tests
@@ -211,6 +219,7 @@ export class Application {
     this.serviceManager = foundation.serviceManager;
     this.serverRoot = foundation.serverRoot;
     this.transportType = foundation.transport;
+    this.pathResolver = foundation.pathResolver;
 
     const transport = foundation.transport;
 
@@ -298,15 +307,27 @@ export class Application {
       );
     }
 
-    const result = await loadPromptData({
+    const loadParams = {
       logger: this.logger,
       configManager: this.configManager,
       promptManager: this.promptManager,
       runtimeOptions: this.runtimeOptions,
-      serverRoot: this.serverRoot,
-      mcpToolsManager: this.mcpToolsManager,
-      apiManager: this.apiManager,
-    });
+      pathResolver: this.pathResolver,
+    } as const;
+
+    const optionalParams: Partial<Parameters<typeof loadPromptData>[0]> = {};
+
+    if (this.serverRoot !== undefined) {
+      optionalParams.serverRoot = this.serverRoot;
+    }
+    if (this.mcpToolsManager) {
+      optionalParams.mcpToolsManager = this.mcpToolsManager;
+    }
+    if (this.apiManager) {
+      optionalParams.apiManager = this.apiManager;
+    }
+
+    const result = await loadPromptData({ ...loadParams, ...optionalParams });
 
     this._promptsData = result.promptsData;
     this._categories = result.categories;
@@ -351,6 +372,11 @@ export class Application {
 
     await this.ensurePromptHotReload();
 
+    // Generate hooks cache on startup
+    if (this.serverRoot) {
+      await generateCacheOnStartup(this.logger, this.serverRoot);
+    }
+
     this.logger.info('All modules initialized successfully');
   }
 
@@ -360,18 +386,24 @@ export class Application {
    * Setup and start the server
    */
   private async startServer(): Promise<void> {
-    const { transportManager, apiManager, serverManager } = await startServerWithManagers({
+    const startupParams: Parameters<typeof startServerWithManagers>[0] = {
       logger: this.logger,
       configManager: this.configManager,
       promptManager: this.promptManager,
       mcpToolsManager: this.mcpToolsManager,
       mcpServer: this.mcpServer,
       runtimeOptions: this.runtimeOptions,
-      transportType: this.transportType,
       promptsData: this._promptsData,
       categories: this._categories,
       convertedPrompts: this._convertedPrompts,
-    });
+    };
+
+    if (this.transportType !== undefined) {
+      startupParams.transportType = this.transportType;
+    }
+
+    const { transportManager, apiManager, serverManager } =
+      await startServerWithManagers(startupParams);
 
     this.transportManager = transportManager;
     this.apiManager = apiManager;
@@ -379,8 +411,8 @@ export class Application {
   }
 
   /**
-   * Switch to a different framework by ID (CAGEERF, ReACT, 5W1H, etc.)
-   * Core functionality: Allow switching between frameworks to guide the system
+   * Switch to a different framework by ID (built-in or custom)
+   * Core functionality: Allow switching between registered frameworks to guide the system
    */
   async switchFramework(frameworkId: string): Promise<{ success: boolean; message: string }> {
     //  Framework switching simplified - basic support only
@@ -674,24 +706,45 @@ export class Application {
         this.serviceManager.register({
           name: serviceName,
           start: async () => {
-            // Build auxiliary reload configs for methodology and gates
+            // Build auxiliary reload configs for methodology, gates, and script tools
             const methodologyAux = buildMethodologyAuxiliaryReloadConfig(
               this.logger,
               this.mcpToolsManager
             );
             const gateAux = buildGateAuxiliaryReloadConfig(this.logger, this.gateManager);
 
+            // Build script tool auxiliary reload config
+            const scriptLoader = this.promptManager.getModules().converter.getScriptToolLoader();
+            const promptsDir = this.promptsFilePath
+              ? path.dirname(this.promptsFilePath)
+              : undefined;
+            const scriptAux = promptsDir
+              ? buildScriptAuxiliaryReloadConfig(this.logger, scriptLoader, promptsDir)
+              : undefined;
+
+            // Build Claude Code cache refresh auxiliary reload config
+            const claudeCodeCacheAux = this.serverRoot
+              ? buildClaudeCodeCacheAuxiliaryReloadConfig(this.logger, this.serverRoot)
+              : undefined;
+
             // Collect all auxiliary reloads
-            const auxiliaryReloads = [methodologyAux, gateAux].filter(
-              (aux): aux is NonNullable<typeof aux> => aux !== undefined
-            );
+            const auxiliaryReloads = [
+              methodologyAux,
+              gateAux,
+              scriptAux,
+              claudeCodeCacheAux,
+            ].filter((aux): aux is NonNullable<typeof aux> => aux !== undefined);
+
+            const hotReloadOptions: Parameters<typeof this.promptManager.startHotReload>[2] = {};
+
+            if (auxiliaryReloads.length > 0) {
+              hotReloadOptions.auxiliaryReloads = auxiliaryReloads;
+            }
 
             await this.promptManager.startHotReload(
               this.promptsFilePath!,
               this.promptHotReloadHandler,
-              {
-                auxiliaryReloads: auxiliaryReloads.length > 0 ? auxiliaryReloads : undefined,
-              }
+              hotReloadOptions
             );
           },
           stop: async () => {
@@ -720,7 +773,7 @@ export class Application {
       return;
     }
 
-    this.promptReloadInProgress = (async () => {
+    const reloadPromise = (async () => {
       try {
         this.logger.info(
           `🔥 Hot reload event received (${event.type}): ${
@@ -757,7 +810,8 @@ export class Application {
       }
     })();
 
-    await this.promptReloadInProgress;
+    this.promptReloadInProgress = reloadPromise;
+    await reloadPromise;
   }
 
   /**
@@ -853,14 +907,14 @@ export class Application {
 
     // Check foundation modules
     const foundationHealthy = !!(this.logger && this.configManager && this.textReferenceManager);
-    moduleStatus.foundation = foundationHealthy;
+    moduleStatus['foundation'] = foundationHealthy;
     if (!foundationHealthy) {
       issues.push('Foundation modules not properly initialized');
     }
 
     // Check data loading
     const dataLoaded = this._promptsData.length > 0 && this._categories.length > 0;
-    moduleStatus.dataLoaded = dataLoaded;
+    moduleStatus['dataLoaded'] = dataLoaded;
     if (!dataLoaded) {
       issues.push('Prompt data not loaded or empty');
     }
@@ -871,26 +925,26 @@ export class Application {
       // REMOVED: this.executionCoordinator && this.gateEvaluator - modular systems removed
       this.mcpToolsManager
     );
-    moduleStatus.modulesInitialized = modulesInitialized;
-    moduleStatus.serverRunning = !!(this.serverManager && this.transportManager);
+    moduleStatus['modulesInitialized'] = modulesInitialized;
+    moduleStatus['serverRunning'] = !!(this.serverManager && this.transportManager);
 
-    moduleStatus.configManager = !!this.configManager;
-    moduleStatus.logger = !!this.logger;
-    moduleStatus.promptManager = !!this.promptManager;
-    moduleStatus.textReferenceManager = !!this.textReferenceManager;
-    moduleStatus.conversationManager = !!this.conversationManager;
+    moduleStatus['configManager'] = !!this.configManager;
+    moduleStatus['logger'] = !!this.logger;
+    moduleStatus['promptManager'] = !!this.promptManager;
+    moduleStatus['textReferenceManager'] = !!this.textReferenceManager;
+    moduleStatus['conversationManager'] = !!this.conversationManager;
     // REMOVED: moduleStatus for executionCoordinator and gateEvaluator - modular systems removed
-    moduleStatus.mcpToolsManager = !!this.mcpToolsManager;
-    moduleStatus.transportManager = !!this.transportManager;
-    moduleStatus.apiManager = !!this.apiManager;
-    moduleStatus.serverManager = !!this.serverManager;
+    moduleStatus['mcpToolsManager'] = !!this.mcpToolsManager;
+    moduleStatus['transportManager'] = !!this.transportManager;
+    moduleStatus['apiManager'] = !!this.apiManager;
+    moduleStatus['serverManager'] = !!this.serverManager;
 
     // Check overall health
     return buildHealthReport({
       foundation: foundationHealthy,
       dataLoaded,
       modulesInitialized,
-      serverRunning: moduleStatus.serverRunning,
+      serverRunning: moduleStatus['serverRunning'],
       moduleStatus,
       promptsLoaded: this._promptsData.length,
       categoriesLoaded: this._categories.length,
@@ -944,9 +998,9 @@ export class Application {
       application: {
         promptsLoaded: this._promptsData.length,
         categoriesLoaded: this._categories.length,
-        serverConnections: this.transportManager?.isSse()
-          ? this.transportManager.getActiveConnectionsCount()
-          : undefined,
+        ...(this.transportManager?.isSse()
+          ? { serverConnections: this.transportManager.getActiveConnectionsCount() }
+          : {}),
       },
       executionCoordinator: executionCoordinatorMetrics,
     };
@@ -1006,9 +1060,7 @@ export class Application {
     const gatesConfig = this.configManager.getGatesConfig();
     const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
     const shouldEnable =
-      systemPromptEnabled ||
-      gatesConfig.enableMethodologyGates ||
-      config.dynamicToolDescriptions;
+      systemPromptEnabled || gatesConfig.enableMethodologyGates || config.dynamicToolDescriptions;
 
     if (!this.frameworkStateManager) {
       this.pendingFrameworkSystemState = shouldEnable;

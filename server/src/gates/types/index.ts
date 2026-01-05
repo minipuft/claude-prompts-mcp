@@ -17,14 +17,7 @@ export type {
 } from './gate-guide-types.js';
 
 // Registry types
-export type {
-  GateSource,
-  GateGuideEntry,
-  GateRegistryStats,
-} from './gate-guide-types.js';
+export type { GateSource, GateGuideEntry, GateRegistryStats } from './gate-guide-types.js';
 
 // Selection types
-export type {
-  GateSelectionContext,
-  GateSelectionResult,
-} from './gate-guide-types.js';
+export type { GateSelectionContext, GateSelectionResult } from './gate-guide-types.js';

@@ -32,9 +32,12 @@ export type MethodologyGate = z.infer<typeof MethodologyGateSchema>;
 // Template Suggestion Schema
 // ============================================
 export const TemplateSuggestionSchema = z.object({
-  section: z.string(),
-  type: z.string(),
-  description: z.string(),
+  section: z.enum(['system', 'user']),
+  type: z.enum(['addition', 'structure', 'modification']),
+  description: z.string().optional(), // Description of the suggestion
+  content: z.string().optional(), // Suggested content to add
+  methodologyJustification: z.string().optional(), // Why this aligns with methodology
+  impact: z.enum(['high', 'medium', 'low']).optional(),
 });
 
 export type TemplateSuggestion = z.infer<typeof TemplateSuggestionSchema>;

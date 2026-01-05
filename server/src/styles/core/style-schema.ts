@@ -156,12 +156,17 @@ export function validateStyleSchema(
     warnings.push('Style has no guidance or guidanceFile - will provide no guidance');
   }
 
-  return {
+  const validationResult: StyleSchemaValidationResult = {
     valid: errors.length === 0,
     errors,
     warnings,
-    data: errors.length === 0 ? definition : undefined,
   };
+
+  if (errors.length === 0) {
+    validationResult.data = definition;
+  }
+
+  return validationResult;
 }
 
 /**

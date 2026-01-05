@@ -25,8 +25,12 @@ env:
 
 jobs:
   mcp-protocol-validation:
-    name: MCP Protocol Compliance Validation
+    name: MCP Protocol Compliance Validation (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18.x, 20.x, 22.x, 24.x]
     defaults:
       run:
         shell: bash
@@ -39,24 +43,33 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
         run: npm ci --prefer-offline --no-audit
 
-      - name: Lint
-        run: npm run lint
+      - name: Validate generated artifacts (contracts)
+        run: npm run validate:contracts
+
+      - name: Validate action inventory (metadata)
+        run: npm run validate:metadata
+
+      - name: Lint (ratchet)
+        run: npm run lint:ratchet
 
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Build
+        run: npm run build
+
+      - name: Startup smoke test (built dist)
+        run: npm run start:test
+
       - name: Unit tests
         run: npm run test:unit
 
-      - name: Validate MCP architecture
-        run: npm run validate:dependencies
-
-      - name: Detect circular dependencies
-        run: npm run validate:circular
+      - name: Validate architecture rules
+        run: npm run validate:arch

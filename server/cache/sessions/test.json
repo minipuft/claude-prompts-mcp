@@ -1,0 +1,8 @@
+{
+  "chain_id": "",
+  "current_step": 2,
+  "total_steps": 5,
+  "pending_gate": null,
+  "gate_criteria": [],
+  "last_prompt_id": ""
+}

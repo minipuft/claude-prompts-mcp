@@ -51,7 +51,7 @@ export interface GateValidationStatistics {
 export class GateValidator {
   private logger: Logger;
   private gateLoader: GateDefinitionProvider;
-  private llmConfig?: LLMIntegrationConfig;
+  private llmConfig: LLMIntegrationConfig | undefined;
   private validationStats: GateValidationStatistics = {
     totalValidations: 0,
     successfulValidations: 0,
@@ -61,7 +61,11 @@ export class GateValidator {
   };
   private validationTimes: number[] = [];
 
-  constructor(logger: Logger, gateLoader: GateDefinitionProvider, llmConfig?: LLMIntegrationConfig) {
+  constructor(
+    logger: Logger,
+    gateLoader: GateDefinitionProvider,
+    llmConfig?: LLMIntegrationConfig
+  ) {
     this.logger = logger;
     this.gateLoader = gateLoader;
     this.llmConfig = llmConfig;
@@ -265,7 +269,8 @@ export class GateValidator {
    */
   private async runLLMSelfCheck(criteria: GatePassCriteria): Promise<ValidationCheck> {
     // Check if LLM integration is configured and enabled
-    if (this.llmConfig?.enabled !== true) {
+    const llmConfig = this.llmConfig;
+    if (llmConfig?.enabled !== true) {
       this.logger.debug('[LLM GATE] LLM self-check skipped - LLM integration disabled in config');
       return {
         type: 'llm_self_check',
@@ -281,7 +286,7 @@ export class GateValidator {
       };
     }
 
-    if (this.llmConfig.endpoint === undefined || this.llmConfig.endpoint === '') {
+    if (llmConfig.endpoint === undefined || llmConfig.endpoint === '') {
       this.logger.warn('[LLM GATE] LLM self-check skipped - no endpoint configured');
       return {
         type: 'llm_self_check',
@@ -308,8 +313,8 @@ export class GateValidator {
       details: {
         skipped: true,
         reason: 'LLM API client not yet implemented',
-        configEnabled: this.llmConfig.enabled,
-        endpoint: this.llmConfig.endpoint,
+        configEnabled: llmConfig.enabled,
+        endpoint: llmConfig.endpoint,
         templateRequested: criteria.prompt_template || 'default',
         implementation: 'TODO: Wire LLM client from semantic analyzer',
       },
@@ -344,8 +349,8 @@ export class GateValidator {
       if (check.type === 'llm_self_check') {
         hints.push('Review the quality criteria and improve content structure and depth');
         // When LLM validation is implemented, this would include specific feedback
-        if (check.details?.feedback !== undefined) {
-          hints.push(check.details.feedback as string);
+        if (check.details?.['feedback'] !== undefined) {
+          hints.push(check.details['feedback'] as string);
         }
       }
     }

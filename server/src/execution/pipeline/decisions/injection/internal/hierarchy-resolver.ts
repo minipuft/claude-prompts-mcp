@@ -58,14 +58,29 @@ export class HierarchyResolver {
         target: runtimeOverride.target,
       });
 
+      const defaultConfig = DEFAULT_CONFIG_BY_TYPE[injectionType];
+      const runtimeConfig: InjectionTypeConfig = {
+        enabled: runtimeOverride.enabled ?? true,
+      };
+
+      const frequency =
+        this.getFrequencyFromHierarchy(injectionType, input, resolutionPath) ??
+        defaultConfig.frequency;
+      if (frequency) {
+        runtimeConfig.frequency = frequency;
+      }
+
+      const target =
+        runtimeOverride.target ??
+        this.getTargetFromHierarchy(injectionType, input) ??
+        defaultConfig.target ??
+        'both';
+      if (target) {
+        runtimeConfig.target = target;
+      }
+
       return {
-        config: {
-          enabled: runtimeOverride.enabled ?? true,
-          // Runtime overrides don't change frequency - inherit from below
-          frequency: this.getFrequencyFromHierarchy(injectionType, input, resolutionPath),
-          // Runtime override target takes precedence, else inherit from hierarchy
-          target: runtimeOverride.target ?? this.getTargetFromHierarchy(injectionType, input),
-        },
+        config: runtimeConfig,
         source: 'runtime-override',
         resolutionPath,
       };
@@ -334,12 +349,26 @@ export class HierarchyResolver {
       return defaults;
     }
 
-    return {
+    const merged: InjectionTypeConfig = {
       enabled: partialConfig.enabled ?? defaults.enabled,
-      frequency: partialConfig.frequency ?? defaults.frequency,
-      target: partialConfig.target ?? defaults.target ?? 'both',
-      conditions: partialConfig.conditions ?? defaults.conditions,
     };
+
+    const frequency = partialConfig.frequency ?? defaults.frequency;
+    if (frequency) {
+      merged.frequency = frequency;
+    }
+
+    const target = partialConfig.target ?? defaults.target ?? 'both';
+    if (target) {
+      merged.target = target;
+    }
+
+    const conditions = partialConfig.conditions ?? defaults.conditions;
+    if (conditions) {
+      merged.conditions = conditions;
+    }
+
+    return merged;
   }
 
   /**

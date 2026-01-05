@@ -1,6 +1,6 @@
 // @lifecycle canonical - Type definitions for execution operators.
 import type { CommandParseResultBase } from './command-parse-types.js';
-import type { ExecutionModifier, ExecutionModifiers } from '../../types.js';
+import type { ExecutionModifiers } from '../../types.js';
 
 /**
  * Chain operator representing sequential execution
@@ -118,7 +118,6 @@ export interface SymbolicExecutionPlan {
   styleSelection?: string;
   estimatedComplexity: number;
   requiresSessionState: boolean;
-  modifier?: ExecutionModifier;
   modifiers?: ExecutionModifiers;
 }
 

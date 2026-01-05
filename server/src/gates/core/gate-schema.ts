@@ -206,10 +206,7 @@ export interface GateSchemaValidationResult {
  * }
  * ```
  */
-export function validateGateSchema(
-  data: unknown,
-  expectedId?: string
-): GateSchemaValidationResult {
+export function validateGateSchema(data: unknown, expectedId?: string): GateSchemaValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -243,12 +240,20 @@ export function validateGateSchema(
     warnings.push('No activation rules - gate will always be active');
   }
 
-  return {
+  const resultPayload = {
     valid: errors.length === 0,
     errors,
     warnings,
-    data: errors.length === 0 ? definition : undefined,
   };
+
+  if (errors.length === 0) {
+    return {
+      ...resultPayload,
+      data: definition,
+    };
+  }
+
+  return resultPayload;
 }
 
 /**

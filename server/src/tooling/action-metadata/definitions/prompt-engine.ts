@@ -34,10 +34,17 @@ const issuesByParam: Partial<Record<RequestField, ParameterDescriptor<RequestFie
 };
 
 const generatedParameters = contractToParameterDescriptors<RequestField>(promptEngineContract).map(
-  (param) => ({
-    ...param,
-    issues: issuesByParam[param.name],
-  })
+  (param) => {
+    const issues = issuesByParam[param.name];
+    if (!issues) {
+      return param;
+    }
+
+    return {
+      ...param,
+      issues,
+    };
+  }
 ) satisfies ParameterDescriptor<RequestField>[];
 
 // Parameters from contracts plus any manually tracked deprecated params

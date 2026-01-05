@@ -229,10 +229,11 @@ export class SafeConfigWriter {
       // Step 1: Validate the operation
       const validation = validateConfigInput(key, value);
       if (!validation.valid) {
+        const errorMessage = validation.error ?? 'Unknown validation error';
         return {
           success: false,
-          message: `Validation failed: ${validation.error}`,
-          error: validation.error,
+          message: `Validation failed: ${errorMessage}`,
+          ...(validation.error ? { error: validation.error } : {}),
         };
       }
 
@@ -253,8 +254,8 @@ export class SafeConfigWriter {
         return {
           success: false,
           message: `Configuration validation failed: ${configValidation.error}`,
-          error: configValidation.error,
-          backupPath: backup?.backupPath,
+          ...(configValidation.error ? { error: configValidation.error } : {}),
+          ...(backup?.backupPath ? { backupPath: backup.backupPath } : {}),
         };
       }
 
@@ -267,7 +268,7 @@ export class SafeConfigWriter {
       return {
         success: true,
         message: `Configuration updated successfully: ${key} = ${value}`,
-        backupPath: backup?.backupPath,
+        ...(backup?.backupPath ? { backupPath: backup.backupPath } : {}),
         restartRequired: this.requiresRestart(key),
       };
     } catch (error) {
@@ -381,6 +382,9 @@ export class SafeConfigWriter {
     // Navigate to the parent object
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
+      if (!part) {
+        continue;
+      }
       if (!current[part]) {
         current[part] = {};
       }
@@ -389,7 +393,9 @@ export class SafeConfigWriter {
 
     // Set the final value
     const finalKey = parts[parts.length - 1];
-    current[finalKey] = value;
+    if (finalKey) {
+      current[finalKey] = value;
+    }
 
     return newConfig as Config;
   }

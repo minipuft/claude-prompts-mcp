@@ -463,7 +463,19 @@ export class ContextResolver {
   ): ContextResolution {
     // If we have alternatives, use the best one
     if (alternatives.length > 0) {
-      const best = alternatives.sort((a, b) => b.confidence - a.confidence)[0];
+      const best = [...alternatives].sort((a, b) => b.confidence - a.confidence)[0];
+      if (!best) {
+        return {
+          value: '',
+          source: 'empty_fallback',
+          confidence: 0.1,
+          metadata: {
+            resolvedAt: Date.now(),
+            strategy: 'empty_fallback',
+            warnings: [`No context available for "${key}" - using empty value`],
+          },
+        };
+      }
       return {
         value: best.value,
         source: best.source,

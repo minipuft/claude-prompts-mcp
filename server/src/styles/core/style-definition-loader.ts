@@ -24,10 +24,7 @@ import {
   type StyleSchemaValidationResult,
   type StyleDefinitionYaml,
 } from './style-schema.js';
-import {
-  loadYamlFileSync,
-  discoverYamlDirectories,
-} from '../../utils/yaml/index.js';
+import { loadYamlFileSync, discoverYamlDirectories } from '../../utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -277,8 +274,11 @@ export class StyleDefinitionLoader {
    */
   private inlineReferencedFiles(definition: StyleDefinitionYaml, styleDir: string): void {
     // Inline guidance.md if referenced
-    if (definition.guidanceFile) {
-      const guidancePath = join(styleDir, definition.guidanceFile);
+    const guidanceFile = (definition as Record<string, unknown>)['guidanceFile'] as
+      | string
+      | undefined;
+    if (guidanceFile) {
+      const guidancePath = join(styleDir, guidanceFile);
       if (existsSync(guidancePath)) {
         try {
           const content = readFileSync(guidancePath, 'utf-8');
@@ -293,12 +293,10 @@ export class StyleDefinitionLoader {
           );
         }
       } else {
-        console.warn(
-          `[StyleDefinitionLoader] Referenced guidance file not found: ${guidancePath}`
-        );
+        console.warn(`[StyleDefinitionLoader] Referenced guidance file not found: ${guidancePath}`);
       }
       // Remove the file reference after inlining
-      delete (definition as Record<string, unknown>).guidanceFile;
+      delete (definition as Record<string, unknown>)['guidanceFile'];
     }
   }
 
@@ -323,12 +321,12 @@ export class StyleDefinitionLoader {
    *   1. MCP_STYLES_PATH environment variable
    *   2. Package.json resolution (npm/npx installs)
    *   3. Walk up from module location (development)
-   *   4. Common relative paths
+   *   4. Common relative paths (resources/styles first, then legacy styles)
    *   5. Fallback
    */
   private resolveStylesDir(): string {
     // Priority 1: Direct path environment variable
-    const envStyles = process.env.MCP_STYLES_PATH;
+    const envStyles = process.env['MCP_STYLES_PATH'];
     if (envStyles) {
       const resolvedPath = join(envStyles);
       if (existsSync(resolvedPath) && this.hasYamlFiles(resolvedPath)) {
@@ -345,9 +343,15 @@ export class StyleDefinitionLoader {
       return pkgResolved;
     }
 
-    // Priority 4: Walk up from current module location
+    // Priority 3: Walk up from current module location
     let current = __dirname;
     for (let i = 0; i < 10; i++) {
+      // Check resources/styles first (new structure)
+      const resourcesCandidate = join(current, 'resources', 'styles');
+      if (existsSync(resourcesCandidate) && this.hasYamlFiles(resourcesCandidate)) {
+        return resourcesCandidate;
+      }
+      // Then check legacy styles location
       const candidate = join(current, 'styles');
       if (existsSync(candidate) && this.hasYamlFiles(candidate)) {
         return candidate;
@@ -355,8 +359,13 @@ export class StyleDefinitionLoader {
       current = dirname(current);
     }
 
-    // Priority 5: Common relative paths from dist
+    // Priority 4: Common relative paths from dist (resources/styles first)
     const relativePaths = [
+      join(__dirname, '..', '..', '..', 'resources', 'styles'),
+      join(__dirname, '..', '..', 'resources', 'styles'),
+      join(process.cwd(), 'resources', 'styles'),
+      join(process.cwd(), 'server', 'resources', 'styles'),
+      // Legacy paths
       join(__dirname, '..', '..', '..', 'styles'),
       join(__dirname, '..', '..', 'styles'),
       join(process.cwd(), 'styles'),
@@ -369,8 +378,8 @@ export class StyleDefinitionLoader {
       }
     }
 
-    // Fallback (may not exist yet)
-    return join(__dirname, '..', '..', '..', 'styles');
+    // Fallback to new structure (may not exist yet)
+    return join(__dirname, '..', '..', '..', 'resources', 'styles');
   }
 
   /**
@@ -384,6 +393,12 @@ export class StyleDefinitionLoader {
         if (existsSync(pkgPath)) {
           const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
           if (pkg.name === 'claude-prompts') {
+            // Check resources/styles first (new structure)
+            const resourcesStylesPath = join(dir, 'resources', 'styles');
+            if (existsSync(resourcesStylesPath) && this.hasYamlFiles(resourcesStylesPath)) {
+              return resourcesStylesPath;
+            }
+            // Then check legacy styles location
             const stylesPath = join(dir, 'styles');
             if (existsSync(stylesPath) && this.hasYamlFiles(stylesPath)) {
               return stylesPath;

@@ -2,8 +2,8 @@
 import { createStyleHotReloadRegistration } from '../styles/hot-reload/index.js';
 
 import type { Logger } from '../logging/index.js';
-import type { StyleManager } from '../styles/index.js';
 import type { AuxiliaryReloadConfig } from '../prompts/hot-reload-manager.js';
+import type { StyleManager } from '../styles/index.js';
 
 /**
  * Build style auxiliary reload configuration for HotReloadManager.
@@ -35,11 +35,18 @@ export function buildStyleAuxiliaryReloadConfig(
       directories: registration.directories,
       handler: async (event) => {
         // Extract style ID from file path and add to event
-        const styleId = extractStyleIdFromPath(event.affectedFiles[0]);
+        const firstFile = event.affectedFiles[0];
+        const styleId = firstFile ? extractStyleIdFromPath(firstFile) : undefined;
+        if (!styleId) {
+          logger.warn('Unable to determine style ID for hot reload event', event);
+          return;
+        }
         const styleEvent = {
           ...event,
           type: 'style_changed' as const,
           styleId,
+          // Pass through changeType for deletion handling (only if defined)
+          ...(event.changeType ? { changeType: event.changeType } : {}),
         };
         await registration.handler(styleEvent);
       },

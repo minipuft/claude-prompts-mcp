@@ -12,7 +12,7 @@ import type { ConvertedPrompt, ToolResponse, McpToolRequest } from '../../types/
 import type { ChainStepPrompt } from '../operators/types.js';
 import type { CommandParseResult } from '../parsers/command-parser.js';
 import type { GateEnforcementAuthority } from '../pipeline/decisions/index.js';
-import type { ExecutionModifier, ExecutionModifiers, ExecutionPlan } from '../types.js';
+import type { ExecutionModifiers, ExecutionPlan } from '../types.js';
 
 /**
  * No-op logger for tests and cases where logging isn't needed.
@@ -366,7 +366,6 @@ export interface ParsedCommand extends CommandParseResult {
   namedInlineGates?: NamedInlineGate[];
   chainId?: string;
   steps?: ChainStepPrompt[];
-  modifier?: ExecutionModifier;
   modifiers?: ExecutionModifiers;
   styleSelection?: string;
 }

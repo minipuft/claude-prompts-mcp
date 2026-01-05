@@ -10,6 +10,7 @@ export interface ToolParameter {
   examples?: string[];
   notes?: string[];
   enum?: string[]; // For enum types with explicit values
+  includeInDescription?: boolean; // If false, param is in schema but not tool description
 }
 
 export interface ToolCommand {
@@ -48,7 +49,7 @@ export const system_controlParameters: ToolParameter[] = [
   {
     "name": "framework",
     "type": "string",
-    "description": "Target framework for switch operations (CAGEERF, ReACT, 5W1H, SCAMPER).",
+    "description": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
     "status": "working",
     "compatibility": "canonical"
   },

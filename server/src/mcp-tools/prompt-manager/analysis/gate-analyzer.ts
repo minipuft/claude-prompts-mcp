@@ -143,13 +143,25 @@ export class GateAnalyzer {
     // Extract intent keywords
     const intentKeywords = this.extractIntentKeywords(prompt.userMessageTemplate);
 
-    return {
+    const result = {
       executionType,
       category: prompt.category,
-      framework: this.dependencies.frameworkStateManager?.getActiveFramework()?.methodology,
       intentKeywords,
       complexity,
+    } as {
+      executionType: 'chain' | 'single';
+      category: string;
+      framework?: string;
+      intentKeywords?: string[];
+      complexity: 'high' | 'medium' | 'low';
     };
+
+    const activeFramework = this.dependencies.frameworkStateManager?.getActiveFramework()?.type;
+    if (activeFramework) {
+      result.framework = activeFramework;
+    }
+
+    return result;
   }
 
   /**

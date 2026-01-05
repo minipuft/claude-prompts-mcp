@@ -27,6 +27,10 @@ export async function reloadPromptData(options: PromptReloadOptions): Promise<Pr
     options.promptsFileOverride
   );
 
+  // Clear loader cache to ensure fresh content is read from disk
+  // (fixes hot-reload not picking up direct file edits)
+  options.promptManager.clearLoaderCache();
+
   const result = await options.promptManager.loadAndConvertPrompts(promptsFilePath);
 
   if (options.mcpToolsManager) {

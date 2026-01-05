@@ -4,7 +4,9 @@
   "private": true,
   "description": "Root package for git hooks and workspace management",
   "scripts": {
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "sync": "bash scripts/sync-to-cache.sh",
+    "dev": "npm run sync && echo 'Restart Claude Code to apply hook changes'"
   },
   "devDependencies": {
     "husky": "^9.1.7"

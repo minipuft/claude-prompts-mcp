@@ -50,8 +50,8 @@ export interface EnhancedExecutionContext extends ExecutionContext {
  * - Context validation and preparation
  */
 export class ContextBuilder {
-  private frameworkManager?: FrameworkManager;
-  private frameworkStateManager?: FrameworkStateManager;
+  private frameworkManager: FrameworkManager | undefined;
+  private frameworkStateManager: FrameworkStateManager | undefined;
 
   constructor(frameworkManager?: FrameworkManager, frameworkStateManager?: FrameworkStateManager) {
     this.frameworkManager = frameworkManager;
@@ -105,11 +105,10 @@ export class ContextBuilder {
 
       // Add framework context if available
       if (this.frameworkManager && this.frameworkStateManager) {
-        enhancedContext.frameworkContext = this.buildFrameworkContext(
-          convertedPrompt,
-          promptArgs,
-          options
-        );
+        const frameworkContext = this.buildFrameworkContext(convertedPrompt, promptArgs, options);
+        if (frameworkContext) {
+          enhancedContext.frameworkContext = frameworkContext;
+        }
       }
 
       logger.debug('✅ [ContextBuilder] Execution context built successfully', {
@@ -312,7 +311,9 @@ export class ContextBuilder {
         metadata: { ...context.metadata, ...(overrides.metadata || {}) },
         performance: {
           startTime: context.performance?.startTime || Date.now(),
-          memoryUsage: context.performance?.memoryUsage,
+          ...(context.performance?.memoryUsage !== undefined
+            ? { memoryUsage: context.performance.memoryUsage }
+            : {}),
           ...(overrides.performance || {}),
         },
       };

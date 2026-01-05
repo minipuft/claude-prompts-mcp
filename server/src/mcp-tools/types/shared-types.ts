@@ -370,7 +370,11 @@ export interface PromptEngineArgs {
  * Execution options with proper typing
  */
 export interface ExecutionOptions {
-  framework?: 'CAGEERF' | 'ReACT' | '5W1H' | 'SCAMPER';
+  /**
+   * Framework to apply. Accepts any registered framework ID.
+   * Use frameworkManager.listFrameworks() to see available options.
+   */
+  framework?: string;
   llmValidation?: boolean;
   retryCount?: number;
   debugMode?: boolean;

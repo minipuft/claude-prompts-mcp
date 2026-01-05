@@ -71,23 +71,25 @@ export function parsePromptSections(content: string): Record<string, string> {
   // Extract the title and description (everything before the first ## heading)
   const titleMatch = content.match(/^# (.+?)(?=\n\n|\n##)/s);
   if (titleMatch) {
-    sections.title = titleMatch[1].trim();
+    const title = titleMatch[1];
+    if (title) {
+      sections['title'] = title.trim();
+    }
 
     // Extract description (content between title and first ## heading)
     const descMatch = content.match(/^# .+?\n\n([\s\S]+?)(?=\n## )/s);
-    if (descMatch) {
-      sections.description = descMatch[1].trim();
-    } else {
-      sections.description = '';
-    }
+    const description = descMatch?.[1];
+    sections['description'] = description ? description.trim() : '';
   }
 
   // Extract other sections (## headings)
   const sectionMatches = content.matchAll(/## ([^\n]+)\n\n([\s\S]+?)(?=\n## |\n# |\n$)/g);
   for (const match of sectionMatches) {
-    const sectionName = match[1].trim();
-    const sectionContent = match[2].trim();
-    sections[sectionName] = sectionContent;
+    const sectionName = match[1]?.trim();
+    const sectionContent = match[2]?.trim();
+    if (sectionName && sectionContent !== undefined) {
+      sections[sectionName] = sectionContent;
+    }
   }
 
   return sections;
@@ -199,15 +201,17 @@ export async function modifyPromptSection(
 
     // Modify the section
     if (sectionName === 'title') {
-      sections.title = newContent;
+      sections['title'] = newContent;
     } else if (sectionName === 'description') {
-      sections.description = newContent;
+      sections['description'] = newContent;
     } else {
       sections[sectionName] = newContent;
     }
 
     // Reconstruct the prompt content
-    let newPromptContent = `# ${sections.title}\n\n${sections.description}\n\n`;
+    const title = sections['title'] ?? '';
+    const description = sections['description'] ?? '';
+    let newPromptContent = `# ${title}\n\n${description}\n\n`;
 
     // Add other sections
     for (const [name, content] of Object.entries(sections)) {
@@ -318,10 +322,11 @@ export async function performTransactionalFileOperations<T>(
   try {
     // Perform operations
     for (let i = 0; i < operations.length; i++) {
-      if (typeof operations[i] !== 'function') {
+      const operation = operations[i];
+      if (typeof operation !== 'function') {
         throw new Error(`Operation at index ${i} is not a function`);
       }
-      result = await operations[i]();
+      result = await operation();
       lastSuccessfulIndex = i;
     }
     return result as T;
@@ -331,8 +336,9 @@ export async function performTransactionalFileOperations<T>(
     // Perform rollbacks in reverse order
     for (let i = lastSuccessfulIndex; i >= 0; i--) {
       try {
-        if (typeof rollbacks[i] === 'function') {
-          await rollbacks[i]();
+        const rollback = rollbacks[i];
+        if (typeof rollback === 'function') {
+          await rollback();
         } else {
           log.warn(`Skipping invalid rollback at index ${i} (not a function)`);
         }
@@ -418,18 +424,23 @@ export async function findAndDeletePromptFile(
     try {
       await fs.unlink(findResult.path!);
       log.info(`Successfully deleted markdown file: ${findResult.path}`);
-      return { found: true, deleted: true, path: findResult.path };
+      return findResult.path
+        ? { found: true, deleted: true, path: findResult.path }
+        : { found: true, deleted: true };
     } catch (deleteError) {
       const errorMessage = `Error deleting file at ${findResult.path}: ${
         deleteError instanceof Error ? deleteError.message : String(deleteError)
       }`;
       log.error(errorMessage);
-      return {
+      const response: { found: boolean; deleted: boolean; path?: string; error?: string } = {
         found: true,
         deleted: false,
-        path: findResult.path,
         error: errorMessage,
       };
+      if (findResult.path) {
+        response.path = findResult.path;
+      }
+      return response;
     }
   } catch (error) {
     const errorMessage = `Error finding and deleting prompt file: ${

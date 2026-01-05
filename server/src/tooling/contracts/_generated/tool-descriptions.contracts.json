@@ -1,0 +1,71 @@
+{
+  "version": "3.0.0",
+  "lastUpdated": "2025-12-30T13:04:43.989Z",
+  "generatedFrom": "contracts",
+  "tools": {
+    "prompt_engine": {
+      "description": "🚀 PROMPT ENGINE [CAGEERF]: Expands prompts with C.A.G.E.E.R.F methodology for you to follow.\n\nWHAT IT RETURNS: Prepared prompt + CAGEERF phase instructions (Context→Analysis→Goals→Execution→Evaluation→Refinement).\nWHAT YOU DO: Execute each phase yourself using the returned structure.\n\nSYNTAX: >>prompt_id key=\"value\" | Chain: >>s1 --> >>s2\nOPERATORS: @CAGEERF | :: \"criteria\" | %clean/%lean\n",
+      "shortDescription": "Expand and return prompt templates",
+      "category": "execution",
+      "parameters": {
+        "command": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: \"criteria\" %clean/%lean",
+        "chain_id": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command.",
+        "user_response": "Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming.",
+        "gate_verdict": "Gate review verdict with flexible format support. Primary: 'GATE_REVIEW: PASS|FAIL - reason'. Also accepts: 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason' (minimal).",
+        "gate_action": "User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely.",
+        "gates": {
+          "type": "array",
+          "description": "Quality gates for output validation. Three formats supported:\n\n**1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.\n\n**2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.\n\n**3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows."
+        },
+        "force_restart": "Restart chain from step 1, ignoring cached state.",
+        "options": "Execution options forwarded downstream."
+      },
+      "frameworkAware": {
+        "enabled": "🚀 PROMPT ENGINE [FRAMEWORK]: Returns prompts with methodology guidance injected. You apply the methodology yourself.",
+        "disabled": "🚀 PROMPT ENGINE: Returns prompts without methodology injection. Raw template expansion only."
+      },
+      "triggerExamples": [
+        "User: '>>analyze this code' → prompt_engine(command: '>>analyze this code')"
+      ]
+    },
+    "resource_manager": {
+      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, methodologies.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | methodology\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_methodology - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
+      "shortDescription": "Manage prompts, gates, and methodologies",
+      "category": "management",
+      "parameters": {
+        "resource_type": "Type of resource to manage. Routes to appropriate handler.",
+        "action": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology). Versioning: history/rollback/compare (all types).",
+        "id": "Resource identifier. Required for create, update, delete, inspect, reload, switch.",
+        "name": "Human-friendly name for the resource (create/update).",
+        "description": "Resource description explaining its purpose (create/update).",
+        "enabled_only": "Filter list to enabled resources only. Default: true.",
+        "confirm": "Safety confirmation for delete operation.",
+        "reason": "Audit reason for reload/delete/switch operations."
+      },
+      "frameworkAware": {
+        "enabled": "🗂️ RESOURCE MANAGER [FRAMEWORK]: Operations reflect active methodology context.",
+        "disabled": "🗂️ RESOURCE MANAGER: Standard resource lifecycle operations."
+      }
+    },
+    "system_control": {
+      "description": "⚙️ SYSTEM CONTROL: Retrieves system status, switches frameworks, manages gates, and provides analytics.\n\nACTIONS: status | framework | gates | analytics | config | maintenance | guide\n\nReturns: Current state, configurations, or operation confirmations.",
+      "shortDescription": "System administration",
+      "category": "system",
+      "parameters": {
+        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations).",
+        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list).",
+        "framework": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
+        "reason": "Audit reason for framework/gate toggles or admin actions.",
+        "persist": "When true, gate/framework enable/disable changes are also written to config.json.",
+        "show_details": "Include detailed output (status/analytics/framework/gate reports).",
+        "include_history": "Include recorded history where supported.",
+        "topic": "Guide topic when requesting guidance.",
+        "search_query": "Filter gates by keyword (matches ID, name, or description). Use with gates:list action."
+      },
+      "frameworkAware": {
+        "enabled": "⚙️ SYSTEM CONTROL [FRAMEWORK]: Status includes active methodology context. Guide reflects current framework.",
+        "disabled": "⚙️ SYSTEM CONTROL: Standard system status without methodology context."
+      }
+    }
+  }
+}

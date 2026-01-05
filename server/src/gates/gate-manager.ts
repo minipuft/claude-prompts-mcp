@@ -2,17 +2,20 @@
 /**
  * Gate Manager
  *
- * Orchestration layer for the gate system, following the FrameworkManager pattern.
+ * Orchestration layer for the gate system.
+ * Extends BaseResourceManager to provide unified resource management patterns.
+ *
  * Coordinates between:
  * - GateRegistry: Lifecycle management for gate guides
  * - GateSystemManager: Runtime enable/disable state
  * - Gate selection and activation logic
- *
- * @see FrameworkManager for the pattern this follows
  */
 
+import { BaseResourceManager } from '../core/resource-manager/index.js';
 import { Logger } from '../logging/index.js';
 import { GateRegistry, createGateRegistry, type GateRegistryConfig } from './registry/index.js';
+
+import type { GateSystemManager } from './gate-state-manager.js';
 import type {
   IGateGuide,
   GateActivationContext,
@@ -21,7 +24,6 @@ import type {
   GateGuideEntry,
   GateRegistryStats,
 } from './types/index.js';
-import type { GateSystemManager } from './gate-state-manager.js';
 
 /**
  * Configuration for GateManager
@@ -51,49 +53,87 @@ export interface GateManagerConfig {
  * }
  * ```
  */
-export class GateManager {
+export class GateManager extends BaseResourceManager<
+  IGateGuide,
+  GateGuideEntry,
+  GateManagerConfig,
+  GateRegistryStats
+> {
   private registry: GateRegistry | null = null;
   private stateManager: GateSystemManager | null = null;
-  private logger: Logger;
-  private config: Required<GateManagerConfig>;
-  private initialized: boolean = false;
 
   constructor(logger: Logger, config: GateManagerConfig = {}) {
-    this.logger = logger;
-    this.config = {
+    super(logger, config);
+  }
+
+  // ============================================================================
+  // BaseResourceManager Abstract Method Implementations
+  // ============================================================================
+
+  protected get managerName(): string {
+    return 'GateManager';
+  }
+
+  protected async initializeRegistry(): Promise<void> {
+    this.registry = await createGateRegistry(this.logger, this.config.registryConfig);
+    const stats = this.registry.getRegistryStats();
+    this.logger.debug(`GateRegistry loaded with ${stats.totalGates} gates`);
+  }
+
+  protected applyDefaultConfig(config: GateManagerConfig): GateManagerConfig {
+    return {
       registryConfig: config.registryConfig ?? {},
       debug: config.debug ?? false,
     };
   }
 
-  /**
-   * Initialize the gate manager and registry
-   */
-  async initialize(): Promise<void> {
-    if (this.initialized) {
-      this.logger.debug('GateManager already initialized');
-      return;
-    }
-
-    this.logger.info('Initializing GateManager...');
-    const startTime = performance.now();
-
-    try {
-      // Initialize the gate registry
-      this.registry = await createGateRegistry(this.logger, this.config.registryConfig);
-
-      const loadTime = performance.now() - startTime;
-      this.initialized = true;
-
-      const stats = this.registry.getRegistryStats();
-      this.logger.info(
-        `GateManager initialized with ${stats.totalGates} gates in ${loadTime.toFixed(1)}ms`
-      );
-    } catch (error) {
-      this.logger.error('Failed to initialize GateManager:', error);
-      throw error;
-    }
+  protected getResource(id: string): IGateGuide | undefined {
+    return this.registry!.getGuide(id);
   }
+
+  protected hasResource(id: string): boolean {
+    return this.registry!.hasGuide(id);
+  }
+
+  protected listResources(enabledOnly: boolean): IGateGuide[] {
+    return this.registry!.getAllGuides(enabledOnly);
+  }
+
+  protected getResourceEntries(enabledOnly: boolean): GateGuideEntry[] {
+    return this.registry!.getGuideEntries(enabledOnly);
+  }
+
+  protected setResourceEnabled(id: string, enabled: boolean): boolean {
+    return this.registry!.setGuideEnabled(id, enabled);
+  }
+
+  protected async reloadResource(id: string): Promise<boolean> {
+    return this.registry!.reloadGuide(id);
+  }
+
+  protected unregisterResource(id: string): boolean {
+    return this.registry!.unregisterGuide(id);
+  }
+
+  protected clearResourceCache(id?: string): void {
+    const loader = this.registry!.getLoader();
+    loader.clearCache(id);
+  }
+
+  protected getResourceStats(): GateRegistryStats {
+    return this.registry!.getRegistryStats();
+  }
+
+  protected override isSystemEnabled(): boolean {
+    if (!this.stateManager) {
+      return true; // Default to enabled if no state manager
+    }
+    return this.stateManager.isGateSystemEnabled();
+  }
+
+  // ============================================================================
+  // Domain-Specific Methods (Gate Selection & Activation)
+  // ============================================================================
 
   /**
    * Set the gate system state manager for synchronization
@@ -107,54 +147,7 @@ export class GateManager {
    * Check if the gate system is enabled
    */
   isGateSystemEnabled(): boolean {
-    if (!this.stateManager) {
-      return true; // Default to enabled if no state manager
-    }
-    return this.stateManager.isGateSystemEnabled();
-  }
-
-  /**
-   * Get a specific gate guide by ID
-   *
-   * @param gateId - The gate ID (case-insensitive)
-   * @returns The gate guide or undefined if not found/disabled
-   */
-  getGate(gateId: string): IGateGuide | undefined {
-    this.ensureInitialized();
-    return this.registry!.getGuide(gateId);
-  }
-
-  /**
-   * Check if a gate exists
-   *
-   * @param gateId - The gate ID to check
-   * @returns true if the gate exists
-   */
-  hasGate(gateId: string): boolean {
-    this.ensureInitialized();
-    return this.registry!.hasGuide(gateId);
-  }
-
-  /**
-   * List all registered gates
-   *
-   * @param enabledOnly - If true, only return enabled gates
-   * @returns Array of gate guides
-   */
-  listGates(enabledOnly: boolean = true): IGateGuide[] {
-    this.ensureInitialized();
-    return this.registry!.getAllGuides(enabledOnly);
-  }
-
-  /**
-   * Get gate entries with metadata
-   *
-   * @param enabledOnly - If true, only return enabled entries
-   * @returns Array of gate guide entries
-   */
-  getGateEntries(enabledOnly: boolean = true): GateGuideEntry[] {
-    this.ensureInitialized();
-    return this.registry!.getGuideEntries(enabledOnly);
+    return this.isSystemEnabled();
   }
 
   /**
@@ -171,7 +164,7 @@ export class GateManager {
     const startTime = performance.now();
 
     // If gate system is disabled, return empty result
-    if (!this.isGateSystemEnabled()) {
+    if (!this.isSystemEnabled()) {
       return {
         guides: [],
         selectedIds: [],
@@ -188,11 +181,13 @@ export class GateManager {
     const skippedIds: string[] = [];
 
     // Build activation context from selection context
-    const activationContext: GateActivationContext = {
-      promptCategory: context.promptCategory,
-      framework: context.framework,
-      explicitRequest: false,
-    };
+    const activationContext: GateActivationContext = { explicitRequest: false };
+    if (context.promptCategory) {
+      activationContext.promptCategory = context.promptCategory;
+    }
+    if (context.framework) {
+      activationContext.framework = context.framework;
+    }
 
     // Get all enabled guides
     const allGuides = this.registry!.getAllGuides(context.enabledOnly ?? true);
@@ -251,7 +246,7 @@ export class GateManager {
   getActiveGates(gateIds: string[], context: GateActivationContext): IGateGuide[] {
     this.ensureInitialized();
 
-    if (!this.isGateSystemEnabled()) {
+    if (!this.isSystemEnabled()) {
       return [];
     }
 
@@ -259,35 +254,12 @@ export class GateManager {
 
     for (const gateId of gateIds) {
       const guide = this.registry!.getGuide(gateId);
-      if (guide && guide.isActive(context)) {
+      if (guide?.isActive(context)) {
         activeGuides.push(guide);
       }
     }
 
     return activeGuides;
-  }
-
-  /**
-   * Enable or disable a specific gate
-   *
-   * @param gateId - The gate ID
-   * @param enabled - Whether to enable or disable
-   * @returns true if the operation succeeded
-   */
-  setGateEnabled(gateId: string, enabled: boolean): boolean {
-    this.ensureInitialized();
-    return this.registry!.setGuideEnabled(gateId, enabled);
-  }
-
-  /**
-   * Reload a specific gate from its definition
-   *
-   * @param gateId - The gate ID to reload
-   * @returns true if reload succeeded
-   */
-  async reloadGate(gateId: string): Promise<boolean> {
-    this.ensureInitialized();
-    return this.registry!.reloadGuide(gateId);
   }
 
   /**
@@ -299,41 +271,22 @@ export class GateManager {
   }
 
   /**
-   * Get registry statistics
-   */
-  getRegistryStats(): GateRegistryStats {
-    this.ensureInitialized();
-    return this.registry!.getRegistryStats();
-  }
-
-  /**
    * Get combined gate system status
+   *
+   * Overrides base class to include domain-specific fields
    */
-  getStatus(): {
+  override getStatus(): {
     enabled: boolean;
     initialized: boolean;
     registryStats: GateRegistryStats | null;
     stateManagerConnected: boolean;
   } {
     return {
-      enabled: this.isGateSystemEnabled(),
+      enabled: this.isSystemEnabled(),
       initialized: this.initialized,
       registryStats: this.initialized ? this.registry!.getRegistryStats() : null,
       stateManagerConnected: this.stateManager !== null,
     };
-  }
-
-  // ============================================================================
-  // Private Implementation
-  // ============================================================================
-
-  /**
-   * Ensure the manager is initialized before operations
-   */
-  private ensureInitialized(): void {
-    if (!this.initialized || !this.registry) {
-      throw new Error('GateManager not initialized. Call initialize() first.');
-    }
   }
 }
 

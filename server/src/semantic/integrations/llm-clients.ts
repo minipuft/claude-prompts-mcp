@@ -381,12 +381,13 @@ export class LLMClientFactory {
  * Provider is auto-detected from endpoint URL
  */
 export function loadLLMConfigFromEnv(): Partial<LLMIntegrationConfig> {
+  const env = process.env;
   return {
-    enabled: process.env.MCP_LLM_ENABLED === 'true',
-    apiKey: process.env.MCP_LLM_API_KEY || null,
-    endpoint: process.env.MCP_LLM_ENDPOINT || null,
-    model: process.env.MCP_LLM_MODEL || 'gpt-4',
-    maxTokens: parseInt(process.env.MCP_LLM_MAX_TOKENS || '1000'),
-    temperature: parseFloat(process.env.MCP_LLM_TEMPERATURE || '0.1'),
+    enabled: env['MCP_LLM_ENABLED'] === 'true',
+    apiKey: env['MCP_LLM_API_KEY'] || null,
+    endpoint: env['MCP_LLM_ENDPOINT'] || null,
+    model: env['MCP_LLM_MODEL'] || 'gpt-4',
+    maxTokens: parseInt(env['MCP_LLM_MAX_TOKENS'] || '1000'),
+    temperature: parseFloat(env['MCP_LLM_TEMPERATURE'] || '0.1'),
   };
 }

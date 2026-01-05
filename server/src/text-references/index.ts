@@ -41,18 +41,21 @@ export class TextReferenceManager {
       this.chainStepResults[chainId] = {};
     }
 
-    this.chainStepResults[chainId][stepNumber] = {
+    const stepResult: StoredStepResult = {
       content,
       timestamp: Date.now(),
-      metadata,
     };
+    if (metadata) {
+      stepResult.metadata = metadata;
+    }
+    this.chainStepResults[chainId][stepNumber] = stepResult;
 
     this.logger.debug(
       `[TextReferenceManager] Stored step ${stepNumber} result for chain ${chainId} (${content.length} chars)`
     );
 
     // Store under named outputs if outputMapping is provided
-    const outputMapping = metadata?.outputMapping as Record<string, string> | undefined;
+    const outputMapping = metadata?.['outputMapping'] as Record<string, string> | undefined;
     if (outputMapping) {
       if (!this.namedOutputs[chainId]) {
         this.namedOutputs[chainId] = {};
@@ -141,7 +144,10 @@ export class TextReferenceManager {
     let totalSteps = 0;
 
     chainIds.forEach((chainId) => {
-      totalSteps += Object.keys(this.chainStepResults[chainId]).length;
+      const chainSteps = this.chainStepResults[chainId];
+      if (chainSteps) {
+        totalSteps += Object.keys(chainSteps).length;
+      }
     });
 
     return {

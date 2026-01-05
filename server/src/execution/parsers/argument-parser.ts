@@ -17,13 +17,13 @@
 import { ArgumentSchemaValidator } from './argument-schema.js';
 import { Logger } from '../../logging/index.js';
 import {
+  ArgumentValidationError,
   safeJsonParse,
   validateJsonArguments,
-  ArgumentValidationError,
 } from '../../utils/index.js';
 
 import type { ConvertedPrompt, PromptArgument } from '../../types/index.js';
-import type { ValidationResult, ValidationError, ValidationWarning } from '../types.js';
+import type { ValidationResult } from '../types.js';
 
 type PromptDefinition = Pick<ConvertedPrompt, 'id' | 'arguments'>;
 
@@ -152,7 +152,11 @@ export class ArgumentParser {
     }
 
     // Should never reach here due to fallback strategy, but safety first
-    return this.strategies[this.strategies.length - 1];
+    const fallbackStrategy = this.strategies[this.strategies.length - 1];
+    if (!fallbackStrategy) {
+      throw new Error('No parsing strategies available');
+    }
+    return fallbackStrategy;
   }
 
   /**
@@ -234,6 +238,7 @@ export class ArgumentParser {
       ): ArgumentParsingResult => {
         const processedArgs: Record<string, string | number | boolean | null> = {};
         const typeCoercions: Array<{ arg: string; from: string; to: string }> = [];
+        const contextSources: Record<string, string> = {};
 
         // Parse key=value and key:value pairs with proper quote handling
         // Supports both = and : delimiters, and dashes in argument names
@@ -247,13 +252,17 @@ export class ArgumentParser {
           const match = pair.match(/([\w-]+)\s*[=:]\s*(?:"([^"]*)"|'([^']*)'|(.*))/);
           if (match) {
             const [, key, doubleQuoted, singleQuoted, unquoted] = match;
+            // Skip if key is undefined (shouldn't happen given regex, but TypeScript needs certainty)
+            if (!key) {
+              continue;
+            }
             // Use the appropriate captured group - quoted strings take precedence
             const value =
               doubleQuoted !== undefined
                 ? doubleQuoted
                 : singleQuoted !== undefined
                   ? singleQuoted
-                  : unquoted || '';
+                  : (unquoted ?? '');
             const trimmedValue = value.trim();
 
             // Find argument definition for type coercion
@@ -268,8 +277,23 @@ export class ArgumentParser {
                 });
               }
               processedArgs[key] = coercedValue.value;
+              contextSources[key] = 'user_provided';
             } else {
               processedArgs[key] = trimmedValue;
+              contextSources[key] = 'user_provided';
+            }
+          }
+        }
+
+        // Apply defaults for missing optional arguments
+        const appliedDefaults: string[] = [];
+        for (const arg of promptData.arguments) {
+          if (!(arg.name in processedArgs)) {
+            const defaultValue = this.resolveContextualDefault(arg, context);
+            processedArgs[arg.name] = defaultValue.value;
+            contextSources[arg.name] = defaultValue.source;
+            if (defaultValue.source !== 'none' && defaultValue.source !== 'empty_fallback') {
+              appliedDefaults.push(arg.name);
             }
           }
         }
@@ -282,9 +306,9 @@ export class ArgumentParser {
           validationResults,
           metadata: {
             parsingStrategy: 'keyvalue',
-            appliedDefaults: [],
+            appliedDefaults,
             typeCoercions,
-            contextSources: {},
+            contextSources,
             warnings: [],
           },
         };
@@ -313,8 +337,10 @@ export class ArgumentParser {
         if (promptData.arguments.length === 1) {
           // Single argument - assign all text to it
           const arg = promptData.arguments[0];
-          processedArgs[arg.name] = rawArgs.trim();
-          contextSources[arg.name] = 'user_provided';
+          if (arg) {
+            processedArgs[arg.name] = rawArgs.trim();
+            contextSources[arg.name] = 'user_provided';
+          }
         } else {
           // Multiple arguments - use intelligent defaults
           this.applyIntelligentDefaults(
@@ -469,8 +495,11 @@ export class ArgumentParser {
 
     // Strategy 4: First argument (fallback)
     if (!targetArg && promptData.arguments.length > 0) {
-      targetArg = promptData.arguments[0];
-      this.logger.debug(`First argument fallback: ${targetArg.name}`);
+      const firstArg = promptData.arguments[0];
+      if (firstArg) {
+        targetArg = firstArg;
+        this.logger.debug(`First argument fallback: ${targetArg.name}`);
+      }
     }
 
     // Assign user content to target argument with intelligent processing
@@ -707,35 +736,39 @@ export class ArgumentParser {
 
     for (const arg of promptData.arguments) {
       const value = processedArgs[arg.name];
-      const result: ValidationResult = {
+      const safeValue = value ?? null;
+      let result: ValidationResult = {
         argumentName: arg.name,
         valid: true,
-        originalValue: value,
-        processedValue: value,
-        appliedRules: [],
-        warnings: [],
-        errors: [],
+        originalValue: safeValue,
+        processedValue: safeValue,
       };
 
       const isMissingValue = this.isMissingArgumentValue(value);
 
       // Check if argument is required but missing
       if (arg.required && isMissingValue) {
-        result.valid = false;
-        result.errors = result.errors || [];
-        result.errors.push({
-          field: arg.name,
-          message: `Required argument '${arg.name}' is missing`,
-          code: 'REQUIRED_ARGUMENT_MISSING',
-          suggestion: `Please provide a value for argument '${arg.name}'`,
-          example: `"${arg.name}": "example_value"`,
-        });
+        result = {
+          ...result,
+          valid: false,
+          errors: [
+            {
+              field: arg.name,
+              message: `Required argument '${arg.name}' is missing`,
+              code: 'REQUIRED_ARGUMENT_MISSING',
+              suggestion: `Please provide a value for argument '${arg.name}'`,
+              example: `"${arg.name}": "example_value"`,
+            },
+          ],
+        };
       }
 
       // Add existing validation errors if any
       if (existingValidation?.errors) {
-        result.warnings = result.warnings || [];
-        result.warnings.push(...existingValidation.errors);
+        result = {
+          ...result,
+          warnings: existingValidation.errors,
+        };
       }
 
       results.push(result);
@@ -814,12 +847,32 @@ export class ArgumentParser {
 
         throw new ArgumentValidationError(validation.issues, {
           id: promptData.id,
-          arguments: promptData.arguments.map((arg) => ({
-            name: arg.name,
-            type: arg.type,
-            required: arg.required,
-            validation: arg.validation,
-          })),
+          arguments: promptData.arguments.map((arg) => {
+            const mappedArg: {
+              name: string;
+              type?: string;
+              required: boolean;
+              validation?: { minLength?: number; maxLength?: number; pattern?: string };
+            } = {
+              name: arg.name,
+              required: arg.required,
+            };
+            if (arg.type !== undefined) {
+              mappedArg.type = arg.type;
+            }
+            if (arg.validation !== undefined) {
+              mappedArg.validation = {
+                ...(arg.validation.minLength !== undefined && {
+                  minLength: arg.validation.minLength,
+                }),
+                ...(arg.validation.maxLength !== undefined && {
+                  maxLength: arg.validation.maxLength,
+                }),
+                ...(arg.validation.pattern !== undefined && { pattern: arg.validation.pattern }),
+              };
+            }
+            return mappedArg;
+          }),
         });
       }
 

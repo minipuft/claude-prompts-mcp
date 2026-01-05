@@ -109,3 +109,12 @@ server/prompts/general/test_*.md
 node_modules/
 *.tgz
 .osgrep
+
+# Local backups (not committed)
+plans/_backup-commands/
+
+# Local dev scripts
+scripts/dev-link.sh
+
+# IDE workspace files
+plans/claude-prompts-mcp.code-workspace

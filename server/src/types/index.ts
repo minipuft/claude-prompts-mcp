@@ -104,6 +104,17 @@ export type {
   IntegratedAnalysisResult,
 } from '../frameworks/types/index.js';
 
+// Versioning system types
+export type {
+  VersioningConfig,
+  VersionEntry,
+  HistoryFile,
+  SaveVersionResult,
+  RollbackResult,
+  SaveVersionOptions,
+} from '../versioning/types.js';
+export { DEFAULT_VERSIONING_CONFIG } from '../versioning/types.js';
+
 // ===== Additional System Types =====
 
 // Conversation History Types

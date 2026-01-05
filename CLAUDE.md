@@ -14,7 +14,7 @@ This handbook trains Claude Code (and any assistant) to behave like a senior dev
 
 | Dependency | Version | Notes |
 |------------|---------|-------|
-| Node.js | `>=24` | LTS (Krypton). CI and Docker use `node:24-alpine`. |
+| Node.js | `>=18.18.0` | CI verifies 18→24. Local dev defaults to Node 24 via `.nvmrc` / `.node-version`. |
 | TypeScript | `^5.9.3` | Strict mode enabled. |
 | Jest | `^30.0.0` | With `ts-jest` for ESM support. |
 | Express | `^4.18.2` | Migration to v5 pending (high risk). |
@@ -26,12 +26,12 @@ This handbook trains Claude Code (and any assistant) to behave like a senior dev
 ## 2. Core Operating Principles
 
 1. **Plan First** – Outline intent, affected modules, and validation before editing. Use MCP prompts or notes if the change is non-trivial.
-2. **MCP Tooling Only** – Prompts, templates, chains, and tool descriptions must flow through MCP tools (`prompt_manager`, `prompt_engine`, `system_control`). Manual edits under `server/prompts/**` or `server/runtime-state/**` are forbidden. Tool descriptions and Zod schemas are generated from contracts; run `npm run generate:contracts` rather than editing outputs.
-3. **Contracts as SSOT** – Tool descriptions and MCP parameter schemas are generated from `tooling/contracts/*.json` to `src/tooling/contracts/_generated/`. ToolDescriptionManager loads from generated `tool-descriptions.json`. MCP registration imports generated Zod schemas from `mcp-schemas.ts`. Methodology overlays remain framework-aware.
+2. **MCP Tooling Only** – Prompts, templates, chains, and tool descriptions must flow through MCP tools (`resource_manager`, `prompt_engine`, `system_control`). Manual edits under `server/prompts/**` or `server/runtime-state/**` are forbidden. Tool descriptions and Zod schemas are generated from contracts; run `npm run generate:contracts` rather than editing outputs.
+3. **Contracts as SSOT** – Tool descriptions and MCP parameter schemas are generated from `tooling/contracts/*.json` to `src/tooling/contracts/_generated/`. ToolDescriptionManager loads from generated `tool-descriptions.contracts.json` (and `tool-descriptions.json` exists only as a backwards-compatible alias). MCP registration imports generated Zod schemas from `mcp-schemas.ts`. Methodology overlays remain framework-aware.
 4. **Methodology overlays** – Framework-specific tool descriptions are defined in methodology guides (`getToolDescriptions`). Update these when parameters or guidance change so overlays stay aligned with contracts and runtime registration.
 3. **Transport Parity** – Any runtime change must work in STDIO and SSE. Mention transport implications in code reviews and docs.
 4. **Docs/Code Lockstep** – When code or behavior changes, update the relevant doc in `docs/` (see list below) and adjust lifecycle tags in `docs/README.md` if needed.
-5. **Validation Discipline** – `npm run validate:all`, `npm run typecheck`, and `npm test` are mandatory gates when touching execution, runtime, frameworks, gates, or MCP tools. Document any skipped command with justification.
+5. **Validation Discipline** – For most changes, treat `npm run typecheck`, `npm run lint:ratchet`, and `npm run test:ci` as the minimum gates. Add `npm run validate:arch` when touching module boundaries. Run `npm run validate:all` intentionally (it includes the full ESLint pass and may fail until lint debt is reduced). Document any skipped command with justification.
 6. **Reversibility** – Prefer small, atomic diffs. Never delete “legacy” code paths without checking the migration plan.
 
 ---
@@ -40,16 +40,32 @@ This handbook trains Claude Code (and any assistant) to behave like a senior dev
 
 | Topic                          | Doc                              |
 | ------------------------------ | -------------------------------- |
-| Architecture & runtime phases  | `docs/architecture.md`           |
-| MCP tooling workflows          | `docs/mcp-tools.md`              |
-| Prompt/template authoring      | `docs/prompt-authoring-guide.md` |
-| Chain schema & troubleshooting | `docs/chains.md`                 |
-| Gate system                    | `docs/gates.md`                  |
-| Troubleshooting                | `docs/troubleshooting.md`        |
+| Architecture & runtime phases  | `docs/architecture/overview.md`  |
+| MCP tooling workflows          | `docs/reference/mcp-tools.md`    |
+| Prompt/template authoring      | `docs/guides/prompt-authoring-guide.md` |
+| Script tools & auto-execute    | `docs/guides/script-tools.md`    |
+| Chains                         | `docs/guides/chains.md`          |
+| Gate system                    | `docs/guides/gates.md`           |
+| Troubleshooting                | `docs/guides/troubleshooting.md` |
 | Release highlights             | `CHANGELOG.md`                   |
 | Docs lifecycle overview        | `docs/README.md`                 |
 
 Always read the doc relevant to your task before editing files. Update those docs when behavior changes.
+
+---
+
+## 3.1. Rules Reference (Auto-Loaded)
+
+Claude Code automatically loads rules from `.claude/rules/` based on file paths. These rules are **auto-loaded** when working on matching files—no explicit invocation needed.
+
+| Rule | Scope | Purpose |
+|------|-------|---------|
+| `orchestration-layers.md` | `stages/**/*.ts`, `**/core/*.ts`, `**/*handler*.ts` | Size limits, domain ownership matrix, service extraction |
+| `state-persistence.md` | `*-state-manager.ts`, `chain-session/**`, `runtime-state/**` | Await persistence, throw on failure, no silent state failures |
+| `async-error-handling.md` | `server/src/**/*.ts` | Error propagation, no double-catch, check return values |
+| `mcp-contracts.md` | `tooling/contracts/**`, `mcp-tools/**` | Contract SSOT, regeneration workflow, never edit generated files |
+
+**Rule loading**: Rules activate automatically when you read/edit files matching their `paths` frontmatter.
 
 ---
 
@@ -81,20 +97,25 @@ Use these paths to verify implementation details before documenting or reasoning
 | --------------------------------------- | --------------------------------------------------------------------------------------- |
 | `npm run build`                         | Compile TypeScript → `dist/`. Required before supervisor mode or when sharing binaries. |
 | `npm run typecheck`                     | Strict TS type validation.                                                              |
+| `npm run typecheck:tests`               | Typecheck tests (separate project config).                                              |
 | `npm test` / `npm run test:unit`        | Full Jest suite. Add targeted tests when touching execution/framework/gate modules.     |
 | `npm run test:watch`                    | Jest watch mode for continuous testing during development.                              |
 | `npm run test:coverage`                 | Run tests with coverage report.                                                         |
 | `npm run start:stdio`                   | Manual STDIO smoke test (Claude Desktop / CLI).                                         |
 | `npm run start:sse`                     | Manual SSE smoke test (web clients).                                                    |
 | `npm run start:verbose` / `start:debug` | Diagnose startup or transport issues.                                                   |
-| `npm run lint`                          | ESLint (flat config + lifecycle plugin).                                                |
+| `npm run lint`                          | Full ESLint pass (may fail until lint debt is reduced).                                 |
 | `npm run lint:fix`                      | Auto-fix ESLint issues.                                                                 |
-| `npm run validate:dependencies`         | Canonical-module checker.                                                               |
-| `npm run validate:circular`             | `madge` cycle detector.                                                                 |
+| `npm run lint:ratchet`                  | Fail if ESLint violations increased vs baseline.                                        |
+| `npm run lint:ratchet:baseline`         | Update baseline (intentional + review required).                                        |
+| `npm run lint:staged`                   | Lint-staged runner (used by pre-commit).                                                |
+| `npm run generate:contracts`            | Regenerate MCP schemas/descriptions from contracts.                                     |
+| `npm run validate:contracts`            | Verify generated contract artifacts are in sync.                                        |
+| `npm run validate:methodologies`        | Validate methodology YAMLs and schema expectations.                                     |
+| `npm run validate:arch`                 | Dependency Cruiser architecture rules for `src/`.                                       |
 | `npm run validate:filesize`             | Check file size against baseline limits.                                                |
-| `npm run validate:legacy`               | Verify no legacy import patterns remain.                                                |
 | `npm run validate:metadata`             | Verify action-metadata inventory integrity.                                             |
-| `npm run validate:all`                  | Complete validation suite (dependencies, circular, filesize, legacy, metadata).         |
+| `npm run validate:all`                  | Full validation suite (includes full ESLint, architecture, metadata, contracts, etc.).  |
 
 Hooks in `.husky/` (repo root) run subsets automatically. Do not bypass without explicit approval.
 
@@ -117,18 +138,18 @@ The `prompt_engine` supports a symbolic command language for expressing complex 
 - Operators can be combined for complex workflows
 - `>>` prefix is optional (automatically normalized)
 - Supports inline parameters: `>>prompt key:'value'`
-- See `docs/mcp-tools.md` for detailed syntax and examples
+- See `docs/reference/mcp-tools.md` for detailed syntax and examples
 
 ---
 
 ## 7. MCP Tool Workflow (NO direct file edits)
 
-### `prompt_manager`
+### `resource_manager`
 
-- Actions: `create`, `update`, `delete`, `list`, `inspect`, `analyze_type`, `analyze_gates`, `reload`, `guide`.
-- Legacy creation aliases removed; use `create` only. `migrate_type` removed.
+- **Unified CRUD** for prompts, gates, and methodologies via `resource_type` parameter.
+- Actions: `create`, `update`, `delete`, `list`, `inspect`, `reload` (all types), plus `analyze_type`, `analyze_gates`, `guide` (prompt only), and `switch` (methodology only).
 - Use `chain_steps` to define chains; execution type is auto-detected.
-- All prompt/chain edits must go through this tool so the registry, schema validation, and hot reload stay consistent.
+- All resource edits must go through this tool so the registry, schema validation, and hot reload stay consistent.
 
 ### `prompt_engine`
 
@@ -143,8 +164,8 @@ The `prompt_engine` supports a symbolic command language for expressing complex 
 Example session:
 
 ```bash
-prompt_manager(action:"create", id:"analysis_report", ...)
-prompt_manager(action:"reload")
+resource_manager(resource_type:"prompt", action:"create", id:"analysis_report", ...)
+resource_manager(resource_type:"prompt", action:"reload")
 prompt_engine(command:">>analysis_report content:'Q4 metrics' --> ")
 system_control(action:"status")
 ```
@@ -153,53 +174,22 @@ system_control(action:"status")
 
 ---
 
-## 7.1. MCP Tool Schema Maintenance Protocol
+## 7.1. MCP Tool Schema Maintenance
 
-### Critical Paths for Parameter Changes
+> **Full protocol**: See `.claude/rules/mcp-contracts.md` (auto-loaded when editing contracts or MCP tools)
 
-When adding or modifying MCP tool parameters, follow this simplified workflow:
+**Quick reference**:
+1. Edit source: `tooling/contracts/*.json`
+2. Regenerate: `npm run generate:contracts`
+3. Validate: `npm run typecheck && npm run build && npm test`
 
-1. **Source of Truth**: `/server/tooling/contracts/*.json`
-   - All parameter definitions start here
-   - Include `toolDescription` block for MCP tool descriptions
-   - Include proper `status`, `compatibility`, and migration notes
-
-2. **Regenerate Artifacts**: Run `npm run generate:contracts`
-   - Generates `tool-descriptions.json` (loaded by ToolDescriptionManager)
-   - Generates `mcp-schemas.ts` (Zod schemas imported by MCP registration)
-   - Generates TypeScript types and Markdown docs
-
-3. **Validation**: Run full validation suite
-   - `npm run typecheck`
-   - `npm run build`
-   - `npm test`
-
-### Schema Sync Checklist
-
-Before committing parameter changes:
-
-- [ ] Updated contract in `tooling/contracts/*.json` (including `toolDescription` if adding new tool)
-- [ ] Ran `npm run generate:contracts` (auto-generates Zod schemas and tool descriptions)
-- [ ] Verified with `npm run typecheck` and `npm run build`
-- [ ] Tested MCP tool with new parameter in Claude Desktop/CLI
-- [ ] Updated relevant documentation in `docs/`
-
-### Architecture Benefits
-
-Contracts are now the **single source of truth** for:
-- Tool descriptions (generated to `_generated/tool-descriptions.json`)
-- MCP parameter schemas (generated to `_generated/mcp-schemas.ts`)
-- TypeScript types and documentation
-
-This eliminates schema drift - when you update a contract, running `npm run generate:contracts` automatically updates all downstream artifacts including the Zod schemas used in MCP registration.
-
-**⚠️ Warning**: Files in `_generated/` are auto-overwritten on every `npm run generate:contracts`. Never manually edit these files—all changes go to source contracts in `/tooling/contracts/*.json`.
+**Never edit files in `_generated/`** — they're auto-overwritten.
 
 ---
 
 ## 8. Prompt & Chain Authoring Rules
 
-1. Follow the template structure from `docs/prompt-authoring-guide.md` (title, optional system message, `## User Message`, sections).
+1. Follow the template structure from `docs/guides/prompt-authoring-guide.md` (title, optional system message, `## User Message`, sections).
 2. Define arguments in metadata with accurate types + validation. The runtime derives Zod schemas from these definitions.
 3. Use `{{ref:path.md}}` for shared snippets; maintain references via the text reference manager.
 4. For chains, provide complete `chainSteps` (IDs, dependencies, input/output mapping, optional `inlineGateIds`, `parallelGroup`, `timeout`, `retries`, `stepType`). Conditional execution uses the `?` operator in symbolic commands. Validate chains with `prompt_engine` using `force_restart`.
@@ -212,9 +202,39 @@ This eliminates schema drift - when you update a contract, running `npm run gene
 1. **Discover** – Read the relevant doc(s) + inspect `server/dist` modules.
 2. **Design** – Outline the change, affected files, MCP tooling steps, and validations.
 3. **Implement** – Make minimal diffs; use MCP tools for prompts/chains. Keep `runtime-state` out of commits (contains framework-state.json, chain-sessions.json, chain-run-registry.json, gate-system-state.json, and argument-history.json).
-4. **Validate** – Run `npm run validate:all`, `npm run typecheck`, `npm test`, plus any transport smoke tests. Document skipped steps.
-5. **Document** – Update `docs/` and plan files (`plans/*.md`) as needed.
+4. **Validate** – Run `npm run typecheck`, `npm run lint:ratchet`, and tests:
+   - **New feature?** → `npm run test:integration` FIRST, then `npm run test:unit`
+   - **Bug fix/refactor?** → `npm run test:ci` (unit tests sufficient)
+   - Add `npm run validate:arch` when touching module boundaries. Run `npm run validate:all` intentionally (full suite). Document skipped steps.
+5. **Document** – Use the Doc Update Checklist below. Skip only with explicit justification.
 6. **Review** – Summarize changes, validations, and follow-up work in the final response.
+
+### Doc Update Checklist (MANDATORY for Step 5)
+
+| If you changed... | Then update... | Skip justification |
+|-------------------|----------------|-------------------|
+| MCP tool parameters/behavior | `docs/reference/mcp-tools.md` | Parameter is internal-only |
+| Pipeline stages or execution flow | `docs/architecture/overview.md` | Refactor without behavior change |
+| Prompt/chain schema or authoring patterns | `docs/guides/prompt-authoring-guide.md` | - |
+| Chain step mapping, dependencies, or session handling | `docs/guides/chains.md` | - |
+| Gate definitions, activation rules, or enforcement | `docs/guides/gates.md` | - |
+| CLI flags, env vars, or config options | `docs/reference/mcp-tools.md` + README.md | - |
+| Error messages or recovery flows | `docs/guides/troubleshooting.md` | Trivial wording fix |
+| Public API or breaking changes | `CHANGELOG.md` (Unreleased section) | - |
+| Test structure or coverage patterns | `plans/test-modernization-roadmap.md` | - |
+
+**Default**: If uncertain whether a doc needs updating, update it. Stale docs cost more than redundant updates.
+
+### Test Update Checklist (MANDATORY for Step 4)
+
+| If you added... | Then write... | Location |
+|-----------------|---------------|----------|
+| New feature (new module/capability) | Integration test FIRST | `tests/integration/` |
+| Complex edge cases | Unit tests | `tests/unit/` |
+| Critical user workflow | E2E test | `tests/e2e/` |
+| Bug fix | Unit test reproducing the bug | `tests/unit/` |
+
+**Anti-pattern**: Writing unit tests only for new features, then forgetting integration tests.
 
 ---
 
@@ -303,7 +323,7 @@ Keep the footer links updated for GitHub diff navigation:
 ## 12. Optimization Backlog (suggested improvements)
 
 1. **Doc path validator** – Script to fail CI when docs reference non-existent `server/dist` files.
-2. **MCP smoke harness** – Automated CLI script to run baseline `prompt_manager/prompt_engine/system_control` commands during CI.
+2. **MCP smoke harness** – Automated CLI script to run baseline `resource_manager/prompt_engine/system_control` commands during CI.
 3. **Chain session inspector** – Developer-only tool to list/trim chain sessions for debugging.
 4. **Doc lifecycle badges** – Auto-sync README/doc badges with `docs/README.md` statuses to reduce manual edits.
 
@@ -387,6 +407,19 @@ server/methodologies/
 | 10 | Formatting |
 | 11 | Call-to-action |
 
+### Pipeline Stage Boundaries (ENFORCED)
+
+> **Full rules**: See `.claude/rules/orchestration-layers.md` (auto-loaded when editing stages/handlers)
+
+**Key limits**:
+- Stage file size: **150 lines max** → Extract to service if exceeded
+- Helper methods in stages: **0** → All logic goes to services
+- Domain logic: **Forbidden** → Stages orchestrate, services contain logic
+
+**Quick ownership reference**: Gates → `GateManager`, Frameworks → `FrameworkManager`, Prompts → `PromptRegistry`, Injection → `InjectionDecisionService`, Styles → `StyleManager`. Full matrix in the rule file.
+
+> **Note**: Async error handling, orchestration layer, and state persistence rules are defined in `.claude/rules/` and auto-loaded by Claude Code based on file paths.
+
 ### Blocked/Deprecated Parameters
 
 | Parameter | Status | Alternative |
@@ -404,7 +437,22 @@ server/methodologies/
 
 **Consolidation Over Addition**: Enhance existing systems vs creating new ones, require architectural justification for parallel systems, verify no duplicate functionality
 
-**Framework Development**: Methodology guides = single source of truth (never hard-code), dynamic generation from guide metadata, guide-driven enhancements (system prompts, quality gates, validation)
+**MCP Contract Development (CRITICAL)**: When adding MCP tool parameters:
+1. **Verify upstream first** - Check what service/manager layers expect (names and types)
+2. **Use canonical names** - Contract params must match manager params exactly (no hidden router transformations)
+3. **Type consistency** - Contract type must match service type (`number` vs `string` matters)
+4. **Layer alignment** - Contract → Generated → Types → Router → Manager → Service must all agree
+5. **Pre-commit enforced** - Hook blocks commits if contracts change without regeneration
+
+```
+# Before adding a parameter, verify existing code:
+grep -rn "paramName" src/mcp-tools/*/core/manager.ts
+grep -rn "paramName" src/versioning/ src/gates/ src/frameworks/
+```
+
+> **Full rules**: See `.claude/rules/mcp-contracts.md` (auto-loaded when editing contracts or MCP tools)
+
+**Framework Development**: Methodology guides = single source of truth (never hard-code), dynamic generation from guide metadata, guide-driven enhancements (system prompts, quality gates, validation). **Framework validity**: always call `frameworkManager.getFramework(id)` - never hardcode framework lists or use type unions for validation
 
 **Domain Cohesion**: Framework logic in `/frameworks`, separate stateless (manager) from stateful (state manager), clear separation (analysis WHAT vs methodology HOW), explicit integration points (`/integration`)
 
@@ -420,30 +468,55 @@ server/methodologies/
 
 **Framework Integration**: No direct coupling (integrate via framework manager), event-driven communication, semantic analysis coordination (informed by, not dependent on), gates adapt to framework (remain framework-agnostic in core)
 
-**Pipeline State Management**: Use centralized state via `context.gates` (GateAccumulator), `context.frameworkAuthority` (FrameworkDecisionAuthority), and `context.diagnostics` (DiagnosticAccumulator). Never mutate gate arrays directly or resolve framework IDs manually in stages. See `docs/architecture.md#pipeline-state-management` for patterns.
+**Pipeline State Management**: Use centralized state via `context.gates` (GateAccumulator), `context.frameworkAuthority` (FrameworkDecisionAuthority), and `context.diagnostics` (DiagnosticAccumulator). Never mutate gate arrays directly or resolve framework IDs manually in stages. See `docs/architecture/overview.md#pipeline-state-management` for patterns.
 
 **Configuration**: CLI flags and env vars for path overrides (`MCP_WORKSPACE`, `MCP_CONFIG_PATH`, `MCP_PROMPTS_PATH`, `MCP_METHODOLOGIES_PATH`, `MCP_GATES_PATH`), separate server/prompts config, modular imports, absolute paths for Claude Desktop
 
 **Error Handling**: Comprehensive boundaries (all orchestration levels), structured logging (verbose/quiet modes), meaningful error messages (diagnostics), rollback mechanisms (startup failures)
 
-**Testing**: Follow professional quality patterns from `/home/minipuft/Applications/CLAUDE.md#Testing_Standards`
+**Testing**: Follow `/home/minipuft/Applications/CLAUDE.md#Testing_Standards` for workflow, classification, mock boundaries, and LLM mistake prevention.
 
-**MCP-Specific Test Coverage**:
-- Transport layer validation (STDIO/SSE)
-- Nunjucks template rendering edge cases
-- Hot-reload file watching and registry updates
-- MCP protocol compliance (request/response schemas)
-- Framework system behavior (switching, state persistence)
-- Gate validation and enforcement
-- Chain session management and resumption
-- Symbolic command parsing and execution
-- Error handling and recovery paths
+**Project Test Commands**:
 
-**Test Execution Requirements**:
-- `npm test` must pass before any commit touching execution/framework/gate modules
-- `npm run test:coverage` for baseline coverage checks (target: >80%)
-- `npm run test:watch` during active development for fast feedback
-- Add targeted tests when modifying core subsystems (see Architecture Cheat Sheet §4)
+| Command | When to Use |
+|---------|-------------|
+| `npm run test:integration` | FIRST for new features (catches boundary bugs) |
+| `npm run test:unit` | Edge cases and complex logic validation |
+| `npm run test:all` | Before commits (unit + integration) |
+| `npm run test:e2e` | Critical user journeys (when stable) |
+| `npm run test:coverage` | Baseline coverage checks (target: >80%) |
+| `npm run test:watch` | During active development |
+
+**MCP-Specific Test Coverage** (what this project needs tested):
+
+| Area | Integration Test Focus | Unit Test Focus |
+|------|------------------------|-----------------|
+| Transport layer | STDIO/SSE startup and message handling | Protocol message parsing |
+| Template rendering | Full Nunjucks pipeline with variables | Edge cases in template syntax |
+| Hot-reload | File change → registry update flow | Individual file observer events |
+| MCP protocol | Request → response contract compliance | Schema validation edge cases |
+| Framework system | Switch framework → state persistence | Individual framework operations |
+| Gate system | Validation criteria → enforcement decisions | Gate definition parsing |
+| Chain sessions | Start → step → resume → complete workflow | Session state transitions |
+| Symbolic parsing | Full command → execution plan | Individual operator parsing |
+
+**Project Directory Structure**:
+
+```text
+tests/
+├── unit/                    # Mirror src/ - ALL deps mocked
+│   ├── execution/
+│   ├── frameworks/
+│   ├── gates/
+│   └── mcp-tools/
+├── integration/             # Workflow-based - real collaborators
+│   ├── scripts/            # Script-tools workflow
+│   ├── pipeline/           # Execution pipeline flows
+│   └── prompts/            # Prompt loading flows
+└── e2e/                    # Full MCP transport
+    ├── api/                # Tool call flows
+    └── cli/                # Server lifecycle
+```
 
 **Environment Variables**: `MCP_WORKSPACE` (base workspace directory for prompts, config, etc.), `MCP_PROMPTS_PATH` (direct path to prompts config), `MCP_CONFIG_PATH` (direct path to config.json), `MCP_STYLES_PATH` (direct path to styles directory). CLI flags take priority: `--workspace`, `--prompts`, `--config`, `--methodologies`, `--gates`, `--styles`
 

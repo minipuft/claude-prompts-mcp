@@ -13,6 +13,7 @@
 
 import type {
   FrameworkMethodology,
+  FrameworkType,
   JudgePromptDefinition,
   MethodologyToolDescriptions,
 } from '../types/methodology-types.js';
@@ -22,15 +23,19 @@ import type { PhasesDefinition, PhaseQualityIndicators } from '../utils/index.js
  * Complete methodology definition loaded from YAML source
  *
  * This is the main interface for methodology configurations. Each methodology
- * (CAGEERF, ReACT, 5W1H, SCAMPER) provides a definition file that conforms
- * to this interface.
+ * (built-in or custom) provides a definition file that conforms to this interface.
+ * Use FrameworkManager.listFrameworks() to see registered methodologies.
  */
 export interface MethodologyDefinition {
   /** Unique identifier (e.g., 'cageerf', 'react', '5w1h', 'scamper') */
   id: string;
   /** Human-readable name */
   name: string;
-  /** Methodology acronym/identifier for display */
+  /** Framework type discriminator (preferred over 'methodology') */
+  type?: FrameworkType;
+  /**
+   * @deprecated Use 'type' instead. Kept for backward compatibility with existing YAML files.
+   */
   methodology: FrameworkMethodology;
   /** Version string */
   version: string;

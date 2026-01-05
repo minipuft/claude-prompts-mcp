@@ -200,14 +200,21 @@ export class JudgeSelectionStage extends BasePipelineStage {
     const styleSelection =
       parsedCommand?.styleSelection ?? parsedCommand?.executionPlan?.styleSelection;
 
-    return {
+    const operatorContext: OperatorContext = {
       hasFrameworkOperator: Boolean(frameworkOverride),
-      frameworkId: frameworkOverride,
       hasInlineGates: inlineGates.length > 0,
       inlineGateIds: inlineGates,
       hasStyleSelector: Boolean(styleSelection),
-      styleId: styleSelection,
     };
+
+    if (frameworkOverride) {
+      operatorContext.frameworkId = frameworkOverride;
+    }
+    if (styleSelection) {
+      operatorContext.styleId = styleSelection;
+    }
+
+    return operatorContext;
   }
 
   /**
@@ -344,7 +351,7 @@ export class JudgeSelectionStage extends BasePipelineStage {
       '```',
       `prompt_engine({`,
       `  command: "${escapedCommand}${
-        operatorContext.hasFrameworkOperator ? '' : ' @<CAGEERF|ReACT|5W1H|SCAMPER>'
+        operatorContext.hasFrameworkOperator ? '' : ' @<framework>'
       } :: <gate_id or criteria> #<analytical|procedural|creative|reasoning>"`,
       `})`,
       '```',

@@ -134,9 +134,9 @@ export class FileObserver extends EventEmitter {
   private isStarted: boolean = false;
   private startTime: number = 0;
   private retryCount: number = 0;
-  private configManager?: ConfigManager;
-  private sigintHandler?: () => void;
-  private sigtermHandler?: () => void;
+  private configManager: ConfigManager | undefined;
+  private sigintHandler: (() => void) | undefined;
+  private sigtermHandler: (() => void) | undefined;
 
   constructor(logger: Logger, config?: Partial<FileObserverConfig>, configManager?: ConfigManager) {
     super();
@@ -376,9 +376,15 @@ export class FileObserver extends EventEmitter {
       isPromptFile,
       isConfigFile,
       isMethodologyFile,
-      methodologyId: methodologyInfo.methodologyId,
-      category,
     };
+
+    if (methodologyInfo.methodologyId) {
+      event.methodologyId = methodologyInfo.methodologyId;
+    }
+
+    if (category) {
+      event.category = category;
+    }
 
     // Add framework analysis if enabled
     if (this.config.frameworkIntegration?.enabled) {
@@ -415,7 +421,7 @@ export class FileObserver extends EventEmitter {
     // Set new timer
     const timer = setTimeout(() => {
       this.debounceTimers.delete(debounceKey);
-      this.emitFileChangeEvent(event);
+      void this.emitFileChangeEvent(event);
     }, this.config.debounceMs);
 
     this.debounceTimers.set(debounceKey, timer);
@@ -423,8 +429,16 @@ export class FileObserver extends EventEmitter {
 
   /**
    * Emit the file change event
+   * For 'renamed' events, checks file existence to detect deletions
    */
-  private emitFileChangeEvent(event: FileChangeEvent): void {
+  private async emitFileChangeEvent(event: FileChangeEvent): Promise<void> {
+    // For 'renamed' events, check if file still exists to detect deletions
+    // Node.js fs.watch emits 'rename' for both renames AND deletions
+    if (event.type === 'renamed') {
+      const finalType = await this.classifyRenameEvent(event.filePath);
+      event.type = finalType;
+    }
+
     this.stats.eventsTriggered++;
     this.stats.lastEventTime = event.timestamp;
 
@@ -444,6 +458,21 @@ export class FileObserver extends EventEmitter {
 
     if (event.isMethodologyFile) {
       this.emit('methodologyFileChange', event);
+    }
+  }
+
+  /**
+   * Classify a 'rename' event as either 'removed' or 'added' based on file existence
+   * Node.js fs.watch emits 'rename' for file creation, deletion, and actual renames
+   */
+  private async classifyRenameEvent(filePath: string): Promise<FileChangeType> {
+    try {
+      await fs.promises.access(filePath);
+      // File exists - this is either a new file or an actual rename target
+      return 'added';
+    } catch {
+      // File doesn't exist - it was deleted
+      return 'removed';
     }
   }
 
@@ -528,7 +557,7 @@ export class FileObserver extends EventEmitter {
 
   /**
    * Check if file is a methodology YAML file
-   * Methodology files live in methodologies/{id}/ directories and are YAML files
+   * Methodology files live in resources/methodologies/{id}/ directories and are YAML files
    *
    * @returns Object with isMethodology flag and extracted methodologyId
    */
@@ -543,7 +572,7 @@ export class FileObserver extends EventEmitter {
       return { isMethodology: false };
     }
 
-    // Check if path contains /methodologies/ directory
+    // Check if path contains /methodologies/ directory (matches both resources/methodologies/ and legacy methodologies/)
     if (!fullPath) {
       return { isMethodology: false };
     }
@@ -555,8 +584,12 @@ export class FileObserver extends EventEmitter {
       return { isMethodology: false };
     }
 
-    // Extract methodology ID from path (e.g., /methodologies/cageerf/methodology.yaml -> cageerf)
-    const methodologyId = methodologyMatch[1].toLowerCase();
+    // Extract methodology ID from path (e.g., resources/methodologies/cageerf/methodology.yaml -> cageerf)
+    const methodologyId = methodologyMatch[1]?.toLowerCase();
+
+    if (!methodologyId) {
+      return { isMethodology: false };
+    }
 
     return {
       isMethodology: true,

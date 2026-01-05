@@ -58,7 +58,10 @@ describe('ResponseFormatter.formatPromptEngineResponse', () => {
     expect(promptResult.content[0].text).toBe('Prompt text');
     expect(promptResult.structuredContent).toBeUndefined();
 
-    const defaultChainResult = formatter.formatPromptEngineResponse('Chain text (default)', context);
+    const defaultChainResult = formatter.formatPromptEngineResponse(
+      'Chain text (default)',
+      context
+    );
     expect(defaultChainResult.structuredContent).toBeUndefined();
   });
 

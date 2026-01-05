@@ -54,8 +54,11 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
     const blueprint: SessionBlueprint = {
       parsedCommand: this.clone(context.parsedCommand!),
       executionPlan: this.clone(context.executionPlan!),
-      gateInstructions: context.gateInstructions,
     };
+
+    if (context.gateInstructions !== undefined) {
+      blueprint.gateInstructions = context.gateInstructions;
+    }
 
     try {
       this.chainSessionManager!.updateSessionBlueprint(sessionId, blueprint);

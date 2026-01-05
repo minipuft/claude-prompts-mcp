@@ -35,6 +35,32 @@ module.exports = {
     },
 
     // ============================================
+    // DOMAIN DECOUPLING
+    // ============================================
+    {
+      name: 'no-frameworks-in-gates',
+      comment: 'Gates domain should not depend on Frameworks domain.',
+      severity: 'error',
+      from: {
+        path: '^src/gates/',
+      },
+      to: {
+        path: '^src/frameworks/',
+      },
+    },
+    {
+      name: 'no-gates-in-frameworks',
+      comment: 'Frameworks domain should not depend on Gates domain.',
+      severity: 'error',
+      from: {
+        path: '^src/frameworks/',
+      },
+      to: {
+        path: '^src/gates/',
+      },
+    },
+
+    // ============================================
     // CIRCULAR DEPENDENCY PREVENTION
     // ============================================
     {

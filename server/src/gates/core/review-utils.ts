@@ -136,17 +136,29 @@ export function composeReviewPrompt(
 
   const combinedPrompt = segments.join('\n\n');
 
+  const metadata: {
+    previousResponse?: string;
+    retryHints: string[];
+    timestamps?: ReviewPromptTimestamps;
+  } = {
+    retryHints: retryHints.map((hint) => hint.trim()).filter((hint) => hint.length > 0),
+  };
+
+  const normalizedPreviousResponse = previousResponse?.trim();
+  if (normalizedPreviousResponse) {
+    metadata.previousResponse = normalizedPreviousResponse;
+  }
+  if (timestamps) {
+    metadata.timestamps = timestamps;
+  }
+
   return {
     combinedPrompt,
     gateIds,
     instructions,
     prompts,
     createdAt,
-    metadata: {
-      previousResponse: previousResponse?.trim() || undefined,
-      retryHints: retryHints.map((hint) => hint.trim()).filter((hint) => hint.length > 0),
-      timestamps,
-    },
+    metadata,
   };
 }
 

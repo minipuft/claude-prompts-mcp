@@ -28,10 +28,7 @@ import {
   type InjectionType,
 } from '../execution/pipeline/decisions/injection/index.js';
 import { FrameworkManager } from '../frameworks/framework-manager.js';
-import {
-  FrameworkStateManager,
-  FrameworkSwitchRequest,
-} from '../frameworks/framework-state-manager.js';
+import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
 import { getDefaultRuntimeLoader } from '../frameworks/methodology/index.js';
 import { Logger } from '../logging/index.js';
 import {
@@ -158,7 +155,9 @@ export class ConsolidatedSystemControl {
   constructor(logger: Logger, mcpServer: any, onRestart?: (reason: string) => Promise<void>) {
     this.logger = logger;
     this.mcpServer = mcpServer;
-    this.onRestart = onRestart;
+    if (onRestart) {
+      this.onRestart = onRestart;
+    }
     this.responseFormatter = new ResponseFormatter(this.logger);
   }
 
@@ -559,58 +558,37 @@ export class ConsolidatedSystemControl {
 
   // Framework management methods
   public async switchFramework(args: {
-    framework?: 'CAGEERF' | 'ReACT' | '5W1H' | 'SCAMPER';
+    framework?: string;
     reason?: string;
   }): Promise<ToolResponse> {
-    if (!this.frameworkStateManager) {
-      throw new Error('Framework state manager not initialized');
+    if (!this.frameworkManager) {
+      throw new Error('Framework manager not initialized');
     }
 
     if (!args.framework) {
       throw new Error('Framework parameter is required for switch operation');
     }
 
-    const { framework, reason = `User requested switch to ${args.framework}` } = args;
+    // Delegate to FrameworkManager - single authority for framework switching
+    const result = await this.frameworkManager.switchFramework(
+      args.framework,
+      args.reason || `User requested switch to ${args.framework}`
+    );
 
-    const currentState = this.frameworkStateManager.getCurrentState();
-
-    // Check if already active
-    if (currentState.activeFramework === framework) {
-      return this.createMinimalSystemResponse(
-        `ℹ️ Framework '${framework}' is already active. No change needed.`,
-        'switch_framework'
-      );
+    if (!result.success) {
+      throw new Error(result.error || 'Framework switch failed');
     }
 
-    const request: FrameworkSwitchRequest = {
-      targetFramework: framework,
-      reason: reason,
-    };
+    // Build success response using result.framework
+    const framework = result.framework!;
+    let response = `🔄 **Framework Switch Successful**\n\n`;
+    response += `**Current**: ${framework.name} (${framework.id})\n`;
+    response += `**Description**: ${framework.description}\n`;
+    response += `**Type**: ${framework.type}\n\n`;
+    response += `**Guidelines**: ${framework.executionGuidelines.join(' • ')}\n\n`;
+    response += `✅ All future prompt executions will now use the ${framework.id} methodology.`;
 
-    const success = await this.frameworkStateManager.switchFramework(request);
-
-    if (success) {
-      const newState = this.frameworkStateManager.getCurrentState();
-      const activeFramework = this.frameworkStateManager.getActiveFramework();
-
-      let response = `🔄 **Framework Switch Successful**\n\n`;
-      response += `**Previous**: ${currentState.activeFramework}\n`;
-      response += `**Current**: ${newState.activeFramework}\n`;
-      response += `**Switched At**: ${newState.switchedAt.toISOString()}\n`;
-      response += `**Reason**: ${reason}\n\n`;
-      response += `**New Framework Details**:\n`;
-      response += `- **Name**: ${activeFramework.name}\n`;
-      response += `- **Description**: ${activeFramework.description}\n`;
-      response += `- **Methodology**: ${activeFramework.methodology}\n\n`;
-      response += `**Guidelines**: ${activeFramework.executionGuidelines.join(' • ')}\n\n`;
-      response += `✅ All future prompt executions will now use the ${framework} methodology.`;
-
-      return this.createMinimalSystemResponse(response, 'switch_framework');
-    } else {
-      throw new Error(
-        `Failed to switch to framework '${framework}'. Please check framework availability and try again.`
-      );
-    }
+    return this.createMinimalSystemResponse(response, 'switch_framework');
   }
 
   public async listFrameworks(args: { show_details?: boolean }): Promise<ToolResponse> {
@@ -640,7 +618,7 @@ export class ConsolidatedSystemControl {
 
       if (args.show_details) {
         response += `   📝 ${framework.description}\n`;
-        response += `   🎯 Methodology: ${framework.methodology}\n`;
+        response += `   🎯 Type: ${framework.type}\n`;
 
         // Add data-driven methodology info if available
         if (methodologyDef) {
@@ -714,7 +692,7 @@ export class ConsolidatedSystemControl {
 
     response += `**ID**: ${definition.id}\n`;
     response += `**Version**: ${definition.version || '1.0.0'}\n`;
-    response += `**Methodology**: ${definition.methodology}\n`;
+    response += `**Type**: ${definition.type || definition.methodology}\n`;
     response += `**Status**: ${definition.enabled !== false ? '✅ Enabled' : '❌ Disabled'}\n\n`;
 
     // System prompt guidance
@@ -783,7 +761,7 @@ export class ConsolidatedSystemControl {
     if (methodologyIds.length === 0) {
       return this.createMinimalSystemResponse(
         `📋 **No Methodologies Found**\n\n` +
-          `Ensure YAML files exist in \`methodologies/<id>/methodology.yaml\`.`,
+          `Ensure YAML files exist in \`resources/methodologies/<id>/methodology.yaml\`.`,
         'list_methodologies'
       );
     }
@@ -798,7 +776,7 @@ export class ConsolidatedSystemControl {
       response += `${status} **${definition.name}** (\`${definition.id}\`)\n`;
 
       if (args.show_details) {
-        response += `   Methodology: ${definition.methodology}\n`;
+        response += `   Type: ${definition.type || definition.methodology}\n`;
         if (definition.methodologyGates?.length) {
           response += `   Gates: ${definition.methodologyGates.length} methodology-specific\n`;
         }
@@ -1121,7 +1099,9 @@ export class ConsolidatedSystemControl {
     lines.push(`:: "custom criteria"            # Anonymous inline gate`);
     lines.push('```');
     lines.push('');
-    lines.push(`**Total Gates**: ${filteredGates.length}${searchQuery ? ` (filtered from ${gateDefinitions.length})` : ''}`);
+    lines.push(
+      `**Total Gates**: ${filteredGates.length}${searchQuery ? ` (filtered from ${gateDefinitions.length})` : ''}`
+    );
 
     return this.createMinimalSystemResponse(lines.join('\n'), 'gate_list');
   }
@@ -1333,20 +1313,21 @@ export class ConsolidatedSystemControl {
       response += '## 📈 Performance Trends\n\n';
 
       // Group trends by metric type for better organization
-      const trendsByMetric = this.systemAnalytics.performanceTrends.reduce(
-        (acc, trend) => {
-          if (!acc[trend.metric]) acc[trend.metric] = [];
-          acc[trend.metric].push(trend);
-          return acc;
-        },
-        {} as Record<string, any[]>
-      );
+      const trendsByMetric = this.systemAnalytics.performanceTrends.reduce<
+        Record<string, Array<SystemAnalytics['performanceTrends'][number]>>
+      >((acc, trend) => {
+        const bucket = acc[trend.metric] ?? [];
+        bucket.push(trend);
+        acc[trend.metric] = bucket;
+        return acc;
+      }, {});
 
       Object.entries(trendsByMetric).forEach(([metric, trends]) => {
-        const recentTrends = trends.slice(-10);
+        const recentTrends = (trends ?? []).slice(-10);
         response += `### ${metric.charAt(0).toUpperCase() + metric.slice(1)} Trends\n`;
         recentTrends.forEach((trend, index) => {
-          const time = new Date(trend.timestamp).toISOString().split('T')[1].split('.')[0];
+          const isoTime = new Date(trend.timestamp).toISOString();
+          const time = isoTime.split('T')[1]?.split('.')[0] ?? isoTime;
           const contextInfo = this.formatTrendContext(trend);
           response += `${index + 1}. ${time}: ${this.formatTrendValue(
             trend.metric,
@@ -2071,9 +2052,10 @@ class MaintenanceActionHandler extends ActionHandler {
     // Recent Activity
     if (include_history && this.systemControl.systemAnalytics.performanceTrends.length > 0) {
       response += '## 📈 Recent Performance Trends\n\n';
-      const recentTrends = this.systemControl.systemAnalytics.performanceTrends.slice(-10);
+      const recentTrends = (this.systemControl.systemAnalytics.performanceTrends ?? []).slice(-10);
       recentTrends.forEach((trend, index) => {
-        const timestamp = new Date(trend.timestamp).toISOString().split('T')[1].split('.')[0];
+        const isoTime = new Date(trend.timestamp).toISOString();
+        const timestamp = isoTime.split('T')[1]?.split('.')[0] ?? isoTime;
         const contextInfo = this.formatTrendContext(trend);
         response += `${index + 1}. ${timestamp}: ${this.formatTrendValue(
           trend.metric,
@@ -2122,77 +2104,55 @@ class MaintenanceActionHandler extends ActionHandler {
   }
 
   /**
-   * Switch framework
+   * Switch framework - delegates to FrameworkManager (single authority)
    */
   public async switchFramework(args: {
-    framework?: 'CAGEERF' | 'ReACT' | '5W1H' | 'SCAMPER';
+    framework?: string;
     reason?: string;
   }): Promise<ToolResponse> {
-    if (!this.systemControl.frameworkStateManager) {
-      throw new Error('Framework state manager not initialized');
+    if (!this.frameworkManager) {
+      throw new Error('Framework manager not initialized');
     }
 
     if (!args.framework) {
       throw new Error('Framework parameter is required for switch operation');
     }
 
-    const { framework, reason = `User requested switch to ${args.framework}` } = args;
+    // Delegate to FrameworkManager - single authority for framework switching
+    const result = await this.frameworkManager.switchFramework(
+      args.framework,
+      args.reason || `User requested switch to ${args.framework}`
+    );
 
-    const currentState = this.systemControl.frameworkStateManager.getCurrentState();
-
-    // Check if already active
-    if (currentState.activeFramework === framework) {
-      return this.createMinimalSystemResponse(
-        `ℹ️ Framework '${framework}' is already active. No change needed.`,
-        'switch_framework'
-      );
+    if (!result.success) {
+      throw new Error(result.error || 'Framework switch failed');
     }
 
-    const request: FrameworkSwitchRequest = {
-      targetFramework: framework,
-      reason: reason,
-    };
+    // Build success response using result.framework
+    const framework = result.framework!;
+    let response = `🔄 **Framework Switch Successful**\n\n`;
+    response += `**Current**: ${framework.name} (${framework.id})\n`;
+    response += `**Description**: ${framework.description}\n`;
+    response += `**Type**: ${framework.type}\n\n`;
+    response += `**Guidelines**: ${framework.executionGuidelines.join(' • ')}\n\n`;
+    response += `✅ All future prompt executions will now use the ${framework.id} methodology.`;
 
-    const success = await this.systemControl.frameworkStateManager.switchFramework(request);
-
-    if (success) {
-      const newState = this.systemControl.frameworkStateManager.getCurrentState();
-      const activeFramework = this.systemControl.frameworkStateManager.getActiveFramework();
-
-      let response = `🔄 **Framework Switch Successful**\n\n`;
-      response += `**Previous**: ${currentState.activeFramework}\n`;
-      response += `**Current**: ${newState.activeFramework}\n`;
-      response += `**Switched At**: ${newState.switchedAt.toISOString()}\n`;
-      response += `**Reason**: ${reason}\n\n`;
-      response += `**New Framework Details**:\n`;
-      response += `- **Name**: ${activeFramework.name}\n`;
-      response += `- **Description**: ${activeFramework.description}\n`;
-      response += `- **Methodology**: ${activeFramework.methodology}\n\n`;
-      response += `**Guidelines**: ${activeFramework.executionGuidelines.join(' • ')}\n\n`;
-      response += `✅ All future prompt executions will now use the ${framework} methodology.`;
-
-      // Trigger dynamic tool description updates
-      if (this.mcpToolsManager?.reregisterToolsWithUpdatedDescriptions) {
-        try {
-          await this.mcpToolsManager.reregisterToolsWithUpdatedDescriptions();
-          response += `\n\n🔄 **Tool descriptions updated** - MCP clients will receive updated tool descriptions with ${framework} methodology guidance.`;
-        } catch (error) {
-          this.logger.error(
-            `Failed to update tool descriptions after framework switch: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-          response += `\n\n⚠️ **Note**: Tool descriptions may need manual refresh for some clients.`;
-        }
+    // Trigger dynamic tool description updates
+    if (this.mcpToolsManager?.reregisterToolsWithUpdatedDescriptions) {
+      try {
+        await this.mcpToolsManager.reregisterToolsWithUpdatedDescriptions();
+        response += `\n\n🔄 **Tool descriptions updated** - MCP clients will receive updated tool descriptions with ${framework.id} methodology guidance.`;
+      } catch (error) {
+        this.logger.error(
+          `Failed to update tool descriptions after framework switch: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+        response += `\n\n⚠️ **Note**: Tool descriptions may need manual refresh for some clients.`;
       }
-
-      return this.createMinimalSystemResponse(response, 'switch_framework');
-    } else {
-      return this.createMinimalSystemResponse(
-        `❌ Failed to switch to framework '${framework}'. Check system logs for details.`,
-        'switch_framework'
-      );
     }
+
+    return this.createMinimalSystemResponse(response, 'switch_framework');
   }
 
   /**
@@ -2218,7 +2178,7 @@ class MaintenanceActionHandler extends ActionHandler {
 
       response += `## ${icon} ${framework.name}${status}\n\n`;
       response += `**ID**: ${framework.id}\n`;
-      response += `**Methodology**: ${framework.methodology}\n`;
+      response += `**Type**: ${framework.type}\n`;
       response += `**Description**: ${framework.description}\n`;
       response += `**Priority**: ${framework.priority}\n`;
       response += `**Enabled**: ${framework.enabled ? '✅ Yes' : '❌ No'}\n`;
@@ -2315,20 +2275,21 @@ class MaintenanceActionHandler extends ActionHandler {
       response += '## 📈 Performance Trends\n\n';
 
       // Group trends by metric type for better organization
-      const trendsByMetric = this.systemControl.systemAnalytics.performanceTrends.reduce(
-        (acc, trend) => {
-          if (!acc[trend.metric]) acc[trend.metric] = [];
-          acc[trend.metric].push(trend);
-          return acc;
-        },
-        {} as Record<string, any[]>
-      );
+      const trendsByMetric = this.systemControl.systemAnalytics.performanceTrends.reduce<
+        Record<string, Array<SystemAnalytics['performanceTrends'][number]>>
+      >((acc, trend) => {
+        const bucket = acc[trend.metric] ?? [];
+        bucket.push(trend);
+        acc[trend.metric] = bucket;
+        return acc;
+      }, {});
 
       Object.entries(trendsByMetric).forEach(([metric, trends]) => {
-        const recentTrends = trends.slice(-10);
+        const recentTrends = (trends ?? []).slice(-10);
         response += `### ${metric.charAt(0).toUpperCase() + metric.slice(1)} Trends\n`;
         recentTrends.forEach((trend, index) => {
-          const time = new Date(trend.timestamp).toISOString().split('T')[1].split('.')[0];
+          const isoTime = new Date(trend.timestamp).toISOString();
+          const time = isoTime.split('T')[1]?.split('.')[0] ?? isoTime;
           const contextInfo = this.formatTrendContext(trend);
           response += `${index + 1}. ${time}: ${this.formatTrendValue(
             trend.metric,
@@ -2940,12 +2901,13 @@ class MaintenanceActionHandler extends ActionHandler {
     }
 
     const validation = validateConfigInput(key, value);
+    const suggestion = this.getValidationSuggestion(key);
 
     if (!validation.valid) {
       return {
         valid: false,
-        error: validation.error,
-        suggestion: this.getValidationSuggestion(key),
+        error: validation.error ?? 'Invalid configuration value',
+        ...(suggestion ? { suggestion } : {}),
       };
     }
 
@@ -3151,7 +3113,7 @@ class MaintenanceActionHandler extends ActionHandler {
               `**Impact**: All active connections will be terminated\n` +
               `**Downtime**: Server will restart (typically 5-10 seconds)\n\n` +
               `**To proceed**: Set 'confirm: true' to execute the restart.\n\n` +
-              `🔄 **Alternative**: Use hot-reload via prompt_manager 'reload' action for most changes.`,
+              `🔄 **Alternative**: Use hot-reload via resource_manager(resource_type:"prompt", action:"reload") for most changes.`,
           },
         ],
       };
@@ -3371,7 +3333,6 @@ class MaintenanceActionHandler extends ActionHandler {
       startTime: now,
       endTime: now,
       frameworkEnabled: false,
-      frameworkUsed: undefined,
       success: false,
     };
 

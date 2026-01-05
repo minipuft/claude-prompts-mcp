@@ -40,9 +40,9 @@ export class DiagnosticAccumulator {
       level,
       stage,
       message,
-      code: options?.code,
       timestamp: Date.now(),
-      context: options?.context,
+      ...(options?.code !== undefined ? { code: options.code } : {}),
+      ...(options?.context !== undefined ? { context: options.context } : {}),
     };
 
     this.entries.push(entry);
@@ -68,28 +68,35 @@ export class DiagnosticAccumulator {
    * Add a warning diagnostic.
    */
   warn(stage: string, message: string, context?: Record<string, unknown>): void {
-    this.add('warning', stage, message, { context });
+    const options = context !== undefined ? { context } : undefined;
+    this.add('warning', stage, message, options);
   }
 
   /**
    * Add an error diagnostic.
    */
   error(stage: string, message: string, code?: string, context?: Record<string, unknown>): void {
-    this.add('error', stage, message, { code, context });
+    const options =
+      code !== undefined || context !== undefined
+        ? { ...(code !== undefined ? { code } : {}), ...(context !== undefined ? { context } : {}) }
+        : undefined;
+    this.add('error', stage, message, options);
   }
 
   /**
    * Add an info diagnostic.
    */
   info(stage: string, message: string, context?: Record<string, unknown>): void {
-    this.add('info', stage, message, { context });
+    const options = context !== undefined ? { context } : undefined;
+    this.add('info', stage, message, options);
   }
 
   /**
    * Add a debug diagnostic.
    */
   debug(stage: string, message: string, context?: Record<string, unknown>): void {
-    this.add('debug', stage, message, { context });
+    const options = context !== undefined ? { context } : undefined;
+    this.add('debug', stage, message, options);
   }
 
   /**

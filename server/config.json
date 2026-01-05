@@ -4,13 +4,18 @@
     "version": "1.3.0",
     "port": 9090
   },
+  "versioning": {
+    "enabled": true,
+    "max_versions": 50,
+    "auto_version": true
+  },
   "prompts": {
-    "file": "prompts/promptsConfig.json",
+    "directory": "resources/prompts",
     "registerWithMcp": true
   },
   "gates": {
     "enabled": true,
-    "definitionsDirectory": "gates",
+    "definitionsDirectory": "resources/gates",
     "enableMethodologyGates": true
   },
   "execution": {

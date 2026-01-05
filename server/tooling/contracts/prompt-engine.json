@@ -1,45 +1,39 @@
 {
   "tool": "prompt_engine",
   "version": 1,
-  "summary": "Execute prompts/chains with inline operators. Every step must start with a real prompt id (`>>prompt_id` or `/prompt_id`); place modifiers at the front `%judge @Framework #style :: gates`. Use `%clean`/`%lean` to disable framework injection. If you don't know the id, list/inspect via prompt_manager instead of inventing one.",
+  "summary": "Execute prompts/chains. Use >>prompt_id or /prompt_id. Modifiers go first: %judge @Framework #style :: gates. Use prompt_manager to discover valid IDs.",
   "toolDescription": {
-    "description": "🚀 PROMPT ENGINE: Expands prompt templates and returns structured instructions for you to follow.\n\nRetrieves prompt by ID → fills arguments → applies methodology context → returns prepared prompt.\n\nSYNTAX: >>prompt_id key=\"value\" | Chain: >>s1 --> >>s2 (N-1 arrows for N steps)\nOPERATORS: @Framework (methodology) | :: \"criteria\" (gates) | %clean/%lean (disable framework)\n\nChain resumption: chain_id + user_response (your step output).",
+    "description": "\ud83d\ude80 PROMPT ENGINE [CAGEERF]: Expands prompts with C.A.G.E.E.R.F methodology for you to follow.\n\nWHAT IT RETURNS: Prepared prompt + CAGEERF phase instructions (Context\u2192Analysis\u2192Goals\u2192Execution\u2192Evaluation\u2192Refinement).\nWHAT YOU DO: Execute each phase yourself using the returned structure.\n\nSYNTAX: >>prompt_id key=\"value\" | Chain: >>s1 --> >>s2\nOPERATORS: @CAGEERF | :: \"criteria\" | %clean/%lean\n",
     "shortDescription": "Expand and return prompt templates",
     "category": "execution",
+    "triggerExamples": [
+      "User: '>>analyze this code' \u2192 prompt_engine(command: '>>analyze this code')"
+    ],
     "frameworkAware": {
-      "enabled": "🚀 PROMPT ENGINE [FRAMEWORK]: Returns prompts with methodology guidance injected. You apply the methodology yourself.",
-      "disabled": "🚀 PROMPT ENGINE: Returns prompts without methodology injection. Raw template expansion only."
+      "enabled": "\ud83d\ude80 PROMPT ENGINE [FRAMEWORK]: Returns prompts with methodology guidance injected. You apply the methodology yourself.",
+      "disabled": "\ud83d\ude80 PROMPT ENGINE: Returns prompts without methodology injection. Raw template expansion only."
     }
   },
   "parameters": [
     {
       "name": "command",
       "type": "string",
-      "description": "Prompt ID to expand with optional arguments. Format: >>prompt_id key=\"value\".\n\nChains: >>step1 --> >>step2 (N-1 arrows for N steps).\nModifiers (place before ID): @Framework | :: \"criteria\" | %clean/%lean.\n\nDo NOT invent IDs - use prompt_manager(action:\"list\") to discover valid prompts.",
+      "description": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: \"criteria\" %clean/%lean",
       "required": false,
       "status": "working",
       "notes": [
-        "Operators: `-->` chain, `@` framework, `::` gates, `#id` style (e.g., #analytical), `%judge` menu; `%clean`/`%lean` disable framework injection. Modifiers belong at the front and apply to the whole chain.",
-        "Every chain step must start with a prompt id prefix (`>>` or `/`). Plain text step labels are invalid; use prompt_manager(list/inspect) to find valid ids instead of fabricating them.",
-        "Free text belongs after the prompt id, quoted (\"...\") or as key:value pairs. Avoid unquoted bare strings that look like prompt names.",
-        "Two request shapes: execute (`command` required, optional gates/options); resume (`chain_id` with user_response and/or gate_verdict/gate_action, command optional).",
-        "Chaining runs all steps back-to-back; issue separate calls if you need to pause between phases."
+        "Every step needs prompt ID prefix (>> or /). Modifiers apply to whole chain.",
+        "Script tools: tool:<id> to invoke; confirm:true tools need approval."
       ],
       "examples": [
-        "%judge @CAGEERF #analytical >>analytical \"overview\" --> >>procedural \"edge cases\" --> >>creative \"JSON summary\" :: framework-compliance :: technical-accuracy",
-        "@ReACT >>analysis_report topic:'AI safety' :: 'cite sources' #analytical",
-        ">>analysis_report audience:'exec' --> >>summary #procedural"
+        "@CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'"
       ]
     },
     {
       "name": "chain_id",
       "type": "string",
       "description": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command.",
-      "status": "working",
-      "notes": [
-        "RESUME WORKFLOW: Provide chain_id + user_response (or gate_verdict). Do NOT re-send command parameter.",
-        "Preferred resume path. Use with user_response or gate_verdict."
-      ]
+      "status": "working"
     },
     {
       "name": "user_response",
@@ -51,26 +45,14 @@
       "name": "gate_verdict",
       "type": "string",
       "description": "Gate review verdict with flexible format support. Primary: 'GATE_REVIEW: PASS|FAIL - reason'. Also accepts: 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason' (minimal).",
-      "status": "working",
-      "notes": [
-        "Multiple format variants supported (v3.1+)",
-        "Case-insensitive matching with hyphen or colon separators",
-        "Rationale required for all verdicts",
-        "Takes precedence over verdicts parsed from user_response",
-        "Minimal format ('PASS - reason') only accepted via this parameter, not from user_response"
-      ]
+      "status": "working"
     },
     {
       "name": "gate_action",
       "type": "enum",
       "enum": ["retry", "skip", "abort"],
       "description": "User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely.",
-      "status": "working",
-      "notes": [
-        "Only effective when gate retry limit is exceeded (default: 2 attempts)",
-        "Use with chain_id to specify which chain session to apply the action to",
-        "Blocking gates prompt for this choice; advisory/informational gates auto-continue"
-      ]
+      "status": "working"
     },
     {
       "name": "gates",
@@ -79,16 +61,11 @@
       "status": "working",
       "compatibility": "canonical",
       "notes": [
-        "RECOMMENDED: Use Quick Gates `{name, description}` when dynamically creating validation - simple to generate, properly named in output.",
-        "Quick Gates auto-default to severity:medium, type:validation, scope:execution.",
-        "Full schema supports: id, name, description, severity (critical|high|medium|low), type, scope, criteria[], pass_criteria[], guidance, apply_to_steps[].",
-        "Supports mixed types in single array for maximum flexibility.",
-        "Step-targeted gates: Use target_step_number or apply_to_steps in full gate definitions."
+        "RECOMMENDED: Quick Gates {name, description} auto-default to severity:medium, type:validation.",
+        "Full schema: id, name, severity, criteria[], pass_criteria[], guidance, apply_to_steps[]."
       ],
       "examples": [
-        "[\"code-quality\", \"research-quality\"]",
-        "[{\"name\": \"Source Verification\", \"description\": \"All claims must cite sources\"}]",
-        "[{\"id\": \"security-gate\", \"severity\": \"critical\", \"criteria\": [\"No hardcoded secrets\", \"Input validation present\"]}]"
+        "[{\"name\": \"Source Quality\", \"description\": \"All sources must be official docs\"}]"
       ]
     },
     {
@@ -108,12 +85,7 @@
     {
       "id": "chain-resume",
       "summary": "Resume chain via chain_id + user_response/gate_verdict/gate_action",
-      "parameters": [
-        "chain_id",
-        "user_response",
-        "gate_verdict",
-        "gate_action"
-      ]
+      "parameters": ["chain_id", "user_response", "gate_verdict", "gate_action"]
     }
   ]
 }

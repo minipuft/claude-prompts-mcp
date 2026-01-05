@@ -21,23 +21,20 @@ import { Logger } from '../logging/index.js';
 
 import type { ToolDescription, ToolDescriptionsConfig, FrameworksConfig } from '../types/index.js';
 
+/**
+ * @deprecated Emergency fallback only - do not edit.
+ * Primary source of truth is tool-descriptions.contracts.json generated from tooling/contracts/*.json.
+ * Run `npm run generate:contracts` to regenerate from contracts.
+ * These defaults exist only as emergency fallback when generated artifacts are missing.
+ */
 const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[string, ToolDescription]> = [
   [
     'prompt_engine',
     {
       description:
-        '🚀 PROMPT ENGINE: Executes prompts/chains with % modifiers and unified gates. Start with real prompt ids (no invented labels); list/inspect via prompt_manager(action:"list") when unsure. Inline gates via `::`; frameworks via `@`; `%clean`/`%lean` disable framework injection. Use `>>guide <topic>` only when you need help.',
+        '🚀 PROMPT ENGINE: Executes prompts/chains with % modifiers and unified gates. Start with real prompt ids (no invented labels); list/inspect via resource_manager(resource_type:"prompt", action:"list") when unsure. Inline gates via `::`; frameworks via `@`; `%clean`/`%lean` disable framework injection. Use `>>guide <topic>` only when you need help.',
       shortDescription: 'Execute prompts and chains',
       category: 'execution',
-    },
-  ],
-  [
-    'prompt_manager',
-    {
-      description:
-        '📝 PROMPT MANAGER: Lifecycle operations for prompts. Actions: create|update|delete|list|inspect|analyze_type|analyze_gates|guide. Use `guide` action to discover which verb fits your goal.',
-      shortDescription: 'Manage prompt lifecycle',
-      category: 'management',
     },
   ],
   [
@@ -49,30 +46,46 @@ const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[string, ToolDescription]> = [
       category: 'system',
     },
   ],
+  [
+    'resource_manager',
+    {
+      description:
+        '📦 RESOURCE MANAGER: Unified CRUD for prompts, gates, and methodologies. resource_type: prompt|gate|methodology. Actions: create|update|delete|list|inspect|reload + analyze_type|analyze_gates|guide (prompt only) + switch (methodology only).',
+      shortDescription: 'Manage prompts, gates, methodologies',
+      category: 'management',
+    },
+  ],
 ];
 
 function cloneToolDescription(description: ToolDescription): ToolDescription {
-  return {
-    ...description,
-    parameters: description.parameters ? { ...description.parameters } : undefined,
-    frameworkAware: description.frameworkAware
-      ? {
-          ...description.frameworkAware,
-          methodologies: description.frameworkAware.methodologies
-            ? { ...description.frameworkAware.methodologies }
-            : undefined,
-          parametersEnabled: description.frameworkAware.parametersEnabled
-            ? { ...description.frameworkAware.parametersEnabled }
-            : undefined,
-          parametersDisabled: description.frameworkAware.parametersDisabled
-            ? { ...description.frameworkAware.parametersDisabled }
-            : undefined,
-          methodologyParameters: description.frameworkAware.methodologyParameters
-            ? { ...description.frameworkAware.methodologyParameters }
-            : undefined,
-        }
-      : undefined,
-  };
+  const cloned: ToolDescription = { ...description };
+
+  if (description.parameters) {
+    cloned.parameters = { ...description.parameters };
+  }
+
+  if (description.frameworkAware) {
+    const frameworkAware = { ...description.frameworkAware };
+
+    if (description.frameworkAware.methodologies) {
+      frameworkAware.methodologies = { ...description.frameworkAware.methodologies };
+    }
+    if (description.frameworkAware.parametersEnabled) {
+      frameworkAware.parametersEnabled = { ...description.frameworkAware.parametersEnabled };
+    }
+    if (description.frameworkAware.parametersDisabled) {
+      frameworkAware.parametersDisabled = { ...description.frameworkAware.parametersDisabled };
+    }
+    if (description.frameworkAware.methodologyParameters) {
+      frameworkAware.methodologyParameters = {
+        ...description.frameworkAware.methodologyParameters,
+      };
+    }
+
+    cloned.frameworkAware = frameworkAware;
+  }
+
+  return cloned;
 }
 
 function createDefaultToolDescriptionMap(): Map<string, ToolDescription> {
@@ -102,9 +115,9 @@ export class ToolDescriptionManager extends EventEmitter {
   private defaults: Map<string, ToolDescription>;
   private methodologyDescriptions: Map<string, MethodologyToolDescriptions>;
   private isInitialized: boolean = false;
-  private fileWatcher?: FSWatcher;
+  private fileWatcher: FSWatcher | undefined;
   private isWatching: boolean = false;
-  private reloadDebounceTimer?: NodeJS.Timeout;
+  private reloadDebounceTimer: NodeJS.Timeout | undefined;
   private configManager: ConfigManager;
   private frameworksConfig: FrameworksConfig;
   private frameworksConfigListener: (
@@ -132,9 +145,11 @@ export class ToolDescriptionManager extends EventEmitter {
       'tooling',
       'contracts',
       '_generated',
-      'tool-descriptions.json'
+      'tool-descriptions.contracts.json'
     );
-    this.activeConfigPath = this.configPath;
+    // Active overlays are derived at runtime and should not overwrite generated artifacts.
+    // Persist the active snapshot under runtime-state/ (gitignored).
+    this.activeConfigPath = path.join(serverRoot, 'runtime-state', 'tool-descriptions.active.json');
     this.fallbackConfigPath = this.configPath; // No separate fallback - contracts are SSOT
     this.legacyFallbackPath = this.configPath;
     this.descriptions = new Map();
@@ -201,7 +216,7 @@ export class ToolDescriptionManager extends EventEmitter {
 
         const guide = createGenericGuide(definition);
         const descriptions = guide.getToolDescriptions?.() || {};
-        const methodologyKey = this.normalizeMethodologyKey(guide.methodology);
+        const methodologyKey = this.normalizeMethodologyKey(guide.type);
         const frameworkKey = this.normalizeMethodologyKey(guide.frameworkId);
 
         if (methodologyKey) {
@@ -269,7 +284,7 @@ export class ToolDescriptionManager extends EventEmitter {
     source: 'active' | 'fallback' | 'legacy' | 'defaults';
     path: string;
   }> {
-    // Load from generated tool-descriptions.json (contracts are SSOT)
+    // Load from generated tool-descriptions.contracts.json (contracts are SSOT)
     const generated = await this.readToolDescriptionsConfig(this.configPath);
     if (generated) {
       return { config: generated, source: 'active', path: this.configPath };
@@ -278,7 +293,7 @@ export class ToolDescriptionManager extends EventEmitter {
     // Fallback to in-memory defaults if generated file missing
     // This should only happen if contracts weren't generated - run `npm run generate:contracts`
     this.logger.warn(
-      `[ToolDescriptionManager] Generated tool-descriptions.json not found at ${this.configPath}. ` +
+      `[ToolDescriptionManager] Generated tool-descriptions.contracts.json not found at ${this.configPath}. ` +
         `Run 'npm run generate:contracts' to generate from contracts. Using in-memory defaults.`
     );
     return {
@@ -311,7 +326,7 @@ export class ToolDescriptionManager extends EventEmitter {
 
       return {
         activeFramework: activeFramework?.id,
-        activeMethodology: activeFramework?.methodology ?? activeFramework?.id,
+        activeMethodology: activeFramework?.type ?? activeFramework?.id,
         frameworkSystemEnabled: state?.frameworkSystemEnabled,
       };
     } catch (error) {
@@ -363,14 +378,21 @@ export class ToolDescriptionManager extends EventEmitter {
       tools[name] = baseDescription;
     }
 
-    return {
+    const generatedConfig: ToolDescriptionsConfig = {
       ...baseConfig,
       tools,
-      activeFramework: activeContext.activeFramework,
-      activeMethodology: activeContext.activeMethodology,
       generatedAt: new Date().toISOString(),
       generatedFrom: baseConfig.generatedFrom ?? 'fallback',
     };
+
+    if (activeContext.activeFramework) {
+      generatedConfig.activeFramework = activeContext.activeFramework;
+    }
+    if (activeContext.activeMethodology) {
+      generatedConfig.activeMethodology = activeContext.activeMethodology;
+    }
+
+    return generatedConfig;
   }
 
   private async maybePersistActiveConfig(config: ToolDescriptionsConfig): Promise<boolean> {

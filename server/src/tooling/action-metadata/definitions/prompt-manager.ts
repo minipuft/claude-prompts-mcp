@@ -88,6 +88,32 @@ const promptManagerActions = [
     description:
       'Explains available actions, expected arguments, and known risks using metadata-driven summaries.',
   },
+  {
+    id: 'history',
+    displayName: 'Version History',
+    category: 'versioning',
+    status: 'working',
+    requiredArgs: ['id'],
+    description:
+      'View version history for a prompt. Shows past versions with timestamps and diffs.',
+  },
+  {
+    id: 'rollback',
+    displayName: 'Rollback Version',
+    category: 'versioning',
+    status: 'working',
+    requiredArgs: ['id', 'version'],
+    description:
+      'Rollback a prompt to a previous version. Requires confirm:true. Current state is saved before rollback.',
+  },
+  {
+    id: 'compare',
+    displayName: 'Compare Versions',
+    category: 'versioning',
+    status: 'working',
+    requiredArgs: ['id', 'from_version', 'to_version'],
+    description: 'Compare two versions of a prompt showing unified diff between snapshots.',
+  },
 ] as const;
 
 export type PromptManagerActionId = (typeof promptManagerActions)[number]['id'];

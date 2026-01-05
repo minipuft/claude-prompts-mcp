@@ -1,16 +1,16 @@
-// @lifecycle canonical - Validates framework identifiers against the registry.
+// @lifecycle canonical - Validates framework identifiers against the manager.
 /**
  * Framework Validator
  * Centralized validation and normalization for framework identifiers.
  *
  * This class serves as the single entrypoint for verifying framework identifiers
  * across parsing, execution, and state-management components. All lookups are
- * delegated to the FrameworkRegistry to ensure a single source of truth.
+ * delegated to the FrameworkManager to ensure a single source of truth.
  */
 import { Logger } from '../logging/index.js';
 import { ValidationError, type ErrorContext } from '../utils/errorHandling.js';
-import { FrameworkRegistry } from './methodology/framework-registry.js';
 
+import type { FrameworkManager } from './framework-manager.js';
 import type { FrameworkDefinition } from './types/index.js';
 
 export interface FrameworkValidationOptions {
@@ -41,7 +41,7 @@ export class FrameworkValidator {
   private readonly defaultStage: string;
 
   constructor(
-    private readonly registry: FrameworkRegistry,
+    private readonly frameworkManager: FrameworkManager,
     private readonly logger: Logger,
     config: FrameworkValidatorConfig = {}
   ) {
@@ -61,7 +61,7 @@ export class FrameworkValidator {
       throw this.buildMissingFrameworkError(frameworkId, options);
     }
 
-    const definition = this.registry.getFramework(normalizedId);
+    const definition = this.frameworkManager.getFramework(normalizedId);
     if (!definition) {
       throw this.buildMissingFrameworkError(frameworkId, options);
     }
@@ -92,10 +92,10 @@ export class FrameworkValidator {
     }
 
     if (options.enabledOnly) {
-      return this.registry.isFrameworkEnabled(normalizedId);
+      return this.frameworkManager.isFrameworkEnabled(normalizedId);
     }
 
-    return Boolean(this.registry.getFramework(normalizedId));
+    return Boolean(this.frameworkManager.getFramework(normalizedId));
   }
 
   /**
@@ -111,7 +111,7 @@ export class FrameworkValidator {
       return null;
     }
 
-    const validation = this.registry.validateIdentifier(trimmed);
+    const validation = this.frameworkManager.validateIdentifier(trimmed);
     if (!validation.valid) {
       return null;
     }
@@ -124,7 +124,7 @@ export class FrameworkValidator {
     options: FrameworkValidationOptions
   ): ValidationError {
     const sanitized = frameworkId?.trim() ?? '';
-    const availableFrameworks = this.registry.getFrameworkIds(false);
+    const availableFrameworks = this.frameworkManager.getFrameworkIds(false);
     const availableList = availableFrameworks.length
       ? availableFrameworks.join(', ')
       : 'none registered';
@@ -159,7 +159,7 @@ export class FrameworkValidator {
     frameworkId: string,
     options: FrameworkValidationOptions
   ): ErrorContext {
-    const availableFrameworks = this.registry.getFrameworkIds(true);
+    const availableFrameworks = this.frameworkManager.getFrameworkIds(true);
     const defaultSuggestions = [
       'Run system_control({ action: "framework", operation: "list" }) to review available frameworks',
       'Ensure the framework prefix matches the registry entry (e.g., @CAGEERF)',
@@ -169,7 +169,7 @@ export class FrameworkValidator {
       action: options.stage ?? this.defaultStage,
       userInput: { frameworkId },
       suggestions: options.context?.suggestions ?? defaultSuggestions,
-      relatedComponents: ['framework-validator', 'framework-registry'],
+      relatedComponents: ['framework-validator', 'framework-manager'],
       ...options.context,
       details: {
         availableFrameworks,

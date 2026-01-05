@@ -185,7 +185,7 @@ describe('JudgeSelectionStage', () => {
       const response = context.response;
       const responseText = (response?.content[0] as { text: string }).text;
 
-      expect(responseText).toContain('@<CAGEERF|ReACT|5W1H|SCAMPER>');
+      expect(responseText).toContain('@<framework>');
       expect(responseText).toContain('#<analytical|procedural|creative|reasoning>');
       expect(responseText).toContain(':: <gate_id');
     });

@@ -1,7 +1,43 @@
 #!/usr/bin/env sh
 
-# Navigate to server directory and run lint-staged
-cd server && npx lint-staged
+# Navigate to server directory
+cd server
+
+# Contract integrity check: If contracts changed, generated files must also change
+CONTRACTS_CHANGED=$(git diff --cached --name-only | grep "tooling/contracts/.*\.json" || true)
+GENERATED_CHANGED=$(git diff --cached --name-only | grep "_generated/" || true)
+
+if [ -n "$CONTRACTS_CHANGED" ] && [ -z "$GENERATED_CHANGED" ]; then
+  echo ""
+  echo "❌ Contract files modified but generated files not updated!"
+  echo ""
+  echo "Modified contracts:"
+  echo "$CONTRACTS_CHANGED"
+  echo ""
+  echo "Run: npm run generate:contracts"
+  echo "Then stage the generated files: git add src/tooling/contracts/_generated/"
+  exit 1
+fi
+
+# Prevent direct edits to generated TypeScript files
+MANUAL_GEN_EDITS=$(git diff --cached --name-only | grep "_generated/.*\.ts$" || true)
+if [ -n "$MANUAL_GEN_EDITS" ]; then
+  # Check if contracts were also changed (legitimate regeneration)
+  if [ -z "$CONTRACTS_CHANGED" ]; then
+    echo ""
+    echo "❌ Direct edits to generated files detected without contract changes!"
+    echo ""
+    echo "Modified generated files:"
+    echo "$MANUAL_GEN_EDITS"
+    echo ""
+    echo "Edit contracts in tooling/contracts/*.json instead, then run:"
+    echo "  npm run generate:contracts"
+    exit 1
+  fi
+fi
+
+# Run lint-staged (local install; no network)
+npm run -s lint:staged
 
 # Check exit status and provide feedback
 if [ $? -ne 0 ]; then

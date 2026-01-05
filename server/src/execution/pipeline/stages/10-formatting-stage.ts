@@ -85,25 +85,37 @@ export class ResponseFormattingStage extends BasePipelineStage {
         startTime: Date.now(),
         endTime: Date.now(),
         frameworkEnabled: Boolean(context.frameworkContext),
-        frameworkUsed: context.frameworkContext?.selectedFramework?.name,
-        stepsExecuted: sessionContext?.currentStep,
-        sessionId: sessionContext?.sessionId,
-        chainId: sessionContext?.chainId ?? context.parsedCommand?.chainId,
-        chainProgress: sessionContext
-          ? {
-              currentStep: sessionContext.currentStep,
-              totalSteps: sessionContext.totalSteps,
-              status:
-                typeof sessionContext.totalSteps === 'number' &&
-                typeof sessionContext.currentStep === 'number' &&
-                sessionContext.totalSteps > 0 &&
-                sessionContext.currentStep >= sessionContext.totalSteps
-                  ? 'complete'
-                  : 'in_progress',
-            }
-          : undefined,
         success: true,
       };
+
+      const frameworkUsed = context.frameworkContext?.selectedFramework?.name;
+      if (frameworkUsed) {
+        formatterContext.frameworkUsed = frameworkUsed;
+      }
+
+      if (sessionContext?.currentStep !== undefined) {
+        formatterContext.stepsExecuted = sessionContext.currentStep;
+      }
+
+      if (sessionContext?.sessionId !== undefined) {
+        formatterContext.sessionId = sessionContext.sessionId;
+      }
+
+      const chainId = sessionContext?.chainId ?? context.parsedCommand?.chainId;
+      if (chainId !== undefined) {
+        formatterContext.chainId = chainId;
+      }
+
+      if (sessionContext?.currentStep !== undefined && sessionContext.totalSteps !== undefined) {
+        formatterContext.chainProgress = {
+          currentStep: sessionContext.currentStep,
+          totalSteps: sessionContext.totalSteps,
+          status:
+            sessionContext.totalSteps > 0 && sessionContext.currentStep >= sessionContext.totalSteps
+              ? 'complete'
+              : 'in_progress',
+        };
+      }
 
       // Use variant-specific formatting logic
       let responseContent: string;
@@ -165,6 +177,18 @@ export class ResponseFormattingStage extends BasePipelineStage {
         : JSON.stringify(context.executionResults!.content, null, 2);
     sections.push(baseContent);
 
+    // Add script tool confirmation request if pending
+    const confirmationRequired = context.state.scripts?.confirmationRequired;
+    if (confirmationRequired) {
+      sections.push(this.formatConfirmationRequest(confirmationRequired));
+    }
+
+    // Add script validation errors if present (blocks auto-execute)
+    const validationErrors = context.state.scripts?.validationErrors;
+    if (validationErrors && validationErrors.length > 0) {
+      sections.push(this.formatValidationErrors(validationErrors));
+    }
+
     // Add gate instructions for chain execution
     if (gateGuidanceEnabled && context.gateInstructions) {
       sections.push(context.gateInstructions);
@@ -203,6 +227,18 @@ export class ResponseFormattingStage extends BasePipelineStage {
         : JSON.stringify(context.executionResults!.content, null, 2);
     sections.push(baseContent);
 
+    // Add script tool confirmation request if pending
+    const confirmationRequired = context.state.scripts?.confirmationRequired;
+    if (confirmationRequired) {
+      sections.push(this.formatConfirmationRequest(confirmationRequired));
+    }
+
+    // Add script validation errors if present (blocks auto-execute)
+    const validationErrors = context.state.scripts?.validationErrors;
+    if (validationErrors && validationErrors.length > 0) {
+      sections.push(this.formatValidationErrors(validationErrors));
+    }
+
     // Add gate instructions if present (for inline gates via ::)
     if (gateGuidanceEnabled && context.gateInstructions) {
       sections.push(context.gateInstructions);
@@ -216,6 +252,96 @@ export class ResponseFormattingStage extends BasePipelineStage {
     }
 
     return sections.join('\n\n');
+  }
+
+  /**
+   * Formats script tool confirmation request for user approval.
+   * Shows matched parameters so users can verify what will be executed.
+   */
+  private formatConfirmationRequest(
+    confirmation: NonNullable<
+      typeof ExecutionContext.prototype.state.scripts
+    >['confirmationRequired']
+  ): string {
+    if (!confirmation) return '';
+
+    const sections: string[] = [];
+
+    for (const tool of confirmation.tools) {
+      const lines: string[] = [`⚠️ **Tool Confirmation**: \`${tool.toolId}\``];
+
+      // Show the confirmation message from tool.yaml
+      if (tool.message) {
+        lines.push(`> ${tool.message}`);
+      }
+
+      // Show detected parameters for transparency
+      if (tool.matchedParams && tool.matchedParams.length > 0) {
+        lines.push(`**Detected parameters:** ${tool.matchedParams.join(', ')}`);
+      }
+
+      // Show a summary of extracted values (concise format)
+      if (tool.extractedInputs && Object.keys(tool.extractedInputs).length > 0) {
+        const summary = this.formatExtractedInputsSummary(tool.extractedInputs);
+        lines.push(`**Values:** ${summary}`);
+      }
+
+      lines.push(`→ To proceed: \`${tool.resumeCommand}\``);
+      sections.push(lines.join('\n'));
+    }
+
+    return sections.join('\n\n');
+  }
+
+  /**
+   * Formats validation errors from script tool validation.
+   * Displayed when autoApproveOnValid validation fails.
+   */
+  private formatValidationErrors(errors: string[]): string {
+    const lines: string[] = [
+      '\n---',
+      '## ❌ Validation Failed',
+      '',
+      'The following validation errors prevented auto-execution:',
+      '',
+    ];
+
+    for (const error of errors) {
+      lines.push(`- ${error}`);
+    }
+
+    lines.push('');
+    lines.push('**Fix the issues above** and try again with updated parameters.');
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Formats extracted inputs as a concise summary for confirmation display.
+   * Truncates long values and arrays for readability.
+   */
+  private formatExtractedInputsSummary(inputs: Record<string, unknown>): string {
+    const parts: string[] = [];
+
+    for (const [key, value] of Object.entries(inputs)) {
+      if (value === undefined || value === null) continue;
+
+      let display: string;
+      if (Array.isArray(value)) {
+        display = `[${value.length} items]`;
+      } else if (typeof value === 'object') {
+        const keys = Object.keys(value);
+        display = `{${keys.length} fields}`;
+      } else if (typeof value === 'string' && value.length > 30) {
+        display = `"${value.substring(0, 27)}..."`;
+      } else {
+        display = JSON.stringify(value);
+      }
+
+      parts.push(`${key}=${display}`);
+    }
+
+    return parts.join(', ') || '(none)';
   }
 
   /**

@@ -12,18 +12,18 @@
  * - Command validation and sanitization
  */
 
-import { stripStyleOperators, normalizeSymbolicPrefixes } from './parser-utils.js';
+import { normalizeSymbolicPrefixes, stripStyleOperators } from './parser-utils.js';
 import { SymbolicCommandParser, createSymbolicCommandParser } from './symbolic-operator-parser.js';
 import { Logger } from '../../logging/index.js';
-import { ValidationError, PromptError, safeJsonParse } from '../../utils/index.js';
+import { PromptError, ValidationError, safeJsonParse } from '../../utils/index.js';
 
 import type { ConvertedPrompt } from '../../types/index.js';
 import type { ExecutionModifier, ExecutionModifiers } from '../types.js';
 import type { CommandParseResultBase } from './types/command-parse-types.js';
 import type {
-  SymbolicExecutionPlan,
   OperatorDetectionResult,
   SymbolicCommandParseResult,
+  SymbolicExecutionPlan,
 } from './types/operator-types.js';
 
 export type CommandParseResult = CommandParseResultBase<
@@ -88,7 +88,10 @@ export class UnifiedCommandParser {
       return { command };
     }
 
-    const modifierKey = match[1].toLowerCase();
+    const modifierKey = match[1]?.toLowerCase();
+    if (!modifierKey) {
+      return { command };
+    }
     const modifier = VALID_MODIFIERS[modifierKey];
 
     if (!modifier) {
@@ -134,7 +137,8 @@ export class UnifiedCommandParser {
     }
 
     const trimmed = command.trim();
-    const { command: commandWithoutModifier, modifier } = this.extractModifier(trimmed);
+    const { command: commandWithoutModifier, modifier: modifierToken } =
+      this.extractModifier(trimmed);
     if (!commandWithoutModifier || commandWithoutModifier.trim().length === 0) {
       throw new ValidationError('Command cannot be empty after applying modifier');
     }
@@ -167,17 +171,23 @@ export class UnifiedCommandParser {
             if (hadPrefixes) {
               result.metadata.prefixesNormalized = true;
             }
-            if (modifier) {
-              if (result.modifier && result.modifier !== modifier) {
+            if (modifierToken) {
+              const hasExistingModifier =
+                result.modifiers?.clean === true ||
+                result.modifiers?.judge === true ||
+                result.modifiers?.lean === true ||
+                result.modifiers?.framework === true;
+              if (hasExistingModifier) {
                 throw new ValidationError(
-                  `Only one %modifier is allowed per command. Found "${result.modifier}" and "${modifier}".`
+                  'Only one %modifier is allowed per command. Remove the additional modifier.'
                 );
               }
-              if (!result.modifier) {
-                result.modifier = modifier;
-                result.modifiers = this.buildModifiers(modifier);
-                result.metadata.modifier = modifier;
+
+              const modifiersValue = this.buildModifiers(modifierToken);
+              if (modifiersValue) {
+                result.modifiers = modifiersValue;
               }
+              result.metadata.modifierToken = modifierToken;
             }
 
             // Validate that the prompt ID exists
@@ -278,6 +288,9 @@ export class UnifiedCommandParser {
         }
 
         const basePromptId = firstPromptMatch[1];
+        if (!basePromptId) {
+          return null;
+        }
         const baseArgs = (firstPromptMatch[2] ?? '').trim();
 
         return this.symbolicParser.buildParseResult(command, operators, basePromptId, baseArgs);
@@ -302,6 +315,9 @@ export class UnifiedCommandParser {
         if (!match) return null;
 
         const [, prefix, rawPromptId, rawArgs] = match;
+        if (!rawPromptId) {
+          return null;
+        }
 
         // Clean up prompt ID: convert spaces and hyphens to underscores, normalize
         const promptId = rawPromptId
@@ -366,7 +382,9 @@ export class UnifiedCommandParser {
           return null;
         }
 
-        const { command: innerCommand, modifier } = this.extractModifier(String(actualCommand));
+        const { command: innerCommand, modifier: modifierToken } = this.extractModifier(
+          String(actualCommand)
+        );
 
         // Recursively parse the inner command
         const simpleStrategy = this.createSimpleCommandStrategy();
@@ -377,27 +395,33 @@ export class UnifiedCommandParser {
         const innerResult = simpleStrategy.parse(innerCommand);
         if (!innerResult) return null;
 
-        if (modifier) {
-          innerResult.modifier = modifier;
-          innerResult.modifiers = this.buildModifiers(modifier);
-          innerResult.metadata.modifier = modifier;
-          innerResult.metadata.originalCommand =
-            typeof data.command === 'string' ? data.command : command;
+        if (modifierToken) {
+          const modifiersValue = this.buildModifiers(modifierToken);
+          if (modifiersValue) {
+            innerResult.modifiers = modifiersValue;
+          }
+          if (innerResult.metadata) {
+            innerResult.metadata.modifierToken = modifierToken;
+            innerResult.metadata.originalCommand =
+              typeof data.command === 'string' ? data.command : command;
+          }
         }
 
+        const mods = innerResult.modifiers;
         return {
           promptId: innerResult.promptId,
           rawArgs: data.args ? JSON.stringify(data.args) : innerResult.rawArgs,
           format: 'json',
           confidence,
-          modifier: innerResult.modifier,
-          modifiers: innerResult.modifiers,
+          ...(mods !== undefined && { modifiers: mods }),
           metadata: {
             originalCommand: command,
             parseStrategy: 'json',
             detectedFormat: 'JSON wrapper with inner command',
             warnings: innerResult.metadata?.warnings ?? [],
-            modifier: innerResult.metadata?.modifier,
+            ...(innerResult.metadata?.modifierToken !== undefined && {
+              modifierToken: innerResult.metadata.modifierToken,
+            }),
           },
         };
       },
@@ -497,25 +521,37 @@ export class UnifiedCommandParser {
    * Simple Levenshtein distance calculation
    */
   private levenshteinDistance(a: string, b: string): number {
-    const matrix = Array(b.length + 1)
+    const matrix: number[][] = Array(b.length + 1)
       .fill(null)
-      .map(() => Array(a.length + 1).fill(null));
+      .map(() => Array<number>(a.length + 1).fill(0));
 
-    for (let i = 0; i <= a.length; i++) matrix[0][i] = i;
-    for (let j = 0; j <= b.length; j++) matrix[j][0] = j;
+    for (let i = 0; i <= a.length; i++) {
+      const row = matrix[0];
+      if (row) row[i] = i;
+    }
+    for (let j = 0; j <= b.length; j++) {
+      const row = matrix[j];
+      if (row) row[0] = j;
+    }
 
     for (let j = 1; j <= b.length; j++) {
       for (let i = 1; i <= a.length; i++) {
-        const indicator = a[i - 1] === b[j - 1] ? 0 : 1;
-        matrix[j][i] = Math.min(
-          matrix[j][i - 1] + 1,
-          matrix[j - 1][i] + 1,
-          matrix[j - 1][i - 1] + indicator
-        );
+        const aChar = a[i - 1];
+        const bChar = b[j - 1];
+        const indicator = aChar === bChar ? 0 : 1;
+        const currentRow = matrix[j];
+        const prevRow = matrix[j - 1];
+        if (currentRow && prevRow) {
+          const left = currentRow[i - 1] ?? 0;
+          const up = prevRow[i] ?? 0;
+          const diag = prevRow[i - 1] ?? 0;
+          currentRow[i] = Math.min(left + 1, up + 1, diag + indicator);
+        }
       }
     }
 
-    return matrix[b.length][a.length];
+    const finalRow = matrix[b.length];
+    return finalRow?.[a.length] ?? Math.max(a.length, b.length);
   }
 
   /**

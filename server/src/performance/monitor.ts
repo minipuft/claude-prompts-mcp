@@ -72,7 +72,7 @@ export class PerformanceMonitor {
   // Performance tracking
   private metricsHistory: PerformanceMetrics[] = [];
   private maxHistorySize = 1000; // Keep last 1000 measurements
-  private monitoringInterval?: NodeJS.Timeout;
+  private monitoringInterval: NodeJS.Timeout | undefined;
   private alertingCallbacks: ((alert: PerformanceAlert) => void)[] = [];
 
   // Performance thresholds
@@ -106,19 +106,20 @@ export class PerformanceMonitor {
    * Check if we're running in a test environment
    */
   private isTestEnvironment(): boolean {
+    const env = process.env;
     return (
-      process.env.NODE_ENV === 'test' ||
+      env['NODE_ENV'] === 'test' ||
       process.argv.includes('--suppress-debug') ||
       process.argv.includes('--test-mode') ||
       // Detect GitHub Actions CI environment
-      process.env.GITHUB_ACTIONS === 'true' ||
-      process.env.CI === 'true' ||
+      env['GITHUB_ACTIONS'] === 'true' ||
+      env['CI'] === 'true' ||
       // Detect common test runner patterns
       process.argv.some(
         (arg) => arg.includes('test') || arg.includes('jest') || arg.includes('mocha')
       ) ||
       // Detect if called from integration test scripts
-      process.argv[1]?.includes('tests/scripts/')
+      (process.argv[1]?.includes('tests/scripts/') ?? false)
     );
   }
 
@@ -281,6 +282,10 @@ export class PerformanceMonitor {
 
     const latestMetrics = relevantMetrics[relevantMetrics.length - 1];
     const earliestMetrics = relevantMetrics[0];
+
+    if (!latestMetrics || !earliestMetrics) {
+      return undefined;
+    }
 
     const totalExecutions =
       latestMetrics.execution.totalExecutions - earliestMetrics.execution.totalExecutions;

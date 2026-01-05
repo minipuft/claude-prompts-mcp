@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/claude-prompts.svg)](https://www.npmjs.com/package/claude-prompts)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18.18-brightgreen.svg)](https://nodejs.org/)
 
 MCP server for prompt management, thinking frameworks, and quality gates. Hot-reloads prompts, injects structured reasoning, enforces output validation—all through MCP tools Claude can call directly.
 
@@ -25,7 +25,7 @@ Add to Claude Desktop (`~/.config/claude/claude_desktop_config.json`):
 }
 ```
 
-Restart Claude Desktop. Test with: `prompt_manager(action: "list")`
+Restart Claude Desktop. Test with: `resource_manager(resource_type: "prompt", action: "list")`
 
 ---
 
@@ -35,11 +35,11 @@ Restart Claude Desktop. Test with: `prompt_manager(action: "list")`
 
 **Problem**: Prompt engineering is slow. Edit → restart → test → repeat. And you're debugging prompt issues manually.
 
-**Solution**: Just ask Claude to fix it. Describe the problem, Claude updates the prompt via `prompt_manager`, you test immediately. No manual editing, no restart.
+**Solution**: Just ask Claude to fix it. Describe the problem, Claude updates the prompt via `resource_manager`, you test immediately. No manual editing, no restart.
 
 ```text
 User: "The code_review prompt is too verbose"
-Claude: prompt_manager(action:"update", id:"code_review", ...)
+Claude: resource_manager(resource_type:"prompt", action:"update", id:"code_review", ...)
 User: "Test it"
 Claude: prompt_engine(command:">>code_review")  # Updated version runs instantly
 ```
@@ -75,9 +75,25 @@ prompt_engine(command: "Summarize this :: 'under 200 words' :: 'include statisti
 
 ---
 
+### 📜 Version History — Undo and compare changes
+
+**Problem**: You edited a prompt and broke something. No undo, no diff, no way back.
+
+**Solution**: Every update auto-saves a version snapshot. View history, compare with diffs, rollback to any previous state.
+
+```text
+resource_manager(resource_type:"prompt", action:"history", id:"code_review")
+resource_manager(resource_type:"prompt", action:"compare", id:"code_review", from_version:1, to_version:3)
+resource_manager(resource_type:"prompt", action:"rollback", id:"code_review", version:2, confirm:true)
+```
+
+**Expect**: Full version history with timestamps. Rollback auto-saves current state first—you can always undo.
+
+---
+
 ## MCP Tools
 
-Three tools Claude can call:
+Three consolidated tools Claude can call:
 
 ### `prompt_engine` — Execute prompts and chains
 
@@ -92,13 +108,17 @@ prompt_engine(command: "@CAGEERF >>analysis :: 'cite sources'")
 prompt_engine(command: "research --> analyze --> summarize")
 ```
 
-### `prompt_manager` — Create, update, delete prompts
+### `resource_manager` — Unified CRUD for prompts, gates, and methodologies
 
 ```bash
-prompt_manager(action: "list")
-prompt_manager(action: "create", id: "my_prompt", name: "My Prompt", ...)
-prompt_manager(action: "update", id: "my_prompt", ...)
-prompt_manager(action: "reload")  # After external file edits
+resource_manager(resource_type: "prompt", action: "list")
+resource_manager(resource_type: "prompt", action: "create", id: "my_prompt", name: "My Prompt", ...)
+resource_manager(resource_type: "prompt", action: "update", id: "my_prompt", ...)
+
+# Version history
+resource_manager(resource_type: "prompt", action: "history", id: "my_prompt")
+resource_manager(resource_type: "prompt", action: "compare", id: "my_prompt", from_version: 1, to_version: 3)
+resource_manager(resource_type: "prompt", action: "rollback", id: "my_prompt", version: 2, confirm: true)
 ```
 
 ### `system_control` — Runtime administration
@@ -134,7 +154,7 @@ The package includes example prompts, but the real power comes from **your own p
 - **Project-specific templates** — Code review prompts tailored to your stack
 - **Team workflows** — Standardized analysis chains your whole team uses
 - **Domain expertise** — Prompts encoding your specific domain knowledge
-- **Persistent iteration** — Claude improves your prompts via `prompt_manager`, and they persist
+- **Persistent iteration** — Claude improves your prompts via `resource_manager`, and they persist
 
 ---
 
@@ -146,7 +166,7 @@ The package includes example prompts, but the real power comes from **your own p
 npx claude-prompts --init=~/my-prompts
 ```
 
-This creates `~/my-prompts/prompts/promptsConfig.json` with three starter prompts.
+This creates `~/my-prompts/prompts/` with starter prompts (`prompt.yaml` + templates).
 
 **2. Point Claude Desktop to your workspace:**
 
@@ -169,7 +189,7 @@ Edit `~/.config/claude/claude_desktop_config.json`:
 **3. Restart Claude Desktop and test:**
 
 ```
-prompt_manager(action: "list")
+resource_manager(resource_type:"prompt", action:"list")
 prompt_engine(command: ">>quick_review code:'function add(a,b) { return a + b }'")
 ```
 
@@ -177,10 +197,10 @@ prompt_engine(command: ">>quick_review code:'function add(a,b) { return a + b }'
 
 ```text
 User: "Make the quick_review prompt also check for performance issues"
-Claude: prompt_manager(action:"update", id:"quick_review", ...)
+Claude: resource_manager(resource_type:"prompt", action:"update", id:"quick_review", ...)
 ```
 
-Claude updates your `promptsConfig.json` directly via `prompt_manager`. Changes apply instantly—no restart needed. This is the recommended workflow: **describe what you want, let Claude implement it.**
+Changes apply instantly—no restart needed. This is the recommended workflow: **describe what you want, let Claude implement it.**
 
 ---
 
@@ -189,13 +209,43 @@ Claude updates your `promptsConfig.json` directly via `prompt_manager`. Changes 
 ```
 my-workspace/
 ├── prompts/
-│   └── promptsConfig.json    # Your custom prompts (required)
+│   └── <category>/<id>/      # Prompt directories (required)
+│       ├── prompt.yaml       # Metadata, arguments, tools reference
+│       ├── user-message.md   # Template content
+│       └── tools/            # Script tools (optional)
+│           └── <tool_id>/
+│               ├── tool.yaml    # Config (trigger, runtime, timeout)
+│               ├── schema.json  # Input validation schema
+│               └── script.py    # Validation logic
 ├── config.json               # Server settings (optional)
 ├── methodologies/            # Custom thinking frameworks (optional)
 └── gates/                    # Custom quality gates (optional)
 ```
 
-**Minimum required:** Just `prompts/promptsConfig.json` with at least one prompt.
+**Minimum required:** Just `prompts/` with at least one prompt directory.
+
+Script tools enable validation scripts that auto-trigger on schema match. See [Script Tools Guide](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/script-tools.md) for details.
+
+---
+
+## Releasing (Maintainers)
+
+This repo uses a Release PR flow to ensure the npm package version and changelog are committed before publishing.
+
+- Changelog: `server/CHANGELOG.md`
+- Package version: `server/package.json#version`
+- Tag format: `claude-prompts-vX.Y.Z` (created by release-please)
+
+**One-time GitHub setup**
+- Add repo secret `RELEASE_PLEASE_TOKEN` (PAT) so release tags/releases can trigger workflows.
+- Add repo secret `NPM_TOKEN` (npm automation token for `claude-prompts`).
+- (Recommended) Create GitHub Environment `npm` with required reviewers to gate publishing.
+
+**Release steps**
+1. Merge normal work into `main`.
+2. Release Please opens a Release PR; review the version bump + `server/CHANGELOG.md`.
+3. Merge the Release PR.
+4. Publish the draft GitHub Release created for the new tag (this triggers the npm publish workflow).
 
 ---
 
@@ -236,7 +286,7 @@ my-workspace/
       "command": "npx",
       "args": ["-y", "claude-prompts@latest"],
       "env": {
-        "MCP_PROMPTS_PATH": "/home/user/projects/my-app/prompts.json"
+        "MCP_PROMPTS_PATH": "/home/user/projects/my-app/prompts"
       }
     }
   }
@@ -250,7 +300,7 @@ my-workspace/
 | Variable | Purpose | Example |
 |----------|---------|---------|
 | `MCP_WORKSPACE` | Base directory containing prompts/, config.json | `/home/user/my-prompts` |
-| `MCP_PROMPTS_PATH` | Direct path to prompts config file | `/path/to/promptsConfig.json` |
+| `MCP_PROMPTS_PATH` | Direct path to a prompts directory | `/path/to/prompts` |
 | `MCP_METHODOLOGIES_PATH` | Custom methodologies directory | `/path/to/methodologies` |
 | `MCP_GATES_PATH` | Custom gates directory | `/path/to/gates` |
 | `MCP_CONFIG_PATH` | Custom server config.json | `/path/to/config.json` |
@@ -267,7 +317,7 @@ my-workspace/
 npx claude-prompts --workspace=/path/to/workspace
 
 # Override specific paths
-npx claude-prompts --prompts=/path/to/prompts.json
+npx claude-prompts --prompts=/path/to/prompts
 
 # Debugging
 npx claude-prompts --verbose
@@ -280,7 +330,7 @@ npx claude-prompts --startup-test --verbose
 | Flag | Purpose |
 |------|---------|
 | `--workspace=/path` | Base directory for all user assets |
-| `--prompts=/path` | Direct path to prompts config |
+| `--prompts=/path` | Direct path to a prompts directory |
 | `--methodologies=/path` | Custom methodologies directory |
 | `--gates=/path` | Custom gates directory |
 | `--config=/path` | Custom server config.json |
@@ -292,7 +342,7 @@ npx claude-prompts --startup-test --verbose
 ### Troubleshooting
 
 **"No prompts found"**
-- Check `MCP_WORKSPACE` points to directory containing `prompts/promptsConfig.json`
+- Check `MCP_WORKSPACE` points to a directory containing `prompts/`
 - Run `npx claude-prompts --startup-test --verbose` to see resolved paths
 
 **"Methodology not found"**
@@ -303,8 +353,8 @@ npx claude-prompts --startup-test --verbose
 - Ensure the user running Claude Desktop can read your workspace directory
 
 **Changes not appearing**
-- Use `prompt_manager(action: "reload")` after external file edits
-- Or restart Claude Desktop
+- Confirm you're editing files under your configured `MCP_WORKSPACE` / `MCP_PROMPTS_PATH`
+- If needed, restart Claude Desktop (most clients restart MCP servers on reconnect)
 
 ---
 
@@ -312,11 +362,11 @@ npx claude-prompts --startup-test --verbose
 
 Full guides in the [main repository](https://github.com/minipuft/claude-prompts-mcp):
 
-- [Architecture](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/architecture.md) — System design
-- [MCP Tooling](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/mcp-tooling-guide.md) — Complete tool reference
-- [Prompt Authoring](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/prompt-authoring-guide.md) — Template structure
-- [Chains](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/chains.md) — Multi-step patterns
-- [Gates](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/gates.md) — Quality validation
+- [Architecture](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/architecture/overview.md) — System design
+- [MCP Tooling](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/reference/mcp-tools.md) — Complete tool reference
+- [Prompt Authoring](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/prompt-authoring-guide.md) — Template structure
+- [Chains](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/chains.md) — Multi-step patterns
+- [Gates](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/gates.md) — Quality validation
 
 ---
 

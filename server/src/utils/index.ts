@@ -10,6 +10,7 @@ export * from './jsonUtils.js';
 export * from './chainUtils.js';
 export * from './constants.js';
 export * from './yaml/index.js';
+export * from './resource-loader-types.js';
 
 // Re-export framework system from new locations (maintaining backward compatibility)
 export * from '../frameworks/index.js';
@@ -59,7 +60,6 @@ export function clearRequireCache(): void {
   // Use stderr to avoid corrupting STDIO protocol
   console.error(`Cleared ${promptPaths.length} prompt-related modules from require cache`);
 }
-
 
 /**
  * Force garbage collection if available
@@ -203,7 +203,7 @@ export function camelToKebab(str: string): string {
  * Convert kebab-case to camelCase
  */
 export function kebabToCamel(str: string): string {
-  return str.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+  return str.replace(/-([a-z])/g, (g) => (g[1] ? g[1].toUpperCase() : ''));
 }
 
 /**
@@ -222,16 +222,28 @@ export function parseArgs(args: string[]): Record<string, string> {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg.startsWith('--')) {
-      const [key, value] = arg.split('=');
-      if (value !== undefined) {
-        parsed[key.substring(2)] = value;
-      } else if (i + 1 < args.length && !args[i + 1].startsWith('--')) {
-        parsed[key.substring(2)] = args[i + 1];
+    if (!arg?.startsWith('--')) {
+      continue;
+    }
+
+    const [key, value] = arg.split('=');
+    const normalizedKey = key?.substring(2);
+    if (!normalizedKey) {
+      continue;
+    }
+
+    if (value !== undefined) {
+      parsed[normalizedKey] = value;
+    } else if (i + 1 < args.length) {
+      const nextArg = args[i + 1];
+      if (nextArg !== undefined && !nextArg.startsWith('--')) {
+        parsed[normalizedKey] = nextArg;
         i++;
-      } else {
-        parsed[key.substring(2)] = 'true';
+        continue;
       }
+      parsed[normalizedKey] = 'true';
+    } else {
+      parsed[normalizedKey] = 'true';
     }
   }
 

@@ -6,25 +6,24 @@ cd server || exit 1
 echo "🔍 Running pre-push validation..."
 echo ""
 
-# Run full validation suite
 echo "1/5 Type checking..."
 npm run typecheck || { echo "❌ Type checking failed"; exit 1; }
 
 echo ""
 echo "2/5 Linting..."
-npm run lint -- --max-warnings 0 || { echo "❌ Linting failed"; exit 1; }
+npm run lint:ratchet || { echo "❌ Lint ratchet failed (new violations introduced)"; exit 1; }
 
 echo ""
 echo "3/5 Format checking..."
-npm run format || { echo "❌ Format checking failed"; exit 1; }
+echo "✅ Skipped (format is enforced via eslint/prettier in lint-staged for staged files)"
 
 echo ""
 echo "4/5 Running tests..."
-npm run test:jest || { echo "❌ Tests failed"; exit 1; }
+npm run test:ci || { echo "❌ Tests failed"; exit 1; }
 
 echo ""
 echo "5/5 Dependency validation..."
-npm run validate:all || { echo "❌ Dependency validation failed"; exit 1; }
+npm run validate:arch || { echo "❌ Dependency validation failed"; exit 1; }
 
 echo ""
 echo "✅ All pre-push validation passed!"

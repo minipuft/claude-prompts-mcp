@@ -37,8 +37,9 @@ let nunjucksEnv: nunjucks.Environment | null = null;
 // Uses __dirname in Jest/CommonJS, import.meta.url in ES modules
 function getPromptTemplatesPath(): string {
   // Check for test environment override first
-  if (process.env.PROMPTS_PATH) {
-    return process.env.PROMPTS_PATH;
+  const promptsPathEnv = process.env['PROMPTS_PATH'];
+  if (promptsPathEnv) {
+    return promptsPathEnv;
   }
 
   if (typeof __dirname !== 'undefined') {
@@ -69,7 +70,7 @@ function getNunjucksEnv(): nunjucks.Environment {
       autoescape: false, // We're generating plain text prompts for LLM, not HTML
       throwOnUndefined: false, // Renders undefined variables as empty string for better compatibility
       watch: false, // Set to true for development to auto-reload templates; false for production
-      noCache: process.env.NODE_ENV === 'development', // Disable cache in development, enable in production
+      noCache: process.env['NODE_ENV'] === 'development', // Disable cache in development, enable in production
       tags: {
         blockStart: '{%',
         blockEnd: '%}',
@@ -143,11 +144,22 @@ export function validateJsonArguments(
     }
   }
 
-  return {
+  const result: {
+    valid: boolean;
+    errors?: string[];
+    sanitizedArgs?: Record<string, string | number | boolean | null | any[]>;
+  } = {
     valid: errors.length === 0,
-    errors: errors.length > 0 ? errors : undefined,
-    sanitizedArgs,
   };
+
+  if (errors.length > 0) {
+    result.errors = errors;
+  }
+  if (Object.keys(sanitizedArgs).length > 0) {
+    result.sanitizedArgs = sanitizedArgs;
+  }
+
+  return result;
 }
 
 /**
@@ -216,4 +228,156 @@ export function processTemplate(
     }
     throw error; // Re-throw the original error
   }
+}
+
+/**
+ * Result of template processing with reference resolution.
+ */
+export interface ProcessTemplateWithRefsResult {
+  /** The fully rendered template content */
+  content: string;
+  /** Script results from referenced prompts, keyed by "promptId:toolId" */
+  scriptResults: Map<string, unknown>;
+  /** All prompt IDs that were resolved during reference resolution */
+  resolvedPromptIds: Set<string>;
+  /** Inline script results from {{script:...}} references */
+  inlineScriptResults?: Map<string, unknown>;
+}
+
+/**
+ * Interface for script reference resolver.
+ * Resolves {{script:id}} patterns in templates.
+ */
+export interface IScriptReferenceResolver {
+  preResolve: (
+    template: string,
+    context: Record<string, unknown>,
+    promptDir?: string
+  ) => Promise<{
+    resolvedTemplate: string;
+    scriptResults: Map<string, unknown>;
+    diagnostics: {
+      scriptsResolved: number;
+      warnings: string[];
+      resolutionTimeMs: number;
+    };
+  }>;
+  hasScriptReferences: (template: string) => boolean;
+}
+
+/**
+ * Options for processTemplateWithRefs.
+ */
+export interface ProcessTemplateOptions {
+  /** Prompt reference resolver for {{ref:...}} patterns */
+  promptResolver?: {
+    preResolve: (
+      template: string,
+      context: Record<string, unknown>
+    ) => Promise<{
+      resolvedTemplate: string;
+      scriptResults: Map<string, unknown>;
+      resolvedPromptIds: Set<string>;
+    }>;
+  };
+  /** Script reference resolver for {{script:...}} patterns */
+  scriptResolver?: IScriptReferenceResolver;
+  /** Prompt directory for prompt-local script lookup */
+  promptDir?: string;
+}
+
+/**
+ * Processes a template string with {{ref:prompt_id}} and {{script:id}} reference resolution.
+ *
+ * This async wrapper:
+ * 1. Pre-resolves all {{ref:...}} patterns using PromptReferenceResolver
+ * 2. Pre-resolves all {{script:...}} patterns using ScriptReferenceResolver
+ * 3. Processes the resolved template with Nunjucks via processTemplate()
+ *
+ * Use this instead of processTemplate() when templates may contain prompt or script references.
+ *
+ * @param template The template string with placeholders and potential {{ref:...}} or {{script:...}} patterns
+ * @param args The arguments to replace placeholders with
+ * @param specialContext Special context values to replace first
+ * @param resolver Optional PromptReferenceResolver instance for reference resolution (legacy parameter)
+ * @param options Optional options including script resolver
+ * @returns The processed template string with references resolved, plus metadata
+ *
+ * @example
+ * ```typescript
+ * const result = await processTemplateWithRefs(
+ *   'Intro: {{ref:shared_intro}}\nCount: {{script:analyzer.row_count}}',
+ *   { topic: 'AI Safety' },
+ *   {},
+ *   promptResolver,
+ *   { scriptResolver, promptDir: '/path/to/prompt' }
+ * );
+ * console.log(result.content); // Rendered with shared_intro and script output included
+ * ```
+ */
+export async function processTemplateWithRefs(
+  template: string,
+  args: Record<string, unknown>,
+  specialContext: Record<string, string> = {},
+  resolver?: {
+    preResolve: (
+      template: string,
+      context: Record<string, unknown>
+    ) => Promise<{
+      resolvedTemplate: string;
+      scriptResults: Map<string, unknown>;
+      resolvedPromptIds: Set<string>;
+    }>;
+  },
+  options?: ProcessTemplateOptions
+): Promise<ProcessTemplateWithRefsResult> {
+  let resolvedTemplate = template;
+  const scriptResults = new Map<string, unknown>();
+  const resolvedPromptIds = new Set<string>();
+  const inlineScriptResults = new Map<string, unknown>();
+
+  // 1. Resolve {{ref:...}} patterns first (prompt references)
+  const promptResolver = resolver ?? options?.promptResolver;
+  if (promptResolver) {
+    const combinedContext = { ...specialContext, ...args };
+    const preResolveResult = await promptResolver.preResolve(resolvedTemplate, combinedContext);
+    resolvedTemplate = preResolveResult.resolvedTemplate;
+
+    // Copy script results from referenced prompts
+    for (const [key, value] of preResolveResult.scriptResults) {
+      scriptResults.set(key, value);
+    }
+
+    // Copy resolved IDs
+    for (const id of preResolveResult.resolvedPromptIds) {
+      resolvedPromptIds.add(id);
+    }
+  }
+
+  // 2. Resolve {{script:...}} patterns (inline script references)
+  const scriptResolver = options?.scriptResolver;
+  if (scriptResolver?.hasScriptReferences(resolvedTemplate)) {
+    const combinedContext = { ...specialContext, ...args };
+    const scriptResolveResult = await scriptResolver.preResolve(
+      resolvedTemplate,
+      combinedContext,
+      options?.promptDir
+    );
+    resolvedTemplate = scriptResolveResult.resolvedTemplate;
+
+    // Copy inline script results
+    for (const [key, value] of scriptResolveResult.scriptResults) {
+      inlineScriptResults.set(key, value);
+    }
+  }
+
+  // 3. Process with standard Nunjucks template processing
+  const content = processTemplate(resolvedTemplate, args as Record<string, any>, specialContext);
+
+  return {
+    content,
+    scriptResults,
+    resolvedPromptIds,
+    inlineScriptResults: inlineScriptResults.size > 0 ? inlineScriptResults : undefined,
+  };
 }

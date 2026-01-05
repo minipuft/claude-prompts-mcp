@@ -9,10 +9,11 @@
  * Temporary gates can be merged via TemporaryGateRegistry when provided.
  */
 
-import type { GateManager } from '../gate-manager.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
+import type { GateManager } from '../gate-manager.js';
 import type {
+  GateActivationContext,
   GateActivationResult,
   GateDefinitionYaml,
   LightweightGateDefinition,
@@ -20,7 +21,7 @@ import type {
 
 export class GateManagerProvider implements GateDefinitionProvider {
   private readonly gateManager: GateManager;
-  private readonly temporaryGateRegistry?: TemporaryGateRegistry;
+  private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined;
 
   constructor(gateManager: GateManager, temporaryGateRegistry?: TemporaryGateRegistry) {
     this.gateManager = gateManager;
@@ -36,7 +37,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
       }
     }
 
-    const guide = this.gateManager.getGate(gateId);
+    const guide = this.gateManager.get(gateId);
     if (!guide) {
       return null;
     }
@@ -62,11 +63,18 @@ export class GateManagerProvider implements GateDefinitionProvider {
     gateIds: string[],
     context: { promptCategory?: string; framework?: string; explicitRequest?: boolean }
   ): Promise<GateActivationResult> {
-    const activeGuides = this.gateManager.getActiveGates(gateIds, {
-      promptCategory: context.promptCategory,
-      framework: context.framework,
-      explicitRequest: context.explicitRequest,
-    });
+    const activationContext: GateActivationContext = {};
+    if (context.promptCategory) {
+      activationContext.promptCategory = context.promptCategory;
+    }
+    if (context.framework) {
+      activationContext.framework = context.framework;
+    }
+    if (context.explicitRequest !== undefined) {
+      activationContext.explicitRequest = context.explicitRequest;
+    }
+
+    const activeGuides = this.gateManager.getActiveGates(gateIds, activationContext);
 
     const activeGates: LightweightGateDefinition[] = [];
     const guidanceText: string[] = [];
@@ -91,11 +99,11 @@ export class GateManagerProvider implements GateDefinitionProvider {
   }
 
   async listAvailableGates(): Promise<string[]> {
-    return this.gateManager.listGates(true).map((g) => g.gateId);
+    return this.gateManager.list(true).map((g) => g.gateId);
   }
 
   async listAvailableGateDefinitions(): Promise<LightweightGateDefinition[]> {
-    return this.gateManager.listGates(true).reduce<LightweightGateDefinition[]>((acc, guide) => {
+    return this.gateManager.list(true).reduce<LightweightGateDefinition[]>((acc, guide) => {
       const definition = guide.getDefinition?.() as GateDefinitionYaml | undefined;
       if (definition) {
         acc.push(this.toLightweight(definition));
@@ -137,7 +145,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
   }
 
   getStatistics(): { cachedGates: number; totalLoads: number; lastAccess: Date | null } {
-    const stats = this.gateManager.getRegistryStats();
+    const stats = this.gateManager.getStats();
     return {
       cachedGates: stats.enabledGates,
       totalLoads: stats.totalGates,
@@ -160,19 +168,40 @@ export class GateManagerProvider implements GateDefinitionProvider {
   }
 
   private toLightweight(definition: GateDefinitionYaml): LightweightGateDefinition {
-    return {
+    const retryConfig = this.normalizeRetryConfig(definition.retry_config);
+    const lightweight: LightweightGateDefinition = {
       id: definition.id,
       name: definition.name,
       type: definition.type,
       description: definition.description,
-      severity: definition.severity,
-      enforcementMode: definition.enforcementMode,
-      guidance: definition.guidance,
-      pass_criteria: definition.pass_criteria,
-      retry_config: this.normalizeRetryConfig(definition.retry_config),
-      activation: definition.activation,
-      gate_type: definition.gate_type,
     };
+
+    if (definition.severity) {
+      lightweight.severity = definition.severity;
+    }
+    if (definition.enforcementMode) {
+      lightweight.enforcementMode = definition.enforcementMode;
+    }
+    if (definition.guidance) {
+      lightweight.guidance = definition.guidance;
+    }
+    if (definition.pass_criteria) {
+      lightweight.pass_criteria = definition.pass_criteria;
+    }
+    if (retryConfig) {
+      lightweight.retry_config = retryConfig;
+    }
+    if (definition.activation) {
+      lightweight.activation = definition.activation;
+    }
+    if (definition.gate_type) {
+      lightweight.gate_type = definition.gate_type;
+    }
+    if (definition.guidanceFile) {
+      lightweight.guidanceFile = definition.guidanceFile;
+    }
+
+    return lightweight;
   }
 
   private normalizeRetryConfig(

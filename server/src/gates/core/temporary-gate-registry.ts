@@ -116,14 +116,32 @@ export class TemporaryGateRegistry {
     }
 
     const now = Date.now();
-    // Destructure to exclude 'id' from spread to avoid overwriting gateId
-    const { id: _unusedId, ...defWithoutId } = definition;
+    const {
+      id: _unusedId,
+      expires_at,
+      scope_id,
+      pass_criteria,
+      context,
+      target_step_number,
+      apply_to_steps,
+      ...defWithoutId
+    } = definition;
+
     const tempGate: TemporaryGateDefinition = {
       id: gateId,
+      name: defWithoutId.name,
+      type: defWithoutId.type,
+      scope: defWithoutId.scope,
+      description: defWithoutId.description,
+      guidance: defWithoutId.guidance,
+      source: defWithoutId.source,
       created_at: now,
-      expires_at: definition.expires_at || now + this.defaultExpirationMs,
-      scope_id: scopeId,
-      ...defWithoutId,
+      expires_at: expires_at ?? now + this.defaultExpirationMs,
+      ...((scopeId ?? scope_id) ? { scope_id: scopeId ?? scope_id } : {}),
+      ...(pass_criteria !== undefined ? { pass_criteria } : {}),
+      ...(context !== undefined ? { context } : {}),
+      ...(target_step_number !== undefined ? { target_step_number } : {}),
+      ...(apply_to_steps !== undefined ? { apply_to_steps } : {}),
     };
 
     // Store the gate
@@ -194,7 +212,7 @@ export class TemporaryGateRegistry {
    * Convert temporary gate to standard gate definition
    */
   convertToStandardGate(tempGate: TemporaryGateDefinition): GateDefinition {
-    return {
+    const base: GateDefinition = {
       id: tempGate.id,
       name: tempGate.name,
       type: tempGate.type,
@@ -202,7 +220,6 @@ export class TemporaryGateRegistry {
       requirements: [], // Temporary gates use simplified criteria
       failureAction: 'retry',
       guidance: tempGate.guidance,
-      pass_criteria: tempGate.pass_criteria,
       retry_config: {
         max_attempts: 3,
         improvement_hints: true,
@@ -212,16 +229,21 @@ export class TemporaryGateRegistry {
         explicit_request: true,
       },
     };
+
+    if (tempGate.pass_criteria !== undefined) {
+      base.pass_criteria = tempGate.pass_criteria;
+    }
+
+    return base;
   }
 
   convertToLightweightGate(tempGate: TemporaryGateDefinition): LightweightGateDefinition {
-    return {
+    const lightweight: LightweightGateDefinition = {
       id: tempGate.id,
       name: tempGate.name,
       type: tempGate.type === 'guidance' ? 'guidance' : 'validation',
       description: tempGate.description,
       guidance: tempGate.guidance,
-      pass_criteria: tempGate.pass_criteria as GatePassCriteria[] | undefined,
       retry_config: {
         max_attempts: 3,
         improvement_hints: true,
@@ -231,6 +253,12 @@ export class TemporaryGateRegistry {
         explicit_request: true,
       },
     };
+
+    if (tempGate.pass_criteria !== undefined) {
+      lightweight.pass_criteria = tempGate.pass_criteria as GatePassCriteria[];
+    }
+
+    return lightweight;
   }
 
   /**
@@ -407,7 +435,11 @@ export class TemporaryGateRegistry {
 
       const toRemove = Math.min(100, gates.length - Math.floor(this.maxMemoryGates * 0.8));
       for (let i = 0; i < toRemove; i++) {
-        this.removeTemporaryGate(gates[i].id);
+        const gate = gates[i];
+        if (!gate) {
+          continue;
+        }
+        this.removeTemporaryGate(gate.id);
       }
 
       this.logger.warn(`[TEMP GATE REGISTRY] Force removed ${toRemove} oldest gates`);

@@ -14,6 +14,7 @@
  */
 
 import { ConvertedPrompt } from '../execution/types.js';
+import { BUILTIN_FRAMEWORK_TYPES } from '../frameworks/types/methodology-types.js';
 import { Logger } from '../logging/index.js';
 import { SemanticAnalysisConfig } from '../types.js';
 
@@ -163,7 +164,9 @@ export class ContentAnalyzer {
       text: combinedText,
       task: 'Analyze this prompt for execution strategy and framework requirements',
       categories: ['single', 'prompt', 'template', 'chain'],
-      methodologies: ['CAGEERF', 'ReACT', '5W1H', 'SCAMPER', 'none'],
+      // Use built-in frameworks for LLM classification guidance
+      // Note: Custom frameworks are handled by FrameworkManager at runtime
+      methodologies: [...BUILTIN_FRAMEWORK_TYPES, 'none'],
     });
 
     const normalizedExecution = this.normalizeExecutionType(llmResult.executionType);
@@ -333,7 +336,6 @@ export class ContentAnalyzer {
         hasStructuredReasoning: false,
         hasMethodologyKeywords: false,
         hasComplexAnalysis: false,
-        advancedChainFeatures: undefined,
       },
 
       complexity: 'low',

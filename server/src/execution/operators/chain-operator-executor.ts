@@ -3,7 +3,7 @@ import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
 import { composeReviewPrompt } from '../../gates/core/review-utils.js';
 import { Logger } from '../../logging/index.js';
 import { safeJsonParse } from '../../utils/index.js';
-import { processTemplate } from '../../utils/jsonUtils.js';
+import { processTemplate, processTemplateWithRefs } from '../../utils/jsonUtils.js';
 
 import type {
   ChainStepExecutionInput,
@@ -15,7 +15,9 @@ import type {
 import type { PromptGuidanceService } from '../../frameworks/prompt-guidance/index.js';
 import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
 import type { ConvertedPrompt } from '../../types/index.js';
+import type { IScriptReferenceResolver } from '../../utils/jsonUtils.js';
 import type { InjectionState } from '../pipeline/decisions/injection/types.js';
+import type { PromptReferenceResolver } from '../reference/index.js';
 
 /**
  * Type guard for gate review input
@@ -35,13 +37,16 @@ export class ChainOperatorExecutor {
   constructor(
     private readonly logger: Logger,
     private readonly convertedPrompts: ConvertedPrompt[],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly gateGuidanceRenderer?: any,
     private readonly getFrameworkContext?: (promptId: string) => Promise<{
       selectedFramework?: { methodology: string; name: string };
       category?: string;
       systemPrompt?: string;
     } | null>,
-    private readonly promptGuidanceService?: PromptGuidanceService
+    private readonly promptGuidanceService?: PromptGuidanceService,
+    private readonly referenceResolver?: PromptReferenceResolver,
+    private readonly scriptReferenceResolver?: IScriptReferenceResolver
   ) {}
 
   async renderStep(input: ChainStepExecutionInput): Promise<ChainStepRenderResult> {
@@ -147,7 +152,7 @@ export class ChainOperatorExecutor {
         );
         const templateContext = { ...chainContext, ...stepArgs };
 
-        const renderedTemplate = this.renderTemplate(
+        const renderedTemplate = await this.renderTemplate(
           convertedPrompt,
           templateContext,
           targetStep.promptId
@@ -313,6 +318,11 @@ export class ChainOperatorExecutor {
     }
 
     const step = stepPrompts[currentStepIndex];
+    if (!step) {
+      throw new Error(
+        `Step at index ${currentStepIndex} is undefined in chain of length ${stepPrompts.length}`
+      );
+    }
     this.logger.debug(`[SymbolicChain] Rendering step ${step.stepNumber}: ${step.promptId}`);
 
     // Look up convertedPrompt if not already set on the step
@@ -362,31 +372,33 @@ export class ChainOperatorExecutor {
     const previousStepIndex = currentStepIndex - 1;
 
     if (currentStepIndex === 0) {
-      templateContext.previous_step_output =
+      templateContext['previous_step_output'] =
         '**[CONTEXT INSTRUCTION]**: This is the first step. Begin the workflow here.';
-      templateContext.previous_step_result = templateContext.previous_step_output;
+      templateContext['previous_step_result'] = templateContext['previous_step_output'];
     } else {
-      const storedOutput = this.getStoredStepResult(
-        chainContext,
-        stepPrompts[previousStepIndex].stepNumber
-      );
+      const previousStep = stepPrompts[previousStepIndex];
+      const storedOutput = previousStep
+        ? this.getStoredStepResult(chainContext, previousStep.stepNumber)
+        : undefined;
 
       if (storedOutput) {
-        templateContext.previous_step_output = storedOutput;
-        templateContext.previous_step_result = storedOutput;
+        templateContext['previous_step_output'] = storedOutput;
+        templateContext['previous_step_result'] = storedOutput;
       } else {
-        const previousName = this.getPromptDisplayName(stepPrompts[previousStepIndex]);
+        const previousName = previousStep
+          ? this.getPromptDisplayName(previousStep)
+          : `Step ${currentStepIndex}`;
         const instruction = `**[CONTEXT INSTRUCTION]**: Use the response you produced for Step ${currentStepIndex} (${previousName}) wherever {{previous_step_output}} is referenced.`;
-        templateContext.previous_step_output = instruction;
-        templateContext.previous_step_result = instruction;
+        templateContext['previous_step_output'] = instruction;
+        templateContext['previous_step_result'] = instruction;
       }
     }
 
     // Runtime Semantic Enhancement (Self-Loop)
     let templateToRender = convertedPrompt.userMessageTemplate;
 
-    if (this.promptGuidanceService && templateContext.previous_step_output) {
-      const previousOutputStr = String(templateContext.previous_step_output);
+    if (this.promptGuidanceService && templateContext['previous_step_output']) {
+      const previousOutputStr = String(templateContext['previous_step_output']);
       // Simple check to see if it looks like JSON
       if (previousOutputStr.trim().startsWith('{')) {
         const parseResult = safeJsonParse(previousOutputStr);
@@ -413,7 +425,7 @@ export class ChainOperatorExecutor {
       }
     }
 
-    const renderedTemplate = this.renderTemplateString(
+    const renderedTemplate = await this.renderTemplateString(
       templateToRender,
       templateContext,
       step.promptId
@@ -604,9 +616,10 @@ export class ChainOperatorExecutor {
     }
 
     if (step.frameworkContext) {
+      const category = step.convertedPrompt?.category;
       return {
         selectedFramework: step.frameworkContext.selectedFramework,
-        category: step.convertedPrompt?.category,
+        ...(category !== undefined && { category }),
         systemPrompt: step.frameworkContext.systemPrompt,
       };
     }
@@ -721,11 +734,11 @@ export class ChainOperatorExecutor {
     return { ...argsInput };
   }
 
-  private renderTemplate(
+  private async renderTemplate(
     convertedPrompt: ConvertedPrompt,
     templateContext: Record<string, unknown>,
     promptId: string
-  ): string {
+  ): Promise<string> {
     return this.renderTemplateString(
       convertedPrompt.userMessageTemplate,
       templateContext,
@@ -733,14 +746,26 @@ export class ChainOperatorExecutor {
     );
   }
 
-  private renderTemplateString(
+  private async renderTemplateString(
     templateString: string,
     templateContext: Record<string, unknown>,
     promptId: string
-  ): string {
+  ): Promise<string> {
     try {
-      const rendered = processTemplate(templateString, templateContext, {});
+      // Use reference resolver if available, otherwise fall back to standard template processing
+      if (this.referenceResolver || this.scriptReferenceResolver) {
+        const result = await processTemplateWithRefs(
+          templateString,
+          templateContext,
+          {},
+          this.referenceResolver,
+          { scriptResolver: this.scriptReferenceResolver }
+        );
+        return result.content;
+      }
 
+      // Fallback: standard synchronous template processing
+      const rendered = processTemplate(templateString, templateContext, {});
       return rendered;
     } catch (error) {
       this.logger.error(`[SymbolicChain] Template rendering failed for ${promptId}:`, error);

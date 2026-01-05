@@ -1,15 +1,15 @@
 import { describe, beforeEach, expect, test, jest } from '@jest/globals';
 
 import { FrameworkValidator } from '../../../dist/frameworks/framework-validator.js';
-import { FrameworkRegistry } from '../../../dist/frameworks/methodology/framework-registry.js';
 import { ValidationError } from '../../../dist/utils/index.js';
 
+import type { FrameworkManager } from '../../../dist/frameworks/framework-manager.js';
 import type { FrameworkDefinition } from '../../../dist/frameworks/types/index.js';
 import type { Logger } from '../../../dist/logging/index.js';
 
 describe('FrameworkValidator', () => {
   let validator: FrameworkValidator;
-  let registry: FrameworkRegistry;
+  let mockFrameworkManager: jest.Mocked<FrameworkManager>;
   let logger: Logger;
 
   const createDefinition = (
@@ -27,6 +27,11 @@ describe('FrameworkValidator', () => {
     ...overrides,
   });
 
+  const frameworks: Record<string, FrameworkDefinition> = {
+    CAGEERF: createDefinition('CAGEERF'),
+    REACT: createDefinition('REACT', { enabled: false }),
+  };
+
   beforeEach(() => {
     logger = {
       info: jest.fn(),
@@ -35,11 +40,32 @@ describe('FrameworkValidator', () => {
       debug: jest.fn(),
     };
 
-    registry = new FrameworkRegistry(logger, { defaultFrameworkId: 'CAGEERF' });
-    registry.registerDefinition(createDefinition('CAGEERF'));
-    registry.registerDefinition(createDefinition('REACT', { enabled: false }));
+    // Create mock FrameworkManager with the methods FrameworkValidator uses
+    mockFrameworkManager = {
+      getFramework: jest.fn((id: string) => frameworks[id.toUpperCase()]),
+      isFrameworkEnabled: jest.fn((id: string) => {
+        const fw = frameworks[id.toUpperCase()];
+        return fw?.enabled ?? false;
+      }),
+      getFrameworkIds: jest.fn((enabledOnly: boolean) => {
+        const ids = Object.keys(frameworks);
+        return enabledOnly ? ids.filter((id) => frameworks[id].enabled) : ids;
+      }),
+      validateIdentifier: jest.fn((id: string) => {
+        const normalizedId = id.trim().toUpperCase();
+        const framework = frameworks[normalizedId];
+        if (framework) {
+          return { valid: true, normalizedId: framework.id };
+        }
+        return {
+          valid: false,
+          error: `Framework '${id}' not found`,
+          suggestions: Object.keys(frameworks),
+        };
+      }),
+    } as unknown as jest.Mocked<FrameworkManager>;
 
-    validator = new FrameworkValidator(registry, logger);
+    validator = new FrameworkValidator(mockFrameworkManager, logger);
   });
 
   test('validateAndNormalize returns normalized identifier and definition', () => {

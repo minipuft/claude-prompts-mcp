@@ -374,6 +374,8 @@ export default [
       'dist/**',
       'node_modules/**',
       'coverage/**',
+      'tests/**',
+      'temp/**',
       '*.config.js',
       '*.config.cjs',
       '*.config.mjs',

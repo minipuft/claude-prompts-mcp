@@ -46,6 +46,12 @@ export class CategoryManager {
     for (let i = 0; i < categories.length; i++) {
       const category = categories[i];
 
+      if (!category) {
+        result.issues.push(`Category ${i + 1}: Entry is undefined`);
+        result.isValid = false;
+        continue;
+      }
+
       // Validate required fields
       if (!category.id || typeof category.id !== 'string') {
         result.issues.push(`Category ${i + 1}: Missing or invalid 'id' field`);
@@ -82,8 +88,10 @@ export class CategoryManager {
         id: category.id.trim(),
         name: category.name.trim(),
         description: (category.description || '').trim(),
-        registerWithMcp: category.registerWithMcp,
       };
+      if (category.registerWithMcp !== undefined) {
+        normalizedCategory.registerWithMcp = category.registerWithMcp;
+      }
 
       validatedCategories.push(normalizedCategory);
     }
@@ -290,13 +298,22 @@ export class CategoryManager {
     statistics?: CategoryStatistics;
     consistency?: ReturnType<CategoryManager['checkConsistency']>;
   } {
-    const debugInfo = {
+    const debugInfo: {
+      categoriesLoaded: number;
+      categoryIds: string[];
+      categoryNames: string[];
+      statistics?: CategoryStatistics;
+      consistency?: ReturnType<CategoryManager['checkConsistency']>;
+    } = {
       categoriesLoaded: this.categories.length,
       categoryIds: this.categories.map((cat) => cat.id),
       categoryNames: this.categories.map((cat) => cat.name),
-      statistics: prompts ? this.getCategoryStatistics(prompts) : undefined,
-      consistency: prompts ? this.checkConsistency(prompts) : undefined,
     };
+
+    if (prompts) {
+      debugInfo.statistics = this.getCategoryStatistics(prompts);
+      debugInfo.consistency = this.checkConsistency(prompts);
+    }
 
     return debugInfo;
   }

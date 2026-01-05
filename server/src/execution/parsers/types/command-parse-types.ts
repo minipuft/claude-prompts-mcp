@@ -14,7 +14,6 @@ export interface CommandParseResultBase<TOperators = unknown, TPlan = unknown> {
   format: 'simple' | 'json' | 'structured' | 'legacy' | 'symbolic';
   confidence: number;
   commandType?: 'single' | 'chain';
-  modifier?: ExecutionModifier;
   modifiers?: ExecutionModifiers;
   metadata: {
     originalCommand: string;
@@ -22,7 +21,7 @@ export interface CommandParseResultBase<TOperators = unknown, TPlan = unknown> {
     detectedFormat: string;
     warnings: string[];
     prefixesNormalized?: boolean;
-    modifier?: ExecutionModifier;
+    modifierToken?: ExecutionModifier;
   };
   operators?: TOperators;
   executionPlan?: TPlan;

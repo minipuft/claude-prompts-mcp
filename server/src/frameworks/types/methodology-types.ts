@@ -12,10 +12,40 @@ import type { ContentAnalysisResult } from '../../semantic/types.js';
 import type { ToolParameter } from '../../types/index.js';
 
 /**
- * Framework methodology definitions
- * Each framework provides system prompt templates and execution guidelines
+ * Default framework types (canonical built-in implementations).
+ *
+ * IMPORTANT: This constant is for DOCUMENTATION and type guards only.
+ * For runtime validation, use frameworkManager.getFramework(id) which
+ * supports both built-in and custom frameworks from the registry.
+ *
+ * @see FrameworkManager.getFramework() for runtime validation
  */
-export type FrameworkMethodology = 'CAGEERF' | 'ReACT' | '5W1H' | 'SCAMPER' | 'AUTO';
+export const BUILTIN_FRAMEWORK_TYPES = ['CAGEERF', 'ReACT', '5W1H', 'SCAMPER'] as const;
+
+/**
+ * Type for built-in frameworks only
+ */
+export type BuiltinFrameworkType = (typeof BUILTIN_FRAMEWORK_TYPES)[number];
+
+/**
+ * Type guard to check if a type is a built-in framework
+ */
+export function isBuiltinFramework(type: string): type is BuiltinFrameworkType {
+  return BUILTIN_FRAMEWORK_TYPES.includes(type as BuiltinFrameworkType);
+}
+
+/**
+ * Framework type discriminator
+ * Any string value is allowed for custom frameworks.
+ * Built-in types: CAGEERF, ReACT, 5W1H, SCAMPER
+ */
+export type FrameworkType = string;
+
+/**
+ * Framework methodology definitions (includes AUTO for selection)
+ * @deprecated Use FrameworkType for type discrimination. This includes 'AUTO' for selection contexts only.
+ */
+export type FrameworkMethodology = FrameworkType | 'AUTO';
 
 /**
  * Framework definition structure
@@ -24,6 +54,12 @@ export interface FrameworkDefinition {
   id: string;
   name: string;
   description: string;
+  /** The framework type discriminator (e.g., 'CAGEERF', 'ReACT') */
+  type: FrameworkType;
+  /**
+   * @deprecated Use `type` instead. Kept for backward compatibility.
+   * Returns the same value as `type`.
+   */
   methodology: FrameworkMethodology;
   systemPromptTemplate: string;
   executionGuidelines: string[];
@@ -117,17 +153,6 @@ export interface StepGuidance {
 
   // Quality gates for each step
   stepValidation: Record<string, string[]>;
-}
-
-/**
- * Metadata tracked for registered frameworks.
- */
-export interface FrameworkRegistryMetadata {
-  registeredAt: Date;
-  isBuiltIn: boolean;
-  loadTime: number;
-  validationStatus: 'not_validated' | 'validated' | 'failed';
-  lastUsed?: Date;
 }
 
 /**
@@ -252,6 +277,11 @@ export interface IMethodologyGuide {
   // Framework identification
   readonly frameworkId: string;
   readonly frameworkName: string;
+  /** The framework type discriminator */
+  readonly type: FrameworkType;
+  /**
+   * @deprecated Use `type` instead. Kept for backward compatibility.
+   */
   readonly methodology: FrameworkMethodology;
   readonly version: string;
 
@@ -330,6 +360,11 @@ export interface IMethodologyGuide {
 export abstract class BaseMethodologyGuide implements IMethodologyGuide {
   abstract readonly frameworkId: string;
   abstract readonly frameworkName: string;
+  /** The framework type discriminator */
+  abstract readonly type: FrameworkType;
+  /**
+   * @deprecated Use `type` instead. Kept for backward compatibility.
+   */
   abstract readonly methodology: FrameworkMethodology;
   abstract readonly version: string;
 

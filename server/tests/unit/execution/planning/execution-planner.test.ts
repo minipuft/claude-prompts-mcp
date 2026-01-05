@@ -231,4 +231,131 @@ describe('ExecutionPlanner', () => {
     expect(stepPlans).toHaveLength(2);
     expect(stepPlans[0].requiresSession).toBe(true);
   });
+
+  describe('applyScriptToolDefaults', () => {
+    test('applies clean modifier by default for prompts with script tools', async () => {
+      const analyzer = createAnalyzer();
+      const planner = new ExecutionPlanner(analyzer, logger);
+
+      const promptWithScriptTools: ConvertedPrompt = {
+        ...basePrompt,
+        scriptTools: [
+          {
+            id: 'word_count',
+            name: 'Word Counter',
+            description: 'Counts words',
+            scriptPath: 'script.py',
+            runtime: 'python',
+            inputSchema: { type: 'object', properties: {} },
+            toolDir: '/tmp/tools/word_count',
+            absoluteScriptPath: '/tmp/tools/word_count/script.py',
+            promptId: 'demo',
+            descriptionContent: 'Counts words in text',
+          },
+        ],
+      };
+
+      const plan = await planner.createPlan({
+        convertedPrompt: promptWithScriptTools,
+        frameworkEnabled: true,
+      });
+
+      expect(plan.modifiers?.clean).toBe(true);
+      // Clean mode should disable framework requirement
+      expect(plan.requiresFramework).toBe(false);
+    });
+
+    test('does not apply clean default when user provides explicit modifier', async () => {
+      const analyzer = createAnalyzer();
+      const planner = new ExecutionPlanner(analyzer, logger);
+
+      const promptWithScriptTools: ConvertedPrompt = {
+        ...basePrompt,
+        scriptTools: [
+          {
+            id: 'word_count',
+            name: 'Word Counter',
+            description: 'Counts words',
+            scriptPath: 'script.py',
+            runtime: 'python',
+            inputSchema: { type: 'object', properties: {} },
+            toolDir: '/tmp/tools/word_count',
+            absoluteScriptPath: '/tmp/tools/word_count/script.py',
+            promptId: 'demo',
+            descriptionContent: 'Counts words in text',
+          },
+        ],
+      };
+
+      const parsedCommand: ParsedCommand = {
+        promptId: 'demo',
+        rawArgs: '',
+        format: 'symbolic',
+        confidence: 0.9,
+        modifiers: { framework: true }, // User explicitly requested framework mode
+        metadata: {
+          originalCommand: '%framework >>demo',
+          parseStrategy: 'symbolic',
+          detectedFormat: 'symbolic',
+          warnings: [],
+        },
+      };
+
+      const plan = await planner.createPlan({
+        parsedCommand,
+        convertedPrompt: promptWithScriptTools,
+        frameworkEnabled: true,
+      });
+
+      expect(plan.modifiers?.framework).toBe(true);
+      expect(plan.requiresFramework).toBe(true);
+    });
+
+    test('does not apply clean default when user provides custom gates', async () => {
+      const analyzer = createAnalyzer();
+      const planner = new ExecutionPlanner(analyzer, logger);
+
+      const promptWithScriptTools: ConvertedPrompt = {
+        ...basePrompt,
+        scriptTools: [
+          {
+            id: 'word_count',
+            name: 'Word Counter',
+            description: 'Counts words',
+            scriptPath: 'script.py',
+            runtime: 'python',
+            inputSchema: { type: 'object', properties: {} },
+            toolDir: '/tmp/tools/word_count',
+            absoluteScriptPath: '/tmp/tools/word_count/script.py',
+            promptId: 'demo',
+            descriptionContent: 'Counts words in text',
+          },
+        ],
+      };
+
+      const plan = await planner.createPlan({
+        convertedPrompt: promptWithScriptTools,
+        frameworkEnabled: true,
+        gateOverrides: {
+          gates: ['code-quality'], // User provided custom gates
+        },
+      });
+
+      // Should NOT default to clean when user provides gates
+      expect(plan.modifiers?.clean).toBeFalsy();
+    });
+
+    test('does not apply clean default for prompts without script tools', async () => {
+      const analyzer = createAnalyzer();
+      const planner = new ExecutionPlanner(analyzer, logger);
+
+      const plan = await planner.createPlan({
+        convertedPrompt: basePrompt, // No scriptTools
+        frameworkEnabled: true,
+      });
+
+      // Should NOT default to clean for regular prompts
+      expect(plan.modifiers?.clean).toBeFalsy();
+    });
+  });
 });

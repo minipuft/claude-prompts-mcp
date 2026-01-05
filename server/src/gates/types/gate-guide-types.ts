@@ -12,13 +12,13 @@
  * - Simpler interface focused on guidance and validation
  */
 
+import type { ValidationResult } from '../../execution/types.js';
 import type {
   GateEnforcementMode,
   GatePassCriteria,
   GateSeverity,
   ValidationContext,
 } from '../types.js';
-import type { ValidationResult } from '../../execution/types.js';
 
 // ============================================================================
 // Gate Activation Types

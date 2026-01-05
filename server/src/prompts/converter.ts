@@ -8,9 +8,13 @@ import * as path from 'node:path';
 
 import { PromptLoader } from './loader.js';
 import { Logger } from '../logging/index.js';
+import {
+  ScriptToolDefinitionLoader,
+  createScriptToolDefinitionLoader,
+} from '../scripts/core/script-definition-loader.js';
 import { isChainPrompt } from '../utils/chainUtils.js';
 
-import type { PromptData } from './types.js';
+import type { PromptArgument, PromptData } from './types.js';
 import type { ConvertedPrompt } from '../execution/types.js';
 
 /**
@@ -46,19 +50,33 @@ function resolveRegisterWithMcp(
 export class PromptConverter {
   private logger: Logger;
   private loader: PromptLoader;
-  private globalRegisterWithMcp?: boolean;
+  private globalRegisterWithMcp: boolean | undefined;
+  private scriptToolLoader: ScriptToolDefinitionLoader;
 
   constructor(logger: Logger, loader?: PromptLoader, globalRegisterWithMcp?: boolean) {
     this.logger = logger;
     this.loader = loader || new PromptLoader(logger);
-    this.globalRegisterWithMcp = globalRegisterWithMcp;
+    this.scriptToolLoader = createScriptToolDefinitionLoader({ debug: false });
+    if (globalRegisterWithMcp !== undefined) {
+      this.globalRegisterWithMcp = globalRegisterWithMcp;
+    }
+  }
+
+  /**
+   * Get the script tool loader instance.
+   * Exposed for hot-reload integration.
+   */
+  getScriptToolLoader(): ScriptToolDefinitionLoader {
+    return this.scriptToolLoader;
   }
 
   /**
    * Set the global registerWithMcp default value
    */
   setGlobalRegisterWithMcp(value: boolean | undefined): void {
-    this.globalRegisterWithMcp = value;
+    if (value !== undefined) {
+      this.globalRegisterWithMcp = value;
+    }
   }
 
   /**
@@ -89,20 +107,72 @@ export class PromptConverter {
           name: promptData.name,
           description: promptData.description,
           category: promptData.category,
-          systemMessage: promptFile.systemMessage,
+          systemMessage: promptFile.systemMessage ?? '',
           userMessageTemplate: promptFile.userMessageTemplate,
-          arguments: promptData.arguments.map((arg) => ({
-            name: arg.name,
-            description: arg.description,
-            required: arg.required,
-          })),
+          arguments: promptData.arguments.map((arg) => {
+            const mappedArgument: PromptArgument = {
+              name: arg.name,
+              required: arg.required ?? false,
+            };
+
+            if (arg.description !== undefined) {
+              mappedArgument.description = arg.description;
+            }
+            if (arg.type !== undefined) {
+              mappedArgument.type = arg.type;
+            }
+            if (arg.defaultValue !== undefined) {
+              mappedArgument.defaultValue = arg.defaultValue;
+            }
+            if (arg.validation) {
+              mappedArgument.validation = arg.validation;
+            }
+
+            return mappedArgument;
+          }),
           // Include chain information from markdown-embedded chainSteps
           chainSteps: chainSteps,
-          // Include gate configuration from prompt file
-          gateConfiguration: promptFile.gateConfiguration,
           // Resolve MCP registration from prompt/category/global defaults
           registerWithMcp: resolveRegisterWithMcp(promptData, this.globalRegisterWithMcp),
         };
+
+        if (promptFile.gateConfiguration) {
+          convertedPrompt.gateConfiguration = promptFile.gateConfiguration;
+        }
+
+        // Load script tools if prompt declares any (Phase 2 integration)
+        if (promptData.tools && promptData.tools.length > 0) {
+          try {
+            // Get the prompt directory from the file path
+            const fullFilePath = path.join(fileBasePath, promptData.file);
+            const promptDir = promptData.file.endsWith('.yaml')
+              ? path.dirname(fullFilePath)
+              : path.dirname(path.dirname(fullFilePath)); // For {id}/prompt.yaml
+
+            // Load the declared tools
+            const loadedTools = this.scriptToolLoader.loadToolsForPrompt(
+              promptDir,
+              promptData.tools,
+              promptData.id
+            );
+
+            if (loadedTools.length > 0) {
+              convertedPrompt.scriptTools = loadedTools;
+              this.logger.debug(
+                `[PromptConverter] Loaded ${loadedTools.length} script tools for '${promptData.id}'`
+              );
+            }
+
+            // Store promptDir for script reference resolution ({{script:id}} syntax)
+            convertedPrompt.promptDir = promptDir;
+          } catch (toolLoadError) {
+            this.logger.warn(
+              `[PromptConverter] Failed to load script tools for '${promptData.id}':`,
+              toolLoadError
+            );
+            // Continue without script tools - non-blocking error
+          }
+        }
 
         // NOTE: All chains now use markdown-embedded format
         // Modular chain system has been removed - chains are defined inline within markdown files
@@ -247,7 +317,7 @@ export class PromptConverter {
     let match;
 
     while ((match = placeholderRegex.exec(template)) !== null) {
-      const placeholder = match[1].trim();
+      const placeholder = (match[1] ?? '').trim();
       if (!placeholders.includes(placeholder)) {
         placeholders.push(placeholder);
       }
@@ -273,7 +343,11 @@ export class PromptConverter {
     // Also match stepN_result patterns (step1_result, step2_result, etc.)
     const isStepResultPattern = /^step\d+_result$/.test(placeholder);
 
-    return specialPlaceholders.includes(placeholder) || isStepResultPattern || placeholder.startsWith('ref:');
+    return (
+      specialPlaceholders.includes(placeholder) ||
+      isStepResultPattern ||
+      placeholder.startsWith('ref:')
+    );
   }
 
   /**

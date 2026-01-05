@@ -103,8 +103,13 @@ export class GateEnforcementAuthority {
           continue; // Try next pattern
         }
 
+        const verdictValue = match[1];
+        if (!verdictValue) {
+          continue;
+        }
+
         return {
-          verdict: match[1].toUpperCase() as 'PASS' | 'FAIL',
+          verdict: verdictValue.toUpperCase() as 'PASS' | 'FAIL',
           rationale,
           raw,
           source,
@@ -176,7 +181,7 @@ export class GateEnforcementAuthority {
   createPendingReview(options: CreateReviewOptions): PendingGateReview {
     const { gateIds, instructions, maxAttempts = DEFAULT_RETRY_LIMIT, metadata } = options;
 
-    return {
+    const pendingReview: PendingGateReview = {
       combinedPrompt: instructions,
       gateIds,
       prompts: [],
@@ -185,8 +190,13 @@ export class GateEnforcementAuthority {
       maxAttempts,
       retryHints: [],
       history: [],
-      metadata,
     };
+
+    if (metadata) {
+      pendingReview.metadata = metadata;
+    }
+
+    return pendingReview;
   }
 
   /**

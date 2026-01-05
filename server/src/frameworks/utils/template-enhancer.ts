@@ -41,6 +41,9 @@ export interface ProcessingStepDefinition {
  */
 export interface MethodologyDefinitionForEnhancement {
   id: string;
+  /** Framework type discriminator (preferred) */
+  type?: string;
+  /** @deprecated Use `type` instead */
   methodology: string;
   systemPromptGuidance: string;
   templateSuggestions?: TemplateSuggestion[];
@@ -122,9 +125,9 @@ export function createMethodologyEnhancement(
     methodologyGates: convertMethodologyGates(methodologyGates),
     templateSuggestions: convertTemplateSuggestions(templateSuggestions),
     enhancementMetadata: {
-      methodology: definition.methodology,
+      methodology: definition.type || definition.methodology,
       confidence,
-      applicabilityReason: `${definition.methodology} methodology provides systematic approach`,
+      applicabilityReason: `${definition.type || definition.methodology} methodology provides systematic approach`,
       appliedAt: new Date(),
     },
   };

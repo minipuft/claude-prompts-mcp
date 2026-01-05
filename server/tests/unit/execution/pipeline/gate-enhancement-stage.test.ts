@@ -3,9 +3,9 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../../src/execution/context/execution-context.js';
 import { GateEnhancementStage } from '../../../../src/execution/pipeline/stages/05-gate-enhancement-stage.js';
 
-import type { GateManager } from '../../../../src/gates/gate-manager.js';
 import type { GateLoader } from '../../../../src/gates/core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../../../../src/gates/core/temporary-gate-registry.js';
+import type { GateManager } from '../../../../src/gates/gate-manager.js';
 import type { IGateService } from '../../../../src/gates/services/gate-service-interface.js';
 import type { Logger } from '../../../../src/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/types/index.js';
@@ -14,11 +14,7 @@ import type { ConvertedPrompt } from '../../../../src/types/index.js';
  * Creates a mock GateLoader that returns specified methodology gate IDs.
  */
 const createMockGateLoader = (
-  methodologyGateIds: string[] = [
-    'framework-compliance',
-    'research-quality',
-    'technical-accuracy',
-  ]
+  methodologyGateIds: string[] = ['framework-compliance', 'research-quality', 'technical-accuracy']
 ): GateLoader =>
   ({
     loadGate: jest.fn(),
@@ -55,7 +51,7 @@ const createMockGateManager = (): GateManager => {
 
   return {
     selectGates: jest.fn().mockImplementation(({ promptCategory }: { promptCategory?: string }) => {
-      const gates = promptCategory ? categoryGateMapping[promptCategory] ?? [] : [];
+      const gates = promptCategory ? (categoryGateMapping[promptCategory] ?? []) : [];
       return {
         guides: [],
         selectedIds: gates,

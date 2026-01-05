@@ -2,7 +2,6 @@
     "author": {
         "name": "minipuft"
     },
-    "commands": "./commands",
     "description": "Reusable prompt templates with quality gates and multi-step workflows for consistent AI outputs",
     "homepage": "https://github.com/minipuft/claude-prompts-mcp",
     "keywords": ["mcp", "prompts", "templates", "gates", "chains", "workflows"],

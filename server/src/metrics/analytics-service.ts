@@ -143,6 +143,67 @@ export class MetricsCollector extends EventEmitter {
   }
 
   /**
+   * Track execution (adapter for ResponseFormatter AnalyticsService interface)
+   */
+  trackExecution(data: {
+    executionId: string;
+    executionType: string;
+    duration: number;
+    frameworkUsed?: string;
+    stepsExecuted?: number;
+    success: boolean;
+    sessionId?: string;
+  }): void {
+    const executionData: ExecutionData = {
+      executionId: data.executionId,
+      executionType: data.executionType as 'single' | 'chain',
+      startTime: Date.now() - data.duration,
+      endTime: Date.now(),
+      executionTime: data.duration,
+      success: data.success,
+      frameworkEnabled: !!data.frameworkUsed,
+      toolName: 'prompt_engine',
+    };
+    if (data.frameworkUsed !== undefined) {
+      executionData.frameworkUsed = data.frameworkUsed;
+    }
+    if (data.stepsExecuted !== undefined) {
+      executionData.stepsExecuted = data.stepsExecuted;
+    }
+    if (data.sessionId !== undefined) {
+      executionData.sessionId = data.sessionId;
+    }
+    this.recordExecution(executionData);
+  }
+
+  /**
+   * Track error (adapter for ResponseFormatter AnalyticsService interface)
+   */
+  trackError(data: {
+    executionId: string;
+    executionType: string;
+    errorType: string;
+    errorMessage: string;
+    sessionId?: string;
+  }): void {
+    const executionData: ExecutionData = {
+      executionId: data.executionId,
+      executionType: data.executionType as 'single' | 'chain',
+      startTime: Date.now(),
+      endTime: Date.now(),
+      executionTime: 0,
+      success: false,
+      frameworkEnabled: false,
+      toolName: 'prompt_engine',
+      error: `${data.errorType}: ${data.errorMessage}`,
+    };
+    if (data.sessionId !== undefined) {
+      executionData.sessionId = data.sessionId;
+    }
+    this.recordExecutionError(executionData);
+  }
+
+  /**
    * Record gate validation
    */
   recordGateValidation(gateData: GateValidationData): void {
@@ -243,14 +304,16 @@ export class MetricsCollector extends EventEmitter {
       }
 
       const perf = this.frameworkUsage.frameworkPerformance[executionData.frameworkUsed];
-      const totalTime = perf.averageExecutionTime * perf.usageCount;
-      perf.usageCount++;
-      perf.averageExecutionTime = (totalTime + executionData.executionTime) / perf.usageCount;
+      if (perf) {
+        const totalTime = perf.averageExecutionTime * perf.usageCount;
+        perf.usageCount++;
+        perf.averageExecutionTime = (totalTime + executionData.executionTime) / perf.usageCount;
 
-      // Update success rate
-      const prevSuccesses = perf.successRate * (perf.usageCount - 1);
-      const newSuccesses = prevSuccesses + (executionData.success ? 1 : 0);
-      perf.successRate = newSuccesses / perf.usageCount;
+        // Update success rate
+        const prevSuccesses = perf.successRate * (perf.usageCount - 1);
+        const newSuccesses = prevSuccesses + (executionData.success ? 1 : 0);
+        perf.successRate = newSuccesses / perf.usageCount;
+      }
     }
 
     // Store execution history
@@ -305,12 +368,16 @@ export class MetricsCollector extends EventEmitter {
     this.frameworkUsage.frameworkSwitches++;
     this.frameworkUsage.currentFramework = switchData.toFramework;
 
-    this.frameworkUsage.frameworkSwitchHistory.push({
+    const switchEntry: FrameworkUsage['frameworkSwitchHistory'][number] = {
       timestamp: switchData.switchTime,
       fromFramework: switchData.fromFramework,
       toFramework: switchData.toFramework,
-      reason: switchData.reason,
-    });
+    };
+    if (switchData.reason !== undefined) {
+      switchEntry.reason = switchData.reason;
+    }
+
+    this.frameworkUsage.frameworkSwitchHistory.push(switchEntry);
 
     this.frameworkSwitchHistory.push(switchData);
     this.trimHistory(this.frameworkSwitchHistory);
@@ -355,20 +422,31 @@ export class MetricsCollector extends EventEmitter {
         : Boolean(frameworkUsed);
     const stepsExecuted =
       typeof metadata['stepsExecuted'] === 'number' ? metadata['stepsExecuted'] : undefined;
-    return {
+    const executionData: ExecutionData = {
       executionId: metric.commandId,
       executionType: this.mapExecutionModeToExecutionType(metric.executionMode),
       startTime: metric.startTime,
       endTime: metric.endTime,
       executionTime: metric.durationMs,
       success: metric.status === 'success',
-      frameworkUsed,
       frameworkEnabled,
-      stepsExecuted,
-      sessionId: metric.sessionId,
       toolName: metric.toolName,
-      error: metric.errorMessage,
     };
+
+    if (frameworkUsed !== undefined) {
+      executionData.frameworkUsed = frameworkUsed;
+    }
+    if (stepsExecuted !== undefined) {
+      executionData.stepsExecuted = stepsExecuted;
+    }
+    if (metric.sessionId !== undefined) {
+      executionData.sessionId = metric.sessionId;
+    }
+    if (metric.errorMessage !== undefined) {
+      executionData.error = metric.errorMessage;
+    }
+
+    return executionData;
   }
 
   private mapExecutionModeToExecutionType(
@@ -396,8 +474,10 @@ export class MetricsCollector extends EventEmitter {
       timestamp: Date.now(),
       metric,
       value,
-      context,
     };
+    if (context !== undefined) {
+      trend.context = context;
+    }
 
     this.emit('system:performance', trend);
   }
@@ -586,12 +666,26 @@ export class MetricsCollector extends EventEmitter {
       const bestFramework = frameworks.reduce((best, current) => {
         const bestPerf = this.frameworkUsage.frameworkPerformance[best];
         const currentPerf = this.frameworkUsage.frameworkPerformance[current];
+        if (!bestPerf) {
+          return current;
+        }
+        if (!currentPerf) {
+          return best;
+        }
         return currentPerf.successRate > bestPerf.successRate ? current : best;
       });
 
-      if (this.frameworkUsage.currentFramework !== bestFramework) {
+      const bestPerf = this.frameworkUsage.frameworkPerformance[bestFramework];
+      if (
+        bestPerf !== undefined &&
+        this.frameworkUsage.currentFramework !== bestFramework &&
+        typeof bestPerf.successRate === 'number'
+      ) {
+        const bestSuccessRate = bestPerf.successRate;
         recommendations.push(
-          `Consider switching to ${bestFramework} framework for better performance (${Math.round(this.frameworkUsage.frameworkPerformance[bestFramework].successRate * 100)}% success rate).`
+          `Consider switching to ${bestFramework} framework for better performance (${Math.round(
+            bestSuccessRate * 100
+          )}% success rate).`
         );
       }
     }

@@ -156,7 +156,7 @@ export class FrameworkSemanticIntegration {
           const guidanceResult = await this.promptGuidanceService.applyGuidance(prompt, {
             includeSystemPromptInjection: true,
             includeTemplateEnhancement: true,
-            frameworkOverride: frameworkContext.selectedFramework.methodology,
+            frameworkOverride: frameworkContext.selectedFramework.type,
             semanticAnalysis: semanticAnalysis,
           });
 
@@ -300,7 +300,10 @@ export class FrameworkSemanticIntegration {
     // Handle analysis mode specific logic
     if (semanticAnalysis) {
       // In minimal mode (no LLM), user choice is more important
-      if (semanticAnalysis.analysisMetadata.mode === 'minimal' || !semanticAnalysis.analysisMetadata.mode) {
+      if (
+        semanticAnalysis.analysisMetadata.mode === 'minimal' ||
+        !semanticAnalysis.analysisMetadata.mode
+      ) {
         if (!userPreference && semanticAnalysis.frameworkRecommendation.requiresUserChoice) {
           // Log that user choice is needed
           this.logger.info(
@@ -451,9 +454,9 @@ export class FrameworkSemanticIntegration {
 
     const semantic = complexityScore[semanticComplexity] || 2;
 
-    // Framework suitability based on methodology
+    // Framework suitability based on type
     let frameworkSuitability = 2; // Default medium
-    switch (framework.methodology) {
+    switch (framework.type) {
       case 'CAGEERF':
         frameworkSuitability = 3; // Best for high complexity
         break;
@@ -502,7 +505,7 @@ export class FrameworkSemanticIntegration {
     const gates: string[] = [];
 
     // Use actual gate IDs from definitions directory
-    switch (framework.methodology) {
+    switch (framework.type) {
       case 'CAGEERF':
         gates.push('framework-compliance', 'technical-accuracy', 'content-structure');
         break;
@@ -667,14 +670,11 @@ export class FrameworkSemanticIntegration {
     let improvement = 0.1; // Base improvement assumption
 
     // Framework-specific improvements
-    if (semanticAnalysis.complexity === 'high' && alternativeFramework.methodology === 'CAGEERF') {
+    if (semanticAnalysis.complexity === 'high' && alternativeFramework.type === 'CAGEERF') {
       improvement += 0.2;
     }
 
-    if (
-      semanticAnalysis.executionType === 'chain' &&
-      alternativeFramework.methodology === 'ReACT'
-    ) {
+    if (semanticAnalysis.executionType === 'chain' && alternativeFramework.type === 'ReACT') {
       improvement += 0.15;
     }
 
@@ -746,7 +746,7 @@ export class FrameworkSemanticIntegration {
       const guidanceResult = await this.promptGuidanceService.applyGuidance(prompt, {
         includeSystemPromptInjection: true,
         includeTemplateEnhancement: true,
-        frameworkOverride: frameworkContext.selectedFramework.methodology,
+        frameworkOverride: frameworkContext.selectedFramework.type,
         semanticAnalysis: semanticAnalysis,
       });
 

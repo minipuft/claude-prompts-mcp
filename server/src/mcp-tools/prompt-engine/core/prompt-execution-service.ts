@@ -23,6 +23,8 @@ import { CommandParsingStage } from '../../../execution/pipeline/stages/01-parsi
 import { InlineGateExtractionStage } from '../../../execution/pipeline/stages/02-inline-gate-stage.js';
 import { OperatorValidationStage } from '../../../execution/pipeline/stages/03-operator-validation-stage.js';
 import { ExecutionPlanningStage } from '../../../execution/pipeline/stages/04-planning-stage.js';
+import { ScriptExecutionStage } from '../../../execution/pipeline/stages/04b-script-execution-stage.js';
+import { ScriptAutoExecuteStage } from '../../../execution/pipeline/stages/04c-script-auto-execute-stage.js';
 import { GateEnhancementStage } from '../../../execution/pipeline/stages/05-gate-enhancement-stage.js';
 import { FrameworkResolutionStage } from '../../../execution/pipeline/stages/06-framework-stage.js';
 import { JudgeSelectionStage } from '../../../execution/pipeline/stages/06a-judge-selection-stage.js';
@@ -36,28 +38,38 @@ import { GateReviewStage } from '../../../execution/pipeline/stages/10-gate-revi
 import { CallToActionStage } from '../../../execution/pipeline/stages/11-call-to-action-stage.js';
 import { PostFormattingCleanupStage } from '../../../execution/pipeline/stages/12-post-formatting-cleanup-stage.js';
 import { ExecutionPlanner } from '../../../execution/planning/execution-planner.js';
+import {
+  PromptReferenceResolver,
+  ScriptReferenceResolver,
+} from '../../../execution/reference/index.js';
 import { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import { FrameworkStateManager } from '../../../frameworks/framework-state-manager.js';
 import { FrameworkValidator } from '../../../frameworks/framework-validator.js';
-import { FrameworkRegistry } from '../../../frameworks/methodology/framework-registry.js';
 import {
   PromptGuidanceService,
   createPromptGuidanceService,
 } from '../../../frameworks/prompt-guidance/index.js';
 import { FrameworkExecutionContext } from '../../../frameworks/types/index.js';
-import { LightweightGateSystem, createGateValidator, createTemporaryGateRegistry } from '../../../gates/core/index.js';
-import { GateManagerProvider } from '../../../gates/registry/gate-provider-adapter.js';
-import type { GateManager } from '../../../gates/gate-manager.js';
+import {
+  LightweightGateSystem,
+  createGateValidator,
+  createTemporaryGateRegistry,
+} from '../../../gates/core/index.js';
 import {
   GateGuidanceRenderer,
   createGateGuidanceRenderer,
 } from '../../../gates/guidance/GateGuidanceRenderer.js';
+import { GateManagerProvider } from '../../../gates/registry/gate-provider-adapter.js';
 import { GateReferenceResolver } from '../../../gates/services/gate-reference-resolver.js';
 import { GateServiceFactory } from '../../../gates/services/gate-service-factory.js';
 import { Logger } from '../../../logging/index.js';
-import { StyleManager, createStyleManager } from '../../../styles/index.js';
 import { PromptAssetManager } from '../../../prompts/index.js';
+import { WorkspaceScriptLoader } from '../../../scripts/core/index.js';
+import { createToolDetectionService } from '../../../scripts/detection/tool-detection-service.js';
+import { createExecutionModeService } from '../../../scripts/execution/execution-mode-service.js';
+import { createScriptExecutor } from '../../../scripts/execution/script-executor.js';
 import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
+import { StyleManager, createStyleManager } from '../../../styles/index.js';
 import { ConversationManager } from '../../../text-references/conversation.js';
 import { TextReferenceManager, ArgumentHistoryTracker } from '../../../text-references/index.js';
 import { ConvertedPrompt, PromptData, ToolResponse } from '../../../types/index.js';
@@ -69,6 +81,7 @@ import { renderPromptEngineGuide } from '../utils/guide.js';
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { ParsingSystem } from '../../../execution/parsers/index.js';
 import type { PipelineStage } from '../../../execution/pipeline/stage.js';
+import type { GateManager } from '../../../gates/gate-manager.js';
 import type { IGateService } from '../../../gates/services/gate-service-interface.js';
 import type { MetricsCollector } from '../../../metrics/index.js';
 import type { McpToolRequest, TemporaryGateInput } from '../../../types/execution.js';
@@ -95,17 +108,21 @@ export class PromptExecutionService {
 
   private frameworkStateManager?: FrameworkStateManager;
   private frameworkManager?: FrameworkManager;
-  private promptGuidanceService?: PromptGuidanceService;
+  private promptGuidanceService: PromptGuidanceService | undefined;
   private chainOperatorExecutor?: ChainOperatorExecutor;
   private frameworkValidator: FrameworkValidator | null = null;
   private toolDescriptionManager?: ToolDescriptionManager;
   private analyticsService?: MetricsCollector;
-  private promptPipeline?: PromptExecutionPipeline;
+  private promptPipeline: PromptExecutionPipeline | undefined;
   private mcpToolsManager?: any;
   /** GateManager for registry-based gate selection in pipeline stages */
   private readonly gateManager: GateManager;
   /** StyleManager for dynamic style guidance (# operator) */
   private styleManager?: StyleManager;
+  /** Resolver for {{ref:prompt_id}} references in templates */
+  private referenceResolver?: PromptReferenceResolver;
+  /** Resolver for {{script:id}} references in templates */
+  private scriptReferenceResolver?: ScriptReferenceResolver;
 
   private convertedPrompts: ConvertedPrompt[] = [];
   private readonly serverRoot: string;
@@ -199,8 +216,8 @@ export class PromptExecutionService {
           if (framework?.id) {
             identifiers.add(framework.id.toUpperCase());
           }
-          if (framework?.methodology) {
-            identifiers.add(framework.methodology.toUpperCase());
+          if (framework?.type) {
+            identifiers.add(framework.type.toUpperCase());
           }
         }
 
@@ -228,6 +245,18 @@ export class PromptExecutionService {
   updateData(_promptsData: PromptData[], convertedPrompts: ConvertedPrompt[]): void {
     this.convertedPrompts = convertedPrompts;
     this.chainManagementService.updatePrompts(convertedPrompts);
+    // Create reference resolver with updated prompts
+    this.referenceResolver = new PromptReferenceResolver(this.logger, convertedPrompts);
+    // Create script reference resolver with workspace loader
+    const scriptLoader = new WorkspaceScriptLoader({
+      workspaceScriptsPath: path.join(this.serverRoot, 'resources', 'scripts'),
+    });
+    const scriptExecutor = createScriptExecutor({ debug: false });
+    this.scriptReferenceResolver = new ScriptReferenceResolver(
+      this.logger,
+      scriptLoader,
+      scriptExecutor
+    );
     this.chainOperatorExecutor = this.createChainOperatorExecutor();
     this.resetPipeline();
   }
@@ -340,16 +369,20 @@ export class PromptExecutionService {
       });
     }
 
-    const request: McpToolRequest = {
-      command: shouldTreatAsResumeOnly ? undefined : normalizedCommand || undefined,
-      chain_id: args.chain_id ?? (shouldTreatAsResumeOnly ? chainIdFromCommand : undefined),
-      gate_verdict: args.gate_verdict,
-      gate_action: args.gate_action,
-      user_response: args.user_response,
-      force_restart: args.force_restart,
-      gates: args.gates,
-      options: args.options,
-    };
+    const commandValue = shouldTreatAsResumeOnly ? undefined : normalizedCommand || undefined;
+    const chainIdValue =
+      args.chain_id ?? (shouldTreatAsResumeOnly ? chainIdFromCommand : undefined);
+
+    const request = {
+      ...(commandValue && { command: commandValue }),
+      ...(chainIdValue && { chain_id: chainIdValue }),
+      ...(args.gate_verdict && { gate_verdict: args.gate_verdict }),
+      ...(args.gate_action && { gate_action: args.gate_action }),
+      ...(args.user_response && { user_response: args.user_response }),
+      ...(args.force_restart !== undefined && { force_restart: args.force_restart }),
+      ...(args.gates && { gates: args.gates }),
+      ...(args.options && { options: args.options }),
+    } as McpToolRequest;
 
     this.logger.info('[PromptExecutionService] Executing request', {
       command: request.command ?? '<resume>',
@@ -387,17 +420,17 @@ export class PromptExecutionService {
           if (this.mcpToolsManager.promptManagerTool) {
             return this.mcpToolsManager.promptManagerTool.handleAction(params, {});
           }
-          return this.buildPromptListFallback(params?.search_query);
+          return this.buildPromptListFallback(params?.['search_query']);
         case 'system_control':
           if (this.mcpToolsManager.systemControl) {
             return this.mcpToolsManager.systemControl.handleAction(params, {});
           }
           break;
         case 'prompt_engine_guide':
-          return this.generatePromptEngineGuide(params?.goal);
+          return this.generatePromptEngineGuide(params?.['goal']);
         case 'prompt_engine_invalid_command':
           return this.responseFormatter.formatErrorResponse(
-            'Commands must start with a real prompt id after `>>`. Use prompt_manager(action:"list") or inspect to find valid ids before executing.'
+            'Commands must start with a real prompt id after `>>`. Use resource_manager(resource_type:"prompt", action:"list") to find valid ids before executing.'
           );
         default:
           break;
@@ -464,7 +497,7 @@ export class PromptExecutionService {
 
     if (matchingPrompts.length === 25) {
       lines.push(
-        '\n…results truncated. Use prompt_manager(action:"list") for full search capabilities.'
+        '\n…results truncated. Use resource_manager(resource_type:"prompt", action:"list") for full search capabilities.'
       );
     }
 
@@ -529,7 +562,7 @@ export class PromptExecutionService {
     try {
       this.styleManager = await createStyleManager(this.logger, {
         loaderConfig: {
-          stylesDir: path.join(this.serverRoot, 'styles'),
+          stylesDir: path.join(this.serverRoot, 'resources', 'styles'),
         },
       });
       this.logger.info('[PromptExecutionService] StyleManager initialized');
@@ -551,16 +584,10 @@ export class PromptExecutionService {
       return;
     }
 
-    try {
-      const registry = new FrameworkRegistry(this.logger);
-      registry.loadDefinitions(this.frameworkManager.listFrameworks(false));
-      this.frameworkValidator = new FrameworkValidator(registry, this.logger, {
-        defaultStage: 'operator_validation',
-      });
-    } catch (error) {
-      this.logger.warn('[PromptExecutionService] Failed to rebuild framework validator', { error });
-      this.frameworkValidator = null;
-    }
+    // FrameworkValidator now uses FrameworkManager directly as the single source of truth
+    this.frameworkValidator = new FrameworkValidator(this.frameworkManager, this.logger, {
+      defaultStage: 'operator_validation',
+    });
   }
 
   private createChainOperatorExecutor(): ChainOperatorExecutor {
@@ -568,7 +595,10 @@ export class PromptExecutionService {
       this.logger,
       this.convertedPrompts,
       this.gateGuidanceRenderer,
-      this.resolveFrameworkContextForPrompt.bind(this)
+      this.resolveFrameworkContextForPrompt.bind(this),
+      this.promptGuidanceService,
+      this.referenceResolver,
+      this.scriptReferenceResolver
     );
   }
 
@@ -581,7 +611,6 @@ export class PromptExecutionService {
     const frameworkContext = await this.getFrameworkExecutionContext(prompt);
     if (!frameworkContext) {
       return {
-        selectedFramework: undefined,
         category: prompt.category,
       };
     }
@@ -607,7 +636,7 @@ export class PromptExecutionService {
     try {
       const activeFramework = this.frameworkStateManager.getActiveFramework();
       return this.frameworkManager.generateExecutionContext(prompt, {
-        userPreference: activeFramework.methodology as any,
+        userPreference: activeFramework.type as any,
       });
     } catch (error) {
       this.logger.warn('[PromptExecutionService] Failed to generate framework execution context', {
@@ -675,6 +704,23 @@ export class PromptExecutionService {
       this.logger
     );
 
+    // Script execution stage (04b) - executes prompt-scoped script tools
+    // Creates services lazily to avoid startup overhead when scripts aren't used
+    const scriptExecutor = createScriptExecutor({ debug: false });
+    const toolDetectionService = createToolDetectionService({ debug: false });
+    const executionModeService = createExecutionModeService({ debug: false });
+    const scriptExecutionStage = new ScriptExecutionStage(
+      scriptExecutor,
+      toolDetectionService,
+      executionModeService,
+      this.logger
+    );
+
+    // Script auto-execute stage (04c) - calls MCP tools based on script output
+    // Uses resource manager handler from mcpToolsManager if available
+    const resourceManagerHandler = this.mcpToolsManager?.getResourceManagerHandler?.() ?? null;
+    const scriptAutoExecuteStage = new ScriptAutoExecuteStage(resourceManagerHandler, this.logger);
+
     const frameworkStage: PipelineStage = this.frameworkManager
       ? new FrameworkResolutionStage(
           this.frameworkManager,
@@ -732,7 +778,9 @@ export class PromptExecutionService {
     const executionStage = new StepExecutionStage(
       this.chainOperatorExecutor,
       this.chainSessionManager,
-      this.logger
+      this.logger,
+      this.referenceResolver,
+      this.scriptReferenceResolver
     );
     const gateReviewStage = new GateReviewStage(
       this.chainOperatorExecutor,
@@ -755,6 +803,8 @@ export class PromptExecutionService {
       inlineGateStage,
       operatorValidationStage,
       planningStage,
+      scriptExecutionStage, // 04b - Script tool execution
+      scriptAutoExecuteStage, // 04c - Script auto-execute
       frameworkStage,
       judgeSelectionStage,
       promptGuidanceStage,

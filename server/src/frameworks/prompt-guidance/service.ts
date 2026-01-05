@@ -168,7 +168,7 @@ export class PromptGuidanceService {
     try {
       const methodologyState = this.methodologyTracker.getCurrentState();
       const activeFramework = await this.getActiveFramework(options.frameworkOverride);
-      const methodologyGuide = await this.getMethodologyGuide(activeFramework.methodology);
+      const methodologyGuide = await this.getMethodologyGuide(activeFramework.type);
 
       // Surface methodology guidance (read-only hints)
       const processingGuidance = methodologyGuide.guideTemplateProcessing(
@@ -188,12 +188,16 @@ export class PromptGuidanceService {
         guidanceApplied: false,
         processingTimeMs: 0,
         metadata: {
-          frameworkUsed: activeFramework.methodology,
+          frameworkUsed: activeFramework.type,
           enhancementsApplied: [],
           confidenceScore: 0,
           semanticAware: options.semanticAnalysis !== undefined,
-          semanticComplexity: options.semanticAnalysis?.complexity,
-          semanticConfidence: options.semanticAnalysis?.confidence,
+          ...(options.semanticAnalysis?.complexity
+            ? { semanticComplexity: options.semanticAnalysis.complexity }
+            : {}),
+          ...(options.semanticAnalysis?.confidence !== undefined
+            ? { semanticConfidence: options.semanticAnalysis.confidence }
+            : {}),
         },
       };
 
@@ -358,7 +362,7 @@ export class PromptGuidanceService {
     if (template.includes('{METHODOLOGY_GUIDANCE}')) {
       enhancedPrompt = template.replace('{METHODOLOGY_GUIDANCE}', guidance);
     } else {
-      enhancedPrompt = `${template}\n\n## ${framework.methodology} Methodology\n\n${guidance}`;
+      enhancedPrompt = `${template}\n\n## ${framework.type} Methodology\n\n${guidance}`;
     }
 
     // Apply simple variable substitution
@@ -366,7 +370,7 @@ export class PromptGuidanceService {
       .replace(/\{PROMPT_NAME\}/g, prompt.name || 'Prompt')
       .replace(/\{PROMPT_CATEGORY\}/g, prompt.category || 'general')
       .replace(/\{FRAMEWORK_NAME\}/g, framework.name)
-      .replace(/\{METHODOLOGY\}/g, framework.methodology)
+      .replace(/\{METHODOLOGY\}/g, framework.type)
       .replace(/\{PROMPT_TYPE\}/g, prompt.chainSteps?.length ? 'chain' : 'single');
 
     return {
@@ -462,7 +466,7 @@ export class PromptGuidanceService {
       };
 
       const activeFramework = await this.getActiveFramework(frameworkOverride);
-      const methodologyGuide = await this.getMethodologyGuide(activeFramework.methodology);
+      const methodologyGuide = await this.getMethodologyGuide(activeFramework.type);
 
       const result = await this.templateEnhancer.enhanceTemplate(
         template,

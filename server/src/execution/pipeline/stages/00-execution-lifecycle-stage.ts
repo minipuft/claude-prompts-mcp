@@ -3,10 +3,10 @@ import { randomUUID } from 'crypto';
 
 import { BasePipelineStage } from '../stage.js';
 
-import type { CleanupHandler } from '../../context/internal-state.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ExecutionContext } from '../../context/execution-context.js';
+import type { CleanupHandler } from '../../context/internal-state.js';
 
 /**
  * Canonical Pipeline Stage 0.3: Execution Lifecycle

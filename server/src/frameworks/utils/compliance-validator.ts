@@ -113,7 +113,11 @@ export function validateCompliance(
   // Detect all phases
   const phaseDetections: Record<string, PhaseDetection> = {};
   for (const phaseName of phaseNames) {
-    phaseDetections[phaseName] = detectPhase(text, qualityIndicators[phaseName]);
+    const indicator = qualityIndicators[phaseName];
+    if (!indicator) {
+      continue;
+    }
+    phaseDetections[phaseName] = detectPhase(text, indicator);
   }
 
   // Calculate compliance score
@@ -170,9 +174,14 @@ export function validateCompliance(
     strengths,
     improvementAreas,
     specificSuggestions,
-    methodologyGaps: improvementAreas.filter(
-      (area) => !strengths.some((s) => s.toLowerCase().includes(area.split(' ')[1]?.toLowerCase()))
-    ),
+    methodologyGaps: improvementAreas.filter((area) => {
+      const areaToken = area.split(' ')[1];
+      if (!areaToken) {
+        return !strengths.some((s) => s.toLowerCase().includes(area.toLowerCase()));
+      }
+      const normalizedArea = areaToken.toLowerCase();
+      return !strengths.some((s) => s.toLowerCase().includes(normalizedArea));
+    }),
   };
 }
 

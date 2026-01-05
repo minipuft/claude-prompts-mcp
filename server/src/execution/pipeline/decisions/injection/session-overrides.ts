@@ -42,13 +42,22 @@ export class SessionOverrideManager {
   ): InjectionRuntimeOverride {
     const override: InjectionRuntimeOverride = {
       type,
-      enabled,
-      target,
       scope,
-      scopeId,
       setAt: Date.now(),
-      expiresAt: expiresInMs ? Date.now() + expiresInMs : undefined,
     };
+
+    if (enabled !== undefined) {
+      override.enabled = enabled;
+    }
+    if (target !== undefined) {
+      override.target = target;
+    }
+    if (scopeId !== undefined) {
+      override.scopeId = scopeId;
+    }
+    if (expiresInMs) {
+      override.expiresAt = Date.now() + expiresInMs;
+    }
 
     this.state.overrides.set(type, override);
     this.state.history.push(override);
@@ -147,14 +156,32 @@ export class SessionOverrideManager {
 
     return {
       activeOverrides: activeOverrides.size,
-      overrides: Array.from(activeOverrides.entries()).map(([type, override]) => ({
-        type,
-        enabled: override.enabled,
-        target: override.target,
-        scope: override.scope,
-        setAt: override.setAt,
-        expiresAt: override.expiresAt,
-      })),
+      overrides: Array.from(activeOverrides.entries()).map(([type, override]) => {
+        const summary: {
+          type: InjectionType;
+          enabled?: boolean;
+          target?: InjectionTarget;
+          scope: string;
+          setAt: number;
+          expiresAt?: number;
+        } = {
+          type,
+          scope: override.scope,
+          setAt: override.setAt,
+        };
+
+        if (override.enabled !== undefined) {
+          summary.enabled = override.enabled;
+        }
+        if (override.target !== undefined) {
+          summary.target = override.target;
+        }
+        if (override.expiresAt !== undefined) {
+          summary.expiresAt = override.expiresAt;
+        }
+
+        return summary;
+      }),
       historyCount: this.state.history.length,
     };
   }

@@ -4,15 +4,16 @@
  *
  * A data-driven implementation of IMethodologyGuide that works with JSON
  * methodology definitions. This eliminates the need for TypeScript classes
- * per methodology - the same class works for CAGEERF, ReACT, 5W1H, SCAMPER, etc.
+ * per methodology - the same class works for any registered framework (built-in or custom).
  *
  * All methodology-specific behavior is driven by the JSON definition loaded
- * at runtime from dist/methodologies/.
+ * at runtime from resources/methodologies/.
  */
 
 import {
   BaseMethodologyGuide,
   type FrameworkMethodology,
+  type FrameworkType,
   type PromptCreationGuidance,
   type ProcessingGuidance,
   type StepGuidance,
@@ -53,6 +54,9 @@ import type { ContentAnalysisResult } from '../../semantic/types.js';
 export class GenericMethodologyGuide extends BaseMethodologyGuide {
   readonly frameworkId: string;
   readonly frameworkName: string;
+  /** The framework type discriminator */
+  readonly type: FrameworkType;
+  /** @deprecated Use `type` instead */
   readonly methodology: FrameworkMethodology;
   readonly version: string;
 
@@ -67,7 +71,9 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
     this.definition = definition;
     this.frameworkId = definition.id;
     this.frameworkName = definition.name;
-    this.methodology = definition.methodology;
+    // Support both 'type' and legacy 'methodology' fields in definition
+    this.type = definition.type || definition.methodology;
+    this.methodology = this.type; // Backward compat: methodology mirrors type
     this.version = definition.version || '1.0.0';
   }
 

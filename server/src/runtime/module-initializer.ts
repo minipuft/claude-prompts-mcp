@@ -89,7 +89,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   if (isVerbose) logger.info('🔄 Initializing Gate Manager...');
   const gateManager = await createGateManager(logger);
   if (isVerbose) {
-    const stats = gateManager.getRegistryStats();
+    const stats = gateManager.getStats();
     logger.info(`✅ GateManager initialized with ${stats.totalGates} gates`);
   }
 

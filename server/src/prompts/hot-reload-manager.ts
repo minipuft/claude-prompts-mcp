@@ -28,6 +28,11 @@ export type HotReloadEventType =
   | 'reload_required';
 
 /**
+ * File change operation types for hot reload events
+ */
+export type FileChangeOperation = 'added' | 'modified' | 'removed';
+
+/**
  * Hot reload event data
  */
 export interface HotReloadEvent {
@@ -39,6 +44,8 @@ export interface HotReloadEvent {
   methodologyId?: string;
   /** Gate ID for gate_changed events */
   gateId?: string;
+  /** The type of file change (added, modified, removed) */
+  changeType?: FileChangeOperation;
   timestamp: number;
   requiresFullReload: boolean;
 }
@@ -129,14 +136,14 @@ export class HotReloadManager {
   protected logger: Logger;
   private config: HotReloadConfig;
   private fileObserver: FileObserver;
-  private categoryManager?: CategoryManager;
-  private onReloadCallback?: (event: HotReloadEvent) => Promise<void>;
-  private onMethodologyReloadCallback?: (event: HotReloadEvent) => Promise<void>;
-  private onGateReloadCallback?: (event: HotReloadEvent) => Promise<void>;
+  private categoryManager: CategoryManager | undefined;
+  private onReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
+  private onMethodologyReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
+  private onGateReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private auxiliaryReloads: AuxiliaryReloadConfig[] = [];
   private stats: HotReloadStats;
   private isStarted: boolean = false;
-  private batchTimer?: NodeJS.Timeout;
+  private batchTimer: NodeJS.Timeout | undefined;
   private pendingChanges: FileChangeEvent[] = [];
   private watchedDirectories: Set<string> = new Set();
 
@@ -151,15 +158,28 @@ export class HotReloadManager {
     this.config = { ...DEFAULT_HOT_RELOAD_CONFIG, ...config };
 
     // Create file observer with filtered config
-    const observerConfig = {
+    const debounceMs: number =
+      this.config.debounceMs ?? DEFAULT_HOT_RELOAD_CONFIG.debounceMs ?? 500;
+    const watchPromptFiles: boolean =
+      this.config.watchPromptFiles ?? DEFAULT_HOT_RELOAD_CONFIG.watchPromptFiles ?? true;
+    const watchConfigFiles: boolean =
+      this.config.watchConfigFiles ?? DEFAULT_HOT_RELOAD_CONFIG.watchConfigFiles ?? true;
+    const recursive: boolean = this.config.recursive ?? DEFAULT_HOT_RELOAD_CONFIG.recursive ?? true;
+    const ignoredPatterns: string[] =
+      this.config.ignoredPatterns ?? DEFAULT_HOT_RELOAD_CONFIG.ignoredPatterns ?? [];
+    const maxRetries: number = this.config.maxRetries ?? DEFAULT_HOT_RELOAD_CONFIG.maxRetries ?? 3;
+    const retryDelayMs: number =
+      this.config.retryDelayMs ?? DEFAULT_HOT_RELOAD_CONFIG.retryDelayMs ?? 1000;
+
+    const observerConfig: Partial<FileObserverConfig> = {
       enabled: this.config.enabled,
-      debounceMs: this.config.debounceMs,
-      watchPromptFiles: this.config.watchPromptFiles,
-      watchConfigFiles: this.config.watchConfigFiles,
-      recursive: this.config.recursive,
-      ignoredPatterns: this.config.ignoredPatterns,
-      maxRetries: this.config.maxRetries,
-      retryDelayMs: this.config.retryDelayMs,
+      debounceMs,
+      watchPromptFiles,
+      watchConfigFiles,
+      recursive,
+      ignoredPatterns,
+      maxRetries,
+      retryDelayMs,
     };
 
     this.fileObserver = createFileObserver(logger, observerConfig, configManager);
@@ -353,13 +373,17 @@ export class HotReloadManager {
         (methodologyId ? ` (methodology: ${methodologyId})` : '')
     );
 
+    // Map FileChangeType to FileChangeOperation (filter out 'renamed' as it becomes 'added' or 'removed')
+    const changeType = this.mapToChangeOperation(event.type);
+
     const hotReloadEvent: HotReloadEvent = {
       type: 'methodology_changed',
       reason: `Methodology file ${event.type}: ${event.filename}`,
       affectedFiles: [event.filePath],
-      methodologyId,
       timestamp: event.timestamp,
       requiresFullReload: false, // Methodology changes typically don't need full reload
+      changeType,
+      ...(methodologyId ? { methodologyId } : {}),
     };
 
     // Use dedicated methodology callback if available, otherwise fall through to general reload
@@ -385,6 +409,23 @@ export class HotReloadManager {
     return match?.[1]?.toLowerCase();
   }
 
+  /**
+   * Map FileChangeType to FileChangeOperation
+   * 'renamed' is no longer used after file-observer enhancement (becomes 'added' or 'removed')
+   */
+  private mapToChangeOperation(fileChangeType: FileChangeEvent['type']): FileChangeOperation {
+    switch (fileChangeType) {
+      case 'added':
+        return 'added';
+      case 'removed':
+        return 'removed';
+      case 'modified':
+      case 'renamed':
+      default:
+        return 'modified';
+    }
+  }
+
   private async triggerAuxiliaryReloads(event: FileChangeEvent): Promise<void> {
     if (this.auxiliaryReloads.length === 0) {
       return;
@@ -408,6 +449,7 @@ export class HotReloadManager {
         affectedFiles: [event.filePath],
         timestamp: event.timestamp,
         requiresFullReload: false,
+        changeType: this.mapToChangeOperation(event.type),
       };
 
       try {
@@ -495,9 +537,9 @@ export class HotReloadManager {
       type: reloadType,
       reason: `File ${event.type}: ${event.filename}`,
       affectedFiles: [event.filePath],
-      category: event.category,
       timestamp: event.timestamp,
       requiresFullReload,
+      ...(event.category ? { category: event.category } : {}),
     };
 
     await this.processReloadEvent(hotReloadEvent);
@@ -571,10 +613,17 @@ export class HotReloadManager {
       newConfig.watchPromptFiles !== undefined ||
       newConfig.watchConfigFiles !== undefined
     ) {
+      const debounceMs: number =
+        this.config.debounceMs ?? DEFAULT_HOT_RELOAD_CONFIG.debounceMs ?? 500;
+      const watchPromptFiles: boolean =
+        this.config.watchPromptFiles ?? DEFAULT_HOT_RELOAD_CONFIG.watchPromptFiles ?? true;
+      const watchConfigFiles: boolean =
+        this.config.watchConfigFiles ?? DEFAULT_HOT_RELOAD_CONFIG.watchConfigFiles ?? true;
+
       this.fileObserver.updateConfig({
-        debounceMs: this.config.debounceMs,
-        watchPromptFiles: this.config.watchPromptFiles,
-        watchConfigFiles: this.config.watchConfigFiles,
+        debounceMs,
+        watchPromptFiles,
+        watchConfigFiles,
       });
     }
 

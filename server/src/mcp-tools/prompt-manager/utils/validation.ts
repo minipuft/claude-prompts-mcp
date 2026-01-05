@@ -8,6 +8,7 @@ import { ValidationError } from '../../../utils/index.js';
 import { ValidationContext } from '../core/types.js';
 
 import type { PromptManagerActionId } from '../../../tooling/action-metadata/definitions/prompt-manager.js';
+import type { ToolDefinitionInput } from '../../resource-manager/core/types.js';
 
 /**
  * Action-specific parameter requirements and examples
@@ -177,6 +178,76 @@ export function validatePromptArguments(args: any[]): void {
       throw new ValidationError('Each argument must have a description');
     }
   }
+}
+
+/**
+ * Validate tool definitions for inline tool creation
+ * Returns array of error messages (empty if valid)
+ */
+export function validateToolDefinitions(tools: ToolDefinitionInput[]): string[] {
+  const errors: string[] = [];
+  const seenIds = new Set<string>();
+
+  if (!Array.isArray(tools)) {
+    errors.push('Tools must be an array');
+    return errors;
+  }
+
+  for (const tool of tools) {
+    // Required fields
+    if (!tool.id) {
+      errors.push('Tool missing required field: id');
+    }
+    if (!tool.name) {
+      errors.push('Tool missing required field: name');
+    }
+    if (!tool.script) {
+      errors.push(`Tool '${tool.id || 'unknown'}' missing required field: script`);
+    }
+
+    // ID format validation (lowercase alphanumeric with underscores/hyphens)
+    if (tool.id && !/^[a-z][a-z0-9_-]*$/.test(tool.id)) {
+      errors.push(
+        `Tool ID '${tool.id}' must start with lowercase letter and contain only lowercase alphanumeric, underscores, or hyphens`
+      );
+    }
+
+    // Duplicate ID check
+    if (tool.id) {
+      if (seenIds.has(tool.id)) {
+        errors.push(`Duplicate tool ID: '${tool.id}'`);
+      }
+      seenIds.add(tool.id);
+    }
+
+    // Valid runtime values
+    const validRuntimes = ['python', 'node', 'shell', 'auto'];
+    if (tool.runtime && !validRuntimes.includes(tool.runtime)) {
+      errors.push(
+        `Tool '${tool.id}' has invalid runtime: '${tool.runtime}'. Valid: ${validRuntimes.join(', ')}`
+      );
+    }
+
+    // Valid trigger values
+    const validTriggers = ['schema_match', 'explicit', 'always', 'never'];
+    if (tool.trigger && !validTriggers.includes(tool.trigger)) {
+      errors.push(
+        `Tool '${tool.id}' has invalid trigger: '${tool.trigger}'. Valid: ${validTriggers.join(', ')}`
+      );
+    }
+
+    // Timeout must be positive
+    if (tool.timeout !== undefined && (typeof tool.timeout !== 'number' || tool.timeout <= 0)) {
+      errors.push(`Tool '${tool.id}' has invalid timeout: must be a positive number`);
+    }
+
+    // Schema should be an object if provided
+    if (tool.schema !== undefined && (typeof tool.schema !== 'object' || tool.schema === null)) {
+      errors.push(`Tool '${tool.id}' has invalid schema: must be an object`);
+    }
+  }
+
+  return errors;
 }
 
 /**

@@ -15,6 +15,7 @@ export type {
   FrameworkExecutionContext,
   FrameworkMethodology,
   FrameworkSelectionCriteria,
+  FrameworkType,
   IMethodologyGuide,
   MethodologyEnhancement,
   MethodologyToolDescription,

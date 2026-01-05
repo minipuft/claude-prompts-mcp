@@ -14,8 +14,12 @@ env:
 
 jobs:
   validation:
-    name: Jest Unit Suite
+    name: Jest Unit Suite (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18.x, 20.x, 22.x, 24.x]
     defaults:
       run:
         shell: bash
@@ -28,12 +32,30 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: server/package-lock.json
 
       - name: Install dependencies
         run: npm ci --prefer-offline --no-audit
+
+      - name: Validate generated artifacts (contracts)
+        run: npm run validate:contracts
+
+      - name: Validate action inventory (metadata)
+        run: npm run validate:metadata
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint (ratchet)
+        run: npm run lint:ratchet
+
+      - name: Build
+        run: npm run build
+
+      - name: Startup smoke test (built dist)
+        run: npm run start:test
 
       - name: Jest unit tests
         run: npm run test:ci

@@ -4,7 +4,7 @@
     "args": ["${CLAUDE_PLUGIN_ROOT}/server/dist/index.js", "--transport=stdio"],
     "env": {
       "MCP_WORKSPACE": "${CLAUDE_PLUGIN_ROOT}",
-      "MCP_RESOURCES_PATH": "${HOME}/.local/share/claude-prompts"
+      "MCP_RESOURCES_PATH": "${CLAUDE_PLUGIN_ROOT}/server/resources"
     }
   }
 }

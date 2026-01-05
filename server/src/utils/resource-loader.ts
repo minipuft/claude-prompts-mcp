@@ -38,7 +38,7 @@ export interface ResourceLoadResult<T> {
 }
 
 export class ResourceLoader {
-  private readonly logger?: Logger;
+  private readonly logger: Logger | undefined;
   private readonly cache = new Map<string, { mtimeMs: number; data: unknown }>();
 
   constructor(config: ResourceLoaderConfig = {}) {
@@ -67,14 +67,21 @@ export class ResourceLoader {
         };
       }
 
+      const yamlOptions: YamlFileLoadOptions = {
+        ...(options?.yamlOptions ?? {}),
+        required: true,
+      };
+
+      if (options?.encoding !== undefined) {
+        yamlOptions.encoding = options.encoding;
+      }
+
       const data =
         kind === 'yaml'
-          ? await loadYamlFile<T>(filePath, {
-              ...options?.yamlOptions,
-              required: true,
-              encoding: options?.encoding,
-            })
-          : await this.loadJson<T>(filePath, options?.encoding);
+          ? await loadYamlFile<T>(filePath, yamlOptions)
+          : options?.encoding !== undefined
+            ? await this.loadJson<T>(filePath, options.encoding)
+            : await this.loadJson<T>(filePath);
 
       // If YAML loader returns undefined despite required=true, treat as error
       if (data === undefined) {

@@ -10,9 +10,6 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Create dummy docs to satisfy build script
-RUN mkdir -p /docs && touch /docs/mcp-tools.md
-
 # Build the application
 RUN npm run build
 

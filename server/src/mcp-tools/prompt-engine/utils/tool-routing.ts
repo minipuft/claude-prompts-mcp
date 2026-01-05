@@ -20,8 +20,8 @@ function isPlausiblePromptId(token: string): boolean {
 }
 
 /**
- * Detects whether a raw command string should be routed to another MCP tool
- * (prompt_manager or system_control) before the prompt engine attempts to
+ * Detects whether a raw command string should be routed to an internal handler
+ * (prompt manager, system control, etc.) before the prompt engine attempts to
  * parse it as a template/chain instruction.
  */
 export function detectToolRoutingCommand(command: string): ToolRoutingResult {
@@ -75,7 +75,7 @@ export function detectToolRoutingCommand(command: string): ToolRoutingResult {
   }
 
   const frameworkMatch = trimmedCommand.match(FRAMEWORK_PATTERN);
-  if (frameworkMatch) {
+  if (frameworkMatch?.[3]) {
     return {
       requiresRouting: true,
       targetTool: 'system_control',

@@ -6,8 +6,8 @@
  *
  * CORE TOOLS:
  * - prompt_engine: Universal execution engine with framework integration
- * - prompt_manager: Complete prompt lifecycle management with intelligent filtering
  * - system_control: Framework and system management with analytics
+ * - resource_manager: Unified CRUD for prompts, gates, and methodologies
  *
  * ARCHITECTURE:
  * - Framework-aware tool descriptions that change based on active methodology
@@ -28,39 +28,49 @@ import { ConfigManager } from '../config/index.js';
 import { FrameworkManager, createFrameworkManager } from '../frameworks/framework-manager.js';
 import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
 import { GateSystemManager, createGateSystemManager } from '../gates/gate-state-manager.js';
-import type { GateManager } from '../gates/gate-manager.js';
 import { Logger } from '../logging/index.js';
 import { MetricsCollector, createMetricsCollector } from '../metrics/index.js';
 import { PromptAssetManager } from '../prompts/index.js';
 // Gate evaluator removed - now using Framework methodology validation
 import { createContentAnalyzer } from '../semantic/configurable-semantic-analyzer.js';
+import {
+  ConsolidatedFrameworkManager,
+  createConsolidatedFrameworkManager,
+} from './framework-manager/index.js';
+import { ResourceManagerRouter, createResourceManagerRouter } from './resource-manager/index.js';
 import { createSemanticIntegrationFactory } from '../semantic/integrations/index.js';
 import { ConversationManager } from '../text-references/conversation.js';
 import { TextReferenceManager } from '../text-references/index.js';
+import { ConsolidatedGateManager, createConsolidatedGateManager } from './gate-manager/index.js';
 import {
   ConsolidatedPromptManager,
   createConsolidatedPromptManager,
 } from './prompt-manager/index.js';
 import {
   promptEngineSchema,
-  promptManagerSchema,
   systemControlSchema,
+  resourceManagerSchema,
   type promptEngineInput,
-  type promptManagerInput,
   type systemControlInput,
+  type resourceManagerInput,
 } from '../tooling/contracts/_generated/mcp-schemas.js';
 import { Category, ConvertedPrompt, PromptData, ToolResponse } from '../types/index.js';
 import { ServiceManager } from '../utils/service-manager.js';
+import { PromptExecutionService, createPromptExecutionService } from './prompt-engine/index.js';
+
+import type { GateManager } from '../gates/gate-manager.js';
+import type { GateSpecification } from '../types/execution.js';
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
 
 // Consolidated tools
-import { PromptExecutionService, createPromptExecutionService } from './prompt-engine/index.js';
+import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
+import type { ResourceManagerInput } from './resource-manager/core/types.js';
 // Gate system management integration
 
 /**
  * Consolidated MCP Tools Manager
  *
- * Manages 3 intelligent consolidated tools that replace the previous 24+ scattered tools
+ * Manages 3 intelligent consolidated tools: prompt_engine, system_control, resource_manager
  */
 export class ConsolidatedMcpToolsManager {
   private logger: Logger;
@@ -68,11 +78,14 @@ export class ConsolidatedMcpToolsManager {
   private promptManager: PromptAssetManager;
   private configManager: ConfigManager;
 
-  // Consolidated tools (3 instead of 24+)
+  // Consolidated tools (5 core tools)
   private promptExecutionService!: PromptExecutionService;
   private promptManagerTool!: ConsolidatedPromptManager;
   private systemControl!: ConsolidatedSystemControl;
-  // Core tools: prompt engine, manager, and system control
+  private gateManagerTool!: ConsolidatedGateManager;
+  private frameworkManagerTool!: ConsolidatedFrameworkManager;
+  private resourceManagerRouter?: ResourceManagerRouter;
+  // Core tools: prompt engine, prompt manager, system control, gate manager, framework manager, resource manager
 
   // Shared components
   private semanticAnalyzer!: ReturnType<typeof createContentAnalyzer>;
@@ -85,7 +98,7 @@ export class ConsolidatedMcpToolsManager {
   private gateSystemManager?: GateSystemManager;
   private gateManager: GateManager;
   private analyticsService!: MetricsCollector;
-  private serviceManager?: ServiceManager;
+  private serviceManager: ServiceManager | undefined;
   // Removed executionCoordinator - chains now use LLM-driven execution model
 
   // Callback references
@@ -98,6 +111,7 @@ export class ConsolidatedMcpToolsManager {
 
   // Pending analytics queue for initialization race condition
   private pendingAnalytics: any[] = [];
+  private toolsInitialized = false;
 
   constructor(
     logger: Logger,
@@ -115,7 +129,9 @@ export class ConsolidatedMcpToolsManager {
     this.configManager = configManager;
     this.conversationManager = conversationManager;
     this.textReferenceManager = textReferenceManager;
-    this.serviceManager = serviceManager;
+    if (serviceManager != null) {
+      this.serviceManager = serviceManager;
+    }
     this.gateManager = gateManager;
   }
 
@@ -171,7 +187,7 @@ export class ConsolidatedMcpToolsManager {
       onRestart
     );
 
-    // Initialize 3 core consolidated tools
+    // Initialize 5 core consolidated tools
 
     this.systemControl = createConsolidatedSystemControl(this.logger, this.mcpServer, onRestart);
 
@@ -181,13 +197,25 @@ export class ConsolidatedMcpToolsManager {
       this.promptExecutionService.getGateGuidanceRenderer()
     );
 
+    // Initialize gate manager tool
+    this.gateManagerTool = createConsolidatedGateManager({
+      logger: this.logger,
+      gateManager: this.gateManager,
+      configManager: this.configManager,
+      onRefresh,
+    });
+
+    // Initialize framework manager tool (framework manager set later via setFrameworkManager)
+    // Note: frameworkManager is not yet available at this point, will be set in setFrameworkManager
+
     // chainScaffolder removed - functionality consolidated into promptEngine
 
     // Flush any pending analytics data that was queued during initialization
+    this.toolsInitialized = true;
     this.flushPendingAnalytics();
 
     this.logger.info(
-      'Consolidated MCP Tools Manager initialized with 3 intelligent tools (chain management in prompt_engine)'
+      'Consolidated MCP Tools Manager initialized with 5 intelligent tools (chain management in prompt_engine)'
     );
   }
 
@@ -200,8 +228,12 @@ export class ConsolidatedMcpToolsManager {
     this.systemControl.setFrameworkStateManager(frameworkStateManager);
     this.promptManagerTool.setFrameworkStateManager?.(frameworkStateManager);
     // FIXED: Synchronize Framework Manager with Framework State Manager to prevent injection duplication
-    if (this.frameworkManager) {
+    if (this.frameworkManager != null) {
       this.frameworkManager.setFrameworkStateManager(frameworkStateManager);
+    }
+    // Set on framework manager tool if already initialized
+    if (this.frameworkManagerTool != null) {
+      this.frameworkManagerTool.setFrameworkStateManager(frameworkStateManager);
     }
     // Core tools handle framework state integration
   }
@@ -247,7 +279,7 @@ export class ConsolidatedMcpToolsManager {
     });
 
     const serviceName = 'tool-description-watcher';
-    if (this.serviceManager) {
+    if (this.serviceManager != null) {
       if (!this.serviceManager.hasService(serviceName)) {
         this.serviceManager.register({
           name: serviceName,
@@ -317,20 +349,51 @@ export class ConsolidatedMcpToolsManager {
    * Initialize and set framework manager (called after framework state manager)
    */
   async setFrameworkManager(existingFrameworkManager?: FrameworkManager): Promise<void> {
-    if (!this.frameworkManager) {
+    if (this.frameworkManager == null) {
       // Use provided framework manager or create a new one
       this.frameworkManager =
-        existingFrameworkManager || (await createFrameworkManager(this.logger));
+        existingFrameworkManager ?? (await createFrameworkManager(this.logger));
 
       // FIX: Connect frameworkStateManager if it was set before frameworkManager was created
       // This handles the startup order where setFrameworkStateManager() is called first
-      if (this.frameworkStateManager) {
+      if (this.frameworkStateManager != null) {
         this.frameworkManager.setFrameworkStateManager(this.frameworkStateManager);
       }
 
       this.promptExecutionService.setFrameworkManager(this.frameworkManager);
       this.systemControl.setFrameworkManager(this.frameworkManager);
       this.promptManagerTool.setFrameworkManager?.(this.frameworkManager);
+
+      // Initialize framework manager tool now that frameworkManager is available
+      const frameworkManagerDeps: FrameworkManagerDependencies = {
+        logger: this.logger,
+        frameworkManager: this.frameworkManager,
+        configManager: this.configManager,
+        onRefresh: async () => {
+          // Trigger reload via the onRestart mechanism (full refresh)
+          this.logger.debug('Framework manager triggered refresh');
+        },
+        onToolsUpdate: async () => {
+          // Re-register tools with updated descriptions
+          await this.reregisterToolsWithUpdatedDescriptions();
+        },
+      };
+
+      if (this.frameworkStateManager != null) {
+        frameworkManagerDeps.frameworkStateManager = this.frameworkStateManager;
+      }
+
+      this.frameworkManagerTool = createConsolidatedFrameworkManager(frameworkManagerDeps);
+
+      // Initialize unified resource manager router (routes to prompt/gate/framework managers)
+      this.resourceManagerRouter = createResourceManagerRouter({
+        logger: this.logger,
+        promptManager: this.promptManagerTool,
+        gateManager: this.gateManagerTool,
+        frameworkManager: this.frameworkManagerTool,
+      });
+      this.logger.debug('ResourceManagerRouter initialized for unified resource management');
+
       // Core tools integrated with framework management
 
       // Set ConfigManager for system control config operations
@@ -344,7 +407,7 @@ export class ConsolidatedMcpToolsManager {
 
       // REMOVED: ChainOrchestrator initialization - modular chain system removed
 
-      if (existingFrameworkManager) {
+      if (existingFrameworkManager != null) {
         this.logger.info('Framework manager integrated with MCP tools (shared instance)');
       } else {
         this.logger.info('Framework manager initialized and integrated with MCP tools');
@@ -359,6 +422,23 @@ export class ConsolidatedMcpToolsManager {
     return this.frameworkManager;
   }
 
+  /**
+   * Get resource manager handler for auto-execute functionality.
+   * Returns a function that can execute resource_manager actions internally.
+   */
+  getResourceManagerHandler():
+    | ((
+        args: Record<string, unknown>,
+        context: Record<string, unknown>
+      ) => Promise<import('../types/index.js').ToolResponse>)
+    | null {
+    const router = this.resourceManagerRouter;
+    if (router == null) {
+      return null;
+    }
+    return (args, context) => router.handleAction(args as any, context);
+  }
+
   // REMOVED: wireExecutionCoordinator - ExecutionCoordinator removed
 
   /**
@@ -370,27 +450,29 @@ export class ConsolidatedMcpToolsManager {
     // Get current framework state for dynamic descriptions
     const frameworkEnabled = this.frameworkStateManager?.isFrameworkSystemEnabled() ?? false;
     const activeFramework = this.frameworkStateManager?.getActiveFramework();
-    const activeMethodology = activeFramework?.methodology ?? activeFramework?.id;
+    const activeMethodology = activeFramework?.type ?? activeFramework?.id;
 
     this.logger.info(`🔧 Registering tools with framework-aware descriptions:`);
     this.logger.info(`   Framework enabled: ${frameworkEnabled}`);
-    this.logger.info(`   Active framework: ${activeFramework?.id || 'none'}`);
-    this.logger.info(`   Active methodology: ${activeMethodology || 'none'}`);
+    this.logger.info(`   Active framework: ${activeFramework?.id ?? 'none'}`);
+    this.logger.info(`   Active methodology: ${activeMethodology ?? 'none'}`);
     this.logger.info(
-      `   Tool description manager: ${this.toolDescriptionManager ? 'available' : 'not available'}`
+      `   Tool description manager: ${
+        this.toolDescriptionManager != null ? 'available' : 'not available'
+      }`
     );
 
     // Register prompt_engine tool
     try {
       // Get dynamic description based on current framework state
+      // Description loaded from tool-descriptions.contracts.json via ToolDescriptionManager
       const promptEngineDescription =
         this.toolDescriptionManager?.getDescription(
           'prompt_engine',
           frameworkEnabled,
           activeMethodology,
           { applyMethodologyOverride: true }
-        ) ??
-        '🚀 PROMPT ENGINE: Execute prompts/chains. SYNTAX: >>prompt_id key="value" | Chain: >>s1 --> >>s2 (N-1 arrows) | OPERATORS: @framework ::gates #style(id) %modifier | Gate verdicts via `gate_verdict`; step outputs via `user_response`.';
+        ) ?? '';
 
       const getPromptEngineParamDescription = (paramName: string, fallback: string) =>
         this.toolDescriptionManager?.getParameterDescription(
@@ -402,7 +484,7 @@ export class ConsolidatedMcpToolsManager {
         ) ?? fallback;
 
       // Log which description source is being used for transparency
-      if (this.toolDescriptionManager) {
+      if (this.toolDescriptionManager != null) {
         this.logger.info(
           `   prompt_engine: Using ToolDescriptionManager (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
         );
@@ -438,19 +520,18 @@ export class ConsolidatedMcpToolsManager {
         })
         .refine(
           (value) => {
-            if (value.id) {
+            if (value.id != null) {
               return true;
             }
-            const hasCriteria = Boolean(value.criteria?.length || value.pass_criteria?.length);
-            const hasGuidance = Boolean(
-              (value.guidance && value.guidance.trim().length > 0) ||
-              (value.description && value.description.trim().length > 0)
-            );
+            const hasCriteria =
+              (value.criteria?.length ?? 0) > 0 || (value.pass_criteria?.length ?? 0) > 0;
+            const hasGuidance =
+              (value.guidance?.trim().length ?? 0) > 0 ||
+              (value.description?.trim().length ?? 0) > 0;
             return hasCriteria || hasGuidance;
           },
           {
-            message:
-              'Temporary gate entries require an id or some inline criteria/guidance',
+            message: 'Temporary gate entries require an id or some inline criteria/guidance',
           }
         );
 
@@ -553,13 +634,101 @@ export class ConsolidatedMcpToolsManager {
         },
         async (args: promptEngineInput) => {
           try {
-            const extraPayload =
-              args.user_response && args.user_response.trim().length > 0
-                ? { previous_step_output: args.user_response }
-                : undefined;
-            const requestExtras = extraPayload ? { extra: extraPayload } : {};
+            // Normalize and validate string inputs (trim whitespace, filter empty values)
+            const trimmedCommand = args.command?.trim();
+            const trimmedChainId = args.chain_id?.trim();
+            const trimmedUserResponse = args.user_response?.trim();
+            const trimmedGateVerdict = args.gate_verdict?.trim();
+            const trimmedGateAction = args.gate_action?.trim();
+
+            const extraPayload = trimmedUserResponse
+              ? { previous_step_output: trimmedUserResponse }
+              : undefined;
+            const requestExtras = extraPayload != null ? { extra: extraPayload } : {};
+
+            // Build normalized args, only including non-empty values
+            const normalizedArgs: Parameters<PromptExecutionService['executePromptCommand']>[0] = {
+              ...(trimmedCommand ? { command: trimmedCommand } : {}),
+              ...(trimmedChainId ? { chain_id: trimmedChainId } : {}),
+              ...(trimmedUserResponse ? { user_response: trimmedUserResponse } : {}),
+              ...(trimmedGateVerdict ? { gate_verdict: trimmedGateVerdict } : {}),
+              ...(trimmedGateAction
+                ? { gate_action: trimmedGateAction as 'retry' | 'skip' | 'abort' }
+                : {}),
+              ...(args.force_restart !== undefined ? { force_restart: args.force_restart } : {}),
+              ...(args.options != null ? { options: args.options } : {}),
+            };
+
+            if (args.gates != null) {
+              const normalizedGates = args.gates
+                .map((gate): GateSpecification | null => {
+                  if (typeof gate === 'string') {
+                    return gate;
+                  }
+
+                  // Check for CustomCheck type ({name, description} - simple inline gate)
+                  if ('name' in gate && 'description' in gate) {
+                    // Validate non-empty name and description
+                    const trimmedName = gate.name?.trim();
+                    const trimmedDescription = gate.description?.trim();
+                    if (trimmedName && trimmedDescription) {
+                      return {
+                        name: trimmedName,
+                        description: trimmedDescription,
+                      };
+                    }
+                    return null;
+                  }
+
+                  const normalized: Record<string, unknown> = {};
+                  if (gate['id'] !== undefined) {
+                    normalized['id'] = gate['id'];
+                  }
+                  if (gate['name'] !== undefined) {
+                    normalized['name'] = gate['name'];
+                  }
+                  if (gate['description'] !== undefined) {
+                    normalized['description'] = gate['description'];
+                  }
+                  if (gate['criteria'] !== undefined) {
+                    normalized['criteria'] = gate['criteria'];
+                  }
+                  if (gate['pass_criteria'] !== undefined) {
+                    normalized['pass_criteria'] = gate['pass_criteria'];
+                  }
+                  if (gate['severity'] !== undefined) {
+                    normalized['severity'] = gate['severity'];
+                  }
+                  if (gate['type'] !== undefined) {
+                    normalized['type'] = gate['type'];
+                  }
+                  if (gate['scope'] !== undefined) {
+                    normalized['scope'] = gate['scope'];
+                  }
+                  if (gate['context'] !== undefined) {
+                    normalized['context'] = gate['context'];
+                  }
+                  if (gate['guidance'] !== undefined) {
+                    normalized['guidance'] = gate['guidance'];
+                  }
+                  if (gate['source'] !== undefined) {
+                    normalized['source'] = gate['source'];
+                  }
+                  if (gate['target_step_number'] !== undefined) {
+                    normalized['target_step_number'] = gate['target_step_number'];
+                  }
+                  if (gate['apply_to_steps'] !== undefined) {
+                    normalized['apply_to_steps'] = gate['apply_to_steps'];
+                  }
+
+                  return normalized as GateSpecification;
+                })
+                .filter((entry): entry is GateSpecification => entry !== null);
+              normalizedArgs.gates = normalizedGates;
+            }
+
             const toolResponse = await this.promptExecutionService.executePromptCommand(
-              args,
+              normalizedArgs,
               requestExtras
             );
 
@@ -593,272 +762,19 @@ export class ConsolidatedMcpToolsManager {
       throw error;
     }
 
-    // Register prompt_manager tool
-    try {
-      // Get dynamic description based on current framework state
-      const promptManagerDescription =
-        this.toolDescriptionManager?.getDescription(
-          'prompt_manager',
-          frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
-        ) ??
-        '🧰 PROMPT MANAGER: Create, update, delete, list, inspect, and analyze prompts/chains. Supports gate configuration and metadata-driven guides; legacy creation aliases are removed.';
-
-      const getPromptManagerParamDescription = (paramName: string, fallback: string) =>
-        this.toolDescriptionManager?.getParameterDescription(
-          'prompt_manager',
-          paramName,
-          frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
-        ) ?? fallback;
-
-      // Log which description source is being used for transparency
-      if (this.toolDescriptionManager) {
-        this.logger.info(
-          `   prompt_manager: Using ToolDescriptionManager (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
-        );
-      } else {
-        this.logger.info(
-          `   prompt_manager: Using fallback description (ToolDescriptionManager not available)`
-        );
-      }
-
-      this.mcpServer.registerTool(
-        'prompt_manager',
-        {
-          title: 'Prompt Manager',
-          description: promptManagerDescription,
-          inputSchema: {
-            action: z
-              .enum([
-                'create',
-                'analyze_type',
-                'update',
-                'delete',
-                'reload',
-                'list',
-                'inspect',
-                'analyze_gates',
-                'guide',
-              ])
-              .describe(
-                getPromptManagerParamDescription(
-                  'action',
-                  'Action to perform. Supported: create, update, delete, reload, list, inspect, analyze_type, analyze_gates, guide.'
-                )
-              ),
-            id: z
-              .string()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'id',
-                  'Prompt identifier. Required for create*, update, delete, analyze_type, analyze_gates. Use letters, numbers, underscores, or hyphens.'
-                )
-              ),
-            name: z
-              .string()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'name',
-                  'Friendly prompt name. Required for create.'
-                )
-              ),
-            description: z
-              .string()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'description',
-                  'Short description of the prompt purpose. Required for create.'
-                )
-              ),
-            user_message_template: z
-              .string()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'user_message_template',
-                  "Prompt body with Nunjucks placeholders (e.g. 'Analyze {{input}}'). Required for create."
-                )
-              ),
-            system_message: z
-              .string()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'system_message',
-                  'Optional system message to store with the prompt.'
-                )
-              ),
-            content: z
-              .string()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'content',
-                  'Full prompt content for create/update operations when not using templates.'
-                )
-              ),
-            category: z
-              .string()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'category',
-                  'Category label used for filtering and organization.'
-                )
-              ),
-            arguments: z
-              .array(
-                z.object({
-                  name: z.string(),
-                  type: z.string(),
-                  description: z.string(),
-                })
-              )
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'arguments',
-                  'Array of argument definitions ({name, type, description}) for prompts with structured inputs.'
-                )
-              ),
-            gate_configuration: z
-              .object({
-                include: z.array(z.string()).optional(),
-                exclude: z.array(z.string()).optional(),
-                gates: z.array(z.any()).optional(),
-                framework_gates: z.boolean().optional(),
-              })
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'gate_configuration',
-                  'Explicit gate configuration (include/exclude lists, unified gates array, framework_gates flag).'
-                )
-              ),
-            search_query: z
-              .string()
-              .optional()
-              .describe(
-                getPromptManagerParamDescription(
-                  'search_query',
-                  "Search expression for list (e.g. 'category:code type:chain')."
-                )
-              ),
-          },
-        },
-        async (args: promptManagerInput) => {
-          try {
-            // Check if promptManagerTool exists
-            if (!this.promptManagerTool) {
-              this.logger.error(`ERROR: promptManagerTool is undefined!`);
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: promptManagerTool is not initialized`,
-                  },
-                ],
-                isError: true,
-              };
-            }
-
-            // CRITICAL: Adding error-level logging to trace MCP tool invocation
-            this.logger.error(
-              `[GATE-TRACE] 🔥 MCP TOOL INVOCATION: About to call promptManagerTool.handleAction for action: ${args.action}`
-            );
-            this.logger.error(`[GATE-TRACE] 🔥 MCP args being passed:`, args);
-
-            const toolResponse = await this.promptManagerTool.handleAction(args, {});
-
-            this.logger.error(
-              `[GATE-TRACE] 🔥 MCP TOOL RESPONSE: handleAction completed for action: ${args.action}`
-            );
-
-            // Debug logging and validation
-            if (!toolResponse) {
-              this.logger.error(
-                `prompt_manager returned undefined response for action: ${args.action}`
-              );
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: Tool returned undefined response`,
-                  },
-                ],
-                isError: true,
-              };
-            }
-
-            if (!toolResponse.content) {
-              this.logger.error(
-                `prompt_manager returned response with undefined content for action: ${args.action}`,
-                toolResponse
-              );
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: Tool returned response with undefined content`,
-                  },
-                ],
-                isError: true,
-              };
-            }
-
-            return {
-              content: toolResponse.content,
-              isError: toolResponse.isError,
-              ...(toolResponse.structuredContent && {
-                structuredContent: toolResponse.structuredContent,
-              }),
-            };
-          } catch (error) {
-            this.logger.error(
-              `prompt_manager error: ${error instanceof Error ? error.message : String(error)}`
-            );
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-                },
-              ],
-              isError: true,
-            };
-          }
-        }
-      );
-      this.logger.debug('✅ prompt_manager tool registered successfully');
-    } catch (error) {
-      this.logger.error(
-        `❌ Failed to register prompt_manager tool: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-      throw error;
-    }
-
     // Register system_control tool
     try {
-      // Get dynamic description based on current framework state
+      // Description loaded from tool-descriptions.contracts.json via ToolDescriptionManager
       const systemControlDescription =
         this.toolDescriptionManager?.getDescription(
           'system_control',
           frameworkEnabled,
           activeMethodology,
           { applyMethodologyOverride: true }
-        ) ??
-        '⚙️ SYSTEM CONTROL: Unified interface for status, framework controls, gate management, analytics, configuration, and maintenance actions.';
+        ) ?? '';
 
       // Log which description source is being used for transparency
-      if (this.toolDescriptionManager) {
+      if (this.toolDescriptionManager != null) {
         this.logger.info(
           `   system_control: Using ToolDescriptionManager (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
         );
@@ -906,7 +822,7 @@ export class ConsolidatedMcpToolsManager {
               .describe(
                 getSystemControlParamDescription(
                   'framework',
-                  'Framework identifier when switching (CAGEERF, ReACT, 5W1H, SCAMPER).'
+                  'Framework identifier when switching. Use framework:list to see available options.'
                 )
               ),
             reason: z
@@ -962,9 +878,9 @@ export class ConsolidatedMcpToolsManager {
             return {
               content: toolResponse.content,
               isError: toolResponse.isError,
-              ...(toolResponse.structuredContent && {
-                structuredContent: toolResponse.structuredContent,
-              }),
+              ...(toolResponse.structuredContent != null
+                ? { structuredContent: toolResponse.structuredContent }
+                : {}),
             };
           } catch (error) {
             this.logger.error(
@@ -991,47 +907,116 @@ export class ConsolidatedMcpToolsManager {
       );
       throw error;
     }
-    this.logger.info('🎉 Centralized MCP tools registered successfully!');
-    this.logger.info('📊 Core Tools: 3 centrally managed tools');
-    this.logger.info('🚀 Active Tools: prompt_engine, prompt_manager, system_control');
+
+    // Register resource_manager tool (unified router for prompts, gates, methodologies)
+    try {
+      // Description loaded from tool-descriptions.contracts.json via ToolDescriptionManager
+      const resourceManagerDescription =
+        this.toolDescriptionManager?.getDescription(
+          'resource_manager',
+          frameworkEnabled,
+          activeMethodology,
+          { applyMethodologyOverride: true }
+        ) ?? '';
+
+      this.mcpServer.registerTool(
+        'resource_manager',
+        {
+          title: 'Resource Manager',
+          description: resourceManagerDescription,
+          // Use generated schema from contracts - includes .passthrough() for advanced methodology fields
+          inputSchema: resourceManagerSchema,
+        },
+        async (args: resourceManagerInput) => {
+          try {
+            const router = this.resourceManagerRouter;
+            if (router == null) {
+              return {
+                content: [{ type: 'text', text: 'Error: resource_manager not initialized' }],
+                isError: true,
+              };
+            }
+            // Cast to ResourceManagerInput - the generated schema uses .passthrough() so advanced
+            // methodology fields flow through, but router expects the more specific local type
+            const toolResponse = await router.handleAction(args as ResourceManagerInput, {});
+            return {
+              content: toolResponse.content,
+              isError: toolResponse.isError,
+            };
+          } catch (error) {
+            this.logger.error(
+              `resource_manager error: ${error instanceof Error ? error.message : String(error)}`
+            );
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
+      );
+      this.logger.debug('✅ resource_manager tool registered successfully');
+    } catch (error) {
+      this.logger.error(
+        `❌ Failed to register resource_manager tool: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      throw error;
+    }
+
+    this.logger.info('🎉 MCP tools registered successfully!');
+    this.logger.info('📊 Core Tools: 3 registered MCP tools');
+    this.logger.info('🚀 Active Tools: prompt_engine, system_control, resource_manager');
 
     // Log available tools for user reference
     const toolSummary = [
-      'Available Core Tools (centralized registration):',
-      '🎯 prompt_engine - Centralized prompt execution engine',
-      '🎯 prompt_manager - Centralized prompt lifecycle management',
-      '⚙️ system_control - Centralized framework and system management',
+      'Available MCP Tools:',
+      '🎯 prompt_engine - Execute prompts with frameworks and gates',
+      '⚙️ system_control - System administration and status',
+      '📦 resource_manager - Unified CRUD for prompts, gates, and methodologies',
     ].join('\n   ');
 
     this.logger.info(toolSummary);
   }
 
   /**
-   * Re-register all tools with updated descriptions (for framework switching) - centralized version
+   * Update tool descriptions for framework switching without re-registering tools.
+   * The MCP SDK does not support re-registering already registered tools.
+   * Instead, we sync the description manager and notify clients of the change.
    */
   async reregisterToolsWithUpdatedDescriptions(): Promise<void> {
-    this.logger.info('🔄 Re-registering tools with updated framework-aware descriptions...');
+    this.logger.info('🔄 Updating tool descriptions for framework switch...');
 
     try {
-      // Simply call the centralized registration method which now uses dynamic descriptions
-      await this.registerAllTools();
+      // Sync tool description manager with new framework state
+      // The descriptions are fetched dynamically when clients request tool info
+      if (this.toolDescriptionManager != null) {
+        await this.toolDescriptionManager.reload();
+        this.logger.info('✅ Tool description manager synchronized');
+      }
 
-      // Notify MCP clients that tool list has changed
-      if (this.mcpServer?.server?.sendToolListChanged) {
+      // Notify MCP clients that tool list has changed (descriptions updated)
+      if (typeof this.mcpServer?.server?.sendToolListChanged === 'function') {
         await this.mcpServer.server.sendToolListChanged();
         this.logger.info('✅ Sent tool list changed notification to MCP clients');
       } else {
         this.logger.warn('⚠️ MCP server does not support sendToolListChanged notification');
       }
 
-      this.logger.info(
-        '🎉 Tools re-registered successfully with updated descriptions (centralized)!'
-      );
+      this.logger.info('🎉 Tool descriptions updated successfully for framework switch!');
     } catch (error) {
       this.logger.error(
-        `Failed to re-register tools: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to update tool descriptions: ${error instanceof Error ? error.message : String(error)}`
       );
-      throw error;
+      // Don't throw - framework switch should still succeed even if description update fails
+      this.logger.warn(
+        'Framework switch completed but tool descriptions may not reflect new framework'
+      );
     }
   }
 
@@ -1057,7 +1042,7 @@ export class ConsolidatedMcpToolsManager {
    * Update system analytics (from consolidated tools)
    */
   updateAnalytics(analytics: any): void {
-    if (this.systemControl) {
+    if (this.toolsInitialized) {
       this.systemControl.updateAnalytics(analytics);
     } else {
       // Queue analytics data until systemControl is initialized
@@ -1074,7 +1059,7 @@ export class ConsolidatedMcpToolsManager {
    * mutations flowing through the canonical tool implementation.
    */
   async runPromptManagerAction(args: PromptManagerActionArgs): Promise<ToolResponse> {
-    if (!this.promptManagerTool) {
+    if (!this.toolsInitialized) {
       throw new Error('promptManagerTool is not initialized');
     }
     return this.promptManagerTool.handleAction(args, {});
@@ -1084,7 +1069,7 @@ export class ConsolidatedMcpToolsManager {
    * Flush pending analytics data to systemControl after initialization
    */
   private flushPendingAnalytics(): void {
-    if (this.systemControl && this.pendingAnalytics.length > 0) {
+    if (this.toolsInitialized && this.pendingAnalytics.length > 0) {
       this.logger.debug(`Flushing ${this.pendingAnalytics.length} pending analytics updates`);
       this.pendingAnalytics.forEach((analytics) => {
         this.systemControl.updateAnalytics(analytics);
@@ -1100,13 +1085,13 @@ export class ConsolidatedMcpToolsManager {
     this.logger.info('🛑 Shutting down MCP tools manager...');
 
     // Shutdown tool description manager and stop file watching
-    if (this.toolDescriptionManager) {
+    if (this.toolDescriptionManager != null) {
       this.toolDescriptionManager.shutdown();
       this.logger.info('✅ Tool description manager shut down');
     }
 
     // Cleanup gate system manager
-    if (this.gateSystemManager) {
+    if (this.gateSystemManager != null) {
       this.gateSystemManager.cleanup().catch((error) => {
         this.logger.error('Error during gate system manager cleanup:', error);
       });

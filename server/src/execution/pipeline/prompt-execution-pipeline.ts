@@ -11,6 +11,7 @@ import type {
   PipelineStageStatus,
   MetricStatus,
   CommandExecutionMetric,
+  PipelineStageMetric,
 } from '../../metrics/index.js';
 import type { McpToolRequest, ToolResponse } from '../../types/index.js';
 
@@ -20,7 +21,7 @@ import type { McpToolRequest, ToolResponse } from '../../types/index.js';
 export class PromptExecutionPipeline {
   private stages: PipelineStage[] = [];
   private readonly logger: Logger;
-  private readonly metricsProvider?: () => MetricsCollector | undefined;
+  private readonly metricsProvider: (() => MetricsCollector | undefined) | undefined;
 
   constructor(
     private readonly requestStage: PipelineStage,
@@ -30,6 +31,8 @@ export class PromptExecutionPipeline {
     private readonly inlineGateStage: PipelineStage,
     private readonly operatorValidationStage: PipelineStage,
     private readonly planningStage: PipelineStage,
+    private readonly scriptExecutionStage: PipelineStage | null, // 04b - Script tool execution
+    private readonly scriptAutoExecuteStage: PipelineStage | null, // 04c - Script auto-execute
     private readonly frameworkStage: PipelineStage,
     private readonly judgeSelectionStage: PipelineStage,
     private readonly promptGuidanceStage: PipelineStage,
@@ -63,7 +66,7 @@ export class PromptExecutionPipeline {
 
     const pipelineStart = Date.now();
     const commandMetricId = this.createCommandMetricId();
-    context.metadata.commandMetricId = commandMetricId;
+    context.metadata['commandMetricId'] = commandMetricId;
     const stageMetrics: StageMetricSummary[] = [];
     let previousState = this.captureContextState(context);
     let commandStatus: MetricStatus = 'success';
@@ -189,6 +192,11 @@ export class PromptExecutionPipeline {
     // 1. SessionStage MUST run before InjectionControlStage (provides currentStep)
     // 2. InjectionControlStage MUST run before PromptGuidanceStage (decisions control injection)
     // 3. PromptGuidanceStage reads context.state.injection to decide what to inject
+    //
+    // Script execution ordering:
+    // ScriptExecutionStage (04b) runs after planning, before auto-execute.
+    // ScriptAutoExecuteStage (04c) runs after script execution, before judge selection.
+    // This allows auto-executed tool outputs to be available in template context.
     this.stages = [
       this.requestStage,
       this.dependencyStage,
@@ -197,6 +205,10 @@ export class PromptExecutionPipeline {
       this.inlineGateStage,
       this.operatorValidationStage,
       this.planningStage,
+      // 04b: Script execution (optional) - runs after planning
+      ...(this.scriptExecutionStage ? [this.scriptExecutionStage] : []),
+      // 04c: Script auto-execute (optional) - runs after script execution, before judge selection
+      ...(this.scriptAutoExecuteStage ? [this.scriptAutoExecuteStage] : []),
       this.judgeSelectionStage, // Moved before framework/gate stages for two-phase flow
       this.gateStage, // Now runs after judge decision
       this.frameworkStage, // Now uses clientFrameworkOverride from judge flow
@@ -304,17 +316,15 @@ export class PromptExecutionPipeline {
       return;
     }
 
-    metrics.recordPipelineStage({
+    const metricPayload: PipelineStageMetric = {
       stageId: `${stage.name}:${context.getSessionId() ?? 'sessionless'}:${startTime}`,
       stageName: stage.name,
       stageType: this.mapStageType(stage.name),
       toolName: 'prompt_engine',
-      sessionId: context.getSessionId(),
       startTime,
       endTime: startTime + durationMs,
       durationMs,
       status,
-      errorMessage,
       metadata: {
         heapUsed: memoryAfter.heapUsed,
         rss: memoryAfter.rss,
@@ -322,7 +332,17 @@ export class PromptExecutionPipeline {
         rssDelta: memoryAfter.rss - memoryBefore.rss,
         responseReady: Boolean(context.response),
       },
-    });
+    };
+
+    const sessionId = context.getSessionId();
+    if (sessionId !== undefined) {
+      metricPayload.sessionId = sessionId;
+    }
+    if (errorMessage !== undefined) {
+      metricPayload.errorMessage = errorMessage;
+    }
+
+    metrics.recordPipelineStage(metricPayload);
   }
 
   private recordCommandExecutionMetric(
@@ -339,8 +359,8 @@ export class PromptExecutionPipeline {
 
     const endTime = Date.now();
     const appliedGates = context.executionPlan?.gates ?? [];
-    const temporaryGateIds = Array.isArray(context.metadata.temporaryGateIds)
-      ? (context.metadata.temporaryGateIds as string[])
+    const temporaryGateIds = Array.isArray(context.metadata['temporaryGateIds'])
+      ? (context.metadata['temporaryGateIds'] as string[])
       : [];
 
     const metric: CommandExecutionMetric = {
@@ -348,16 +368,22 @@ export class PromptExecutionPipeline {
       commandName: context.mcpRequest.command ?? '<response-only>',
       toolName: 'prompt_engine',
       executionMode: this.resolveExecutionMode(context),
-      sessionId: context.getSessionId(),
       startTime,
       endTime,
       durationMs: endTime - startTime,
       status,
       appliedGates,
       temporaryGatesApplied: temporaryGateIds.length,
-      errorMessage,
       metadata: this.buildCommandMetricMetadata(context),
     };
+
+    const sessionId = context.getSessionId();
+    if (sessionId !== undefined) {
+      metric.sessionId = sessionId;
+    }
+    if (errorMessage !== undefined) {
+      metric.errorMessage = errorMessage;
+    }
 
     metrics.recordCommandExecutionMetric(metric);
   }

@@ -276,9 +276,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
         (injectionDecision?.inject ?? true) && context.state.framework.systemPromptApplied !== true;
 
       // Get semantic analysis from execution plan (set by Planning Stage)
-      const semanticAnalysis = context.executionPlan?.semanticAnalysis as
-        | ContentAnalysisResult
-        | undefined;
+      const semanticAnalysis = context.executionPlan?.semanticAnalysis;
       const selectedResources = context.state.framework.selectedResources;
       const availableResources = context.state.framework.availableResources as
         | ConvertedPrompt[]
@@ -287,8 +285,12 @@ export class PromptGuidanceStage extends BasePipelineStage {
       const guidanceOptions: Parameters<PromptGuidanceService['applyGuidance']>[1] = {
         includeSystemPromptInjection: includeSystemPrompt,
         includeTemplateEnhancement: true,
-        frameworkOverride: this.getFrameworkOverride(context),
       };
+
+      const frameworkOverride = this.getFrameworkOverride(context);
+      if (frameworkOverride) {
+        guidanceOptions.frameworkOverride = frameworkOverride;
+      }
 
       if (semanticAnalysis) {
         guidanceOptions.semanticAnalysis = semanticAnalysis;
@@ -337,18 +339,35 @@ export class PromptGuidanceStage extends BasePipelineStage {
   private getFrameworkOverride(context: ExecutionContext): FrameworkMethodology | undefined {
     const decisionInput = this.buildDecisionInput(context);
     const frameworkId = context.frameworkAuthority.getFrameworkId(decisionInput);
-    return frameworkId as FrameworkMethodology | undefined;
+    return frameworkId;
   }
 
   /**
    * Build decision input from context for FrameworkDecisionAuthority.
    */
   private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
-    return {
-      modifiers: context.executionPlan?.modifiers,
-      operatorOverride: context.parsedCommand?.executionPlan?.frameworkOverride,
-      clientOverride: context.state.framework.clientOverride,
-      globalActiveFramework: context.frameworkContext?.selectedFramework?.id,
-    };
+    const decisionInput: FrameworkDecisionInput = {};
+
+    const modifiers = context.executionPlan?.modifiers;
+    if (modifiers) {
+      decisionInput.modifiers = modifiers;
+    }
+
+    const operatorOverride = context.parsedCommand?.executionPlan?.frameworkOverride;
+    if (operatorOverride) {
+      decisionInput.operatorOverride = operatorOverride;
+    }
+
+    const clientOverride = context.state.framework.clientOverride;
+    if (clientOverride) {
+      decisionInput.clientOverride = clientOverride;
+    }
+
+    const globalActiveFramework = context.frameworkContext?.selectedFramework?.id;
+    if (globalActiveFramework) {
+      decisionInput.globalActiveFramework = globalActiveFramework;
+    }
+
+    return decisionInput;
   }
 }

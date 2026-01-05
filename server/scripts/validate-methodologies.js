@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const METHODOLOGIES_DIR = join(__dirname, '..', 'methodologies');
+const METHODOLOGIES_DIR = join(__dirname, '..', 'resources', 'methodologies');
 const DIST_SCHEMA_PATH = join(__dirname, '..', 'dist', 'frameworks', 'methodology', 'methodology-schema.js');
 const args = process.argv.slice(2);
 const STRICT = args.includes('--strict');

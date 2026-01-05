@@ -5,7 +5,7 @@
  * Minimal entry point with comprehensive error handling, health checks, and validation
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { ConfigManager } from './config/index.js';
@@ -309,7 +309,7 @@ QUICK START:
   npx claude-prompts --init=~/my-prompts    Create a new workspace with starter prompts
 
   Then add MCP_WORKSPACE to your Claude Desktop config and restart.
-  Claude can update your prompts via prompt_manager - no manual editing needed!
+  Claude can update your prompts via resource_manager - no manual editing needed!
 
 PATH OPTIONS:
   --workspace=/path       Base directory for user assets (prompts, config, etc.)
@@ -341,7 +341,7 @@ PRIORITY ORDER:
 
 WORKSPACE STRUCTURE:
   Your workspace can contain:
-    prompts/promptsConfig.json  - Your custom prompts
+    prompts/                   - Your custom prompts (directory format)
     config.json                 - Server configuration overrides
     methodologies/              - Custom methodology definitions
     gates/                      - Custom gate definitions
@@ -351,7 +351,7 @@ EXAMPLES:
   npx claude-prompts --workspace=/home/user/my-prompts
 
   # Override specific paths
-  npx claude-prompts --prompts=/path/to/prompts.json
+  npx claude-prompts --prompts=/path/to/prompts
 
   # Via environment variables
   MCP_WORKSPACE=/home/user/my-prompts npx claude-prompts
@@ -381,35 +381,63 @@ For more information: https://github.com/minipuft/claude-prompts-mcp
 }
 
 /**
- * Starter prompts config for new workspaces
+ * Starter prompts for new workspaces
  */
-const STARTER_PROMPTS_CONFIG = {
-  version: '1.0',
-  description: 'My custom prompts workspace - edit these or add your own!',
-  prompts: [
-    {
-      id: 'quick_review',
-      title: 'Quick Code Review',
-      description: 'Fast review focusing on bugs and security issues',
-      content:
-        'Review this code for bugs, security issues, and obvious improvements. Be concise and actionable.\n\n```\n{{code}}\n```',
-    },
-    {
-      id: 'explain',
-      title: 'Explain Code',
-      description: 'Get a clear explanation of how code works',
-      content:
-        'Explain how this code works. Start with a one-sentence summary, then break down the key parts:\n\n```\n{{code}}\n```',
-    },
-    {
-      id: 'improve',
-      title: 'Suggest Improvements',
-      description: 'Get actionable suggestions to improve code quality',
-      content:
-        'Suggest improvements for this code. Focus on:\n- Readability\n- Performance\n- Best practices\n\nProvide before/after examples where helpful.\n\n```\n{{code}}\n```',
-    },
-  ],
+type StarterPrompt = {
+  id: string;
+  category: string;
+  description: string;
+  userMessageTemplate: string;
+  arguments: Array<{ name: string; type: 'string'; description: string }>;
 };
+
+const STARTER_PROMPTS: StarterPrompt[] = [
+  {
+    id: 'quick_review',
+    category: 'development',
+    description: 'Fast review focusing on bugs and security issues.',
+    userMessageTemplate:
+      'Review this code for bugs, security issues, and obvious improvements. Be concise and actionable.\n\n```\n{{code}}\n```',
+    arguments: [{ name: 'code', type: 'string', description: 'Code to review.' }],
+  },
+  {
+    id: 'explain',
+    category: 'development',
+    description: 'Clear explanation of how code works.',
+    userMessageTemplate:
+      'Explain how this code works. Start with a one-sentence summary, then break down the key parts.\n\n```\n{{code}}\n```',
+    arguments: [{ name: 'code', type: 'string', description: 'Code to explain.' }],
+  },
+  {
+    id: 'improve',
+    category: 'development',
+    description: 'Actionable suggestions to improve code quality.',
+    userMessageTemplate:
+      'Suggest improvements for this code. Focus on:\n- Readability\n- Performance\n- Best practices\n\nProvide before/after examples where helpful.\n\n```\n{{code}}\n```',
+    arguments: [{ name: 'code', type: 'string', description: 'Code to improve.' }],
+  },
+];
+
+function formatStarterPromptYaml(prompt: StarterPrompt): string {
+  const descriptionLines = prompt.description.split('\n').map((line) => `  ${line || ''}`);
+  const argsLines = prompt.arguments.flatMap((arg) => [
+    `  - name: ${arg.name}`,
+    `    type: ${arg.type}`,
+    `    description: ${arg.description}`,
+  ]);
+
+  return [
+    `id: ${prompt.id}`,
+    `name: ${prompt.id}`,
+    `category: ${prompt.category}`,
+    `description: >-`,
+    ...descriptionLines,
+    `userMessageTemplateFile: user-message.md`,
+    `arguments:`,
+    ...argsLines,
+    '',
+  ].join('\n');
+}
 
 /**
  * Initialize a new workspace with starter prompts
@@ -417,26 +445,36 @@ const STARTER_PROMPTS_CONFIG = {
 function initWorkspace(targetPath: string): { success: boolean; message: string } {
   try {
     const workspacePath = resolve(targetPath);
-    const promptsDir = join(workspacePath, 'prompts');
-    const promptsConfigPath = join(promptsDir, 'promptsConfig.json');
+    const promptsDir = join(workspacePath, 'resources', 'prompts');
 
-    // Check if workspace already exists
-    if (existsSync(promptsConfigPath)) {
+    // Check if workspace already exists (check both new and legacy paths)
+    const legacyPromptsDir = join(workspacePath, 'prompts');
+    if (
+      (existsSync(promptsDir) && readdirSync(promptsDir).length > 0) ||
+      (existsSync(legacyPromptsDir) && readdirSync(legacyPromptsDir).length > 0)
+    ) {
       return {
         success: false,
-        message: `Workspace already exists at ${workspacePath}\nFound: ${promptsConfigPath}`,
+        message: `Workspace already exists at ${workspacePath}\nFound prompts directory (non-empty)`,
       };
     }
 
     // Create directories
     mkdirSync(promptsDir, { recursive: true });
 
-    // Write starter prompts config
-    writeFileSync(
-      promptsConfigPath,
-      JSON.stringify(STARTER_PROMPTS_CONFIG, null, 2) + '\n',
-      'utf8'
-    );
+    const createdFiles: string[] = [];
+    for (const prompt of STARTER_PROMPTS) {
+      const promptDir = join(promptsDir, prompt.category, prompt.id);
+      mkdirSync(promptDir, { recursive: true });
+
+      const promptYamlPath = join(promptDir, 'prompt.yaml');
+      writeFileSync(promptYamlPath, formatStarterPromptYaml(prompt), 'utf8');
+      createdFiles.push(promptYamlPath);
+
+      const userMessagePath = join(promptDir, 'user-message.md');
+      writeFileSync(userMessagePath, `${prompt.userMessageTemplate.trimEnd()}\n`, 'utf8');
+      createdFiles.push(userMessagePath);
+    }
 
     return {
       success: true,
@@ -444,7 +482,7 @@ function initWorkspace(targetPath: string): { success: boolean; message: string 
 ✅ Workspace created at: ${workspacePath}
 
 Created files:
-  ${promptsConfigPath}
+  ${createdFiles.map((f) => `\n  ${f}`).join('')}
 
 Next steps:
 
@@ -464,12 +502,12 @@ Next steps:
 
 2. Restart Claude Desktop
 
-3. Test with: prompt_manager(action: "list")
+3. Test with: resource_manager(resource_type: "prompt", action: "list")
 
 4. Edit prompts directly or ask Claude:
    "Update the quick_review prompt to also check for TypeScript errors"
 
-   Claude will use prompt_manager to update your prompts automatically!
+   Claude will use resource_manager to update your prompts automatically!
 
 📖 Full docs: https://github.com/minipuft/claude-prompts-mcp
 `,
@@ -498,7 +536,7 @@ function parseCommandLineArgs(): { shouldExit: boolean; exitCode: number } {
   const initArg = args.find((arg) => arg.startsWith('--init'));
   if (initArg) {
     // Parse the target path
-    let targetPath: string;
+    let targetPath: string | undefined;
     if (initArg.includes('=')) {
       targetPath = initArg.split('=')[1];
     } else {
@@ -514,9 +552,14 @@ function parseCommandLineArgs(): { shouldExit: boolean; exitCode: number } {
       }
     }
 
+    if (!targetPath) {
+      console.error('Error: --init requires a path. Usage: --init=/path/to/workspace');
+      return { shouldExit: true, exitCode: 1 };
+    }
+
     // Expand ~ to home directory
     if (targetPath.startsWith('~')) {
-      const homedir = process.env.HOME || process.env.USERPROFILE || '';
+      const homedir = process.env['HOME'] || process.env['USERPROFILE'] || '';
       targetPath = targetPath.replace('~', homedir);
     }
 
@@ -528,7 +571,7 @@ function parseCommandLineArgs(): { shouldExit: boolean; exitCode: number } {
   // Validate transport argument
   const transportArg = args.find((arg) => arg.startsWith('--transport='));
   if (transportArg) {
-    const transport = transportArg.split('=')[1];
+    const transport = transportArg.slice('--transport='.length);
     if (!['stdio', 'sse'].includes(transport)) {
       console.error(`Error: Invalid transport '${transport}'. Supported: stdio, sse`);
       console.error('Use --help for usage information');
@@ -539,7 +582,7 @@ function parseCommandLineArgs(): { shouldExit: boolean; exitCode: number } {
   // Validate log-level argument
   const logLevelArg = args.find((arg) => arg.startsWith('--log-level='));
   if (logLevelArg) {
-    const level = logLevelArg.split('=')[1]?.toLowerCase();
+    const level = logLevelArg.slice('--log-level='.length)?.toLowerCase();
     if (!['debug', 'info', 'warn', 'error'].includes(level)) {
       console.error(`Error: Invalid log level '${level}'. Supported: debug, info, warn, error`);
       console.error('Use --help for usage information');
@@ -587,7 +630,7 @@ async function main(): Promise<void> {
     const args = fullArgv.slice(2);
     const runtimeOptions = resolveRuntimeLaunchOptions(args, fullArgv);
     const isStartupTest = runtimeOptions.startupTest;
-    const isCI = process.env.CI === 'true' || process.env.NODE_ENV === 'test';
+    const isCI = process.env['CI'] === 'true' || process.env['NODE_ENV'] === 'test';
     const isVerbose = runtimeOptions.verbose;
 
     if (isStartupTest && isVerbose) {
@@ -597,8 +640,8 @@ async function main(): Promise<void> {
       debugLog(`DEBUG: Platform: ${process.platform}`);
       debugLog(`DEBUG: Node.js version: ${process.version}`);
       debugLog(`DEBUG: Working directory: ${process.cwd()}`);
-      debugLog(`DEBUG: MCP_WORKSPACE: ${process.env.MCP_WORKSPACE || 'not set'}`);
-      debugLog(`DEBUG: MCP_PROMPTS_PATH: ${process.env.MCP_PROMPTS_PATH || 'not set'}`);
+      debugLog(`DEBUG: MCP_WORKSPACE: ${process.env['MCP_WORKSPACE'] || 'not set'}`);
+      debugLog(`DEBUG: MCP_PROMPTS_PATH: ${process.env['MCP_PROMPTS_PATH'] || 'not set'}`);
     }
 
     // Setup error handlers first
@@ -640,7 +683,7 @@ async function main(): Promise<void> {
         const fs = await import('fs');
         const path = await import('path');
 
-        const workspace = process.env.MCP_WORKSPACE || process.cwd();
+        const workspace = process.env['MCP_WORKSPACE'] || process.cwd();
         debugLog(`DEBUG: Checking workspace: ${workspace}`);
         debugLog(`DEBUG: Workspace exists: ${fs.existsSync(workspace)}`);
 
@@ -797,7 +840,7 @@ export { main as startServer };
 
 // Start the application with comprehensive error handling
 const isTestEnvironment =
-  process.env.NODE_ENV === 'test' || typeof process.env.JEST_WORKER_ID !== 'undefined';
+  process.env['NODE_ENV'] === 'test' || typeof process.env['JEST_WORKER_ID'] !== 'undefined';
 
 if (!isTestEnvironment) {
   main().catch(async (error) => {

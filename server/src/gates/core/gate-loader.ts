@@ -5,10 +5,7 @@
  * Uses GateDefinitionLoader for path resolution, validation, and guidance inlining.
  */
 
-import {
-  GateDefinitionLoader,
-  type GateDefinitionLoaderConfig,
-} from './gate-definition-loader.js';
+import { GateDefinitionLoader, type GateDefinitionLoaderConfig } from './gate-definition-loader.js';
 import { Logger } from '../../logging/index.js';
 
 import type {
@@ -51,7 +48,7 @@ export class GateLoader implements GateDefinitionProvider {
   private logger: Logger;
   private gatesDirectory: string;
   private definitionLoader: GateDefinitionLoader;
-  private temporaryGateRegistry?: TemporaryGateRegistry;
+  private temporaryGateRegistry: TemporaryGateRegistry | undefined;
 
   constructor(
     logger: Logger,
@@ -62,10 +59,15 @@ export class GateLoader implements GateDefinitionProvider {
     this.logger = logger;
 
     // Prefer explicit directory, otherwise let GateDefinitionLoader resolve.
-    this.definitionLoader = new GateDefinitionLoader({
-      gatesDir: gatesDirectory,
-      ...loaderConfig,
-    });
+    const definitionLoaderConfig: GateDefinitionLoaderConfig = {
+      ...(loaderConfig ?? {}),
+    };
+
+    if (gatesDirectory !== undefined) {
+      definitionLoaderConfig.gatesDir = gatesDirectory;
+    }
+
+    this.definitionLoader = new GateDefinitionLoader(definitionLoaderConfig);
     this.gatesDirectory = this.definitionLoader.getGatesDir();
     this.logger.debug('[GateLoader] Using resolved gates directory:', this.gatesDirectory);
 
@@ -97,7 +99,7 @@ export class GateLoader implements GateDefinitionProvider {
       }
 
       // Normalize to lightweight shape used by existing pipeline
-      const gate = this.toLightweightGate(definition);
+      const gate = this.toLightweightGate(definition as GateDefinitionYaml);
 
       this.gateCache.set(gateId, gate);
       this.lastModified.set(gateId, Date.now());
@@ -184,7 +186,9 @@ export class GateLoader implements GateDefinitionProvider {
   async listAvailableGateDefinitions(): Promise<LightweightGateDefinition[]> {
     try {
       const loaded = this.definitionLoader.loadAllGates();
-      return Array.from(loaded.values()).map((definition) => this.toLightweightGate(definition));
+      return Array.from(loaded.values()).map((definition) =>
+        this.toLightweightGate(definition as GateDefinitionYaml)
+      );
     } catch (error) {
       this.logger.error('Failed to list available gate definitions:', error);
       return [];
@@ -309,18 +313,25 @@ export class GateLoader implements GateDefinitionProvider {
    * Convert GateDefinitionYaml to LightweightGateDefinition shape expected by legacy consumers.
    */
   private toLightweightGate(definition: GateDefinitionYaml): LightweightGateDefinition {
+    const retryConfig = this.normalizeRetryConfig(definition.retry_config);
+
     return {
       id: definition.id,
       name: definition.name,
       type: definition.type,
       description: definition.description,
-      severity: definition.severity,
-      enforcementMode: definition.enforcementMode,
-      guidance: definition.guidance,
-      pass_criteria: definition.pass_criteria,
-      retry_config: this.normalizeRetryConfig(definition.retry_config),
-      activation: definition.activation,
-      gate_type: definition.gate_type,
+      ...(definition.severity !== undefined ? { severity: definition.severity } : {}),
+      ...(definition.enforcementMode !== undefined
+        ? { enforcementMode: definition.enforcementMode }
+        : {}),
+      ...(definition.guidanceFile !== undefined ? { guidanceFile: definition.guidanceFile } : {}),
+      ...(definition.guidance !== undefined ? { guidance: definition.guidance } : {}),
+      ...(definition.pass_criteria !== undefined
+        ? { pass_criteria: definition.pass_criteria }
+        : {}),
+      ...(retryConfig !== undefined ? { retry_config: retryConfig } : {}),
+      ...(definition.activation !== undefined ? { activation: definition.activation } : {}),
+      ...(definition.gate_type !== undefined ? { gate_type: definition.gate_type } : {}),
     };
   }
 

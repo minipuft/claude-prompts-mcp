@@ -23,8 +23,8 @@ import { Category, PromptData, PromptsFile, ToolResponse } from '../types/index.
 export class ApiManager {
   private logger: Logger;
   private configManager: ConfigManager;
-  private promptManager?: PromptAssetManager;
-  private mcpToolsManager?: McpToolsManager;
+  private promptManager: PromptAssetManager | undefined;
+  private mcpToolsManager: McpToolsManager | undefined;
   private promptsData: PromptData[] = [];
   private categories: Category[] = [];
   private convertedPrompts: any[] = [];
@@ -400,15 +400,20 @@ export class ApiManager {
    * Helper method to reload prompt data
    */
   private async reloadPromptData(): Promise<void> {
-    if (!this.promptManager) {
+    const promptManager = this.promptManager;
+    if (!promptManager) {
       throw new Error('PromptManager not available');
     }
 
-    const result = await reloadPromptDataFromDisk({
+    const reloadOptions: Parameters<typeof reloadPromptDataFromDisk>[0] = {
       configManager: this.configManager,
-      promptManager: this.promptManager,
-      mcpToolsManager: this.mcpToolsManager,
-    });
+      promptManager,
+    };
+    if (this.mcpToolsManager) {
+      reloadOptions.mcpToolsManager = this.mcpToolsManager;
+    }
+
+    const result = await reloadPromptDataFromDisk(reloadOptions);
 
     this.updateData(result.promptsData, result.categories, result.convertedPrompts);
   }
@@ -421,7 +426,7 @@ export class ApiManager {
   }
 
   private extractToolResponseMessage(response: ToolResponse): string {
-    if (!response?.content?.length) {
+    if (response.content.length === 0) {
       return response.isError ? 'Prompt manager reported an error' : 'Operation completed';
     }
 

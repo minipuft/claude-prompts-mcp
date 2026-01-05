@@ -203,6 +203,18 @@ export class MockConfigManager {
     };
   }
 
+  getPromptsDirectory() {
+    return '/test/prompts';
+  }
+
+  getVersioningConfig() {
+    return {
+      enabled: true,
+      max_versions: 50,
+      auto_version: true,
+    };
+  }
+
   on(event: string, handler: Function) {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, []);

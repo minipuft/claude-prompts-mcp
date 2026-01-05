@@ -44,7 +44,7 @@ export class CallToActionStage extends BasePipelineStage {
 
     const sanitizedCTA = callToAction.trim();
     if (this.isFinalCallToAction(sanitizedCTA)) {
-      context.state.gates.reviewCallToAction = undefined;
+      delete context.state.gates.reviewCallToAction;
       if (finalChainStep && !pendingReview) {
         this.appendFinalCallToAction(context);
         this.logExit({ appended: 'final-step-from-template' });
@@ -55,7 +55,7 @@ export class CallToActionStage extends BasePipelineStage {
     }
 
     // CTA output intentionally disabled for intermediate steps (footer carries resume instructions).
-    context.state.gates.reviewCallToAction = undefined;
+    delete context.state.gates.reviewCallToAction;
     this.logExit({ skipped: 'CTA suppressed in favor of streamlined footer' });
   }
 

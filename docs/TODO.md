@@ -1,5 +1,7 @@
 # Roadmap
 
+> Status: canonical
+
 What's next for Claude Prompts MCP.
 
 ---
@@ -80,11 +82,35 @@ prompt_manager(action:"push", workspace:"team-acme")
 
 ## Technical Debt
 
-| Area              | Now     | Target               |
-| ----------------- | ------- | -------------------- |
-| Test coverage     | ~70%    | 90%+ on core modules |
-| TypeScript strict | Partial | Full strict mode     |
-| Bundle size       | ~2MB    | < 1MB (tree-shaking) |
+| Area              | Now     | Target               | Plan |
+| ----------------- | ------- | -------------------- | ---- |
+| Test coverage     | Unit only | Unit + Integration + E2E | [test-modernization-roadmap](../server/plans/test-modernization-roadmap.md) |
+| Coverage enforcement | None | 80% threshold | [test-modernization-roadmap](../server/plans/test-modernization-roadmap.md) |
+| TypeScript strict | Full    | Keep strict enabled  | - |
+| Bundle size       | ~2MB    | < 1MB (tree-shaking) | - |
+
+### CI / Quality Gates (Remaining Work)
+
+- [x] Enable strict TypeScript semantics in `server/tsconfig.json`: `noPropertyAccessFromIndexSignature`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`.
+- [x] Add a lint ratchet strategy: keep `tests/**` excluded initially, fail CI on new violations (`server/.eslint-ratchet-baseline.json`), and tighten scope once baseline is reduced.
+- [x] Align core CI gates with server scripts: `npm run typecheck` + `npm run lint:ratchet` + tests in CI/PR workflows.
+- [x] Ensure build output is exercised in CI: run `npm run build` and `npm run start:test` across the Node matrix.
+- [x] Add toolchain pinning for developers: commit `.nvmrc` + `.node-version` aligned with `server/package.json#engines`.
+- [x] Align rule docs with the new workflow: update `AGENTS.md` and `CLAUDE.md` to match scripts, docs taxonomy, and the ESLint ratchet approach.
+- [ ] Ensure PR workflows run the architecture gates: `npm run validate:arch` and decide whether warnings should fail the build once cycles are resolved.
+- [x] Ensure generated artifacts stay in sync in CI: `npm run validate:contracts` and `npm run validate:metadata`.
+- [x] Decide support policy and enforce via CI matrix (Node versions / OS): CI verifies Node 18→24 on `ubuntu-latest`. (OS matrix can be added later if scripts are made cross-platform.)
+
+### Test Modernization
+
+See [test-modernization-roadmap.md](../plans/test-modernization-roadmap.md) for the comprehensive 6-phase plan:
+
+- [ ] **Phase 1**: Coverage infrastructure (thresholds, CI, helpers)
+- [ ] **Phase 2**: Test classification audit & migration (8 sub-phases analyzing all 67 test files)
+- [ ] **Phase 3**: Missing unit test coverage (8 subsystems without tests)
+- [ ] **Phase 4**: Integration test suite (MCP protocol, chains, hot-reload, pipeline)
+- [ ] **Phase 5**: E2E test suite (STDIO/SSE transports, MCP compliance)
+- [ ] **Phase 6**: Test quality improvements (remove implementation detail tests, consolidation)
 
 ---
 

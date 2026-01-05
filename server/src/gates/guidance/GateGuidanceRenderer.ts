@@ -11,7 +11,7 @@ import type { Logger } from '../../logging/index.js';
 import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
-import type { LightweightGateDefinition } from '../types.js';
+import type { GateActivationContext, LightweightGateDefinition } from '../types.js';
 
 export interface GateGuidanceRendererOptions {
   gateLoader: GateDefinitionProvider;
@@ -25,8 +25,8 @@ export interface GateGuidanceRendererOptions {
 export class GateGuidanceRenderer {
   private readonly logger: Logger;
   private readonly gateLoader: GateDefinitionProvider;
-  private readonly temporaryGateRegistry?: TemporaryGateRegistry;
-  private readonly frameworkIdentifierProvider?: () => readonly string[] | undefined;
+  private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined;
+  private readonly frameworkIdentifierProvider: (() => readonly string[] | undefined) | undefined;
 
   constructor(logger: Logger, options: GateGuidanceRendererOptions) {
     if (!options?.gateLoader) {
@@ -179,11 +179,14 @@ export class GateGuidanceRenderer {
     context: GateContext,
     explicit: boolean = false
   ): boolean {
-    return this.gateLoader.isGateActive(gate, {
-      promptCategory: context.category,
-      framework: context.framework,
-      explicitRequest: explicit,
-    });
+    const activationContext: GateActivationContext = { explicitRequest: explicit };
+    if (context.category) {
+      activationContext.promptCategory = context.category;
+    }
+    if (context.framework) {
+      activationContext.framework = context.framework;
+    }
+    return this.gateLoader.isGateActive(gate, activationContext);
   }
 
   /**

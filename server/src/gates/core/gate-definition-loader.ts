@@ -24,10 +24,7 @@ import {
   type GateSchemaValidationResult,
   type GateDefinitionYaml,
 } from './gate-schema.js';
-import {
-  loadYamlFileSync,
-  discoverYamlDirectories,
-} from '../../utils/yaml/index.js';
+import { loadYamlFileSync, discoverYamlDirectories } from '../../utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -293,9 +290,7 @@ export class GateDefinitionLoader {
           );
         }
       } else {
-        console.warn(
-          `[GateDefinitionLoader] Referenced guidance file not found: ${guidancePath}`
-        );
+        console.warn(`[GateDefinitionLoader] Referenced guidance file not found: ${guidancePath}`);
       }
       // Remove the file reference after inlining
       delete (definition as any).guidanceFile;
@@ -323,12 +318,12 @@ export class GateDefinitionLoader {
    *   1. MCP_GATES_PATH environment variable
    *   2. Package.json resolution (npm/npx installs)
    *   3. Walk up from module location (development)
-   *   4. Common relative paths
+   *   4. Common relative paths (resources/gates first, then legacy)
    *   5. Fallback
    */
   private resolveGatesDir(): string {
     // Priority 1: Direct path environment variable
-    const envGates = process.env.MCP_GATES_PATH;
+    const envGates = process.env['MCP_GATES_PATH'];
     if (envGates) {
       const resolvedPath = join(envGates);
       if (existsSync(resolvedPath) && this.hasYamlFiles(resolvedPath)) {
@@ -345,9 +340,15 @@ export class GateDefinitionLoader {
       return pkgResolved;
     }
 
-    // Priority 4: Walk up from current module location
+    // Priority 3: Walk up from current module location
     let current = __dirname;
     for (let i = 0; i < 10; i++) {
+      // Check resources/gates first (new structure)
+      const resourcesCandidate = join(current, 'resources', 'gates');
+      if (existsSync(resourcesCandidate) && this.hasYamlFiles(resourcesCandidate)) {
+        return resourcesCandidate;
+      }
+      // Then check legacy location
       const candidate = join(current, 'gates');
       if (existsSync(candidate) && this.hasYamlFiles(candidate)) {
         return candidate;
@@ -355,8 +356,13 @@ export class GateDefinitionLoader {
       current = dirname(current);
     }
 
-    // Priority 5: Common relative paths from dist
+    // Priority 4: Common relative paths from dist (resources/gates first)
     const relativePaths = [
+      join(__dirname, '..', '..', '..', 'resources', 'gates'),
+      join(__dirname, '..', '..', 'resources', 'gates'),
+      join(process.cwd(), 'resources', 'gates'),
+      join(process.cwd(), 'server', 'resources', 'gates'),
+      // Legacy paths
       join(__dirname, '..', '..', '..', 'gates'),
       join(__dirname, '..', '..', 'gates'),
       join(process.cwd(), 'gates'),
@@ -369,8 +375,8 @@ export class GateDefinitionLoader {
       }
     }
 
-    // Fallback (may not exist yet)
-    return join(__dirname, '..', '..', '..', 'gates');
+    // Fallback to new structure (may not exist yet)
+    return join(__dirname, '..', '..', '..', 'resources', 'gates');
   }
 
   /**
@@ -384,6 +390,12 @@ export class GateDefinitionLoader {
         if (existsSync(pkgPath)) {
           const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
           if (pkg.name === 'claude-prompts') {
+            // Check resources/gates first (new structure)
+            const resourcesGatesPath = join(dir, 'resources', 'gates');
+            if (existsSync(resourcesGatesPath) && this.hasYamlFiles(resourcesGatesPath)) {
+              return resourcesGatesPath;
+            }
+            // Then check legacy location
             const gatesPath = join(dir, 'gates');
             if (existsSync(gatesPath) && this.hasYamlFiles(gatesPath)) {
               return gatesPath;

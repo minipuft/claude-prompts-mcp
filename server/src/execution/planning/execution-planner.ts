@@ -46,8 +46,6 @@ type SemanticAnalyzerLike = Pick<ContentAnalyzer, 'analyzePrompt' | 'isLLMEnable
 
 type StrategyResolution = {
   strategy: ExecutionStrategyType;
-  modifier?: ExecutionModifier;
-  modifiers?: ExecutionModifiers;
 };
 
 /**
@@ -55,8 +53,8 @@ type StrategyResolution = {
  * Extracted from PromptExecutionService to make planning reusable across the pipeline.
  */
 export class ExecutionPlanner {
-  private frameworkManager?: FrameworkManager;
-  private gateLoader?: GateDefinitionProvider;
+  private frameworkManager: FrameworkManager | undefined;
+  private gateLoader: GateDefinitionProvider | undefined;
   private readonly categoryExtractor: CategoryExtractor;
   /** Cached methodology gate IDs loaded from GateLoader */
   private methodologyGateIdsCache: Set<string> | null = null;
@@ -120,16 +118,21 @@ export class ExecutionPlanner {
     }
 
     const categoryInfo = this.categoryExtractor.extractCategory(convertedPrompt);
-    const strategyInfo = this.resolveStrategy({
+    const strategyInput: Parameters<typeof this.resolveStrategy>[0] = {
       convertedPrompt,
-      parsedCommand,
       analysis,
-    });
+    };
+    if (parsedCommand !== undefined) {
+      strategyInput.parsedCommand = parsedCommand;
+    }
+    const strategyInfo = this.resolveStrategy(strategyInput);
 
     const modifierResolution = this.normalizeModifiers(
-      parsedCommand?.modifier ?? strategyInfo.modifier,
-      parsedCommand?.modifiers ?? strategyInfo.modifiers ?? convertedPrompt.executionModifiers
+      parsedCommand?.modifiers ?? convertedPrompt.executionModifiers
     );
+
+    // Apply script-tools default: clean mode if prompt has script tools and no explicit overrides
+    this.applyScriptToolDefaults(modifierResolution, convertedPrompt, parsedCommand, gateOverrides);
 
     const explicitGates = this.collectExplicitGateIds(convertedPrompt, categoryInfo);
     const autoGates = this.shouldAutoAssignGates()
@@ -176,16 +179,23 @@ export class ExecutionPlanner {
     );
     requiresFramework = adjusted.requiresFramework;
 
-    return {
+    const plan: ExecutionPlan = {
       strategy: strategyInfo.strategy,
       gates: Array.from(adjusted.gates),
       requiresFramework,
       requiresSession: this.requiresSession(parsedCommand, convertedPrompt, strategyInfo.strategy),
-      category: categoryInfo.category,
-      modifier: modifierResolution.modifier,
-      modifiers: modifierResolution.modifiers,
-      semanticAnalysis: analysis ?? undefined,
     };
+    if (categoryInfo.category !== undefined) {
+      plan.category = categoryInfo.category;
+    }
+    if (modifierResolution.modifiers !== undefined) {
+      plan.modifiers = modifierResolution.modifiers;
+    }
+    if (analysis !== null) {
+      plan.semanticAnalysis = analysis;
+    }
+
+    return plan;
   }
 
   async createChainPlan(options: ChainExecutionPlannerOptions): Promise<ChainExecutionPlanResult> {
@@ -200,12 +210,20 @@ export class ExecutionPlanner {
       throw new Error('Chain planning requires a converted prompt on the command or first step');
     }
 
-    const chainPlan = await this.createPlan({
-      parsedCommand,
+    const chainPlanOptions: ExecutionPlannerOptions = {
       convertedPrompt: chainPrompt,
-      frameworkEnabled,
-      gateOverrides,
-    });
+    };
+    if (parsedCommand !== undefined) {
+      chainPlanOptions.parsedCommand = parsedCommand;
+    }
+    if (frameworkEnabled !== undefined) {
+      chainPlanOptions.frameworkEnabled = frameworkEnabled;
+    }
+    if (gateOverrides !== undefined) {
+      chainPlanOptions.gateOverrides = gateOverrides;
+    }
+
+    const chainPlan = await this.createPlan(chainPlanOptions);
 
     const stepPlans: ExecutionPlan[] = [];
     for (const step of steps) {
@@ -215,12 +233,20 @@ export class ExecutionPlanner {
         );
       }
 
-      const stepPlan = await this.createPlan({
-        parsedCommand,
+      const stepPlanOptions: ExecutionPlannerOptions = {
         convertedPrompt: step.convertedPrompt,
-        frameworkEnabled,
-        gateOverrides,
-      });
+      };
+      if (parsedCommand !== undefined) {
+        stepPlanOptions.parsedCommand = parsedCommand;
+      }
+      if (frameworkEnabled !== undefined) {
+        stepPlanOptions.frameworkEnabled = frameworkEnabled;
+      }
+      if (gateOverrides !== undefined) {
+        stepPlanOptions.gateOverrides = gateOverrides;
+      }
+
+      const stepPlan = await this.createPlan(stepPlanOptions);
       stepPlans.push(stepPlan);
     }
 
@@ -294,11 +320,8 @@ export class ExecutionPlanner {
     return { strategy: 'single' };
   }
 
-  private normalizeModifiers(
-    modifier?: ExecutionModifier,
-    modifiers?: ExecutionModifiers
-  ): { modifier?: ExecutionModifier; modifiers?: ExecutionModifiers } {
-    const normalizedModifier = modifier ?? this.extractModifierFromFlags(modifiers);
+  private normalizeModifiers(modifiers?: ExecutionModifiers): { modifiers?: ExecutionModifiers } {
+    const normalizedModifier = this.extractModifierFromFlags(modifiers);
     const normalizedModifiers =
       normalizedModifier !== undefined
         ? this.buildModifiers(normalizedModifier)
@@ -306,10 +329,7 @@ export class ExecutionPlanner {
           ? this.stripModifierFlags(modifiers)
           : undefined;
 
-    return {
-      modifier: normalizedModifier,
-      modifiers: normalizedModifiers,
-    };
+    return { modifiers: normalizedModifiers };
   }
 
   private buildModifiers(modifier: ExecutionModifier): ExecutionModifiers {
@@ -351,6 +371,70 @@ export class ExecutionPlanner {
     }
 
     return enabled[0];
+  }
+
+  /**
+   * Apply script-tools default: clean mode for prompts with script tools.
+   *
+   * Script tool prompts default to %clean to focus output on tool results.
+   * This default is overridden if the user explicitly provides:
+   * - Any modifier flag (%judge, %lean, %framework, or even %clean)
+   * - Custom gates via the gates parameter
+   *
+   * @param modifierResolution - Current modifier resolution (mutated in place)
+   * @param convertedPrompt - The prompt being executed
+   * @param parsedCommand - User's parsed command (to detect explicit modifiers)
+   * @param gateOverrides - User's gate overrides (to detect custom gates)
+   */
+  private applyScriptToolDefaults(
+    modifierResolution: { modifiers?: ExecutionModifiers },
+    convertedPrompt: ConvertedPrompt,
+    parsedCommand?: ParsedCommand,
+    gateOverrides?: GateOverrideOptions
+  ): void {
+    // Only apply to prompts with script tools
+    if (!convertedPrompt.scriptTools || convertedPrompt.scriptTools.length === 0) {
+      return;
+    }
+
+    // Don't override if user explicitly provided modifier flags via command
+    const userModifiers = parsedCommand?.modifiers;
+    if (userModifiers) {
+      const hasExplicitModifier =
+        userModifiers.clean === true ||
+        userModifiers.judge === true ||
+        userModifiers.lean === true ||
+        userModifiers.framework === true;
+      if (hasExplicitModifier) {
+        return;
+      }
+    }
+
+    const hasExistingModifier =
+      modifierResolution.modifiers?.clean === true ||
+      modifierResolution.modifiers?.judge === true ||
+      modifierResolution.modifiers?.lean === true ||
+      modifierResolution.modifiers?.framework === true;
+    if (hasExistingModifier) {
+      return;
+    }
+
+    // Don't override if user provided custom gates
+    if (gateOverrides?.gates && gateOverrides.gates.length > 0) {
+      return;
+    }
+
+    // Apply clean mode as default for script-tool prompts
+    if (!modifierResolution.modifiers) {
+      modifierResolution.modifiers = { clean: true };
+    } else if (!modifierResolution.modifiers.clean) {
+      modifierResolution.modifiers = { ...modifierResolution.modifiers, clean: true };
+    }
+
+    this.logger.debug('[ExecutionPlanner] Applied clean mode default for script-tool prompt', {
+      promptId: convertedPrompt.id,
+      scriptToolCount: convertedPrompt.scriptTools.length,
+    });
   }
 
   private applyModifierOverrides(

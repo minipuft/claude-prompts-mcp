@@ -10,7 +10,6 @@
 
 import { GateSystemManager } from '../gate-state-manager.js';
 import { GateLoader, createGateLoader } from './gate-loader.js';
-import type { GateDefinitionProvider } from './gate-loader.js';
 import { GateValidator, createGateValidator } from './gate-validator.js';
 import {
   TemporaryGateRegistry,
@@ -18,7 +17,9 @@ import {
   type TemporaryGateDefinition,
 } from './temporary-gate-registry.js';
 
+import type { GateDefinitionProvider } from './gate-loader.js';
 import type { ValidationResult } from '../../execution/types.js';
+import type { ValidationContext } from '../types.js';
 
 export { GateLoader, createGateLoader, type GateDefinitionProvider } from './gate-loader.js';
 export { GateValidator, createGateValidator } from './gate-validator.js';
@@ -73,8 +74,8 @@ export type { GateValidationStatistics } from './gate-validator.js';
  * Core gate system manager with temporary gate support
  */
 export class LightweightGateSystem {
-  private gateSystemManager?: GateSystemManager;
-  private temporaryGateRegistry?: TemporaryGateRegistry;
+  private gateSystemManager: GateSystemManager | undefined;
+  private temporaryGateRegistry: TemporaryGateRegistry | undefined;
 
   constructor(
     public gateLoader: GateDefinitionProvider,
@@ -193,16 +194,31 @@ export class LightweightGateSystem {
 
     const startTime = performance.now();
 
-    const context = {
+    const context: ValidationContext = {
       content,
-      metadata: validationContext.metadata,
-      executionContext: {
-        promptId: validationContext.promptId,
-        stepId: validationContext.stepId,
-        attemptNumber: validationContext.attemptNumber,
-        previousAttempts: validationContext.previousAttempts,
-      },
     };
+
+    if (validationContext.metadata) {
+      context.metadata = validationContext.metadata;
+    }
+
+    const executionContext: NonNullable<ValidationContext['executionContext']> = {};
+    if (validationContext.promptId) {
+      executionContext.promptId = validationContext.promptId;
+    }
+    if (validationContext.stepId) {
+      executionContext.stepId = validationContext.stepId;
+    }
+    if (validationContext.attemptNumber !== undefined) {
+      executionContext.attemptNumber = validationContext.attemptNumber;
+    }
+    if (validationContext.previousAttempts) {
+      executionContext.previousAttempts = validationContext.previousAttempts;
+    }
+
+    if (Object.keys(executionContext).length > 0) {
+      context.executionContext = executionContext;
+    }
 
     const results = await this.gateValidator.validateGates(gateIds, context);
 
@@ -314,15 +330,18 @@ export function createLightweightGateSystem(
   // Create temporary gate registry if enabled
   let temporaryGateRegistry: TemporaryGateRegistry | undefined;
   if (options?.enableTemporaryGates !== false) {
-    temporaryGateRegistry = createTemporaryGateRegistry(logger, {
-      maxMemoryGates: options?.maxMemoryGates,
-      defaultExpirationMs: options?.defaultExpirationMs,
-    });
+    const temporaryGateOptions: Parameters<typeof createTemporaryGateRegistry>[1] = {};
+    if (options?.maxMemoryGates !== undefined) {
+      temporaryGateOptions.maxMemoryGates = options.maxMemoryGates;
+    }
+    if (options?.defaultExpirationMs !== undefined) {
+      temporaryGateOptions.defaultExpirationMs = options.defaultExpirationMs;
+    }
+    temporaryGateRegistry = createTemporaryGateRegistry(logger, temporaryGateOptions);
   }
 
   const gateLoader =
-    options?.provider ??
-    createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
+    options?.provider ?? createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
   const gateValidator = createGateValidator(logger, gateLoader, options?.llmConfig);
 
   const gateSystem = new LightweightGateSystem(gateLoader, gateValidator, temporaryGateRegistry);

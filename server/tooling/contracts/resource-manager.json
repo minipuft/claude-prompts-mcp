@@ -1,0 +1,473 @@
+{
+  "tool": "resource_manager",
+  "version": 1,
+  "summary": "Unified resource management for prompts, gates, and methodologies. Use resource_type to specify the resource kind, then action for the operation.",
+  "toolDescription": {
+    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, methodologies.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | methodology\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n\u2022 >>create_methodology - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
+    "shortDescription": "Manage prompts, gates, and methodologies",
+    "category": "management",
+    "frameworkAware": {
+      "enabled": "\ud83d\uddc2\ufe0f RESOURCE MANAGER [FRAMEWORK]: Operations reflect active methodology context.",
+      "disabled": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: Standard resource lifecycle operations."
+    }
+  },
+  "parameters": [
+    {
+      "name": "resource_type",
+      "type": "enum[prompt|gate|methodology]",
+      "description": "Type of resource to manage. Routes to appropriate handler.",
+      "status": "working",
+      "required": true
+    },
+    {
+      "name": "action",
+      "type": "enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare]",
+      "description": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology). Versioning: history/rollback/compare (all types).",
+      "status": "working",
+      "required": true
+    },
+    {
+      "name": "id",
+      "type": "string",
+      "description": "Resource identifier. Required for create, update, delete, inspect, reload, switch.",
+      "status": "working"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "description": "Human-friendly name for the resource (create/update).",
+      "status": "working"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "description": "Resource description explaining its purpose (create/update).",
+      "status": "working"
+    },
+    {
+      "name": "enabled_only",
+      "type": "boolean",
+      "description": "Filter list to enabled resources only. Default: true.",
+      "status": "working"
+    },
+    {
+      "name": "confirm",
+      "type": "boolean",
+      "description": "Safety confirmation for delete operation.",
+      "status": "working"
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "description": "Audit reason for reload/delete/switch operations.",
+      "status": "working"
+    },
+    {
+      "name": "category",
+      "type": "string",
+      "description": "[Prompt] Category tag for the prompt.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "user_message_template",
+      "type": "string",
+      "description": "[Prompt] Prompt body/template with Nunjucks placeholders.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "system_message",
+      "type": "string",
+      "description": "[Prompt] Optional system message for the prompt.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "arguments",
+      "type": "array<{name,required?,description?,type?}>",
+      "description": "[Prompt] Argument definitions for the prompt.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "chain_steps",
+      "type": "array<step>",
+      "description": "[Prompt] Chain steps definition for multi-step prompts.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "tools",
+      "type": "array<{id,name,script,description?,runtime?,schema?,trigger?,confirm?,strict?,timeout?}>",
+      "description": "[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "gate_configuration",
+      "type": "object",
+      "description": "[Prompt] Gate configuration: include (array), exclude (array), framework_gates (boolean).",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "execution_hint",
+      "type": "enum[single|chain]",
+      "description": "[Prompt] Hint for execution type on creation.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "section",
+      "type": "enum[name|description|system_message|user_message_template|arguments|chain_steps]",
+      "description": "[Prompt] Targeted update section.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "section_content",
+      "type": "string",
+      "description": "[Prompt] Content for targeted section updates.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "filter",
+      "type": "string",
+      "description": "[Prompt] List filter query.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "format",
+      "type": "enum[table|json|text]",
+      "description": "[Prompt] Output format for list/inspect.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "detail",
+      "type": "enum[summary|full]",
+      "description": "[Prompt] Inspect detail level.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "search_query",
+      "type": "string",
+      "description": "[Prompt] Search query for filtering (list action).",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "gate_type",
+      "type": "enum[validation|guidance]",
+      "description": "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "guidance",
+      "type": "string",
+      "description": "[Gate] Gate guidance content - the criteria or instructions.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "pass_criteria",
+      "type": "array<string>",
+      "description": "[Gate] Structured pass criteria definitions.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "activation",
+      "type": "object",
+      "description": "[Gate] Activation rules: prompt_categories, frameworks, explicit_request.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "retry_config",
+      "type": "object",
+      "description": "[Gate] Retry configuration: max_attempts, improvement_hints.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "methodology",
+      "type": "string",
+      "description": "[Methodology] Methodology type identifier. Use action:'list' to see registered methodologies.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "system_prompt_guidance",
+      "type": "string",
+      "description": "[Methodology] System prompt guidance injected when active.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "phases",
+      "type": "array<object>",
+      "description": "[Methodology] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (methodology_gates, processing_steps, execution_steps, etc.) are also accepted.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "gates",
+      "type": "object",
+      "description": "[Methodology] Gate configuration: include, exclude arrays.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "tool_descriptions",
+      "type": "object",
+      "description": "[Methodology] Tool description overlays when active.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "enabled",
+      "type": "boolean",
+      "description": "[Methodology] Whether the methodology is enabled.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "persist",
+      "type": "boolean",
+      "description": "[Methodology] For switch: persist the change to config. Default: false.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "version",
+      "type": "number",
+      "description": "[Versioning] Target version number for rollback action.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "from_version",
+      "type": "number",
+      "description": "[Versioning] Starting version number for compare action.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "to_version",
+      "type": "number",
+      "description": "[Versioning] Ending version number for compare action.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "limit",
+      "type": "number",
+      "description": "[Versioning] Max versions to return in history. Default: 10.",
+      "status": "working",
+      "includeInDescription": false
+    },
+    {
+      "name": "skip_version",
+      "type": "boolean",
+      "description": "[Versioning] Skip auto-versioning on update. Default: false.",
+      "status": "working",
+      "includeInDescription": false
+    }
+  ],
+  "commands": [
+    {
+      "id": "prompt:create",
+      "summary": "Create a prompt/chain with metadata and arguments.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "name",
+        "description",
+        "category",
+        "user_message_template",
+        "system_message",
+        "arguments",
+        "chain_steps",
+        "tools",
+        "gate_configuration",
+        "execution_hint"
+      ]
+    },
+    {
+      "id": "prompt:update",
+      "summary": "Update prompt fields or targeted sections.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "section",
+        "section_content",
+        "name",
+        "description",
+        "user_message_template",
+        "tools"
+      ]
+    },
+    {
+      "id": "prompt:list",
+      "summary": "List prompts with filters.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "filter",
+        "format",
+        "search_query"
+      ]
+    },
+    {
+      "id": "prompt:analyze_type",
+      "summary": "Semantic analysis for execution type recommendation.",
+      "parameters": ["resource_type", "action", "id"]
+    },
+    {
+      "id": "prompt:analyze_gates",
+      "summary": "Gate configuration suggestions for a prompt.",
+      "parameters": ["resource_type", "action", "id"]
+    },
+    {
+      "id": "prompt:guide",
+      "summary": "Get action suggestions for prompt management.",
+      "parameters": ["resource_type", "action"]
+    },
+    {
+      "id": "gate:create",
+      "summary": "Create a new gate with YAML configuration and guidance.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "name",
+        "gate_type",
+        "description",
+        "guidance",
+        "pass_criteria",
+        "activation",
+        "retry_config"
+      ]
+    },
+    {
+      "id": "gate:update",
+      "summary": "Update existing gate configuration or guidance.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "name",
+        "gate_type",
+        "description",
+        "guidance",
+        "pass_criteria",
+        "activation",
+        "retry_config"
+      ]
+    },
+    {
+      "id": "gate:list",
+      "summary": "List all registered gates.",
+      "parameters": ["resource_type", "action", "enabled_only"]
+    },
+    {
+      "id": "methodology:create",
+      "summary": "Create a new methodology with YAML configuration.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "name",
+        "methodology",
+        "description",
+        "system_prompt_guidance",
+        "phases",
+        "gates",
+        "tool_descriptions"
+      ]
+    },
+    {
+      "id": "methodology:update",
+      "summary": "Update existing methodology configuration.",
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "name",
+        "methodology",
+        "description",
+        "system_prompt_guidance",
+        "phases",
+        "gates",
+        "tool_descriptions",
+        "enabled"
+      ]
+    },
+    {
+      "id": "methodology:list",
+      "summary": "List all available methodologies.",
+      "parameters": ["resource_type", "action", "enabled_only"]
+    },
+    {
+      "id": "methodology:switch",
+      "summary": "Switch the active framework/methodology.",
+      "parameters": ["resource_type", "action", "id", "persist", "reason"]
+    },
+    {
+      "id": "common:inspect",
+      "summary": "Inspect resource details.",
+      "parameters": ["resource_type", "action", "id", "detail", "format"]
+    },
+    {
+      "id": "common:reload",
+      "summary": "Hot-reload a specific resource from disk.",
+      "parameters": ["resource_type", "action", "id", "reason"]
+    },
+    {
+      "id": "common:delete",
+      "summary": "Delete a resource (with confirmation).",
+      "parameters": ["resource_type", "action", "id", "confirm", "reason"]
+    },
+    {
+      "id": "common:history",
+      "summary": "View version history for a resource.",
+      "parameters": ["resource_type", "action", "id", "limit"]
+    },
+    {
+      "id": "common:rollback",
+      "summary": "Rollback a resource to a previous version.",
+      "parameters": ["resource_type", "action", "id", "version", "reason"]
+    },
+    {
+      "id": "common:compare",
+      "summary": "Compare two versions of a resource.",
+      "parameters": ["resource_type", "action", "id", "from_version", "to_version"]
+    }
+  ],
+  "conditionalRequirements": {
+    "switch": {
+      "resource_type": "methodology",
+      "message": "The 'switch' action is only valid for resource_type: 'methodology'"
+    },
+    "analyze_type": {
+      "resource_type": "prompt",
+      "message": "The 'analyze_type' action is only valid for resource_type: 'prompt'"
+    },
+    "analyze_gates": {
+      "resource_type": "prompt",
+      "message": "The 'analyze_gates' action is only valid for resource_type: 'prompt'"
+    },
+    "guide": {
+      "resource_type": "prompt",
+      "message": "The 'guide' action is only valid for resource_type: 'prompt'"
+    }
+  }
+}

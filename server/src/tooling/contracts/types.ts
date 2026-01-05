@@ -30,6 +30,8 @@ export const parameterSchema = z.object({
   examples: z.array(z.string()).optional(),
   notes: z.array(z.string()).optional(),
   enum: z.array(z.string()).optional(), // For enum types with explicit values
+  /** If false, param is accepted by schema but not shown in tool description (reduces token usage) */
+  includeInDescription: z.boolean().optional(),
 });
 
 export type ParameterDefinition = z.infer<typeof parameterSchema>;
@@ -57,12 +59,14 @@ export type FrameworkAwareDescription = z.infer<typeof frameworkAwareDescription
 
 /**
  * Tool-level description metadata for MCP registration.
- * This is the SSOT for tool descriptions - generates tool-descriptions.json.
+ * This is the SSOT for tool descriptions - generates tool-descriptions.contracts.json.
  */
 export const toolDescriptionSchema = z.object({
   description: z.string().min(1),
   shortDescription: z.string().min(1),
   category: z.enum(['execution', 'management', 'system']),
+  /** Pattern-matched examples that help LLMs recognize when to invoke this tool */
+  triggerExamples: z.array(z.string()).optional(),
   frameworkAware: frameworkAwareDescriptionSchema,
 });
 

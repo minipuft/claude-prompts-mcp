@@ -15,6 +15,7 @@ import * as path from 'path';
 import { FileBackedChainRunRegistry, type ChainRunRegistry } from './run-registry.js';
 import { Logger } from '../logging/index.js';
 import {
+  GateReviewHistoryEntry,
   PendingGateReview,
   StepMetadata,
   StepState,
@@ -31,6 +32,7 @@ import type {
   SessionBlueprint,
 } from './types.js';
 import type { ParsedCommand } from '../execution/context/execution-context.js';
+import type { GateReviewPrompt } from '../execution/types.js';
 
 interface ChainSessionManagerOptions {
   serverRoot: string;
@@ -75,12 +77,14 @@ export class ChainSessionManager implements ChainSessionService {
   ) {
     this.logger = logger;
     this.textReferenceManager = textReferenceManager;
-    this.argumentHistoryTracker = argumentHistoryTracker;
+    if (argumentHistoryTracker !== undefined) {
+      this.argumentHistoryTracker = argumentHistoryTracker;
+    }
     this.serverRoot = options.serverRoot;
-    this.defaultSessionTimeoutMs = options?.defaultSessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
+    this.defaultSessionTimeoutMs = options.defaultSessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
     this.reviewSessionTimeoutMs =
-      options?.reviewSessionTimeoutMs ?? DEFAULT_REVIEW_SESSION_TIMEOUT_MS;
-    this.cleanupIntervalMs = options?.cleanupIntervalMs ?? DEFAULT_CLEANUP_INTERVAL_MS;
+      options.reviewSessionTimeoutMs ?? DEFAULT_REVIEW_SESSION_TIMEOUT_MS;
+    this.cleanupIntervalMs = options.cleanupIntervalMs ?? DEFAULT_CLEANUP_INTERVAL_MS;
 
     // Set up file-based persistence path - use server root instead of process.cwd()
     const runtimeStateDir = path.join(this.serverRoot, 'runtime-state');
@@ -93,9 +97,7 @@ export class ChainSessionManager implements ChainSessionService {
         fallbackPaths: [legacyRunsPath, legacySessionsPath],
       });
 
-    if (this.logger) {
-      this.logger.debug('ChainSessionManager initialized with text reference manager integration');
-    }
+    this.logger.debug('ChainSessionManager initialized with text reference manager integration');
 
     // Initialize asynchronously
     this.initialize();
@@ -110,7 +112,7 @@ export class ChainSessionManager implements ChainSessionService {
       await this.runRegistry.ensureInitialized();
       await this.loadSessions();
     } catch (error) {
-      this.logger?.warn(
+      this.logger.warn(
         `Failed to initialize ChainSessionManager: ${
           error instanceof Error ? error.message : String(error)
         }`
@@ -123,13 +125,13 @@ export class ChainSessionManager implements ChainSessionService {
    */
   private startCleanupScheduler(): void {
     if (this.cleanupIntervalHandle) {
-      this.cleanupIntervalHandle.unref?.();
+      this.cleanupIntervalHandle.unref();
       return;
     }
 
     this.cleanupIntervalHandle = setInterval(() => {
       this.cleanupStaleSessions().catch((error) => {
-        this.logger?.warn(
+        this.logger.warn(
           `Failed to run scheduled session cleanup: ${
             error instanceof Error ? error.message : String(error)
           }`
@@ -137,7 +139,7 @@ export class ChainSessionManager implements ChainSessionService {
       });
     }, this.cleanupIntervalMs);
 
-    this.cleanupIntervalHandle.unref?.();
+    this.cleanupIntervalHandle.unref();
   }
 
   /**
@@ -284,7 +286,9 @@ export class ChainSessionManager implements ChainSessionService {
       startTime: Date.now(),
       lastActivity: Date.now(),
       originalArgs,
-      blueprint: options?.blueprint ? this.cloneBlueprint(options.blueprint) : undefined,
+      ...(options?.blueprint !== undefined && {
+        blueprint: this.cloneBlueprint(options.blueprint),
+      }),
       lifecycle: 'canonical',
     };
 
@@ -355,9 +359,21 @@ export class ChainSessionManager implements ChainSessionService {
     const metadata: StepMetadata = {
       state,
       isPlaceholder,
-      renderedAt: existing?.renderedAt || (state === StepState.RENDERED ? now : undefined),
-      respondedAt: state === StepState.RESPONSE_CAPTURED ? now : existing?.respondedAt,
-      completedAt: state === StepState.COMPLETED ? now : existing?.completedAt,
+      ...(existing?.renderedAt !== undefined
+        ? { renderedAt: existing.renderedAt }
+        : state === StepState.RENDERED
+          ? { renderedAt: now }
+          : {}),
+      ...(state === StepState.RESPONSE_CAPTURED
+        ? { respondedAt: now }
+        : existing?.respondedAt !== undefined
+          ? { respondedAt: existing.respondedAt }
+          : {}),
+      ...(state === StepState.COMPLETED
+        ? { completedAt: now }
+        : existing?.completedAt !== undefined
+          ? { completedAt: existing.completedAt }
+          : {}),
     };
 
     session.state.stepStates.set(stepNumber, metadata);
@@ -689,19 +705,19 @@ export class ChainSessionManager implements ChainSessionService {
     };
 
     if (reviewContext && Object.keys(reviewContext.previousResults).length > 0) {
-      contextData.previous_step_results = { ...reviewContext.previousResults };
+      contextData['previous_step_results'] = { ...reviewContext.previousResults };
     }
 
     const currentStepArgs = this.getCurrentStepArgs(session);
     if (currentStepArgs && Object.keys(currentStepArgs).length > 0) {
-      contextData.currentStepArgs = currentStepArgs;
+      contextData['currentStepArgs'] = currentStepArgs;
       // Expose step arguments as {{input}} for template access
-      contextData.input = currentStepArgs;
+      contextData['input'] = currentStepArgs;
     }
 
     const chainMetadata = this.buildChainMetadata(session);
     if (chainMetadata) {
-      contextData.chain_metadata = chainMetadata;
+      contextData['chain_metadata'] = chainMetadata;
     }
 
     this.logger.debug(
@@ -774,16 +790,23 @@ export class ChainSessionManager implements ChainSessionService {
     session.pendingGateReview = {
       ...review,
       gateIds: [...review.gateIds],
-      prompts: review.prompts.map((prompt) => ({
-        ...prompt,
-        explicitInstructions: prompt.explicitInstructions
-          ? [...prompt.explicitInstructions]
-          : undefined,
-        metadata: prompt.metadata ? { ...prompt.metadata } : undefined,
-      })),
-      retryHints: review.retryHints ? [...review.retryHints] : undefined,
-      history: review.history ? review.history.map((entry) => ({ ...entry })) : undefined,
-      metadata: review.metadata ? { ...review.metadata } : undefined,
+      prompts: review.prompts.map((prompt) => {
+        const mappedPrompt: GateReviewPrompt = {
+          ...prompt,
+        };
+        if (prompt.explicitInstructions !== undefined) {
+          mappedPrompt.explicitInstructions = [...prompt.explicitInstructions];
+        }
+        if (prompt.metadata !== undefined) {
+          mappedPrompt.metadata = { ...prompt.metadata };
+        }
+        return mappedPrompt;
+      }),
+      ...(review.retryHints !== undefined && { retryHints: [...review.retryHints] }),
+      ...(review.history !== undefined && {
+        history: review.history.map((entry) => ({ ...entry })),
+      }),
+      ...(review.metadata !== undefined && { metadata: { ...review.metadata } }),
     };
 
     await this.saveSessions();
@@ -799,16 +822,23 @@ export class ChainSessionManager implements ChainSessionService {
     return {
       ...review,
       gateIds: [...review.gateIds],
-      prompts: review.prompts.map((prompt) => ({
-        ...prompt,
-        explicitInstructions: prompt.explicitInstructions
-          ? [...prompt.explicitInstructions]
-          : undefined,
-        metadata: prompt.metadata ? { ...prompt.metadata } : undefined,
-      })),
-      retryHints: review.retryHints ? [...review.retryHints] : undefined,
-      history: review.history ? review.history.map((entry) => ({ ...entry })) : undefined,
-      metadata: review.metadata ? { ...review.metadata } : undefined,
+      prompts: review.prompts.map((prompt) => {
+        const mappedPrompt: GateReviewPrompt = {
+          ...prompt,
+        };
+        if (prompt.explicitInstructions !== undefined) {
+          mappedPrompt.explicitInstructions = [...prompt.explicitInstructions];
+        }
+        if (prompt.metadata !== undefined) {
+          mappedPrompt.metadata = { ...prompt.metadata };
+        }
+        return mappedPrompt;
+      }),
+      ...(review.retryHints !== undefined && { retryHints: [...review.retryHints] }),
+      ...(review.history !== undefined && {
+        history: review.history.map((entry) => ({ ...entry })),
+      }),
+      ...(review.metadata !== undefined && { metadata: { ...review.metadata } }),
     };
   }
 
@@ -881,12 +911,13 @@ export class ChainSessionManager implements ChainSessionService {
     const timestamp = Date.now();
 
     review.history ??= [];
-    review.history.push({
+    const historyEntry: GateReviewHistoryEntry = {
       timestamp,
       status: outcome.verdict.toLowerCase(),
-      reasoning: outcome.rationale,
-      reviewer: outcome.reviewer,
-    });
+      ...(outcome.rationale !== undefined && { reasoning: outcome.rationale }),
+      ...(outcome.reviewer !== undefined && { reviewer: outcome.reviewer }),
+    };
+    review.history.push(historyEntry);
     review.previousResponse = outcome.rawVerdict;
     review.attemptCount = (review.attemptCount ?? 0) + 1;
 
@@ -962,6 +993,9 @@ export class ChainSessionManager implements ChainSessionService {
     if (history && history.length > 0) {
       for (let idx = history.length - 1; idx >= 0; idx -= 1) {
         const runChainId = history[idx];
+        if (runChainId === undefined) {
+          continue;
+        }
         const sessionIds = this.chainSessionMapping.get(runChainId);
         if (!sessionIds) {
           continue;
@@ -1019,7 +1053,11 @@ export class ChainSessionManager implements ChainSessionService {
       if (this.isDormantSession(session)) {
         continue;
       }
-      summaries.push({
+      const promptName = session.blueprint?.parsedCommand?.convertedPrompt?.name;
+      const promptId =
+        session.blueprint?.parsedCommand?.convertedPrompt?.id ??
+        session.blueprint?.parsedCommand?.promptId;
+      const summary: ChainSessionSummary = {
         sessionId: session.sessionId,
         chainId: session.chainId,
         currentStep: session.state.currentStep,
@@ -1027,11 +1065,10 @@ export class ChainSessionManager implements ChainSessionService {
         pendingReview: Boolean(session.pendingGateReview),
         lastActivity: session.lastActivity,
         startTime: session.startTime,
-        promptName: session.blueprint?.parsedCommand?.convertedPrompt?.name,
-        promptId:
-          session.blueprint?.parsedCommand?.convertedPrompt?.id ??
-          session.blueprint?.parsedCommand?.promptId,
-      });
+        ...(promptName !== undefined && { promptName }),
+        ...(promptId !== undefined && { promptId }),
+      };
+      summaries.push(summary);
     }
 
     summaries.sort((a, b) => b.lastActivity - a.lastActivity);
@@ -1256,7 +1293,11 @@ export class ChainSessionManager implements ChainSessionService {
     if (!match) {
       return undefined;
     }
-    return Number.parseInt(match[1], 10);
+    const matchGroup = match[1];
+    if (matchGroup === undefined) {
+      return undefined;
+    }
+    return Number.parseInt(matchGroup, 10);
   }
 
   private ensureRunMappingConsistency(): void {
@@ -1355,9 +1396,10 @@ export class ChainSessionManager implements ChainSessionService {
     this.logger.info('Shutting down ChainSessionManager...');
 
     try {
-      if (this.cleanupIntervalHandle) {
+      if (this.cleanupIntervalHandle !== undefined) {
         clearInterval(this.cleanupIntervalHandle);
-        this.cleanupIntervalHandle = undefined;
+        // Use Object.assign to safely clear the optional property
+        Object.assign(this, { cleanupIntervalHandle: undefined });
         this.logger.debug('Chain session cleanup scheduler cleared');
       }
 
@@ -1413,6 +1455,9 @@ export class ChainSessionManager implements ChainSessionService {
     const history = this.baseChainMapping.get(normalized) ?? [];
     for (let idx = history.length - 1; idx >= 0; idx -= 1) {
       const runChainId = history[idx];
+      if (runChainId === undefined) {
+        continue;
+      }
       const dormantSession = this.getDormantSessionForChain(runChainId);
       if (dormantSession) {
         return dormantSession;

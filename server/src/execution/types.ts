@@ -7,6 +7,7 @@
  */
 
 import type { GateDefinition, PromptArgument } from '../prompts/types.js';
+import type { LoadedScriptTool } from '../scripts/types.js';
 import type {
   CustomCheck,
   GateScope,
@@ -53,7 +54,6 @@ export interface ExecutionPlan {
   requiresFramework: boolean;
   requiresSession: boolean;
   category?: string;
-  modifier?: ExecutionModifier;
   modifiers?: ExecutionModifiers;
   /** Semantic analysis result from planning phase (for resource-driven guidance) */
   semanticAnalysis?: import('../semantic/types.js').ContentAnalysisResult;
@@ -113,6 +113,13 @@ export interface ConvertedPrompt {
   enhancedGateConfiguration?: EnhancedGateConfiguration;
   executionModifiers?: ExecutionModifiers; // Optional default modifiers applied when executing this prompt
   requiresExecution?: boolean; // Whether this prompt should be executed rather than returned
+  // Script tools
+  /** Loaded script tools for this prompt (populated by loader when tools declared in prompt.yaml) */
+  scriptTools?: LoadedScriptTool[];
+  /** Raw tool IDs from prompt definition (before loading) */
+  tools?: string[];
+  /** Directory path for prompt-local script resolution (populated during conversion) */
+  promptDir?: string;
 }
 
 /**
@@ -261,7 +268,6 @@ export interface PerformanceMetrics {
     recentExecutions: number;
   };
 }
-
 
 /**
  * Chain execution state

@@ -6,10 +6,6 @@
  * and (optionally) tool registration. Kept standalone so runtime integration
  * can opt in incrementally without touching existing hand-written descriptors.
  */
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { z } from 'zod';
 
 import type { ToolContract, ParameterDefinition } from './types.js';
@@ -90,48 +86,5 @@ function toZodType(typeString: string): z.ZodTypeAny {
   return z.any();
 }
 
-/**
- * Load generated contract metadata from the build artifacts directory.
- *
- * Consumers can pass custom base paths if needed; default resolves to
- * server/tooling/contracts/_generated relative to this file.
- */
-export async function loadGeneratedContract(tool: string, baseDir?: string): Promise<ToolContract> {
-  const currentDir = path.dirname(fileURLToPath(import.meta.url));
-  const root = baseDir ?? path.resolve(path.join(currentDir, '..', '_generated'));
-  const metaPath = path.join(root, `${tool}.metadata.json`);
-  const raw = await readFile(metaPath, 'utf-8');
-  const parsed = JSON.parse(raw);
-  return contractMetadataSchema.parse(parsed);
-}
-
-// Minimal schema to validate generated metadata blobs.
-const contractMetadataSchema = z.object({
-  tool: z.string(),
-  version: z.number().int().positive(),
-  summary: z.string(),
-  parameters: z.array(
-    z.object({
-      name: z.string(),
-      type: z.string(),
-      description: z.string(),
-      status: z.enum(['working', 'needs-validation', 'deprecated', 'hidden', 'experimental']),
-      required: z.boolean().optional(),
-      default: z.any().optional(),
-      compatibility: z.enum(['canonical', 'deprecated', 'legacy']), // Required with default value
-      examples: z.array(z.string()).optional(),
-      notes: z.array(z.string()).optional(),
-    })
-  ),
-  commands: z
-    .array(
-      z.object({
-        id: z.string(),
-        summary: z.string(),
-        parameters: z.array(z.string()).optional(),
-        status: z.enum(['working', 'needs-validation', 'deprecated', 'hidden', 'experimental']), // Required with default value
-        notes: z.array(z.string()).optional(),
-      })
-    )
-    .optional(),
-});
+// NOTE: loadGeneratedContract and contractMetadataSchema removed - they loaded
+// from *.metadata.json files which were dead code (never imported at runtime).

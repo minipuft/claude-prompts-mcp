@@ -4,7 +4,7 @@
  *
  * Centralized registry for loading and managing methodology guides.
  * Uses YAML-based loading exclusively with fail-fast behavior.
- * All methodologies must be defined in methodologies/<id>/methodology.yaml.
+ * All methodologies must be defined in resources/methodologies/<id>/methodology.yaml.
  */
 
 import { createGenericGuide } from './generic-methodology-guide.js';
@@ -73,7 +73,7 @@ export class MethodologyRegistry {
       autoLoadBuiltIn: config.autoLoadBuiltIn ?? true,
       customGuides: config.customGuides ?? [],
       validateOnRegistration: config.validateOnRegistration ?? true,
-      runtimeLoaderConfig: config.runtimeLoaderConfig,
+      ...(config.runtimeLoaderConfig ? { runtimeLoaderConfig: config.runtimeLoaderConfig } : {}),
     };
 
     // RuntimeMethodologyLoader is mandatory - YAML loading is required
@@ -126,6 +126,9 @@ export class MethodologyRegistry {
     const startTime = performance.now();
 
     try {
+      // Normalize ID once at the boundary for consistent storage/lookup
+      const normalizedId = guide.frameworkId.toLowerCase();
+
       // Validate guide if required
       if (this.config.validateOnRegistration) {
         const validationResult = this.validateGuide(guide);
@@ -138,7 +141,7 @@ export class MethodologyRegistry {
       }
 
       // Check for existing guide with same ID
-      if (this.guides.has(guide.frameworkId)) {
+      if (this.guides.has(normalizedId)) {
         this.logger.warn(`Guide with ID '${guide.frameworkId}' already registered, replacing...`);
       }
 
@@ -155,7 +158,7 @@ export class MethodologyRegistry {
         },
       };
 
-      this.guides.set(guide.frameworkId, entry);
+      this.guides.set(normalizedId, entry);
 
       this.logger.debug(
         `Registered ${isBuiltIn ? 'built-in' : 'custom'} methodology guide: ${guide.frameworkName} (${guide.frameworkId}) [${source}]`
@@ -242,6 +245,26 @@ export class MethodologyRegistry {
   }
 
   /**
+   * Unregister a methodology guide from the registry
+   *
+   * @param guideId - The guide ID to unregister
+   * @returns true if the guide was found and removed
+   */
+  unregisterGuide(guideId: string): boolean {
+    this.ensureInitialized();
+    const normalizedId = guideId.toLowerCase();
+
+    if (!this.guides.has(normalizedId)) {
+      this.logger.warn(`Cannot unregister unknown methodology guide: ${guideId}`);
+      return false;
+    }
+
+    this.guides.delete(normalizedId);
+    this.logger.info(`Methodology guide '${guideId}' unregistered from registry`);
+    return true;
+  }
+
+  /**
    * Get registry statistics
    */
   getRegistryStats() {
@@ -273,13 +296,61 @@ export class MethodologyRegistry {
     };
   }
 
+  /**
+   * Load and register a methodology by ID from disk
+   *
+   * Used for hot-reload when a new methodology is created via MCP tools.
+   * Loads the YAML definition and creates a guide, then registers it.
+   *
+   * @param id - Methodology ID to load
+   * @returns true if successfully loaded and registered
+   */
+  async loadAndRegisterById(id: string): Promise<boolean> {
+    this.ensureInitialized();
+
+    const normalizedId = id.toLowerCase();
+
+    if (!this.runtimeLoader) {
+      this.logger.error('RuntimeMethodologyLoader not available for loadAndRegisterById');
+      return false;
+    }
+
+    try {
+      // Clear cache to force fresh load
+      this.runtimeLoader.clearCache();
+
+      // Load definition from disk
+      const definition = this.runtimeLoader.loadMethodology(normalizedId);
+
+      if (!definition) {
+        this.logger.warn(`Methodology '${id}' not found on disk`);
+        return false;
+      }
+
+      // Create guide from definition
+      const guide = createGenericGuide(definition);
+
+      // Register the guide (will replace if exists)
+      const success = await this.registerGuide(guide, false, 'yaml-runtime');
+
+      if (success) {
+        this.logger.info(`Dynamically loaded and registered methodology: ${id}`);
+      }
+
+      return success;
+    } catch (error) {
+      this.logger.error(`Failed to load and register methodology '${id}':`, error);
+      return false;
+    }
+  }
+
   // Private implementation methods
 
   /**
    * Load built-in methodology guides
    *
    * YAML loading is mandatory with fail-fast behavior.
-   * All methodologies must be defined in methodologies/<id>/methodology.yaml.
+   * All methodologies must be defined in resources/methodologies/<id>/methodology.yaml.
    */
   private async loadBuiltInGuides(): Promise<void> {
     this.logger.debug('Loading built-in methodology guides from YAML...');
@@ -299,7 +370,7 @@ export class MethodologyRegistry {
 
       if (!definition) {
         throw new Error(
-          `FATAL: Methodology '${id}' not found. Expected: methodologies/${id}/methodology.yaml`
+          `FATAL: Methodology '${id}' not found. Expected: resources/methodologies/${id}/methodology.yaml`
         );
       }
 
@@ -367,8 +438,13 @@ export class MethodologyRegistry {
       errors.push('frameworkName is required and must be a string');
     }
 
-    if (!guide.methodology || typeof guide.methodology !== 'string') {
-      errors.push('methodology is required and must be a string');
+    // Accept either 'type' (preferred) or 'methodology' (deprecated)
+    if (
+      (!guide.type && !guide.methodology) ||
+      (guide.type && typeof guide.type !== 'string') ||
+      (guide.methodology && typeof guide.methodology !== 'string')
+    ) {
+      errors.push('type (or methodology) is required and must be a string');
     }
 
     if (!guide.version || typeof guide.version !== 'string') {

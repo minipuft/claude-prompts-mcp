@@ -153,7 +153,7 @@ export class CategoryExtractor {
       const promptsIndex = pathSegments.findIndex((segment) => segment === 'prompts');
       if (promptsIndex !== -1 && promptsIndex + 1 < pathSegments.length) {
         const categoryCandidate = pathSegments[promptsIndex + 1];
-        if (this.isValidCategory(categoryCandidate)) {
+        if (categoryCandidate && this.isValidCategory(categoryCandidate)) {
           return categoryCandidate;
         }
       }

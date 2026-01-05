@@ -17,6 +17,12 @@ const createPromptManager = () => {
   const configManager = {
     getPromptsFilePath: () => '/tmp/prompts.json',
     getServerRoot: () => process.cwd(),
+    getPromptsDirectory: () => '/tmp/prompts',
+    getVersioningConfig: () => ({
+      enabled: true,
+      max_versions: 50,
+      auto_version: true,
+    }),
   } as any;
   const semanticAnalyzer = {
     analyzePrompt: jest.fn(),

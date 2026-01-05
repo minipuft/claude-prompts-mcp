@@ -6,7 +6,7 @@ import { z } from 'zod';
  * Generated from contract version 1
  */
 export const promptEngineSchema = z.object({
-  /** Prompt ID to expand with optional arguments. Format: >>prompt_id key="value".  Chains: >>step1 --> >>step2 (N-1 arrows for N steps). Modifiers (place before ID): @Framework | :: "criteria" | %clean/%lean.  Do NOT invent IDs - use prompt_manager(action:"list") to discover valid prompts. */
+  /** Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: "criteria" %clean/%lean */
   command: z.string().trim().optional(),
   /** Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command. */
   chain_id: z.string().regex(/^chain-[a-zA-Z0-9_-]+(?:#\d+)?$/, 'Chain ID must follow format: chain-{prompt}[#runNumber]').optional(),
@@ -41,56 +41,100 @@ export const promptEngineSchema = z.object({
   force_restart: z.boolean().optional(),
   /** Execution options forwarded downstream. */
   options: z.record(z.unknown()).optional(),
-});
+}).passthrough();
 
 export type promptEngineInput = z.infer<typeof promptEngineSchema>;
 
 /**
- * Zod schema for prompt_manager MCP tool
+ * Zod schema for resource_manager MCP tool
  * Generated from contract version 1
  */
-export const promptManagerSchema = z.object({
-  /** The operation to perform: create (new prompt), update (modify existing), delete (remove), list (discover IDs), inspect (view details), analyze_type/analyze_gates (get recommendations), reload (refresh from disk), guide (get action suggestions). */
-  action: z.enum(['create', 'update', 'delete', 'reload', 'list', 'inspect', 'analyze_type', 'analyze_gates', 'guide']),
-  /** Prompt identifier (required for most actions). */
+export const resourceManagerSchema = z.object({
+  /** Type of resource to manage. Routes to appropriate handler. */
+  resource_type: z.enum(['prompt', 'gate', 'methodology']),
+  /** Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology). Versioning: history/rollback/compare (all types). */
+  action: z.enum(['create', 'update', 'delete', 'reload', 'list', 'inspect', 'analyze_type', 'analyze_gates', 'guide', 'switch', 'history', 'rollback', 'compare']),
+  /** Resource identifier. Required for create, update, delete, inspect, reload, switch. */
   id: z.string().optional(),
-  /** Human-friendly name (create/update). */
+  /** Human-friendly name for the resource (create/update). */
   name: z.string().optional(),
-  /** Prompt description (create/update). */
+  /** Resource description explaining its purpose (create/update). */
   description: z.string().optional(),
-  /** Prompt body/template (create/update). */
-  user_message_template: z.string().optional(),
-  /** Optional system message (create/update). */
-  system_message: z.string().optional(),
-  /** Category tag (create/update). */
+  /** Filter list to enabled resources only. Default: true. */
+  enabled_only: z.boolean().optional(),
+  /** Safety confirmation for delete operation. */
+  confirm: z.boolean().optional(),
+  /** Audit reason for reload/delete/switch operations. */
+  reason: z.string().trim().optional(),
+  /** [Prompt] Category tag for the prompt. */
   category: z.string().optional(),
-  /** Prompt arguments metadata (create/update). */
+  /** [Prompt] Prompt body/template with Nunjucks placeholders. */
+  user_message_template: z.string().optional(),
+  /** [Prompt] Optional system message for the prompt. */
+  system_message: z.string().optional(),
+  /** [Prompt] Argument definitions for the prompt. */
   arguments: z.array(z.object({
         name: z.string(),
         type: z.string(),
         description: z.string(),
       })).optional(),
-  /** Chain steps definition (create/update for chains). */
+  /** [Prompt] Chain steps definition for multi-step prompts. */
   chain_steps: z.array(z.unknown()).optional(),
-  /** Hint for execution type on creation. */
+  /** [Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. */
+  tools: z.array(z.unknown()).optional(),
+  /** [Prompt] Gate configuration: include (array), exclude (array), framework_gates (boolean). */
+  gate_configuration: z.record(z.unknown()).optional(),
+  /** [Prompt] Hint for execution type on creation. */
   execution_hint: z.enum(['single', 'chain']).optional(),
-  /** Targeted update section. */
+  /** [Prompt] Targeted update section. */
   section: z.enum(['name', 'description', 'system_message', 'user_message_template', 'arguments', 'chain_steps']).optional(),
-  /** Content for targeted section updates. */
+  /** [Prompt] Content for targeted section updates. */
   section_content: z.string().optional(),
-  /** List filter query (list action). */
+  /** [Prompt] List filter query. */
   filter: z.string().optional(),
-  /** Output format for list/inspect. */
+  /** [Prompt] Output format for list/inspect. */
   format: z.enum(['table', 'json', 'text']).optional(),
-  /** Inspect detail level. */
+  /** [Prompt] Inspect detail level. */
   detail: z.enum(['summary', 'full']).optional(),
-  /** Safety confirmation (delete). */
-  confirm: z.boolean().optional(),
-  /** Audit reason (reload/delete). */
-  reason: z.string().trim().optional(),
-});
+  /** [Prompt] Search query for filtering (list action). */
+  search_query: z.string().optional(),
+  /** [Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. */
+  gate_type: z.enum(['validation', 'guidance']).optional(),
+  /** [Gate] Gate guidance content - the criteria or instructions. */
+  guidance: z.string().optional(),
+  /** [Gate] Structured pass criteria definitions. */
+  pass_criteria: z.array(z.unknown()).optional(),
+  /** [Gate] Activation rules: prompt_categories, frameworks, explicit_request. */
+  activation: z.record(z.unknown()).optional(),
+  /** [Gate] Retry configuration: max_attempts, improvement_hints. */
+  retry_config: z.record(z.unknown()).optional(),
+  /** [Methodology] Methodology type identifier. Use action:'list' to see registered methodologies. */
+  methodology: z.string().optional(),
+  /** [Methodology] System prompt guidance injected when active. */
+  system_prompt_guidance: z.string().optional(),
+  /** [Methodology] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (methodology_gates, processing_steps, execution_steps, etc.) are also accepted. */
+  phases: z.array(z.unknown()).optional(),
+  /** [Methodology] Gate configuration: include, exclude arrays. */
+  gates: z.record(z.unknown()).optional(),
+  /** [Methodology] Tool description overlays when active. */
+  tool_descriptions: z.record(z.unknown()).optional(),
+  /** [Methodology] Whether the methodology is enabled. */
+  enabled: z.boolean().optional(),
+  /** [Methodology] For switch: persist the change to config. Default: false. */
+  persist: z.boolean().optional(),
+  /** [Versioning] Target version number for rollback action. */
+  version: z.number().optional(),
+  /** [Versioning] Starting version number for compare action. */
+  from_version: z.number().optional(),
+  /** [Versioning] Ending version number for compare action. */
+  to_version: z.number().optional(),
+  /** [Versioning] Max versions to return in history. Default: 10. */
+  limit: z.number().optional(),
+  /** [Versioning] Skip auto-versioning on update. Default: false. */
+  skip_version: z.boolean().optional(),
+}).passthrough();
 
-export type promptManagerInput = z.infer<typeof promptManagerSchema>;
+export type resourceManagerInput = z.infer<typeof resourceManagerSchema>;
 
 /**
  * Zod schema for system_control MCP tool
@@ -101,7 +145,7 @@ export const systemControlSchema = z.object({
   action: z.enum(['status', 'framework', 'gates', 'analytics', 'config', 'maintenance', 'guide', 'injection']),
   /** Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list). */
   operation: z.string().optional(),
-  /** Target framework for switch operations (CAGEERF, ReACT, 5W1H, SCAMPER). */
+  /** Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks. */
   framework: z.string().optional(),
   /** Audit reason for framework/gate toggles or admin actions. */
   reason: z.string().trim().optional(),
@@ -115,7 +159,7 @@ export const systemControlSchema = z.object({
   topic: z.string().optional(),
   /** Filter gates by keyword (matches ID, name, or description). Use with gates:list action. */
   search_query: z.string().optional(),
-});
+}).passthrough();
 
 export type systemControlInput = z.infer<typeof systemControlSchema>;
 

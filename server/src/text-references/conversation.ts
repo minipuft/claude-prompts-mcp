@@ -38,6 +38,10 @@ export class ConversationManager {
   getPreviousMessage(): string {
     for (let i = this.conversationHistory.length - 1; i >= 0; i--) {
       const historyItem = this.conversationHistory[i];
+      if (!historyItem) {
+        continue;
+      }
+
       if (historyItem.role === 'user' && !historyItem.isProcessedTemplate) {
         this.logger.debug(
           `Found previous user message for context: ${historyItem.content.substring(0, 50)}...`
@@ -94,14 +98,29 @@ export class ConversationManager {
     const oldestMessage = timestamps.length > 0 ? Math.min(...timestamps) : undefined;
     const newestMessage = timestamps.length > 0 ? Math.max(...timestamps) : undefined;
 
-    return {
+    const stats: {
+      totalMessages: number;
+      userMessages: number;
+      assistantMessages: number;
+      processedTemplates: number;
+      oldestMessage?: number;
+      newestMessage?: number;
+    } = {
       totalMessages: this.conversationHistory.length,
       userMessages,
       assistantMessages,
       processedTemplates,
-      oldestMessage,
-      newestMessage,
     };
+
+    if (oldestMessage !== undefined) {
+      stats.oldestMessage = oldestMessage;
+    }
+
+    if (newestMessage !== undefined) {
+      stats.newestMessage = newestMessage;
+    }
+
+    return stats;
   }
 }
 

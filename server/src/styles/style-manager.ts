@@ -176,9 +176,7 @@ export class StyleManager {
     const style = this.getStyle(styleId);
     if (!style?.compatibleFrameworks) return true; // No restriction
     if (!frameworkId) return true;
-    return style.compatibleFrameworks.some(
-      (f) => f.toUpperCase() === frameworkId.toUpperCase()
-    );
+    return style.compatibleFrameworks.some((f) => f.toUpperCase() === frameworkId.toUpperCase());
   }
 
   /**
@@ -208,9 +206,11 @@ export class StyleManager {
 
     // Check framework context
     if (style.activation.framework_context?.length && context.framework) {
-      if (!style.activation.framework_context.some(
-        (f) => f.toUpperCase() === context.framework!.toUpperCase()
-      )) {
+      if (
+        !style.activation.framework_context.some(
+          (f) => f.toUpperCase() === context.framework!.toUpperCase()
+        )
+      ) {
         return false;
       }
     }

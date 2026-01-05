@@ -67,6 +67,31 @@ export interface GateDefinition {
 }
 
 /**
+ * Gate configuration for prompts (YAML format)
+ */
+export interface PromptGateConfiguration {
+  /** Gate IDs to include */
+  include?: string[];
+  /** Gate IDs to exclude */
+  exclude?: string[];
+  /** Whether to include framework gates (default: true) */
+  framework_gates?: boolean;
+  /** Inline gate definitions */
+  inline_gate_definitions?: Array<{
+    id?: string;
+    name: string;
+    type: string;
+    scope?: 'execution' | 'session' | 'chain' | 'step';
+    description?: string;
+    guidance?: string;
+    pass_criteria?: any[];
+    expires_at?: number;
+    source?: 'manual' | 'automatic' | 'analysis';
+    context?: Record<string, any>;
+  }>;
+}
+
+/**
  * Complete prompt metadata structure
  */
 export interface PromptData {
@@ -82,10 +107,16 @@ export interface PromptData {
   file: string;
   /** Arguments accepted by this prompt */
   arguments: PromptArgument[];
-  /** Optional gates for validation */
+  /** Optional gates for validation (legacy format) */
   gates?: GateDefinition[];
+  /** Gate configuration (YAML format) */
+  gateConfiguration?: PromptGateConfiguration;
+  /** Chain steps for multi-step execution (YAML format) */
+  chainSteps?: ChainStep[];
   /** Whether to register this prompt with MCP. Overrides category default. */
   registerWithMcp?: boolean;
+  /** Script tool IDs declared by this prompt (references tools/{id}/ directories) */
+  tools?: string[];
 }
 
 /**
@@ -126,8 +157,8 @@ export interface PromptsConfigFile {
  * Configuration for the prompts subsystem
  */
 export interface PromptsConfig {
-  /** Path to the prompts definition file */
-  file: string;
+  /** Path to the prompts directory */
+  directory: string;
   /** Global default for MCP registration. Category/prompt overrides take precedence. */
   registerWithMcp?: boolean;
 }

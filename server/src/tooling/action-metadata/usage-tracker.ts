@@ -76,12 +76,20 @@ export function recordParameterIssue(
   metadata?: Record<string, unknown>
 ): void {
   const metrics = getToolMetrics(toolId);
-  metrics.parameterIssues.push({
-    timestamp: Date.now(),
-    parameter,
-    message,
-    metadata,
-  });
+  const issue: ParameterIssue = metadata
+    ? {
+        timestamp: Date.now(),
+        parameter,
+        message,
+        metadata,
+      }
+    : {
+        timestamp: Date.now(),
+        parameter,
+        message,
+      };
+
+  metrics.parameterIssues.push(issue);
 
   if (metrics.parameterIssues.length > MAX_PARAMETER_ISSUES) {
     metrics.parameterIssues.splice(0, metrics.parameterIssues.length - MAX_PARAMETER_ISSUES);
@@ -102,10 +110,18 @@ export function getActionUsageSnapshot(): Record<
       actions: Array.from(metrics.actions.values()).map((entry) => ({
         actionId: entry.actionId,
         counts: { ...entry.counts },
-        lastError: entry.lastError,
       })),
       parameterIssues: [...metrics.parameterIssues],
     };
+
+    snapshot[toolId].actions = snapshot[toolId].actions.map((entry) => {
+      if (entry.lastError) {
+        return entry;
+      }
+
+      const { lastError, ...rest } = entry;
+      return rest;
+    });
   }
 
   return snapshot;

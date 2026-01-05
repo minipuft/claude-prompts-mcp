@@ -47,7 +47,7 @@ export interface GateValidationResult {
  * - Quality scoring and recommendations
  */
 export class EngineValidator {
-  private gateSystem?: LightweightGateSystem;
+  private gateSystem: LightweightGateSystem | undefined;
 
   constructor(gateSystem?: LightweightGateSystem) {
     this.gateSystem = gateSystem;
@@ -343,21 +343,20 @@ export class EngineValidator {
             attemptNumber: 1,
             previousAttempts: [],
           });
-          const gateResult = gateResults[0] || {
+          const gateResult = (Array.isArray(gateResults) ? gateResults[0] : undefined) || {
             valid: false,
             errors: [
               { field: 'gate', message: 'Gate validation failed', code: 'VALIDATION_ERROR' },
             ],
           };
 
+          const primaryMessage =
+            gateResult.errors?.[0]?.message ?? (gateResult.valid ? 'Gate passed' : 'Gate failed');
+
           results.push({
             gate: gateName,
             passed: gateResult.valid || gateResult.passed || false,
-            message: gateResult.errors?.length
-              ? gateResult.errors[0].message
-              : gateResult.valid
-                ? 'Gate passed'
-                : 'Gate failed',
+            message: primaryMessage,
             score: 85, // Default validation score
           });
 

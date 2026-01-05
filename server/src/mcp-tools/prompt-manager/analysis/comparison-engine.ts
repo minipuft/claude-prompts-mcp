@@ -21,8 +21,8 @@ export interface ComparisonResult {
  */
 export interface ComparisonChange {
   type: 'execution_type' | 'framework_requirement' | 'gates' | 'confidence' | 'complexity';
-  before: any;
-  after: any;
+  before: unknown;
+  after: unknown;
   impact: 'positive' | 'negative' | 'neutral';
   description: string;
 }
@@ -168,13 +168,17 @@ export class ComparisonEngine {
 
     if (typeChanges.length > 0) {
       const change = typeChanges[0];
-      parts.push(`🔄 **Type**: ${change.before} → ${change.after}`);
+      if (change !== undefined) {
+        parts.push(`🔄 **Type**: ${change.before} → ${change.after}`);
+      }
     }
 
     if (frameworkChanges.length > 0) {
       const change = frameworkChanges[0];
-      const status = change.after ? 'enabled' : 'disabled';
-      parts.push(`🧠 **Framework**: ${status}`);
+      if (change !== undefined) {
+        const status = change.after ? 'enabled' : 'disabled';
+        parts.push(`🧠 **Framework**: ${status}`);
+      }
     }
 
     if (gateChanges.length > 0) {
@@ -210,12 +214,16 @@ export class ComparisonEngine {
     const typeChanges = changes.filter((c) => c.type === 'execution_type');
     if (typeChanges.length > 0) {
       const change = typeChanges[0];
-      if (change.after === 'chain' && change.before !== 'chain') {
-        recommendations.push('💡 Consider adding chain validation gates for multi-step execution');
-      } else if (change.after === 'template' && change.before === 'prompt') {
-        recommendations.push('💡 Framework integration now available for structured analysis');
-      } else if (change.after === 'prompt' && change.before !== 'prompt') {
-        recommendations.push('⚡ Simplified execution should improve performance');
+      if (change !== undefined) {
+        if (change.after === 'chain' && change.before !== 'chain') {
+          recommendations.push(
+            '💡 Consider adding chain validation gates for multi-step execution'
+          );
+        } else if (change.after === 'template' && change.before === 'prompt') {
+          recommendations.push('💡 Framework integration now available for structured analysis');
+        } else if (change.after === 'prompt' && change.before !== 'prompt') {
+          recommendations.push('⚡ Simplified execution should improve performance');
+        }
       }
     }
 
@@ -223,10 +231,12 @@ export class ComparisonEngine {
     const frameworkChanges = changes.filter((c) => c.type === 'framework_requirement');
     if (frameworkChanges.length > 0) {
       const change = frameworkChanges[0];
-      if (change.after && !change.before) {
-        recommendations.push('🎯 Enable CAGEERF or ReACT framework for optimal results');
-      } else if (!change.after && change.before) {
-        recommendations.push('🚀 Framework overhead removed - consider basic prompt execution');
+      if (change !== undefined) {
+        if (change.after && !change.before) {
+          recommendations.push('🎯 Enable CAGEERF or ReACT framework for optimal results');
+        } else if (!change.after && change.before) {
+          recommendations.push('🚀 Framework overhead removed - consider basic prompt execution');
+        }
       }
     }
 
@@ -240,10 +250,12 @@ export class ComparisonEngine {
     const confidenceChanges = changes.filter((c) => c.type === 'confidence');
     if (confidenceChanges.length > 0) {
       const change = confidenceChanges[0];
-      if (change.impact === 'negative') {
-        recommendations.push('⚠️ Lower confidence suggests prompt may need refinement');
-      } else if (change.impact === 'positive') {
-        recommendations.push('✅ Improved confidence indicates better prompt structure');
+      if (change !== undefined) {
+        if (change.impact === 'negative') {
+          recommendations.push('⚠️ Lower confidence suggests prompt may need refinement');
+        } else if (change.impact === 'positive') {
+          recommendations.push('✅ Improved confidence indicates better prompt structure');
+        }
       }
     }
 
