@@ -11,5 +11,5 @@
     "name": "claude-prompts",
     "repository": "https://github.com/minipuft/claude-prompts-mcp",
     "skills": "./skills",
-    "version": "1.0.6"
+    "version": "1.0.7"
 }
