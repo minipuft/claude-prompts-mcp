@@ -5,12 +5,11 @@
     "commands": "./commands",
     "description": "Reusable prompt templates with quality gates and multi-step workflows for consistent AI outputs",
     "homepage": "https://github.com/minipuft/claude-prompts-mcp",
-    "hooks": "./hooks/hooks.json",
     "keywords": ["mcp", "prompts", "templates", "gates", "chains", "workflows"],
     "license": "MIT",
     "mcpServers": "./mcp.json",
     "name": "claude-prompts",
     "repository": "https://github.com/minipuft/claude-prompts-mcp",
     "skills": "./skills",
-    "version": "1.0.4"
+    "version": "1.0.5"
 }
