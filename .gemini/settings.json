@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "name": "init-prompts",
+            "type": "command",
+            "command": "bash \"${extensionPath}/.gemini/hooks/setup.sh\"",
+            "description": "Initialize prompt system dependencies"
+          }
+        ]
+      }
+    ],
+    "BeforeModel": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "name": "prompt-suggest",
+            "type": "command",
+            "command": "python3 \"${extensionPath}/.gemini/hooks/prompt-suggest.py\"",
+            "description": "Detect >>prompt syntax and provide context"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": "*prompt_engine*",
+        "hooks": [
+          {
+            "name": "chain-tracker",
+            "type": "command",
+            "command": "python3 \"${extensionPath}/.gemini/hooks/post-prompt-engine.py\"",
+            "description": "Track chain state and pending gates"
+          }
+        ]
+      }
+    ]
+  }
+}

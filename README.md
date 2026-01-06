@@ -96,6 +96,25 @@ Raw MCP works, but models sometimes miss the syntax. The hooks catch that. → [
 
 **User Data**: Your custom prompts are stored in `~/.local/share/claude-prompts/` and persist across plugin updates.
 
+### Gemini CLI
+
+```bash
+# Install from GitHub
+gemini extensions install minipuft/claude-prompts-mcp
+
+# Or link locally for development
+cd claude-prompts-mcp
+gemini extensions link .
+```
+
+The extension provides:
+- **MCP server** with the same tools (`prompt_engine`, `resource_manager`, `system_control`)
+- **GEMINI.md** context file with usage documentation
+
+**Optional hooks** for `>>prompt` syntax detection can be enabled manually - see `GEMINI.md` for setup instructions.
+
+Works with the same prompts, gates, and methodologies as Claude Code.
+
 ### Other MCP Clients
 
 <details>

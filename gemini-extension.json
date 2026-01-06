@@ -1,0 +1,15 @@
+{
+  "name": "gemini-prompts",
+  "version": "1.0.7",
+  "contextFileName": "GEMINI.md",
+  "mcpServers": {
+    "gemini-prompts": {
+      "command": "node",
+      "args": ["${extensionPath}${/}server${/}dist${/}index.js", "--transport=stdio"],
+      "env": {
+        "MCP_WORKSPACE": "${extensionPath}",
+        "MCP_RESOURCES_PATH": "${extensionPath}${/}server${/}resources"
+      }
+    }
+  }
+}
