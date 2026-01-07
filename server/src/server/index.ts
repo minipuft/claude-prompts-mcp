@@ -83,20 +83,26 @@ export class ServerManager {
     this.logger.info('STDIO transport ready');
 
     // Then start SSE transport if API manager is available
-    if (this.apiManager) {
+    if (this.apiManager !== undefined) {
       const app = this.apiManager.createApp();
       this.transportManager.setupSseTransport(app);
       this.httpServer = createServer(app);
       this.setupHttpServerEventHandlers();
 
       await new Promise<void>((resolve, reject) => {
-        this.httpServer!.listen(this.port, () => {
+        const httpServer = this.httpServer;
+        if (httpServer === undefined) {
+          reject(new Error('HTTP server not initialized'));
+          return;
+        }
+
+        httpServer.listen(this.port, () => {
           this.logger.info(`SSE transport running on http://localhost:${this.port}`);
           this.logger.info(`Connect to http://localhost:${this.port}/mcp for SSE MCP connections`);
           resolve();
         });
 
-        this.httpServer!.on('error', (error: any) => {
+        httpServer.on('error', (error: NodeJS.ErrnoException) => {
           if (error.code === 'EADDRINUSE') {
             this.logger.error(`Port ${this.port} is already in use. SSE transport disabled.`);
             // Don't reject - STDIO is still working
@@ -123,7 +129,7 @@ export class ServerManager {
    * Start server with SSE transport
    */
   private async startSseServer(): Promise<void> {
-    if (!this.apiManager) {
+    if (this.apiManager === undefined) {
       throw new Error('API Manager is required for SSE transport');
     }
 
@@ -141,13 +147,19 @@ export class ServerManager {
 
     // Start listening
     await new Promise<void>((resolve, reject) => {
-      this.httpServer!.listen(this.port, () => {
+      const httpServer = this.httpServer;
+      if (httpServer === undefined) {
+        reject(new Error('HTTP server not initialized'));
+        return;
+      }
+
+      httpServer.listen(this.port, () => {
         this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
         this.logger.info(`Connect to http://localhost:${this.port}/mcp for MCP connections`);
         resolve();
       });
 
-      this.httpServer!.on('error', (error: any) => {
+      httpServer.on('error', (error: NodeJS.ErrnoException) => {
         if (error.code === 'EADDRINUSE') {
           this.logger.error(
             `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
@@ -165,7 +177,7 @@ export class ServerManager {
    * This is the preferred HTTP transport, replacing deprecated SSE
    */
   private async startStreamableHttpServer(): Promise<void> {
-    if (!this.apiManager) {
+    if (this.apiManager === undefined) {
       throw new Error('API Manager is required for Streamable HTTP transport');
     }
 
@@ -183,7 +195,13 @@ export class ServerManager {
 
     // Start listening
     await new Promise<void>((resolve, reject) => {
-      this.httpServer!.listen(this.port, () => {
+      const httpServer = this.httpServer;
+      if (httpServer === undefined) {
+        reject(new Error('HTTP server not initialized'));
+        return;
+      }
+
+      httpServer.listen(this.port, () => {
         this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
         this.logger.info(`Streamable HTTP transport ready at http://localhost:${this.port}/mcp`);
         this.logger.info(
@@ -192,7 +210,7 @@ export class ServerManager {
         resolve();
       });
 
-      this.httpServer!.on('error', (error: any) => {
+      httpServer.on('error', (error: NodeJS.ErrnoException) => {
         if (error.code === 'EADDRINUSE') {
           this.logger.error(
             `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
@@ -209,9 +227,9 @@ export class ServerManager {
    * Setup HTTP server event handlers
    */
   private setupHttpServerEventHandlers(): void {
-    if (!this.httpServer) return;
+    if (this.httpServer === undefined) return;
 
-    this.httpServer.on('error', (error: any) => {
+    this.httpServer.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
         this.logger.error(
           `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
@@ -244,9 +262,9 @@ export class ServerManager {
     this.logger.info('Initiating graceful shutdown...');
 
     // Close HTTP server if running
-    if (this.httpServer) {
+    if (this.httpServer !== undefined) {
       this.httpServer.close((error) => {
-        if (error) {
+        if (error !== undefined) {
           this.logger.error('Error closing HTTP server:', error);
         } else {
           this.logger.info('HTTP server closed successfully');
@@ -282,9 +300,10 @@ export class ServerManager {
 
     try {
       // Shutdown current server
-      if (this.httpServer) {
+      if (this.httpServer !== undefined) {
+        const httpServer = this.httpServer;
         await new Promise<void>((resolve) => {
-          this.httpServer!.close(() => {
+          httpServer.close(() => {
             this.logger.info('Server closed for restart');
             resolve();
           });
@@ -310,18 +329,20 @@ export class ServerManager {
   isRunning(): boolean {
     const mode = this.transportManager.getTransportType();
 
-    if (mode === 'stdio') {
-      // For STDIO only, we consider it running if the process is alive
-      return true;
-    } else if (mode === 'sse' || mode === 'streamable-http') {
-      // For HTTP transports, check if HTTP server is listening
-      return this.httpServer?.listening || false;
-    } else if (mode === 'both') {
-      // For dual mode, STDIO is always running; HTTP might be optional
-      return true;
+    switch (mode) {
+      case 'stdio':
+        // For STDIO only, we consider it running if the process is alive
+        return true;
+      case 'sse':
+      case 'streamable-http':
+        // For HTTP transports, check if HTTP server is listening
+        return this.httpServer?.listening ?? false;
+      case 'both':
+        // For dual mode, STDIO is always running; HTTP might be optional
+        return true;
+      default:
+        return false;
     }
-
-    return false;
   }
 
   /**
@@ -340,7 +361,7 @@ export class ServerManager {
     const isHttpActive =
       mode === 'sse' ||
       mode === 'streamable-http' ||
-      (mode === 'both' && this.httpServer?.listening);
+      (mode === 'both' && this.httpServer?.listening === true);
 
     const status: {
       running: boolean;
@@ -368,7 +389,7 @@ export class ServerManager {
     if (mode === 'both') {
       status.transports = {
         stdio: true,
-        sse: this.httpServer?.listening || false,
+        sse: this.httpServer?.listening ?? false,
         streamableHttp: false, // 'both' mode currently only supports STDIO + SSE
       };
     }
