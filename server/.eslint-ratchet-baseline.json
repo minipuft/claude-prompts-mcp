@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-01-06T23:26:17.631Z",
+  "generatedAt": "2026-01-07T04:24:00.473Z",
   "eslintTarget": "src",
   "totals": {
-    "errors": 4489,
-    "warnings": 1122
+    "errors": 4504,
+    "warnings": 1135
   },
   "byRule": {
     "@typescript-eslint/no-unused-vars": {
@@ -12,24 +12,24 @@
       "warnings": 0
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 380,
+      "errors": 382,
       "warnings": 0
     },
     "@typescript-eslint/no-misused-promises": {
-      "errors": 17,
+      "errors": 20,
       "warnings": 0
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2406,
+      "errors": 2412,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 549
+      "warnings": 556
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "errors": 0,
-      "warnings": 317
+      "warnings": 318
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
       "errors": 303,
@@ -45,14 +45,14 @@
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 100
+      "warnings": 103
     },
     "@typescript-eslint/explicit-function-return-type": {
-      "errors": 37,
+      "errors": 38,
       "warnings": 0
     },
     "import/order": {
-      "errors": 7,
+      "errors": 8,
       "warnings": 0
     },
     "no-console": {
@@ -69,7 +69,7 @@
     },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
-      "warnings": 66
+      "warnings": 68
     },
     "no-useless-escape": {
       "errors": 4,
@@ -100,7 +100,7 @@
       "warnings": 0
     },
     "prettier/prettier": {
-      "errors": 692,
+      "errors": 694,
       "warnings": 0
     }
   }
