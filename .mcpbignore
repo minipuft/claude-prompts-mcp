@@ -1,5 +1,15 @@
 # Desktop Extension Bundle Exclusions
-# Include: manifest.json, server/dist/, server/resources/, server/node_modules/, server/config.json, skills/
+# Include: manifest.json, server/dist/, server/resources/ (public only), server/node_modules/, server/config.json, skills/
+
+# Private prompt categories (development-specific, not shipped)
+server/resources/prompts/development/
+server/resources/prompts/debugging/
+server/resources/prompts/codebase-setup/
+server/resources/prompts/pr-review/
+server/resources/prompts/examples/
+server/resources/prompts/content_processing/
+server/resources/prompts/documentation/
+server/resources/prompts/framework-authoring/
 
 # Large caches (critical - 344MB!)
 .osgrep/

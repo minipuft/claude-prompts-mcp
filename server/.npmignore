@@ -1,0 +1,44 @@
+# NPM Package Exclusions
+# Public prompts: guidance/, general/, planning/, analysis/
+# Private prompts: everything else (excluded below)
+
+# Private prompt categories (development-specific)
+resources/prompts/development/
+resources/prompts/debugging/
+resources/prompts/codebase-setup/
+resources/prompts/pr-review/
+resources/prompts/examples/
+resources/prompts/content_processing/
+resources/prompts/documentation/
+resources/prompts/framework-authoring/
+
+# Source code (dist is sufficient for npm)
+src/
+
+# Development files
+tests/
+scripts/
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+
+# Build configs
+tsconfig*.json
+jest.config.*
+.eslint*
+.dependency-cruiser*
+.lintstagedrc*
+.prettierrc*
+
+# Cache and runtime state
+cache/
+runtime-state/
+logs/
+temp/
+graphs/
+
+# IDE and editor
+.vscode/
+.cursor/
+.claude/
