@@ -76,12 +76,27 @@ def write_sync_marker(cache_dir: Path, mtime: float) -> None:
 
 
 def find_source_dir() -> Path | None:
-    """Find the plugin source directory at known dev locations."""
-    # Check common dev locations
+    """Find the plugin source directory at known dev locations.
+
+    Searches common development directories for claude-prompts-mcp.
+    Returns None if not found (e.g., marketplace install).
+    """
+    # Check common dev locations across different OS conventions
     candidates = [
+        # macOS/Linux common locations
         Path.home() / "Applications/claude-prompts-mcp",
         Path.home() / "projects/claude-prompts-mcp",
         Path.home() / "dev/claude-prompts-mcp",
+        Path.home() / "src/claude-prompts-mcp",
+        Path.home() / "code/claude-prompts-mcp",
+        Path.home() / "repos/claude-prompts-mcp",
+        Path.home() / "git/claude-prompts-mcp",
+        Path.home() / "workspace/claude-prompts-mcp",
+        # Windows common locations
+        Path.home() / "Documents/claude-prompts-mcp",
+        Path.home() / "Documents/GitHub/claude-prompts-mcp",
+        # XDG conventions
+        Path.home() / ".local/src/claude-prompts-mcp",
     ]
 
     for candidate in candidates:
@@ -92,18 +107,25 @@ def find_source_dir() -> Path | None:
 
 
 def find_cache_dir() -> Path | None:
-    """Find the Claude Code plugin cache directory."""
-    # Check both possible cache locations
-    cache_candidates = [
-        Path.home() / ".claude/plugins/cache/minipuft/claude-prompts",
-        Path.home() / ".claude/plugins/cache/minipuft-marketplace/claude-prompts-mcp",
-    ]
+    """Find the Claude Code plugin cache directory.
 
-    for cache_base in cache_candidates:
-        if cache_base.exists():
-            versions = list(cache_base.iterdir())
-            if versions:
-                return versions[0]
+    Searches for any publisher's cache containing 'claude-prompts'.
+    """
+    cache_base = Path.home() / ".claude/plugins/cache"
+
+    if not cache_base.exists():
+        return None
+
+    # Search all publishers for claude-prompts plugin
+    for publisher_dir in cache_base.iterdir():
+        if not publisher_dir.is_dir():
+            continue
+        for plugin_dir in publisher_dir.iterdir():
+            if "claude-prompts" in plugin_dir.name and plugin_dir.is_dir():
+                # Get the first version directory
+                versions = [v for v in plugin_dir.iterdir() if v.is_dir()]
+                if versions:
+                    return versions[0]
 
     return None
 

@@ -76,12 +76,27 @@ def write_sync_marker(cache_dir: Path, mtime: float) -> None:
 
 
 def find_source_dir() -> Path | None:
-    """Find the plugin source directory at known dev locations."""
-    # Check common dev locations
+    """Find the plugin source directory at known dev locations.
+
+    Searches common development directories for claude-prompts-mcp.
+    Returns None if not found (e.g., marketplace install).
+    """
+    # Check common dev locations across different OS conventions
     candidates = [
+        # macOS/Linux common locations
         Path.home() / "Applications/claude-prompts-mcp",
         Path.home() / "projects/claude-prompts-mcp",
         Path.home() / "dev/claude-prompts-mcp",
+        Path.home() / "src/claude-prompts-mcp",
+        Path.home() / "code/claude-prompts-mcp",
+        Path.home() / "repos/claude-prompts-mcp",
+        Path.home() / "git/claude-prompts-mcp",
+        Path.home() / "workspace/claude-prompts-mcp",
+        # Windows common locations
+        Path.home() / "Documents/claude-prompts-mcp",
+        Path.home() / "Documents/GitHub/claude-prompts-mcp",
+        # XDG conventions
+        Path.home() / ".local/src/claude-prompts-mcp",
     ]
 
     for candidate in candidates:
@@ -92,16 +107,19 @@ def find_source_dir() -> Path | None:
 
 
 def find_cache_dir() -> Path | None:
-    """Find the Gemini CLI extension cache directory."""
-    # Check possible Gemini extension cache locations
-    cache_candidates = [
-        Path.home() / ".gemini/extensions/gemini-prompts",
-        Path.home() / ".gemini/extensions/claude-prompts-mcp",
-    ]
+    """Find the Gemini CLI extension cache directory.
 
-    for cache_base in cache_candidates:
-        if cache_base.exists():
-            return cache_base
+    Searches for any extension containing 'prompts' in the name.
+    """
+    extensions_base = Path.home() / ".gemini/extensions"
+
+    if not extensions_base.exists():
+        return None
+
+    # Search for prompts extension
+    for ext_dir in extensions_base.iterdir():
+        if ext_dir.is_dir() and "prompts" in ext_dir.name:
+            return ext_dir
 
     return None
 
