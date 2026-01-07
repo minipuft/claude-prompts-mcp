@@ -2,15 +2,77 @@
 """
 SessionStart hook: Auto-sync plugin source to Claude Code cache.
 
-Runs on every session start to ensure hooks and cache are up-to-date.
+Uses quick-check mode: compares source timestamps against last sync marker.
+Skips sync if no changes detected (<100ms). Full sync only when needed (2-5s).
+
 Only syncs if running from separate resources source (not marketplace install).
 """
 
-import json
 import os
 import shutil
 import sys
 from pathlib import Path
+
+# Directories to sync and check for changes
+SYNC_DIRS = [".claude-plugin", "hooks"]
+SYNC_SERVER_SUBDIRS = ["cache", "dist"]
+MARKER_FILE = ".dev-sync-marker"
+
+
+def get_source_mtime(source_dir: Path) -> float:
+    """Get latest modification time from source directories.
+
+    Scans all files in sync directories to find the most recent change.
+    Returns 0.0 if no files found.
+    """
+    latest = 0.0
+
+    # Check core directories
+    for dir_name in SYNC_DIRS:
+        src = source_dir / dir_name
+        if src.exists():
+            for f in src.rglob("*"):
+                if f.is_file():
+                    try:
+                        latest = max(latest, f.stat().st_mtime)
+                    except OSError:
+                        pass  # Skip files we can't stat
+
+    # Check server subdirectories
+    for subdir in SYNC_SERVER_SUBDIRS:
+        src = source_dir / f"server/{subdir}"
+        if src.exists():
+            for f in src.rglob("*"):
+                if f.is_file():
+                    try:
+                        latest = max(latest, f.stat().st_mtime)
+                    except OSError:
+                        pass
+
+    return latest
+
+
+def get_sync_marker(cache_dir: Path) -> float:
+    """Read last sync timestamp from marker file.
+
+    Returns 0.0 if marker doesn't exist (forces full sync).
+    """
+    marker = cache_dir / MARKER_FILE
+    if marker.exists():
+        try:
+            return float(marker.read_text().strip())
+        except (ValueError, OSError):
+            return 0.0
+    return 0.0
+
+
+def write_sync_marker(cache_dir: Path, mtime: float) -> None:
+    """Write sync timestamp to marker file."""
+    marker = cache_dir / MARKER_FILE
+    try:
+        marker.write_text(str(mtime))
+    except OSError:
+        pass  # Non-critical, will just sync again next time
 
 
 def find_source_dir() -> Path | None:
@@ -62,19 +124,27 @@ def main():
     cache_dir = find_cache_dir()
 
     if not source_dir or not cache_dir:
-        sys.exit(0)  # Silent exit if can't find directories
+        sys.exit(0)  # Silent exit if can't find directories (marketplace install)
 
+    # Quick-check: compare source timestamps against last sync
+    source_mtime = get_source_mtime(source_dir)
+    last_sync = get_sync_marker(cache_dir)
+
+    if source_mtime <= last_sync:
+        sys.exit(0)  # No changes since last sync - fast exit (<100ms)
+
+    # Changes detected - perform full sync
     synced = []
 
     # Sync core directories
-    for dir_name in [".claude-plugin", "hooks"]:
+    for dir_name in SYNC_DIRS:
         src = source_dir / dir_name
         dst = cache_dir / dir_name
         if sync_directory(src, dst):
             synced.append(dir_name)
 
     # Sync server subdirectories
-    for server_subdir in ["cache", "dist"]:
+    for server_subdir in SYNC_SERVER_SUBDIRS:
         src = source_dir / f"server/{server_subdir}"
         dst = cache_dir / f"server/{server_subdir}"
         if src.exists():
@@ -82,8 +152,9 @@ def main():
             if sync_directory(src, dst):
                 synced.append(f"server/{server_subdir}")
 
-    # Output to transcript (exit 0 + stdout)
+    # Update marker after successful sync
     if synced:
+        write_sync_marker(cache_dir, source_mtime)
         print(f"[Dev Sync] {', '.join(synced)}")
 
     sys.exit(0)

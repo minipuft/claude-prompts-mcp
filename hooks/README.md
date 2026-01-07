@@ -41,7 +41,22 @@ Triggers before context compaction (`/compact`). Cleans up chain session state t
 
 ### `dev-sync.py` (SessionStart)
 
-Triggers on session start. Synchronizes the prompt cache from the MCP server, ensuring `prompt-suggest.py` has up-to-date prompt metadata.
+Triggers on session start. Uses **quick-check mode** to minimize startup delay:
+
+| Scenario | Time | Action |
+|----------|------|--------|
+| No changes since last sync | <100ms | Instant skip |
+| Source files modified | 2-5s | Full sync |
+| First run / marker missing | 2-5s | Full sync + create marker |
+
+**How it works:**
+1. Compares source file timestamps against `.dev-sync-marker` in cache
+2. If no changes detected, exits immediately (no sync)
+3. If changes detected, performs full sync and updates marker
+
+**Force full sync:** Delete `.dev-sync-marker` from the cache directory.
+
+**Note:** Only runs for development setups (source dir exists). Marketplace installs skip this hook entirely.
 
 ## Installation
 
@@ -63,8 +78,9 @@ hooks/
 ├── prompt-suggest.py     # UserPromptSubmit: syntax detection
 ├── post-prompt-engine.py # PostToolUse: chain/gate tracking
 ├── pre-compact.py        # PreCompact: session cleanup
-├── dev-sync.py           # SessionStart: cache synchronization
-├── setup.sh              # SessionStart: initial setup
+├── dev-sync.py           # SessionStart: quick-check sync (dev only)
+├── ralph-stop.py         # Stop: graceful shutdown
+├── setup.sh              # Manual: npm install (not auto-run)
 └── lib/
     ├── cache_manager.py  # Reads server/cache/prompts.cache.json
     ├── session_state.py  # Chain/gate state tracking

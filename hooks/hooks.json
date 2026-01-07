@@ -5,10 +5,6 @@
         {
           "type": "command",
           "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dev-sync.py"
-        },
-        {
-          "type": "command",
-          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/setup.sh"
         }
       ]
     }],
