@@ -5,10 +5,10 @@
         "matcher": "startup",
         "hooks": [
           {
-            "name": "init-prompts",
+            "name": "dev-sync",
             "type": "command",
-            "command": "bash \"${extensionPath}/.gemini/hooks/setup.sh\"",
-            "description": "Initialize prompt system dependencies"
+            "command": "python3 \"${extensionPath}/.gemini/hooks/dev-sync.py\"",
+            "description": "Quick-check sync for development (skips if no changes)"
           }
         ]
       }
