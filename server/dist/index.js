@@ -503,8 +503,8 @@ function parseCommandLineArgs() {
     const transportArg = args.find((arg) => arg.startsWith('--transport='));
     if (transportArg) {
         const transport = transportArg.slice('--transport='.length);
-        if (!['stdio', 'sse'].includes(transport)) {
-            console.error(`Error: Invalid transport '${transport}'. Supported: stdio, sse`);
+        if (!['stdio', 'sse', 'streamable-http'].includes(transport)) {
+            console.error(`Error: Invalid transport '${transport}'. Supported: stdio, sse, streamable-http`);
             console.error('Use --help for usage information');
             return { shouldExit: true, exitCode: 1 };
         }

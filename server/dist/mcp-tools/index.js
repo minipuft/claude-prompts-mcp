@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import { z } from 'zod';
 // Import generated Zod schemas from contracts (SSOT for parameter validation)
 import { createConsolidatedSystemControl } from './system-control.js';
+import { createChainSessionManager } from '../chain-session/manager.js';
 import { createFrameworkManager } from '../frameworks/framework-manager.js';
 import { createGateSystemManager } from '../gates/gate-state-manager.js';
 import { createMetricsCollector } from '../metrics/index.js';
@@ -72,6 +73,8 @@ export class ConsolidatedMcpToolsManager {
         await this.gateSystemManager.initialize();
         const analyzerMode = analysisConfig.llmIntegration.enabled ? 'semantic' : 'minimal';
         this.logger.info(`Semantic analyzer initialized (mode: ${analyzerMode})`);
+        // Initialize chain session manager
+        this.chainSessionManager = createChainSessionManager(this.logger, this.textReferenceManager, this.configManager.getServerRoot());
         // Initialize consolidated tools
         this.promptExecutionService = createPromptExecutionService(this.logger, this.mcpServer, this.promptManager, this.configManager, this.semanticAnalyzer, this.conversationManager, this.textReferenceManager, this.gateManager, this // Pass manager reference for analytics data flow
         // Removed executionCoordinator - chains now use LLM-driven execution
@@ -81,8 +84,9 @@ export class ConsolidatedMcpToolsManager {
         this.promptManagerTool = createConsolidatedPromptManager(this.logger, this.mcpServer, this.configManager, this.semanticAnalyzer, this.frameworkStateManager, this.frameworkManager, onRefresh, onRestart);
         // Initialize 5 core consolidated tools
         this.systemControl = createConsolidatedSystemControl(this.logger, this.mcpServer, onRestart);
-        // Set gate system manager in system control
+        // Set managers in system control
         this.systemControl.setGateSystemManager(this.gateSystemManager);
+        this.systemControl.setChainSessionManager(this.chainSessionManager);
         this.systemControl.setGateGuidanceRenderer(this.promptExecutionService.getGateGuidanceRenderer());
         // Initialize gate manager tool
         this.gateManagerTool = createConsolidatedGateManager({

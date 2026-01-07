@@ -57,6 +57,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
+    // Capture state at start of execution to avoid mutation issues
+    const currentStepAtStart = session.state.currentStep ?? 1;
+
     // Keep pipeline session context aligned with manager state (important for gate reviews)
     const updatedSessionContext: import('../../context/execution-context.js').SessionContext = {
       sessionId,
@@ -65,9 +68,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     if (sessionContext.chainId !== undefined) {
       updatedSessionContext.chainId = sessionContext.chainId;
     }
-    if (session.state.currentStep !== undefined) {
-      updatedSessionContext.currentStep = session.state.currentStep;
-    }
+    updatedSessionContext.currentStep = currentStepAtStart;
     if (session.state.totalSteps !== undefined) {
       updatedSessionContext.totalSteps = session.state.totalSteps;
     }
@@ -154,7 +155,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
         if (outcome === 'cleared') {
           // Gate review passed - advance to next step
-          const stepToAdvance = session.state.currentStep ?? 1;
+          const stepToAdvance = currentStepAtStart;
           await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
           context.diagnostics.info(this.name, 'Gate PASS - advanced step', { stepToAdvance });
           delete sessionContext.pendingReview;
@@ -198,7 +199,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 });
                 // Clear pending review and advance step (non-blocking mode continues)
                 await this.chainSessionManager.clearPendingGateReview(sessionId);
-                const stepToAdvance = session.state.currentStep ?? 1;
+                const stepToAdvance = currentStepAtStart;
                 await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
                 delete sessionContext.pendingReview;
                 break;
@@ -211,7 +212,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 });
                 // Clear pending review and advance step (non-blocking mode continues)
                 await this.chainSessionManager.clearPendingGateReview(sessionId);
-                const stepToAdvance = session.state.currentStep ?? 1;
+                const stepToAdvance = currentStepAtStart;
                 await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
                 delete sessionContext.pendingReview;
                 break;
@@ -244,8 +245,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // - If user_response provided: capture for CURRENT step (the one just rendered)
     // - Otherwise: capture placeholder for PREVIOUS step
     const targetStepNumber = hasUserResponse
-      ? (session.state.currentStep ?? 1)
-      : (session.state.currentStep ?? 1) - 1;
+      ? currentStepAtStart
+      : currentStepAtStart - 1;
 
     if (!this.shouldCaptureStep(targetStepNumber, session.state.totalSteps)) {
       this.logExit({ skipped: 'No prior step to capture' });

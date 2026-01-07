@@ -28,14 +28,15 @@ The system is an **unopinionated engine for composability**:
 | **Language** | TypeScript (strict mode) | Enables contract-driven development. Zod schemas bridge deterministic runtime ↔ probabilistic LLM. |
 | **Module System** | ESM | Modern, tree-shakeable, better tooling support. |
 
-### Transport: STDIO & SSE
+### Transport: STDIO, SSE & Streamable HTTP
 
-| Transport | Protocol | Use Case |
-|-----------|----------|----------|
-| **STDIO** | Line-based JSON | Claude Desktop, Cursor, CLI tools. Treats server as seamless extension. |
-| **SSE** | HTTP Server-Sent Events | Web clients, remote deployment without architectural changes. |
+| Transport | Protocol | Use Case | Status |
+|-----------|----------|----------|--------|
+| **STDIO** | Line-based JSON | Claude Desktop, Cursor, CLI tools. Server feels like a local extension. | Active |
+| **Streamable HTTP** | HTTP POST/GET with SSE streams | Web dashboards, remote APIs. One `/mcp` endpoint. | **Recommended** |
+| **SSE** | HTTP Server-Sent Events | Legacy integrations. | Deprecated |
 
-Both transports share unified message handling. Transport is auto-detected at startup.
+Transport auto-detects at startup. For HTTP, use Streamable HTTP—SSE is deprecated.
 
 ### Data Storage: File-Based Persistence (Intentional)
 

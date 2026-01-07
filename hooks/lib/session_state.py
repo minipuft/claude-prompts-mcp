@@ -19,6 +19,9 @@ class ChainState(TypedDict):
     pending_gate: str | None
     gate_criteria: list[str]
     last_prompt_id: str
+    # Shell verification (Ralph mode)
+    pending_shell_verify: str | None  # The command being verified
+    shell_verify_attempts: int        # Current attempt count
 
 
 def _get_session_state_dir() -> Path:
@@ -95,7 +98,9 @@ def parse_prompt_engine_response(response: str | dict) -> ChainState | None:
         "total_steps": 0,
         "pending_gate": None,
         "gate_criteria": [],
-        "last_prompt_id": ""
+        "last_prompt_id": "",
+        "pending_shell_verify": None,
+        "shell_verify_attempts": 0
     }
 
     import re
@@ -122,8 +127,18 @@ def parse_prompt_engine_response(response: str | dict) -> ChainState | None:
         criteria = re.findall(r'[-•]\s*(.+?)(?:\n|$)', content)
         state["gate_criteria"] = [c.strip() for c in criteria[:5] if c.strip()]
 
-    # Only return state if we found chain/gate info
-    if state["current_step"] > 0 or state["pending_gate"]:
+    # Detect shell verification: "Shell verification: npm test"
+    verify_match = re.search(r'Shell verification:\s*(.+?)(?:\n|$)', content)
+    if verify_match:
+        state["pending_shell_verify"] = verify_match.group(1).strip()
+
+    # Detect attempt count: "Attempt 2/5" or "(Attempt 2/5)"
+    attempt_match = re.search(r'Attempt\s+(\d+)/(\d+)', content)
+    if attempt_match:
+        state["shell_verify_attempts"] = int(attempt_match.group(1))
+
+    # Only return state if we found chain/gate/verify info
+    if state["current_step"] > 0 or state["pending_gate"] or state["pending_shell_verify"]:
         return state
 
     return None
@@ -140,6 +155,8 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
     step = state["current_step"]
     total = state["total_steps"]
     gate = state.get("pending_gate")
+    verify_cmd = state.get("pending_shell_verify")
+    verify_attempts = state.get("shell_verify_attempts", 1)
 
     if mode == "inline":
         # Two-line hybrid: Line 1 = status, Line 2 = action
@@ -149,10 +166,14 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
             parts.append(f"[{chain_label}] {step}/{total}")
         if gate:
             parts.append(f"Gate: {gate}")
+        if verify_cmd:
+            parts.append(f"Verify: {verify_attempts}/5")
         line1 = " | ".join(parts) if parts else ""
 
         # Line 2: Clear continuation instruction
-        if gate:
+        if verify_cmd:
+            line2 = f"→ Shell verify: `{verify_cmd}` will validate"
+        elif gate:
             line2 = "→ GATE_REVIEW: PASS|FAIL - <reason>"
         elif step > 0 and step < total:
             line2 = f"→ prompt_engine(chain_id:\"{chain_id}\") to continue"
@@ -171,5 +192,9 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
 
     if gate:
         lines.append(f"[Gate] {gate} - Respond: GATE_REVIEW: PASS|FAIL - <reason>")
+
+    if verify_cmd:
+        lines.append(f"[Verify] `{verify_cmd}` - Attempt {verify_attempts}/5")
+        lines.append("Run implementation, then prompt_engine validates with shell command")
 
     return "\n".join(lines)

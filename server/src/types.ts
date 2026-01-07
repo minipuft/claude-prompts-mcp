@@ -36,10 +36,11 @@ export interface ServerConfig {
 /**
  * Transport mode options
  * - 'stdio': Standard I/O transport for Claude Desktop/CLI (default)
- * - 'sse': Server-sent events over HTTP for web clients
+ * - 'sse': Server-sent events over HTTP for web clients (deprecated, use streamable-http)
+ * - 'streamable-http': Streamable HTTP transport (MCP standard since 2025-03-26)
  * - 'both': Run both STDIO and SSE transports simultaneously
  */
-export type TransportMode = 'stdio' | 'sse' | 'both';
+export type TransportMode = 'stdio' | 'sse' | 'streamable-http' | 'both';
 
 /**
  * LLM provider for semantic analysis

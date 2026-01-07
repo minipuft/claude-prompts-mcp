@@ -29,7 +29,7 @@ jobs:
         with:
           # For workflow_run: use the branch/tag from the triggering workflow
           # For workflow_dispatch: use current ref
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -98,17 +98,14 @@ jobs:
           name: claude-prompts-${{ steps.version.outputs.version }}.mcpb
           path: claude-prompts-${{ steps.version.outputs.version }}.mcpb
 
-  # Build Claude Code plugin archive
+  # Build Claude Code plugin archive (manual only)
   claude-code-plugin:
-    # Run if: npm-publish succeeded OR manual trigger
-    if: >-
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-      || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -193,17 +190,14 @@ jobs:
           name: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
           path: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
 
-  # Build Gemini CLI extension archive
+  # Build Gemini CLI extension archive (manual only)
   gemini-extension:
-    # Run if: npm-publish succeeded OR manual trigger
-    if: >-
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-      || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -273,16 +267,28 @@ jobs:
           zip -r ../claude-prompts-gemini-${{ steps.version.outputs.version }}.zip .
           cd ..
 
+          # Create platform-specific assets for Gemini CLI detection
+          cp claude-prompts-gemini-${{ steps.version.outputs.version }}.zip darwin.gemini-prompts.zip
+          cp claude-prompts-gemini-${{ steps.version.outputs.version }}.zip linux.gemini-prompts.zip
+          cp claude-prompts-gemini-${{ steps.version.outputs.version }}.zip win32.gemini-prompts.zip
+
       - name: Upload to Release
         if: github.event_name == 'workflow_run'
         uses: softprops/action-gh-release@v2
         with:
-          files: claude-prompts-gemini-${{ steps.version.outputs.version }}.zip
+          files: |
+            darwin.gemini-prompts.zip
+            linux.gemini-prompts.zip
+            win32.gemini-prompts.zip
           tag_name: claude-prompts-v${{ steps.version.outputs.version }}
 
       - name: Upload Artifact (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: claude-prompts-gemini-${{ steps.version.outputs.version }}.zip
-          path: claude-prompts-gemini-${{ steps.version.outputs.version }}.zip
+          name: claude-prompts-gemini-${{ steps.version.outputs.version }}
+          path: |
+            claude-prompts-gemini-${{ steps.version.outputs.version }}.zip
+            darwin.gemini-prompts.zip
+            linux.gemini-prompts.zip
+            win32.gemini-prompts.zip

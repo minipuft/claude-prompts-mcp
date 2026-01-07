@@ -11,7 +11,8 @@ export async function startServerWithManagers(params) {
     logger.debug(`[startup-server] Transport selected: ${transport}`);
     const transportManager = createTransportManager(logger, configManager, mcpServer, transport);
     let apiManager;
-    if (transportManager.isSse()) {
+    // Create ApiManager for any HTTP-based transport (SSE or Streamable HTTP)
+    if (transportManager.isSse() || transportManager.isStreamableHttp()) {
         apiManager = createApiManager(logger, configManager, promptManager, mcpToolsManager);
         apiManager.updateData(promptsData, categories, convertedPrompts);
     }

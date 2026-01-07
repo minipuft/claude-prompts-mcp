@@ -5,11 +5,14 @@ SessionStart hook: Auto-sync plugin source to Claude Code cache.
 Uses quick-check mode: compares source timestamps against last sync marker.
 Skips sync if no changes detected (<100ms). Full sync only when needed (2-5s).
 
+Also ensures node_modules exists in cache (runs npm install if missing).
+
 Only syncs if running from separate resources source (not marketplace install).
 """
 
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +20,9 @@ from pathlib import Path
 SYNC_DIRS = [".claude-plugin", "hooks"]
 SYNC_SERVER_SUBDIRS = ["cache", "dist"]
 MARKER_FILE = ".dev-sync-marker"
+
+# Critical packages that must exist for server to run
+CRITICAL_PACKAGES = ["@modelcontextprotocol"]
 
 
 def get_source_mtime(source_dir: Path) -> float:
@@ -141,12 +147,64 @@ def sync_directory(src: Path, dst: Path) -> bool:
     return True
 
 
+def check_node_modules(cache_dir: Path) -> bool:
+    """Check if node_modules exists and has critical packages.
+
+    Returns True if healthy, False if repair needed.
+    """
+    node_modules = cache_dir / "server" / "node_modules"
+
+    if not node_modules.exists():
+        return False
+
+    # Check for critical packages
+    for pkg in CRITICAL_PACKAGES:
+        if not (node_modules / pkg).exists():
+            return False
+
+    return True
+
+
+def repair_node_modules(cache_dir: Path) -> bool:
+    """Run npm install in the cache's server directory.
+
+    Returns True if successful, False otherwise.
+    """
+    server_dir = cache_dir / "server"
+
+    if not (server_dir / "package.json").exists():
+        return False
+
+    try:
+        # Run npm install with minimal output
+        result = subprocess.run(
+            ["npm", "install", "--prefer-offline", "--no-audit", "--no-fund"],
+            cwd=server_dir,
+            capture_output=True,
+            timeout=120,  # 2 minute timeout
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+
 def main():
     source_dir = find_source_dir()
     cache_dir = find_cache_dir()
 
-    if not source_dir or not cache_dir:
-        sys.exit(0)  # Silent exit if can't find directories (marketplace install)
+    if not cache_dir:
+        sys.exit(0)  # Silent exit if no cache (not installed)
+
+    # Always check node_modules health (independent of sync)
+    if not check_node_modules(cache_dir):
+        print("[Dev Sync] Repairing node_modules...")
+        if repair_node_modules(cache_dir):
+            print("[Dev Sync] node_modules restored")
+        else:
+            print("[Dev Sync] Warning: node_modules repair failed")
+
+    if not source_dir:
+        sys.exit(0)  # No source dir means marketplace install - skip sync
 
     # Quick-check: compare source timestamps against last sync
     source_mtime = get_source_mtime(source_dir)

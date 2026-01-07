@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2025-12-30T13:04:43.989Z",
+  "lastUpdated": "2026-01-07T05:58:41.203Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -48,12 +48,13 @@
       }
     },
     "system_control": {
-      "description": "⚙️ SYSTEM CONTROL: Retrieves system status, switches frameworks, manages gates, and provides analytics.\n\nACTIONS: status | framework | gates | analytics | config | maintenance | guide\n\nReturns: Current state, configurations, or operation confirmations.",
+      "description": "⚙️ SYSTEM CONTROL: Retrieves system status, switches frameworks, manages gates, and provides analytics.\n\nACTIONS: status | framework | gates | analytics | config | maintenance | guide | session\n\nReturns: Current state, configurations, or operation confirmations.",
       "shortDescription": "System administration",
       "category": "system",
       "parameters": {
-        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations).",
-        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list).",
+        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions).",
+        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect).",
+        "session_id": "Target session ID or chain ID for session operations.",
         "framework": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
         "reason": "Audit reason for framework/gate toggles or admin actions.",
         "persist": "When true, gate/framework enable/disable changes are also written to config.json.",

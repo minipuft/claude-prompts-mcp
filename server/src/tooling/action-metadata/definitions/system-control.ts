@@ -139,6 +139,30 @@ const operations: ActionDescriptor[] = [
     requiredArgs: [],
     description: 'Clear all session overrides for injection control.',
   },
+  {
+    id: 'session:list',
+    displayName: 'List Sessions',
+    category: 'session',
+    status: 'working',
+    requiredArgs: [],
+    description: 'List active chain sessions.',
+  },
+  {
+    id: 'session:clear',
+    displayName: 'Clear Session',
+    category: 'session',
+    status: 'working',
+    requiredArgs: ['session_id'],
+    description: 'Clear a specific session or chain history.',
+  },
+  {
+    id: 'session:inspect',
+    displayName: 'Inspect Session',
+    category: 'session',
+    status: 'working',
+    requiredArgs: ['session_id'],
+    description: 'Inspect session details.',
+  },
 ];
 
 export const SYSTEM_CONTROL_ACTION_IDS = [
@@ -150,6 +174,7 @@ export const SYSTEM_CONTROL_ACTION_IDS = [
   'maintenance',
   'guide',
   'injection',
+  'session',
 ] as const;
 
 export type SystemControlActionId = (typeof SYSTEM_CONTROL_ACTION_IDS)[number];

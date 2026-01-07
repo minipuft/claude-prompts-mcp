@@ -99,7 +99,7 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 **Fix**:
 1. Check write permissions on `runtime-state/` directory
 2. Delete `chain-sessions.json` and restart (sessions will reset)
-3. In CI, use SSE transport to avoid STDIO restrictions
+3. In CI, use HTTP transport (`--transport=streamable-http`) to avoid STDIO restrictions
 
 ### Chain Stuck / Won't Advance
 
@@ -191,6 +191,6 @@ When reporting bugs, include:
 1. Output of `system_control(action: "status")`
 2. Relevant logs from `server/logs/*.log`
 3. Prompt IDs and chain_ids involved
-4. Transport type (STDIO/SSE)
+4. Transport type (STDIO/SSE/Streamable HTTP)
 5. Node.js version: `node -v`
 6. Steps to reproduce

@@ -114,9 +114,11 @@ Raw MCP works, but models sometimes miss the syntax. The hooks catch that. → [
 # Install directly from GitHub
 gemini extensions install https://github.com/minipuft/claude-prompts-mcp
 
-# Or clone and link for development
-git clone https://github.com/minipuft/claude-prompts-mcp
-gemini extensions link ./claude-prompts-mcp
+# Development Setup (Hot Reload)
+# Use a symbolic link to point the extension directory directly to your source code.
+# This ensures changes to hooks and prompts are reflected immediately.
+rm -rf ~/.gemini/extensions/gemini-prompts
+ln -s "$(pwd)" ~/.gemini/extensions/gemini-prompts
 ```
 
 The extension provides:
@@ -201,6 +203,8 @@ cd claude-prompts-mcp/server && npm install && npm run build
 ```
 
 Then point your config to `server/dist/index.js`.
+
+**Transport options**: `--transport=stdio` (default), `--transport=streamable-http` (recommended for HTTP).
 
 </details>
 

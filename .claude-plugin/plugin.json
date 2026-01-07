@@ -2,9 +2,20 @@
     "author": {
         "name": "minipuft"
     },
-    "description": "Hot-reloadable prompts with structured reasoning (CAGEERF, ReACT), quality gates, and chain workflows. Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
+    "description": "Hot-reloadable versioned prompts with easy tools for prompt engineering, chain workflows, quality gates, Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
     "homepage": "https://github.com/minipuft/claude-prompts-mcp",
-    "keywords": ["mcp", "prompts", "templates", "gates", "chains", "workflows", "cageerf", "react", "hot-reload", "reasoning"],
+    "keywords": [
+        "mcp",
+        "prompts",
+        "templates",
+        "gates",
+        "chains",
+        "workflows",
+        "cageerf",
+        "react",
+        "hot-reload",
+        "reasoning"
+    ],
     "license": "MIT",
     "mcpServers": "./mcp.json",
     "name": "claude-prompts",

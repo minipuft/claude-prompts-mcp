@@ -1,6 +1,6 @@
 /**
  * Transport Management Module
- * Handles STDIO and SSE transport setup and lifecycle management
+ * Handles STDIO, SSE, and Streamable HTTP transport setup and lifecycle management
  */
 import express from 'express';
 import { ConfigManager } from '../../config/index.js';
@@ -12,6 +12,7 @@ import type { TransportMode } from '../../types/index.js';
 export declare enum TransportType {
     STDIO = "stdio",
     SSE = "sse",
+    STREAMABLE_HTTP = "streamable-http",
     BOTH = "both"
 }
 /**
@@ -23,6 +24,7 @@ export declare class TransportManager {
     private mcpServer;
     private transport;
     private sseTransports;
+    private streamableHttpTransports;
     constructor(logger: Logger, configManager: ConfigManager, mcpServer: any, transport: TransportMode);
     /**
      * Determine transport mode from command line arguments or configuration
@@ -46,6 +48,11 @@ export declare class TransportManager {
      */
     setupSseTransport(app: express.Application): void;
     /**
+     * Setup Streamable HTTP transport with Express integration
+     * This is the new MCP standard transport (replacing SSE)
+     */
+    setupStreamableHttpTransport(app: express.Application): void;
+    /**
      * Get transport mode
      */
     getTransportType(): TransportMode;
@@ -57,8 +64,13 @@ export declare class TransportManager {
     /**
      * Check if SSE transport should be active
      * True for 'sse' or 'both' modes
+     * @deprecated SSE is deprecated, prefer streamable-http
      */
     isSse(): boolean;
+    /**
+     * Check if Streamable HTTP transport should be active
+     */
+    isStreamableHttp(): boolean;
     /**
      * Check if running in dual transport mode
      */
@@ -68,9 +80,13 @@ export declare class TransportManager {
      */
     getActiveConnectionsCount(): number;
     /**
-     * Close all active SSE connections
+     * Get active Streamable HTTP sessions count
      */
-    closeAllConnections(): void;
+    getActiveStreamableHttpSessionsCount(): number;
+    /**
+     * Close all active connections (SSE and Streamable HTTP)
+     */
+    closeAllConnections(): Promise<void>;
 }
 /**
  * Create and configure a transport manager

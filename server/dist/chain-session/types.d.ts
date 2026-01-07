@@ -79,6 +79,7 @@ export interface ChainSessionService {
     isRetryLimitExceeded(sessionId: string): boolean;
     resetRetryCount(sessionId: string): Promise<void>;
     recordGateReviewOutcome(sessionId: string, outcome: GateReviewOutcomeUpdate): Promise<'cleared' | 'pending'>;
+    clearSession(sessionId: string): Promise<boolean>;
     clearSessionsForChain(chainId: string): Promise<void>;
     listActiveSessions(limit?: number): ChainSessionSummary[];
     updateSessionState(sessionId: string, stepNumber: number, stepResult: string, metadata?: Record<string, any>): Promise<boolean>;

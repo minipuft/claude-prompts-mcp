@@ -16,6 +16,8 @@ import {
   waitForHealth,
   sendMcpRequestWithSse,
   killServer,
+  StreamableHttpMcpClient,
+  httpPost,
   PROJECT_ROOT as HTTP_PROJECT_ROOT,
   SERVER_PATH as HTTP_SERVER_PATH,
 } from './helpers/http-mcp-client.js';
@@ -31,6 +33,8 @@ const SERVER_PATH = path.join(PROJECT_ROOT, 'server', 'dist', 'index.js');
 let serverProcess: ChildProcess | null = null;
 let httpServerProcess: ChildProcess | null = null;
 let httpServerPort: number | null = null;
+let streamableHttpServerProcess: ChildProcess | null = null;
+let streamableHttpServerPort: number | null = null;
 
 /**
  * Helper to spawn MCP server with proper env
@@ -112,6 +116,12 @@ describe('MCP Server Smoke Tests', () => {
       await killServer(httpServerProcess);
       httpServerProcess = null;
       httpServerPort = null;
+    }
+    // Clean up Streamable HTTP server
+    if (streamableHttpServerProcess) {
+      await killServer(streamableHttpServerProcess);
+      streamableHttpServerProcess = null;
+      streamableHttpServerPort = null;
     }
   });
 
@@ -334,6 +344,225 @@ describe('MCP Server Smoke Tests', () => {
         expect(toolNames).toContain('prompt_engine');
         expect(toolNames).toContain('resource_manager');
         expect(toolNames).toContain('system_control');
+      },
+      20000
+    );
+  });
+
+  /**
+   * Streamable HTTP Transport Tests
+   *
+   * Tests the new MCP standard transport (since 2025-03-26):
+   * - Single /mcp endpoint for POST, GET, DELETE
+   * - Session management via mcp-session-id header
+   * - Stateful session mode with session ID generator
+   */
+  describe('MCP Protocol via Streamable HTTP Transport', () => {
+    it(
+      'server starts with streamable-http transport',
+      async () => {
+        // Get available port
+        streamableHttpServerPort = await getAvailablePort();
+        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+
+        // Start server with streamable-http transport
+        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+          transport: 'streamable-http',
+          debug: true,
+        });
+
+        // Wait for health endpoint (server takes ~5s to initialize)
+        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+        // Server started successfully
+        expect(streamableHttpServerProcess.killed).toBe(false);
+      },
+      20000
+    );
+
+    it(
+      'server responds to MCP initialize request via Streamable HTTP',
+      async () => {
+        // Get available port
+        streamableHttpServerPort = await getAvailablePort();
+        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+
+        // Start server with streamable-http transport
+        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+          transport: 'streamable-http',
+          debug: true,
+        });
+
+        // Wait for health endpoint (server takes ~5s to initialize)
+        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+        // Create Streamable HTTP client and initialize
+        const client = new StreamableHttpMcpClient(baseUrl);
+        const { sessionId, capabilities } = await client.initialize();
+
+        // Should have a session ID
+        expect(sessionId).toBeTruthy();
+        expect(typeof sessionId).toBe('string');
+
+        // Should have MCP capabilities
+        expect(capabilities).toHaveProperty('protocolVersion');
+        expect(capabilities).toHaveProperty('serverInfo');
+        expect((capabilities as { serverInfo: { name: string } }).serverInfo).toHaveProperty(
+          'name'
+        );
+
+        await client.close();
+      },
+      20000
+    );
+
+    it(
+      'server registers expected MCP tools via Streamable HTTP',
+      async () => {
+        // Get available port
+        streamableHttpServerPort = await getAvailablePort();
+        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+
+        // Start server with streamable-http transport
+        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+          transport: 'streamable-http',
+          debug: true,
+        });
+
+        // Wait for health endpoint (server takes ~5s to initialize)
+        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+        // Create client and initialize
+        const client = new StreamableHttpMcpClient(baseUrl);
+        await client.initialize();
+
+        // List tools
+        const result = (await client.request('tools/list', {}, 2)) as {
+          tools: Array<{ name: string }>;
+        };
+
+        expect(Array.isArray(result.tools)).toBe(true);
+
+        const toolNames = result.tools.map((t) => t.name);
+        expect(toolNames).toContain('prompt_engine');
+        expect(toolNames).toContain('resource_manager');
+        expect(toolNames).toContain('system_control');
+
+        await client.close();
+      },
+      20000
+    );
+
+    it(
+      'session returns unique session ID via Streamable HTTP',
+      async () => {
+        // Get available port
+        streamableHttpServerPort = await getAvailablePort();
+        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+
+        // Start server with streamable-http transport
+        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+          transport: 'streamable-http',
+          debug: true,
+        });
+
+        // Wait for health endpoint (server initialization takes time)
+        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+        // Create client and verify session ID is returned
+        const client = new StreamableHttpMcpClient(baseUrl);
+        const { sessionId } = await client.initialize();
+
+        // Session ID should be a valid UUID format
+        expect(sessionId).toBeTruthy();
+        expect(typeof sessionId).toBe('string');
+        expect(sessionId.length).toBeGreaterThan(0);
+
+        // Verify client can make requests with the session
+        const result = (await client.request('tools/list', {}, 2)) as {
+          tools: Array<{ name: string }>;
+        };
+        expect(Array.isArray(result.tools)).toBe(true);
+
+        await client.close();
+      },
+      25000
+    );
+
+    /**
+     * MCP Spec Compliance: 400 Bad Request without session ID
+     * Per spec: "Servers that require a session ID SHOULD respond to requests
+     * without an Mcp-Session-Id header (other than initialization) with HTTP 400"
+     */
+    it(
+      'returns 400 Bad Request for non-init request without session ID',
+      async () => {
+        streamableHttpServerPort = await getAvailablePort();
+        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+
+        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+          transport: 'streamable-http',
+          debug: true,
+        });
+
+        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+        // Send a tools/list request WITHOUT session ID (not an init request)
+        const request = {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/list',
+          params: {},
+        };
+
+        const response = await httpPost(`${baseUrl}/mcp`, request, {
+          Accept: 'application/json, text/event-stream',
+        });
+
+        // Should return 400 Bad Request per MCP spec
+        expect(response.status).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.error).toBeDefined();
+        expect(body.error.message).toContain('session');
+      },
+      20000
+    );
+
+    /**
+     * MCP Spec Compliance: 404 for invalid session ID
+     * When a session ID is provided but not found, return 404
+     */
+    it(
+      'returns 404 for invalid session ID',
+      async () => {
+        streamableHttpServerPort = await getAvailablePort();
+        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+
+        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+          transport: 'streamable-http',
+          debug: true,
+        });
+
+        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+        // Send a request with a fake session ID
+        const request = {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/list',
+          params: {},
+        };
+
+        const response = await httpPost(`${baseUrl}/mcp`, request, {
+          'mcp-session-id': 'invalid-session-id-12345',
+          Accept: 'application/json, text/event-stream',
+        });
+
+        // Should return 404 Not Found for invalid session
+        expect(response.status).toBe(404);
+        const body = JSON.parse(response.body);
+        expect(body.error).toBeDefined();
+        expect(body.error.message).toContain('Session not found');
       },
       20000
     );

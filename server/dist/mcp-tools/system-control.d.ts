@@ -14,6 +14,7 @@ import { FrameworkStateManager } from '../frameworks/framework-state-manager.js'
 import { Logger } from '../logging/index.js';
 import { ToolResponse } from '../types/index.js';
 import { ToolDescriptionManager } from './tool-description-manager.js';
+import type { ChainSessionService } from '../chain-session/types.js';
 import { GateSystemManager } from '../gates/gate-state-manager.js';
 import { MetricsCollector } from '../metrics/index.js';
 import type { GateGuidanceRenderer } from '../gates/guidance/GateGuidanceRenderer.js';
@@ -48,6 +49,7 @@ export declare class ConsolidatedSystemControl {
     frameworkStateManager?: FrameworkStateManager;
     private frameworkManager?;
     gateSystemManager?: GateSystemManager;
+    chainSessionManager?: ChainSessionService;
     private onRestart?;
     private toolDescriptionManager?;
     private mcpToolsManager?;
@@ -90,6 +92,10 @@ export declare class ConsolidatedSystemControl {
      * Set gate system manager for runtime gate management
      */
     setGateSystemManager(gateSystemManager: GateSystemManager): void;
+    /**
+     * Set chain session manager for session management operations
+     */
+    setChainSessionManager(chainSessionManager: ChainSessionService): void;
     /**
      * Set gate guidance renderer for discovery operations
      */

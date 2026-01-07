@@ -39,11 +39,12 @@ def main():
     if not state:
         sys.exit(0)
 
-    # Only inject if there's active chain/gate state
+    # Only inject if there's active chain/gate/verify state
     has_chain = state.get("current_step", 0) > 0
     has_gate = state.get("pending_gate") is not None
+    has_verify = state.get("pending_shell_verify") is not None
 
-    if not has_chain and not has_gate:
+    if not has_chain and not has_gate and not has_verify:
         sys.exit(0)
 
     # Format reminder using existing function

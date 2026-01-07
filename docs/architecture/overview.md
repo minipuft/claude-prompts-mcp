@@ -603,12 +603,18 @@ Four-phase startup:
 
 ### Transports (`src/server/transport/`)
 
-| Transport | Protocol                | Use Case       |
-| --------- | ----------------------- | -------------- |
-| STDIO     | Line-based JSON         | Claude Desktop |
-| SSE       | HTTP Server-Sent Events | Web clients    |
+| Transport           | Protocol                       | Use Case                     | Status          |
+| ------------------- | ------------------------------ | ---------------------------- | --------------- |
+| STDIO               | Line-based JSON                | Claude Desktop, Claude Code  | Active          |
+| Streamable HTTP     | HTTP POST/GET with SSE streams | Web dashboards, remote APIs  | **Recommended** |
+| SSE                 | HTTP Server-Sent Events        | Legacy integrations          | Deprecated      |
 
-Both share unified message handling with automatic protocol detection.
+**Streamable HTTP** (`--transport=streamable-http`):
+- One endpoint (`/mcp`) handles POST, GET, DELETE—no separate message paths
+- Sessions tracked via `mcp-session-id` header
+- Use this for web clients and remote APIs. SSE is deprecated.
+
+Transport auto-detects at startup. All modes share the same message handling.
 
 ### Prompts (`src/prompts/`)
 

@@ -44,6 +44,7 @@ export declare class ConsolidatedMcpToolsManager {
     private semanticAnalyzer;
     private frameworkStateManager?;
     private frameworkManager?;
+    private chainSessionManager?;
     private conversationManager;
     private textReferenceManager;
     private toolDescriptionManager?;

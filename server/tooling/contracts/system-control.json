@@ -3,7 +3,7 @@
   "version": 1,
   "summary": "Runtime administration: status, framework and gate management, analytics, config, diagnostics. One action per call—set `action` and required fields; chain admin steps with separate calls.",
   "toolDescription": {
-    "description": "⚙️ SYSTEM CONTROL: Retrieves system status, switches frameworks, manages gates, and provides analytics.\n\nACTIONS: status | framework | gates | analytics | config | maintenance | guide\n\nReturns: Current state, configurations, or operation confirmations.",
+    "description": "⚙️ SYSTEM CONTROL: Retrieves system status, switches frameworks, manages gates, and provides analytics.\n\nACTIONS: status | framework | gates | analytics | config | maintenance | guide | session\n\nReturns: Current state, configurations, or operation confirmations.",
     "shortDescription": "System administration",
     "category": "system",
     "frameworkAware": {
@@ -14,8 +14,8 @@
   "parameters": [
     {
       "name": "action",
-      "type": "enum[status|framework|gates|analytics|config|maintenance|guide|injection]",
-      "description": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations).",
+      "type": "enum[status|framework|gates|analytics|config|maintenance|guide|injection|session]",
+      "description": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions).",
       "status": "working",
       "required": true,
       "notes": [
@@ -24,13 +24,20 @@
       "examples": [
         "system_control({\"action\":\"status\",\"show_details\":true})",
         "system_control({\"action\":\"framework\",\"operation\":\"switch\",\"framework\":\"CAGEERF\",\"reason\":\"enable methodology\"})",
-        "system_control({\"action\":\"gates\",\"operation\":\"disable\",\"reason\":\"maintenance\",\"persist\":true})"
+        "system_control({\"action\":\"gates\",\"operation\":\"disable\",\"reason\":\"maintenance\",\"persist\":true})",
+        "system_control({\"action\":\"session\",\"operation\":\"clear\",\"session_id\":\"chain-123\"})"
       ]
     },
     {
       "name": "operation",
       "type": "string",
-      "description": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list).",
+      "description": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect).",
+      "status": "working"
+    },
+    {
+      "name": "session_id",
+      "type": "string",
+      "description": "Target session ID or chain ID for session operations.",
       "status": "working"
     },
     {
@@ -155,6 +162,21 @@
       "id": "guide",
       "summary": "Guidance on available system operations.",
       "parameters": ["action", "topic"]
+    },
+    {
+      "id": "session:list",
+      "summary": "List active chain sessions.",
+      "parameters": ["action", "operation", "show_details"]
+    },
+    {
+      "id": "session:clear",
+      "summary": "Clear a specific session or chain history.",
+      "parameters": ["action", "operation", "session_id"]
+    },
+    {
+      "id": "session:inspect",
+      "summary": "Inspect session details.",
+      "parameters": ["action", "operation", "session_id"]
     }
   ]
 }

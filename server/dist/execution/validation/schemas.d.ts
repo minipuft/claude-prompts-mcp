@@ -216,9 +216,9 @@ export declare const mcpToolRequestSchema: z.ZodEffects<z.ZodObject<{
     })[] | undefined;
     options?: Record<string, any> | undefined;
     command?: string | undefined;
-    chain_id?: string | undefined;
-    user_response?: string | undefined;
     gate_verdict?: string | undefined;
+    user_response?: string | undefined;
+    chain_id?: string | undefined;
     gate_action?: "retry" | "skip" | "abort" | undefined;
     force_restart?: boolean | undefined;
 }, {
@@ -241,9 +241,9 @@ export declare const mcpToolRequestSchema: z.ZodEffects<z.ZodObject<{
     })[] | undefined;
     options?: Record<string, any> | undefined;
     command?: string | undefined;
-    chain_id?: string | undefined;
-    user_response?: string | undefined;
     gate_verdict?: string | undefined;
+    user_response?: string | undefined;
+    chain_id?: string | undefined;
     gate_action?: "retry" | "skip" | "abort" | undefined;
     force_restart?: boolean | undefined;
 }>, {
@@ -266,9 +266,9 @@ export declare const mcpToolRequestSchema: z.ZodEffects<z.ZodObject<{
     })[] | undefined;
     options?: Record<string, any> | undefined;
     command?: string | undefined;
-    chain_id?: string | undefined;
-    user_response?: string | undefined;
     gate_verdict?: string | undefined;
+    user_response?: string | undefined;
+    chain_id?: string | undefined;
     gate_action?: "retry" | "skip" | "abort" | undefined;
     force_restart?: boolean | undefined;
 }, {
@@ -291,9 +291,9 @@ export declare const mcpToolRequestSchema: z.ZodEffects<z.ZodObject<{
     })[] | undefined;
     options?: Record<string, any> | undefined;
     command?: string | undefined;
-    chain_id?: string | undefined;
-    user_response?: string | undefined;
     gate_verdict?: string | undefined;
+    user_response?: string | undefined;
+    chain_id?: string | undefined;
     gate_action?: "retry" | "skip" | "abort" | undefined;
     force_restart?: boolean | undefined;
 }>;

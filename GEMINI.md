@@ -127,7 +127,7 @@ Hooks provide automatic `>>prompt` syntax detection. Add to your `~/.gemini/sett
 ```json
 {
   "hooks": {
-    "BeforeModel": [
+    "BeforeAgent": [
       {
         "matcher": "*",
         "hooks": [{
@@ -139,11 +139,21 @@ Hooks provide automatic `>>prompt` syntax detection. Add to your `~/.gemini/sett
     ],
     "AfterTool": [
       {
-        "matcher": "*prompt_engine*",
+        "matcher": "prompt_engine",
         "hooks": [{
           "name": "chain-tracker",
           "type": "command",
           "command": "python3 ~/.gemini/extensions/gemini-prompts/.gemini/hooks/post-prompt-engine.py"
+        }]
+      }
+    ],
+    "PreCompress": [
+      {
+        "matcher": "*",
+        "hooks": [{
+          "name": "pre-compact",
+          "type": "command",
+          "command": "python3 ~/.gemini/extensions/gemini-prompts/hooks/gemini/pre-compact.py"
         }]
       }
     ]

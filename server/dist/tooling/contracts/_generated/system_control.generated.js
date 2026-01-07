@@ -1,15 +1,16 @@
 export const system_controlParameters = [
     {
         "name": "action",
-        "type": "enum[status|framework|gates|analytics|config|maintenance|guide|injection]",
-        "description": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations).",
+        "type": "enum[status|framework|gates|analytics|config|maintenance|guide|injection|session]",
+        "description": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions).",
         "required": true,
         "status": "working",
         "compatibility": "canonical",
         "examples": [
             "system_control({\"action\":\"status\",\"show_details\":true})",
             "system_control({\"action\":\"framework\",\"operation\":\"switch\",\"framework\":\"CAGEERF\",\"reason\":\"enable methodology\"})",
-            "system_control({\"action\":\"gates\",\"operation\":\"disable\",\"reason\":\"maintenance\",\"persist\":true})"
+            "system_control({\"action\":\"gates\",\"operation\":\"disable\",\"reason\":\"maintenance\",\"persist\":true})",
+            "system_control({\"action\":\"session\",\"operation\":\"clear\",\"session_id\":\"chain-123\"})"
         ],
         "notes": [
             "Single-call operations; sequence multiple admin steps with separate requests."
@@ -18,7 +19,14 @@ export const system_controlParameters = [
     {
         "name": "operation",
         "type": "string",
-        "description": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list).",
+        "description": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect).",
+        "status": "working",
+        "compatibility": "canonical"
+    },
+    {
+        "name": "session_id",
+        "type": "string",
+        "description": "Target session ID or chain ID for session operations.",
         "status": "working",
         "compatibility": "canonical"
     },
@@ -224,6 +232,36 @@ export const system_controlCommands = [
         "parameters": [
             "action",
             "topic"
+        ],
+        "status": "working"
+    },
+    {
+        "id": "session:list",
+        "summary": "List active chain sessions.",
+        "parameters": [
+            "action",
+            "operation",
+            "show_details"
+        ],
+        "status": "working"
+    },
+    {
+        "id": "session:clear",
+        "summary": "Clear a specific session or chain history.",
+        "parameters": [
+            "action",
+            "operation",
+            "session_id"
+        ],
+        "status": "working"
+    },
+    {
+        "id": "session:inspect",
+        "summary": "Inspect session details.",
+        "parameters": [
+            "action",
+            "operation",
+            "session_id"
         ],
         "status": "working"
     }

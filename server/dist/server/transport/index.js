@@ -1,10 +1,13 @@
-// @lifecycle canonical - Sets up STDIO and SSE transports.
+// @lifecycle canonical - Sets up STDIO, SSE, and Streamable HTTP transports.
 /**
  * Transport Management Module
- * Handles STDIO and SSE transport setup and lifecycle management
+ * Handles STDIO, SSE, and Streamable HTTP transport setup and lifecycle management
  */
+import { randomUUID } from 'node:crypto';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
 /**
  * Transport types supported by the server
@@ -13,6 +16,7 @@ export var TransportType;
 (function (TransportType) {
     TransportType["STDIO"] = "stdio";
     TransportType["SSE"] = "sse";
+    TransportType["STREAMABLE_HTTP"] = "streamable-http";
     TransportType["BOTH"] = "both";
 })(TransportType || (TransportType = {}));
 /**
@@ -21,6 +25,7 @@ export var TransportType;
 export class TransportManager {
     constructor(logger, configManager, mcpServer, transport) {
         this.sseTransports = new Map();
+        this.streamableHttpTransports = new Map();
         this.logger = logger;
         this.configManager = configManager;
         this.mcpServer = mcpServer;
@@ -35,8 +40,11 @@ export class TransportManager {
         const transportArg = args.find((arg) => arg.startsWith('--transport='));
         if (transportArg) {
             const value = transportArg.split('=')[1];
-            // Validate CLI arg
-            if (value === 'stdio' || value === 'sse' || value === 'both') {
+            // Validate CLI arg - include streamable-http
+            if (value === 'stdio' ||
+                value === 'sse' ||
+                value === 'streamable-http' ||
+                value === 'both') {
                 return value;
             }
             // Use stderr to avoid corrupting STDIO protocol
@@ -131,11 +139,23 @@ export class TransportManager {
                 }
                 let handled = false;
                 let lastError = null;
+                // Get sessionId from query params - SSEServerTransport includes it in the endpoint URL
+                const sessionId = req.query['sessionId'];
                 for (const transport of transports) {
                     try {
                         // Use any available method to process the request
                         const sseTransport = transport;
-                        if (typeof sseTransport.handleRequest === 'function') {
+                        // SSEServerTransport (MCP SDK) uses handlePostMessage method
+                        if (typeof sseTransport.handlePostMessage === 'function') {
+                            // Check if this transport matches the session (if provided)
+                            if (sessionId && sseTransport._sessionId && sseTransport._sessionId !== sessionId) {
+                                continue; // Not the right transport for this session
+                            }
+                            this.logger.debug('Using handlePostMessage method');
+                            await sseTransport.handlePostMessage(req, res, req.body);
+                            handled = true;
+                        }
+                        else if (typeof sseTransport.handleRequest === 'function') {
                             this.logger.debug('Using handleRequest method');
                             handled = await sseTransport.handleRequest(req, res);
                         }
@@ -173,6 +193,86 @@ export class TransportManager {
         });
     }
     /**
+     * Setup Streamable HTTP transport with Express integration
+     * This is the new MCP standard transport (replacing SSE)
+     */
+    setupStreamableHttpTransport(app) {
+        this.logger.info('Setting up Streamable HTTP transport endpoints');
+        // Single /mcp endpoint handles all HTTP methods (POST, GET, DELETE)
+        const mcpHandler = async (req, res) => {
+            const sessionId = req.headers['mcp-session-id'];
+            try {
+                let transport;
+                if (sessionId) {
+                    // Reuse existing transport for this session
+                    transport = this.streamableHttpTransports.get(sessionId);
+                    if (!transport) {
+                        this.logger.warn(`No transport found for session ${sessionId}`);
+                        res.status(404).json({
+                            jsonrpc: '2.0',
+                            error: { code: -32000, message: 'Session not found' },
+                            id: null,
+                        });
+                        return;
+                    }
+                }
+                else if (req.method === 'POST' && isInitializeRequest(req.body)) {
+                    // New initialization request - create new transport
+                    this.logger.info('New Streamable HTTP initialization request');
+                    transport = new StreamableHTTPServerTransport({
+                        sessionIdGenerator: () => randomUUID(),
+                        onsessioninitialized: (newSessionId) => {
+                            this.logger.info(`Streamable HTTP session initialized: ${newSessionId}`);
+                            this.streamableHttpTransports.set(newSessionId, transport);
+                        },
+                        onsessionclosed: (closedSessionId) => {
+                            this.logger.info(`Streamable HTTP session closed: ${closedSessionId}`);
+                            this.streamableHttpTransports.delete(closedSessionId);
+                        },
+                    });
+                    // Set up cleanup handler
+                    transport.onclose = () => {
+                        const sid = transport.sessionId;
+                        if (sid) {
+                            this.streamableHttpTransports.delete(sid);
+                        }
+                    };
+                    // Connect to MCP server before handling request
+                    await this.mcpServer.connect(transport);
+                    await transport.handleRequest(req, res, req.body);
+                    return;
+                }
+                else {
+                    // Invalid request - no session ID and not initialization
+                    this.logger.warn('Invalid request: no session ID and not initialization');
+                    res.status(400).json({
+                        jsonrpc: '2.0',
+                        error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+                        id: null,
+                    });
+                    return;
+                }
+                // Handle request with existing transport
+                await transport.handleRequest(req, res, req.body);
+            }
+            catch (error) {
+                this.logger.error('Error handling Streamable HTTP request:', error);
+                if (!res.headersSent) {
+                    res.status(500).json({
+                        jsonrpc: '2.0',
+                        error: { code: -32603, message: 'Internal server error' },
+                        id: null,
+                    });
+                }
+            }
+        };
+        // Register routes for all HTTP methods on /mcp
+        app.post('/mcp', express.json(), mcpHandler);
+        app.get('/mcp', mcpHandler);
+        app.delete('/mcp', mcpHandler);
+        this.logger.info('Streamable HTTP transport ready at /mcp');
+    }
+    /**
      * Get transport mode
      */
     getTransportType() {
@@ -188,9 +288,16 @@ export class TransportManager {
     /**
      * Check if SSE transport should be active
      * True for 'sse' or 'both' modes
+     * @deprecated SSE is deprecated, prefer streamable-http
      */
     isSse() {
         return this.transport === TransportType.SSE || this.transport === TransportType.BOTH;
+    }
+    /**
+     * Check if Streamable HTTP transport should be active
+     */
+    isStreamableHttp() {
+        return this.transport === TransportType.STREAMABLE_HTTP;
     }
     /**
      * Check if running in dual transport mode
@@ -202,14 +309,30 @@ export class TransportManager {
      * Get active SSE connections count
      */
     getActiveConnectionsCount() {
-        return this.sseTransports.size;
+        return this.sseTransports.size + this.streamableHttpTransports.size;
     }
     /**
-     * Close all active SSE connections
+     * Get active Streamable HTTP sessions count
      */
-    closeAllConnections() {
+    getActiveStreamableHttpSessionsCount() {
+        return this.streamableHttpTransports.size;
+    }
+    /**
+     * Close all active connections (SSE and Streamable HTTP)
+     */
+    async closeAllConnections() {
         this.logger.info(`Closing ${this.sseTransports.size} active SSE connections`);
         this.sseTransports.clear();
+        this.logger.info(`Closing ${this.streamableHttpTransports.size} active Streamable HTTP sessions`);
+        for (const [sessionId, transport] of this.streamableHttpTransports) {
+            try {
+                await transport.close();
+            }
+            catch (error) {
+                this.logger.error(`Error closing Streamable HTTP session ${sessionId}:`, error);
+            }
+        }
+        this.streamableHttpTransports.clear();
     }
 }
 /**

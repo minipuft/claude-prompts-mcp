@@ -108,14 +108,14 @@ export declare const ChainStepSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     promptId: string;
     stepName: string;
-    inputMapping?: Record<string, string> | undefined;
     outputMapping?: Record<string, string> | undefined;
+    inputMapping?: Record<string, string> | undefined;
     retries?: number | undefined;
 }, {
     promptId: string;
     stepName: string;
-    inputMapping?: Record<string, string> | undefined;
     outputMapping?: Record<string, string> | undefined;
+    inputMapping?: Record<string, string> | undefined;
     retries?: number | undefined;
 }>;
 export type ChainStepYaml = z.infer<typeof ChainStepSchema>;
@@ -397,14 +397,14 @@ export declare const PromptDataSchema: z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }>, "many">>;
     /** Whether to register this prompt with MCP */
@@ -568,14 +568,14 @@ export declare const PromptDataSchema: z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }>, "many">>;
     /** Whether to register this prompt with MCP */
@@ -739,14 +739,14 @@ export declare const PromptDataSchema: z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }>, "many">>;
     /** Whether to register this prompt with MCP */
@@ -917,14 +917,14 @@ export declare const PromptsFileSchema: z.ZodObject<{
         }, "strip", z.ZodTypeAny, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }>, "many">>;
         /** Whether to register this prompt with MCP */
@@ -1088,14 +1088,14 @@ export declare const PromptsFileSchema: z.ZodObject<{
         }, "strip", z.ZodTypeAny, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }>, "many">>;
         /** Whether to register this prompt with MCP */
@@ -1259,14 +1259,14 @@ export declare const PromptsFileSchema: z.ZodObject<{
         }, "strip", z.ZodTypeAny, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }>, "many">>;
         /** Whether to register this prompt with MCP */
@@ -1432,14 +1432,14 @@ export declare const PromptsFileSchema: z.ZodObject<{
         }, "strip", z.ZodTypeAny, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }>, "many">>;
         /** Whether to register this prompt with MCP */
@@ -1605,14 +1605,14 @@ export declare const PromptsFileSchema: z.ZodObject<{
         }, "strip", z.ZodTypeAny, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }, {
             promptId: string;
             stepName: string;
-            inputMapping?: Record<string, string> | undefined;
             outputMapping?: Record<string, string> | undefined;
+            inputMapping?: Record<string, string> | undefined;
             retries?: number | undefined;
         }>, "many">>;
         /** Whether to register this prompt with MCP */
@@ -1867,14 +1867,14 @@ export declare const PromptYamlSchema: z.ZodEffects<z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }>, "many">>;
     /** Whether to register this prompt with MCP (default: true) */
@@ -2044,14 +2044,14 @@ export declare const PromptYamlSchema: z.ZodEffects<z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }>, "many">>;
     /** Whether to register this prompt with MCP (default: true) */
@@ -2221,14 +2221,14 @@ export declare const PromptYamlSchema: z.ZodEffects<z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }>, "many">>;
     /** Whether to register this prompt with MCP (default: true) */
@@ -2398,14 +2398,14 @@ export declare const PromptYamlSchema: z.ZodEffects<z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }>, "many">>;
     /** Whether to register this prompt with MCP (default: true) */
@@ -2575,14 +2575,14 @@ export declare const PromptYamlSchema: z.ZodEffects<z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }, {
         promptId: string;
         stepName: string;
-        inputMapping?: Record<string, string> | undefined;
         outputMapping?: Record<string, string> | undefined;
+        inputMapping?: Record<string, string> | undefined;
         retries?: number | undefined;
     }>, "many">>;
     /** Whether to register this prompt with MCP (default: true) */

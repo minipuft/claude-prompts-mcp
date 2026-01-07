@@ -9,6 +9,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **Streamable HTTP Transport**: New MCP standard transport (since 2025-03-26) via `--transport=streamable-http`.
+  - Single `/mcp` endpoint for POST/GET/DELETE operations
+  - Session management via `mcp-session-id` header
+  - UUID-based stateful sessions
+  - Recommended replacement for deprecated SSE transport
+  - Full E2E test coverage with `StreamableHttpMcpClient` helper
+- **System control session tools**: `system_control(action:"session")` supports `list`, `inspect`, and `clear` for active chain sessions and pending reviews.
+- **Gemini hook adapters**: Centralized Gemini BeforeAgent/AfterTool hooks with optional `GEMINI_HOOK_DEBUG=1` logging.
 - **Claude Desktop Extension (.mcpb)**: One-click installation for Claude Desktop via `.mcpb` bundle format.
   - Drag-and-drop install into Claude Desktop Settings
   - Optional **Custom Prompts Directory** user config - point to your own prompt templates
@@ -53,9 +61,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **TypeScript**: tightened typing/tsconfig strictness and cleaned up types across the execution pipeline.
 - **Docs**: reorganized documentation layout and cross-links.
 - **Script tools**: Consolidated `mode` parameter into `trigger` + `confirm` options (see Migration below).
+- **Dev sync hook**: SessionStart now checks cached `node_modules` and runs `npm install` when required packages are missing.
+- **Chain response capture**: Step capture now snapshots the current step at stage entry to avoid mutation during gate review advancement.
+- **Release automation**: Release Please publishes non-draft releases; GitHub Releases attach the Claude Desktop `.mcpb` after npm publish while CLI extensions remain repo-based.
 
 ### Deprecated
 
+- **SSE Transport**: The `--transport=sse` option is now deprecated. Use `--transport=streamable-http` for HTTP-based MCP connections. SSE remains functional for backwards compatibility.
 - **Script tool `mode` parameter**: The `mode` field (`auto`/`manual`/`confirm`) is deprecated. Use `trigger: explicit` instead of `mode: manual`, and `confirm: true` instead of `mode: confirm`. Old configurations are auto-migrated with deprecation warnings.
 - **Script tool `confidence` parameter**: Numeric confidence scores are deprecated. Use `strict: true/false` for matching control.
 
@@ -76,6 +88,8 @@ See `docs/guides/script-tools.md` for full documentation.
 ### Fixed
 
 - **Hot-reload cache**: Disk edits to template files (`user-message.md`, etc.) now refresh on reload.
+- **SSE request routing**: SSE handler now respects per-session endpoints and SDK `handlePostMessage` behavior.
+- **E2E HTTP harness**: Server startup in tests avoids Jest env flags that skip main entry, and Streamable HTTP responses parse JSON/SSE formats.
 
 ## [1.1.0] - 2025-12-08
 

@@ -62,9 +62,12 @@ export function startServerWithHttp(
     console.log('  ARGS:', args);
   }
 
-  // Build clean environment without Jest's NODE_OPTIONS
+  // Build clean environment - remove Jest-specific vars that prevent server from starting
+  // See src/index.ts lines 843-845: server skips main() if JEST_WORKER_ID is set
   const cleanEnv = { ...process.env };
   delete cleanEnv.NODE_OPTIONS; // Remove Jest's --experimental-vm-modules
+  delete cleanEnv.NODE_ENV; // Don't pass test mode to server
+  delete cleanEnv.JEST_WORKER_ID; // CRITICAL: Server checks this and skips main() if set
 
   const proc = spawn('node', args, {
     cwd,
@@ -73,7 +76,7 @@ export function startServerWithHttp(
       PORT: String(port), // Server uses PORT env var for port
       MCP_WORKSPACE: PROJECT_ROOT,
       MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
-      NODE_ENV: 'test', // Ensure test environment
+      // Note: NODE_ENV is NOT set - let server run in normal mode
     },
     // Use 'ignore' for stdin to avoid triggering 'end' event handler
     // which exits the process (see logging/index.ts setupProcessEventHandlers)
@@ -143,9 +146,9 @@ async function httpGet(url: string): Promise<{ status: number; body: string }> {
 }
 
 /**
- * Simple HTTP POST request
+ * Simple HTTP POST request (exported for raw HTTP tests)
  */
-async function httpPost(
+export async function httpPost(
   url: string,
   data: object,
   headers: Record<string, string> = {}
@@ -257,7 +260,12 @@ export async function sendMcpRequestViaHttp(
 
 /**
  * Establish SSE connection and send MCP request, wait for response
- * This is the full SSE flow: GET /mcp for stream, POST /messages for requests
+ *
+ * MCP SSE Protocol:
+ * 1. Client connects to /mcp via GET (SSE stream)
+ * 2. Server sends 'endpoint' event with URL to POST messages to
+ * 3. Client POSTs JSON-RPC requests to that endpoint
+ * 4. Server sends responses via the SSE stream
  */
 export async function sendMcpRequestWithSse(
   baseUrl: string,
@@ -274,6 +282,9 @@ export async function sendMcpRequestWithSse(
       reject(new Error(`MCP request timed out after ${timeout}ms`));
     }, timeout);
 
+    let messagesEndpoint: string | null = null;
+    let currentEvent: string | null = null;
+
     // Open SSE connection
     const sseUrl = new URL(`${baseUrl}/mcp`);
     const sseReq = http.get(sseUrl, (sseRes) => {
@@ -282,14 +293,72 @@ export async function sendMcpRequestWithSse(
       sseRes.on('data', (chunk: Buffer) => {
         buffer += chunk.toString();
 
-        // Parse SSE events
+        // Parse SSE events line by line
         const lines = buffer.split('\n');
         buffer = lines.pop() || ''; // Keep incomplete line
 
         for (const line of lines) {
           const trimmed = line.trim();
+
+          // Track event type
+          if (trimmed.startsWith('event:')) {
+            currentEvent = trimmed.slice(6).trim();
+            continue;
+          }
+
+          // Handle data lines
           if (trimmed.startsWith('data:')) {
             const data = trimmed.slice(5).trim();
+
+            // Handle 'endpoint' event - tells us where to POST messages
+            if (currentEvent === 'endpoint') {
+              messagesEndpoint = data;
+              currentEvent = null;
+
+              // Now that we have the endpoint, send the request
+              const request = {
+                jsonrpc: '2.0',
+                id: requestId,
+                method,
+                params,
+              };
+
+              // Use the provided endpoint URL (may include session info)
+              const postUrl = messagesEndpoint.startsWith('http')
+                ? messagesEndpoint
+                : `${baseUrl}${messagesEndpoint}`;
+
+              httpPost(postUrl, request).catch((err) => {
+                clearTimeout(timer);
+                sseReq.destroy();
+                reject(err);
+              });
+              continue;
+            }
+
+            // Handle 'message' event - contains the response
+            if (currentEvent === 'message') {
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.id === requestId) {
+                  clearTimeout(timer);
+                  sseReq.destroy();
+
+                  if (parsed.error) {
+                    reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
+                  } else {
+                    resolve(parsed.result);
+                  }
+                  return;
+                }
+              } catch {
+                // Not valid JSON, continue
+              }
+              currentEvent = null;
+              continue;
+            }
+
+            // Also check for response without explicit event type (fallback)
             try {
               const parsed = JSON.parse(data);
               if (parsed.id === requestId) {
@@ -307,6 +376,11 @@ export async function sendMcpRequestWithSse(
               // Not our response, continue
             }
           }
+
+          // Empty line resets event type
+          if (trimmed === '') {
+            currentEvent = null;
+          }
         }
       });
 
@@ -314,23 +388,6 @@ export async function sendMcpRequestWithSse(
         clearTimeout(timer);
         reject(err);
       });
-
-      // Once SSE is connected, send the request via POST
-      setTimeout(async () => {
-        try {
-          const request = {
-            jsonrpc: '2.0',
-            id: requestId,
-            method,
-            params,
-          };
-          await httpPost(`${baseUrl}/messages`, request);
-        } catch (err) {
-          clearTimeout(timer);
-          sseReq.destroy();
-          reject(err);
-        }
-      }, 100);
     });
 
     sseReq.on('error', (err) => {
@@ -345,6 +402,221 @@ export async function sendMcpRequestWithSse(
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Parse response body that may be JSON or SSE format
+ */
+function parseJsonOrSse(body: string, expectedId?: number): { result?: unknown; error?: unknown } {
+  const trimmed = body.trim();
+
+  // Try direct JSON parse first
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // May be SSE format, try to extract JSON from data lines
+    const lines = trimmed.split('\n');
+    for (const line of lines) {
+      const lineTrimmed = line.trim();
+      if (lineTrimmed.startsWith('data:')) {
+        const data = lineTrimmed.slice(5).trim();
+        try {
+          const parsed = JSON.parse(data);
+          if (!expectedId || parsed.id === expectedId) {
+            return parsed;
+          }
+        } catch {
+          // Not valid JSON, continue
+        }
+      } else if (lineTrimmed && !lineTrimmed.startsWith('event:') && !lineTrimmed.startsWith('id:')) {
+        try {
+          const parsed = JSON.parse(lineTrimmed);
+          if (!expectedId || parsed.id === expectedId) {
+            return parsed;
+          }
+        } catch {
+          // Not JSON, skip
+        }
+      }
+    }
+    throw new Error(`Could not parse response: ${body.substring(0, 200)}`);
+  }
+}
+
+/**
+ * Streamable HTTP MCP Client
+ *
+ * Handles the new MCP standard transport (since 2025-03-26):
+ * - Single /mcp endpoint for POST, GET, DELETE
+ * - Session management via mcp-session-id header
+ * - Stateful session mode with session ID generator
+ */
+export class StreamableHttpMcpClient {
+  private baseUrl: string;
+  private sessionId: string | null = null;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
+  }
+
+  /**
+   * Initialize the session by sending an initialize request
+   */
+  async initialize(): Promise<{ sessionId: string; capabilities: unknown }> {
+    const request = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: {
+          name: 'test-client',
+          version: '1.0.0',
+        },
+      },
+    };
+
+    // Streamable HTTP requires Accept header for both JSON and SSE
+    const response = await httpPost(`${this.baseUrl}/mcp`, request, {
+      Accept: 'application/json, text/event-stream',
+    });
+
+    if (response.status !== 200) {
+      throw new Error(`Initialize failed: HTTP ${response.status}: ${response.body}`);
+    }
+
+    // Extract session ID from response header
+    const sessionId = response.headers['mcp-session-id'] as string;
+    if (sessionId) {
+      this.sessionId = sessionId;
+    }
+
+    // Parse response - may be JSON or SSE format
+    const parsed = parseJsonOrSse(response.body, 1);
+    if (parsed.error) {
+      throw new Error(parsed.error.message || JSON.stringify(parsed.error));
+    }
+
+    return {
+      sessionId: this.sessionId || '',
+      capabilities: parsed.result,
+    };
+  }
+
+  /**
+   * Send a request using the established session
+   */
+  async request(
+    method: string,
+    params: Record<string, unknown> = {},
+    requestId: number = 1
+  ): Promise<unknown> {
+    if (!this.sessionId) {
+      throw new Error('Session not initialized. Call initialize() first.');
+    }
+
+    const request = {
+      jsonrpc: '2.0',
+      id: requestId,
+      method,
+      params,
+    };
+
+    const response = await httpPost(`${this.baseUrl}/mcp`, request, {
+      'mcp-session-id': this.sessionId,
+      Accept: 'application/json, text/event-stream',
+    });
+
+    if (response.status !== 200) {
+      throw new Error(`Request failed: HTTP ${response.status}: ${response.body}`);
+    }
+
+    // Parse response - may be JSON or SSE format
+    const parsed = parseJsonOrSse(response.body, requestId);
+    if (parsed.error) {
+      throw new Error(parsed.error.message || JSON.stringify(parsed.error));
+    }
+
+    return parsed.result;
+  }
+
+  /**
+   * Close the session
+   */
+  async close(): Promise<void> {
+    if (!this.sessionId) return;
+
+    try {
+      await httpDelete(`${this.baseUrl}/mcp`, { 'mcp-session-id': this.sessionId });
+    } catch {
+      // Ignore errors on close
+    }
+    this.sessionId = null;
+  }
+
+  /**
+   * Get the current session ID
+   */
+  getSessionId(): string | null {
+    return this.sessionId;
+  }
+}
+
+/**
+ * Simple HTTP DELETE request
+ */
+async function httpDelete(
+  url: string,
+  headers: Record<string, string> = {}
+): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+
+    const options: http.RequestOptions = {
+      hostname: urlObj.hostname,
+      port: urlObj.port,
+      path: urlObj.pathname,
+      method: 'DELETE',
+      headers: {
+        ...headers,
+      },
+    };
+
+    const req = http.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => (body += chunk));
+      res.on('end', () =>
+        resolve({
+          status: res.statusCode || 0,
+          body,
+        })
+      );
+      res.on('error', reject);
+    });
+
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+/**
+ * Send MCP request via Streamable HTTP transport (stateless mode)
+ * For quick one-off requests without session management
+ */
+export async function sendMcpRequestWithStreamableHttp(
+  baseUrl: string,
+  method: string,
+  params: Record<string, unknown> = {},
+  requestId: number = 1
+): Promise<unknown> {
+  const client = new StreamableHttpMcpClient(baseUrl);
+  await client.initialize();
+  try {
+    return await client.request(method, params, requestId);
+  } finally {
+    await client.close();
+  }
 }
 
 /**

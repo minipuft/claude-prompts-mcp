@@ -6,6 +6,11 @@
 // Set test environment
 process.env.NODE_ENV = 'test';
 
+// Provide require() polyfill for ESM tests where some utilities use dynamic require()
+import { createRequire } from 'module';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(global as any).require = (global as any).require || createRequire(import.meta.url);
+
 // Global test timeout - commented out as it's set in jest.config.cjs
 // jest.setTimeout(30000);
 

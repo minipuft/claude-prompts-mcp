@@ -103,6 +103,7 @@ export interface ChainSessionService {
     sessionId: string,
     outcome: GateReviewOutcomeUpdate
   ): Promise<'cleared' | 'pending'>;
+  clearSession(sessionId: string): Promise<boolean>;
   clearSessionsForChain(chainId: string): Promise<void>;
   listActiveSessions(limit?: number): ChainSessionSummary[];
   updateSessionState(

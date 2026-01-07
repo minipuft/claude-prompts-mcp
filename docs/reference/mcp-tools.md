@@ -673,6 +673,17 @@ node dist/index.js --transport=stdio \
   --config=/path/to/config.json
 ```
 
+### Transport Options
+
+| Transport         | Flag                          | Use Case                              |
+| ----------------- | ----------------------------- | ------------------------------------- |
+| STDIO             | `--transport=stdio`           | Claude Desktop, Claude Code           |
+| Streamable HTTP   | `--transport=streamable-http` | Web dashboards, remote APIs (**use this for HTTP**) |
+| SSE (deprecated)  | `--transport=sse`             | Legacy integrations                   |
+| Dual mode         | `--transport=both`            | STDIO + SSE simultaneously            |
+
+For HTTP clients, use Streamable HTTP. It's the current MCP standard and replaces SSE.
+
 ### Environment Variables
 
 | Variable                 | Description                                          |

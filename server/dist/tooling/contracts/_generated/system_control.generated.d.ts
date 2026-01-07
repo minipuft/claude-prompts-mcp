@@ -18,7 +18,7 @@ export interface ToolCommand {
     status: 'working' | 'needs-validation' | 'deprecated' | 'hidden' | 'experimental';
     notes?: string[];
 }
-export type system_controlParamName = 'action' | 'operation' | 'framework' | 'reason' | 'persist' | 'show_details' | 'include_history' | 'topic' | 'search_query';
+export type system_controlParamName = 'action' | 'operation' | 'session_id' | 'framework' | 'reason' | 'persist' | 'show_details' | 'include_history' | 'topic' | 'search_query';
 export declare const system_controlParameters: ToolParameter[];
 export declare const system_controlCommands: ToolCommand[];
 export declare const system_controlMetadata: {

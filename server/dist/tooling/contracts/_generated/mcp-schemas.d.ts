@@ -502,10 +502,12 @@ export type resourceManagerInput = z.infer<typeof resourceManagerSchema>;
  * Generated from contract version 1
  */
 export declare const systemControlSchema: z.ZodObject<{
-    /** The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations). */
-    action: z.ZodEnum<["status", "framework", "gates", "analytics", "config", "maintenance", "guide", "injection"]>;
-    /** Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list). */
+    /** The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions). */
+    action: z.ZodEnum<["status", "framework", "gates", "analytics", "config", "maintenance", "guide", "injection", "session"]>;
+    /** Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect). */
     operation: z.ZodOptional<z.ZodString>;
+    /** Target session ID or chain ID for session operations. */
+    session_id: z.ZodOptional<z.ZodString>;
     /** Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks. */
     framework: z.ZodOptional<z.ZodString>;
     /** Audit reason for framework/gate toggles or admin actions. */
@@ -521,10 +523,12 @@ export declare const systemControlSchema: z.ZodObject<{
     /** Filter gates by keyword (matches ID, name, or description). Use with gates:list action. */
     search_query: z.ZodOptional<z.ZodString>;
 }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
-    /** The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations). */
-    action: z.ZodEnum<["status", "framework", "gates", "analytics", "config", "maintenance", "guide", "injection"]>;
-    /** Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list). */
+    /** The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions). */
+    action: z.ZodEnum<["status", "framework", "gates", "analytics", "config", "maintenance", "guide", "injection", "session"]>;
+    /** Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect). */
     operation: z.ZodOptional<z.ZodString>;
+    /** Target session ID or chain ID for session operations. */
+    session_id: z.ZodOptional<z.ZodString>;
     /** Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks. */
     framework: z.ZodOptional<z.ZodString>;
     /** Audit reason for framework/gate toggles or admin actions. */
@@ -540,10 +544,12 @@ export declare const systemControlSchema: z.ZodObject<{
     /** Filter gates by keyword (matches ID, name, or description). Use with gates:list action. */
     search_query: z.ZodOptional<z.ZodString>;
 }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
-    /** The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations). */
-    action: z.ZodEnum<["status", "framework", "gates", "analytics", "config", "maintenance", "guide", "injection"]>;
-    /** Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list). */
+    /** The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions). */
+    action: z.ZodEnum<["status", "framework", "gates", "analytics", "config", "maintenance", "guide", "injection", "session"]>;
+    /** Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect). */
     operation: z.ZodOptional<z.ZodString>;
+    /** Target session ID or chain ID for session operations. */
+    session_id: z.ZodOptional<z.ZodString>;
     /** Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks. */
     framework: z.ZodOptional<z.ZodString>;
     /** Audit reason for framework/gate toggles or admin actions. */

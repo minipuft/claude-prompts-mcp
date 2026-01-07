@@ -134,10 +134,12 @@ export const resourceManagerSchema = z.object({
  * Generated from contract version 1
  */
 export const systemControlSchema = z.object({
-    /** The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations). */
-    action: z.enum(['status', 'framework', 'gates', 'analytics', 'config', 'maintenance', 'guide', 'injection']),
-    /** Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list). */
+    /** The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions). */
+    action: z.enum(['status', 'framework', 'gates', 'analytics', 'config', 'maintenance', 'guide', 'injection', 'session']),
+    /** Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect). */
     operation: z.string().optional(),
+    /** Target session ID or chain ID for session operations. */
+    session_id: z.string().optional(),
     /** Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks. */
     framework: z.string().optional(),
     /** Audit reason for framework/gate toggles or admin actions. */

@@ -60,7 +60,8 @@ export async function startServerWithManagers(
   const transportManager = createTransportManager(logger, configManager, mcpServer, transport);
 
   let apiManager: ApiManager | undefined;
-  if (transportManager.isSse()) {
+  // Create ApiManager for any HTTP-based transport (SSE or Streamable HTTP)
+  if (transportManager.isSse() || transportManager.isStreamableHttp()) {
     apiManager = createApiManager(logger, configManager, promptManager, mcpToolsManager);
     apiManager.updateData(promptsData, categories, convertedPrompts);
   }

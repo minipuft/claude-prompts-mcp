@@ -40,7 +40,7 @@ export class ServerManager {
 
   /**
    * Start the server based on transport mode
-   * Supports 'stdio', 'sse', or 'both' modes
+   * Supports 'stdio', 'sse', 'streamable-http', or 'both' modes
    */
   async startServer(): Promise<void> {
     try {
@@ -56,8 +56,11 @@ export class ServerManager {
         // STDIO only
         await this.startStdioServer();
       } else if (mode === 'sse') {
-        // SSE only
+        // SSE only (deprecated, use streamable-http)
         await this.startSseServer();
+      } else if (mode === 'streamable-http') {
+        // Streamable HTTP (MCP standard since 2025-03-26)
+        await this.startStreamableHttpServer();
       } else {
         throw new Error(`Unsupported transport mode: ${mode}`);
       }
@@ -158,6 +161,49 @@ export class ServerManager {
   }
 
   /**
+   * Start server with Streamable HTTP transport (MCP standard since 2025-03-26)
+   * This is the preferred HTTP transport, replacing deprecated SSE
+   */
+  private async startStreamableHttpServer(): Promise<void> {
+    if (!this.apiManager) {
+      throw new Error('API Manager is required for Streamable HTTP transport');
+    }
+
+    // Create Express app
+    const app = this.apiManager.createApp();
+
+    // Setup Streamable HTTP transport endpoints
+    this.transportManager.setupStreamableHttpTransport(app);
+
+    // Create HTTP server
+    this.httpServer = createServer(app);
+
+    // Setup HTTP server event handlers
+    this.setupHttpServerEventHandlers();
+
+    // Start listening
+    await new Promise<void>((resolve, reject) => {
+      this.httpServer!.listen(this.port, () => {
+        this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
+        this.logger.info(`Streamable HTTP transport ready at http://localhost:${this.port}/mcp`);
+        this.logger.info(`Sessions: ${this.transportManager.getActiveStreamableHttpSessionsCount()}`);
+        resolve();
+      });
+
+      this.httpServer!.on('error', (error: any) => {
+        if (error.code === 'EADDRINUSE') {
+          this.logger.error(
+            `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
+          );
+        } else {
+          this.logger.error('Server error:', error);
+        }
+        reject(error);
+      });
+    });
+  }
+
+  /**
    * Setup HTTP server event handlers
    */
   private setupHttpServerEventHandlers(): void {
@@ -203,20 +249,23 @@ export class ServerManager {
         } else {
           this.logger.info('HTTP server closed successfully');
         }
-        this.finalizeShutdown(exitCode);
+        // Fire and forget - process.exit is called inside
+        void this.finalizeShutdown(exitCode);
       });
     } else {
-      this.finalizeShutdown(exitCode);
+      // Fire and forget - process.exit is called inside
+      void this.finalizeShutdown(exitCode);
     }
   }
 
   /**
    * Finalize shutdown process
    */
-  private finalizeShutdown(exitCode: number): void {
-    // Close transport connections
-    if (this.transportManager.isSse()) {
-      this.transportManager.closeAllConnections();
+  private async finalizeShutdown(exitCode: number): Promise<void> {
+    // Close transport connections (SSE and Streamable HTTP)
+    const mode = this.transportManager.getTransportType();
+    if (mode === 'sse' || mode === 'streamable-http' || mode === 'both') {
+      await this.transportManager.closeAllConnections();
     }
 
     this.logger.info('Server shutdown complete');
@@ -262,8 +311,8 @@ export class ServerManager {
     if (mode === 'stdio') {
       // For STDIO only, we consider it running if the process is alive
       return true;
-    } else if (mode === 'sse') {
-      // For SSE only, check if HTTP server is listening
+    } else if (mode === 'sse' || mode === 'streamable-http') {
+      // For HTTP transports, check if HTTP server is listening
       return this.httpServer?.listening || false;
     } else if (mode === 'both') {
       // For dual mode, STDIO is always running; HTTP might be optional
@@ -281,34 +330,44 @@ export class ServerManager {
     transport: string;
     port?: number;
     connections?: number;
+    sessions?: number;
     uptime: number;
-    transports?: { stdio: boolean; sse: boolean };
+    transports?: { stdio: boolean; sse: boolean; streamableHttp: boolean };
   } {
     const mode = this.transportManager.getTransportType();
-    const isSseActive = mode === 'sse' || (mode === 'both' && this.httpServer?.listening);
+    const isHttpActive =
+      mode === 'sse' ||
+      mode === 'streamable-http' ||
+      (mode === 'both' && this.httpServer?.listening);
 
     const status: {
       running: boolean;
       transport: string;
       port?: number;
       connections?: number;
+      sessions?: number;
       uptime: number;
-      transports?: { stdio: boolean; sse: boolean };
+      transports?: { stdio: boolean; sse: boolean; streamableHttp: boolean };
     } = {
       running: this.isRunning(),
       transport: mode,
       uptime: process.uptime(),
     };
 
-    if (isSseActive) {
+    if (isHttpActive) {
       status.port = this.port;
       status.connections = this.transportManager.getActiveConnectionsCount();
+    }
+
+    if (mode === 'streamable-http') {
+      status.sessions = this.transportManager.getActiveStreamableHttpSessionsCount();
     }
 
     if (mode === 'both') {
       status.transports = {
         stdio: true,
         sse: this.httpServer?.listening || false,
+        streamableHttp: false, // 'both' mode currently only supports STDIO + SSE
       };
     }
 

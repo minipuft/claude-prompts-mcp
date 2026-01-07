@@ -1,68 +1,77 @@
 {
-  "manifest_version": "0.3",
-  "name": "claude-prompts",
-  "display_name": "Claude Prompts",
-  "version": "1.1.0",
-  "description": "Hot-reloadable prompts with structured reasoning (CAGEERF, ReACT), quality gates, and chain workflows",
-  "long_description": "Turn your prompt library into a programmable engine. Hot-reload for live editing, symbolic command syntax (>>prompt --> >>chain @framework :: 'gate'), methodology injection, and self-evaluating quality gates. Supports version history, rollback, and resource selection with %judge.",
-
-  "author": {
-    "name": "minipuft",
-    "url": "https://github.com/minipuft"
-  },
-
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/minipuft/claude-prompts-mcp.git"
-  },
-  "homepage": "https://github.com/minipuft/claude-prompts-mcp",
-  "documentation": "https://github.com/minipuft/claude-prompts-mcp#readme",
-  "support": "https://github.com/minipuft/claude-prompts-mcp/issues",
-  "license": "MIT",
-  "keywords": ["mcp", "prompts", "templates", "gates", "chains", "workflows", "cageerf", "react", "hot-reload", "reasoning"],
-
-  "server": {
-    "type": "node",
-    "entry_point": "server/dist/index.js",
-    "mcp_config": {
-      "command": "node",
-      "args": ["${__dirname}/server/dist/index.js", "--transport=stdio"],
-      "env": {
-        "MCP_WORKSPACE": "${__dirname}",
-        "MCP_RESOURCES_PATH": "${__dirname}/server/resources"
-      }
-    }
-  },
-
-  "tools": [
-    {
-      "name": "prompt_engine",
-      "description": "Execute prompts with frameworks, gates, and chains. Supports symbolic syntax (>>prompt --> >>chain)."
+    "author": {
+        "name": "minipuft",
+        "url": "https://github.com/minipuft"
     },
-    {
-      "name": "resource_manager",
-      "description": "CRUD operations for prompts, gates, and methodologies. Manage templates and workflows."
+    "compatibility": {
+        "platforms": [
+            "darwin",
+            "win32",
+            "linux"
+        ],
+        "runtimes": {
+            "node": ">=18.18.0"
+        }
     },
-    {
-      "name": "system_control",
-      "description": "Framework management, analytics, status, and configuration inspection."
-    }
-  ],
-  "tools_generated": false,
-
-  "compatibility": {
-    "platforms": ["darwin", "win32", "linux"],
-    "runtimes": {
-      "node": ">=18.18.0"
-    }
-  },
-
-  "user_config": {
-    "custom_prompts_path": {
-      "type": "directory",
-      "title": "Custom Prompts Directory",
-      "description": "Optional: Add your own prompt templates from this directory",
-      "required": false
-    }
-  }
+    "description": "Hot-reloadable versioned prompts with easy tools for prompt engineering, chain workflows, quality gates, Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
+    "display_name": "Claude Prompts",
+    "documentation": "https://github.com/minipuft/claude-prompts-mcp#readme",
+    "homepage": "https://github.com/minipuft/claude-prompts-mcp",
+    "keywords": [
+        "mcp",
+        "prompts",
+        "templates",
+        "gates",
+        "chains",
+        "workflows",
+        "hot-reload",
+        "reasoning"
+    ],
+    "license": "MIT",
+    "long_description": "Turn your prompt library into a programmable engine. Hot-reload for live editing, symbolic command syntax (>>prompt --> >>chain @framework :: 'gate'), methodology injection, and self-evaluating quality gates. Supports version history, rollback, and hooks for extra reliability",
+    "manifest_version": "0.3",
+    "name": "claude-prompts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/minipuft/claude-prompts-mcp.git"
+    },
+    "server": {
+        "entry_point": "server/dist/index.js",
+        "mcp_config": {
+            "args": [
+                "${__dirname}/server/dist/index.js",
+                "--transport=stdio"
+            ],
+            "command": "node",
+            "env": {
+                "MCP_RESOURCES_PATH": "${__dirname}/server/resources",
+                "MCP_WORKSPACE": "${__dirname}"
+            }
+        },
+        "type": "node"
+    },
+    "support": "https://github.com/minipuft/claude-prompts-mcp/issues",
+    "tools": [{
+            "description": "Execute prompts with frameworks, gates, and chains. Supports symbolic syntax (>>prompt --> >>chain).",
+            "name": "prompt_engine"
+        },
+        {
+            "description": "CRUD operations for prompts, gates, and methodologies. Manage templates and workflows.",
+            "name": "resource_manager"
+        },
+        {
+            "description": "Framework management, analytics, status, and configuration inspection.",
+            "name": "system_control"
+        }
+    ],
+    "tools_generated": false,
+    "user_config": {
+        "custom_prompts_path": {
+            "description": "Optional: Add your own prompt templates from this directory",
+            "required": false,
+            "title": "Custom Prompts Directory",
+            "type": "directory"
+        }
+    },
+    "version": "1.1.0"
 }

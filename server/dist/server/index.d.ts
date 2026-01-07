@@ -21,7 +21,7 @@ export declare class ServerManager {
     constructor(logger: Logger, configManager: ConfigManager, transportManager: TransportManager, apiManager?: ApiManager);
     /**
      * Start the server based on transport mode
-     * Supports 'stdio', 'sse', or 'both' modes
+     * Supports 'stdio', 'sse', 'streamable-http', or 'both' modes
      */
     startServer(): Promise<void>;
     /**
@@ -36,6 +36,11 @@ export declare class ServerManager {
      * Start server with SSE transport
      */
     private startSseServer;
+    /**
+     * Start server with Streamable HTTP transport (MCP standard since 2025-03-26)
+     * This is the preferred HTTP transport, replacing deprecated SSE
+     */
+    private startStreamableHttpServer;
     /**
      * Setup HTTP server event handlers
      */
@@ -68,10 +73,12 @@ export declare class ServerManager {
         transport: string;
         port?: number;
         connections?: number;
+        sessions?: number;
         uptime: number;
         transports?: {
             stdio: boolean;
             sse: boolean;
+            streamableHttp: boolean;
         };
     };
     /**

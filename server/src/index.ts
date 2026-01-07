@@ -9,11 +9,11 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { ConfigManager } from './config/index.js';
-import { Logger } from './logging/index.js';
 import { startApplication } from './runtime/application.js';
 import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
 
 import type { HealthReport } from './runtime/health.js';
+import type { Logger } from './logging/index.js';
 
 const EMPTY_HEALTH_REPORT: HealthReport = {
   healthy: false,
@@ -572,8 +572,10 @@ function parseCommandLineArgs(): { shouldExit: boolean; exitCode: number } {
   const transportArg = args.find((arg) => arg.startsWith('--transport='));
   if (transportArg) {
     const transport = transportArg.slice('--transport='.length);
-    if (!['stdio', 'sse'].includes(transport)) {
-      console.error(`Error: Invalid transport '${transport}'. Supported: stdio, sse`);
+    if (!['stdio', 'sse', 'streamable-http'].includes(transport)) {
+      console.error(
+        `Error: Invalid transport '${transport}'. Supported: stdio, sse, streamable-http`
+      );
       console.error('Use --help for usage information');
       return { shouldExit: true, exitCode: 1 };
     }

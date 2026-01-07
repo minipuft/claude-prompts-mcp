@@ -24,6 +24,7 @@ import { z } from 'zod';
 
 import { ConsolidatedSystemControl, createConsolidatedSystemControl } from './system-control.js';
 import { ToolDescriptionManager } from './tool-description-manager.js';
+import { ChainSessionManager, createChainSessionManager } from '../chain-session/manager.js';
 import { ConfigManager } from '../config/index.js';
 import { FrameworkManager, createFrameworkManager } from '../frameworks/framework-manager.js';
 import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
@@ -91,6 +92,7 @@ export class ConsolidatedMcpToolsManager {
   private semanticAnalyzer!: ReturnType<typeof createContentAnalyzer>;
   private frameworkStateManager?: FrameworkStateManager;
   private frameworkManager?: FrameworkManager;
+  private chainSessionManager?: ChainSessionManager;
   // REMOVED: chainOrchestrator - modular chain system removed
   private conversationManager: ConversationManager;
   private textReferenceManager: TextReferenceManager;
@@ -159,6 +161,13 @@ export class ConsolidatedMcpToolsManager {
     const analyzerMode = analysisConfig.llmIntegration.enabled ? 'semantic' : 'minimal';
     this.logger.info(`Semantic analyzer initialized (mode: ${analyzerMode})`);
 
+    // Initialize chain session manager
+    this.chainSessionManager = createChainSessionManager(
+      this.logger,
+      this.textReferenceManager,
+      this.configManager.getServerRoot()
+    );
+
     // Initialize consolidated tools
     this.promptExecutionService = createPromptExecutionService(
       this.logger,
@@ -191,8 +200,9 @@ export class ConsolidatedMcpToolsManager {
 
     this.systemControl = createConsolidatedSystemControl(this.logger, this.mcpServer, onRestart);
 
-    // Set gate system manager in system control
+    // Set managers in system control
     this.systemControl.setGateSystemManager(this.gateSystemManager);
+    this.systemControl.setChainSessionManager(this.chainSessionManager);
     this.systemControl.setGateGuidanceRenderer(
       this.promptExecutionService.getGateGuidanceRenderer()
     );

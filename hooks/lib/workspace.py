@@ -34,7 +34,14 @@ def get_workspace_root() -> Path | None:
         if plugin_path.exists():
             return plugin_path
 
-    # 3. Self-resolution from script location
+    # 3. Gemini CLI extension root
+    gemini_root = os.environ.get("GEMINI_EXTENSION_PATH") or os.environ.get("extensionPath")
+    if gemini_root:
+        gemini_path = Path(gemini_root)
+        if gemini_path.exists():
+            return gemini_path
+
+    # 4. Self-resolution from script location
     # .claude-plugin/hooks/lib/workspace.py -> lib -> hooks -> .claude-plugin -> project_root
     script_dir = Path(__file__).resolve().parent
     plugin_dir = script_dir.parent.parent  # .claude-plugin
