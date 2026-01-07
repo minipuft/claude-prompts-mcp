@@ -32,6 +32,7 @@ import { PromptGuidanceStage } from '../../../execution/pipeline/stages/06b-prom
 import { SessionManagementStage } from '../../../execution/pipeline/stages/07-session-stage.js';
 import { InjectionControlStage } from '../../../execution/pipeline/stages/07b-injection-control-stage.js';
 import { StepResponseCaptureStage } from '../../../execution/pipeline/stages/08-response-capture-stage.js';
+import { createShellVerificationStage } from '../../../execution/pipeline/stages/08b-shell-verification-stage.js';
 import { StepExecutionStage } from '../../../execution/pipeline/stages/09-execution-stage.js';
 import { ResponseFormattingStage } from '../../../execution/pipeline/stages/10-formatting-stage.js';
 import { GateReviewStage } from '../../../execution/pipeline/stages/10-gate-review-stage.js';
@@ -62,6 +63,7 @@ import {
 import { GateManagerProvider } from '../../../gates/registry/gate-provider-adapter.js';
 import { GateReferenceResolver } from '../../../gates/services/gate-reference-resolver.js';
 import { GateServiceFactory } from '../../../gates/services/gate-service-factory.js';
+import { createShellVerifyExecutor } from '../../../gates/shell/index.js';
 import { Logger } from '../../../logging/index.js';
 import { PromptAssetManager } from '../../../prompts/index.js';
 import { WorkspaceScriptLoader } from '../../../scripts/core/index.js';
@@ -235,6 +237,11 @@ export class PromptExecutionService {
 
     // Inject GateLoader into ExecutionPlanner for dynamic methodology gate detection
     this.executionPlanner.setGateLoader(this.lightweightGateSystem.gateLoader);
+
+    // Inject GateManager into ExecutionPlanner for category-based gate selection
+    if (this.gateManager) {
+      this.executionPlanner.setGateManager(this.gateManager);
+    }
 
     // Initialize StyleManager asynchronously
     void this.initializeStyleManager();
@@ -775,6 +782,12 @@ export class PromptExecutionService {
       this.chainSessionManager,
       this.logger
     );
+
+    // Shell verification stage (08b) - executes shell commands for ground-truth validation
+    // Enables "Ralph Wiggum" style loops where Claude's work is validated by real command execution
+    const shellVerifyExecutor = createShellVerifyExecutor({ debug: false });
+    const shellVerificationStage = createShellVerificationStage(shellVerifyExecutor, this.logger);
+
     const executionStage = new StepExecutionStage(
       this.chainOperatorExecutor,
       this.chainSessionManager,
@@ -812,6 +825,7 @@ export class PromptExecutionService {
       sessionStage,
       injectionControlStage,
       responseCaptureStage,
+      shellVerificationStage, // 08b - Shell verification (Ralph Wiggum loops)
       executionStage,
       gateReviewStage,
       callToActionStage,

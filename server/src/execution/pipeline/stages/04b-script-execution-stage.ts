@@ -235,9 +235,7 @@ export class ScriptExecutionStage extends BasePipelineStage {
     if (output !== null && typeof output === 'object') {
       // We have valid JSON output - extract validation fields
       const valid = output['valid'] === true;
-      const warnings = Array.isArray(output['warnings'])
-        ? (output['warnings'] as string[])
-        : [];
+      const warnings = Array.isArray(output['warnings']) ? (output['warnings'] as string[]) : [];
       const errors = Array.isArray(output['errors'])
         ? (output['errors'] as string[])
         : valid

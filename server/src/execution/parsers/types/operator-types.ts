@@ -1,5 +1,6 @@
 // @lifecycle canonical - Type definitions for execution operators.
 import type { CommandParseResultBase } from './command-parse-types.js';
+import type { ShellVerifyGate } from '../../../gates/shell/types.js';
 import type { ExecutionModifiers } from '../../types.js';
 
 /**
@@ -25,6 +26,9 @@ export interface ChainStep {
  * When absent, behavior depends on criteria:
  * - Quoted string: anonymous temp gate with criteria
  * - Unquoted identifier: canonical gate lookup (fallback to criteria if not found)
+ *
+ * Shell verification gates use the `:: verify:"command"` syntax to execute
+ * shell commands for ground-truth validation (Ralph Wiggum loops).
  */
 export interface GateOperator {
   type: 'gate';
@@ -37,6 +41,18 @@ export interface GateOperator {
   scope: 'execution' | 'step' | 'chain';
   retryOnFailure: boolean;
   maxRetries: number;
+  /**
+   * Shell verification configuration for ground-truth validation.
+   * Present when using `:: verify:"command"` syntax.
+   * Exit code 0 = PASS, non-zero = FAIL.
+   *
+   * Extended options enable Ralph Wiggum-style autonomous loops:
+   * - loop:true - Enable Stop hook integration
+   * - max:N - Maximum iterations
+   * - checkpoint:true - Git stash before execution
+   * - rollback:true - Git restore on failure
+   */
+  shellVerify?: ShellVerifyGate;
 }
 
 /**

@@ -9,6 +9,7 @@ Hooks that guide Claude's behavior when using the prompt engine. These solve com
 | Model ignores `>>analyze` syntax | `prompt-suggest.py` detects it and suggests the correct MCP call |
 | User forgets to continue chain | `post-prompt-engine.py` injects `[Chain] Step 2/5 - call prompt_engine to continue` |
 | Gate review skipped | `post-prompt-engine.py` reminds: `[Gate] Respond: GATE_REVIEW: PASS\|FAIL` |
+| Session state bloat | `pre-compact.py` cleans up before context compaction |
 
 ## Included Hooks
 
@@ -34,11 +35,23 @@ Triggers after `prompt_engine` calls. Parses the response to track chain state a
   Respond: GATE_REVIEW: PASS|FAIL - <reason>
 ```
 
+### `pre-compact.py` (PreCompact)
+
+Triggers before context compaction (`/compact`). Cleans up chain session state to prevent stale data from persisting across compaction boundaries.
+
+### `dev-sync.py` (SessionStart)
+
+Triggers on session start. Synchronizes the prompt cache from the MCP server, ensuring `prompt-suggest.py` has up-to-date prompt metadata.
+
 ## Installation
 
 These hooks are included when you install via the Claude Code plugin:
 
 ```bash
+# First time: add the marketplace
+/plugin marketplace add minipuft/minipuft-plugins
+
+# Install the plugin (includes hooks)
 /plugin install claude-prompts@minipuft
 ```
 
@@ -47,8 +60,11 @@ These hooks are included when you install via the Claude Code plugin:
 ```
 hooks/
 ├── hooks.json            # Hook configuration (matcher → command)
-├── prompt-suggest.py     # UserPromptSubmit hook
-├── post-prompt-engine.py # PostToolUse hook
+├── prompt-suggest.py     # UserPromptSubmit: syntax detection
+├── post-prompt-engine.py # PostToolUse: chain/gate tracking
+├── pre-compact.py        # PreCompact: session cleanup
+├── dev-sync.py           # SessionStart: cache synchronization
+├── setup.sh              # SessionStart: initial setup
 └── lib/
     ├── cache_manager.py  # Reads server/cache/prompts.cache.json
     ├── session_state.py  # Chain/gate state tracking

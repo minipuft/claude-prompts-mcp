@@ -304,6 +304,70 @@ prompt_engine(command: ">>code :: security:'validate inputs' :: code-quality")
 | Anonymous | `:: "criteria"` | Auto-generated ID, criteria as guidance |
 | Named | `:: id:"criteria"` | Custom ID for tracking in output |
 | Canonical | `:: gate-id` | Registered gate with full guidance |
+| Shell Verify | `:: verify:"command"` | Ground-truth validation via shell exit code |
+
+---
+
+## Shell Verification Gates
+
+Shell verification gates execute real commands for ground-truth validation instead of LLM self-evaluation.
+
+### Basic Usage
+
+```bash
+# Run tests after Claude's work
+prompt_engine(command: ">>implement-feature :: verify:'npm test'")
+
+# Multiple verification commands
+prompt_engine(command: ">>code :: verify:'npm run typecheck && npm test'")
+```
+
+**Flow**: Claude works → Verification runs → Exit 0 = PASS, non-zero = FAIL → Bounce-back on failure
+
+### Autonomous Loops (Ralph Wiggum Style)
+
+Enable `loop:true` for true autonomous execution where Claude keeps working until tests pass:
+
+```bash
+prompt_engine(command: ">>fix-all-errors :: verify:'npm test' loop:true max:15")
+```
+
+**Flow**: Claude works → Tries to stop → Stop hook runs verification → If FAIL: blocked, error fed back → Loop continues
+
+### Git Safety
+
+Checkpoint and rollback for risky changes:
+
+```bash
+prompt_engine(command: ">>refactor :: verify:'npm test' checkpoint:true rollback:true")
+```
+
+**Flow**: Git stash created → Verification runs → If FAIL with rollback: changes restored → If PASS: stash cleared
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `timeout:N` | number | 300 | Timeout in seconds |
+| `loop:true` | boolean | false | Enable Stop hook for autonomous loops |
+| `max:N` | number | 10 | Max iterations when loop enabled |
+| `checkpoint:true` | boolean | false | Git stash before verification |
+| `rollback:true` | boolean | false | Git restore on failure |
+
+### Example Patterns
+
+```bash
+# CI-style validation
+>>implement :: verify:"npm test && npm run lint"
+
+# Long-running with extended timeout
+>>prepare-release :: verify:"npm run ci" timeout:600 loop:true
+
+# Safe experimentation
+>>refactor-auth :: verify:"npm test" checkpoint:true rollback:true
+```
+
+**Related**: Invoke `/verify` skill for detailed usage patterns.
 
 ---
 

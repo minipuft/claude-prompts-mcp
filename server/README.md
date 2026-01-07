@@ -8,24 +8,28 @@ MCP server for prompt management, thinking frameworks, and quality gates. Hot-re
 
 ## Quick Start
 
-```bash
-npx -y claude-prompts
-```
+| Method | Command | Best For |
+|--------|---------|----------|
+| **Desktop Extension** | Drag `.mcpb` into Settings | End users |
+| **NPX** | `npx -y claude-prompts` | Auto-updates |
+| **Local Dev** | `npm run start:stdio` | Contributors |
 
-Add to Claude Desktop (`~/.config/claude/claude_desktop_config.json`):
+**Desktop Extension** — [Download `.mcpb`](https://github.com/minipuft/claude-prompts-mcp/releases), drag into Claude Desktop Settings. Done.
 
+**NPX** — Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "claude-prompts": {
-      "command": "npx",
-      "args": ["-y", "claude-prompts@latest"]
-    }
+    "claude-prompts": { "command": "npx", "args": ["-y", "claude-prompts@latest"] }
   }
 }
 ```
 
-Restart Claude Desktop. Test with: `resource_manager(resource_type: "prompt", action: "list")`
+Restart Claude Desktop. Verify:
+```
+resource_manager(resource_type: "prompt", action: "list")
+```
+→ Returns available prompts. Now try `>>analyze` or `>>research_chain`.
 
 ---
 

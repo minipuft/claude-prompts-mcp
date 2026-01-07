@@ -8,7 +8,24 @@
       "include-component-in-tag": true,
       "include-v-in-tag": true,
       "tag-separator": "-",
-      "draft": true
+      "draft": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "../manifest.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "../gemini-extension.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "../.claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }

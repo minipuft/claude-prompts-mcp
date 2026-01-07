@@ -11,6 +11,7 @@ import { EventEmitter } from 'events';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { createFrameworkManager } from './framework-manager.js';
+import { atomicWriteFile } from '../utils/atomic-file-write.js';
 /**
  * Stateful Framework State Manager
  *
@@ -140,8 +141,9 @@ export class FrameworkStateManager extends EventEmitter {
         };
         const runtimeDir = path.dirname(this.runtimeStatePath);
         await fs.mkdir(runtimeDir, { recursive: true });
-        await fs.writeFile(this.runtimeStatePath, JSON.stringify(persistedState, null, 2));
-        this.logger.debug(`💾 Framework state saved to ${this.runtimeStatePath}`);
+        // Use atomic write to prevent data corruption from concurrent processes
+        await atomicWriteFile(this.runtimeStatePath, JSON.stringify(persistedState, null, 2));
+        this.logger.debug(`Framework state saved to ${this.runtimeStatePath}`);
     }
     /**
      * Validate persisted state structure

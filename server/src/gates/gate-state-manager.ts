@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Logger } from '../logging/index.js';
+import { atomicWriteFile } from '../utils/atomic-file-write.js';
 
 /**
  * Gate system state interface
@@ -177,7 +178,8 @@ export class GateSystemManager extends EventEmitter {
         savedAt: new Date().toISOString(),
       };
 
-      await fs.writeFile(this.stateFilePath, JSON.stringify(stateToSave, null, 2));
+      // Use atomic write to prevent data corruption from concurrent processes
+      await atomicWriteFile(this.stateFilePath, JSON.stringify(stateToSave, null, 2));
       this.logger.debug('Gate system state saved to file');
     } catch (error) {
       this.logger.error('Failed to save gate system state:', error);

@@ -59,3 +59,6 @@ jobs:
 
       - name: Jest unit tests
         run: npm run test:ci
+
+      - name: Plugin & hooks validation (E2E)
+        run: npm run test:e2e

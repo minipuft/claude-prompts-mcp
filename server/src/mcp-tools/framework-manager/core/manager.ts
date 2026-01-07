@@ -222,8 +222,7 @@ export class ConsolidatedFrameworkManager {
 
     // Check required fields one at a time for focused feedback
     const hasPhases = Array.isArray(data.phases) && data.phases.length > 0;
-    const hasGates =
-      Array.isArray(data.methodology_gates) && data.methodology_gates.length > 0;
+    const hasGates = Array.isArray(data.methodology_gates) && data.methodology_gates.length > 0;
 
     if (!data.system_prompt_guidance?.trim()) {
       errors.push('system_prompt_guidance is required - defines core LLM guidance');
@@ -325,7 +324,10 @@ export class ConsolidatedFrameworkManager {
     message += `**Files:**\n${paths.map((p) => `  • ${p}`).join('\n')}\n\n`;
 
     if (validation.warnings.length > 0) {
-      message += `**Recommendations:**\n${validation.warnings.slice(0, 3).map((w) => `  • ${w}`).join('\n')}`;
+      message += `**Recommendations:**\n${validation.warnings
+        .slice(0, 3)
+        .map((w) => `  • ${w}`)
+        .join('\n')}`;
     }
 
     return message;
@@ -689,7 +691,10 @@ export class ConsolidatedFrameworkManager {
           const validation = this.validateMethodology(creationData);
           validationInfo = `\n\n**Quality:** ${validation.score}% (${validation.level})`;
           if (validation.warnings.length > 0) {
-            validationInfo += `\n**Recommendations:**\n${validation.warnings.slice(0, 3).map((w) => `  • ${w}`).join('\n')}`;
+            validationInfo += `\n**Recommendations:**\n${validation.warnings
+              .slice(0, 3)
+              .map((w) => `  • ${w}`)
+              .join('\n')}`;
           }
         }
       }

@@ -13,6 +13,7 @@ import {
   type SymbolicExecutionPlan,
   type SymbolicOperator,
 } from './types/operator-types.js';
+import { SHELL_VERIFY_DEFAULT_TIMEOUT } from '../../gates/constants.js';
 import { Logger } from '../../logging/index.js';
 import { ValidationError } from '../../utils/index.js';
 
@@ -112,6 +113,31 @@ export class SymbolicCommandParser {
 
         // Named gate with colon syntax: :: id:"criteria"
         if (namedColonId && namedColonText) {
+          // Shell verification gate: :: verify:"npm test" [loop:true] [max:N] [timeout:N] [checkpoint:true] [rollback:true]
+          if (namedColonId === 'verify') {
+            // Parse additional verify options from the remaining command
+            const verifyOptions = this.parseVerifyOptions(command, match.index ?? 0);
+
+            operators.push({
+              type: 'gate',
+              gateId: `shell-verify-${Date.now()}`,
+              criteria: `Shell verification: ${namedColonText}`,
+              parsedCriteria: [`Shell verification: ${namedColonText}`],
+              scope: 'execution',
+              retryOnFailure: true,
+              maxRetries: 5,
+              shellVerify: {
+                command: namedColonText,
+                timeout: verifyOptions.timeout ?? SHELL_VERIFY_DEFAULT_TIMEOUT,
+                loop: verifyOptions.loop,
+                maxIterations: verifyOptions.maxIterations,
+                checkpoint: verifyOptions.checkpoint,
+                rollback: verifyOptions.rollback,
+              },
+            });
+            continue;
+          }
+
           const parsedCriteria = this.parseCriteria(namedColonText);
           operators.push({
             type: 'gate',
@@ -355,6 +381,85 @@ export class SymbolicCommandParser {
       .split(/,|and|\||;/i)
       .map((part) => part.trim())
       .filter((part) => part.length > 0);
+  }
+
+  /**
+   * Parse verify-specific options from command string.
+   *
+   * Supports:
+   * - loop:true/false - Enable Stop hook integration for autonomous loops
+   * - max:N - Maximum iterations (default 10)
+   * - timeout:N - Timeout in seconds (converted to ms internally)
+   * - checkpoint:true/false - Git stash before execution
+   * - rollback:true/false - Git restore on failure
+   *
+   * @example :: verify:"npm test" loop:true max:15 checkpoint:true
+   */
+  private parseVerifyOptions(
+    command: string,
+    matchStart: number
+  ): {
+    loop?: boolean;
+    maxIterations?: number;
+    timeout?: number;
+    checkpoint?: boolean;
+    rollback?: boolean;
+  } {
+    // Get the portion of command after the verify:"..." match
+    const afterVerify = command.slice(matchStart);
+
+    // Skip past the verify:"..." part to find trailing options
+    const verifyMatch = afterVerify.match(/verify:["'][^"']+["']/i);
+    if (!verifyMatch) {
+      return {};
+    }
+
+    const optionsStart = verifyMatch.index! + verifyMatch[0].length;
+    const optionsStr = afterVerify.slice(optionsStart);
+
+    const options: {
+      loop?: boolean;
+      maxIterations?: number;
+      timeout?: number;
+      checkpoint?: boolean;
+      rollback?: boolean;
+    } = {};
+
+    // Parse loop:true/false
+    const loopMatch = optionsStr.match(/\bloop:(true|false)\b/i);
+    if (loopMatch?.[1]) {
+      options.loop = loopMatch[1].toLowerCase() === 'true';
+    }
+
+    // Parse max:N (maxIterations)
+    const maxMatch = optionsStr.match(/\bmax:(\d+)\b/i);
+    if (maxMatch?.[1]) {
+      options.maxIterations = parseInt(maxMatch[1], 10);
+    }
+
+    // Parse timeout:N (in seconds, convert to ms)
+    const timeoutMatch = optionsStr.match(/\btimeout:(\d+)\b/i);
+    if (timeoutMatch?.[1]) {
+      options.timeout = parseInt(timeoutMatch[1], 10) * 1000; // seconds → ms
+    }
+
+    // Parse checkpoint:true/false
+    const checkpointMatch = optionsStr.match(/\bcheckpoint:(true|false)\b/i);
+    if (checkpointMatch?.[1]) {
+      options.checkpoint = checkpointMatch[1].toLowerCase() === 'true';
+    }
+
+    // Parse rollback:true/false
+    const rollbackMatch = optionsStr.match(/\brollback:(true|false)\b/i);
+    if (rollbackMatch?.[1]) {
+      options.rollback = rollbackMatch[1].toLowerCase() === 'true';
+    }
+
+    if (Object.keys(options).length > 0) {
+      this.logger.debug('[SymbolicParser] Parsed verify options:', options);
+    }
+
+    return options;
   }
 
   private calculateComplexity(operators: SymbolicOperator[]): 'simple' | 'moderate' | 'complex' {

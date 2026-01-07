@@ -471,18 +471,13 @@ export class ChainSessionManager implements ChainSessionService {
     // Update step state tracking
     this.setStepState(sessionId, stepNumber, stepState, isPlaceholder);
 
-    // Only increment currentStep if this is NOT a placeholder (real completion)
-    if (!isPlaceholder) {
-      session.state.currentStep = stepNumber + 1; // Move to next step
-      session.executionOrder.push(stepNumber);
-      this.logger?.debug(
-        `[StepLifecycle] Step ${stepNumber} completed with real response, advancing to step ${session.state.currentStep}`
-      );
-    } else {
-      this.logger?.debug(
-        `[StepLifecycle] Step ${stepNumber} rendered with template placeholder, NOT advancing currentStep`
-      );
-    }
+    // NOTE: Step advancement is now handled by advanceStep() which should be called
+    // ONLY after gate validation passes (or if no gates are configured).
+    // This prevents the bug where retry would skip to the next step.
+    this.logger?.debug(
+      `[StepLifecycle] Step ${stepNumber} ${isPlaceholder ? 'rendered as placeholder' : 'response captured'}, ` +
+        `currentStep remains ${session.state.currentStep} (advancement deferred to advanceStep())`
+    );
 
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
@@ -573,26 +568,63 @@ export class ChainSessionManager implements ChainSessionService {
     const existingMetadata = this.getStepState(sessionId, stepNumber);
     const preservePlaceholder = Boolean(options?.preservePlaceholder);
     const isPlaceholder = preservePlaceholder ? Boolean(existingMetadata?.isPlaceholder) : false;
-    const shouldAdvanceStep = !preservePlaceholder && session.state.currentStep <= stepNumber;
 
     // Transition to COMPLETED state while respecting placeholder metadata when requested
     this.setStepState(sessionId, stepNumber, StepState.COMPLETED, isPlaceholder);
 
-    // Advance the currentStep counter if not already advanced
-    if (shouldAdvanceStep) {
-      session.state.currentStep = stepNumber + 1;
+    // NOTE: Step advancement is now handled by advanceStep() which should be called
+    // ONLY after gate validation passes. This prevents the retry-skip bug.
+    this.logger?.debug(
+      `[StepLifecycle] Step ${stepNumber} marked COMPLETED${isPlaceholder ? ' (placeholder)' : ''}, ` +
+        `currentStep remains ${session.state.currentStep} (call advanceStep() to advance)`
+    );
+
+    session.state.lastUpdated = Date.now();
+    session.lastActivity = Date.now();
+
+    await this.saveSessions();
+    return true;
+  }
+
+  /**
+   * Advance to the next step after gate validation passes.
+   * This should be called ONLY when:
+   * - Gate review passes (PASS verdict)
+   * - No gates are configured for this step
+   * - Enforcement mode is advisory/informational (non-blocking)
+   *
+   * @param sessionId - The session identifier
+   * @param stepNumber - The step that was completed (will advance to stepNumber + 1)
+   * @returns true if advanced successfully, false if session not found
+   */
+  async advanceStep(sessionId: string, stepNumber: number): Promise<boolean> {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) {
+      this.logger?.warn(
+        `[StepLifecycle] Cannot advance step for non-existent session: ${sessionId}`
+      );
+      return false;
+    }
+
+    // Only advance if we're at or before this step (prevent double-advancement)
+    if (session.state.currentStep > stepNumber) {
+      this.logger?.debug(
+        `[StepLifecycle] Step ${stepNumber} already passed, currentStep is ${session.state.currentStep}`
+      );
+      return true;
+    }
+
+    session.state.currentStep = stepNumber + 1;
+    if (!session.executionOrder.includes(stepNumber)) {
       session.executionOrder.push(stepNumber);
-      this.logger?.debug(
-        `[StepLifecycle] Step ${stepNumber} marked COMPLETED, advancing to step ${session.state.currentStep}`
-      );
-    } else if (preservePlaceholder) {
-      this.logger?.debug(
-        `[StepLifecycle] Step ${stepNumber} marked COMPLETED as placeholder, NOT advancing currentStep`
-      );
     }
 
     session.state.lastUpdated = Date.now();
     session.lastActivity = Date.now();
+
+    this.logger?.debug(
+      `[StepLifecycle] Advanced from step ${stepNumber} to step ${session.state.currentStep}`
+    );
 
     await this.saveSessions();
     return true;

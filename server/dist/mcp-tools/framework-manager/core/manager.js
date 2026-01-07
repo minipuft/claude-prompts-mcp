@@ -254,7 +254,10 @@ export class ConsolidatedFrameworkManager {
         let message = `✅ Methodology '${id}' created (${validation.score}% - ${validation.level})\n\n`;
         message += `**Files:**\n${paths.map((p) => `  • ${p}`).join('\n')}\n\n`;
         if (validation.warnings.length > 0) {
-            message += `**Recommendations:**\n${validation.warnings.slice(0, 3).map((w) => `  • ${w}`).join('\n')}`;
+            message += `**Recommendations:**\n${validation.warnings
+                .slice(0, 3)
+                .map((w) => `  • ${w}`)
+                .join('\n')}`;
         }
         return message;
     }
@@ -519,7 +522,10 @@ export class ConsolidatedFrameworkManager {
                     const validation = this.validateMethodology(creationData);
                     validationInfo = `\n\n**Quality:** ${validation.score}% (${validation.level})`;
                     if (validation.warnings.length > 0) {
-                        validationInfo += `\n**Recommendations:**\n${validation.warnings.slice(0, 3).map((w) => `  • ${w}`).join('\n')}`;
+                        validationInfo += `\n**Recommendations:**\n${validation.warnings
+                            .slice(0, 3)
+                            .map((w) => `  • ${w}`)
+                            .join('\n')}`;
                     }
                 }
             }

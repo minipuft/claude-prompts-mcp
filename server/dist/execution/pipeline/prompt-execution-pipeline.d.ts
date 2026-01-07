@@ -22,6 +22,7 @@ export declare class PromptExecutionPipeline {
     private readonly sessionStage;
     private readonly frameworkInjectionControlStage;
     private readonly responseCaptureStage;
+    private readonly shellVerificationStage;
     private readonly executionStage;
     private readonly gateReviewStage;
     private readonly callToActionStage;
@@ -32,7 +33,8 @@ export declare class PromptExecutionPipeline {
     private readonly metricsProvider;
     constructor(requestStage: PipelineStage, dependencyStage: PipelineStage, lifecycleStage: PipelineStage, parsingStage: PipelineStage, inlineGateStage: PipelineStage, operatorValidationStage: PipelineStage, planningStage: PipelineStage, scriptExecutionStage: PipelineStage | null, // 04b - Script tool execution
     scriptAutoExecuteStage: PipelineStage | null, // 04c - Script auto-execute
-    frameworkStage: PipelineStage, judgeSelectionStage: PipelineStage, promptGuidanceStage: PipelineStage, gateStage: PipelineStage, sessionStage: PipelineStage, frameworkInjectionControlStage: PipelineStage, responseCaptureStage: PipelineStage, executionStage: PipelineStage, gateReviewStage: PipelineStage, callToActionStage: PipelineStage, formattingStage: PipelineStage, postFormattingStage: PipelineStage, logger: Logger, metricsProvider?: () => MetricsCollector | undefined);
+    frameworkStage: PipelineStage, judgeSelectionStage: PipelineStage, promptGuidanceStage: PipelineStage, gateStage: PipelineStage, sessionStage: PipelineStage, frameworkInjectionControlStage: PipelineStage, responseCaptureStage: PipelineStage, shellVerificationStage: PipelineStage | null, // 08b - Shell verification (Ralph Wiggum)
+    executionStage: PipelineStage, gateReviewStage: PipelineStage, callToActionStage: PipelineStage, formattingStage: PipelineStage, postFormattingStage: PipelineStage, logger: Logger, metricsProvider?: () => MetricsCollector | undefined);
     /**
      * Execute the configured pipeline for the given MCP request.
      */

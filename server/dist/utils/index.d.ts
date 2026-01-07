@@ -8,6 +8,7 @@ export * from './chainUtils.js';
 export * from './constants.js';
 export * from './yaml/index.js';
 export * from './resource-loader-types.js';
+export * from './atomic-file-write.js';
 export * from '../frameworks/index.js';
 export { GateLoader, createGateLoader, GateValidator, createGateValidator, LightweightGateSystem, createLightweightGateSystem, } from '../gates/index.js';
 export type { LightweightGateDefinition, GatePassCriteria, ValidationCheck, ValidationContext, GateActivationResult, } from '../gates/index.js';

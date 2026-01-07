@@ -221,10 +221,8 @@ export class MethodologyFileService {
     const rawPhases = phasesSource['phases'];
     const rawMethodologyGates =
       methodology['methodologyGates'] ?? phasesSource['methodology_gates'];
-    const rawProcessingSteps =
-      phasesSource['processingSteps'] ?? phasesSource['processing_steps'];
-    const rawExecutionSteps =
-      phasesSource['executionSteps'] ?? phasesSource['execution_steps'];
+    const rawProcessingSteps = phasesSource['processingSteps'] ?? phasesSource['processing_steps'];
+    const rawExecutionSteps = phasesSource['executionSteps'] ?? phasesSource['execution_steps'];
     const rawQualityIndicators =
       phasesSource['qualityIndicators'] ?? phasesSource['quality_indicators'];
     const rawTemplateEnhancements =

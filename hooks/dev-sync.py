@@ -31,13 +31,19 @@ def find_source_dir() -> Path | None:
 
 def find_cache_dir() -> Path | None:
     """Find the Claude Code plugin cache directory."""
-    cache_base = Path.home() / ".claude/plugins/cache/minipuft-marketplace/claude-prompts-mcp"
+    # Check both possible cache locations
+    cache_candidates = [
+        Path.home() / ".claude/plugins/cache/minipuft/claude-prompts",
+        Path.home() / ".claude/plugins/cache/minipuft-marketplace/claude-prompts-mcp",
+    ]
 
-    if not cache_base.exists():
-        return None
+    for cache_base in cache_candidates:
+        if cache_base.exists():
+            versions = list(cache_base.iterdir())
+            if versions:
+                return versions[0]
 
-    versions = list(cache_base.iterdir())
-    return versions[0] if versions else None
+    return None
 
 
 def sync_directory(src: Path, dst: Path) -> bool:
@@ -67,13 +73,14 @@ def main():
         if sync_directory(src, dst):
             synced.append(dir_name)
 
-    # Sync server/cache
-    server_cache_src = source_dir / "server/cache"
-    server_cache_dst = cache_dir / "server/cache"
-    if server_cache_src.exists():
-        server_cache_dst.parent.mkdir(parents=True, exist_ok=True)
-        if sync_directory(server_cache_src, server_cache_dst):
-            synced.append("server/cache")
+    # Sync server subdirectories
+    for server_subdir in ["cache", "dist"]:
+        src = source_dir / f"server/{server_subdir}"
+        dst = cache_dir / f"server/{server_subdir}"
+        if src.exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if sync_directory(src, dst):
+                synced.append(f"server/{server_subdir}")
 
     # Output to transcript (exit 0 + stdout)
     if synced:

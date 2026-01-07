@@ -89,6 +89,17 @@ export declare class GateManager extends BaseResourceManager<IGateGuide, GateGui
      */
     getGateRegistry(): GateRegistry;
     /**
+     * Get gates that auto-activate for a given category.
+     *
+     * Used by ExecutionPlanner to replace hardcoded autoAssignGates().
+     * This method queries all gates and filters by their activation.prompt_categories
+     * rules, excluding framework gates (which are handled separately via framework_gates flag).
+     *
+     * @param category - The prompt category (e.g., 'development', 'research', 'analysis')
+     * @returns Array of gate IDs that should auto-activate for this category
+     */
+    getCategoryGates(category: string): string[];
+    /**
      * Get combined gate system status
      *
      * Overrides base class to include domain-specific fields

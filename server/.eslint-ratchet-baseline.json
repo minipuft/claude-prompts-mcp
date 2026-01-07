@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-01-05T21:54:52.350Z",
+  "generatedAt": "2026-01-06T23:26:17.631Z",
   "eslintTarget": "src",
   "totals": {
-    "errors": 4488,
-    "warnings": 1115
+    "errors": 4489,
+    "warnings": 1122
   },
   "byRule": {
     "@typescript-eslint/no-unused-vars": {
@@ -20,7 +20,7 @@
       "warnings": 0
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2393,
+      "errors": 2406,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
@@ -32,15 +32,11 @@
       "warnings": 317
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 302,
-      "warnings": 0
-    },
-    "prettier/prettier": {
-      "errors": 712,
+      "errors": 303,
       "warnings": 0
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 451,
+      "errors": 461,
       "warnings": 0
     },
     "@typescript-eslint/no-floating-promises": {
@@ -49,19 +45,19 @@
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 97
+      "warnings": 100
     },
     "@typescript-eslint/explicit-function-return-type": {
       "errors": 37,
       "warnings": 0
     },
     "import/order": {
-      "errors": 10,
+      "errors": 7,
       "warnings": 0
     },
     "no-console": {
       "errors": 0,
-      "warnings": 69
+      "warnings": 73
     },
     "@typescript-eslint/explicit-module-boundary-types": {
       "errors": 54,
@@ -101,6 +97,10 @@
     },
     "no-prototype-builtins": {
       "errors": 2,
+      "warnings": 0
+    },
+    "prettier/prettier": {
+      "errors": 692,
       "warnings": 0
     }
   }

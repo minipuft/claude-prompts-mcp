@@ -28,7 +28,15 @@ from session_state import (
 def parse_hook_input() -> dict:
     """Parse JSON input from Claude Code hook system."""
     try:
-        return json.load(sys.stdin)
+        data = json.load(sys.stdin)
+        # Debug: log what we receive
+        debug_log = Path(__file__).parent / "debug_hook.log"
+        with open(debug_log, "a") as f:
+            f.write(f"\n=== PostToolUse Hook ===\n")
+            f.write(f"tool_name: {data.get('tool_name', 'MISSING')}\n")
+            f.write(f"session_id: {data.get('session_id', 'MISSING')}\n")
+            f.write(f"keys: {list(data.keys())}\n")
+        return data
     except json.JSONDecodeError:
         return {}
 
@@ -44,6 +52,7 @@ def main():
         sys.exit(0)
 
     tool_response = hook_input.get("tool_response", {})
+    tool_input = hook_input.get("tool_input", {})
 
     # Parse response for chain/gate state
     if isinstance(tool_response, dict):
@@ -61,6 +70,12 @@ def main():
 
     if not state:
         sys.exit(0)
+
+    # Extract chain_id from tool_input (higher priority than regex parsing)
+    if isinstance(tool_input, dict):
+        input_chain_id = tool_input.get("chain_id", "")
+        if input_chain_id:
+            state["chain_id"] = input_chain_id
 
     # Save state for this session
     save_session_state(session_id, state)

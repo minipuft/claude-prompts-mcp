@@ -76,13 +76,23 @@ flowchart TB
 
 ### Claude Code (Recommended)
 
+**Step 1: Add the plugin marketplace** (first time only)
 ```bash
-# First time only: add the marketplace
-/plugin marketplace add minipuft
+/plugin marketplace add minipuft/minipuft-plugins
+```
 
-# Install the plugin
+**Step 2: Install the plugin**
+```bash
 /plugin install claude-prompts@minipuft
 ```
+
+**Step 3: Try it**
+```bash
+>>tech_evaluation_chain library:'zod' context:'API validation'
+```
+
+<details>
+<summary><strong>Why hooks matter</strong></summary>
 
 The plugin adds hooks that fix common issues:
 
@@ -94,17 +104,19 @@ The plugin adds hooks that fix common issues:
 
 Raw MCP works, but models sometimes miss the syntax. The hooks catch that. → [hooks/README.md](hooks/README.md)
 
-**User Data**: Your custom prompts are stored in `~/.local/share/claude-prompts/` and persist across plugin updates.
+</details>
+
+**User Data**: Custom prompts stored in `~/.local/share/claude-prompts/` persist across updates.
 
 ### Gemini CLI
 
 ```bash
-# Install from GitHub
-gemini extensions install minipuft/claude-prompts-mcp
+# Install directly from GitHub
+gemini extensions install https://github.com/minipuft/claude-prompts-mcp
 
-# Or link locally for development
-cd claude-prompts-mcp
-gemini extensions link .
+# Or clone and link for development
+git clone https://github.com/minipuft/claude-prompts-mcp
+gemini extensions link ./claude-prompts-mcp
 ```
 
 The extension provides:
@@ -115,12 +127,46 @@ The extension provides:
 
 Works with the same prompts, gates, and methodologies as Claude Code.
 
+### Claude Desktop
+
+| Method | Install Time | Updates | Custom Prompts |
+|--------|-------------|---------|----------------|
+| **Desktop Extension** | 10 seconds | Manual | Built-in config |
+| **NPX** | 30 seconds | Automatic | Via env vars |
+
+**Desktop Extension** (one-click):
+```
+1. Download claude-prompts.mcpb → github.com/minipuft/claude-prompts-mcp/releases
+2. Drag into Claude Desktop Settings
+3. Done. Optionally set a custom prompts folder when prompted.
+```
+
+**NPX** (auto-updates):
+```json
+// ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
+// %APPDATA%\Claude\claude_desktop_config.json (Windows)
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts@latest"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. Test it:
+```
+>>research_chain topic:'remote team policies' purpose:'handbook update'
+```
+→ Returns a 4-step research workflow with methodology injection and quality gates.
+
 ### Other MCP Clients
 
 <details>
-<summary><strong>NPM (Claude Desktop, generic clients)</strong></summary>
+<summary><strong>Generic MCP clients (.cursor/mcp.json, etc.)</strong></summary>
 
-Add to your MCP config (`claude_desktop_config.json`, `.cursor/mcp.json`, etc.):
+Add to your MCP config:
 
 ```json
 {
@@ -133,7 +179,7 @@ Add to your MCP config (`claude_desktop_config.json`, `.cursor/mcp.json`, etc.):
 }
 ```
 
-Restart your client, then test: `resource_manager(resource_type:"prompt", action:"list")`
+Test: `resource_manager(resource_type:"prompt", action:"list")`
 
 </details>
 

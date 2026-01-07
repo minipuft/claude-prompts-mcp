@@ -38,3 +38,6 @@ export { GateManager, createGateManager, type GateManagerConfig } from './gate-m
 
 // Export hot reload coordinator (Phase 4)
 export * from './hot-reload/index.js';
+
+// Export shell verification types (Ralph Wiggum loops)
+export * from './shell/index.js';

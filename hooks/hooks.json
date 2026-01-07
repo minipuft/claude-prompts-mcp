@@ -1,23 +1,44 @@
 {
   "hooks": {
     "SessionStart": [{
-      "hooks": [{
-        "type": "command",
-        "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/setup.sh"
-      }]
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dev-sync.py"
+        },
+        {
+          "type": "command",
+          "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/setup.sh"
+        }
+      ]
     }],
     "UserPromptSubmit": [{
       "matcher": "*",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt-suggest.py"
-      }]
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt-suggest.py"
+        }
+      ]
     }],
     "PostToolUse": [{
       "matcher": "*prompt_engine*",
       "hooks": [{
         "type": "command",
         "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-prompt-engine.py"
+      }]
+    }],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/ralph-stop.py"
+      }]
+    }],
+    "PreCompact": [{
+      "matcher": "*",
+      "hooks": [{
+        "type": "command",
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre-compact.py"
       }]
     }]
   }

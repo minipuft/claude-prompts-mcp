@@ -133,7 +133,8 @@ describe('ExecutionPlanner', () => {
     expect(plan.requiresFramework).toBe(true);
   });
 
-  test('auto-assigns documentation gates and keeps methodology gates unless excluded', async () => {
+  test('returns empty auto-assigned gates when GateManager is not set', async () => {
+    // Without GateManager, autoAssignGates returns empty (gates come from explicit config only)
     const analyzer = createAnalyzer({ executionType: 'single' });
     const planner = new ExecutionPlanner(analyzer, logger);
 
@@ -143,19 +144,18 @@ describe('ExecutionPlanner', () => {
     });
 
     expect(plan.strategy).toBe('single');
-    expect(new Set(plan.gates)).toEqual(
-      new Set(['content-structure', 'educational-clarity', 'framework-compliance'])
-    );
+    // Without GateManager, no auto-assigned gates (gates come from YAML activation rules via GateManager)
+    expect(plan.gates).toEqual([]);
   });
 
-  test('respects gate validation overrides and custom quality gates', async () => {
+  test('includes gates from gateOverrides.gates parameter', async () => {
     const analyzer = createAnalyzer();
     const planner = new ExecutionPlanner(analyzer, logger);
 
     const plan = await planner.createPlan({
       convertedPrompt: basePrompt,
       gateOverrides: {
-        qualityGates: ['technical-accuracy'],
+        gates: ['technical-accuracy'],
       },
     });
 

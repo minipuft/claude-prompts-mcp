@@ -332,4 +332,92 @@ describe('InlineGateExtractionStage', () => {
     expect(context.parsedCommand?.inlineGateIds).toContain('temp_gate');
     expect(context.state.gates.temporaryGateIds?.length).toBeGreaterThan(0);
   });
+
+  test('sets up shell verification state for verify gates (Ralph Wiggum loops)', async () => {
+    const { registry, createTemporaryGate } = createRegistry();
+    const { resolver } = createResolver();
+    const stage = new InlineGateExtractionStage(registry, resolver, createLogger());
+
+    const context = new ExecutionContext({ command: '>>demo :: verify:"npm test"' });
+    context.parsedCommand = {
+      promptId: 'demo',
+      rawArgs: '',
+      format: 'symbolic',
+      confidence: 0.9,
+      metadata: {
+        originalCommand: '>>demo :: verify:"npm test"',
+        parseStrategy: 'symbolic',
+        detectedFormat: 'symbolic',
+        warnings: [],
+      },
+      namedInlineGates: [
+        {
+          gateId: 'shell-verify-12345',
+          criteria: ['Shell verification: npm test'],
+          shellVerify: {
+            command: 'npm test',
+            timeout: 60000,
+          },
+        },
+      ],
+    };
+
+    await stage.execute(context);
+
+    // Shell verification gates should NOT create regular inline gates
+    expect(createTemporaryGate).not.toHaveBeenCalled();
+    expect(context.parsedCommand?.inlineGateIds ?? []).toHaveLength(0);
+
+    // Instead, they should set up pendingShellVerification state
+    const pending = context.state.gates.pendingShellVerification;
+    expect(pending).toBeDefined();
+    expect(pending?.gateId).toBe('shell-verify-12345');
+    expect(pending?.shellVerify.command).toBe('npm test');
+    expect(pending?.shellVerify.timeout).toBe(60000);
+    expect(pending?.attemptCount).toBe(0);
+    expect(pending?.maxAttempts).toBe(5);
+  });
+
+  test('skips shell verification setup when shellVerify is missing', async () => {
+    const { registry, createTemporaryGate } = createRegistry();
+    const { resolver } = createResolver();
+    const stage = new InlineGateExtractionStage(registry, resolver, createLogger());
+
+    const context = new ExecutionContext({ command: '>>demo :: verify:"test"' });
+    context.parsedCommand = {
+      promptId: 'demo',
+      rawArgs: '',
+      format: 'symbolic',
+      confidence: 0.9,
+      metadata: {
+        originalCommand: '>>demo :: verify:"test"',
+        parseStrategy: 'symbolic',
+        detectedFormat: 'symbolic',
+        warnings: [],
+      },
+      // Note: namedInlineGates has gateId but NO shellVerify - should create regular gate
+      namedInlineGates: [
+        {
+          gateId: 'verify',
+          criteria: ['test'],
+          // shellVerify is NOT present
+        },
+      ],
+    };
+
+    await stage.execute(context);
+
+    // Should create a regular inline gate since shellVerify is missing
+    expect(createTemporaryGate).toHaveBeenCalledTimes(1);
+    expect(createTemporaryGate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'verify',
+        name: 'verify',
+      }),
+      expect.any(String)
+    );
+
+    // Should NOT set up shell verification
+    expect(context.state.gates.pendingShellVerification).toBeUndefined();
+  });
 });

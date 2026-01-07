@@ -9,10 +9,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
-- **Claude Code plugin with hooks**: Install via `/plugin install claude-prompts@minipuft`. Includes two hooks that guide model behavior:
+- **Claude Desktop Extension (.mcpb)**: One-click installation for Claude Desktop via `.mcpb` bundle format.
+  - Drag-and-drop install into Claude Desktop Settings
+  - Optional **Custom Prompts Directory** user config - point to your own prompt templates
+  - Production-optimized bundle (~5MB) with all dependencies included
+  - Build locally with `npm run pack:mcpb` (from `server/`)
+  - Manifest follows [Desktop Extensions spec v0.3](https://www.anthropic.com/engineering/desktop-extensions)
+- **Claude Code plugin with hooks**: Install via `/plugin install claude-prompts@minipuft`. Includes hooks that guide model behavior:
   - `prompt-suggest.py` (UserPromptSubmit) — Detects `>>prompt` syntax and suggests correct MCP calls
   - `post-prompt-engine.py` (PostToolUse) — Tracks chain state, reminds about gate reviews
+  - `pre-compact.py` (PreCompact) — Cleans up chain session state before context compaction
+  - `dev-sync.py` (SessionStart) — Synchronizes development cache on session start
   - Solves: models missing `>>` syntax, forgetting to continue chains, skipping gate reviews
+- **Gemini CLI extension**: Install via `gemini extensions install https://github.com/minipuft/claude-prompts-mcp`. Same MCP server with Gemini-specific context file (`GEMINI.md`).
 - **Unified resources path**: New `MCP_RESOURCES_PATH` environment variable for pointing to a custom resources directory containing `prompts/`, `gates/`, `methodologies/`, `styles/`, and `scripts/`. Simplifies customization without cloning the repo.
 - **Styles path override**: Added `MCP_STYLES_PATH` environment variable for fine-grained style directory control.
 - **Template references**: `{{ref:id}}` includes other prompts; `{{script:id}}` runs scripts inline during render.

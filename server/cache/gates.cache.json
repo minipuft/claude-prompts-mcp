@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-01-05T16:02:04.416Z",
+  "generated_at": "2026-01-07T02:40:29.109Z",
   "gates": {
     "api-documentation": {
       "id": "api-documentation",
@@ -73,7 +73,7 @@
       "id": "framework-compliance",
       "name": "Framework Methodology Compliance",
       "type": "validation",
-      "description": "Ensures responses follow the active framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER). This is a framework-level gate that applies universally acr",
+      "description": "Ensures responses follow the active framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER). Requires BOTH a matching framework context AND a relevant p",
       "triggers": [
         "framework",
         "methodology",

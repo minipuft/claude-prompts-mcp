@@ -239,8 +239,7 @@ export class PathResolver {
             const resourcesMethodologies = join(resourcesBase, 'methodologies');
             const workspace = this.getWorkspace();
             const workspaceMethodologies = join(workspace, 'methodologies');
-            if (existsSync(resourcesMethodologies) &&
-                this.hasMethodologyFiles(resourcesMethodologies)) {
+            if (existsSync(resourcesMethodologies) && this.hasMethodologyFiles(resourcesMethodologies)) {
                 resolved = resourcesMethodologies;
                 source = 'resources/methodologies/';
             }

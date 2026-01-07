@@ -26,4 +26,9 @@ export declare class InlineGateExtractionStage extends BasePipelineStage {
     private applyResolution;
     private getScopeId;
     private trackTemporaryGateScope;
+    /**
+     * Sets up shell verification state for Ralph Wiggum loops.
+     * Called when a `:: verify:"command"` gate is detected.
+     */
+    private setupShellVerification;
 }

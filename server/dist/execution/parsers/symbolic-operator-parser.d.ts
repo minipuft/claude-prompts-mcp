@@ -27,6 +27,19 @@ export declare class SymbolicCommandParser {
     private splitChainSteps;
     private parseParallelOperator;
     private parseCriteria;
+    /**
+     * Parse verify-specific options from command string.
+     *
+     * Supports:
+     * - loop:true/false - Enable Stop hook integration for autonomous loops
+     * - max:N - Maximum iterations (default 10)
+     * - timeout:N - Timeout in seconds (converted to ms internally)
+     * - checkpoint:true/false - Git stash before execution
+     * - rollback:true/false - Git restore on failure
+     *
+     * @example :: verify:"npm test" loop:true max:15 checkpoint:true
+     */
+    private parseVerifyOptions;
     private calculateComplexity;
     generateExecutionPlan(detection: OperatorDetectionResult, basePromptId: string, baseArgs: string): SymbolicExecutionPlan;
     buildParseResult(command: string, operators: OperatorDetectionResult, basePromptId: string, baseArgs: string): SymbolicCommandParseResult;

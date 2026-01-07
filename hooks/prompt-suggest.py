@@ -158,15 +158,13 @@ def main():
         sys.exit(0)
 
     output_lines = []
+    chain_state_inline = ""
 
     # Check for active chain state from previous prompt_engine calls
     if session_id:
         session_state = load_session_state(session_id)
         if session_state:
-            reminder = format_chain_reminder(session_state)
-            if reminder:
-                output_lines.append(reminder)
-                output_lines.append("")
+            chain_state_inline = format_chain_reminder(session_state, mode="inline")
 
     # Check for direct prompt invocation (>>prompt_id)
     invoked_prompt = detect_prompt_invocation(user_message)
@@ -175,21 +173,24 @@ def main():
         prompt_info = get_prompt_by_id(invoked_prompt, cache)
 
         if prompt_info:
-            # Compact header: [MCP] >>id (category) [Chain: N steps]
-            chain_tag = f" [Chain: {prompt_info.get('chain_steps', 0)} steps]" if prompt_info.get("is_chain") else ""
-            output_lines.append(f"[MCP] >>{invoked_prompt} ({prompt_info.get('category', 'unknown')}){chain_tag}")
+            # Line 1: [MCP] >>id (category) | Chain state if active
+            chain_tag = f" [{prompt_info.get('chain_steps', 0)} steps]" if prompt_info.get("is_chain") else ""
+            header = f"[MCP] >>{invoked_prompt} ({prompt_info.get('category', 'unknown')}){chain_tag}"
+            if chain_state_inline:
+                header += f" | {chain_state_inline.split(chr(10))[0]}"  # First line of state
+            output_lines.append(header)
 
-            # Compact args: name*:type, name:type
+            # Line 2: Args OR chain continuation instruction
             args = prompt_info.get("arguments", [])
-            if args:
+            if chain_state_inline and "\n" in chain_state_inline:
+                # Show continuation instruction from chain state
+                output_lines.append(chain_state_inline.split("\n")[1])
+            elif args:
                 if isinstance(args[0], dict):
                     arg_str = ", ".join(format_arg_signature(a) for a in args)
                 else:
                     arg_str = ", ".join(args)
                 output_lines.append(f"  Args: {arg_str}")
-
-            # Direct tool call (no "Execute with:" prefix)
-            output_lines.append(f"  {format_tool_call(invoked_prompt, prompt_info)}")
         else:
             # Prompt not found - suggest similar
             output_lines.append(f"[MCP Prompt Not Found] >>{invoked_prompt}")
@@ -214,6 +215,10 @@ def main():
         gates_str = " | ".join(g[:40] for g in inline_gates[:3])
         output_lines.append(f"[Gates] {gates_str}")
         output_lines.append("  Respond: GATE_REVIEW: PASS|FAIL - <reason>")
+
+    # If no prompt invoked but chain state exists, show it standalone
+    if chain_state_inline and not invoked_prompt and not chain_prompts:
+        output_lines.append(chain_state_inline)
 
     # Check for explicit suggestion request
     elif detect_explicit_request(user_message) and not invoked_prompt:

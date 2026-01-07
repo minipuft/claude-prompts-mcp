@@ -54,9 +54,25 @@ export declare class GenericGateGuide implements IGateGuide {
      */
     getRetryConfig(): GateRetryConfig | undefined;
     /**
-     * Check if this gate should be active for the given context
+     * Check if this gate should be active for the given context.
+     *
+     * For framework gates (gate_type: 'framework'), requires BOTH:
+     * - Matching prompt_categories (if defined)
+     * - Matching framework_context (if defined)
+     *
+     * For regular gates, each rule independently blocks activation if not satisfied.
      */
     isActive(context: GateActivationContext): boolean;
+    /**
+     * Check activation for framework gates using AND logic.
+     * Requires BOTH category and framework to match when both are defined.
+     */
+    private checkFrameworkGateActivation;
+    /**
+     * Check activation for regular (non-framework) gates.
+     * Each rule blocks independently if not satisfied.
+     */
+    private checkRegularGateActivation;
     /**
      * Validate content against this gate's criteria
      *

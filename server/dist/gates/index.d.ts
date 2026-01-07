@@ -16,3 +16,4 @@ export { type IGateService, type GateEnhancementResult, type GateValidationResul
 export * from './types/index.js';
 export { GateManager, createGateManager, type GateManagerConfig } from './gate-manager.js';
 export * from './hot-reload/index.js';
+export * from './shell/index.js';

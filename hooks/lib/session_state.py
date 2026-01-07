@@ -106,8 +106,8 @@ def parse_prompt_engine_response(response: str | dict) -> ChainState | None:
         state["current_step"] = int(step_match.group(1))
         state["total_steps"] = int(step_match.group(2))
 
-    # Detect chain_id from resume token pattern
-    chain_match = re.search(r'chain[-_]([a-zA-Z0-9_-]+)', content)
+    # Detect chain_id from resume token pattern (capture full ID including prefix)
+    chain_match = re.search(r'(chain[-_][a-zA-Z0-9_#-]+)', content)
     if chain_match:
         state["chain_id"] = chain_match.group(1)
 
@@ -129,18 +129,47 @@ def parse_prompt_engine_response(response: str | dict) -> ChainState | None:
     return None
 
 
-def format_chain_reminder(state: ChainState) -> str:
-    """Format a reminder about active chain state. Compact format."""
+def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
+    """Format a reminder about active chain state.
+
+    Args:
+        state: Chain state to format
+        mode: "full" for PreCompact (multi-line), "inline" for prompt-suggest (two-line)
+    """
+    chain_id = state.get("chain_id", "")
+    step = state["current_step"]
+    total = state["total_steps"]
+    gate = state.get("pending_gate")
+
+    if mode == "inline":
+        # Two-line hybrid: Line 1 = status, Line 2 = action
+        parts = []
+        if step > 0:
+            chain_label = chain_id if chain_id else "active"
+            parts.append(f"[{chain_label}] {step}/{total}")
+        if gate:
+            parts.append(f"Gate: {gate}")
+        line1 = " | ".join(parts) if parts else ""
+
+        # Line 2: Clear continuation instruction
+        if gate:
+            line2 = "→ GATE_REVIEW: PASS|FAIL - <reason>"
+        elif step > 0 and step < total:
+            line2 = f"→ prompt_engine(chain_id:\"{chain_id}\") to continue"
+        else:
+            line2 = ""
+
+        return f"{line1}\n{line2}".strip() if line1 else ""
+
+    # Full format for PreCompact (preserves context across compaction)
     lines = []
+    if step > 0:
+        if chain_id:
+            lines.append(f"[Chain] {chain_id} - Step {step}/{total}")
+        else:
+            lines.append(f"[Chain] Step {step}/{total}")
 
-    if state["current_step"] > 0:
-        lines.append(f"[Chain] Step {state['current_step']}/{state['total_steps']}")
-
-    if state["pending_gate"]:
-        criteria = state.get("gate_criteria", [])
-        criteria_str = " | ".join(c[:40] for c in criteria[:3]) if criteria else ""
-        lines.append(f"[Gate] {state['pending_gate']} - Respond: GATE_REVIEW: PASS|FAIL - <reason>")
-        if criteria_str:
-            lines.append(f"  Check: {criteria_str}")
+    if gate:
+        lines.append(f"[Gate] {gate} - Respond: GATE_REVIEW: PASS|FAIL - <reason>")
 
     return "\n".join(lines)

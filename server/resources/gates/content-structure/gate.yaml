@@ -28,4 +28,7 @@ activation:
     - documentation
     - content_processing
     - education
+    - analysis
+    - research
+    - general
   explicit_request: false

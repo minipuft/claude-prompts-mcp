@@ -271,6 +271,53 @@ export class GateManager extends BaseResourceManager<
   }
 
   /**
+   * Get gates that auto-activate for a given category.
+   *
+   * Used by ExecutionPlanner to replace hardcoded autoAssignGates().
+   * This method queries all gates and filters by their activation.prompt_categories
+   * rules, excluding framework gates (which are handled separately via framework_gates flag).
+   *
+   * @param category - The prompt category (e.g., 'development', 'research', 'analysis')
+   * @returns Array of gate IDs that should auto-activate for this category
+   */
+  getCategoryGates(category: string): string[] {
+    this.ensureInitialized();
+
+    // If gate system is disabled, return empty
+    if (!this.isSystemEnabled()) {
+      return [];
+    }
+
+    const normalizedCategory = category.length > 0 ? category.toLowerCase() : 'general';
+
+    const activationContext: GateActivationContext = {
+      promptCategory: normalizedCategory,
+      explicitRequest: false,
+    };
+
+    // Get all enabled guides
+    const allGuides = this.registry!.getAllGuides(true);
+
+    const categoryGates = allGuides
+      .filter((guide) => {
+        // Skip framework gates - they're handled separately via framework_gates flag
+        if (guide.gateType === 'framework') {
+          return false;
+        }
+        // Check if gate activates for this category
+        return guide.isActive(activationContext);
+      })
+      .map((guide) => guide.gateId);
+
+    if (this.config.debug === true) {
+      const gateList = categoryGates.length > 0 ? categoryGates.join(', ') : '(none)';
+      this.logger.debug(`[GateManager] getCategoryGates('${normalizedCategory}'): ${gateList}`);
+    }
+
+    return categoryGates;
+  }
+
+  /**
    * Get combined gate system status
    *
    * Overrides base class to include domain-specific fields

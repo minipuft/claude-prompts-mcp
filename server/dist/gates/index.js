@@ -23,4 +23,6 @@ export * from './types/index.js';
 export { GateManager, createGateManager } from './gate-manager.js';
 // Export hot reload coordinator (Phase 4)
 export * from './hot-reload/index.js';
+// Export shell verification types (Ralph Wiggum loops)
+export * from './shell/index.js';
 //# sourceMappingURL=index.js.map

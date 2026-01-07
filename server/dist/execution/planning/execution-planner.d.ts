@@ -1,5 +1,6 @@
 import type { FrameworkManager } from '../../frameworks/framework-manager.js';
 import type { GateDefinitionProvider } from '../../gates/core/gate-loader.js';
+import type { GateManager } from '../../gates/gate-manager.js';
 import type { Logger } from '../../logging/index.js';
 import type { ContentAnalyzer } from '../../semantic/configurable-semantic-analyzer.js';
 import type { ConvertedPrompt } from '../../types/index.js';
@@ -35,12 +36,18 @@ export declare class ExecutionPlanner {
     private readonly logger;
     private frameworkManager;
     private gateLoader;
+    private gateManager;
     private readonly categoryExtractor;
     /** Cached methodology gate IDs loaded from GateLoader */
     private methodologyGateIdsCache;
     constructor(semanticAnalyzer: SemanticAnalyzerLike | null, logger: Logger);
     setFrameworkManager(manager?: FrameworkManager): void;
     setGateLoader(loader?: GateDefinitionProvider): void;
+    /**
+     * Set the GateManager for category-based gate selection.
+     * Used by autoAssignGates to dynamically select gates based on YAML activation rules.
+     */
+    setGateManager(manager?: GateManager): void;
     /**
      * Get methodology gate IDs dynamically from GateLoader.
      * Caches the result to avoid repeated disk reads.
@@ -81,6 +88,16 @@ export declare class ExecutionPlanner {
      * Explicit gates from user/prompt configuration are always honored.
      */
     private shouldAutoAssignGates;
+    /**
+     * Auto-assign gates based on prompt category using YAML activation rules.
+     *
+     * Uses GateManager.getCategoryGates() to dynamically select gates that have
+     * activation.prompt_categories matching the current prompt's category.
+     * Falls back to empty array if GateManager is not available.
+     *
+     * Note: Framework gates (gate_type: 'framework') are handled separately via
+     * the framework_gates configuration flag, not by this method.
+     */
     private autoAssignGates;
     private collectExplicitGateIds;
     private getPromptLevelIncludes;

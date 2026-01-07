@@ -98,15 +98,15 @@ export declare const ExecutionConfigSchema: z.ZodOptional<z.ZodObject<{
     confirm: boolean;
     strict: boolean;
     autoApproveOnValid: boolean;
-    confidence?: undefined;
     mode?: "manual" | "auto" | "confirm" | undefined;
+    confidence?: undefined;
     trigger?: "never" | "always" | "schema_match" | "explicit" | undefined;
     confirmMessage?: string | undefined;
 }, {
     confirm?: boolean | undefined;
     strict?: boolean | undefined;
-    confidence?: number | undefined;
     mode?: "manual" | "auto" | "confirm" | undefined;
+    confidence?: number | undefined;
     trigger?: "never" | "always" | "schema_match" | "explicit" | "parameter_match" | undefined;
     confirmMessage?: string | undefined;
     autoApproveOnValid?: boolean | undefined;
@@ -196,15 +196,15 @@ export declare const ScriptToolYamlSchema: z.ZodObject<{
         confirm: boolean;
         strict: boolean;
         autoApproveOnValid: boolean;
-        confidence?: undefined;
         mode?: "manual" | "auto" | "confirm" | undefined;
+        confidence?: undefined;
         trigger?: "never" | "always" | "schema_match" | "explicit" | undefined;
         confirmMessage?: string | undefined;
     }, {
         confirm?: boolean | undefined;
         strict?: boolean | undefined;
-        confidence?: number | undefined;
         mode?: "manual" | "auto" | "confirm" | undefined;
+        confidence?: number | undefined;
         trigger?: "never" | "always" | "schema_match" | "explicit" | "parameter_match" | undefined;
         confirmMessage?: string | undefined;
         autoApproveOnValid?: boolean | undefined;
@@ -218,18 +218,18 @@ export declare const ScriptToolYamlSchema: z.ZodObject<{
         confirm: boolean;
         strict: boolean;
         autoApproveOnValid: boolean;
-        confidence?: undefined;
         mode?: "manual" | "auto" | "confirm" | undefined;
+        confidence?: undefined;
         trigger?: "never" | "always" | "schema_match" | "explicit" | undefined;
         confirmMessage?: string | undefined;
     } | undefined;
     timeout?: number | undefined;
     description?: string | undefined;
+    workingDir?: string | undefined;
+    env?: Record<string, string> | undefined;
     runtime?: "python" | "node" | "shell" | "auto" | undefined;
     schemaFile?: string | undefined;
     descriptionFile?: string | undefined;
-    env?: Record<string, string> | undefined;
-    workingDir?: string | undefined;
 }, {
     id: string;
     name: string;
@@ -237,8 +237,8 @@ export declare const ScriptToolYamlSchema: z.ZodObject<{
     execution?: {
         confirm?: boolean | undefined;
         strict?: boolean | undefined;
-        confidence?: number | undefined;
         mode?: "manual" | "auto" | "confirm" | undefined;
+        confidence?: number | undefined;
         trigger?: "never" | "always" | "schema_match" | "explicit" | "parameter_match" | undefined;
         confirmMessage?: string | undefined;
         autoApproveOnValid?: boolean | undefined;
@@ -246,11 +246,11 @@ export declare const ScriptToolYamlSchema: z.ZodObject<{
     timeout?: number | undefined;
     enabled?: boolean | undefined;
     description?: string | undefined;
+    workingDir?: string | undefined;
+    env?: Record<string, string> | undefined;
     runtime?: "python" | "node" | "shell" | "auto" | undefined;
     schemaFile?: string | undefined;
     descriptionFile?: string | undefined;
-    env?: Record<string, string> | undefined;
-    workingDir?: string | undefined;
 }>;
 export type ScriptToolYaml = z.infer<typeof ScriptToolYamlSchema>;
 /**

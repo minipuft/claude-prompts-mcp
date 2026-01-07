@@ -37,6 +37,7 @@ export declare class CommandParsingStage extends BasePipelineStage {
      * Separates gate operators into named and anonymous criteria.
      * Named gates (with gateId) are returned separately for explicit ID registration.
      * Anonymous criteria are merged together for backward-compatible temp gate creation.
+     * Shell verification gates (with shellVerify) are included for Ralph Wiggum loops.
      */
     private collectGateCriteria;
     /** @deprecated Use collectGateCriteria for named gate support */

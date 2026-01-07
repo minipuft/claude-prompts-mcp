@@ -117,6 +117,7 @@ const createPipeline = (
     sessionStage,
     frameworkInjectionControlStage,
     responseCaptureStage,
+    null, // shellVerificationStage (optional - null to skip)
     executionStage,
     gateReviewStage,
     callToActionStage,

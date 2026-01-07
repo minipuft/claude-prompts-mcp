@@ -1,6 +1,7 @@
 // @lifecycle canonical - Persists chain run registry data to disk.
 import { promises as fs } from 'fs';
 import path from 'path';
+import { atomicWriteFile } from '../utils/atomic-file-write.js';
 export class FileBackedChainRunRegistry {
     constructor(filePath, logger, options) {
         this.filePath = filePath;
@@ -39,7 +40,8 @@ export class FileBackedChainRunRegistry {
     }
     async save(store) {
         try {
-            await fs.writeFile(this.filePath, JSON.stringify(store, null, 2), 'utf-8');
+            // Use atomic write to prevent data corruption from concurrent processes
+            await atomicWriteFile(this.filePath, JSON.stringify(store, null, 2));
             this.logger?.debug?.(`[ChainRunRegistry] Persisted chain run state to ${this.filePath}`);
         }
         catch (error) {

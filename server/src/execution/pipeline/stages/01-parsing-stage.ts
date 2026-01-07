@@ -421,10 +421,15 @@ export class CommandParsingStage extends BasePipelineStage {
    * Separates gate operators into named and anonymous criteria.
    * Named gates (with gateId) are returned separately for explicit ID registration.
    * Anonymous criteria are merged together for backward-compatible temp gate creation.
+   * Shell verification gates (with shellVerify) are included for Ralph Wiggum loops.
    */
   private collectGateCriteria(parseResult: SymbolicCommandParseResult): {
     anonymousCriteria: string[];
-    namedGates: Array<{ gateId: string; criteria: string[] }>;
+    namedGates: Array<{
+      gateId: string;
+      criteria: string[];
+      shellVerify?: { command: string; timeout?: number; workingDir?: string };
+    }>;
   } {
     const operators = parseResult.operators?.operators;
     if (!Array.isArray(operators)) {
@@ -432,11 +437,24 @@ export class CommandParsingStage extends BasePipelineStage {
     }
 
     const anonymousCriteria: string[] = [];
-    const namedGates: Array<{ gateId: string; criteria: string[] }> = [];
+    const namedGates: Array<{
+      gateId: string;
+      criteria: string[];
+      shellVerify?: { command: string; timeout?: number; workingDir?: string };
+    }> = [];
 
     for (const op of operators) {
       if (op.type !== 'gate') continue;
       const gate = op;
+
+      // DEBUG: Trace what the parser produces
+      this.logger.debug('[collectGateCriteria] Processing gate operator:', {
+        gateId: gate.gateId,
+        hasShellVerify: Boolean(gate.shellVerify),
+        shellVerify: gate.shellVerify,
+        criteria: gate.criteria,
+        parsedCriteria: gate.parsedCriteria,
+      });
 
       const criteria =
         Array.isArray(gate.parsedCriteria) && gate.parsedCriteria.length
@@ -448,8 +466,27 @@ export class CommandParsingStage extends BasePipelineStage {
         .filter((item): item is string => Boolean(item));
 
       if (gate.gateId) {
-        // Named gate - keep ID association
-        namedGates.push({ gateId: gate.gateId, criteria: cleanedCriteria });
+        // Named gate - keep ID association (includes shell verification gates)
+        const namedGate: {
+          gateId: string;
+          criteria: string[];
+          shellVerify?: { command: string; timeout?: number; workingDir?: string };
+        } = { gateId: gate.gateId, criteria: cleanedCriteria };
+
+        // Preserve shellVerify config for Ralph Wiggum loops
+        if (gate.shellVerify) {
+          namedGate.shellVerify = gate.shellVerify;
+        }
+
+        // DEBUG: Trace final namedGate before push
+        this.logger.debug('[collectGateCriteria] Created namedGate:', {
+          gateId: namedGate.gateId,
+          hasShellVerify: Boolean(namedGate.shellVerify),
+          shellVerifyCommand: namedGate.shellVerify?.command,
+          criteria: namedGate.criteria,
+        });
+
+        namedGates.push(namedGate);
       } else {
         // Anonymous gate - merge with others
         anonymousCriteria.push(...cleanedCriteria);

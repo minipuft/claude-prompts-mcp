@@ -20,6 +20,7 @@ const createSessionManager = () => {
   const getStepState = jest.fn();
   const updateSessionState = jest.fn().mockResolvedValue(true);
   const completeStep = jest.fn().mockResolvedValue(true);
+  const advanceStep = jest.fn().mockResolvedValue(true);
   const isRetryLimitExceeded = jest.fn().mockReturnValue(false);
   const resetRetryCount = jest.fn().mockResolvedValue(true);
   const clearPendingGateReview = jest.fn().mockResolvedValue(true);
@@ -33,6 +34,7 @@ const createSessionManager = () => {
       getStepState,
       updateSessionState,
       completeStep,
+      advanceStep,
       isRetryLimitExceeded,
       resetRetryCount,
       clearPendingGateReview,
@@ -44,6 +46,7 @@ const createSessionManager = () => {
     getStepState,
     updateSessionState,
     completeStep,
+    advanceStep,
     isRetryLimitExceeded,
     resetRetryCount,
     clearPendingGateReview,

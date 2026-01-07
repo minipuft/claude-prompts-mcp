@@ -102,6 +102,18 @@ export declare class ChainSessionManager implements ChainSessionService {
         preservePlaceholder?: boolean;
     }): Promise<boolean>;
     /**
+     * Advance to the next step after gate validation passes.
+     * This should be called ONLY when:
+     * - Gate review passes (PASS verdict)
+     * - No gates are configured for this step
+     * - Enforcement mode is advisory/informational (non-blocking)
+     *
+     * @param sessionId - The session identifier
+     * @param stepNumber - The step that was completed (will advance to stepNumber + 1)
+     * @returns true if advanced successfully, false if session not found
+     */
+    advanceStep(sessionId: string, stepNumber: number): Promise<boolean>;
+    /**
      * Persist a step result to storage and optional tracking systems.
      */
     private persistStepResult;

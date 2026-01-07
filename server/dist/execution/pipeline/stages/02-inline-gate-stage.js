@@ -1,4 +1,5 @@
 // @lifecycle canonical - Evaluates inline gates before heavy execution work.
+import { SHELL_VERIFY_DEFAULTS } from '../../../gates/constants.js';
 import { formatCriteriaAsGuidance } from '../criteria-guidance.js';
 import { BasePipelineStage } from '../stage.js';
 /**
@@ -40,9 +41,41 @@ export class InlineGateExtractionStage extends BasePipelineStage {
         const registeredIds = [];
         // Process named inline gates (e.g., `:: security:"no secrets"`)
         // These have explicit IDs from the symbolic parser
+        // Shell verification gates (:: verify:"command") are handled specially
         if (Array.isArray(parsedCommand.namedInlineGates) &&
             parsedCommand.namedInlineGates.length > 0) {
+            // DEBUG: Trace what arrives in namedInlineGates
+            this.logger.debug('[InlineGateExtractionStage] Processing namedInlineGates:', {
+                count: parsedCommand.namedInlineGates.length,
+                gates: parsedCommand.namedInlineGates.map((g) => ({
+                    gateId: g.gateId,
+                    hasShellVerify: Boolean(g.shellVerify),
+                    shellVerifyCommand: g.shellVerify?.command,
+                    criteriaCount: g.criteria?.length,
+                    criteria: g.criteria,
+                })),
+            });
             for (const namedGate of parsedCommand.namedInlineGates) {
+                // DEBUG: Trace each gate individually
+                this.logger.debug('[InlineGateExtractionStage] Processing gate:', {
+                    gateId: namedGate.gateId,
+                    shellVerifyExists: 'shellVerify' in namedGate,
+                    shellVerifyValue: namedGate.shellVerify,
+                    shellVerifyTruthy: Boolean(namedGate.shellVerify),
+                    willTriggerShellPath: Boolean(namedGate.shellVerify && namedGate.gateId),
+                });
+                // Handle shell verification gates (:: verify:"command")
+                if (namedGate.shellVerify && namedGate.gateId) {
+                    // DEBUG: INFO level for visibility
+                    this.logger.info('[InlineGateExtractionStage] SHELL VERIFY detected - setting up:', {
+                        gateId: namedGate.gateId,
+                        command: namedGate.shellVerify.command,
+                    });
+                    this.setupShellVerification(context, namedGate.gateId, namedGate.shellVerify);
+                    // Shell verification gates don't create regular inline gates
+                    // They are validated by the ShellVerificationStage (08b)
+                    continue;
+                }
                 if (namedGate.gateId && isValidGateCriteria(namedGate.criteria)) {
                     const gateId = this.createNamedInlineGate(context, namedGate.gateId, namedGate.criteria, {
                         promptId: parsedCommand.promptId,
@@ -298,6 +331,31 @@ export class InlineGateExtractionStage extends BasePipelineStage {
         if (!exists) {
             scopes.push({ scope, scopeId });
         }
+    }
+    /**
+     * Sets up shell verification state for Ralph Wiggum loops.
+     * Called when a `:: verify:"command"` gate is detected.
+     */
+    setupShellVerification(context, gateId, shellVerifyConfig) {
+        const shellVerify = {
+            command: shellVerifyConfig.command,
+            timeout: shellVerifyConfig.timeout ?? SHELL_VERIFY_DEFAULTS.defaultTimeout,
+            workingDir: shellVerifyConfig.workingDir,
+        };
+        const pending = {
+            gateId,
+            shellVerify,
+            attemptCount: 0,
+            maxAttempts: SHELL_VERIFY_DEFAULTS.maxAttempts,
+            previousResults: [],
+        };
+        context.state.gates.pendingShellVerification = pending;
+        this.logger.info('[InlineGateExtractionStage] Shell verification gate configured', {
+            gateId,
+            command: shellVerify.command,
+            timeout: shellVerify.timeout,
+            maxAttempts: pending.maxAttempts,
+        });
     }
 }
 //# sourceMappingURL=02-inline-gate-stage.js.map

@@ -17,6 +17,7 @@ import * as path from 'node:path';
 
 import { ArgumentHistoryEntry, ReviewContext, PersistedArgumentHistory } from './types.js';
 import { Logger } from '../logging/index.js';
+import { atomicWriteFileSync } from '../utils/atomic-file-write.js';
 
 /**
  * ArgumentHistoryTracker Class
@@ -386,14 +387,9 @@ export class ArgumentHistoryTracker {
         sessionToChain,
       };
 
-      // Ensure directory exists
-      const dir = path.dirname(this.persistencePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-
-      // Write to file
-      fs.writeFileSync(this.persistencePath, JSON.stringify(persistedData, null, 2), 'utf8');
+      // Use atomic write to prevent data corruption from concurrent processes
+      // Note: atomicWriteFileSync ensures directory exists as part of the atomic operation
+      atomicWriteFileSync(this.persistencePath, JSON.stringify(persistedData, null, 2));
 
       this.logger.debug(`Saved argument history to ${this.persistencePath}`);
     } catch (error) {

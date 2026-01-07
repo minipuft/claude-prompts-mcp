@@ -131,29 +131,103 @@ export class GenericGateGuide implements IGateGuide {
   // -------------------------------------------------------------------------
 
   /**
-   * Check if this gate should be active for the given context
+   * Check if this gate should be active for the given context.
+   *
+   * For framework gates (gate_type: 'framework'), requires BOTH:
+   * - Matching prompt_categories (if defined)
+   * - Matching framework_context (if defined)
+   *
+   * For regular gates, each rule independently blocks activation if not satisfied.
    */
   isActive(context: GateActivationContext): boolean {
     const activation = this.definition.activation;
 
     // No activation rules means always active
-    if (!activation) {
+    if (activation === undefined) {
       return true;
     }
 
-    // Check explicit request requirement
+    // Check explicit request requirement (applies to all gate types)
     if (activation.explicit_request === true && context.explicitRequest !== true) {
       return false;
     }
 
+    // Framework gates use AND logic: require BOTH category AND framework match
+    if (this.gateType === 'framework') {
+      return this.checkFrameworkGateActivation(activation, context);
+    }
+
+    // Regular gates: each rule blocks independently if not satisfied
+    return this.checkRegularGateActivation(activation, context);
+  }
+
+  /**
+   * Check activation for framework gates using AND logic.
+   * Requires BOTH category and framework to match when both are defined.
+   */
+  private checkFrameworkGateActivation(
+    activation: GateActivationRules,
+    context: GateActivationContext
+  ): boolean {
+    const categoryRules = activation.prompt_categories;
+    const frameworkRules = activation.framework_context;
+    const hasCategoryRules = categoryRules !== undefined && categoryRules.length > 0;
+    const hasFrameworkRules = frameworkRules !== undefined && frameworkRules.length > 0;
+
+    // If category rules exist, check them
+    let categoryMatch = true;
+    if (hasCategoryRules) {
+      const promptCategory = context.promptCategory;
+      if (promptCategory === undefined || promptCategory.length === 0) {
+        // No category in context but rules require one - don't activate
+        categoryMatch = false;
+      } else {
+        const normalizedCategory = promptCategory.toLowerCase();
+        const normalizedCategories = categoryRules.map((c) => c.toLowerCase());
+        categoryMatch = normalizedCategories.includes(normalizedCategory);
+      }
+    }
+
+    // If framework rules exist, check them
+    let frameworkMatch = true;
+    if (hasFrameworkRules) {
+      const framework = context.framework;
+      if (framework === undefined || framework.length === 0) {
+        // No framework in context but rules require one - don't activate
+        frameworkMatch = false;
+      } else {
+        const normalizedFramework = framework.toUpperCase();
+        const normalizedContexts = frameworkRules.map((f) => f.toUpperCase());
+        frameworkMatch = normalizedContexts.includes(normalizedFramework);
+      }
+    }
+
+    // AND logic: both must pass
+    return categoryMatch && frameworkMatch;
+  }
+
+  /**
+   * Check activation for regular (non-framework) gates.
+   * Each rule blocks independently if not satisfied.
+   */
+  private checkRegularGateActivation(
+    activation: GateActivationRules,
+    context: GateActivationContext
+  ): boolean {
+    const categoryRules = activation.prompt_categories;
+    const frameworkRules = activation.framework_context;
+    const promptCategory = context.promptCategory;
+    const framework = context.framework;
+
     // Check prompt categories (empty array means no restriction)
     if (
-      activation.prompt_categories &&
-      activation.prompt_categories.length > 0 &&
-      context.promptCategory
+      categoryRules !== undefined &&
+      categoryRules.length > 0 &&
+      promptCategory !== undefined &&
+      promptCategory.length > 0
     ) {
-      const normalizedCategory = context.promptCategory.toLowerCase();
-      const normalizedCategories = activation.prompt_categories.map((c) => c.toLowerCase());
+      const normalizedCategory = promptCategory.toLowerCase();
+      const normalizedCategories = categoryRules.map((c) => c.toLowerCase());
       if (!normalizedCategories.includes(normalizedCategory)) {
         return false;
       }
@@ -162,12 +236,13 @@ export class GenericGateGuide implements IGateGuide {
     // Check framework context (empty array means no restriction)
     // Case-insensitive comparison to handle CAGEERF vs cageerf mismatches
     if (
-      activation.framework_context &&
-      activation.framework_context.length > 0 &&
-      context.framework
+      frameworkRules !== undefined &&
+      frameworkRules.length > 0 &&
+      framework !== undefined &&
+      framework.length > 0
     ) {
-      const normalizedFramework = context.framework.toUpperCase();
-      const normalizedContexts = activation.framework_context.map((f) => f.toUpperCase());
+      const normalizedFramework = framework.toUpperCase();
+      const normalizedContexts = frameworkRules.map((f) => f.toUpperCase());
       if (!normalizedContexts.includes(normalizedFramework)) {
         return false;
       }

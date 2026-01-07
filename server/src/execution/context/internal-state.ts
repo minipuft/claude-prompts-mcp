@@ -1,3 +1,4 @@
+import type { PendingShellVerification, ShellVerifyResult } from '../../gates/shell/index.js';
 import type { GateEnforcementMode } from '../../gates/types.js';
 import type { ScriptExecutionResult, ConfirmationRequired } from '../../scripts/types.js';
 import type { ToolResponse } from '../../types/index.js';
@@ -139,6 +140,24 @@ export interface PipelineInternalState {
       rationale?: string;
       pattern?: string;
       outcome?: string;
+    };
+    /**
+     * Pending shell verification gate for Ralph Wiggum loop execution.
+     * Tracks command, attempt count, and previous results across iterations.
+     */
+    pendingShellVerification?: PendingShellVerification;
+    /**
+     * Results from shell verification command executions.
+     * Accumulated across multiple attempts for diagnostic display.
+     */
+    shellVerifyResults?: ShellVerifyResult[];
+    /**
+     * Formatted feedback from shell verification for downstream stages.
+     * Includes bounce-back messages and escalation prompts.
+     */
+    shellVerifyFeedback?: {
+      type: 'bounce_back' | 'escalation';
+      message: string;
     };
   };
 

@@ -17,7 +17,6 @@ import {
   generateCacheOnStartup,
 } from './claude-code-cache-hot-reload.js';
 import { createRuntimeFoundation } from './context.js';
-import type { PathResolver } from './paths.js';
 import { loadPromptData } from './data-loader.js';
 import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildHealthReport } from './health.js';
@@ -54,6 +53,7 @@ import {
 // Import chain utilities
 import { ServiceManager } from '../utils/service-manager.js';
 
+import type { PathResolver } from './paths.js';
 import type { ApiManager } from '../api/index.js';
 import type { McpToolsManager } from '../mcp-tools/index.js';
 import type { ToolDescriptionManager } from '../mcp-tools/tool-description-manager.js';

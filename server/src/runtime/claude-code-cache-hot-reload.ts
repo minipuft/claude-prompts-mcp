@@ -58,10 +58,7 @@ async function refreshClaudeCodeCache(
  * Generate cache on startup.
  * Called during application initialization.
  */
-export async function generateCacheOnStartup(
-  logger: Logger,
-  serverRoot: string
-): Promise<void> {
+export async function generateCacheOnStartup(logger: Logger, serverRoot: string): Promise<void> {
   logger.info('Generating hooks cache on startup...');
 
   try {

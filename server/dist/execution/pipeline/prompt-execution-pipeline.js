@@ -7,7 +7,8 @@ import { ExecutionContext } from '../context/execution-context.js';
 export class PromptExecutionPipeline {
     constructor(requestStage, dependencyStage, lifecycleStage, parsingStage, inlineGateStage, operatorValidationStage, planningStage, scriptExecutionStage, // 04b - Script tool execution
     scriptAutoExecuteStage, // 04c - Script auto-execute
-    frameworkStage, judgeSelectionStage, promptGuidanceStage, gateStage, sessionStage, frameworkInjectionControlStage, responseCaptureStage, executionStage, gateReviewStage, callToActionStage, formattingStage, postFormattingStage, logger, metricsProvider) {
+    frameworkStage, judgeSelectionStage, promptGuidanceStage, gateStage, sessionStage, frameworkInjectionControlStage, responseCaptureStage, shellVerificationStage, // 08b - Shell verification (Ralph Wiggum)
+    executionStage, gateReviewStage, callToActionStage, formattingStage, postFormattingStage, logger, metricsProvider) {
         this.requestStage = requestStage;
         this.dependencyStage = dependencyStage;
         this.lifecycleStage = lifecycleStage;
@@ -24,6 +25,7 @@ export class PromptExecutionPipeline {
         this.sessionStage = sessionStage;
         this.frameworkInjectionControlStage = frameworkInjectionControlStage;
         this.responseCaptureStage = responseCaptureStage;
+        this.shellVerificationStage = shellVerificationStage;
         this.executionStage = executionStage;
         this.gateReviewStage = gateReviewStage;
         this.callToActionStage = callToActionStage;
@@ -171,6 +173,9 @@ export class PromptExecutionPipeline {
             this.frameworkInjectionControlStage, // MOVED: Injection decisions (needs currentStep, controls guidance)
             this.promptGuidanceStage, // NOW AFTER: Uses injection decisions from state.injection
             this.responseCaptureStage,
+            // 08b: Shell verification (optional) - runs after response capture, before execution
+            // Enables Ralph Wiggum loops where shell commands validate Claude's work
+            ...(this.shellVerificationStage ? [this.shellVerificationStage] : []),
             this.executionStage,
             this.gateReviewStage,
             this.callToActionStage,

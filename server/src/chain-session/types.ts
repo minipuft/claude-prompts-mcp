@@ -130,5 +130,13 @@ export interface ChainSessionService {
     stepNumber: number,
     options?: { preservePlaceholder?: boolean; metadata?: Record<string, any> }
   ): Promise<boolean>;
+  /**
+   * Advance to the next step after gate validation passes.
+   * Should be called ONLY when:
+   * - Gate review passes (PASS verdict)
+   * - No gates are configured for this step
+   * - Enforcement mode is advisory/informational (non-blocking)
+   */
+  advanceStep(sessionId: string, stepNumber: number): Promise<boolean>;
   cleanup(): Promise<void>;
 }

@@ -1,8 +1,48 @@
 {
   "version": "1.0",
-  "generated_at": "2026-01-05T16:02:04.403Z",
+  "generated_at": "2026-01-07T02:40:29.105Z",
   "source": "/home/minipuft/Applications/claude-prompts-mcp/server/resources",
   "prompts": {
+    "action_plan": {
+      "id": "action_plan",
+      "name": "Action Plan",
+      "category": "analysis",
+      "description": "Transform research into concrete, actionable recommendations. Step 4 of the research chain.",
+      "is_chain": false,
+      "chain_steps": 0,
+      "arguments": [
+        {
+          "name": "topic",
+          "type": "string",
+          "required": true,
+          "description": "The topic researched"
+        },
+        {
+          "name": "synthesis",
+          "type": "string",
+          "required": false,
+          "description": "Key insights from the synthesis"
+        },
+        {
+          "name": "purpose",
+          "type": "string",
+          "required": false,
+          "description": "Original research purpose"
+        }
+      ],
+      "gates": [],
+      "keywords": [
+        "action",
+        "plan",
+        "transform",
+        "research",
+        "concrete",
+        "actionable",
+        "recommendations",
+        "step",
+        "chain"
+      ]
+    },
     "content_analysis": {
       "id": "content_analysis",
       "name": "Content Analysis",
@@ -77,6 +117,51 @@
         "produces"
       ]
     },
+    "deep_investigation": {
+      "id": "deep_investigation",
+      "name": "Deep Investigation",
+      "category": "analysis",
+      "description": "Thorough research with sources, evidence, and expert perspectives. Step 2 of the research chain. BLOCKING gate requires citations.",
+      "is_chain": false,
+      "chain_steps": 0,
+      "arguments": [
+        {
+          "name": "topic",
+          "type": "string",
+          "required": true,
+          "description": "The topic being researched"
+        },
+        {
+          "name": "focus_areas",
+          "type": "string",
+          "required": false,
+          "description": "Prioritized areas from the initial scan"
+        },
+        {
+          "name": "purpose",
+          "type": "string",
+          "required": false,
+          "description": "Research purpose for context"
+        }
+      ],
+      "gates": [],
+      "keywords": [
+        "deep",
+        "investigation",
+        "thorough",
+        "research",
+        "sources",
+        "evidence",
+        "expert",
+        "perspectives",
+        "step",
+        "chain",
+        "blocking",
+        "gate",
+        "requires",
+        "citations"
+      ]
+    },
     "deep_research": {
       "id": "deep_research",
       "name": "Deep Research Framework",
@@ -105,6 +190,25 @@
         "topics",
         "academic",
         "rigor"
+      ]
+    },
+    "initial_scan": {
+      "id": "initial_scan",
+      "name": "Initial Scan",
+      "category": "examples",
+      "description": "Broad overview and key themes identification",
+      "is_chain": false,
+      "chain_steps": 0,
+      "arguments": [],
+      "gates": [],
+      "keywords": [
+        "initial",
+        "scan",
+        "broad",
+        "overview",
+        "key",
+        "themes",
+        "identification"
       ]
     },
     "note_integration": {
@@ -321,6 +425,95 @@
         "clear",
         "actionable",
         "specifications"
+      ]
+    },
+    "research_chain": {
+      "id": "research_chain",
+      "name": "Research & Analysis Chain",
+      "category": "analysis",
+      "description": "Complete research workflow: initial scan, deep investigation with sources, synthesis, and actionable recommendations. Demonstrates blocking citation gate.",
+      "is_chain": true,
+      "chain_steps": 4,
+      "arguments": [
+        {
+          "name": "topic",
+          "type": "string",
+          "required": true,
+          "description": "The topic to research"
+        },
+        {
+          "name": "purpose",
+          "type": "string",
+          "required": false,
+          "description": "Why you need this research (decision, learning, project, etc.)"
+        },
+        {
+          "name": "constraints",
+          "type": "string",
+          "required": false,
+          "description": "Any constraints (time, scope, specific angle)"
+        }
+      ],
+      "gates": [
+        "research-quality",
+        "content-structure"
+      ],
+      "keywords": [
+        "research",
+        "analysis",
+        "chain",
+        "complete",
+        "workflow",
+        "initial",
+        "scan",
+        "deep",
+        "investigation",
+        "sources",
+        "synthesis",
+        "actionable",
+        "recommendations",
+        "demonstrates",
+        "blocking"
+      ]
+    },
+    "research_synthesis": {
+      "id": "research_synthesis",
+      "name": "Research Synthesis",
+      "category": "analysis",
+      "description": "Consolidate and reconcile findings into coherent insights. Step 3 of the research chain.",
+      "is_chain": false,
+      "chain_steps": 0,
+      "arguments": [
+        {
+          "name": "topic",
+          "type": "string",
+          "required": true,
+          "description": "The topic being researched"
+        },
+        {
+          "name": "key_findings",
+          "type": "string",
+          "required": false,
+          "description": "Key findings from deep investigation"
+        },
+        {
+          "name": "purpose",
+          "type": "string",
+          "required": false,
+          "description": "Research purpose for framing synthesis"
+        }
+      ],
+      "gates": [],
+      "keywords": [
+        "research",
+        "synthesis",
+        "consolidate",
+        "reconcile",
+        "findings",
+        "coherent",
+        "insights",
+        "step",
+        "chain"
       ]
     },
     "review": {
@@ -894,6 +1087,100 @@
         "interfaces"
       ]
     },
+    "integration_assessment": {
+      "id": "integration_assessment",
+      "name": "Integration Assessment",
+      "category": "development",
+      "description": "Assess integration effort: compatibility, migration path, breaking changes. Step 3 of the tech evaluation chain.",
+      "is_chain": false,
+      "chain_steps": 0,
+      "arguments": [
+        {
+          "name": "library",
+          "type": "string",
+          "required": true,
+          "description": "The library or framework being evaluated"
+        },
+        {
+          "name": "context",
+          "type": "string",
+          "required": true,
+          "description": "Your project context"
+        },
+        {
+          "name": "current_stack",
+          "type": "string",
+          "required": false,
+          "description": "Current tech stack for compatibility assessment"
+        },
+        {
+          "name": "technical_findings",
+          "type": "string",
+          "required": false,
+          "description": "Key findings from the technical deep dive"
+        }
+      ],
+      "gates": [],
+      "keywords": [
+        "integration",
+        "assessment",
+        "assess",
+        "effort",
+        "compatibility",
+        "migration",
+        "path",
+        "breaking",
+        "changes",
+        "step",
+        "tech",
+        "evaluation",
+        "chain"
+      ]
+    },
+    "library_overview": {
+      "id": "library_overview",
+      "name": "Library Overview",
+      "category": "development",
+      "description": "Quick assessment of a library/framework: popularity, maintenance, ecosystem fit. Step 1 of the tech evaluation chain.",
+      "is_chain": false,
+      "chain_steps": 0,
+      "arguments": [
+        {
+          "name": "library",
+          "type": "string",
+          "required": true,
+          "description": "The library or framework to evaluate (e.g., 'zod', 'react-query', 'prisma')"
+        },
+        {
+          "name": "context",
+          "type": "string",
+          "required": true,
+          "description": "Your project context and what problem you're solving"
+        },
+        {
+          "name": "current_stack",
+          "type": "string",
+          "required": false,
+          "description": "Current tech stack (optional, helps assess compatibility)"
+        }
+      ],
+      "gates": [],
+      "keywords": [
+        "library",
+        "overview",
+        "quick",
+        "assessment",
+        "framework",
+        "popularity",
+        "maintenance",
+        "ecosystem",
+        "fit",
+        "step",
+        "tech",
+        "evaluation",
+        "chain"
+      ]
+    },
     "rule_refinement": {
       "id": "rule_refinement",
       "name": "Rule Refinement Guide",
@@ -975,6 +1262,144 @@
         "checking",
         "progress",
         "tracking"
+      ]
+    },
+    "tech_evaluation_chain": {
+      "id": "tech_evaluation_chain",
+      "name": "Technology Evaluation Chain",
+      "category": "development",
+      "description": "Complete library/framework evaluation workflow: overview, deep dive, integration assessment, and final recommendation. Demonstrates blocking vs advisory gates.",
+      "is_chain": true,
+      "chain_steps": 4,
+      "arguments": [
+        {
+          "name": "library",
+          "type": "string",
+          "required": true,
+          "description": "The library or framework to evaluate (e.g., 'zod', 'react-query', 'prisma')"
+        },
+        {
+          "name": "context",
+          "type": "string",
+          "required": true,
+          "description": "Your project context and what problem you're solving"
+        },
+        {
+          "name": "current_stack",
+          "type": "string",
+          "required": false,
+          "description": "Current tech stack for compatibility assessment"
+        }
+      ],
+      "gates": [
+        "technical-accuracy",
+        "code-quality"
+      ],
+      "keywords": [
+        "technology",
+        "evaluation",
+        "chain",
+        "complete",
+        "library",
+        "framework",
+        "workflow",
+        "overview",
+        "deep",
+        "dive",
+        "integration",
+        "assessment",
+        "final",
+        "recommendation",
+        "demonstrates"
+      ]
+    },
+    "tech_recommendation": {
+      "id": "tech_recommendation",
+      "name": "Technology Recommendation",
+      "category": "development",
+      "description": "Final go/no-go recommendation with actionable next steps and code examples. Step 4 of the tech evaluation chain.",
+      "is_chain": false,
+      "chain_steps": 0,
+      "arguments": [
+        {
+          "name": "library",
+          "type": "string",
+          "required": true,
+          "description": "The library or framework being evaluated"
+        },
+        {
+          "name": "context",
+          "type": "string",
+          "required": true,
+          "description": "Your project context"
+        },
+        {
+          "name": "evaluation_summary",
+          "type": "string",
+          "required": false,
+          "description": "Summary of findings from previous steps"
+        }
+      ],
+      "gates": [],
+      "keywords": [
+        "technology",
+        "recommendation",
+        "final",
+        "actionable",
+        "next",
+        "steps",
+        "code",
+        "examples",
+        "step",
+        "tech",
+        "evaluation",
+        "chain"
+      ]
+    },
+    "technical_deep_dive": {
+      "id": "technical_deep_dive",
+      "name": "Technical Deep Dive",
+      "category": "development",
+      "description": "In-depth technical analysis: API design, performance, security, edge cases. Step 2 of the tech evaluation chain. BLOCKING gate requires verified claims.",
+      "is_chain": false,
+      "chain_steps": 0,
+      "arguments": [
+        {
+          "name": "library",
+          "type": "string",
+          "required": true,
+          "description": "The library or framework being evaluated"
+        },
+        {
+          "name": "context",
+          "type": "string",
+          "required": true,
+          "description": "Your project context and requirements"
+        },
+        {
+          "name": "concerns",
+          "type": "string",
+          "required": false,
+          "description": "Specific concerns from the overview step to investigate"
+        }
+      ],
+      "gates": [],
+      "keywords": [
+        "technical",
+        "deep",
+        "dive",
+        "depth",
+        "analysis",
+        "api",
+        "design",
+        "performance",
+        "security",
+        "edge",
+        "cases",
+        "step",
+        "tech",
+        "evaluation",
+        "chain"
       ]
     },
     "transform_code_to_modules": {
@@ -1421,25 +1846,6 @@
         "themes"
       ]
     },
-    "initial_scan": {
-      "id": "initial_scan",
-      "name": "Initial Scan",
-      "category": "examples",
-      "description": "Broad overview and key themes identification",
-      "is_chain": false,
-      "chain_steps": 0,
-      "arguments": [],
-      "gates": [],
-      "keywords": [
-        "initial",
-        "scan",
-        "broad",
-        "overview",
-        "key",
-        "themes",
-        "identification"
-      ]
-    },
     "notepage": {
       "id": "notepage",
       "name": "Notepage",
@@ -1840,6 +2246,54 @@
         "step"
       ]
     },
+    "minimal_plan": {
+      "id": "minimal_plan",
+      "name": "Minimal Implementation Plan",
+      "category": "planning",
+      "description": "Creates implementation plans that maximize reuse of existing systems and avoid over-engineering. Forces explicit justification for any new files or abstractions.",
+      "is_chain": false,
+      "chain_steps": 0,
+      "arguments": [
+        {
+          "name": "feature",
+          "type": "string",
+          "required": true,
+          "description": "The feature or functionality to implement"
+        },
+        {
+          "name": "existing_systems",
+          "type": "string",
+          "required": false,
+          "description": "Known existing systems/files that might be relevant (comma-separated)"
+        },
+        {
+          "name": "constraints",
+          "type": "string",
+          "required": false,
+          "description": "Any specific constraints or requirements"
+        }
+      ],
+      "gates": [
+        "code-quality"
+      ],
+      "keywords": [
+        "minimal",
+        "implementation",
+        "plan",
+        "creates",
+        "plans",
+        "maximize",
+        "reuse",
+        "existing",
+        "systems",
+        "avoid",
+        "over",
+        "engineering",
+        "forces",
+        "explicit",
+        "justification"
+      ]
+    },
     "pr_approval_summary": {
       "id": "pr_approval_summary",
       "name": "PR Approval Summary",
@@ -2067,14 +2521,19 @@
   },
   "categories": {
     "analysis": [
+      "action_plan",
       "content_analysis",
       "deep_analysis",
+      "deep_investigation",
       "deep_research",
+      "initial_scan",
       "note_integration",
       "note_refinement",
       "notes",
       "progressive_research",
       "query_refinement",
+      "research_chain",
+      "research_synthesis",
       "review"
     ],
     "codebase-setup": [
@@ -2096,8 +2555,13 @@
       "dev_sync",
       "generate_comprehensive_claude_md",
       "implementation_gap_analysis",
+      "integration_assessment",
+      "library_overview",
       "rule_refinement",
       "strategicImplement",
+      "tech_evaluation_chain",
+      "tech_recommendation",
+      "technical_deep_dive",
       "transform_code_to_modules"
     ],
     "documentation": [
@@ -2137,6 +2601,9 @@
       "procedural",
       "reasoning"
     ],
+    "planning": [
+      "minimal_plan"
+    ],
     "pr-review": [
       "pr_approval_summary",
       "pr_diff_analysis",
@@ -2145,5 +2612,5 @@
       "pr_security_audit"
     ]
   },
-  "count": 51
+  "count": 61
 }

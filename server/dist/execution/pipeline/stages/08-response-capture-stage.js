@@ -122,6 +122,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 verdictDetection.outcome = outcome;
                 context.state.gates.verdictDetection = verdictDetection;
                 if (outcome === 'cleared') {
+                    // Gate review passed - advance to next step
+                    const stepToAdvance = session.state.currentStep ?? 1;
+                    await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
+                    context.diagnostics.info(this.name, 'Gate PASS - advanced step', { stepToAdvance });
                     delete sessionContext.pendingReview;
                 }
                 else {
@@ -151,26 +155,32 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                                 }
                                 context.diagnostics.info(this.name, 'Gate FAIL - blocking mode, awaiting retry');
                                 break;
-                            case 'advisory':
+                            case 'advisory': {
                                 // Log warning but allow advancement
                                 (_a = context.state.gates).advisoryWarnings ?? (_a.advisoryWarnings = []);
                                 context.state.gates.advisoryWarnings.push(`Gate ${session.pendingGateReview?.gateIds.join(', ') ?? 'unknown'} failed: ${verdictPayload.rationale}`);
                                 context.diagnostics.warn(this.name, 'Gate FAIL - advisory mode, continuing', {
                                     rationale: verdictPayload.rationale,
                                 });
-                                // Clear pending review to allow step advancement
+                                // Clear pending review and advance step (non-blocking mode continues)
                                 await this.chainSessionManager.clearPendingGateReview(sessionId);
+                                const stepToAdvance = session.state.currentStep ?? 1;
+                                await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
                                 delete sessionContext.pendingReview;
                                 break;
-                            case 'informational':
+                            }
+                            case 'informational': {
                                 // Log only, no user impact
                                 context.diagnostics.info(this.name, 'Gate FAIL - informational mode, logged only', {
                                     rationale: verdictPayload.rationale,
                                 });
-                                // Clear pending review to allow step advancement
+                                // Clear pending review and advance step (non-blocking mode continues)
                                 await this.chainSessionManager.clearPendingGateReview(sessionId);
+                                const stepToAdvance = session.state.currentStep ?? 1;
+                                await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
                                 delete sessionContext.pendingReview;
                                 break;
+                            }
                         }
                     }
                 }
@@ -213,6 +223,11 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 this.logger.debug(`User response detected for step ${targetStepNumber}, replacing placeholder with real content`);
                 const outputMapping = this.getStepOutputMapping(context, targetStepNumber);
                 await this.captureRealResponse(sessionId, session.chainId, targetStepNumber, userResponse, outputMapping);
+                // Only advance if no pending gate review (gated flows advance on PASS verdict)
+                const hasPendingReview = !!this.chainSessionManager.getPendingGateReview(sessionId);
+                if (!hasPendingReview) {
+                    await this.chainSessionManager.advanceStep(sessionId, targetStepNumber);
+                }
                 const updatedSession = this.chainSessionManager.getSession(sessionId);
                 if (updatedSession) {
                     context.sessionContext = {
@@ -225,7 +240,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 this.logExit({
                     capturedStep: targetStepNumber,
                     responseType: 'user_response',
-                    advanced: true,
+                    advanced: !hasPendingReview,
                 });
                 return;
             }
@@ -234,11 +249,18 @@ export class StepResponseCaptureStage extends BasePipelineStage {
             return;
         }
         try {
+            let didAdvance = false;
             // Check for user response before creating placeholder
             if (hasUserResponse) {
                 // User provided explicit response
                 const outputMapping = this.getStepOutputMapping(context, targetStepNumber);
                 await this.captureRealResponse(sessionId, session.chainId, targetStepNumber, userResponse, outputMapping);
+                // Only advance if no pending gate review (gated flows advance on PASS verdict)
+                const hasPendingReview = !!this.chainSessionManager.getPendingGateReview(sessionId);
+                if (!hasPendingReview) {
+                    await this.chainSessionManager.advanceStep(sessionId, targetStepNumber);
+                    didAdvance = true;
+                }
             }
             else {
                 // No response - create placeholder
@@ -257,7 +279,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
             this.logExit({
                 capturedStep: targetStepNumber,
                 responseType,
-                advanced: !!userResponse,
+                advanced: didAdvance,
             });
         }
         catch (error) {
@@ -293,9 +315,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
             outputMapping, // Pass through for named output storage
         });
         await this.chainSessionManager.completeStep(sessionId, stepNumber, {
-            preservePlaceholder: false, // Real completion, advance currentStep
+            preservePlaceholder: false, // Real completion
         });
-        this.logger.debug(`Step ${stepNumber} completed with real response, advancing to next step`);
+        // Note: Step advancement is handled by the caller - only advance if no pending gate review
+        this.logger.debug(`Step ${stepNumber} completed with real response`);
     }
     getStepOutputMapping(context, stepNumber) {
         const steps = context.parsedCommand?.steps;

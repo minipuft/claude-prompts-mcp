@@ -57,7 +57,7 @@
     "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage tests/unit",
     "test:integration": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --runInBand tests/integration",
     "test:e2e": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --runInBand tests/e2e",
-    "test:all": "npm run test:unit && npm run test:integration",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
     "test:ci": "npm run test:unit",
     "validate": "npm run test:ci",
     "validate:arch": "depcruise --config .dependency-cruiser.cjs src",
@@ -72,7 +72,9 @@
     "dev:graph": "madge --ts-config ./tsconfig.json --extensions ts src --image graph.svg",
     "dev:graph:json": "madge --ts-config ./tsconfig.json --extensions ts src --json",
     "prepublishOnly": "npm run build",
-    "release": "npm run build && npm test && npm publish --access public"
+    "release": "npm run build && npm test && npm publish --access public",
+    "pack:mcpb": "../scripts/build-extension.sh",
+    "pack:mcpb:validate": "cd .. && npx @anthropic-ai/mcpb validate manifest.json"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,cjs,mjs}": [

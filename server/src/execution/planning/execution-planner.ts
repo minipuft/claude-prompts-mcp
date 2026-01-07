@@ -6,6 +6,7 @@ import {
 
 import type { FrameworkManager } from '../../frameworks/framework-manager.js';
 import type { GateDefinitionProvider } from '../../gates/core/gate-loader.js';
+import type { GateManager } from '../../gates/gate-manager.js';
 import type { Logger } from '../../logging/index.js';
 import type { ContentAnalyzer } from '../../semantic/configurable-semantic-analyzer.js';
 import type { ContentAnalysisResult } from '../../semantic/types.js';
@@ -55,6 +56,7 @@ type StrategyResolution = {
 export class ExecutionPlanner {
   private frameworkManager: FrameworkManager | undefined;
   private gateLoader: GateDefinitionProvider | undefined;
+  private gateManager: GateManager | undefined;
   private readonly categoryExtractor: CategoryExtractor;
   /** Cached methodology gate IDs loaded from GateLoader */
   private methodologyGateIdsCache: Set<string> | null = null;
@@ -74,6 +76,14 @@ export class ExecutionPlanner {
     this.gateLoader = loader;
     // Invalidate cache when loader changes
     this.methodologyGateIdsCache = null;
+  }
+
+  /**
+   * Set the GateManager for category-based gate selection.
+   * Used by autoAssignGates to dynamically select gates based on YAML activation rules.
+   */
+  setGateManager(manager?: GateManager): void {
+    this.gateManager = manager;
   }
 
   /**
@@ -485,34 +495,35 @@ export class ExecutionPlanner {
     return true;
   }
 
+  /**
+   * Auto-assign gates based on prompt category using YAML activation rules.
+   *
+   * Uses GateManager.getCategoryGates() to dynamically select gates that have
+   * activation.prompt_categories matching the current prompt's category.
+   * Falls back to empty array if GateManager is not available.
+   *
+   * Note: Framework gates (gate_type: 'framework') are handled separately via
+   * the framework_gates configuration flag, not by this method.
+   */
   private autoAssignGates(category: string): string[] {
-    const gates = new Set<string>(['framework-compliance']);
-    const normalizedCategory = category?.toLowerCase() ?? 'general';
+    // Use GateManager for data-driven gate selection based on YAML activation rules
+    if (this.gateManager !== undefined) {
+      const normalizedCategory = category.length > 0 ? category.toLowerCase() : 'general';
+      const categoryGates = this.gateManager.getCategoryGates(normalizedCategory);
 
-    switch (normalizedCategory) {
-      case 'code_generation':
-      case 'development':
-        gates.add('code-quality');
-        gates.add('technical-accuracy');
-        break;
-      case 'analysis':
-      case 'research':
-        gates.add('research-quality');
-        gates.add('technical-accuracy');
-        break;
-      case 'documentation':
-        gates.add('content-structure');
-        gates.add('educational-clarity');
-        break;
-      case 'architecture':
-        gates.add('technical-accuracy');
-        gates.add('security-awareness');
-        break;
-      default:
-        break;
+      this.logger.debug('[ExecutionPlanner] Auto-assigned gates from activation rules', {
+        category: normalizedCategory,
+        gates: categoryGates,
+      });
+
+      return categoryGates;
     }
 
-    return Array.from(gates);
+    // Fallback: No GateManager available - return empty (gates will come from explicit config)
+    this.logger.debug(
+      '[ExecutionPlanner] No GateManager available for category-based gate selection'
+    );
+    return [];
   }
 
   private collectExplicitGateIds(

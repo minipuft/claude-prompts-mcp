@@ -58,6 +58,9 @@ pids/
 *.seed
 *.pid.lock
 
+# Chain session cache (generated at runtime)
+server/cache/sessions/
+
 # MCP Server Specific
 admin-ui/
 server/graphs/
@@ -118,3 +121,7 @@ scripts/dev-link.sh
 
 # IDE workspace files
 plans/claude-prompts-mcp.code-workspace
+
+# Claude Desktop Extension artifacts
+*.mcpb
+.mcpb-staging/

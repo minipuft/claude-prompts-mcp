@@ -215,8 +215,8 @@ export declare const mcpToolRequestSchema: z.ZodEffects<z.ZodObject<{
         context?: Record<string, any> | undefined;
     })[] | undefined;
     options?: Record<string, any> | undefined;
-    chain_id?: string | undefined;
     command?: string | undefined;
+    chain_id?: string | undefined;
     user_response?: string | undefined;
     gate_verdict?: string | undefined;
     gate_action?: "retry" | "skip" | "abort" | undefined;
@@ -240,8 +240,8 @@ export declare const mcpToolRequestSchema: z.ZodEffects<z.ZodObject<{
         context?: Record<string, any> | undefined;
     })[] | undefined;
     options?: Record<string, any> | undefined;
-    chain_id?: string | undefined;
     command?: string | undefined;
+    chain_id?: string | undefined;
     user_response?: string | undefined;
     gate_verdict?: string | undefined;
     gate_action?: "retry" | "skip" | "abort" | undefined;
@@ -265,8 +265,8 @@ export declare const mcpToolRequestSchema: z.ZodEffects<z.ZodObject<{
         context?: Record<string, any> | undefined;
     })[] | undefined;
     options?: Record<string, any> | undefined;
-    chain_id?: string | undefined;
     command?: string | undefined;
+    chain_id?: string | undefined;
     user_response?: string | undefined;
     gate_verdict?: string | undefined;
     gate_action?: "retry" | "skip" | "abort" | undefined;
@@ -290,8 +290,8 @@ export declare const mcpToolRequestSchema: z.ZodEffects<z.ZodObject<{
         context?: Record<string, any> | undefined;
     })[] | undefined;
     options?: Record<string, any> | undefined;
-    chain_id?: string | undefined;
     command?: string | undefined;
+    chain_id?: string | undefined;
     user_response?: string | undefined;
     gate_verdict?: string | undefined;
     gate_action?: "retry" | "skip" | "abort" | undefined;

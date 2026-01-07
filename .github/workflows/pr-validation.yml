@@ -67,6 +67,9 @@ jobs:
         run: npm run test:ci
         timeout-minutes: 15
 
+      - name: Plugin & hooks validation (E2E)
+        run: npm run test:e2e
+
       - name: Changed files analysis
         if: matrix.node == '24.x'
         working-directory: .

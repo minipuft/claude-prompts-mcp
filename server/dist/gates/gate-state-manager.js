@@ -9,6 +9,7 @@ import { EventEmitter } from 'events';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { atomicWriteFile } from '../utils/atomic-file-write.js';
 /**
  * Gate System Manager - Runtime state management
  */
@@ -107,7 +108,8 @@ export class GateSystemManager extends EventEmitter {
                 },
                 savedAt: new Date().toISOString(),
             };
-            await fs.writeFile(this.stateFilePath, JSON.stringify(stateToSave, null, 2));
+            // Use atomic write to prevent data corruption from concurrent processes
+            await atomicWriteFile(this.stateFilePath, JSON.stringify(stateToSave, null, 2));
             this.logger.debug('Gate system state saved to file');
         }
         catch (error) {

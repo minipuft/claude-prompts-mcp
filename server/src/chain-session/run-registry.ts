@@ -2,6 +2,8 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 
+import { atomicWriteFile } from '../utils/atomic-file-write.js';
+
 import type { PersistedChainRunRegistry } from './types.js';
 import type { Logger } from '../logging/index.js';
 
@@ -72,7 +74,8 @@ export class FileBackedChainRunRegistry implements ChainRunRegistry {
 
   async save(store: PersistedChainRunRegistry): Promise<void> {
     try {
-      await fs.writeFile(this.filePath, JSON.stringify(store, null, 2), 'utf-8');
+      // Use atomic write to prevent data corruption from concurrent processes
+      await atomicWriteFile(this.filePath, JSON.stringify(store, null, 2));
       this.logger?.debug?.(`[ChainRunRegistry] Persisted chain run state to ${this.filePath}`);
     } catch (error) {
       this.logger?.error?.(

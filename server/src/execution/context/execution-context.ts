@@ -344,12 +344,19 @@ export class ExecutionContext {
 
 /**
  * Named inline gate from symbolic syntax (e.g., `:: security:"no secrets"`)
+ * Also supports shell verification gates (e.g., `:: verify:"npm test"`)
  */
 export interface NamedInlineGate {
   /** Explicit gate ID from symbolic syntax */
   gateId: string;
   /** Criteria associated with this named gate */
   criteria: string[];
+  /** Shell verification config for Ralph Wiggum loops (when using `:: verify:"command"`) */
+  shellVerify?: {
+    command: string;
+    timeout?: number;
+    workingDir?: string;
+  };
 }
 
 /**
