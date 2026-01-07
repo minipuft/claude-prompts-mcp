@@ -7,8 +7,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
 
@@ -60,12 +60,7 @@ export class TransportManager {
     if (transportArg) {
       const value = transportArg.split('=')[1];
       // Validate CLI arg - include streamable-http
-      if (
-        value === 'stdio' ||
-        value === 'sse' ||
-        value === 'streamable-http' ||
-        value === 'both'
-      ) {
+      if (value === 'stdio' || value === 'sse' || value === 'streamable-http' || value === 'both') {
         return value as TransportMode;
       }
       // Use stderr to avoid corrupting STDIO protocol

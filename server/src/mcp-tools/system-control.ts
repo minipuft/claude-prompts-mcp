@@ -42,7 +42,6 @@ import { ResponseFormatter } from './prompt-engine/processors/response-formatter
 import { ToolDescriptionManager } from './tool-description-manager.js';
 
 // Chain session management integration
-import type { ChainSessionService } from '../chain-session/types.js';
 
 // Prompt guidance system integration
 import { PromptGuidanceService } from '../frameworks/prompt-guidance/index.js';
@@ -60,6 +59,7 @@ import { recordActionInvocation } from '../tooling/action-metadata/usage-tracker
 // Injection control system
 
 import type { ConfigKey } from './config-utils.js';
+import type { ChainSessionService } from '../chain-session/types.js';
 import type { GateGuidanceRenderer } from '../gates/guidance/GateGuidanceRenderer.js';
 import type { FormatterExecutionContext } from './prompt-engine/core/types.js';
 
@@ -3649,13 +3649,17 @@ class SessionActionHandler extends ActionHandler {
 
     response += `### 📄 Context Variables\n`;
     const varNames = Object.keys(context).filter(
-      (k) => !['chain_run_id', 'chain_id', 'current_step', 'total_steps', 'execution_order'].includes(k)
+      (k) =>
+        !['chain_run_id', 'chain_id', 'current_step', 'total_steps', 'execution_order'].includes(k)
     );
 
     if (varNames.length > 0) {
       varNames.forEach((name) => {
         const val = context[name];
-        const displayVal = typeof val === 'string' ? val.substring(0, 100) + (val.length > 100 ? '...' : '') : JSON.stringify(val);
+        const displayVal =
+          typeof val === 'string'
+            ? val.substring(0, 100) + (val.length > 100 ? '...' : '')
+            : JSON.stringify(val);
         response += `- \`${name}\`: ${displayVal}\n`;
       });
     } else {

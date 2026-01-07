@@ -244,9 +244,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // Determine target step number:
     // - If user_response provided: capture for CURRENT step (the one just rendered)
     // - Otherwise: capture placeholder for PREVIOUS step
-    const targetStepNumber = hasUserResponse
-      ? currentStepAtStart
-      : currentStepAtStart - 1;
+    const targetStepNumber = hasUserResponse ? currentStepAtStart : currentStepAtStart - 1;
 
     if (!this.shouldCaptureStep(targetStepNumber, session.state.totalSteps)) {
       this.logExit({ skipped: 'No prior step to capture' });

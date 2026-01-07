@@ -12,8 +12,8 @@ import { ConfigManager } from './config/index.js';
 import { startApplication } from './runtime/application.js';
 import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
 
-import type { HealthReport } from './runtime/health.js';
 import type { Logger } from './logging/index.js';
+import type { HealthReport } from './runtime/health.js';
 
 const EMPTY_HEALTH_REPORT: HealthReport = {
   healthy: false,

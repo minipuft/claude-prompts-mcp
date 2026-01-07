@@ -186,7 +186,9 @@ export class ServerManager {
       this.httpServer!.listen(this.port, () => {
         this.logger.info(`MCP Prompts Server running on http://localhost:${this.port}`);
         this.logger.info(`Streamable HTTP transport ready at http://localhost:${this.port}/mcp`);
-        this.logger.info(`Sessions: ${this.transportManager.getActiveStreamableHttpSessionsCount()}`);
+        this.logger.info(
+          `Sessions: ${this.transportManager.getActiveStreamableHttpSessionsCount()}`
+        );
         resolve();
       });
 
