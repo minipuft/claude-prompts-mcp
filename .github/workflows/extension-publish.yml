@@ -1,0 +1,288 @@
+name: Publish Extensions
+
+on:
+  # Trigger after npm-publish workflow completes successfully
+  workflow_run:
+    workflows: ["Publish to npm"]
+    types: [completed]
+  # Manual trigger for testing (bypasses npm dependency)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., 1.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write  # Needed to upload release assets
+
+jobs:
+  # Build and attach Desktop Extension (.mcpb) to release
+  desktop-extension:
+    # Run if: npm-publish succeeded OR manual trigger
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # For workflow_run: use the branch/tag from the triggering workflow
+          # For workflow_dispatch: use current ref
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # For workflow_run, extract from head_branch (tag name) or package.json
+            branch='${{ github.event.workflow_run.head_branch }}'
+            if [[ "$branch" =~ ^claude-prompts-v ]]; then
+              version="${branch#claude-prompts-v}"
+            else
+              # Fallback: read from package.json
+              version=$(node -p "require('./server/package.json').version")
+            fi
+            echo "version=$version" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate required files
+        run: |
+          echo "Validating required files for Desktop extension..."
+          required_files="manifest.json .mcpbignore"
+          for file in $required_files; do
+            if [[ ! -f "$file" ]]; then
+              echo "ERROR: Missing required file: $file"
+              exit 1
+            fi
+            echo "  ✓ $file exists"
+          done
+          echo "All required files present."
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Build server
+        working-directory: server
+        run: npm run build
+
+      - name: Build Desktop Extension (.mcpb)
+        run: |
+          chmod +x scripts/build-extension.sh
+          ./scripts/build-extension.sh
+
+      - name: Rename with version
+        run: |
+          mv claude-prompts.mcpb claude-prompts-${{ steps.version.outputs.version }}.mcpb
+
+      - name: Upload to Release
+        if: github.event_name == 'workflow_run'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: claude-prompts-${{ steps.version.outputs.version }}.mcpb
+          tag_name: claude-prompts-v${{ steps.version.outputs.version }}
+
+      - name: Upload Artifact (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-prompts-${{ steps.version.outputs.version }}.mcpb
+          path: claude-prompts-${{ steps.version.outputs.version }}.mcpb
+
+  # Build Claude Code plugin archive
+  claude-code-plugin:
+    # Run if: npm-publish succeeded OR manual trigger
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            branch='${{ github.event.workflow_run.head_branch }}'
+            if [[ "$branch" =~ ^claude-prompts-v ]]; then
+              version="${branch#claude-prompts-v}"
+            else
+              version=$(node -p "require('./server/package.json').version")
+            fi
+            echo "version=$version" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate required files
+        run: |
+          echo "Validating required files for Claude Code plugin..."
+          required_files=".claude-plugin/plugin.json mcp.json"
+          for file in $required_files; do
+            if [[ ! -f "$file" ]]; then
+              echo "ERROR: Missing required file: $file"
+              exit 1
+            fi
+            echo "  ✓ $file exists"
+          done
+          echo "All required files present."
+
+      - name: Install and build server
+        working-directory: server
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create plugin archive
+        run: |
+          mkdir -p .plugin-staging
+
+          # Copy plugin manifest and config
+          cp -r .claude-plugin .plugin-staging/
+          cp mcp.json .plugin-staging/
+
+          # Copy skills and hooks
+          cp -r skills .plugin-staging/ 2>/dev/null || true
+          cp -r hooks .plugin-staging/ 2>/dev/null || true
+
+          # Copy server (built)
+          mkdir -p .plugin-staging/server
+          cp -r server/dist .plugin-staging/server/
+          cp -r server/resources .plugin-staging/server/
+          cp server/config.json .plugin-staging/server/
+          cp server/package.json .plugin-staging/server/
+
+          # Install production deps only
+          cd .plugin-staging/server
+          npm install --omit=dev --ignore-scripts
+          cd ../..
+
+          # Create archive
+          cd .plugin-staging
+          zip -r ../claude-prompts-plugin-${{ steps.version.outputs.version }}.zip .
+          cd ..
+
+      - name: Upload to Release
+        if: github.event_name == 'workflow_run'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
+          tag_name: claude-prompts-v${{ steps.version.outputs.version }}
+
+      - name: Upload Artifact (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
+          path: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
+
+  # Build Gemini CLI extension archive
+  gemini-extension:
+    # Run if: npm-publish succeeded OR manual trigger
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            branch='${{ github.event.workflow_run.head_branch }}'
+            if [[ "$branch" =~ ^claude-prompts-v ]]; then
+              version="${branch#claude-prompts-v}"
+            else
+              version=$(node -p "require('./server/package.json').version")
+            fi
+            echo "version=$version" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate required files
+        run: |
+          echo "Validating required files for Gemini extension..."
+          required_files="gemini-extension.json GEMINI.md"
+          for file in $required_files; do
+            if [[ ! -f "$file" ]]; then
+              echo "ERROR: Missing required file: $file"
+              exit 1
+            fi
+            echo "  ✓ $file exists"
+          done
+          echo "All required files present."
+
+      - name: Install and build server
+        working-directory: server
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create Gemini extension archive
+        run: |
+          mkdir -p .gemini-staging
+
+          # Copy extension manifest and context
+          cp gemini-extension.json .gemini-staging/
+          cp GEMINI.md .gemini-staging/
+
+          # Copy Gemini hooks if present
+          cp -r .gemini .gemini-staging/ 2>/dev/null || true
+
+          # Copy server (built)
+          mkdir -p .gemini-staging/server
+          cp -r server/dist .gemini-staging/server/
+          cp -r server/resources .gemini-staging/server/
+          cp server/config.json .gemini-staging/server/
+          cp server/package.json .gemini-staging/server/
+
+          # Install production deps only
+          cd .gemini-staging/server
+          npm install --omit=dev --ignore-scripts
+          cd ../..
+
+          # Create archive
+          cd .gemini-staging
+          zip -r ../claude-prompts-gemini-${{ steps.version.outputs.version }}.zip .
+          cd ..
+
+      - name: Upload to Release
+        if: github.event_name == 'workflow_run'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: claude-prompts-gemini-${{ steps.version.outputs.version }}.zip
+          tag_name: claude-prompts-v${{ steps.version.outputs.version }}
+
+      - name: Upload Artifact (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-prompts-gemini-${{ steps.version.outputs.version }}.zip
+          path: claude-prompts-gemini-${{ steps.version.outputs.version }}.zip

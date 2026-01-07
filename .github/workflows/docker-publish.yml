@@ -1,10 +1,11 @@
 name: Docker Publish
 
 on:
-  push:
-    branches: [ main ]
-    # Publish semver tags as releases.
-    tags: [ 'v*.*.*' ]
+  # Trigger after extension-publish workflow completes successfully
+  workflow_run:
+    workflows: ["Publish Extensions"]
+    types: [completed]
+  # Keep PR builds for testing Docker build process
   pull_request:
     branches: [ main ]
 
@@ -16,6 +17,10 @@ env:
 
 jobs:
   build-and-push:
+    # Run if: extension-publish succeeded OR pull request
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,6 +32,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          # For workflow_run: use the branch/tag from the triggering workflow
+          # For pull_request: use default ref
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref }}
 
       # Install the cosign tool except on PR
       # https://github.com/sigstore/cosign-installer
@@ -36,8 +45,30 @@ jobs:
         with:
           cosign-release: 'v2.2.2'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # For workflow_run, extract from head_branch (tag name like claude-prompts-v1.1.0)
+            branch='${{ github.event.workflow_run.head_branch }}'
+            if [[ "$branch" =~ ^claude-prompts-v ]]; then
+              version="${branch#claude-prompts-v}"
+            else
+              # Fallback: read from package.json
+              version=$(node -p "require('./server/package.json').version")
+            fi
+          else
+            # For PR, use package.json version with -pr suffix
+            version=$(node -p "require('./server/package.json').version")-pr
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
 
       # Login against a Docker registry except on PR
       # https://github.com/docker/login-action
@@ -57,8 +88,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=${{ steps.version.outputs.version }},suffix=-{{sha}}
             type=sha,format=long
 
       # Build and push Docker image with Buildx (don't push on PR)
