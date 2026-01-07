@@ -1,0 +1,97 @@
+# Desktop Extension Bundle Exclusions
+# Include: manifest.json, server/dist/, server/resources/, server/node_modules/, server/config.json, skills/
+
+# Large caches (critical - 344MB!)
+.osgrep/
+is/
+
+# Development history
+.history/
+
+# Planning and documentation (not needed for runtime)
+plans/
+docs/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+QWEN.md
+CONTRIBUTING.md
+README.md
+*.code-workspace
+
+# Dev tools and configs
+.agent/
+.cursor/
+.vscode/
+.github/
+.husky/
+.codex/
+.claude/
+.gemini/
+.actrc
+
+# Git worktrees
+worktrees/
+
+# Coverage and test output
+coverage/
+server/coverage/
+
+# Dependency graphs (large SVGs)
+server/graphs/
+
+# Source code (dist is sufficient)
+server/src/
+server/tests/
+server/scripts/
+
+# Server build/lint configs
+server/tsconfig*.json
+server/jest.config.*
+server/eslint*.js
+server/eslint-rules/
+server/.eslint*
+server/.dependency-cruiser*
+server/.lintstagedrc*
+server/.prettierrc*
+server/package.json
+
+# Server runtime state (generated at runtime)
+server/runtime-state/
+
+# Server cache (regenerated at runtime)
+server/cache/
+
+# Server temp files
+server/temp/
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Test files
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+*.lcov
+
+# Development node_modules at root (keep server/node_modules)
+/node_modules/
+
+# CI/CD configs
+.release-please*
+renovate.json
+release-please-config.json
+
+# Plugin configs (separate distribution channels)
+.claude-plugin/
+mcp.json
+gemini-extension.json
+
+# Root level files (except manifest.json and LICENSE)
+/hooks/
+/scripts/
+/assets/
+/package.json

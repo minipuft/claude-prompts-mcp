@@ -1,0 +1,68 @@
+{
+  "manifest_version": "0.3",
+  "name": "claude-prompts",
+  "display_name": "Claude Prompts",
+  "version": "1.1.0",
+  "description": "Reusable prompt templates with quality gates and multi-step workflows for consistent AI outputs",
+  "long_description": "A comprehensive MCP server providing prompt templates, quality gates, chain workflows, and methodology frameworks (CAGEERF, ReACT). Features include hot-reload for live editing, symbolic command syntax (>>prompt --> >>chain), and inline gate validation for consistent AI outputs.",
+
+  "author": {
+    "name": "minipuft",
+    "url": "https://github.com/minipuft"
+  },
+
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minipuft/claude-prompts-mcp.git"
+  },
+  "homepage": "https://github.com/minipuft/claude-prompts-mcp",
+  "documentation": "https://github.com/minipuft/claude-prompts-mcp#readme",
+  "support": "https://github.com/minipuft/claude-prompts-mcp/issues",
+  "license": "MIT",
+  "keywords": ["mcp", "prompts", "templates", "gates", "chains", "workflows", "cageerf"],
+
+  "server": {
+    "type": "node",
+    "entry_point": "server/dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/dist/index.js", "--transport=stdio"],
+      "env": {
+        "MCP_WORKSPACE": "${__dirname}",
+        "MCP_RESOURCES_PATH": "${__dirname}/server/resources"
+      }
+    }
+  },
+
+  "tools": [
+    {
+      "name": "prompt_engine",
+      "description": "Execute prompts with frameworks, gates, and chains. Supports symbolic syntax (>>prompt --> >>chain)."
+    },
+    {
+      "name": "resource_manager",
+      "description": "CRUD operations for prompts, gates, and methodologies. Manage templates and workflows."
+    },
+    {
+      "name": "system_control",
+      "description": "Framework management, analytics, status, and configuration inspection."
+    }
+  ],
+  "tools_generated": false,
+
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.18.0"
+    }
+  },
+
+  "user_config": {
+    "custom_prompts_path": {
+      "type": "directory",
+      "title": "Custom Prompts Directory",
+      "description": "Optional: Add your own prompt templates from this directory",
+      "required": false
+    }
+  }
+}
