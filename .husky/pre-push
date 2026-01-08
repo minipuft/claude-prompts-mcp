@@ -25,6 +25,16 @@ echo ""
 echo "5/5 Dependency validation..."
 npm run validate:arch || { echo "❌ Dependency validation failed"; exit 1; }
 
+# Optional: render and validate graphs only when .dot sources changed
+CHANGED_DOTS=$(git diff --name-only --cached | grep '^server/graphs/.*\.dot$' || true)
+if [ -n "$CHANGED_DOTS" ]; then
+  echo ""
+  echo "Graphs changed; rendering diagrams..."
+  (cd .. && npm run graphs:render && npm run graphs:validate) || {
+    echo "⚠️ Graph rendering failed or Graphviz missing; skipping"
+  }
+fi
+
 echo ""
 echo "✅ All pre-push validation passed!"
 echo ""
