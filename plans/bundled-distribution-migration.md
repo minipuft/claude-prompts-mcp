@@ -345,3 +345,72 @@ If issues are discovered after migration:
 - [esbuild documentation](https://esbuild.github.io/)
 - [MCP SDK bundling considerations](https://modelcontextprotocol.io/)
 - Current hook implementation: `hooks/dev-sync.py`
+
+---
+
+## Target-State Release & Distribution Strategy (2026-01)
+
+Objective: Stop committing `server/dist/` to git, deliver prebuilt artifacts via GitHub Releases for extensions, keep npm package builds intact (dist included in the tarball), and update install docs to prefer release-based installs.
+
+### Decisions
+
+- Git repository: Do not commit generated `server/dist/` (post‑migration). Developers build locally; CI builds for releases.
+- npm: Keep `dist/` in the published npm tarball via `files` and `prepublishOnly` (already configured).
+- GitHub Releases: Primary distribution for Claude Desktop extension (`.mcpb`) and Gemini CLI extension (platform-agnostic or platform-specific archives per naming convention).
+- Repo install: Treated as a developer path; requires `npm install` + `npm run build`.
+- Release gating: Use Release Please to cut releases; initially publish as `draft: true` until pipeline is validated, then flip to `draft: false`.
+
+### CI/CD Changes
+
+1) Release creation (Release Please)
+- Trigger: merge of the release PR to `main`.
+- Action: create (draft) GitHub Release with version and changelog.
+
+2) Build & Package job (runs on release creation)
+- Build bundled server (`esbuild` target) and validate startup (`npm run build && npm run start:test`).
+- Produce artifacts:
+  - Claude extension: run `npm --prefix server run pack:mcpb` (calls `scripts/build-extension.sh`) → upload `.mcpb` as release asset.
+  - Gemini extension: create archive(s) following `{platform}.{arch}.{name}.{extension}` or single generic archive; ensure `gemini-extension.json` at archive root.
+  - Optional: attach `docs/static/diagrams` artifact if bundled with docs release.
+- Publish npm (optional auto-publish): `npm publish` gated on a “publish” input or separate workflow to avoid unintended publishes.
+
+3) Post‑migration guard
+- Block committing `server/dist/` by ignoring it in repo `.gitignore` (kept today for compatibility; flip when release pipeline validated).
+
+### Tasks (Phased)
+
+Phase A — Prepare
+- [ ] Confirm esbuild bundle (Phase 1 above) passes startup + tests.
+- [ ] Ensure `server/package.json` includes `files: ["dist", ...]` and `prepublishOnly` → OK today.
+- [ ] Create `scripts/package-gemini-extension.sh` to zip/tar the extension with proper layout and names.
+- [ ] Add GitHub Actions workflow `release-artifacts.yml` triggered on `release` event (created) to build and upload `.mcpb` and Gemini archives.
+- [ ] Optionally set Release Please `draft: true` in `release-please-config.json` during validation period.
+
+Phase B — Flip documentation & installs
+- [ ] Update README/docs to prefer GitHub Releases for Claude Desktop `.mcpb` and Gemini extension archives; keep repo install as “dev only”.
+- [ ] Document npm install still supported via `npx`/`npm install` and is self-contained (bundled dist in tarball).
+
+Phase C — Remove dist from git
+- [ ] Add/keep `.gitignore` rule to exclude `server/dist/`.
+- [ ] Remove tracked `server/dist/` from repo once releases validated (1+ successful releases with verified assets).
+- [ ] Remove dev-sync hooks’ `node_modules` repair paths (already tracked in Phase 4 above) — final cleanup.
+
+### Validation & Exit Criteria
+
+- [ ] Release created by Release Please includes correct changelog and version bump.
+- [ ] Build job uploads `.mcpb` and Gemini archives under expected names; assets download and run locally.
+- [ ] npm publish contains `dist/` in tarball; consumers install and run without dev deps.
+- [ ] README/docs updated with install commands for Releases and npm; repo install marked as dev-only.
+- [ ] After at least one successful release, remove `server/dist/` from git and enforce ignore.
+
+### Rollback Plan (Distribution)
+
+- If Release assets fail validation: keep `server/dist/` committed temporarily; re-run fixed build, attach assets manually if needed.
+- If npm publish fails: re-run publish with corrected token/2FA; consumers still have GitHub Releases.
+- Maintain `build:tsc` fallback script and `dist/index.js` entry for quick revert (until stable).
+
+### Notes & Follow-ups
+
+- Hooks layering (deduplication): audit `~/.gemini/settings.json`, project `.gemini/settings.json`, and `gemini-extension.json` to ensure hooks have unique `name`+`command` combinations; rename to avoid multi-run.
+- Gemini hooks alignment: migrate `BeforeModel` → `BeforeAgent` for prompt-context injection; ensure output structure uses `hookSpecificOutput.additionalContext`; keep logging hooks for diagnosis.
+- Docs diagrams: diagrams are rendered in CI to `docs/static/diagrams/` and referenced in docs; generated assets are ignored in git.
