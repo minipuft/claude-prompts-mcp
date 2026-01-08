@@ -50,7 +50,7 @@ Thumbs.db
 *.Zone.Identifier
 
 # Runtime and Cache Files
-.cache/
+server/cache/*
 tmp/
 temp/
 pids/
@@ -58,12 +58,25 @@ pids/
 *.seed
 *.pid.lock
 
-# Chain session cache (generated at runtime)
-server/cache/sessions/
+# Cache (generated at runtime)
+# Ignore entire cache directory but keep sentinel for directory presence
+server/cache/
+!server/cache/.gitignore
+
+# Optional: explicit cache artifacts
+server/cache/*.cache.json
+
+# Gemini CLI runtime artifacts (if present in repo root)
+.gemini/hook-cache.json
+.gemini/hooks/debug.log
+.gemini/tool-log.txt
+.gemini/memory/session-*.jsonl
 
 # MCP Server Specific
 admin-ui/
-server/graphs/
+# Track graph sources (.dot) but ignore generated assets
+server/graphs/*
+!server/graphs/*.dot
 
 # Runtime State Files
 # server/config/framework-state.json
