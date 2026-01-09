@@ -15,7 +15,7 @@ export interface ChainSession {
     executionOrder: number[];
     startTime: number;
     lastActivity: number;
-    originalArgs: Record<string, any>;
+    originalArgs: Record<string, unknown>;
     /**
      * Pending gate review awaiting user verdict.
      * @remarks Infrastructure for pause/resume validation. APIs implemented but not yet auto-triggered.
@@ -44,12 +44,12 @@ export interface ChainSessionSummary {
 }
 export interface PersistedChainRunRegistry {
     version?: number;
-    runs?: Record<string, any>;
+    runs?: Record<string, unknown>;
     runMapping?: Record<string, string[]>;
     baseRunMapping?: Record<string, string[]>;
     runToBase?: Record<string, string>;
     /** Legacy keys preserved for backward compatibility */
-    sessions?: Record<string, any>;
+    sessions?: Record<string, unknown>;
     chainMapping?: Record<string, string[]>;
     baseChainMapping?: Record<string, string[]>;
     runChainToBase?: Record<string, string>;
@@ -58,7 +58,7 @@ export interface ChainSessionLookupOptions {
     includeDormant?: boolean;
 }
 export interface ChainSessionService {
-    createSession(sessionId: string, chainId: string, totalSteps: number, originalArgs?: Record<string, any>, options?: {
+    createSession(sessionId: string, chainId: string, totalSteps: number, originalArgs?: Record<string, unknown>, options?: {
         blueprint?: SessionBlueprint;
     }): Promise<ChainSession>;
     getSession(sessionId: string): ChainSession | undefined;
@@ -68,8 +68,8 @@ export interface ChainSessionService {
     getSessionByChainIdentifier(chainId: string, options?: ChainSessionLookupOptions): ChainSession | undefined;
     getLatestSessionForBaseChain(chainId: string): ChainSession | undefined;
     getRunHistory(baseChainId: string): string[];
-    getChainContext(sessionId: string): Record<string, any>;
-    getOriginalArgs(sessionId: string): Record<string, any>;
+    getChainContext(sessionId: string): Record<string, unknown>;
+    getOriginalArgs(sessionId: string): Record<string, unknown>;
     getSessionBlueprint(sessionId: string): SessionBlueprint | undefined;
     updateSessionBlueprint(sessionId: string, blueprint: SessionBlueprint): void;
     getInlineGateIds(sessionId: string): string[] | undefined;
@@ -82,14 +82,14 @@ export interface ChainSessionService {
     clearSession(sessionId: string): Promise<boolean>;
     clearSessionsForChain(chainId: string): Promise<void>;
     listActiveSessions(limit?: number): ChainSessionSummary[];
-    updateSessionState(sessionId: string, stepNumber: number, stepResult: string, metadata?: Record<string, any>): Promise<boolean>;
+    updateSessionState(sessionId: string, stepNumber: number, stepResult: string, metadata?: Record<string, unknown>): Promise<boolean>;
     setStepState(sessionId: string, stepNumber: number, state: StepState, isPlaceholder?: boolean): boolean;
     getStepState(sessionId: string, stepNumber: number): StepMetadata | undefined;
     transitionStepState(sessionId: string, stepNumber: number, newState: StepState, isPlaceholder?: boolean): Promise<boolean>;
     isStepComplete(sessionId: string, stepNumber: number): boolean;
     completeStep(sessionId: string, stepNumber: number, options?: {
         preservePlaceholder?: boolean;
-        metadata?: Record<string, any>;
+        metadata?: Record<string, unknown>;
     }): Promise<boolean>;
     /**
      * Advance to the next step after gate validation passes.

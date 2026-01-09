@@ -125,7 +125,41 @@ The extension provides:
 - **MCP server** with the same tools (`prompt_engine`, `resource_manager`, `system_control`)
 - **GEMINI.md** context file with usage documentation
 
-**Optional hooks** for `>>prompt` syntax detection can be enabled manually - see `GEMINI.md` for setup instructions.
+<details>
+<summary><strong>Enabling Hooks (recommended)</strong></summary>
+
+Hooks enhance the experience by detecting `>>prompt` syntax and tracking chain state. **Requires Gemini CLI v0.24.0+**.
+
+**Step 1: Upgrade Gemini CLI**
+```bash
+# Check current version
+gemini --version
+
+# Upgrade to preview (required for hooks.enabled support)
+npm install -g @google/gemini-cli@0.24.0-preview.0
+```
+
+**Step 2: Enable hooks globally**
+
+Add to `~/.gemini/settings.json`:
+```json
+{
+  "hooks": {
+    "enabled": true
+  }
+}
+```
+
+**Step 3: Verify hooks are working**
+```bash
+gemini
+# On session start, you should see hook activity in logs
+# Test with: >>diagnose :: 'security-review'
+```
+
+See [hooks/README.md](hooks/README.md#gemini-cli) for detailed hook configuration.
+
+</details>
 
 Works with the same prompts, gates, and methodologies as Claude Code.
 

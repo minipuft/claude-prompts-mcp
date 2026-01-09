@@ -247,8 +247,17 @@ jobs:
           cp gemini-extension.json .gemini-staging/
           cp GEMINI.md .gemini-staging/
 
-          # Copy Gemini hooks if present
+          # Copy Gemini hooks and settings
           cp -r .gemini .gemini-staging/ 2>/dev/null || true
+
+          # Copy hook scripts and config for Gemini extension
+          mkdir -p .gemini-staging/hooks
+          # Gemini expects hooks/hooks.json - use the Gemini-specific config
+          cp hooks/gemini/hooks.json .gemini-staging/hooks/hooks.json 2>/dev/null || true
+          # Copy Gemini hook scripts
+          cp -r hooks/gemini .gemini-staging/hooks/ 2>/dev/null || true
+          # Copy shared hook libraries
+          cp -r hooks/lib .gemini-staging/hooks/ 2>/dev/null || true
 
           # Copy server (built)
           mkdir -p .gemini-staging/server

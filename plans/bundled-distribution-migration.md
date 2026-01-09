@@ -72,41 +72,55 @@ Migrate from TypeScript compilation (`tsc`) to bundled distribution (`esbuild`) 
 
 ## Implementation Phases
 
-### Phase 1: Add Bundled Build (Non-Destructive)
+### Phase 1: Bundle as Default Build ✅ COMPLETE
 
-**Goal**: Add esbuild alongside existing tsc build for testing.
+**Goal**: Replace tsc with esbuild as the default build, outputting directly to `dist/index.js`.
+
+**Status**: Completed 2026-01-09
+
+**Decision**: Implemented **Option A** - Bundle replaces index.js directly. This avoids config changes and provides a cleaner migration path.
 
 **Tasks**:
-- [ ] Install esbuild: `npm install -D esbuild`
-- [ ] Create `esbuild.config.mjs` configuration
-- [ ] Add `build:bundle` script to package.json
-- [ ] Test bundle output manually
-- [ ] Verify path resolution works
-- [ ] Verify hot reload works
-- [ ] Verify all MCP tools function
+- [x] Install esbuild: `npm install -D esbuild` (v0.27.2)
+- [x] Create `esbuild.config.mjs` configuration
+- [x] Make `build` script use esbuild (outputs to `dist/index.js`)
+- [x] Keep `build:tsc` for development debugging
+- [x] Test bundle output
+- [x] Verify path resolution works
+- [x] Verify all MCP tools function
+- [x] All 881 tests pass
 
-**Files to create/modify**:
+**Implementation Notes**:
+- Bundle size: 4.37 MB (within expected 3-5MB range)
+- Used ESM format with `createRequire` shim for CJS interop
+- Node.js built-ins marked as external (always available at runtime)
+- Source maps enabled for debugging
+- `keepNames: true` for readable stack traces
+- **No config changes needed** - all existing configs already point to `dist/index.js`
+
+**Files created/modified**:
 ```
 server/
 ├── esbuild.config.mjs      # NEW - esbuild configuration
-├── package.json            # ADD build:bundle script
+├── package.json            # UPDATED - build uses esbuild
 └── dist/
-    ├── index.js            # KEEP - tsc output (fallback)
-    └── server.js           # NEW - bundled output
+    └── index.js            # NOW bundled output (4.37 MB)
 ```
 
-**Package.json changes**:
+**Package.json scripts (final)**:
 ```json
 {
   "scripts": {
-    "build": "tsc --project tsconfig.json",
-    "build:bundle": "node esbuild.config.mjs",
-    "build:all": "npm run build && npm run build:bundle"
+    "prebuild": "npm run generate:contracts",
+    "build": "node esbuild.config.mjs",
+    "build:prod": "NODE_ENV=production node esbuild.config.mjs",
+    "build:tsc": "tsc --project tsconfig.json",
+    "dev": "node esbuild.config.mjs --watch"
   }
 }
 ```
 
-**esbuild.config.mjs**:
+**esbuild.config.mjs** (actual implementation):
 ```javascript
 import * as esbuild from 'esbuild';
 
@@ -116,23 +130,32 @@ await esbuild.build({
   platform: 'node',
   target: 'node18',
   format: 'esm',
-  outfile: 'dist/server.js',
+  outfile: 'dist/index.js',  // Direct replacement
   sourcemap: true,
   minify: false,  // Keep readable for debugging
-  external: [],   // Bundle everything
+  keepNames: true,  // Readable stack traces
+  external: [
+    // Node.js built-ins (always available at runtime)
+    'fs', 'path', 'http', 'https', 'crypto', 'url', 'util', 'stream', 'events',
+    'node:fs', 'node:path', 'node:fs/promises', // etc.
+  ],
   banner: {
-    js: '#!/usr/bin/env node',
+    // Require shim for CJS dependencies (Express, etc.)
+    js: `import { createRequire as __createRequire } from 'module';
+const require = __createRequire(import.meta.url);`,
   },
 });
 ```
 
 **Validation checklist**:
-- [ ] `npm run build:bundle` succeeds
-- [ ] `node dist/server.js --transport=stdio` starts
-- [ ] Path resolution finds config.json and resources/
-- [ ] Hot reload detects file changes
-- [ ] All MCP tools respond correctly
-- [ ] `system_control(action: "status")` works
+- [x] `npm run build` succeeds (4.37 MB bundle)
+- [x] `node dist/index.js --transport=stdio` starts
+- [x] Path resolution finds config.json and resources/
+- [x] Hot reload detects file changes (resources loaded from filesystem)
+- [x] All MCP tools respond correctly (prompt_engine, system_control, resource_manager)
+- [x] `system_control(action: "status")` works
+- [x] All 881 unit tests pass
+- [x] TypeScript type checking passes
 
 ### Phase 2: Validate Across Distribution Channels
 
@@ -155,93 +178,66 @@ await esbuild.build({
 | Claude Code | MCP tools work | All tools respond |
 | Gemini CLI | MCP tools work | All tools respond |
 
-### Phase 3: Update Distribution Configs
+### Phase 3: Update Distribution Configs ⏭️ SKIPPED
 
-**Goal**: Point all distribution channels to bundled entry point.
+**Status**: Not needed - Option A outputs bundle to `dist/index.js`, so all existing configs work unchanged.
 
-**Files to update**:
+All distribution channels already point to `dist/index.js`:
+- `.mcp.json` → `server/dist/index.js` ✅
+- `gemini-extension.json` → `server/dist/index.js` ✅
+- `manifest.json` → `server/dist/index.js` ✅
 
-**mcp.json**:
-```json
-{
-  "claude-prompts": {
-    "command": "node",
-    "args": ["${CLAUDE_PLUGIN_ROOT}/server/dist/server.js", "--transport=stdio"],
-    "env": {
-      "MCP_WORKSPACE": "${CLAUDE_PLUGIN_ROOT}"
-    }
-  }
-}
-```
+No changes required.
 
-**gemini-extension.json** (mcpServers section):
-```json
-{
-  "mcpServers": {
-    "claude-prompts": {
-      "command": "node",
-      "args": ["${extensionPath}/server/dist/server.js", "--transport=stdio"]
-    }
-  }
-}
-```
-
-**manifest.json** (if applicable):
-```json
-{
-  "mcpServers": {
-    "claude-prompts": {
-      "command": "node",
-      "args": ["/path/to/server/dist/server.js"]
-    }
-  }
-}
-```
-
-### Phase 4: Simplify Hooks
+### Phase 4: Simplify Hooks ✅ COMPLETE
 
 **Goal**: Remove node_modules repair logic from hooks (no longer needed).
 
-**Decision**: Keep hooks but simplify them.
+**Status**: Completed 2026-01-09
 
-| Hook | Current Purpose | After Bundling |
-|------|-----------------|----------------|
-| `dev-sync.py` | Sync files + repair node_modules | Sync files only |
-| Gemini `dev-sync.py` | Sync files + repair node_modules | Sync files only |
+**Changes Made**:
+- Removed `CRITICAL_PACKAGES` constant
+- Removed `check_node_modules()` function
+- Removed `repair_node_modules()` function
+- Removed `subprocess` import (no longer needed)
+- Removed node_modules check in `main()`
+- Updated docstring to note bundled distribution
+
+| Hook | Before | After |
+|------|--------|-------|
+| `hooks/dev-sync.py` | Sync files + repair node_modules | Sync files only ✅ |
+| `.gemini/hooks/dev-sync.py` | N/A (doesn't exist) | N/A |
 
 **Why keep hooks**:
 - Still useful for syncing dist/cache/hooks from source (dev workflow)
-- Just remove the `check_node_modules()` and `repair_node_modules()` functions
-- Hooks become purely about file sync, not dependency repair
+- Hooks now purely about file sync, not dependency repair
+- File reduced from ~273 lines to ~220 lines
 
-**Files to modify**:
-```
-hooks/dev-sync.py              # REMOVE node_modules repair logic
-.gemini/hooks/dev-sync.py      # REMOVE node_modules repair logic
-```
-
-**Simplified dev-sync.py**:
+**Removed code**:
 ```python
-# Remove:
+# Removed:
 # - CRITICAL_PACKAGES constant
 # - check_node_modules() function
 # - repair_node_modules() function
+# - subprocess import
 # - node_modules check in main()
 
-# Keep:
+# Kept:
 # - File sync logic
 # - Quick-check timestamp mode
 ```
 
-### Phase 5: Update Build Pipeline
+### Phase 5: Update Build Pipeline ✅ COMPLETE
 
 **Goal**: Make bundled build the default.
 
+**Status**: Completed as part of Phase 1 (Option A)
+
 **Tasks**:
-- [ ] Change default `build` script to use esbuild
-- [ ] Keep `build:tsc` as fallback for debugging
-- [ ] Update CI/CD to use bundled build
-- [ ] Update documentation
+- [x] Change default `build` script to use esbuild
+- [x] Keep `build:tsc` as fallback for debugging
+- [ ] Update CI/CD to use bundled build (TODO)
+- [ ] Update documentation (TODO)
 
 **Package.json final state**:
 ```json

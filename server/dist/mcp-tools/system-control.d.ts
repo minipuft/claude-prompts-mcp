@@ -14,9 +14,9 @@ import { FrameworkStateManager } from '../frameworks/framework-state-manager.js'
 import { Logger } from '../logging/index.js';
 import { ToolResponse } from '../types/index.js';
 import { ToolDescriptionManager } from './tool-description-manager.js';
-import type { ChainSessionService } from '../chain-session/types.js';
 import { GateSystemManager } from '../gates/gate-state-manager.js';
 import { MetricsCollector } from '../metrics/index.js';
+import type { ChainSessionService } from '../chain-session/types.js';
 import type { GateGuidanceRenderer } from '../gates/guidance/GateGuidanceRenderer.js';
 /**
  * System analytics interface - optimized for API performance and rich historical context

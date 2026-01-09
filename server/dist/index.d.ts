@@ -3,7 +3,16 @@
  * MCP Claude Prompts Server - Main Entry Point
  * Minimal entry point with comprehensive error handling, health checks, and validation
  */
+import type { Application } from './runtime/application.js';
 import type { HealthReport } from './runtime/health.js';
+type DiagnosticStatus = ({
+    available: true;
+    timestamp: string;
+} & ReturnType<Application['getDiagnosticInfo']>) | {
+    available: false;
+    reason: string;
+    timestamp: string;
+};
 /**
  * Graceful shutdown with validation
  */
@@ -21,7 +30,7 @@ export declare function getApplicationHealth(): HealthReport & {
 /**
  * Export orchestrator diagnostic information for external monitoring
  */
-export declare function getDetailedDiagnostics(): any;
+export declare function getDetailedDiagnostics(): DiagnosticStatus;
 /**
  * Export graceful shutdown for external management
  */

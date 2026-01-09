@@ -144,8 +144,8 @@ def main():
     hook_input = parse_hook_input()
 
     # Get user's message from hook input
-    # UserPromptSubmit provides the user's prompt
-    user_message = hook_input.get("prompt", "") or hook_input.get("message", "")
+    # UserPromptSubmit provides the user's prompt in 'user_prompt' field
+    user_message = hook_input.get("user_prompt", "") or hook_input.get("prompt", "") or hook_input.get("message", "")
     session_id = hook_input.get("session_id", "")
 
     if not user_message:

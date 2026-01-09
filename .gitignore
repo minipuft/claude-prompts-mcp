@@ -50,21 +50,13 @@ Thumbs.db
 *.Zone.Identifier
 
 # Runtime and Cache Files
-server/cache/*
+server/cache/
 tmp/
 temp/
 pids/
 *.pid
 *.seed
 *.pid.lock
-
-# Cache (generated at runtime)
-# Ignore entire cache directory but keep sentinel for directory presence
-server/cache/
-!server/cache/.gitignore
-
-# Optional: explicit cache artifacts
-server/cache/*.cache.json
 
 # Gemini CLI runtime artifacts (if present in repo root)
 .gemini/hook-cache.json
@@ -138,3 +130,5 @@ plans/claude-prompts-mcp.code-workspace
 # Claude Desktop Extension artifacts
 *.mcpb
 .mcpb-staging/
+# Test environments
+.test-gemini-home/
