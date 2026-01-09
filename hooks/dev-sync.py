@@ -5,24 +5,20 @@ SessionStart hook: Auto-sync plugin source to Claude Code cache.
 Uses quick-check mode: compares source timestamps against last sync marker.
 Skips sync if no changes detected (<100ms). Full sync only when needed (2-5s).
 
-Also ensures node_modules exists in cache (runs npm install if missing).
+Note: node_modules repair logic removed - bundled distribution is self-contained.
 
 Only syncs if running from separate resources source (not marketplace install).
 """
 
-import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 # Directories to sync and check for changes
-SYNC_DIRS = [".claude-plugin", "hooks"]
-SYNC_SERVER_SUBDIRS = ["cache", "dist"]
+SYNC_DIRS = [".claude-plugin", "hooks", "skills"]
+SYNC_SERVER_SUBDIRS = ["cache", "dist", "resources"]
+SYNC_ROOT_FILES = [".mcp.json"]
 MARKER_FILE = ".dev-sync-marker"
-
-# Critical packages that must exist for server to run
-CRITICAL_PACKAGES = ["@modelcontextprotocol"]
 
 
 def get_source_mtime(source_dir: Path) -> float:
@@ -54,6 +50,15 @@ def get_source_mtime(source_dir: Path) -> float:
                         latest = max(latest, f.stat().st_mtime)
                     except OSError:
                         pass
+
+    # Check root-level files
+    for filename in SYNC_ROOT_FILES:
+        src = source_dir / filename
+        if src.exists():
+            try:
+                latest = max(latest, src.stat().st_mtime)
+            except OSError:
+                pass
 
     return latest
 
@@ -141,50 +146,14 @@ def sync_directory(src: Path, dst: Path) -> bool:
     if not src.exists():
         return False
 
-    if dst.exists():
-        shutil.rmtree(dst)
-    shutil.copytree(src, dst)
-    return True
-
-
-def check_node_modules(cache_dir: Path) -> bool:
-    """Check if node_modules exists and has critical packages.
-
-    Returns True if healthy, False if repair needed.
-    """
-    node_modules = cache_dir / "server" / "node_modules"
-
-    if not node_modules.exists():
-        return False
-
-    # Check for critical packages
-    for pkg in CRITICAL_PACKAGES:
-        if not (node_modules / pkg).exists():
-            return False
-
-    return True
-
-
-def repair_node_modules(cache_dir: Path) -> bool:
-    """Run npm install in the cache's server directory.
-
-    Returns True if successful, False otherwise.
-    """
-    server_dir = cache_dir / "server"
-
-    if not (server_dir / "package.json").exists():
-        return False
-
     try:
-        # Run npm install with minimal output
-        result = subprocess.run(
-            ["npm", "install", "--prefer-offline", "--no-audit", "--no-fund"],
-            cwd=server_dir,
-            capture_output=True,
-            timeout=120,  # 2 minute timeout
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        if dst.exists():
+            shutil.rmtree(dst, ignore_errors=True)
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        return True
+    except (OSError, shutil.Error) as e:
+        # Handle race conditions, permission issues, or file-in-use errors
+        print(f"Warning: Sync {src.name} failed: {e}", file=sys.stderr)
         return False
 
 
@@ -194,14 +163,6 @@ def main():
 
     if not cache_dir:
         sys.exit(0)  # Silent exit if no cache (not installed)
-
-    # Always check node_modules health (independent of sync)
-    if not check_node_modules(cache_dir):
-        print("[Dev Sync] Repairing node_modules...")
-        if repair_node_modules(cache_dir):
-            print("[Dev Sync] node_modules restored")
-        else:
-            print("[Dev Sync] Warning: node_modules repair failed")
 
     if not source_dir:
         sys.exit(0)  # No source dir means marketplace install - skip sync
@@ -231,6 +192,17 @@ def main():
             dst.parent.mkdir(parents=True, exist_ok=True)
             if sync_directory(src, dst):
                 synced.append(f"server/{server_subdir}")
+
+    # Sync root-level files
+    for filename in SYNC_ROOT_FILES:
+        src = source_dir / filename
+        dst = cache_dir / filename
+        if src.exists():
+            try:
+                shutil.copy2(src, dst)
+                synced.append(filename)
+            except (OSError, shutil.Error):
+                pass
 
     # Update marker after successful sync
     if synced:

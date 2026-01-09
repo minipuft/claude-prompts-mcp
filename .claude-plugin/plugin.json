@@ -1,25 +1,12 @@
 {
-    "author": {
-        "name": "minipuft"
-    },
-    "description": "Hot-reloadable versioned prompts with easy tools for prompt engineering, chain workflows, quality gates, Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
-    "homepage": "https://github.com/minipuft/claude-prompts-mcp",
-    "keywords": [
-        "mcp",
-        "prompts",
-        "templates",
-        "gates",
-        "chains",
-        "workflows",
-        "cageerf",
-        "react",
-        "hot-reload",
-        "reasoning"
-    ],
-    "license": "MIT",
-    "mcpServers": "./mcp.json",
-    "name": "claude-prompts",
-    "repository": "https://github.com/minipuft/claude-prompts-mcp",
-    "skills": "./skills",
-    "version": "1.1.0"
+  "name": "claude-prompts",
+  "description": "Hot-reloadable versioned prompts with easy tools for prompt engineering, chain workflows, quality gates. Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
+  "author": {
+    "name": "minipuft"
+  },
+  "homepage": "https://github.com/minipuft/claude-prompts-mcp",
+  "repository": "https://github.com/minipuft/claude-prompts-mcp",
+  "license": "MIT",
+  "keywords": ["mcp", "prompts", "templates", "gates", "chains", "workflows"],
+  "version": "1.1.1"
 }
