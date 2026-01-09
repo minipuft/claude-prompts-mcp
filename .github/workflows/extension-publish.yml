@@ -131,7 +131,7 @@ jobs:
       - name: Validate required files
         run: |
           echo "Validating required files for Claude Code plugin..."
-          required_files=".claude-plugin/plugin.json mcp.json"
+          required_files=".claude-plugin/plugin.json .mcp.json"
           for file in $required_files; do
             if [[ ! -f "$file" ]]; then
               echo "ERROR: Missing required file: $file"
@@ -153,23 +153,17 @@ jobs:
 
           # Copy plugin manifest and config
           cp -r .claude-plugin .plugin-staging/
-          cp mcp.json .plugin-staging/
+          cp .mcp.json .plugin-staging/
 
           # Copy skills and hooks
           cp -r skills .plugin-staging/ 2>/dev/null || true
           cp -r hooks .plugin-staging/ 2>/dev/null || true
 
-          # Copy server (built)
+          # Copy server (bundled - no node_modules needed)
           mkdir -p .plugin-staging/server
           cp -r server/dist .plugin-staging/server/
           cp -r server/resources .plugin-staging/server/
-          cp server/config.json .plugin-staging/server/
-          cp server/package.json .plugin-staging/server/
-
-          # Install production deps only
-          cd .plugin-staging/server
-          npm install --omit=dev --ignore-scripts
-          cd ../..
+          cp -r server/cache .plugin-staging/server/ 2>/dev/null || true
 
           # Create archive
           cd .plugin-staging
@@ -247,29 +241,18 @@ jobs:
           cp gemini-extension.json .gemini-staging/
           cp GEMINI.md .gemini-staging/
 
-          # Copy Gemini hooks and settings
-          cp -r .gemini .gemini-staging/ 2>/dev/null || true
-
-          # Copy hook scripts and config for Gemini extension
+          # Copy hook scripts for Gemini extension
           mkdir -p .gemini-staging/hooks
-          # Gemini expects hooks/hooks.json - use the Gemini-specific config
-          cp hooks/gemini/hooks.json .gemini-staging/hooks/hooks.json 2>/dev/null || true
           # Copy Gemini hook scripts
           cp -r hooks/gemini .gemini-staging/hooks/ 2>/dev/null || true
           # Copy shared hook libraries
           cp -r hooks/lib .gemini-staging/hooks/ 2>/dev/null || true
 
-          # Copy server (built)
+          # Copy server (bundled - no node_modules needed)
           mkdir -p .gemini-staging/server
           cp -r server/dist .gemini-staging/server/
           cp -r server/resources .gemini-staging/server/
-          cp server/config.json .gemini-staging/server/
-          cp server/package.json .gemini-staging/server/
-
-          # Install production deps only
-          cd .gemini-staging/server
-          npm install --omit=dev --ignore-scripts
-          cd ../..
+          cp -r server/cache .gemini-staging/server/ 2>/dev/null || true
 
           # Create archive
           cd .gemini-staging
