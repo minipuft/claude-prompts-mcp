@@ -1,42 +1,42 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-01-07T04:24:00.473Z",
+  "generatedAt": "2026-01-10T01:00:23.722Z",
   "eslintTarget": "src",
   "totals": {
-    "errors": 4504,
-    "warnings": 1135
+    "errors": 4415,
+    "warnings": 1070
   },
   "byRule": {
     "@typescript-eslint/no-unused-vars": {
-      "errors": 103,
+      "errors": 100,
       "warnings": 0
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 382,
+      "errors": 372,
       "warnings": 0
     },
     "@typescript-eslint/no-misused-promises": {
-      "errors": 20,
+      "errors": 15,
       "warnings": 0
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2412,
+      "errors": 2345,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 556
+      "warnings": 527
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "errors": 0,
-      "warnings": 318
+      "warnings": 302
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 303,
+      "errors": 298,
       "warnings": 0
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 461,
+      "errors": 448,
       "warnings": 0
     },
     "@typescript-eslint/no-floating-promises": {
@@ -45,14 +45,14 @@
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 103
+      "warnings": 97
     },
     "@typescript-eslint/explicit-function-return-type": {
-      "errors": 38,
+      "errors": 37,
       "warnings": 0
     },
     "import/order": {
-      "errors": 8,
+      "errors": 7,
       "warnings": 0
     },
     "no-console": {
@@ -69,7 +69,7 @@
     },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
-      "warnings": 68
+      "warnings": 55
     },
     "no-useless-escape": {
       "errors": 4,
@@ -83,13 +83,9 @@
       "errors": 2,
       "warnings": 0
     },
-    "no-case-declarations": {
-      "errors": 2,
-      "warnings": 0
-    },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,
-      "warnings": 17
+      "warnings": 16
     },
     "@typescript-eslint/await-thenable": {
       "errors": 2,
@@ -100,7 +96,7 @@
       "warnings": 0
     },
     "prettier/prettier": {
-      "errors": 694,
+      "errors": 712,
       "warnings": 0
     }
   }
