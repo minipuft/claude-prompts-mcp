@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-01-10T01:00:23.722Z",
+  "generatedAt": "2026-01-10T04:04:49.753Z",
   "eslintTarget": "src",
   "totals": {
-    "errors": 4415,
-    "warnings": 1070
+    "errors": 4417,
+    "warnings": 1071
   },
   "byRule": {
     "@typescript-eslint/no-unused-vars": {
@@ -20,7 +20,7 @@
       "warnings": 0
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2345,
+      "errors": 2346,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
@@ -45,7 +45,7 @@
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 97
+      "warnings": 98
     },
     "@typescript-eslint/explicit-function-return-type": {
       "errors": 37,
@@ -81,6 +81,10 @@
     },
     "import/no-duplicates": {
       "errors": 2,
+      "warnings": 0
+    },
+    "@typescript-eslint/no-unnecessary-type-assertion": {
+      "errors": 1,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-return": {

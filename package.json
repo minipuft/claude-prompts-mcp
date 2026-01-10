@@ -8,7 +8,9 @@
     "graphs:render": "bash scripts/render-graphs.sh",
     "graphs:validate": "bash scripts/render-graphs.sh --validate",
     "sync": "bash scripts/sync-to-cache.sh",
-    "dev": "npm run sync && echo 'Restart Claude Code to apply hook changes'"
+    "dev": "npm run sync && echo 'Restart Claude Code to apply hook changes'",
+    "dev:claude": "bash scripts/dev-claude.sh",
+    "dev:claude:resume": "bash scripts/dev-claude.sh --resume"
   },
   "devDependencies": {
     "husky": "^9.1.7"
