@@ -88,9 +88,12 @@ heapdump-*
 plans/archive/
 CLAUDE.md
 .codex/
-.claude/
-server/.claude/
 .clinerules/
+
+# Claude Code project config - track rules, ignore personal settings
+.claude/settings.local.json
+.claude/settings.json
+server/.claude/
 
 .agent/
 # Temporary test files
