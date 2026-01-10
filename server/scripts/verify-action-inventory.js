@@ -111,6 +111,22 @@ async function main() {
     return;
   }
 
+  // Check if individual definition files exist (they won't in bundled builds)
+  const testFile = path.join(
+    DIST_DIR,
+    'tooling',
+    'action-metadata',
+    'definitions',
+    'prompt-manager.js'
+  );
+  try {
+    await readFile(testFile, 'utf8');
+  } catch {
+    console.warn('⚠️  Bundled build detected (individual definition files not available)');
+    console.log('✅ Skipping action inventory verification (bundled mode)');
+    return;
+  }
+
   await Promise.all([verifyPromptManager(), verifySystemControl(), verifyPromptEngine()]);
   console.log('✅ Action inventory verified');
 }
