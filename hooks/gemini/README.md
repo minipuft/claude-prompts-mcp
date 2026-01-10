@@ -5,7 +5,7 @@ This directory contains adapter scripts that bridge the Gemini CLI hook system w
 ## Gemini CLI Distribution
 
 For Gemini CLI usage, see the dedicated distribution repo:
-**[claude-prompts-gemini](https://github.com/minipuft/claude-prompts-gemini)**
+**[gemini-prompts](https://github.com/minipuft/gemini-prompts)**
 
 That repo uses this directory via git submodule, with proper `hooks/hooks.json` for Gemini event names.
 
