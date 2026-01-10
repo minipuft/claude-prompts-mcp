@@ -72,6 +72,13 @@ def main():
         hook_input.get("result", {})
     )
 
+    # Extract tool_input for chain_id (matches Claude's post-prompt-engine.py)
+    tool_input = (
+        hook_input.get("tool_input", {}) or
+        hook_input.get("toolInput", {}) or
+        {}
+    )
+
     # Parse content
     if isinstance(tool_response, dict):
         content = tool_response.get("content", "")
@@ -88,12 +95,22 @@ def main():
     if not state:
         sys.exit(0)
 
+    # Extract chain_id from tool_input (higher priority than regex parsing)
+    if isinstance(tool_input, dict):
+        input_chain_id = tool_input.get("chain_id", "")
+        if input_chain_id:
+            state["chain_id"] = input_chain_id
+
     save_session_state(session_id, state)
 
     output_lines = []
     if state.get("pending_gate"):
+        criteria = state.get("gate_criteria", [])
+        criteria_str = " | ".join(c[:40] for c in criteria[:3]) if criteria else ""
         output_lines.append(f"[Gate] {state['pending_gate']}")
         output_lines.append("  Respond: GATE_REVIEW: PASS|FAIL - <reason>")
+        if criteria_str:
+            output_lines.append(f"  Check: {criteria_str}")
 
     if state.get("current_step", 0) > 0:
         step = state["current_step"]
