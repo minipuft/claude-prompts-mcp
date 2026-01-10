@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 # Add shared lib/hooks root
-CORE_HOOKS_DIR = Path(__file__).parent.parent
+CORE_HOOKS_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(CORE_HOOKS_DIR))
 
 import importlib.util

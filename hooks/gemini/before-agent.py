@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Add shared lib to path
-SHARED_LIB = Path(__file__).parent.parent / "lib"
+SHARED_LIB = Path(__file__).resolve().parent.parent / "lib"
 sys.path.insert(0, str(SHARED_LIB))
 
 from cache_manager import (
