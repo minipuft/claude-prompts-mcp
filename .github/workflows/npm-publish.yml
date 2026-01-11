@@ -73,3 +73,12 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public
+
+      - name: Trigger gemini-prompts submodule update
+        if: success()
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DOWNSTREAM_PAT }}
+          repository: minipuft/gemini-prompts
+          event-type: upstream-release
+          client-payload: '{"version": "${{ github.event.release.tag_name }}"}'
