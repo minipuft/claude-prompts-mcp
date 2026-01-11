@@ -98,7 +98,7 @@ export class PromptAssetManager {
         categoryManager,
         {
           enabled: true,
-          autoReload: false, // Will be controlled by external triggers
+          autoReload: true, // Automatically reload on file changes (debounced + batched)
           debounceMs: 500,
           batchChanges: true,
           batchTimeoutMs: 2000,

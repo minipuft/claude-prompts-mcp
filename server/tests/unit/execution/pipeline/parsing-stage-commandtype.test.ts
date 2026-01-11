@@ -29,6 +29,17 @@ describe('CommandParsingStage - commandType Integration', () => {
     systemMessage: null,
   };
 
+  // Step prompt referenced by chain_test's chainSteps
+  const stepConverted: ConvertedPrompt = {
+    id: 'step',
+    name: 'Step Prompt',
+    description: 'Step in chain',
+    category: 'test',
+    arguments: [],
+    userMessageTemplate: 'Step content',
+    systemMessage: null,
+  };
+
   const chainConverted: ConvertedPrompt = {
     id: 'chain_test',
     name: 'Chain Test',
@@ -49,7 +60,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     stage = new CommandParsingStage(
       commandParser,
       argumentParser,
-      [singleConverted, chainConverted],
+      [singleConverted, stepConverted, chainConverted],
       logger
     );
   });

@@ -1,5 +1,5 @@
 # Desktop Extension Bundle Exclusions
-# Include: manifest.json, server/dist/, server/resources/ (public only), server/node_modules/, server/config.json, skills/
+# Include: manifest.json, server/dist/ (bundled), server/resources/ (public only), server/config.json, skills/
 
 # Private prompt categories (development-specific, not shipped)
 server/resources/prompts/development/
@@ -87,8 +87,9 @@ pnpm-lock.yaml
 *.spec.ts
 *.lcov
 
-# Development node_modules at root (keep server/node_modules)
+# Node modules (bundled distribution is self-contained)
 /node_modules/
+server/node_modules/
 
 # CI/CD configs
 .release-please*

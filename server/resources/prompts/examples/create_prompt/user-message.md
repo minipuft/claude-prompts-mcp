@@ -90,7 +90,8 @@ Please fix the errors above and try again with corrected prompt definition.
 {% endif %}
 
 {% else %}
-{# Design workflow: no prompt input provided, guide LLM to design #}
+{# ═══════ DESIGN WORKFLOW ═══════ #}
+{# No prompt input provided - guide LLM to design based on prompt_type #}
 
 Create a new prompt with the following specifications:
 
@@ -100,330 +101,380 @@ Create a new prompt with the following specifications:
 
 ---
 
-## Reference: Existing Prompt Examples
+{% if prompt_type == "script" %}
+{# ═══════ SCRIPT-TOOL PROMPT TYPE ═══════ #}
 
-### Example 1: Simple Prompt (Minimal)
+## Script-Tool Prompt: Two-Phase Workflow
 
-**prompt.yaml:**
+Script-enhanced prompts validate input and can auto-execute MCP tools. Creation requires two phases:
 
-```yaml
-id: reasoning
-name: Reasoning Structure
-category: guidance
-description: Step-by-step reasoning structure
-systemMessageFile: system-message.md
-userMessageTemplateFile: user-message.md
+### Phase 1: Create Tool Files
+
+Create this directory structure relative to prompt location:
+
+```
+resources/prompts/{{category | default("development")}}/{{id | default("my_prompt")}}/
+├── prompt.yaml           # Metadata (tools: [tool_id])
+├── user-message.md       # Nunjucks template with tool output access
+└── tools/
+    └── {{id | default("my_tool")}}/
+        ├── tool.yaml     # Runtime config
+        ├── schema.json   # Input validation (triggers schema_match)
+        └── script.py     # Validation logic
 ```
 
-### Example 2: Prompt with Arguments and Gates
-
-**prompt.yaml:**
+**1. tool.yaml** (runtime configuration):
 
 ```yaml
-id: implementation_gap_analysis
-name: Implementation Gap Analysis
-category: development
-description: >-
-  Identifies gaps between documented/expected behavior and actual implementation.
+id: { { id | default("my_tool") } }
+name: { { name | default("My Tool") } }
+runtime: python
+script: script.py
+timeout: 30000
+enabled: true
+
+execution:
+  trigger: schema_match # Auto-detect from user args
+  strict: false # ANY required param triggers
+```
+
+**2. schema.json** (input validation - triggers schema_match):
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "input_field": {
+      "type": "string",
+      "description": "Main input for validation"
+    }
+  },
+  "required": ["input_field"]
+}
+```
+
+**3. script.py** (validation with MCP-specific output format):
+
+```python
+#!/usr/bin/env python3
+import json
+import sys
+
+def validate(data):
+    errors = []
+    warnings = []
+
+    # Validation logic
+    if not data.get("input_field"):
+        errors.append("Missing required: input_field")
+
+    if errors:
+        return {"valid": False, "errors": errors, "warnings": warnings}
+
+    # Auto-execute MCP tool on success (optional)
+    return {
+        "valid": True,
+        "auto_execute": {
+            "tool": "resource_manager",
+            "params": {
+                "resource_type": "prompt",
+                "action": "create",
+                # ... transformed params
+            }
+        },
+        "warnings": warnings,
+        "summary": {"field_count": len(data)}
+    }
+
+if __name__ == "__main__":
+    print(json.dumps(validate(json.load(sys.stdin))))
+```
+
+**4. user-message.md** (template with tool output access):
+
+```markdown
+{% raw %}{% if tool_{{id | default("my_tool")}} %}
+{% if tool_{{id | default("my_tool")}}.valid %}
+{% if tool_{{id | default("my_tool")}}_result %}
+
+## Success
+
+{{ tool_{{id | default("my_tool")}}\_result.text }}
+{% else %}
+
+## Validated
+
+Ready to execute.
+{% endif %}
+{% else %}
+
+## Validation Errors
+
+{% for error in tool_{{id | default("my_tool")}}.errors %}- {{ error }}
+{% endfor %}
+{% endif %}
+{% else %}
+
+## Design Phase
+
+Provide input to validate...
+{% endif %}{% endraw %}
+```
+
+### Phase 2: Register Prompt
+
+After creating tool files, call `>>create_prompt` with all fields:
+
+```text
+prompt_engine(
+  command: ">>create_prompt",
+  options: {
+    "id": "{{id | default("my_prompt")}}",
+    "name": "{{name | default("My Prompt")}}",
+    "category": "{{category | default("development")}}",
+    "description": "{{purpose | default("Validates and processes input")}}",
+    "userMessageTemplateFile": "user-message.md",
+    "tools": ["{{id | default("my_tool")}}"],
+    "arguments": [
+      {"name": "input_field", "type": "string", "description": "Main input"}
+    ]
+  }
+)
+```
+
+### Template Variables (Script Output)
+
+| Variable                                    | Type    | Description           |
+| ------------------------------------------- | ------- | --------------------- |
+| `{% raw %}{{tool_<id>}}{% endraw %}`        | object  | Full script result    |
+| `{% raw %}{{tool_<id>.valid}}{% endraw %}`  | boolean | Validation passed     |
+| `{% raw %}{{tool_<id>.errors}}{% endraw %}` | array   | Validation errors     |
+| `{% raw %}{{tool_<id>_result}}{% endraw %}` | object  | Auto-execute response |
+
+### Reference Example
+
+See `plugin_doctor` for a complete script-tool implementation:
+`resources/prompts/development/plugin_doctor/`
+
+{% elif prompt_type == "chain" %}
+{# ═══════ CHAIN PROMPT TYPE ═══════ #}
+
+## Chain Prompt: Multi-Step Workflow
+
+Chain prompts execute multiple prompts in sequence, passing data between steps.
+
+### Chain Structure
+
+```yaml
+id: { { id | default("my_chain") } }
+name: { { name | default("My Chain") } }
+category: { { category | default("development") } }
+description: { { purpose | default("Multi-step workflow") } }
+userMessageTemplateFile: user-message.md
+
+arguments:
+  - name: initial_input
+    type: string
+    description: Starting input for the chain
+
+chainSteps:
+  - promptId: step1_prompt
+    stepName: 'Step 1: Analysis'
+  - promptId: step2_prompt
+    stepName: 'Step 2: Synthesis'
+    inputMapping:
+      analysis: steps.step1_prompt.result
+  - promptId: step3_prompt
+    stepName: 'Step 3: Summary'
+    inputMapping:
+      synthesis: steps.step2_prompt.result
+```
+
+### Chain Step Properties
+
+| Property        | Type   | Required | Description                       |
+| --------------- | ------ | -------- | --------------------------------- |
+| `promptId`      | string | Yes      | Prompt to execute                 |
+| `stepName`      | string | Yes      | Display name                      |
+| `inputMapping`  | object | No       | Map previous outputs to step args |
+| `outputMapping` | object | No       | Name this step's output           |
+| `retries`       | number | No       | Retry attempts (0-5)              |
+
+### Input/Output Mapping
+
+```yaml
+chainSteps:
+  - promptId: analyze
+    stepName: 'Analyze'
+    outputMapping:
+      findings: output # Name the output
+
+  - promptId: synthesize
+    stepName: 'Synthesize'
+    inputMapping:
+      data: steps.analyze.result # Reference previous step
+      findings: '{% raw %}{{findings}}{% endraw %}' # Or use named output
+```
+
+### Template Variables (Chain Steps)
+
+| Variable                                        | Description              |
+| ----------------------------------------------- | ------------------------ |
+| `{% raw %}{{input}}{% endraw %}`                | Current step's arguments |
+| `{% raw %}{{step1_result}}{% endraw %}`         | Output from step 1       |
+| `{% raw %}{{previous_step_result}}{% endraw %}` | Most recent step output  |
+| `{% raw %}{{chain_id}}{% endraw %}`             | Current chain session ID |
+
+### Create Chain Prompt
+
+```text
+prompt_engine(
+  command: ">>create_prompt",
+  options: {
+    "id": "{{id | default("my_chain")}}",
+    "name": "{{name | default("My Chain")}}",
+    "category": "{{category | default("development")}}",
+    "description": "{{purpose | default("Multi-step workflow")}}",
+    "arguments": [
+      {"name": "initial_input", "type": "string", "description": "Starting input"}
+    ],
+    "chainSteps": [
+      {"promptId": "step1", "stepName": "Step 1"},
+      {"promptId": "step2", "stepName": "Step 2", "inputMapping": {"prev": "steps.step1.result"}}
+    ]
+  }
+)
+```
+
+**Note:** Referenced prompts (`step1`, `step2`) must exist before chain execution.
+
+{% else %}
+{# ═══════ TEMPLATE PROMPT TYPE (DEFAULT) ═══════ #}
+
+## Template Prompt: Basic Structure
+
+### Minimal Example
+
+```yaml
+id: { { id | default("my_prompt") } }
+name: { { name | default("My Prompt") } }
+category: { { category | default("development") } }
+description: { { purpose | default("What this prompt does") } }
+userMessageTemplateFile: user-message.md
+
+arguments:
+  - name: content
+    type: string
+    description: Main content to process
+```
+
+### With Arguments and Gates
+
+```yaml
+id: { { id | default("my_prompt") } }
+name: { { name | default("My Prompt") } }
+category: { { category | default("development") } }
+description: { { purpose | default("What this prompt does") } }
 systemMessageFile: system-message.md
 userMessageTemplateFile: user-message.md
 
 arguments:
-  - name: focus_area
+  - name: content
     type: string
-    description: The subsystem or feature area to analyze
-  - name: symptom
+    description: Content to analyze
+    required: true
+  - name: focus
     type: string
-    description: The observed behavior that triggered this analysis
-  - name: related_files
-    type: string
-    description: Known files related to the issue (optional)
+    description: Focus area
     required: false
+    defaultValue: general
 
 gateConfiguration:
   include:
-    - technical-accuracy
     - code-quality
-  inline_gate_definitions:
-    - name: Actionable Findings
-      type: quality
-      scope: execution
-      description: Each gap must have specific file:line locations
-      pass_criteria:
-        - Every gap includes exact file paths
-        - Remediation steps are specific
   framework_gates: true
 ```
 
-### Example 3: Chain Prompt (Multi-Step Workflow)
+### Template Syntax (Nunjucks)
 
-**prompt.yaml:**
+```markdown
+# Analysis: {% raw %}{{focus | default("General")}}{% endraw %}
 
-```yaml
-id: pr_review_chain
-name: PR Review Chain
-category: pr-review
-description: >-
-  Complete PR review workflow: diff analysis, security audit, performance check,
-  and approval summary.
-systemMessageFile: system-message.md
-userMessageTemplateFile: user-message.md
+{% raw %}{{content}}{% endraw %}
 
-arguments:
-  - name: pr_title
-    type: string
-    description: Title of the pull request
-  - name: pr_description
-    type: string
-    description: Description/body of the pull request
-  - name: diff_content
-    type: string
-    description: The full diff content to review
+{% raw %}{% if include_examples %}{% endraw %}
 
-gateConfiguration:
-  include:
-    - pr-security
-    - pr-performance
-  framework_gates: false
+## Examples
 
-chainSteps:
-  - promptId: pr_diff_analysis
-    stepName: Diff Analysis (Step 1 of 4)
-  - promptId: pr_security_audit
-    stepName: Security Audit (Step 2 of 4)
-  - promptId: pr_performance_check
-    stepName: Performance Check (Step 3 of 4)
-  - promptId: pr_approval_summary
-    stepName: Approval Summary (Step 4 of 4)
+{% raw %}{{examples}}{% endraw %}
+{% raw %}{% endif %}{% endraw %}
 ```
+
+### Argument Types
+
+| Type      | Input                   | Coercion         |
+| --------- | ----------------------- | ---------------- |
+| `string`  | Any text                | None             |
+| `number`  | Numeric                 | Parsed           |
+| `boolean` | true/false              | Case-insensitive |
+| `array`   | JSON or comma-separated | Parsed           |
+| `object`  | JSON string             | Parsed           |
+
+### Create Template Prompt
+
+```text
+prompt_engine(
+  command: ">>create_prompt",
+  options: {
+    "id": "{{id | default("my_prompt")}}",
+    "name": "{{name | default("My Prompt")}}",
+    "category": "{{category | default("development")}}",
+    "description": "{{purpose | default("What this prompt does")}}",
+    "userMessageTemplate": "Process: {% raw %}{{content}}{% endraw %}\n\nFocus: {% raw %}{{focus}}{% endraw %}",
+    "arguments": [
+      {"name": "content", "type": "string", "description": "Content to process"},
+      {"name": "focus", "type": "string", "description": "Focus area", "required": false, "defaultValue": "general"}
+    ]
+  }
+)
+```
+
+{% endif %}
 
 ---
 
-## Schema Reference
+## Required Fields (all types)
 
-### prompt.yaml Fields
+| Field         | Type   | Description                |
+| ------------- | ------ | -------------------------- |
+| `id`          | string | Lowercase with underscores |
+| `name`        | string | Human-readable name        |
+| `category`    | string | Organization category      |
+| `description` | string | What the prompt does       |
 
-| Field                     | Type    | Required | Description                      |
-| ------------------------- | ------- | -------- | -------------------------------- |
-| `id`                      | string  | Yes      | Lowercase-underscored identifier |
-| `name`                    | string  | Yes      | Human-readable name              |
-| `category`                | string  | Yes      | Prompt category for organization |
-| `description`             | string  | Yes      | Brief description of the prompt  |
-| `systemMessageFile`       | string  | No\*     | Path to system-message.md        |
-| `systemMessage`           | string  | No\*     | Inline system message            |
-| `userMessageTemplateFile` | string  | No\*     | Path to user-message.md          |
-| `userMessageTemplate`     | string  | No\*     | Inline user message template     |
-| `arguments`               | array   | No       | Argument definitions             |
-| `gateConfiguration`       | object  | No       | Gate configuration               |
-| `chainSteps`              | array   | No       | Chain step definitions           |
-| `registerWithMcp`         | boolean | No       | Register as MCP tool             |
-| `tools`                   | array   | No       | Script tool references           |
+Plus ONE of:
 
-\*Must have either `userMessageTemplate`/`userMessageTemplateFile` OR `chainSteps`
-
-### Argument Definition
-
-```yaml
-arguments:
-  - name: my_arg # Required: argument name
-    type: string # Required: string|number|boolean|array|object
-    description: What it is # Required: description
-    required: false # Optional: default true
-    defaultValue: 'text' # Optional: default value
-    validation: # Optional: validation rules
-      pattern: '^[a-z]+$'
-      minLength: 1
-      maxLength: 100
-```
-
-### Gate Configuration
-
-```yaml
-gateConfiguration:
-  include: # Gate IDs to include
-    - code-quality
-    - technical-accuracy
-  exclude: # Gate IDs to exclude
-    - verbose-gate
-  framework_gates: true # Include active framework's gates
-  inline_gate_definitions: # Define gates inline
-    - name: Custom Check
-      type: quality
-      scope: execution
-      description: What to check
-      pass_criteria:
-        - Criterion 1
-        - Criterion 2
-```
-
-### Chain Step Definition
-
-```yaml
-chainSteps:
-  - promptId: step_1_prompt # Required: ID of prompt to execute
-    stepName: Step 1 Name # Required: Display name
-    inputMapping: # Optional: map previous output to input
-      arg_name: '{{previous.output_field}}'
-    outputMapping: # Optional: extract from response
-      output_field: '$.data.field'
-    retries: 2 # Optional: retry count (default: 0)
-```
-
----
+- `userMessageTemplate` / `userMessageTemplateFile`
+- `chainSteps` (for chains)
 
 ## Your Task
 
 Based on **{{name}}** with purpose "{{purpose}}":
 
-1. **Choose prompt type**: {% if prompt_type %}{{prompt_type}}{% else %}single or chain{% endif %}
-2. **Write clear description** explaining what the prompt does
-3. **Define arguments** with types and descriptions
-4. **Create system/user messages** with `{{variable}}` placeholders
-5. **Configure gates** if quality validation is needed
-6. **Define chain steps** if multi-step workflow
+{% if prompt_type == "script" %}
 
----
-
-## How to Create the Prompt
-
-Make a **second `prompt_engine` call** to `>>create_prompt` with all fields in the `options` parameter. The script tool will automatically detect the schema match and create the prompt.
-
-**Example call (single prompt):**
-
-```text
-prompt_engine(
-  command: ">>create_prompt",
-  options: {
-    "id": "my_prompt",
-    "name": "My Prompt",
-    "category": "development",
-    "description": "What this prompt does",
-    "userMessageTemplate": "Analyze the following:\n\n{{content}}\n\nProvide insights on {{focus}}.",
-    "arguments": [
-      {"name": "content", "type": "string", "description": "Content to analyze"},
-      {"name": "focus", "type": "string", "description": "Focus area"}
-    ]
-  }
-)
-```
-
-**Example call (chain prompt):**
-
-```text
-prompt_engine(
-  command: ">>create_prompt",
-  options: {
-    "id": "review_chain",
-    "name": "Review Chain",
-    "category": "review",
-    "description": "Multi-step review workflow",
-    "chainSteps": [
-      {"promptId": "step1", "stepName": "Initial Review"},
-      {"promptId": "step2", "stepName": "Deep Dive"},
-      {"promptId": "step3", "stepName": "Summary"}
-    ]
-  }
-)
-```
-
----
-
-## Required Fields (in `options`)
-
-| Field         | Type   | Description                                            |
-| ------------- | ------ | ------------------------------------------------------ |
-| `id`          | string | Lowercase-underscored identifier (e.g., "code_review") |
-| `name`        | string | Human-readable name                                    |
-| `category`    | string | Prompt category (e.g., "development", "analysis")      |
-| `description` | string | What the prompt does                                   |
-
-Plus ONE of:
-
-- `userMessageTemplate` or `userMessageTemplateFile` (for single prompts)
-- `chainSteps` (for chain prompts)
-
-## Optional Fields
-
-| Field               | Type    | Description                           |
-| ------------------- | ------- | ------------------------------------- |
-| `systemMessage`     | string  | Inline system message                 |
-| `systemMessageFile` | string  | Path to system-message.md             |
-| `arguments`         | array   | Argument definitions                  |
-| `gateConfiguration` | object  | Gate configuration                    |
-| `registerWithMcp`   | boolean | Register as MCP tool (default: false) |
-| `tools`             | array   | Script tool IDs to use                |
-
----
-
-## JSON Structure Reference
-
-### Single Prompt
-
-```json
-{
-  "id": "<lowercase_underscored>",
-  "name": "<Human Readable Name>",
-  "category": "<category>",
-  "description": "What this prompt does",
-  "systemMessage": "You are an expert at...",
-  "userMessageTemplate": "Analyze {{content}} with focus on {{focus}}.",
-  "arguments": [
-    {
-      "name": "content",
-      "type": "string",
-      "description": "Content to analyze",
-      "required": true
-    },
-    {
-      "name": "focus",
-      "type": "string",
-      "description": "Focus area",
-      "required": false,
-      "defaultValue": "general"
-    }
-  ],
-  "gateConfiguration": {
-    "include": ["code-quality"],
-    "framework_gates": true
-  }
-}
-```
-
-### Chain Prompt
-
-```json
-{
-  "id": "<lowercase_underscored>",
-  "name": "<Human Readable Name>",
-  "category": "<category>",
-  "description": "Multi-step workflow description",
-  "arguments": [{ "name": "input", "type": "string", "description": "Initial input" }],
-  "chainSteps": [
-    {
-      "promptId": "step1_prompt",
-      "stepName": "Step 1: Analysis"
-    },
-    {
-      "promptId": "step2_prompt",
-      "stepName": "Step 2: Synthesis",
-      "inputMapping": {
-        "analysis_result": "{{previous.output}}"
-      }
-    }
-  ],
-  "gateConfiguration": {
-    "include": ["technical-accuracy"],
-    "framework_gates": false
-  }
-}
-```
-
-**Requirements:**
-
-- Prompt IDs: lowercase with underscores (e.g., `code_review`, `deep_analysis`)
-- Arguments: Each must have name, type, and description
-- Templates: Use `{{variable}}` syntax for argument placeholders
-- Chain steps: Must reference existing prompt IDs
-- Inline vs file: Use inline for short content, files for longer content
+1. Create tool files using Write tool (tool.yaml, schema.json, script.py)
+2. Create user-message.md with Nunjucks conditionals for tool output
+3. Call `>>create_prompt` with `tools: [tool_id]` to register
+   {% elif prompt_type == "chain" %}
+4. Ensure step prompts exist (create them first if needed)
+5. Define chainSteps with proper inputMapping
+6. Call `>>create_prompt` with chainSteps array
+   {% else %}
+7. Design the template with `{% raw %}{{variable}}{% endraw %}` placeholders
+8. Define arguments with types and validation
+9. Call `>>create_prompt` with all fields
+   {% endif %}
 
 {% endif %}

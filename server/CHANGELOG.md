@@ -7,6 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-01-10
+
 ### Added
 
 - **Streamable HTTP Transport**: New MCP standard transport (since 2025-03-26) via `--transport=streamable-http`.
@@ -61,7 +63,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **TypeScript**: tightened typing/tsconfig strictness and cleaned up types across the execution pipeline.
 - **Docs**: reorganized documentation layout and cross-links.
 - **Script tools**: Consolidated `mode` parameter into `trigger` + `confirm` options (see Migration below).
-- **Dev sync hook**: SessionStart now checks cached `node_modules` and runs `npm install` when required packages are missing.
+- **Bundled distribution**: Default build now uses esbuild to produce a self-contained `dist/index.js` (~4.5MB) with all dependencies bundled. No `node_modules` required at runtime. TypeScript compilation (`npm run build:tsc`) remains available for debugging.
+- **Dev sync hook**: Simplified to file synchronization only—`node_modules` repair logic removed since bundled distribution is self-contained.
 - **Chain response capture**: Step capture now snapshots the current step at stage entry to avoid mutation during gate review advancement.
 - **Release automation**: Release Please publishes non-draft releases; GitHub Releases attach the Claude Desktop `.mcpb` after npm publish while CLI extensions remain repo-based.
 
@@ -88,8 +91,14 @@ See `docs/guides/script-tools.md` for full documentation.
 ### Fixed
 
 - **Hot-reload cache**: Disk edits to template files (`user-message.md`, etc.) now refresh on reload.
+- **Gate reviews (deferred)**: `gate_verdict` now supports PASS-without-review (continues) and FAIL-without-review (creates review) consistently across the pipeline.
+- **Verdict parsing**: Flexible formats accepted via `gate_verdict` only; rationale required; no parsing from `user_response` to avoid false positives.
+- **Chain advancement**: Centralized advancement on PASS to prevent double-increment during combined `user_response` + `gate_verdict` resumes.
 - **SSE request routing**: SSE handler now respects per-session endpoints and SDK `handlePostMessage` behavior.
 - **E2E HTTP harness**: Server startup in tests avoids Jest env flags that skip main entry, and Streamable HTTP responses parse JSON/SSE formats.
+- **Version consistency validation**: Added `validate:versions` script and CI/pre-push checks to prevent version drift between `package.json`, `manifest.json`, and `plugin.json`.
+- **Dist freshness validation**: Added `validate:dist-fresh` CI check to ensure bundled `dist/index.js` matches source code.
+- **Release-please config**: Removed stale `gemini-extension.json` reference (file was deleted in prior migration).
 
 ## [1.1.0] - 2025-12-08
 

@@ -9,7 +9,7 @@ This is the map for the Claude Prompts MCP server. Canonical operational docs li
 ## Start Here (Learning Path)
 
 1. **[Main README](../README.md)**: Quick start and installation options.
-2. **[MCP Tooling Guide](reference/mcp-tools.md)**: Tool surface (`prompt_engine`, `prompt_manager`, `system_control`).
+2. **[MCP Tooling Guide](reference/mcp-tools.md)**: Tool surface (`prompt_engine`, `resource_manager`, `system_control`).
 3. **[Prompt Authoring Guide](guides/prompt-authoring-guide.md)**: Prompt/template structure and schema.
 4. **[Chains](guides/chains.md)**: Multi-step workflows and step mapping.
 5. **[Architecture Overview](architecture/overview.md)**: Runtime, transports, pipeline, and state.

@@ -30,14 +30,17 @@ interface ToolDescriptionsConfig {
   version: string;
   lastUpdated?: string;
   generatedFrom: string;
-  tools: Record<string, {
-    description: string;
-    shortDescription: string;
-    category: string;
-    triggerExamples?: string[];
-    parameters: Record<string, string | { type: string; description: string }>;
-    frameworkAware: { enabled: string; disabled: string };
-  }>;
+  tools: Record<
+    string,
+    {
+      description: string;
+      shortDescription: string;
+      category: string;
+      triggerExamples?: string[];
+      parameters: Record<string, string | { type: string; description: string }>;
+      frameworkAware: { enabled: string; disabled: string };
+    }
+  >;
 }
 
 async function loadContracts(): Promise<ToolContract[]> {
@@ -83,7 +86,10 @@ function renderParamTable(contract: ToolContract): string {
       return `| \`${p.name}\` | ${escapePipes(p.type)} | ${status} | ${required} | ${descParts.join(' ')} |`;
     });
 
-  const header = ['| Name | Type | Status | Required | Description |', '| --- | --- | --- | --- | --- |'];
+  const header = [
+    '| Name | Type | Status | Required | Description |',
+    '| --- | --- | --- | --- | --- |',
+  ];
   return header.concat(rows).join('\n');
 }
 
@@ -91,7 +97,11 @@ function escapePipes(text: string): string {
   return text.replace(/\|/g, '\\|');
 }
 
-async function writeFileIfChanged(filePath: string, content: string, checkMode: boolean): Promise<boolean> {
+async function writeFileIfChanged(
+  filePath: string,
+  content: string,
+  checkMode: boolean
+): Promise<boolean> {
   let current: string | null = null;
   try {
     current = await readFile(filePath, 'utf-8');
@@ -245,7 +255,8 @@ function typeToZod(param: ParameterDefinition): string {
       zodCode += `.regex(/^chain-[a-zA-Z0-9_-]+(?:#\\d+)?$/, 'Chain ID must follow format: chain-{prompt}[#runNumber]')`;
     }
     if (name === 'gate_verdict') {
-      zodCode += `.regex(/^GATE_REVIEW:\\s(PASS|FAIL)\\s-\\s.+$/, 'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"')`;
+      // Accept union of formats; minimal form is safe here because this is a dedicated parameter
+      zodCode += `.refine((v) => /^(?:GATE_REVIEW:\\s*(?:PASS|FAIL)\\s*[-:]\\s*.+|GATE\\s+(?:PASS|FAIL)\\s*[-:]\\s*.+|(?:PASS|FAIL)\\s*[-:]\\s*.+)$/i.test(v), 'Gate verdict must follow one of: "GATE_REVIEW: PASS/FAIL - reason", "GATE PASS/FAIL - reason", or minimal "PASS/FAIL - reason" (param only)')`;
     }
   }
 
@@ -326,7 +337,9 @@ async function main(): Promise<void> {
 
     // Skip .generated.ts for contracts without toolDescription (deprecated tools)
     if (!contract.toolDescription) {
-      console.log(`[generate-contracts] Skipping ${contract.tool} (no toolDescription - deprecated)`);
+      console.log(
+        `[generate-contracts] Skipping ${contract.tool} (no toolDescription - deprecated)`
+      );
       continue;
     }
 
@@ -418,7 +431,11 @@ async function main(): Promise<void> {
     lastUpdated,
   };
   const toolDescriptionsJson = JSON.stringify(toolDescriptions, null, 2);
-  const toolDescChanged = await writeFileIfChanged(toolDescriptionsPath, `${toolDescriptionsJson}\n`, checkMode);
+  const toolDescChanged = await writeFileIfChanged(
+    toolDescriptionsPath,
+    `${toolDescriptionsJson}\n`,
+    checkMode
+  );
   changed = changed || toolDescChanged;
   if (toolDescChanged) {
     console.log('[generate-contracts] Generated tool-descriptions.contracts.json');
@@ -427,7 +444,11 @@ async function main(): Promise<void> {
   // Generate mcp-schemas.ts (Zod schemas for MCP registration)
   const mcpSchemasPath = path.join(GENERATED_META_DIR, 'mcp-schemas.ts');
   const mcpSchemasContent = generateMcpSchemas(contracts);
-  const mcpSchemasChanged = await writeFileIfChanged(mcpSchemasPath, `${mcpSchemasContent}\n`, checkMode);
+  const mcpSchemasChanged = await writeFileIfChanged(
+    mcpSchemasPath,
+    `${mcpSchemasContent}\n`,
+    checkMode
+  );
   changed = changed || mcpSchemasChanged;
   if (mcpSchemasChanged) {
     console.log('[generate-contracts] Generated mcp-schemas.ts');

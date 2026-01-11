@@ -105,15 +105,15 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     ): ParsedVerdict =>
       context.gateEnforcement?.parseVerdict(raw, source) ?? this.parseGateVerdict(raw, source);
 
-    const verdictFromUserResponse =
-      gateVerdictInput === undefined && hasUserResponse(userResponse)
-        ? parseVerdict(userResponse, 'user_response')
-        : null;
+    // Do not parse verdicts from user_response (contract-first). Only use gate_verdict parameter.
+    const verdictFromUserResponse = null;
 
     // Handle gate_action parameter (retry/skip/abort) when retry limit exceeded
     // Delegate to GateEnforcementAuthority for consistent action handling
     const gateAction = context.mcpRequest.gate_action;
     const authority = context.gateEnforcement;
+    // Track if we already advanced due to a PASS/continue verdict in this request
+    let passClearedThisCall = false;
     const isRetryLimitExceeded =
       authority !== undefined
         ? authority.isRetryLimitExceeded(sessionId)
@@ -130,9 +130,56 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
+    // Deferred review support: if a verdict is provided without an existing pending review,
+    // use the GateEnforcementAuthority to create/clear reviews as needed before execution.
+    if (session.pendingGateReview === undefined && gateVerdictInput !== undefined && authority) {
+      const verdictPayload = parseVerdict(gateVerdictInput, 'gate_verdict');
+      if (verdictPayload !== null) {
+        const enforcementMode = context.state.gates.enforcementMode ?? 'blocking';
+        const outcome = await authority.recordOutcome(sessionId, verdictPayload, enforcementMode);
+
+        // Record detection metadata for diagnostics
+        const verdictDetection: NonNullable<typeof context.state.gates.verdictDetection> = {
+          verdict: verdictPayload.verdict,
+          source: verdictPayload.source,
+        };
+        verdictDetection.rationale = verdictPayload.rationale;
+        if (verdictPayload.detectedPattern !== undefined) {
+          verdictDetection.pattern = verdictPayload.detectedPattern;
+        }
+        verdictDetection.outcome = outcome.status === 'cleared' ? 'cleared' : 'pending';
+        context.state.gates.verdictDetection = verdictDetection;
+
+        // Advance immediately on PASS; otherwise sync newly created pending review (on FAIL)
+        if (outcome.status === 'cleared') {
+          const stepToAdvance = currentStepAtStart;
+          await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
+          context.diagnostics.info(this.name, 'Gate PASS (no prior review) - advanced step', {
+            stepToAdvance,
+          });
+          passClearedThisCall = true;
+        }
+
+        // Sync newly created pending review (on FAIL) into session context so ExecutionStage skips
+        const pending = this.chainSessionManager.getPendingGateReview(sessionId);
+        if (pending !== undefined) {
+          sessionContext.pendingReview = pending;
+          context.sessionContext = { ...sessionContext };
+        }
+
+        // If no step output accompanies the verdict, we can stop here after verdict handling
+        if (!hasUserResponse(userResponse)) {
+          this.logExit({
+            gateVerdict: verdictPayload.verdict,
+            gateVerdictSource: verdictPayload.source,
+          });
+          return;
+        }
+      }
+    }
+
     if (session.pendingGateReview !== undefined) {
-      const verdictPayload =
-        parseVerdict(gateVerdictInput, 'gate_verdict') ?? verdictFromUserResponse;
+      const verdictPayload = parseVerdict(gateVerdictInput, 'gate_verdict');
 
       if (verdictPayload !== null) {
         const outcome = await this.chainSessionManager.recordGateReviewOutcome(sessionId, {
@@ -161,6 +208,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
           context.diagnostics.info(this.name, 'Gate PASS - advanced step', { stepToAdvance });
           delete sessionContext.pendingReview;
+          passClearedThisCall = true;
         } else {
           const pending = this.chainSessionManager.getPendingGateReview(sessionId);
           if (pending !== undefined) {
@@ -176,7 +224,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           if (verdictPayload.verdict === 'FAIL') {
             switch (enforcementMode) {
               case 'blocking': {
-                // Stay on step, check retry limit
+                // Stay on step, check retry limit (render review screen with context)
                 const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
                 if (
                   pendingReview !== undefined &&
@@ -209,6 +257,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 const stepToAdvance = currentStepAtStart;
                 await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
                 delete sessionContext.pendingReview;
+                passClearedThisCall = true;
                 break;
               }
 
@@ -222,6 +271,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 const stepToAdvance = currentStepAtStart;
                 await this.chainSessionManager.advanceStep(sessionId, stepToAdvance);
                 delete sessionContext.pendingReview;
+                passClearedThisCall = true;
                 break;
               }
             }
@@ -288,7 +338,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         // Only advance if no pending gate review (gated flows advance on PASS verdict)
         const hasPendingReview =
           this.chainSessionManager.getPendingGateReview(sessionId) !== undefined;
-        if (!hasPendingReview) {
+        if (!hasPendingReview && !passClearedThisCall) {
           await this.chainSessionManager.advanceStep(sessionId, targetStepNumber);
         }
 
@@ -334,7 +384,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         // Only advance if no pending gate review (gated flows advance on PASS verdict)
         const hasPendingReview =
           this.chainSessionManager.getPendingGateReview(sessionId) !== undefined;
-        if (!hasPendingReview) {
+        if (!hasPendingReview && !passClearedThisCall) {
           await this.chainSessionManager.advanceStep(sessionId, targetStepNumber);
           didAdvance = true;
         }

@@ -8,67 +8,11 @@
 <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=claude-prompts&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNsYXVkZS1wcm9tcHRzQGxhdGVzdCJdfQ=="><img src="https://cursor.com/deeplink/mcp-install-dark.png" alt="Add claude-prompts MCP server to Cursor" height="28" /></a>
 [![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge&logo=opensource)](https://opensource.org/licenses/MIT)
 
-**Hot-reloadable prompts, structured reasoning, and chain workflows for your AI assistant.**
+**Hot-reloadable prompts with chains, gates, and structured reasoning for AI assistants.**
 
-[Quick Start](#quick-start) • [What You Get](#what-you-get) • [Syntax](#syntax-reference) • [Docs](#documentation)
+[Quick Start](#quick-start) • [Features](#what-you-get) • [Syntax](#syntax-reference) • [Docs](#documentation)
 
 </div>
-
----
-
-## Why
-
-Stop copy-pasting prompts. This server turns your prompt library into a programmable engine:
-
-- **Version Control** — Prompts are YAML + templates in git. Track changes, review diffs.
-- **Hot Reload** — Edit a template, run it immediately. No restarts.
-- **Structured Execution** — Parses operators, injects methodology, enforces quality gates.
-
----
-
-## How It Works
-
-```mermaid
-%%{init: {'theme': 'neutral', 'themeVariables': {'background':'#0b1224','primaryColor':'#e2e8f0','primaryBorderColor':'#1f2937','primaryTextColor':'#0f172a','lineColor':'#94a3b8','fontFamily':'"DM Sans","Segoe UI",sans-serif','fontSize':'14px','edgeLabelBackground':'#0b1224'}}}%%
-flowchart TB
-    classDef actor fill:#0f172a,stroke:#cbd5e1,stroke-width:1.5px,color:#f8fafc;
-    classDef server fill:#111827,stroke:#fbbf24,stroke-width:1.8px,color:#f8fafc;
-    classDef process fill:#e2e8f0,stroke:#1f2937,stroke-width:1.6px,color:#0f172a;
-    classDef client fill:#f4d0ff,stroke:#a855f7,stroke-width:1.6px,color:#2e1065;
-    classDef clientbg fill:#1a0a24,stroke:#a855f7,stroke-width:1.8px,color:#f8fafc;
-    classDef decision fill:#fef3c7,stroke:#f59e0b,stroke-width:1.6px,color:#78350f;
-
-    linkStyle default stroke:#94a3b8,stroke-width:2px
-
-    User["1. User sends command"]:::actor
-    Example[">>analyze @CAGEERF :: 'cite sources'"]:::actor
-    User --> Example --> Parse
-
-    subgraph Server["MCP Server"]
-        direction TB
-        Parse["2. Parse operators"]:::process
-        Inject["3. Inject framework + gates"]:::process
-        Render["4. Render prompt"]:::process
-        Decide{"6. Route verdict"}:::decision
-        Parse --> Inject --> Render
-    end
-    Server:::server
-
-    subgraph Client["Claude (Client)"]
-        direction TB
-        Execute["5. Run prompt + check gates"]:::client
-    end
-    Client:::clientbg
-
-    Render -->|"Prompt with gate criteria"| Execute
-    Execute -->|"Verdict + output"| Decide
-
-    Decide -->|"PASS → render next step"| Render
-    Decide -->|"FAIL → render retry prompt"| Render
-    Decide -->|"Done"| Result["7. Return to user"]:::actor
-```
-
-**The feedback loop:** You send a command with operators → Server parses and injects methodology/gates → Claude executes and self-evaluates → Server routes: next step (PASS), retry (FAIL), or return result (done).
 
 ---
 
@@ -236,7 +180,7 @@ git clone https://github.com/minipuft/claude-prompts-mcp.git
 cd claude-prompts-mcp/server && npm install && npm run build
 ```
 
-Then point your config to `server/dist/index.js`.
+Then point your config to `server/dist/index.js`. The build produces a self-contained bundle (~4.5MB) with all dependencies included—no `node_modules` required at runtime.
 
 **Transport options**: `--transport=stdio` (default), `--transport=streamable-http` (recommended for HTTP).
 
@@ -407,6 +351,52 @@ prompt_engine(command:"@CAGEERF >>analysis topic:'AI safety'")
 resource_manager(resource_type:"prompt", action:"list")
 system_control(action:"status")
 ```
+
+---
+
+## How It Works
+
+```mermaid
+%%{init: {'theme': 'neutral', 'themeVariables': {'background':'#0b1224','primaryColor':'#e2e8f0','primaryBorderColor':'#1f2937','primaryTextColor':'#0f172a','lineColor':'#94a3b8','fontFamily':'"DM Sans","Segoe UI",sans-serif','fontSize':'14px','edgeLabelBackground':'#0b1224'}}}%%
+flowchart TB
+    classDef actor fill:#0f172a,stroke:#cbd5e1,stroke-width:1.5px,color:#f8fafc;
+    classDef server fill:#111827,stroke:#fbbf24,stroke-width:1.8px,color:#f8fafc;
+    classDef process fill:#e2e8f0,stroke:#1f2937,stroke-width:1.6px,color:#0f172a;
+    classDef client fill:#f4d0ff,stroke:#a855f7,stroke-width:1.6px,color:#2e1065;
+    classDef clientbg fill:#1a0a24,stroke:#a855f7,stroke-width:1.8px,color:#f8fafc;
+    classDef decision fill:#fef3c7,stroke:#f59e0b,stroke-width:1.6px,color:#78350f;
+
+    linkStyle default stroke:#94a3b8,stroke-width:2px
+
+    User["1. User sends command"]:::actor
+    Example[">>analyze @CAGEERF :: 'cite sources'"]:::actor
+    User --> Example --> Parse
+
+    subgraph Server["MCP Server"]
+        direction TB
+        Parse["2. Parse operators"]:::process
+        Inject["3. Inject framework + gates"]:::process
+        Render["4. Render prompt"]:::process
+        Decide{"6. Route verdict"}:::decision
+        Parse --> Inject --> Render
+    end
+    Server:::server
+
+    subgraph Client["Claude (Client)"]
+        direction TB
+        Execute["5. Run prompt + check gates"]:::client
+    end
+    Client:::clientbg
+
+    Render -->|"Prompt with gate criteria"| Execute
+    Execute -->|"Verdict + output"| Decide
+
+    Decide -->|"PASS → render next step"| Render
+    Decide -->|"FAIL → render retry prompt"| Render
+    Decide -->|"Done"| Result["7. Return to user"]:::actor
+```
+
+**The feedback loop:** Command with operators → Parse and inject methodology/gates → Claude executes and self-evaluates → Route: next step (PASS), retry (FAIL), or return result (done).
 
 ---
 

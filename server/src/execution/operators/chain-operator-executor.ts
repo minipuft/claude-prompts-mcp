@@ -109,7 +109,7 @@ export class ChainOperatorExecutor {
       gateIdsToRender.some((gateId) => this.isInlineGateId(gateId)) ||
       Boolean(inlineGuidanceText);
     const callToAction =
-      'Use the resume shortcut below and respond via gate_verdict as `GATE_REVIEW: PASS` or `GATE_REVIEW: FAIL - reason` to resume the workflow.';
+      'Use the resume shortcut below and include both your step output and a gate_verdict (e.g., `GATE_REVIEW: PASS - reason`) to resume the workflow.';
 
     // Get the last actual step that was executed
     const fallbackIndex = stepPrompts.length - 1;
@@ -121,18 +121,7 @@ export class ChainOperatorExecutor {
       (lastStepIndex >= 0 ? stepPrompts[lastStepIndex] : (stepPrompts[fallbackIndex] ?? undefined));
 
     // Build concise PASS/FAIL warning at top
-    const gateWarning = [
-      '---',
-      '',
-      '## ⚠️ QUALITY GATE VALIDATION',
-      '',
-      'You MUST **execute** the task below, then **validate** your output against the quality gates.',
-      '',
-      '**Format:** Start response with `GATE_REVIEW: PASS` or `GATE_REVIEW: FAIL`, then explain why.',
-      '',
-      '---',
-      '',
-    ].join('\n');
+    const gateWarning = '';
 
     // Get original content from last step if available
     let originalContent = '';
@@ -477,9 +466,9 @@ export class ChainOperatorExecutor {
     }
 
     const callToAction = !isFinalStep
-      ? `Use the resume shortcut below to rerun prompt_engine and paste your latest answer into user_response so Step ${
-          stepNumber + 1
-        } can begin.`
+      ? `Use the resume shortcut below and include your step output in user_response${
+          gateGuidanceEnabled ? ' (add gate_verdict if a gate asks you to self-review)' : ''
+        } so Step ${stepNumber + 1} can begin.`
       : 'Deliver the final response to the user (no user_response needed once the chain completes).';
 
     const content = lines.filter(Boolean).join('\n\n').trimEnd();

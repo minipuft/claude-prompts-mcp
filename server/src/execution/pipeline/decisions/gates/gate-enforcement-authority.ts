@@ -212,6 +212,28 @@ export class GateEnforcementAuthority {
     verdict: ParsedVerdict,
     enforcementMode: EnforcementMode = 'blocking'
   ): Promise<ReviewOutcome> {
+    // Deferred review semantics:
+    // - PASS without a pending review: advance immediately, no review UI.
+    // - FAIL without a pending review: create review and await remediation.
+    // - With a pending review: record as before.
+
+    const pending = this.chainSessionManager.getPendingGateReview(sessionId);
+    if (!pending) {
+      if (verdict.verdict === 'PASS') {
+        return {
+          status: 'cleared',
+          nextAction: 'continue',
+        };
+      }
+
+      // Create a review on first FAIL
+      const created = this.createPendingReview({
+        gateIds: [],
+        instructions: 'Gate validation failed. Review and remediate.',
+      });
+      await this.setPendingReview(sessionId, created);
+    }
+
     const result = await this.chainSessionManager.recordGateReviewOutcome(sessionId, {
       verdict: verdict.verdict,
       rationale: verdict.rationale,

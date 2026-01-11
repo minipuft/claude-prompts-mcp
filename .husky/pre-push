@@ -6,24 +6,28 @@ cd server || exit 1
 echo "🔍 Running pre-push validation..."
 echo ""
 
-echo "1/5 Type checking..."
+echo "1/6 Type checking..."
 npm run typecheck || { echo "❌ Type checking failed"; exit 1; }
 
 echo ""
-echo "2/5 Linting..."
+echo "2/6 Linting..."
 npm run lint:ratchet || { echo "❌ Lint ratchet failed (new violations introduced)"; exit 1; }
 
 echo ""
-echo "3/5 Format checking..."
+echo "3/6 Format checking..."
 echo "✅ Skipped (format is enforced via eslint/prettier in lint-staged for staged files)"
 
 echo ""
-echo "4/5 Running tests..."
+echo "4/6 Running tests..."
 npm run test:ci || { echo "❌ Tests failed"; exit 1; }
 
 echo ""
-echo "5/5 Dependency validation..."
+echo "5/6 Dependency validation..."
 npm run validate:arch || { echo "❌ Dependency validation failed"; exit 1; }
+
+echo ""
+echo "6/6 Version consistency check..."
+npm run validate:versions || { echo "❌ Version mismatch across manifests"; exit 1; }
 
 # Optional: render and validate graphs only when .dot sources changed
 CHANGED_DOTS=$(git diff --name-only --cached | grep '^server/graphs/.*\.dot$' || true)

@@ -157,16 +157,25 @@ export class CommandParsingStage extends BasePipelineStage {
       // (Parser defaults to 'single' because it can't see the prompt definition)
       if (convertedPrompt.chainSteps?.length) {
         parsedCommand.commandType = 'chain';
-        parsedCommand.steps = convertedPrompt.chainSteps.map((step, index) => ({
-          stepNumber: index + 1,
-          promptId: step.promptId,
-          args: argResult.processedArgs, // Use parsed arguments from command
-          variableName: step.stepName ?? `step_${index + 1}`,
-          convertedPrompt,
-          inputMapping: step.inputMapping,
-          outputMapping: step.outputMapping,
-          retries: step.retries,
-        })) as ChainStepPrompt[];
+        parsedCommand.steps = convertedPrompt.chainSteps.map((step, index) => {
+          const stepConverted = this.findConvertedPrompt(step.promptId);
+          if (!stepConverted) {
+            throw new PromptError(
+              `Converted prompt data not found for chain step: ${step.promptId}`
+            );
+          }
+
+          return {
+            stepNumber: index + 1,
+            promptId: step.promptId,
+            args: argResult.processedArgs, // Use parsed arguments from command
+            variableName: step.stepName ?? `step_${index + 1}`,
+            convertedPrompt: stepConverted,
+            inputMapping: step.inputMapping,
+            outputMapping: step.outputMapping,
+            retries: step.retries,
+          } as ChainStepPrompt;
+        });
       }
 
       context.parsedCommand = parsedCommand;
@@ -483,6 +492,7 @@ export class CommandParsingStage extends BasePipelineStage {
           gateId: namedGate.gateId,
           hasShellVerify: Boolean(namedGate.shellVerify),
           shellVerifyCommand: namedGate.shellVerify?.command,
+          shellVerifyTimeout: namedGate.shellVerify?.timeout,
           criteria: namedGate.criteria,
         });
 

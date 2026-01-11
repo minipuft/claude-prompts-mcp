@@ -374,8 +374,9 @@ export class ResponseFormattingStage extends BasePipelineStage {
 
     const hasPendingReview = context.hasPendingReview();
     if (hasPendingReview) {
+      // Encourage combined resume to save a round trip: include both output and verdict
       lines.push(
-        `Next: chain_id="${chainIdentifier}", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
+        `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
       );
     } else if (sessionContext.currentStep && sessionContext.totalSteps) {
       const isComplete = sessionContext.currentStep >= sessionContext.totalSteps;

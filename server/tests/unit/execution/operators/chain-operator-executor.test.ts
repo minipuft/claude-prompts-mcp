@@ -289,7 +289,7 @@ describe('ChainOperatorExecutor', () => {
         promptId: 'analyze',
       })
     );
-    expect(result.content).toContain('## ⚠️ QUALITY GATE VALIDATION');
+    // Top-of-template gate banner removed in favor of concise review header
     expect(result.content).toContain('[Gate Review] Quality Gate Self-Review');
   });
 

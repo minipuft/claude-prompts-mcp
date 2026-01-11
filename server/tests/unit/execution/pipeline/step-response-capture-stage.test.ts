@@ -121,9 +121,13 @@ describe('StepResponseCaptureStage', () => {
     expect(manager.completeStep).not.toHaveBeenCalled();
   });
 
-  test('falls back to parsing user_response when gate_verdict is missing', async () => {
-    const { manager, getSession, recordGateReviewOutcome } = createSessionManager();
+  test('does not parse verdicts from user_response (contract-first)', async () => {
+    // Verdicts should only be provided via gate_verdict parameter, not user_response
+    // However, user_response content IS still captured as step output
+    const { manager, getSession, recordGateReviewOutcome, updateSessionState, getStepState } =
+      createSessionManager();
     recordGateReviewOutcome.mockResolvedValue('pending');
+    getStepState.mockReturnValue({ state: StepState.COMPLETED, isPlaceholder: true });
     const stage = new StepResponseCaptureStage(manager, createLogger());
 
     getSession.mockReturnValue({
@@ -136,12 +140,13 @@ describe('StepResponseCaptureStage', () => {
         prompts: [],
         createdAt: Date.now(),
         maxAttempts: 3,
+        combinedPrompt: 'test prompt',
       },
     });
 
     const context = new ExecutionContext({
       command: '>>chain',
-      user_response: 'GATE_REVIEW: FAIL - needs red-team pass',
+      user_response: 'GATE_REVIEW: FAIL - needs red-team pass', // Verdict-like text in user_response
     });
     context.sessionContext = {
       sessionId: 'sess-1',
@@ -155,21 +160,21 @@ describe('StepResponseCaptureStage', () => {
         prompts: [],
         createdAt: Date.now(),
         maxAttempts: 3,
+        combinedPrompt: 'test prompt',
       },
     };
 
     await stage.execute(context);
 
-    expect(recordGateReviewOutcome).toHaveBeenCalledWith(
+    // Verdict in user_response should NOT be parsed as verdict (contract-first approach)
+    expect(recordGateReviewOutcome).not.toHaveBeenCalled();
+    // But user_response content IS captured as step output
+    expect(updateSessionState).toHaveBeenCalledWith(
       'sess-1',
-      expect.objectContaining({
-        verdict: 'FAIL',
-        rawVerdict: 'GATE_REVIEW: FAIL - needs red-team pass',
-        reviewer: 'user_response',
-      })
+      2,
+      'GATE_REVIEW: FAIL - needs red-team pass',
+      expect.objectContaining({ source: 'user_response' })
     );
-    expect(manager.updateSessionState).not.toHaveBeenCalled();
-    expect(manager.completeStep).not.toHaveBeenCalled();
   });
 
   test('records placeholder output for previous step when no user response is provided', async () => {

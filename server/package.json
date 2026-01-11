@@ -1,6 +1,6 @@
 {
   "name": "claude-prompts",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Claude Custom Prompts MCP Server",
   "author": "minipuft",
   "license": "MIT",
@@ -71,7 +71,9 @@
     "generate:contracts": "tsx scripts/generate-contracts.ts",
     "validate:contracts": "tsx scripts/generate-contracts.ts --check",
     "validate:methodologies": "node scripts/validate-methodologies.js",
-    "validate:all": "npm run lint && npm run validate:arch && npm run validate:filesize && npm run validate:metadata && npm run validate:contracts && npm run validate:methodologies",
+    "validate:versions": "node scripts/validate-versions.js",
+    "validate:dist-fresh": "bash scripts/validate-dist-fresh.sh",
+    "validate:all": "npm run lint && npm run validate:arch && npm run validate:filesize && npm run validate:metadata && npm run validate:contracts && npm run validate:methodologies && npm run validate:versions",
     "verify:action-metadata": "node scripts/verify-action-inventory.js",
     "dev:graph": "madge --ts-config ./tsconfig.json --extensions ts src --image graph.svg",
     "dev:graph:json": "madge --ts-config ./tsconfig.json --extensions ts src --json",

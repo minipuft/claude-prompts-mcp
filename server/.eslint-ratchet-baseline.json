@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-01-10T04:04:49.753Z",
+  "generatedAt": "2026-01-10T22:08:03.235Z",
   "eslintTarget": "src",
   "totals": {
-    "errors": 4417,
-    "warnings": 1071
+    "errors": 4422,
+    "warnings": 1075
   },
   "byRule": {
     "@typescript-eslint/no-unused-vars": {
@@ -20,7 +20,7 @@
       "warnings": 0
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2346,
+      "errors": 2351,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
@@ -36,7 +36,7 @@
       "warnings": 0
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 448,
+      "errors": 449,
       "warnings": 0
     },
     "@typescript-eslint/no-floating-promises": {
@@ -45,7 +45,7 @@
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
-      "warnings": 98
+      "warnings": 97
     },
     "@typescript-eslint/explicit-function-return-type": {
       "errors": 37,
@@ -57,7 +57,7 @@
     },
     "no-console": {
       "errors": 0,
-      "warnings": 73
+      "warnings": 78
     },
     "@typescript-eslint/explicit-module-boundary-types": {
       "errors": 54,
@@ -81,10 +81,6 @@
     },
     "import/no-duplicates": {
       "errors": 2,
-      "warnings": 0
-    },
-    "@typescript-eslint/no-unnecessary-type-assertion": {
-      "errors": 1,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-return": {

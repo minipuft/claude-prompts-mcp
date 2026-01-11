@@ -137,23 +137,32 @@ The system restores the execution blueprint automatically.
 
 ### Option 2: Gate Reviews
 
-For gate validation, use the special format:
+Use the `gate_verdict` parameter for verdicts (preferred formats below). Keep `user_response` for actual step output.
 
 ```json
 {
   "chain_id": "chain-analysis_flow#2",
-  "user_response": "GATE_REVIEW: PASS - All quality criteria met."
+  "user_response": "Step output...",
+  "gate_verdict": "GATE_REVIEW: PASS - All quality criteria met."
 }
 ```
 
-Or if failing:
+On failure:
 
 ```json
 {
   "chain_id": "chain-analysis_flow#2",
-  "user_response": "GATE_REVIEW: FAIL - Missing test coverage for edge cases."
+  "user_response": "Revised output...",
+  "gate_verdict": "GATE_REVIEW: FAIL - Missing test coverage for edge cases."
 }
 ```
+
+Verdict formats accepted:
+- `GATE_REVIEW: PASS/FAIL - reason` (preferred)
+- `GATE PASS/FAIL - reason`
+- `PASS/FAIL - reason` (minimal only via `gate_verdict`)
+
+Behavior: PASS without a pending review advances; FAIL creates a review with context. When retries are exhausted, use `gate_action: "retry" | "skip" | "abort"`.
 
 ### Option 3: Command-Based Resume
 
@@ -236,4 +245,10 @@ Don't edit session files manually — use `force_restart` to clear state.
 - **Document branches** — complex flows need inline comments
 - **Use relative references** — avoid hardcoded paths
 
-For prompt authoring, see [Prompt Authoring Guide](prompt-authoring-guide.md).
+---
+
+## Related
+
+- [Chain Authoring Example](chain-authoring-example.md) — Full walkthrough: building a 4-phase documentation-to-skill pipeline
+- [Prompt Authoring Guide](prompt-authoring-guide.md) — Creating prompts
+- [Gates Guide](gates.md) — Quality validation

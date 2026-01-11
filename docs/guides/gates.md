@@ -407,7 +407,17 @@ Resume chains with a verdict:
 prompt_engine(chain_id: "chain-review#1", gate_verdict: "GATE_REVIEW: PASS - criteria met")
 ```
 
-Formats accepted: `GATE_REVIEW: PASS - reason` | `GATE PASS - reason` | `PASS - reason`
+Formats accepted: `GATE_REVIEW: PASS - reason` | `GATE PASS - reason` | `PASS - reason` (minimal only via `gate_verdict`). Rationale is required.
+
+Combined resume (include output and verdict together):
+
+```bash
+prompt_engine(chain_id:"chain-review#1", user_response:"Step output...", gate_verdict:"GATE_REVIEW: PASS - why")
+```
+
+Behavior:
+- PASS with no pending review: chain advances (no review UI).
+- FAIL: a review screen is created with context; when retries are exhausted, use `gate_action:"retry|skip|abort"`.
 
 ### When Gates Fail
 

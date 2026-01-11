@@ -88,7 +88,10 @@ export class McpToolRequestValidator {
       return false;
     }
 
-    return /^GATE_REVIEW:\s(PASS|FAIL)\s-\s.+$/.test(normalized);
+    // Accept union of formats matching runtime parser (minimal allowed for param)
+    return /^(?:GATE_REVIEW:\s*(?:PASS|FAIL)\s*[-:]\s*.+|GATE\s+(?:PASS|FAIL)\s*[-:]\s*.+|(?:PASS|FAIL)\s*[-:]\s*.+)$/i.test(
+      normalized
+    );
   }
 
   /**

@@ -135,8 +135,8 @@ export class SessionManagementStage extends BasePipelineStage {
       context.sessionContext = sessionContext;
       context.state.session.lifecycleDecision = decision;
 
-      // Create PendingGateReview if gates are present and no pending review exists
-      await this.createPendingGateReviewIfNeeded(context, sessionContext);
+      // Deferred gate review: Do not create PendingGateReview up front.
+      // Gate reviews are created only when a FAIL verdict is received.
 
       this.logExit({
         sessionId: sessionContext.sessionId,

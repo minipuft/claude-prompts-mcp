@@ -122,10 +122,10 @@ export class InlineGateExtractionStage extends BasePipelineStage {
 
         // Handle shell verification gates (:: verify:"command")
         if (namedGate.shellVerify && namedGate.gateId) {
-          // DEBUG: INFO level for visibility
-          this.logger.info('[InlineGateExtractionStage] SHELL VERIFY detected - setting up:', {
+          this.logger.info('[InlineGateExtractionStage] Shell verify gate detected', {
             gateId: namedGate.gateId,
             command: namedGate.shellVerify.command,
+            timeout: namedGate.shellVerify.timeout,
           });
           this.setupShellVerification(context, namedGate.gateId, namedGate.shellVerify);
           // Shell verification gates don't create regular inline gates

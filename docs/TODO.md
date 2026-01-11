@@ -87,7 +87,7 @@ prompt_manager(action:"push", workspace:"team-acme")
 | Test coverage     | Unit only | Unit + Integration + E2E | [test-modernization-roadmap](../server/plans/test-modernization-roadmap.md) |
 | Coverage enforcement | None | 80% threshold | [test-modernization-roadmap](../server/plans/test-modernization-roadmap.md) |
 | TypeScript strict | Full    | Keep strict enabled  | - |
-| Bundle size       | ~2MB    | < 1MB (tree-shaking) | - |
+| Bundle size       | ~4.5MB  | < 2MB (tree-shaking) | - |
 
 ### CI / Quality Gates (Remaining Work)
 

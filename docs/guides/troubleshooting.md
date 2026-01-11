@@ -106,9 +106,10 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 **Cause**: Gate failed and waiting for verdict, or session corrupted.
 
 **Fix**:
-1. Check if gate review is pending—send `gate_verdict` or `gate_action`
-2. Force restart: `prompt_engine(command: ">>prompt", force_restart: true)`
-3. Inspect session: check `runtime-state/chain-sessions.json`
+1. Check if gate review is pending—send `gate_verdict` (preferred format: `GATE_REVIEW: PASS/FAIL - reason`) or `gate_action` when retries are exhausted
+2. Bundle responses for efficiency: include both `user_response` and `gate_verdict` in one call
+3. Force restart: `prompt_engine(command: ">>prompt", force_restart: true)`
+4. Inspect session: check `runtime-state/chain-sessions.json`
 
 ---
 

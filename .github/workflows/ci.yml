@@ -45,14 +45,17 @@ jobs:
       - name: Validate action inventory (metadata)
         run: npm run validate:metadata
 
+      - name: Validate version consistency
+        run: npm run validate:versions
+
       - name: Typecheck
         run: npm run typecheck
 
       - name: Lint (ratchet)
         run: npm run lint:ratchet
 
-      - name: Build
-        run: npm run build
+      - name: Validate dist freshness
+        run: npm run validate:dist-fresh
 
       - name: Startup smoke test (built dist)
         run: npm run start:test

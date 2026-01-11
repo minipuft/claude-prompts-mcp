@@ -95,7 +95,8 @@ Use these paths to verify implementation details before documenting or reasoning
 
 | Command                                 | Purpose                                                                                 |
 | --------------------------------------- | --------------------------------------------------------------------------------------- |
-| `npm run build`                         | Compile TypeScript → `dist/`. Required before supervisor mode or when sharing binaries. |
+| `npm run build`                         | Bundle with esbuild → `dist/index.js` (~4.5MB self-contained). No runtime deps needed.  |
+| `npm run build:tsc`                     | TypeScript compilation (for debugging/type declarations).                               |
 | `npm run typecheck`                     | Strict TS type validation.                                                              |
 | `npm run typecheck:tests`               | Typecheck tests (separate project config).                                              |
 | `npm test` / `npm run test:unit`        | Full Jest suite. Add targeted tests when touching execution/framework/gate modules.     |

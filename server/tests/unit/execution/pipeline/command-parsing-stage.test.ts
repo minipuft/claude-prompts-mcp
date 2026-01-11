@@ -290,6 +290,24 @@ describe('CommandParsingStage', () => {
       parseArguments: jest.fn().mockResolvedValue(createArgumentResult({ feature: 'flow' })),
     };
 
+    const stepPreparePrompt: ConvertedPrompt = {
+      id: 'step_prepare',
+      name: 'Prepare Step',
+      description: 'Preparation step',
+      category: 'analysis',
+      userMessageTemplate: 'Prepare {{feature}}',
+      arguments: [],
+    };
+
+    const stepReviewPrompt: ConvertedPrompt = {
+      id: 'step_review',
+      name: 'Review Step',
+      description: 'Review step',
+      category: 'analysis',
+      userMessageTemplate: 'Review {{feature}}',
+      arguments: [],
+    };
+
     const convertedPrompt: ConvertedPrompt = {
       id: 'workflow',
       name: 'Workflow',
@@ -306,7 +324,7 @@ describe('CommandParsingStage', () => {
     const stage = new CommandParsingStage(
       mockCommandParser as UnifiedCommandParser,
       mockArgumentParser as ArgumentParser,
-      [convertedPrompt],
+      [convertedPrompt, stepPreparePrompt, stepReviewPrompt],
       createLogger()
     );
 

@@ -178,10 +178,13 @@ export class ShellVerifyExecutor {
     return new Promise((resolve) => {
       const { command, cwd, env, timeout, startTime } = options;
 
+      // Use detached: true to create a new process group
+      // This allows us to kill all child processes when timing out
       const proc = spawn('sh', ['-c', command], {
         cwd,
         env,
         stdio: ['pipe', 'pipe', 'pipe'],
+        detached: true,
       });
 
       let stdout = '';
@@ -190,10 +193,25 @@ export class ShellVerifyExecutor {
 
       const timeoutId = setTimeout(() => {
         timedOut = true;
-        proc.kill('SIGTERM');
+        // Kill the entire process group using negative PID
+        // This ensures child processes (like long-running commands) are also killed
+        try {
+          if (proc.pid) {
+            process.kill(-proc.pid, 'SIGTERM');
+          }
+        } catch {
+          // Process might have already exited
+          proc.kill('SIGTERM');
+        }
         setTimeout(() => {
           if (!proc.killed) {
-            proc.kill('SIGKILL');
+            try {
+              if (proc.pid) {
+                process.kill(-proc.pid, 'SIGKILL');
+              }
+            } catch {
+              proc.kill('SIGKILL');
+            }
           }
         }, 1000);
       }, timeout);

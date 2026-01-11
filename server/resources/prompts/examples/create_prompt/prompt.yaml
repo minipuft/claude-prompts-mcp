@@ -20,7 +20,7 @@ arguments:
     required: false
   - name: prompt_type
     type: string
-    description: "'single' for one-shot or 'chain' for multi-step"
+    description: "'template' (default) for basic prompts, 'script' for validation/automation with tools, 'chain' for multi-step workflows"
     required: false
 
   # Validation workflow - flat args matching schema.json for script tool detection

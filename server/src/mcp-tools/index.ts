@@ -586,9 +586,12 @@ export class ConsolidatedMcpToolsManager {
             gate_verdict: z
               .string()
               .trim()
-              .regex(
-                /^GATE_REVIEW:\s(PASS|FAIL)\s-\s.+$/,
-                'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
+              .refine(
+                (v) =>
+                  /^(?:GATE_REVIEW:\s*(?:PASS|FAIL)\s*[-:]\s*.+|GATE\s+(?:PASS|FAIL)\s*[-:]\s*.+|(?:PASS|FAIL)\s*[-:]\s*.+)$/i.test(
+                    v
+                  ),
+                'Gate verdict must follow one of: "GATE_REVIEW: PASS/FAIL - reason", "GATE PASS/FAIL - reason", or minimal "PASS/FAIL - reason" (param only)'
               )
               .optional()
               .describe(

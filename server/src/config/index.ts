@@ -342,15 +342,20 @@ export class ConfigManager extends EventEmitter {
           mode: 'every' as const,
           interval: injection?.systemPrompt?.frequency ?? 2,
         },
-        target: 'both' as const,
+        // Safer default: inject framework system prompts on steps only
+        target: 'steps' as const,
       },
       'gate-guidance': {
         ...DEFAULT_INJECTION_CONFIG['gate-guidance'],
         enabled: this.getGatesConfig().enabled,
+        // Guide quality criteria to gate review steps by default
+        target: 'gates' as const,
       },
       'style-guidance': {
         ...DEFAULT_INJECTION_CONFIG['style-guidance'],
         enabled: injection?.styleGuidance ?? true,
+        // Keep style guidance on normal steps by default
+        target: 'steps' as const,
       },
     };
   }

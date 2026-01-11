@@ -24,7 +24,11 @@ import {
   SHELL_VERIFY_DEFAULT_MAX_ATTEMPTS,
   SHELL_VERIFY_DEFAULT_TIMEOUT,
 } from '../../../src/gates/constants.js';
-import type { ShellVerifyGate, ShellVerifyResult, PendingShellVerification } from '../../../src/gates/shell/types.js';
+import type {
+  ShellVerifyGate,
+  ShellVerifyResult,
+  PendingShellVerification,
+} from '../../../src/gates/shell/types.js';
 import type { Logger } from '../../../src/logging/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -92,9 +96,7 @@ describe('Shell Verification Flow Integration', () => {
 
       // Should have both shellVerify gate and criteria/canonical gate
       const verifyGate = result.operators.find((op) => op.type === 'gate' && op.shellVerify);
-      const criteriaGate = result.operators.find(
-        (op) => op.type === 'gate' && !op.shellVerify
-      );
+      const criteriaGate = result.operators.find((op) => op.type === 'gate' && !op.shellVerify);
 
       expect(verifyGate).toBeDefined();
       expect(verifyGate?.shellVerify?.command).toBe('npm test');
@@ -106,7 +108,7 @@ describe('Shell Verification Flow Integration', () => {
     test('generates unique gate IDs for verify gates', async () => {
       const result1 = parser.detectOperators('>>prompt :: verify:"test1"');
       // Add small delay to ensure different timestamps
-      await new Promise(resolve => setTimeout(resolve, 2));
+      await new Promise((resolve) => setTimeout(resolve, 2));
       const result2 = parser.detectOperators('>>prompt :: verify:"test2"');
 
       const gate1 = result1.operators.find((op) => op.type === 'gate' && op.shellVerify);
@@ -211,6 +213,40 @@ describe('Shell Verification Flow Integration', () => {
       expect(result.stdout).toContain('PASS');
       expect(result.stdout).toContain('5 passed');
     });
+
+    test('enforces timeout and kills process group', async () => {
+      // Use a short timeout (1 second) with a long-running command (3 seconds)
+      const startTime = Date.now();
+      const result = await executor.execute({
+        command: 'sleep 3',
+        timeout: 1000, // 1 second
+      });
+      const duration = Date.now() - startTime;
+
+      // Should timeout and fail
+      expect(result.passed).toBe(false);
+      expect(result.timedOut).toBe(true);
+      expect(result.exitCode).toBe(-1);
+
+      // Duration should be close to timeout, not the full command duration
+      // Allow up to 500ms grace for process cleanup
+      expect(duration).toBeLessThan(1500);
+      expect(duration).toBeGreaterThanOrEqual(1000);
+    });
+
+    test('respects explicit timeout option', async () => {
+      // Use explicit 2 second timeout with 1 second command - should complete
+      const startTime = Date.now();
+      const result = await executor.execute({
+        command: 'sleep 1',
+        timeout: 2000,
+      });
+      const duration = Date.now() - startTime;
+
+      expect(result.passed).toBe(true);
+      expect(result.timedOut).toBeFalsy();
+      expect(duration).toBeLessThan(2000);
+    });
   });
 
   describe('Retry Flow Logic', () => {
@@ -248,7 +284,16 @@ describe('Shell Verification Flow Integration', () => {
     test('retry action resets attempt count', () => {
       const pending: PendingShellVerification = {
         shellVerify: { command: 'npm test' },
-        previousResults: [{ passed: false, exitCode: 1, stdout: '', stderr: '', durationMs: 100, command: 'npm test' }],
+        previousResults: [
+          {
+            passed: false,
+            exitCode: 1,
+            stdout: '',
+            stderr: '',
+            durationMs: 100,
+            command: 'npm test',
+          },
+        ],
         attemptCount: 5,
         maxAttempts: 5,
         gateId: 'test-gate',

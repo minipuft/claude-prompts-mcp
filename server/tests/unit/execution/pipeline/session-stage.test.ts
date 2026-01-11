@@ -261,13 +261,15 @@ describe('SessionManagementStage', () => {
     expect(context.sessionContext?.currentStep).toBe(1);
   });
 
-  test('delegates pending review creation to GateEnforcementAuthority', async () => {
+  test('defers gate review creation (no upfront pending review)', async () => {
+    // Gate reviews are now created on FAIL verdict in response-capture-stage,
+    // not upfront during session creation
     const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
     context.parsedCommand = createParsedCommand();
     context.gateInstructions = 'Review these gates carefully.';
 
-    // Set up gate state to trigger review creation
+    // Set up gate state (would have triggered review in old behavior)
     context.state.gates.hasBlockingGates = true;
     context.state.gates.accumulatedGateIds = ['gate-alpha', 'gate-beta'];
 
@@ -279,37 +281,29 @@ describe('SessionManagementStage', () => {
 
     await stage.execute(context);
 
-    // Verify review was created via authority and persisted
-    expect(manager.setPendingGateReview).toHaveBeenCalledTimes(1);
-    const [sessionId, pendingReview] = manager.setPendingGateReview.mock.calls[0];
-    expect(sessionId).toBe('review-chain_prompt-1700000000000');
-    expect(pendingReview.gateIds).toEqual(['gate-alpha', 'gate-beta']);
-    expect(pendingReview.combinedPrompt).toBe('Review these gates carefully.');
-    expect(pendingReview.attemptCount).toBe(0);
-    expect(pendingReview.maxAttempts).toBe(2); // DEFAULT_RETRY_LIMIT
-
-    // Verify review is attached to session context
-    expect(context.sessionContext?.pendingReview).toBeDefined();
-    expect(context.sessionContext?.pendingReview?.gateIds).toEqual(['gate-alpha', 'gate-beta']);
+    // Session created but NO pending review (deferred)
+    expect(manager.createSession).toHaveBeenCalledTimes(1);
+    expect(manager.setPendingGateReview).not.toHaveBeenCalled();
+    expect(context.sessionContext?.pendingReview).toBeUndefined();
 
     dateSpy.mockRestore();
   });
 
-  test('skips review creation when no authority is available', async () => {
+  test('creates session without review when gates present but authority available', async () => {
     const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
     context.parsedCommand = createParsedCommand();
 
-    // Set up gate state but no authority
+    // Set up gate state with authority
     context.state.gates.hasBlockingGates = true;
     context.state.gates.accumulatedGateIds = ['gate-alpha'];
-    // context.gateEnforcement is undefined
+    context.gateEnforcement = new GateEnforcementAuthority(manager as any, createLogger() as any);
 
     manager.getRunHistory.mockReturnValue([]);
 
     await stage.execute(context);
 
-    // Session should be created but no pending review
+    // Session created, no pending review (deferred gate review behavior)
     expect(manager.createSession).toHaveBeenCalledTimes(1);
     expect(manager.setPendingGateReview).not.toHaveBeenCalled();
     expect(context.sessionContext?.pendingReview).toBeUndefined();

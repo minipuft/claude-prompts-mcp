@@ -71,7 +71,7 @@ describe('McpToolRequestValidator', () => {
       };
 
       expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        'McpToolRequest validation failed: gate_verdict: Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
+        'McpToolRequest validation failed: gate_verdict: Gate verdict must follow one of: "GATE_REVIEW: PASS/FAIL - reason", "GATE PASS/FAIL - reason", or minimal "PASS/FAIL - reason" (param only)'
       );
     });
 
@@ -187,8 +187,15 @@ describe('McpToolRequestValidator', () => {
       expect(McpToolRequestValidator.isValidGateVerdict('GATE_REVIEW: INVALID - reason')).toBe(
         false
       );
-      expect(McpToolRequestValidator.isValidGateVerdict('pass - reason')).toBe(false);
       expect(McpToolRequestValidator.isValidGateVerdict('')).toBe(false);
+    });
+
+    it('should accept case-insensitive verdict formats', () => {
+      // Minimal form is case-insensitive per runtime parser
+      expect(McpToolRequestValidator.isValidGateVerdict('pass - reason')).toBe(true);
+      expect(McpToolRequestValidator.isValidGateVerdict('fail - reason')).toBe(true);
+      expect(McpToolRequestValidator.isValidGateVerdict('PASS - reason')).toBe(true);
+      expect(McpToolRequestValidator.isValidGateVerdict('FAIL - reason')).toBe(true);
     });
 
     it('should return false for non-strings', () => {

@@ -118,7 +118,7 @@ prompt_engine(command:"%judge analysis_report")
 | `command`       | string  | Prompt ID with operators and arguments                 |
 | `chain_id`      | string  | Resume token for continuing chains                     |
 | `user_response` | string  | Your output from previous step (for chain resume)      |
-| `gate_verdict`  | string  | `GATE_REVIEW: PASS/FAIL - reason`                      |
+| `gate_verdict`  | string  | Gate review verdict. Preferred: `GATE_REVIEW: PASS/FAIL - reason`. Also accepts `GATE PASS/FAIL - reason` or minimal `PASS/FAIL - reason` (minimal only via `gate_verdict`, not parsed from `user_response`). Rationale required. |
 | `gate_action`   | enum    | `retry`, `skip`, or `abort` after gate failure         |
 | `gates`         | array   | Quality gates (IDs, quick checks, or full definitions) |
 | `force_restart` | boolean | Restart chain from step 1                              |
@@ -149,6 +149,20 @@ prompt_engine(
   chain_id:"chain-research#2",
   gate_verdict:"GATE_REVIEW: PASS - All sources cited"
 )
+
+**Combined resume (recommended for token efficiency):**
+
+```bash
+prompt_engine(
+  chain_id:"chain-research#2",
+  user_response:"Step 2 output...",
+  gate_verdict:"GATE_REVIEW: PASS - criteria met"
+)
+```
+
+Notes:
+- Verdicts are only read from `gate_verdict`; they are not parsed from `user_response`.
+- On PASS without an existing review, the chain continues; on FAIL, a review screen is created with context. Use `gate_action:"retry|skip|abort"` when retries are exhausted.
 ```
 
 ### Gates: Four Ways to Validate
