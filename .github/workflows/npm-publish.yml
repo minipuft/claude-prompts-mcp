@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # Required for npm provenance
 
 jobs:
   publish:
@@ -68,11 +69,22 @@ jobs:
         working-directory: server
         run: npm run test:ci
 
-      - name: Publish
+      - name: Preview package contents
+        working-directory: server
+        run: |
+          echo "=== Package contents ==="
+          npm pack --dry-run 2>&1
+
+          echo ""
+          echo "=== Package size check ==="
+          PACKED=$(npm pack --dry-run 2>&1 | grep "total files" || true)
+          echo "$PACKED"
+
+      - name: Publish with provenance
         working-directory: server
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
+        run: npm publish --access public --provenance
 
       - name: Trigger gemini-prompts submodule update
         if: success()
