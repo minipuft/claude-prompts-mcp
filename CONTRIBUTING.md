@@ -157,7 +157,55 @@ See `docs/architecture.md#pipeline-state-management` for detailed documentation.
 - Keep `.husky/`, `.lintstagedrc.json`, `.prettierrc.json`, and ESLint configs in sync when updating lint rules.
 - Never check in secrets; use environment variables for API keys (LLM integrations, etc.).
 
-## 11. Transport-Agnostic Development
+## 11. Release Automation & CI/CD
+
+### Release Flow
+
+```
+Conventional commits → Release-Please PR → Merge → GitHub Release → npm publish → gemini-prompts update
+```
+
+1. **Commit with conventional format**: `feat:`, `fix:`, `chore:`, etc.
+2. **Release-Please** auto-creates a PR bumping version + CHANGELOG
+3. **Merge the PR** → Creates GitHub Release with tag `claude-prompts-vX.Y.Z`
+4. **npm-publish.yml** triggers → validates, tests, publishes with provenance
+5. **gemini-prompts** receives dispatch → creates PR to update submodule
+
+### Required Secrets (Repository Maintainers)
+
+| Secret | Purpose | Permissions Needed |
+|--------|---------|-------------------|
+| `NPM_TOKEN` | Publish to npm | npm automation token |
+| `RELEASE_PLEASE_TOKEN` | Allow releases to trigger workflows | Contents: Write, PRs: Write |
+| `DOWNSTREAM_PAT` | Trigger gemini-prompts update | Contents: Write, PRs: Write (on gemini-prompts) |
+
+**Creating tokens:**
+1. npm token: https://www.npmjs.com/settings/tokens
+2. GitHub PATs: https://github.com/settings/tokens?type=beta (fine-grained recommended)
+
+**Adding secrets:** Repository Settings → Secrets and variables → Actions
+
+### Manual Release (Emergency)
+
+If automation fails:
+```bash
+cd server
+npm run build && npm test
+npm version patch  # or minor/major
+npm publish --access public
+git push --tags
+```
+
+### Version Consistency
+
+All version references must match:
+- `server/package.json`
+- `manifest.json`
+- `.claude-plugin/plugin.json`
+
+The `validate:versions` script enforces this in CI and pre-push hooks.
+
+## 12. Transport-Agnostic Development
 
 - Avoid STDIO-specific assumptions in prompts or code (e.g., `console.log` inside STDIO loops).
 - SSE endpoints should expose equivalent functionality to STDIO flows. When adding a transport-specific feature, update `docs/architecture.md` with testing instructions.
