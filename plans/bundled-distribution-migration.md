@@ -325,8 +325,10 @@ If issues are discovered after migration:
 - [x] No performance regression (881/881 tests pass)
 - [x] Hooks simplified (no node_modules repair)
 - [x] Documentation updated
-- [ ] CI/CD uses bundled build (pending Phase 2 validation)
-- [ ] Phase 2: Validate across distribution channels (pending)
+- [x] CI/CD uses bundled build — CI now runs `npm run build` before smoke test
+- [x] Phase 2: Validate across distribution channels — User confirmed validation complete
+- [x] dist/ removed from git tracking — 377 files untracked (2026-01-11)
+- [ ] Phase B: Update README/docs for release-based installs — Pending
 
 ## Timeline Estimate
 
@@ -387,29 +389,30 @@ Objective: Stop committing `server/dist/` to git, deliver prebuilt artifacts via
 
 ### Tasks (Phased)
 
-Phase A — Prepare
-- [ ] Confirm esbuild bundle (Phase 1 above) passes startup + tests.
-- [ ] Ensure `server/package.json` includes `files: ["dist", ...]` and `prepublishOnly` → OK today.
-- [ ] Create `scripts/package-gemini-extension.sh` to zip/tar the extension with proper layout and names.
-- [ ] Add GitHub Actions workflow `release-artifacts.yml` triggered on `release` event (created) to build and upload `.mcpb` and Gemini archives.
-- [ ] Optionally set Release Please `draft: true` in `release-please-config.json` during validation period.
+Phase A — Prepare ✅ COMPLETE
+- [x] Confirm esbuild bundle (Phase 1 above) passes startup + tests.
+- [x] Ensure `server/package.json` includes `files: ["dist", ...]` and `prepublishOnly` → Already configured.
+- [x] ~~Create `scripts/package-gemini-extension.sh`~~ — N/A: Gemini CLI extension now maintained in separate repository (gemini-prompts) using this repo as a git submodule.
+- [x] Add GitHub Actions workflow for release artifacts → `extension-publish.yml` exists, builds `.mcpb` and plugin archives after npm publish.
+- [x] Release Please configured in `release-please-config.json`.
 
 Phase B — Flip documentation & installs
-- [ ] Update README/docs to prefer GitHub Releases for Claude Desktop `.mcpb` and Gemini extension archives; keep repo install as “dev only”.
+- [ ] Update README/docs to prefer GitHub Releases for Claude Desktop `.mcpb` and Gemini extension archives; keep repo install as "dev only".
 - [ ] Document npm install still supported via `npx`/`npm install` and is self-contained (bundled dist in tarball).
 
-Phase C — Remove dist from git
-- [ ] Add/keep `.gitignore` rule to exclude `server/dist/`.
-- [ ] Remove tracked `server/dist/` from repo once releases validated (1+ successful releases with verified assets).
-- [ ] Remove dev-sync hooks’ `node_modules` repair paths (already tracked in Phase 4 above) — final cleanup.
+Phase C — Remove dist from git ✅ COMPLETE (2026-01-11)
+- [x] Add `.gitignore` rule to exclude `server/dist/` — Updated to exclude dist from git tracking.
+- [x] Remove tracked `server/dist/` from repo — 377 files removed via `git rm -r --cached server/dist/`.
+- [x] Remove dev-sync hooks' `node_modules` repair paths — Completed in Phase 4.
+- [x] Update CI workflow — Replaced `validate:dist-fresh` with explicit `npm run build` step.
 
 ### Validation & Exit Criteria
 
-- [ ] Release created by Release Please includes correct changelog and version bump.
-- [ ] Build job uploads `.mcpb` and Gemini archives under expected names; assets download and run locally.
-- [ ] npm publish contains `dist/` in tarball; consumers install and run without dev deps.
-- [ ] README/docs updated with install commands for Releases and npm; repo install marked as dev-only.
-- [ ] After at least one successful release, remove `server/dist/` from git and enforce ignore.
+- [x] Release created by Release Please includes correct changelog and version bump — Working (see recent releases).
+- [x] Build job uploads `.mcpb` and Gemini archives under expected names — `extension-publish.yml` handles this.
+- [x] npm publish contains `dist/` in tarball; consumers install and run without dev deps — Configured via `files` in package.json.
+- [ ] README/docs updated with install commands for Releases and npm; repo install marked as dev-only — Phase B pending.
+- [x] After at least one successful release, remove `server/dist/` from git and enforce ignore — Completed 2026-01-11.
 
 ### Rollback Plan (Distribution)
 

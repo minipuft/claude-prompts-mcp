@@ -54,10 +54,10 @@ jobs:
       - name: Lint (ratchet)
         run: npm run lint:ratchet
 
-      - name: Validate dist freshness
-        run: npm run validate:dist-fresh
+      - name: Build bundled distribution
+        run: npm run build
 
-      - name: Startup smoke test (built dist)
+      - name: Startup smoke test
         run: npm run start:test
 
       - name: Jest unit tests

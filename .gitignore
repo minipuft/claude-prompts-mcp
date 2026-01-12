@@ -6,7 +6,8 @@ server/node_modules/
 yarn.lock
 
 # Build Output and TypeScript
-# NOTE: server/dist/ is INCLUDED for plugin distribution (plugins must ship pre-built)
+# server/dist/ is EXCLUDED - built fresh in CI/CD, distributed via GitHub Releases
+server/dist/
 build/
 out/
 *.tsbuildinfo
