@@ -328,7 +328,7 @@ If issues are discovered after migration:
 - [x] CI/CD uses bundled build — CI now runs `npm run build` before smoke test
 - [x] Phase 2: Validate across distribution channels — User confirmed validation complete
 - [x] dist/ removed from git tracking — 377 files untracked (2026-01-11)
-- [ ] Phase B: Update README/docs for release-based installs — Pending
+- [x] Phase B: Update README/docs for release-based installs — Completed 2026-01-12
 
 ## Timeline Estimate
 
@@ -396,9 +396,11 @@ Phase A — Prepare ✅ COMPLETE
 - [x] Add GitHub Actions workflow for release artifacts → `extension-publish.yml` exists, builds `.mcpb` and plugin archives after npm publish.
 - [x] Release Please configured in `release-please-config.json`.
 
-Phase B — Flip documentation & installs
-- [ ] Update README/docs to prefer GitHub Releases for Claude Desktop `.mcpb` and Gemini extension archives; keep repo install as "dev only".
-- [ ] Document npm install still supported via `npx`/`npm install` and is self-contained (bundled dist in tarball).
+Phase B — Flip documentation & installs ✅ COMPLETE (2026-01-12)
+- [x] Update README to prefer GitHub Releases for Claude Desktop `.mcpb`; marked source install as "developers only".
+- [x] Document npm/npx as self-contained (bundled dist, no postinstall required).
+- [x] Update Gemini CLI section to reference separate gemini-prompts repository.
+- [x] Update Contributing section to note dist/ is gitignored, CI builds fresh.
 
 Phase C — Remove dist from git ✅ COMPLETE (2026-01-11)
 - [x] Add `.gitignore` rule to exclude `server/dist/` — Updated to exclude dist from git tracking.
@@ -411,7 +413,7 @@ Phase C — Remove dist from git ✅ COMPLETE (2026-01-11)
 - [x] Release created by Release Please includes correct changelog and version bump — Working (see recent releases).
 - [x] Build job uploads `.mcpb` and Gemini archives under expected names — `extension-publish.yml` handles this.
 - [x] npm publish contains `dist/` in tarball; consumers install and run without dev deps — Configured via `files` in package.json.
-- [ ] README/docs updated with install commands for Releases and npm; repo install marked as dev-only — Phase B pending.
+- [x] README/docs updated with install commands for Releases and npm; repo install marked as dev-only — Completed 2026-01-12.
 - [x] After at least one successful release, remove `server/dist/` from git and enforce ignore — Completed 2026-01-11.
 
 ### Rollback Plan (Distribution)

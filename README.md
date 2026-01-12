@@ -54,72 +54,35 @@ Raw MCP works, but models sometimes miss the syntax. The hooks catch that. → [
 
 ### Gemini CLI
 
+The Gemini CLI extension is maintained in a **separate repository** for cleaner distribution:
+
 ```bash
-# Install directly from GitHub
-gemini extensions install https://github.com/minipuft/claude-prompts-mcp
-
-# Development Setup (Hot Reload)
-# Use a symbolic link to point the extension directory directly to your source code.
-# This ensures changes to hooks and prompts are reflected immediately.
-rm -rf ~/.gemini/extensions/gemini-prompts
-ln -s "$(pwd)" ~/.gemini/extensions/gemini-prompts
+# Install from the dedicated Gemini extension repo
+gemini extensions install https://github.com/minipuft/gemini-prompts
 ```
 
-The extension provides:
-- **MCP server** with the same tools (`prompt_engine`, `resource_manager`, `system_control`)
-- **GEMINI.md** context file with usage documentation
+The extension provides the same tools (`prompt_engine`, `resource_manager`, `system_control`) with Gemini-optimized hooks and context files.
 
-<details>
-<summary><strong>Enabling Hooks (recommended)</strong></summary>
+→ **Repository**: [github.com/minipuft/gemini-prompts](https://github.com/minipuft/gemini-prompts)
 
-Hooks enhance the experience by detecting `>>prompt` syntax and tracking chain state. **Requires Gemini CLI v0.24.0+**.
-
-**Step 1: Upgrade Gemini CLI**
-```bash
-# Check current version
-gemini --version
-
-# Upgrade to preview (required for hooks.enabled support)
-npm install -g @google/gemini-cli@0.24.0-preview.0
-```
-
-**Step 2: Enable hooks globally**
-
-Add to `~/.gemini/settings.json`:
-```json
-{
-  "hooks": {
-    "enabled": true
-  }
-}
-```
-
-**Step 3: Verify hooks are working**
-```bash
-gemini
-# On session start, you should see hook activity in logs
-# Test with: >>diagnose :: 'security-review'
-```
-
-See [hooks/README.md](hooks/README.md#gemini-cli) for detailed hook configuration.
-
-</details>
-
-Works with the same prompts, gates, and methodologies as Claude Code.
+Works with the same prompts, gates, and methodologies as Claude Code. See the [gemini-prompts README](https://github.com/minipuft/gemini-prompts) for hooks setup.
 
 ### Claude Desktop
 
-| Method | Install Time | Updates | Custom Prompts |
-|--------|-------------|---------|----------------|
-| **Desktop Extension** | 10 seconds | Manual | Built-in config |
-| **NPX** | 30 seconds | Automatic | Via env vars |
+| Method | Best For | Updates |
+|--------|----------|---------|
+| **GitHub Release** (.mcpb) | Quick install, offline use | Manual download |
+| **NPX** | Auto-updates, always latest | Automatic |
 
-**Desktop Extension** (one-click):
+**GitHub Release** (recommended):
 ```
-1. Download claude-prompts.mcpb → github.com/minipuft/claude-prompts-mcp/releases
-2. Drag into Claude Desktop Settings
-3. Done. Optionally set a custom prompts folder when prompted.
+1. Download claude-prompts-{version}.mcpb from:
+   → github.com/minipuft/claude-prompts-mcp/releases/latest
+2. Drag into Claude Desktop Settings → MCP Servers
+3. Done. Set custom prompts folder when prompted (optional).
 ```
+
+The `.mcpb` bundle is **self-contained** (~5MB)—no npm install or node_modules required.
 
 **NPX** (auto-updates):
 ```json
@@ -135,11 +98,12 @@ Works with the same prompts, gates, and methodologies as Claude Code.
 }
 ```
 
+The npm package is also **self-contained**—all dependencies bundled, no postinstall required.
+
 Restart Claude Desktop. Test it:
 ```
 >>research_chain topic:'remote team policies' purpose:'handbook update'
 ```
-→ Returns a 4-step research workflow with methodology injection and quality gates.
 
 ### Other MCP Clients
 
@@ -173,16 +137,23 @@ Test: `resource_manager(resource_type:"prompt", action:"list")`
 </details>
 
 <details>
-<summary><strong>From Source</strong></summary>
+<summary><strong>From Source (developers only)</strong></summary>
+
+For contributing or customizing the server itself:
 
 ```bash
 git clone https://github.com/minipuft/claude-prompts-mcp.git
-cd claude-prompts-mcp/server && npm install && npm run build
+cd claude-prompts-mcp/server
+npm install
+npm run build   # Creates bundled dist/index.js (~4.5MB)
+npm test        # Verify everything works
 ```
 
-Then point your config to `server/dist/index.js`. The build produces a self-contained bundle (~4.5MB) with all dependencies included—no `node_modules` required at runtime.
+Point your MCP config to `server/dist/index.js`. The esbuild bundle is self-contained—no `node_modules` required at runtime.
 
-**Transport options**: `--transport=stdio` (default), `--transport=streamable-http` (recommended for HTTP).
+**Note**: `server/dist/` is not committed to git. You must run `npm run build` after cloning.
+
+**Transport options**: `--transport=stdio` (default), `--transport=streamable-http` (for HTTP clients).
 
 </details>
 
@@ -414,12 +385,15 @@ flowchart TB
 
 ```bash
 cd server
-npm install && npm run build
-npm test
-npm run validate:all  # Full CI check
+npm install
+npm run build        # esbuild bundles to dist/index.js
+npm test             # Run test suite
+npm run validate:all # Full CI validation
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+The build produces a self-contained bundle (~4.5MB). `server/dist/` is gitignored—CI builds fresh from source.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow details.
 
 ---
 
