@@ -24,6 +24,7 @@ import type { ConsolidatedFrameworkManager } from '../../framework-manager/index
 import type { GateManagerInput } from '../../gate-manager/core/types.js';
 import type { ConsolidatedGateManager } from '../../gate-manager/index.js';
 import type { ConsolidatedPromptManager } from '../../prompt-manager/index.js';
+import type { ConsolidatedCheckpointManager } from '../checkpoint/index.js';
 
 /**
  * Script tool definition for inline tool creation
@@ -54,7 +55,7 @@ export interface ToolDefinitionInput {
 /**
  * Resource types supported by the unified manager
  */
-export type ResourceType = 'prompt' | 'gate' | 'methodology';
+export type ResourceType = 'prompt' | 'gate' | 'methodology' | 'checkpoint';
 
 /**
  * All possible actions across resource types
@@ -71,14 +72,16 @@ export type ResourceAction =
   | 'guide' // prompt only
   | 'switch' // methodology only
   | 'history' // versioning (all types)
-  | 'rollback' // versioning (all types)
-  | 'compare'; // versioning (all types)
+  | 'rollback' // versioning (all types) + checkpoint
+  | 'compare' // versioning (all types)
+  | 'clear'; // checkpoint only
 
 /**
  * Actions specific to certain resource types
  */
 export const PROMPT_ONLY_ACTIONS: ResourceAction[] = ['analyze_type', 'analyze_gates', 'guide'];
 export const METHODOLOGY_ONLY_ACTIONS: ResourceAction[] = ['switch'];
+export const CHECKPOINT_ONLY_ACTIONS: ResourceAction[] = ['clear'];
 export const VERSIONING_ACTIONS: ResourceAction[] = ['history', 'rollback', 'compare'];
 export const COMMON_ACTIONS: ResourceAction[] = [
   'create',
@@ -203,6 +206,7 @@ export interface ResourceManagerDependencies {
   promptManager: ConsolidatedPromptManager;
   gateManager: ConsolidatedGateManager;
   frameworkManager: ConsolidatedFrameworkManager;
+  checkpointManager?: ConsolidatedCheckpointManager;
 }
 
 /**

@@ -73,8 +73,8 @@ export type promptEngineInput = z.infer<typeof promptEngineSchema>;
 export const resourceManagerSchema = z
   .object({
     /** Type of resource to manage. Routes to appropriate handler. */
-    resource_type: z.enum(['prompt', 'gate', 'methodology']),
-    /** Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology). Versioning: history/rollback/compare (all types). */
+    resource_type: z.enum(['prompt', 'gate', 'methodology', 'checkpoint']),
+    /** Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/methodology). Checkpoint: create/rollback/list/delete/clear. */
     action: z.enum([
       'create',
       'update',
@@ -89,6 +89,7 @@ export const resourceManagerSchema = z
       'history',
       'rollback',
       'compare',
+      'clear',
     ]),
     /** Resource identifier. Required for create, update, delete, inspect, reload, switch. */
     id: z.string().optional(),

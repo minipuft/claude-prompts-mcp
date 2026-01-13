@@ -23,10 +23,13 @@
  */
 
 import { Logger } from '../../logging/index.js';
+import { SHELL_VERIFY_PRESETS } from '../constants.js';
+import { getDefaultShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 
 import type { GateDefinitionProvider } from './gate-loader.js';
 import type { ValidationResult } from '../../execution/types.js';
 import type { LLMIntegrationConfig } from '../../types.js';
+import type { ShellVerifyGate } from '../shell/types.js';
 import type {
   LightweightGateDefinition,
   ValidationCheck,
@@ -201,15 +204,21 @@ export class GateValidator {
    * have been intentionally removed. These naive checks (length validation, substring
    * matching, regex patterns) don't provide meaningful signal for LLM-generated content.
    *
-   * The only valuable validation for LLM output is LLM-based evaluation, which requires
-   * a separate LLM call. This is the focus of future implementation.
+   * The only valuable validations for LLM output are:
+   * - LLM-based evaluation (llm_self_check) - semantic understanding
+   * - Shell verification (shell_verify) - ground truth via exit codes
    */
   private async runValidationCheck(
     criteria: GatePassCriteria,
     _context: ValidationContext
   ): Promise<ValidationCheck> {
     try {
-      // Only LLM self-check provides meaningful validation for LLM content
+      // Shell verification provides ground-truth validation via exit codes
+      if (criteria.type === 'shell_verify') {
+        return await this.runShellVerify(criteria);
+      }
+
+      // LLM self-check provides semantic validation for LLM content
       if (criteria.type === 'llm_self_check') {
         return await this.runLLMSelfCheck(criteria);
       }
@@ -224,12 +233,13 @@ export class GateValidator {
         type: criteria.type,
         passed: true,
         score: 1.0,
-        message: `Check type '${criteria.type}' skipped - string-based validation removed (use llm_self_check for meaningful LLM validation)`,
+        message: `Check type '${criteria.type}' skipped - string-based validation removed (use llm_self_check or shell_verify for meaningful validation)`,
         details: {
           skipped: true,
           reason:
             'String-based checks removed as they do not provide meaningful signal for LLM content',
-          recommendation: 'Use llm_self_check with LLM integration for semantic validation',
+          recommendation:
+            'Use llm_self_check for semantic validation or shell_verify for ground truth',
         },
       };
     } catch (error) {
@@ -238,6 +248,101 @@ export class GateValidator {
         type: criteria.type,
         passed: false,
         message: `Check failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  /**
+   * Run shell verification - ground-truth validation via exit codes.
+   *
+   * Unlike LLM self-evaluation, shell verification provides deterministic
+   * pass/fail results based on actual command execution (test suites, linters, etc.)
+   *
+   * @param criteria - Shell verification criteria from gate definition
+   * @returns Validation check result with exit code details
+   */
+  private async runShellVerify(criteria: GatePassCriteria): Promise<ValidationCheck> {
+    const command = criteria.shell_command;
+
+    if (command == null || command.trim() === '') {
+      this.logger.warn('[SHELL GATE] Shell verification skipped - no command specified');
+      return {
+        type: 'shell_verify',
+        passed: true, // Auto-pass when misconfigured (non-blocking)
+        score: 1.0,
+        message: 'Shell verification skipped (no shell_command specified in gate definition)',
+        details: {
+          skipped: true,
+          reason: 'No shell_command provided in pass_criteria',
+          recommendation: 'Add shell_command field to the shell_verify criteria',
+        },
+      };
+    }
+
+    // Resolve preset values if specified
+    const presetValues =
+      criteria.shell_preset != null ? SHELL_VERIFY_PRESETS[criteria.shell_preset] : undefined;
+
+    // Build shell verification gate config
+    const gateConfig: ShellVerifyGate = {
+      command,
+      timeout: criteria.shell_timeout ?? presetValues?.timeout,
+      workingDir: criteria.shell_working_dir,
+      env: criteria.shell_env,
+      maxIterations: criteria.shell_max_attempts ?? presetValues?.maxIterations,
+      preset: criteria.shell_preset,
+    };
+
+    this.logger.debug(`[SHELL GATE] Executing shell verification: ${command}`);
+
+    try {
+      const executor = getDefaultShellVerifyExecutor();
+      const result = await executor.execute(gateConfig);
+
+      if (result.passed) {
+        this.logger.debug(`[SHELL GATE] Verification passed (exit code ${result.exitCode})`);
+        return {
+          type: 'shell_verify',
+          passed: true,
+          score: 1.0,
+          message: `Shell verification passed: '${command}' exited with code ${result.exitCode}`,
+          details: {
+            exitCode: result.exitCode,
+            durationMs: result.durationMs,
+            stdout:
+              result.stdout.slice(0, 500) !== '' ? result.stdout.slice(0, 500) : '(no output)',
+          },
+        };
+      } else {
+        this.logger.debug(`[SHELL GATE] Verification failed (exit code ${result.exitCode})`);
+        return {
+          type: 'shell_verify',
+          passed: false,
+          score: 0,
+          message: `Shell verification failed: '${command}' exited with code ${result.exitCode}`,
+          details: {
+            exitCode: result.exitCode,
+            durationMs: result.durationMs,
+            stderr:
+              result.stderr.slice(0, 1000) !== ''
+                ? result.stderr.slice(0, 1000)
+                : result.stdout.slice(0, 1000) !== ''
+                  ? result.stdout.slice(0, 1000)
+                  : '(no output)',
+            timedOut: result.timedOut,
+          },
+        };
+      }
+    } catch (error) {
+      this.logger.error(`[SHELL GATE] Shell verification error:`, error);
+      return {
+        type: 'shell_verify',
+        passed: false,
+        score: 0,
+        message: `Shell verification error: ${error instanceof Error ? error.message : String(error)}`,
+        details: {
+          error: error instanceof Error ? error.message : String(error),
+        },
       };
     }
   }

@@ -20,12 +20,19 @@ import { z } from 'zod';
 
 /**
  * Schema for gate pass criteria definitions.
- * Supports content checks, pattern checks, LLM self-checks, and methodology compliance.
+ * Supports content checks, pattern checks, LLM self-checks, methodology compliance,
+ * and shell verification (ground-truth validation via exit code).
  */
 export const GatePassCriteriaSchema = z
   .object({
     /** Type of check to perform */
-    type: z.enum(['content_check', 'llm_self_check', 'pattern_check', 'methodology_compliance']),
+    type: z.enum([
+      'content_check',
+      'llm_self_check',
+      'pattern_check',
+      'methodology_compliance',
+      'shell_verify',
+    ]),
 
     // Content check options
     min_length: z.number().int().nonnegative().optional(),
@@ -53,6 +60,20 @@ export const GatePassCriteriaSchema = z
     // Pattern check options
     regex_patterns: z.array(z.string()).optional(),
     keyword_count: z.record(z.number()).optional(),
+
+    // Shell verification options (ground-truth validation via exit code)
+    /** Shell command to execute for verification (exit 0 = pass) */
+    shell_command: z.string().optional(),
+    /** Timeout in milliseconds for shell command (default: 300000) */
+    shell_timeout: z.number().int().positive().optional(),
+    /** Working directory for shell command execution */
+    shell_working_dir: z.string().optional(),
+    /** Additional environment variables for shell command */
+    shell_env: z.record(z.string()).optional(),
+    /** Maximum verification attempts before escalation (default: 5) */
+    shell_max_attempts: z.number().int().positive().optional(),
+    /** Preset for shell verification (:fast, :full, :extended) */
+    shell_preset: z.enum(['fast', 'full', 'extended']).optional(),
   })
   .passthrough(); // Allow additional fields for extensibility
 

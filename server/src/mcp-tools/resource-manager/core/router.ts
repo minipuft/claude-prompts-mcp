@@ -6,7 +6,7 @@
  * based on the resource_type parameter.
  */
 
-import { PROMPT_ONLY_ACTIONS, METHODOLOGY_ONLY_ACTIONS } from './types.js';
+import { PROMPT_ONLY_ACTIONS, METHODOLOGY_ONLY_ACTIONS, CHECKPOINT_ONLY_ACTIONS } from './types.js';
 
 import type {
   ResourceManagerInput,
@@ -26,6 +26,8 @@ import type { ConsolidatedFrameworkManager } from '../../framework-manager/index
 import type { GateManagerActionId, GateManagerInput } from '../../gate-manager/core/types.js';
 import type { ConsolidatedGateManager } from '../../gate-manager/index.js';
 import type { ConsolidatedPromptManager } from '../../prompt-manager/index.js';
+import type { ConsolidatedCheckpointManager } from '../checkpoint/index.js';
+import type { CheckpointManagerInput, CheckpointAction } from '../checkpoint/types.js';
 
 /**
  * ResourceManagerRouter routes requests to the appropriate handler
@@ -35,12 +37,14 @@ export class ResourceManagerRouter {
   private readonly promptManager: ConsolidatedPromptManager;
   private readonly gateManager: ConsolidatedGateManager;
   private readonly frameworkManager: ConsolidatedFrameworkManager;
+  private readonly checkpointManager?: ConsolidatedCheckpointManager;
 
   constructor(deps: ResourceManagerDependencies) {
     this.logger = deps.logger;
     this.promptManager = deps.promptManager;
     this.gateManager = deps.gateManager;
     this.frameworkManager = deps.frameworkManager;
+    this.checkpointManager = deps.checkpointManager;
 
     this.logger.debug('ResourceManagerRouter initialized');
   }
@@ -78,6 +82,8 @@ export class ResourceManagerRouter {
           return await this.routeToGateManager(args, context);
         case 'methodology':
           return await this.routeToFrameworkManager(args, context);
+        case 'checkpoint':
+          return await this.routeToCheckpointManager(args, context);
         default:
           return this.createErrorResponse(`Unknown resource_type: ${resource_type}`);
       }
@@ -113,6 +119,14 @@ export class ResourceManagerRouter {
       return {
         valid: false,
         error: `Action "${action}" is only valid for resource_type: "methodology"`,
+      };
+    }
+
+    // Check checkpoint-only actions
+    if (CHECKPOINT_ONLY_ACTIONS.includes(action) && resourceType !== 'checkpoint') {
+      return {
+        valid: false,
+        error: `Action "${action}" is only valid for resource_type: "checkpoint"`,
       };
     }
 
@@ -368,6 +382,32 @@ export class ResourceManagerRouter {
     }
 
     return await this.frameworkManager.handleAction(frameworkArgs, context);
+  }
+
+  /**
+   * Route to checkpoint manager
+   */
+  private async routeToCheckpointManager(
+    args: ResourceManagerInput,
+    context: Record<string, unknown>
+  ): Promise<ToolResponse> {
+    if (this.checkpointManager == null) {
+      return this.createErrorResponse(
+        'Checkpoint manager is not available. Ensure checkpoint support is enabled.'
+      );
+    }
+
+    // Transform args to checkpoint_manager format
+    const checkpointArgs: CheckpointManagerInput = {
+      action: args.action as CheckpointAction,
+    };
+
+    if (args.name != null) checkpointArgs.name = args.name;
+    if (args.description != null) checkpointArgs.description = args.description;
+    if (args.confirm != null) checkpointArgs.confirm = args.confirm;
+    if (args.reason != null) checkpointArgs.reason = args.reason;
+
+    return await this.checkpointManager.handleAction(checkpointArgs, context);
   }
 
   /**

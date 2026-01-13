@@ -7,7 +7,7 @@
  * 2. Inline gate stage sets up pending verification
  * 3. Shell verification stage executes and formats feedback
  * 4. Retry/escalation flow works correctly
- * 5. Git checkpoint integration
+ * 5. Preset parsing (:fast, :full, :extended)
  * 6. gate_action handling
  */
 
@@ -29,10 +29,19 @@ import type {
   ShellVerifyResult,
   PendingShellVerification,
 } from '../../../src/gates/shell/types.js';
+import type { GateOperator } from '../../../src/execution/parsers/types/operator-types.js';
 import type { Logger } from '../../../src/logging/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(__dirname, '../../..');
+
+// Helper to find shell verify gate operators
+const findShellVerifyGate = (operators: readonly { type: string }[]): GateOperator | undefined =>
+  operators.find((op): op is GateOperator => op.type === 'gate' && 'shellVerify' in op && !!(op as GateOperator).shellVerify) as GateOperator | undefined;
+
+// Helper to find criteria gate operators (non-shell)
+const findCriteriaGate = (operators: readonly { type: string }[]): GateOperator | undefined =>
+  operators.find((op): op is GateOperator => op.type === 'gate' && !('shellVerify' in op && (op as GateOperator).shellVerify)) as GateOperator | undefined;
 
 describe('Shell Verification Flow Integration', () => {
   let originalServerRoot: string | undefined;
@@ -71,23 +80,46 @@ describe('Shell Verification Flow Integration', () => {
       expect(result.operatorTypes).toContain('gate');
 
       // Find the gate operator
-      const gateOp = result.operators.find((op) => op.type === 'gate' && op.shellVerify);
+      const gateOp = findShellVerifyGate(result.operators);
       expect(gateOp).toBeDefined();
       expect(gateOp?.shellVerify?.command).toBe('npm test');
     });
 
     test('parses verify with additional options', () => {
       const result = parser.detectOperators(
-        '>>fix-bug :: verify:"pytest -v" loop:true checkpoint:true rollback:true max:15 timeout:120'
+        '>>fix-bug :: verify:"pytest -v" loop:true max:15 timeout:120'
       );
 
-      const gateOp = result.operators.find((op) => op.type === 'gate' && op.shellVerify);
+      const gateOp = findShellVerifyGate(result.operators);
       expect(gateOp?.shellVerify?.command).toBe('pytest -v');
       expect(gateOp?.shellVerify?.loop).toBe(true);
-      expect(gateOp?.shellVerify?.checkpoint).toBe(true);
-      expect(gateOp?.shellVerify?.rollback).toBe(true);
       expect(gateOp?.shellVerify?.maxIterations).toBe(15);
       expect(gateOp?.shellVerify?.timeout).toBe(120000); // Converted to ms
+    });
+
+    test('parses verify with preset shortcuts', () => {
+      // Test :fast preset
+      const fastResult = parser.detectOperators('>>prompt :: verify:"npm test" :fast');
+      const fastGate = findShellVerifyGate(fastResult.operators);
+      expect(fastGate?.shellVerify?.preset).toBe('fast');
+
+      // Test :full preset
+      const fullResult = parser.detectOperators('>>prompt :: verify:"npm test" :full');
+      const fullGate = findShellVerifyGate(fullResult.operators);
+      expect(fullGate?.shellVerify?.preset).toBe('full');
+
+      // Test :extended preset
+      const extResult = parser.detectOperators('>>prompt :: verify:"npm test" :extended');
+      const extGate = findShellVerifyGate(extResult.operators);
+      expect(extGate?.shellVerify?.preset).toBe('extended');
+    });
+
+    test('explicit values override preset values', () => {
+      // Preset with explicit max override
+      const result = parser.detectOperators('>>prompt :: verify:"npm test" :fast max:10');
+      const gateOp = findShellVerifyGate(result.operators);
+      expect(gateOp?.shellVerify?.preset).toBe('fast');
+      expect(gateOp?.shellVerify?.maxIterations).toBe(10); // Explicit override
     });
 
     test('parses combined verify and criteria gates', () => {
@@ -95,14 +127,14 @@ describe('Shell Verification Flow Integration', () => {
       const result = parser.detectOperators(">>prompt :: verify:'npm test' :: code-quality");
 
       // Should have both shellVerify gate and criteria/canonical gate
-      const verifyGate = result.operators.find((op) => op.type === 'gate' && op.shellVerify);
-      const criteriaGate = result.operators.find((op) => op.type === 'gate' && !op.shellVerify);
+      const verifyGate = findShellVerifyGate(result.operators);
+      const criteriaGate = findCriteriaGate(result.operators);
 
       expect(verifyGate).toBeDefined();
       expect(verifyGate?.shellVerify?.command).toBe('npm test');
       expect(criteriaGate).toBeDefined();
-      // Either has criteria or canonicalRef for gate reference
-      expect(criteriaGate?.criteria || criteriaGate?.canonicalRef).toBeTruthy();
+      // Criteria gate should have criteria text
+      expect(criteriaGate?.criteria).toBeTruthy();
     });
 
     test('generates unique gate IDs for verify gates', async () => {
@@ -111,8 +143,8 @@ describe('Shell Verification Flow Integration', () => {
       await new Promise((resolve) => setTimeout(resolve, 2));
       const result2 = parser.detectOperators('>>prompt :: verify:"test2"');
 
-      const gate1 = result1.operators.find((op) => op.type === 'gate' && op.shellVerify);
-      const gate2 = result2.operators.find((op) => op.type === 'gate' && op.shellVerify);
+      const gate1 = findShellVerifyGate(result1.operators);
+      const gate2 = findShellVerifyGate(result2.operators);
 
       // Both should have shell-verify- prefix
       expect(gate1?.gateId).toMatch(/^shell-verify-/);
@@ -129,7 +161,6 @@ describe('Shell Verification Flow Integration', () => {
         command: 'npm test',
         timeout: 60000,
         loop: true,
-        checkpoint: true,
       };
 
       const pending: PendingShellVerification = {

@@ -1,10 +1,10 @@
 {
   "tool": "resource_manager",
   "version": 1,
-  "summary": "Unified resource management for prompts, gates, and methodologies. Use resource_type to specify the resource kind, then action for the operation.",
+  "summary": "Unified resource management for prompts, gates, methodologies, and checkpoints. Use resource_type to specify the resource kind, then action for the operation.",
   "toolDescription": {
-    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, methodologies.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | methodology\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n\u2022 >>create_methodology - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
-    "shortDescription": "Manage prompts, gates, and methodologies",
+    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, methodologies, checkpoints.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | methodology | checkpoint\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare | clear\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\nCHECKPOINT: create (save state), rollback (restore), list (show all), delete (remove), clear (remove all)\n\nCREATION GUIDES:\n\u2022 >>create_methodology - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
+    "shortDescription": "Manage prompts, gates, methodologies, and checkpoints",
     "category": "management",
     "frameworkAware": {
       "enabled": "\ud83d\uddc2\ufe0f RESOURCE MANAGER [FRAMEWORK]: Operations reflect active methodology context.",
@@ -14,15 +14,15 @@
   "parameters": [
     {
       "name": "resource_type",
-      "type": "enum[prompt|gate|methodology]",
+      "type": "enum[prompt|gate|methodology|checkpoint]",
       "description": "Type of resource to manage. Routes to appropriate handler.",
       "status": "working",
       "required": true
     },
     {
       "name": "action",
-      "type": "enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare]",
-      "description": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology). Versioning: history/rollback/compare (all types).",
+      "type": "enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare|clear]",
+      "description": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/methodology). Checkpoint: create/rollback/list/delete/clear.",
       "status": "working",
       "required": true
     },
@@ -449,7 +449,38 @@
     {
       "id": "common:compare",
       "summary": "Compare two versions of a resource.",
-      "parameters": ["resource_type", "action", "id", "from_version", "to_version"]
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "from_version",
+        "to_version"
+      ]
+    },
+    {
+      "id": "checkpoint:create",
+      "summary": "Create a git checkpoint (stash) before risky operations.",
+      "parameters": ["resource_type", "action", "name", "description"]
+    },
+    {
+      "id": "checkpoint:rollback",
+      "summary": "Rollback to a previously created checkpoint.",
+      "parameters": ["resource_type", "action", "name", "confirm"]
+    },
+    {
+      "id": "checkpoint:list",
+      "summary": "List all active checkpoints.",
+      "parameters": ["resource_type", "action"]
+    },
+    {
+      "id": "checkpoint:delete",
+      "summary": "Delete a checkpoint without restoring changes.",
+      "parameters": ["resource_type", "action", "name", "confirm"]
+    },
+    {
+      "id": "checkpoint:clear",
+      "summary": "Clear all checkpoints.",
+      "parameters": ["resource_type", "action", "confirm"]
     }
   ],
   "conditionalRequirements": {
@@ -468,6 +499,10 @@
     "guide": {
       "resource_type": "prompt",
       "message": "The 'guide' action is only valid for resource_type: 'prompt'"
+    },
+    "clear": {
+      "resource_type": "checkpoint",
+      "message": "The 'clear' action is only valid for resource_type: 'checkpoint'"
     }
   }
 }

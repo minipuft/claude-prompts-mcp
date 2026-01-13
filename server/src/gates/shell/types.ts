@@ -15,11 +15,17 @@
  * Defines the shell command to execute for validation along with
  * execution parameters like timeout and working directory.
  *
- * Extended options enable Ralph Wiggum-style autonomous loops:
- * - loop: Enable Stop hook integration for true autonomous loops
- * - maxIterations: Safety limit before force-stop
- * - checkpoint: Git stash before execution for safe rollback
- * - rollback: Automatically restore on verification failure
+ * Options:
+ * - max: Maximum attempts (default: 5)
+ * - timeout: Command timeout in seconds (default: 300)
+ * - loop: Enable Stop hook integration for autonomous loops
+ *
+ * Presets (apply with :fast, :full, :extended):
+ * - :fast     → max:1, timeout:30   (quick feedback)
+ * - :full     → max:5, timeout:300  (CI-style)
+ * - :extended → max:10, timeout:600 (long tests)
+ *
+ * Checkpoint/rollback functionality is available via resource_manager.
  */
 export interface ShellVerifyGate {
   /** The shell command to execute for verification */
@@ -31,16 +37,14 @@ export interface ShellVerifyGate {
   /** Additional environment variables for the command */
   env?: Record<string, string>;
 
-  // === Ralph Wiggum Loop Extensions ===
+  // === Ralph Loop Options ===
 
   /** Enable Stop hook integration for autonomous loops (default: false) */
   loop?: boolean;
-  /** Maximum iterations before force-stop when loop:true (default: 10) */
+  /** Maximum iterations before force-stop (default: 5, or preset value) */
   maxIterations?: number;
-  /** Create git stash checkpoint before verification (default: false) */
-  checkpoint?: boolean;
-  /** Rollback to checkpoint on verification failure (default: false) */
-  rollback?: boolean;
+  /** Applied preset name (:fast, :full, :extended) - sets max and timeout */
+  preset?: 'fast' | 'full' | 'extended';
 }
 
 /**
@@ -124,15 +128,13 @@ export interface VerifyActiveState {
     command: string;
     timeout: number;
     maxIterations: number;
-    checkpoint: boolean;
-    rollback: boolean;
     workingDir?: string;
+    preset?: 'fast' | 'full' | 'extended';
   };
   /** Runtime state updated by Stop hook */
   state: {
     iteration: number;
     lastResult: ShellVerifyResult | null;
-    checkpointRef: string | null;
     startedAt: string;
   };
 }

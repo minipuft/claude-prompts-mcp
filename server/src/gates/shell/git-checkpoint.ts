@@ -126,6 +126,11 @@ export class GitCheckpoint {
       // Extract stash index (e.g., "stash@{0}")
       const stashIndex = stashMatch.split(':')[0];
 
+      // Reset any uncommitted changes before popping (rollback discards work since checkpoint)
+      await execAsync('git checkout -- .', {
+        cwd: this.workingDir,
+      });
+
       // Pop the stash to restore changes
       await execAsync(`git stash pop ${stashIndex}`, {
         cwd: this.workingDir,

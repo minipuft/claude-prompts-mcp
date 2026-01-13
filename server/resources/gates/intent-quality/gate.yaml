@@ -1,0 +1,25 @@
+id: intent-quality
+name: Intent Declaration Quality
+type: validation
+description: >-
+  Validates that Intent Declaration is complete and properly formatted for
+  workflow routing
+guidanceFile: guidance.md
+pass_criteria:
+  - required_patterns:
+      - 'Work Type is one of: bug_fix, feature, refactor, explore, optimize'
+  - required_patterns:
+      - 'Confidence level is specified: high, medium, or low'
+  - required_patterns:
+      - Scope includes at least one specific file path or system name
+  - required_patterns:
+      - 'Risk level is assessed: low, medium, or high'
+  - required_patterns:
+      - Problem Statement follows 'Current state → Desired state' format
+  - required_patterns:
+      - Recommended Approach provides actionable next steps (2-3 sentences)
+  - required_patterns:
+      - >-
+        Next Phase matches Work Type routing: bug_fix→/testing,
+        feature→/refactoring, refactor→/refactoring, explore→continue,
+        optimize→profile

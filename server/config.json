@@ -24,7 +24,7 @@
   "frameworks": {
     "dynamicToolDescriptions": true,
     "injection": {
-      "systemPrompt": { "enabled": true, "frequency": 2 },
+      "systemPrompt": { "enabled": true, "frequency": 3 },
       "styleGuidance": true
     }
   },

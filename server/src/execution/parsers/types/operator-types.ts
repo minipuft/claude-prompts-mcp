@@ -46,11 +46,12 @@ export interface GateOperator {
    * Present when using `:: verify:"command"` syntax.
    * Exit code 0 = PASS, non-zero = FAIL.
    *
-   * Extended options enable Ralph Wiggum-style autonomous loops:
+   * Options for Ralph Wiggum-style autonomous loops:
    * - loop:true - Enable Stop hook integration
    * - max:N - Maximum iterations
-   * - checkpoint:true - Git stash before execution
-   * - rollback:true - Git restore on failure
+   * - :fast/:full/:extended - Presets for common configurations
+   *
+   * Checkpoint/rollback available via resource_manager tool.
    */
   shellVerify?: ShellVerifyGate;
 }

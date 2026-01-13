@@ -72,3 +72,50 @@ export const SHELL_VERIFY_DEFAULTS = {
   defaultTimeout: SHELL_VERIFY_DEFAULT_TIMEOUT,
   maxTimeout: SHELL_VERIFY_MAX_TIMEOUT,
 } as const;
+
+// ============================================================================
+// Shell Verification Presets
+// ============================================================================
+
+/**
+ * Verification presets for common use cases.
+ * Users can apply these with :fast, :full, or :extended syntax.
+ *
+ * @example
+ * :: verify:"npm test" :fast      // Quick feedback during development
+ * :: verify:"npm test" :full      // CI-style validation (default-like)
+ * :: verify:"npm test" :extended  // Long-running test suites
+ */
+export const SHELL_VERIFY_PRESETS = {
+  /**
+   * :fast - Quick feedback during development
+   * Single attempt with short timeout for rapid iteration
+   */
+  fast: {
+    maxIterations: 1,
+    timeout: 30000, // 30 seconds
+  },
+
+  /**
+   * :full - CI-style validation (recommended for most cases)
+   * Multiple attempts with standard timeout
+   */
+  full: {
+    maxIterations: 5,
+    timeout: 300000, // 5 minutes
+  },
+
+  /**
+   * :extended - Long-running test suites
+   * More attempts with extended timeout for comprehensive testing
+   */
+  extended: {
+    maxIterations: 10,
+    timeout: 600000, // 10 minutes
+  },
+} as const;
+
+/**
+ * Type for valid preset names
+ */
+export type ShellVerifyPresetName = keyof typeof SHELL_VERIFY_PRESETS;

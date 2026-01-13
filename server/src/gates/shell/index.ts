@@ -22,3 +22,24 @@ export {
   getDefaultShellVerifyExecutor,
   resetDefaultShellVerifyExecutor,
 } from './shell-verify-executor.js';
+
+// Message formatting services (extracted from ShellVerificationStage)
+export type {
+  ShellVerifyFeedback,
+  ShellVerifyFeedbackType,
+} from './shell-verify-message-formatter.js';
+export {
+  truncateForDisplay,
+  extractErrorOutput,
+  formatBounceBackMessage,
+  formatEscalationMessage,
+  createBounceBackFeedback,
+  createEscalationFeedback,
+} from './shell-verify-message-formatter.js';
+
+// State file management for Stop hook integration
+export type { VerifyActiveStateManagerConfig } from './verify-active-state-manager.js';
+export {
+  VerifyActiveStateManager,
+  createVerifyActiveStateManager,
+} from './verify-active-state-manager.js';

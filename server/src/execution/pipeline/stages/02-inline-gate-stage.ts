@@ -1,5 +1,5 @@
 // @lifecycle canonical - Evaluates inline gates before heavy execution work.
-import { SHELL_VERIFY_DEFAULTS } from '../../../gates/constants.js';
+import { SHELL_VERIFY_DEFAULTS, SHELL_VERIFY_PRESETS } from '../../../gates/constants.js';
 import { formatCriteriaAsGuidance } from '../criteria-guidance.js';
 import { BasePipelineStage } from '../stage.js';
 
@@ -472,23 +472,44 @@ export class InlineGateExtractionStage extends BasePipelineStage {
   /**
    * Sets up shell verification state for Ralph Wiggum loops.
    * Called when a `:: verify:"command"` gate is detected.
+   *
+   * Supports presets (:fast, :full, :extended) that expand to max/timeout values.
+   * Explicit max/timeout values override preset defaults.
    */
   private setupShellVerification(
     context: ExecutionContext,
     gateId: string,
-    shellVerifyConfig: { command: string; timeout?: number; workingDir?: string }
+    shellVerifyConfig: ShellVerifyGate
   ): void {
+    // Resolve preset values if specified
+    const presetValues = shellVerifyConfig.preset
+      ? SHELL_VERIFY_PRESETS[shellVerifyConfig.preset]
+      : undefined;
+
+    // Explicit values override preset values, which override system defaults
+    const resolvedMaxIterations =
+      shellVerifyConfig.maxIterations ??
+      presetValues?.maxIterations ??
+      SHELL_VERIFY_DEFAULTS.maxAttempts;
+
+    const resolvedTimeout =
+      shellVerifyConfig.timeout ?? presetValues?.timeout ?? SHELL_VERIFY_DEFAULTS.defaultTimeout;
+
     const shellVerify: ShellVerifyGate = {
       command: shellVerifyConfig.command,
-      timeout: shellVerifyConfig.timeout ?? SHELL_VERIFY_DEFAULTS.defaultTimeout,
+      timeout: resolvedTimeout,
       workingDir: shellVerifyConfig.workingDir,
+      // Ralph loop options
+      loop: shellVerifyConfig.loop,
+      maxIterations: resolvedMaxIterations,
+      preset: shellVerifyConfig.preset,
     };
 
     const pending: PendingShellVerification = {
       gateId,
       shellVerify,
       attemptCount: 0,
-      maxAttempts: SHELL_VERIFY_DEFAULTS.maxAttempts,
+      maxAttempts: resolvedMaxIterations,
       previousResults: [],
     };
 
@@ -499,6 +520,8 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       command: shellVerify.command,
       timeout: shellVerify.timeout,
       maxAttempts: pending.maxAttempts,
+      loop: shellVerify.loop,
+      preset: shellVerify.preset,
     });
   }
 

@@ -79,6 +79,31 @@ prompt_engine(command: "Summarize this :: 'under 200 words' :: 'include statisti
 
 ---
 
+### ✅ Verification Gates — Ground-truth validation via shell commands
+
+**Problem**: LLM self-evaluation isn't always reliable. You want real test results, not Claude's opinion about whether code works.
+
+**Solution**: Shell verification runs actual commands (like `npm test`) and uses exit codes as ground truth. Claude keeps trying until tests pass or max attempts reached.
+
+```text
+# Run tests after implementation
+prompt_engine(command: ">>implement-login :: verify:'npm test'")
+
+# Quick feedback loop
+prompt_engine(command: ">>fix-typo :: verify:'npm run lint' :fast")
+
+# Full CI validation
+prompt_engine(command: ">>refactor-auth :: verify:'npm test' :full")
+```
+
+**Presets**: `:fast` (1 try, 30s), `:full` (5 tries, 5 min), `:extended` (10 tries, 10 min)
+
+**Expect**: Claude implements, tests run, failures bounce back with error output. Claude iterates until tests pass.
+
+See [Ralph Loops Guide](docs/guides/ralph-loops.md) for details.
+
+---
+
 ### 📜 Version History — Undo and compare changes
 
 **Problem**: You edited a prompt and broke something. No undo, no diff, no way back.

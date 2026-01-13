@@ -63,7 +63,10 @@ import {
 import { GateManagerProvider } from '../../../gates/registry/gate-provider-adapter.js';
 import { GateReferenceResolver } from '../../../gates/services/gate-reference-resolver.js';
 import { GateServiceFactory } from '../../../gates/services/gate-service-factory.js';
-import { createShellVerifyExecutor } from '../../../gates/shell/index.js';
+import {
+  createShellVerifyExecutor,
+  createVerifyActiveStateManager,
+} from '../../../gates/shell/index.js';
 import { Logger } from '../../../logging/index.js';
 import { PromptAssetManager } from '../../../prompts/index.js';
 import { WorkspaceScriptLoader } from '../../../scripts/core/index.js';
@@ -786,7 +789,12 @@ export class PromptExecutionService {
     // Shell verification stage (08b) - executes shell commands for ground-truth validation
     // Enables "Ralph Wiggum" style loops where Claude's work is validated by real command execution
     const shellVerifyExecutor = createShellVerifyExecutor({ debug: false });
-    const shellVerificationStage = createShellVerificationStage(shellVerifyExecutor, this.logger);
+    const verifyActiveStateManager = createVerifyActiveStateManager(this.logger);
+    const shellVerificationStage = createShellVerificationStage(
+      shellVerifyExecutor,
+      verifyActiveStateManager,
+      this.logger
+    );
 
     const executionStage = new StepExecutionStage(
       this.chainOperatorExecutor,

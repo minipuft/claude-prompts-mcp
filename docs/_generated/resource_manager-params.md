@@ -1,6 +1,6 @@
 | Name | Type | Status | Required | Description |
 | --- | --- | --- | --- | --- |
-| `action` | enum[create\|update\|delete\|reload\|list\|inspect\|analyze_type\|analyze_gates\|guide\|switch\|history\|rollback\|compare] | working | yes | Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology). Versioning: history/rollback/compare (all types). |
+| `action` | enum[create\|update\|delete\|reload\|list\|inspect\|analyze_type\|analyze_gates\|guide\|switch\|history\|rollback\|compare\|clear] | working | yes | Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/methodology). Checkpoint: create/rollback/list/delete/clear. |
 | `activation` | object | working | no | [Gate] Activation rules: prompt_categories, frameworks, explicit_request. |
 | `arguments` | array<{name,required?,description?,type?}> | working | no | [Prompt] Argument definitions for the prompt. |
 | `category` | string | working | no | [Prompt] Category tag for the prompt. |
@@ -26,7 +26,7 @@
 | `persist` | boolean | working | no | [Methodology] For switch: persist the change to config. Default: false. |
 | `phases` | array<object> | working | no | [Methodology] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (methodology_gates, processing_steps, execution_steps, etc.) are also accepted. |
 | `reason` | string | working | no | Audit reason for reload/delete/switch operations. |
-| `resource_type` | enum[prompt\|gate\|methodology] | working | yes | Type of resource to manage. Routes to appropriate handler. |
+| `resource_type` | enum[prompt\|gate\|methodology\|checkpoint] | working | yes | Type of resource to manage. Routes to appropriate handler. |
 | `retry_config` | object | working | no | [Gate] Retry configuration: max_attempts, improvement_hints. |
 | `search_query` | string | working | no | [Prompt] Search query for filtering (list action). |
 | `section` | enum[name\|description\|system_message\|user_message_template\|arguments\|chain_steps] | working | no | [Prompt] Targeted update section. |

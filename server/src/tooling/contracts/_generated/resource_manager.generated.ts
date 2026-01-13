@@ -25,7 +25,7 @@ export type resource_managerParamName = 'resource_type' | 'action' | 'id' | 'nam
 export const resource_managerParameters: ToolParameter[] = [
   {
     "name": "resource_type",
-    "type": "enum[prompt|gate|methodology]",
+    "type": "enum[prompt|gate|methodology|checkpoint]",
     "description": "Type of resource to manage. Routes to appropriate handler.",
     "required": true,
     "status": "working",
@@ -33,8 +33,8 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     "name": "action",
-    "type": "enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare]",
-    "description": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology). Versioning: history/rollback/compare (all types).",
+    "type": "enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare|clear]",
+    "description": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/methodology). Checkpoint: create/rollback/list/delete/clear.",
     "required": true,
     "status": "working",
     "compatibility": "canonical"
@@ -577,6 +577,58 @@ export const resource_managerCommands: ToolCommand[] = [
       "id",
       "from_version",
       "to_version"
+    ],
+    "status": "working"
+  },
+  {
+    "id": "checkpoint:create",
+    "summary": "Create a git checkpoint (stash) before risky operations.",
+    "parameters": [
+      "resource_type",
+      "action",
+      "name",
+      "description"
+    ],
+    "status": "working"
+  },
+  {
+    "id": "checkpoint:rollback",
+    "summary": "Rollback to a previously created checkpoint.",
+    "parameters": [
+      "resource_type",
+      "action",
+      "name",
+      "confirm"
+    ],
+    "status": "working"
+  },
+  {
+    "id": "checkpoint:list",
+    "summary": "List all active checkpoints.",
+    "parameters": [
+      "resource_type",
+      "action"
+    ],
+    "status": "working"
+  },
+  {
+    "id": "checkpoint:delete",
+    "summary": "Delete a checkpoint without restoring changes.",
+    "parameters": [
+      "resource_type",
+      "action",
+      "name",
+      "confirm"
+    ],
+    "status": "working"
+  },
+  {
+    "id": "checkpoint:clear",
+    "summary": "Clear all checkpoints.",
+    "parameters": [
+      "resource_type",
+      "action",
+      "confirm"
     ],
     "status": "working"
   }

@@ -250,6 +250,46 @@ resource_manager(action:"history", id:"code_review")
 resource_manager(action:"rollback", id:"code_review", version:2, confirm:true)
 ```
 
+### 🔄 Checkpoints
+
+Save working directory state before risky changes. Restore instantly if something breaks:
+
+```text
+# Checkpoint before refactoring
+resource_manager(resource_type:"checkpoint", action:"create", name:"pre-refactor")
+
+# Something broke? Rollback to checkpoint
+resource_manager(resource_type:"checkpoint", action:"rollback", name:"pre-refactor", confirm:true)
+
+# List all checkpoints
+resource_manager(resource_type:"checkpoint", action:"list")
+```
+
+Uses git stash under the hood. Pairs with [verification gates](#verification-gates) for safe autonomous loops.
+
+### ✅ Verification Gates
+
+Ground-truth validation via shell commands—Claude keeps trying until tests pass:
+
+```text
+# Run tests after implementation
+>>implement-feature :: verify:"npm test"
+
+# Quick feedback loop
+>>fix-typo :: verify:"npm run lint" :fast
+
+# Full CI validation
+>>refactor-auth :: verify:"npm test" :full
+```
+
+| Preset | Max Tries | Timeout | Use Case |
+|--------|-----------|---------|----------|
+| `:fast` | 1 | 30s | Quick iteration |
+| `:full` | 5 | 5 min | CI validation |
+| `:extended` | 10 | 10 min | Large test suites |
+
+See [Ralph Loops Guide](docs/guides/ralph-loops.md) for autonomous verification patterns.
+
 ---
 
 ## Syntax Reference
@@ -314,12 +354,13 @@ Customize via `server/config.json`:
 | Tool | Purpose |
 |------|---------|
 | `prompt_engine` | Execute prompts with frameworks and gates |
-| `resource_manager` | CRUD for prompts, gates, methodologies |
+| `resource_manager` | CRUD for prompts, gates, methodologies, checkpoints |
 | `system_control` | Status, analytics, health checks |
 
 ```bash
 prompt_engine(command:"@CAGEERF >>analysis topic:'AI safety'")
 resource_manager(resource_type:"prompt", action:"list")
+resource_manager(resource_type:"checkpoint", action:"create", name:"backup")
 system_control(action:"status")
 ```
 
@@ -377,6 +418,7 @@ flowchart TB
 - **[Prompt Authoring](docs/guides/prompt-authoring-guide.md)** — Template syntax and schema
 - **[Chains](docs/guides/chains.md)** — Multi-step workflows
 - **[Gates](docs/guides/gates.md)** — Quality validation
+- **[Ralph Loops](docs/guides/ralph-loops.md)** — Autonomous verification patterns
 - **[Architecture](docs/architecture/overview.md)** — System internals
 
 ---

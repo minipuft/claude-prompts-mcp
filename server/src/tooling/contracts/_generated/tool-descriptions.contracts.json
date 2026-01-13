@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-01-07T05:58:41.203Z",
+  "lastUpdated": "2026-01-12T23:37:07.764Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -29,12 +29,12 @@
       ]
     },
     "resource_manager": {
-      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, methodologies.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | methodology\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\n\nCREATION GUIDES:\n• >>create_methodology - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
-      "shortDescription": "Manage prompts, gates, and methodologies",
+      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, methodologies, checkpoints.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | methodology | checkpoint\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare | clear\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\nCHECKPOINT: create (save state), rollback (restore), list (show all), delete (remove), clear (remove all)\n\nCREATION GUIDES:\n• >>create_methodology - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
+      "shortDescription": "Manage prompts, gates, methodologies, and checkpoints",
       "category": "management",
       "parameters": {
         "resource_type": "Type of resource to manage. Routes to appropriate handler.",
-        "action": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology). Versioning: history/rollback/compare (all types).",
+        "action": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/methodology). Checkpoint: create/rollback/list/delete/clear.",
         "id": "Resource identifier. Required for create, update, delete, inspect, reload, switch.",
         "name": "Human-friendly name for the resource (create/update).",
         "description": "Resource description explaining its purpose (create/update).",

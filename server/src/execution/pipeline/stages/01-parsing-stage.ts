@@ -293,13 +293,14 @@ export class CommandParsingStage extends BasePipelineStage {
           ? await this.parseArgumentsSafely(step.args, convertedPrompt)
           : undefined;
 
-      // Merge step-level and global gate criteria
-      const combinedGateCriteria = [...(step.inlineGateCriteria ?? []), ...globalGateCriteria];
+      // Only use step-specific gate criteria here - global criteria is handled at command level
+      // Stage 02 creates command-level gates with execution scope that apply to all steps
+      const stepGateCriteria = step.inlineGateCriteria ?? [];
 
       const resolvedArgs = await this.resolveArgumentPayload(
         convertedPrompt,
         stepArgumentInput,
-        combinedGateCriteria,
+        stepGateCriteria,
         fallbackArgs?.processedArgs
       );
 
@@ -320,6 +321,9 @@ export class CommandParsingStage extends BasePipelineStage {
       ...parseResult,
       steps: stepPrompts,
       promptArgs: commandArgs,
+      // Set command-level gate criteria so Stage 02 creates execution-scoped gates
+      // that apply to all steps (not merged into individual step criteria)
+      inlineGateCriteria: globalGateCriteria.length > 0 ? globalGateCriteria : undefined,
     };
 
     if (namedGates.length > 0) {

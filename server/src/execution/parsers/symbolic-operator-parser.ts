@@ -113,7 +113,7 @@ export class SymbolicCommandParser {
 
         // Named gate with colon syntax: :: id:"criteria"
         if (namedColonId && namedColonText) {
-          // Shell verification gate: :: verify:"npm test" [loop:true] [max:N] [timeout:N] [checkpoint:true] [rollback:true]
+          // Shell verification gate: :: verify:"npm test" [:fast|:full|:extended] [loop:true] [max:N] [timeout:N]
           if (namedColonId === 'verify') {
             // Parse additional verify options from the remaining command
             const verifyOptions = this.parseVerifyOptions(command, match.index ?? 0);
@@ -131,8 +131,7 @@ export class SymbolicCommandParser {
                 timeout: verifyOptions.timeout ?? SHELL_VERIFY_DEFAULT_TIMEOUT,
                 loop: verifyOptions.loop,
                 maxIterations: verifyOptions.maxIterations,
-                checkpoint: verifyOptions.checkpoint,
-                rollback: verifyOptions.rollback,
+                preset: verifyOptions.preset,
               },
             });
             continue;
@@ -386,14 +385,19 @@ export class SymbolicCommandParser {
   /**
    * Parse verify-specific options from command string.
    *
-   * Supports:
+   * Options:
    * - loop:true/false - Enable Stop hook integration for autonomous loops
-   * - max:N - Maximum iterations (default 10)
+   * - max:N - Maximum iterations (default 5)
    * - timeout:N - Timeout in seconds (converted to ms internally)
-   * - checkpoint:true/false - Git stash before execution
-   * - rollback:true/false - Git restore on failure
    *
-   * @example :: verify:"npm test" loop:true max:15 checkpoint:true
+   * Presets (shorthand for common configurations):
+   * - :fast     → max:1, timeout:30   (quick feedback during development)
+   * - :full     → max:5, timeout:300  (CI-style validation)
+   * - :extended → max:10, timeout:600 (long-running test suites)
+   *
+   * @example :: verify:"npm test" :fast
+   * @example :: verify:"npm test" max:3 timeout:60
+   * @example :: verify:"npm test" loop:true :full
    */
   private parseVerifyOptions(
     command: string,
@@ -402,8 +406,7 @@ export class SymbolicCommandParser {
     loop?: boolean;
     maxIterations?: number;
     timeout?: number;
-    checkpoint?: boolean;
-    rollback?: boolean;
+    preset?: 'fast' | 'full' | 'extended';
   } {
     // Get the portion of command after the verify:"..." match
     const afterVerify = command.slice(matchStart);
@@ -421,9 +424,14 @@ export class SymbolicCommandParser {
       loop?: boolean;
       maxIterations?: number;
       timeout?: number;
-      checkpoint?: boolean;
-      rollback?: boolean;
+      preset?: 'fast' | 'full' | 'extended';
     } = {};
+
+    // Parse presets (:fast, :full, :extended)
+    const presetMatch = optionsStr.match(/:(fast|full|extended)\b/i);
+    if (presetMatch?.[1]) {
+      options.preset = presetMatch[1].toLowerCase() as 'fast' | 'full' | 'extended';
+    }
 
     // Parse loop:true/false
     const loopMatch = optionsStr.match(/\bloop:(true|false)\b/i);
@@ -431,28 +439,16 @@ export class SymbolicCommandParser {
       options.loop = loopMatch[1].toLowerCase() === 'true';
     }
 
-    // Parse max:N (maxIterations)
+    // Parse max:N (maxIterations) - explicit value overrides preset
     const maxMatch = optionsStr.match(/\bmax:(\d+)\b/i);
     if (maxMatch?.[1]) {
       options.maxIterations = parseInt(maxMatch[1], 10);
     }
 
-    // Parse timeout:N (in seconds, convert to ms)
+    // Parse timeout:N (in seconds, convert to ms) - explicit value overrides preset
     const timeoutMatch = optionsStr.match(/\btimeout:(\d+)\b/i);
     if (timeoutMatch?.[1]) {
       options.timeout = parseInt(timeoutMatch[1], 10) * 1000; // seconds → ms
-    }
-
-    // Parse checkpoint:true/false
-    const checkpointMatch = optionsStr.match(/\bcheckpoint:(true|false)\b/i);
-    if (checkpointMatch?.[1]) {
-      options.checkpoint = checkpointMatch[1].toLowerCase() === 'true';
-    }
-
-    // Parse rollback:true/false
-    const rollbackMatch = optionsStr.match(/\brollback:(true|false)\b/i);
-    if (rollbackMatch?.[1]) {
-      options.rollback = rollbackMatch[1].toLowerCase() === 'true';
     }
 
     if (Object.keys(options).length > 0) {

@@ -1,8 +1,34 @@
 # Ralph Mode: Shell Verification Gates
 
-> **Status:** Planning Complete
+> **Status:** Implementation Complete (Refined 2026-01-11)
 > **Created:** 2026-01-06
 > **Feature:** Add shell-based verification gates using `:: verify:"command"` syntax
+
+## Implementation Status
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 1: Types | ✅ Complete | Extended with loop, checkpoint, rollback options |
+| Phase 2: Executor | ✅ Complete | 343 lines, env allowlist, singleton pattern |
+| Phase 3: Parser | ✅ Complete | Added parseVerifyOptions for extended syntax |
+| Phase 4: State | ✅ Complete | Added shellVerifyFeedback |
+| Phase 5: Stage | ✅ Refined | Refactored to use services (was 444→256 lines) |
+| Phase 6: Registration | ✅ Complete | Registered in prompt-execution-service.ts |
+| Phase 7: Integration | ✅ Complete | Routes to ShellVerificationStage |
+
+### Post-Implementation Refinements (2026-01-11)
+
+Service extraction to meet orchestration layer limits:
+
+1. **ShellVerifyMessageFormatter** (`gates/shell/shell-verify-message-formatter.ts`)
+   - Pure functions for feedback message formatting
+   - `createBounceBackFeedback()`, `createEscalationFeedback()`
+
+2. **VerifyActiveStateManager** (`gates/shell/verify-active-state-manager.ts`)
+   - State file management for Stop hook integration
+   - `writeState()`, `clearState()`, `readState()`
+
+Stage reduced from 444 lines to 256 lines by delegating to services.
 
 ## Background: Ralph Wiggum Comparison
 
@@ -244,19 +270,24 @@ if (namedGate.gateId === 'verify' || namedGate.shellVerify) {
 
 ## Files Summary
 
-### New Files (4)
+### New Files (7)
+
 1. `/server/src/gates/shell/types.ts` - Type definitions
 2. `/server/src/gates/shell/shell-verify-executor.ts` - Shell executor service
 3. `/server/src/gates/shell/index.ts` - Module exports
-4. `/server/src/execution/pipeline/stages/08b-shell-verification-stage.ts` - Pipeline stage
+4. `/server/src/gates/shell/git-checkpoint.ts` - Git stash utilities (checkpoint/rollback)
+5. `/server/src/gates/shell/shell-verify-message-formatter.ts` - Feedback message formatting (refinement)
+6. `/server/src/gates/shell/verify-active-state-manager.ts` - State file management (refinement)
+7. `/server/src/execution/pipeline/stages/08b-shell-verification-stage.ts` - Pipeline stage
 
 ### Modified Files (6)
+
 1. `/server/src/gates/constants.ts` - Add shell verify constants
 2. `/server/src/execution/parsers/symbolic-operator-parser.ts` - Detect `verify:` in gate loop
 3. `/server/src/execution/parsers/types/operator-types.ts` - Add `shellVerify` to `GateOperator`
 4. `/server/src/execution/context/internal-state.ts` - Add shell verification state
 5. `/server/src/execution/pipeline/stages/02-inline-gate-stage.ts` - Handle shell verify gates
-6. `/server/src/execution/pipeline/pipeline-builder.ts` - Register new stage
+6. `/server/src/mcp-tools/prompt-engine/core/prompt-execution-service.ts` - Register stage with services
 
 ---
 

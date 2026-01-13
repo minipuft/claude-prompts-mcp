@@ -147,7 +147,12 @@ export interface GateDefinition {
  */
 export interface GatePassCriteria {
   /** Type of check to perform */
-  type: 'content_check' | 'llm_self_check' | 'pattern_check' | 'methodology_compliance';
+  type:
+    | 'content_check'
+    | 'llm_self_check'
+    | 'pattern_check'
+    | 'methodology_compliance'
+    | 'shell_verify';
 
   // Content check options
   min_length?: number;
@@ -174,6 +179,20 @@ export interface GatePassCriteria {
   // Pattern check options
   regex_patterns?: string[];
   keyword_count?: { [keyword: string]: number };
+
+  // Shell verification options (ground-truth validation via exit code)
+  /** Shell command to execute for verification (exit 0 = pass) */
+  shell_command?: string;
+  /** Timeout in milliseconds for shell command (default: 300000) */
+  shell_timeout?: number;
+  /** Working directory for shell command execution */
+  shell_working_dir?: string;
+  /** Additional environment variables for shell command */
+  shell_env?: Record<string, string>;
+  /** Maximum verification attempts before escalation (default: 5) */
+  shell_max_attempts?: number;
+  /** Preset for shell verification (:fast, :full, :extended) */
+  shell_preset?: 'fast' | 'full' | 'extended';
 }
 
 // ValidationCheck now imported from execution/types.js - no need to redefine
