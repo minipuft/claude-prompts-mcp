@@ -1,17 +1,21 @@
 {
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
   "packages": {
-    "server": {
-      "release-type": "node",
+    ".": {
       "component": "claude-prompts",
       "package-name": "claude-prompts",
-      "changelog-path": "../CHANGELOG.md",
-      "include-component-in-tag": true,
-      "include-v-in-tag": true,
-      "tag-separator": "-",
-      "draft": false
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false,
+      "include-v-in-tag": true
     }
   },
   "extra-files": [
+    {
+      "type": "json",
+      "path": "server/package.json",
+      "jsonpath": "$.version"
+    },
     {
       "type": "json",
       "path": "manifest.json",
@@ -22,5 +26,7 @@
       "path": ".claude-plugin/plugin.json",
       "jsonpath": "$.version"
     }
-  ]
+  ],
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true
 }
