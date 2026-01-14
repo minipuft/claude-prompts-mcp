@@ -245,8 +245,7 @@ export class ConfigManager extends EventEmitter {
     const methodologies = this.config.methodologies;
     return {
       dynamicToolDescriptions:
-        methodologies?.dynamicToolDescriptions ??
-        DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
+        methodologies?.dynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
       injection: {
         systemPrompt: {
           enabled: methodologies?.enabled ?? true,
@@ -265,8 +264,7 @@ export class ConfigManager extends EventEmitter {
     const gatesConfig = this.config.gates ?? {};
     return {
       enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
-      definitionsDirectory:
-        gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
+      definitionsDirectory: gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
       enableMethodologyGates:
         gatesConfig.methodologyGates ?? DEFAULT_GATES_CONFIG.enableMethodologyGates,
     };

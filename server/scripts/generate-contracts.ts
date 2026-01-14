@@ -11,6 +11,7 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 // Import schemas from SSOT (eliminates duplication)
 import {
@@ -444,9 +445,19 @@ async function main(): Promise<void> {
   // Generate mcp-schemas.ts (Zod schemas for MCP registration)
   const mcpSchemasPath = path.join(GENERATED_META_DIR, 'mcp-schemas.ts');
   const mcpSchemasContent = generateMcpSchemas(contracts);
+
+  // Format with prettier to match project style (prevents lint ratchet failures)
+  const prettierBin = path.join(ROOT, 'node_modules', '.bin', 'prettier');
+  const formatted = spawnSync(prettierBin, ['--parser', 'typescript'], {
+    input: mcpSchemasContent,
+    encoding: 'utf-8',
+    cwd: ROOT,
+  });
+  const formattedContent = formatted.status === 0 ? formatted.stdout : mcpSchemasContent;
+
   const mcpSchemasChanged = await writeFileIfChanged(
     mcpSchemasPath,
-    `${mcpSchemasContent}\n`,
+    `${formattedContent}\n`,
     checkMode
   );
   changed = changed || mcpSchemasChanged;
