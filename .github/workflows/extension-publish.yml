@@ -25,13 +25,13 @@ jobs:
       || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # For workflow_run: use the branch/tag from the triggering workflow
           # For workflow_dispatch: use current ref
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload Artifact (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: claude-prompts-${{ steps.version.outputs.version }}.mcpb
           path: claude-prompts-${{ steps.version.outputs.version }}.mcpb
@@ -103,11 +103,11 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -179,7 +179,7 @@ jobs:
 
       - name: Upload Artifact (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
           path: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
