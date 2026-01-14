@@ -19,23 +19,19 @@
 
 ### Claude Code (Recommended)
 
-**Step 1: Add the plugin marketplace** (first time only)
 ```bash
+# Step 1: Add marketplace (first time only)
 /plugin marketplace add minipuft/minipuft-plugins
-```
 
-**Step 2: Install the plugin**
-```bash
+# Step 2: Install
 /plugin install claude-prompts@minipuft
-```
 
-**Step 3: Try it**
-```bash
+# Step 3: Try it
 >>tech_evaluation_chain library:'zod' context:'API validation'
 ```
 
 <details>
-<summary><strong>Why hooks matter</strong></summary>
+<summary>Why hooks matter</summary>
 
 The plugin adds hooks that fix common issues:
 
@@ -51,42 +47,63 @@ Raw MCP works, but models sometimes miss the syntax. The hooks catch that. → [
 
 **User Data**: Custom prompts stored in `~/.local/share/claude-prompts/` persist across updates.
 
-### Gemini CLI
+---
 
-The Gemini CLI extension is maintained in a **separate repository** for cleaner distribution:
+<details>
+<summary><strong>OpenCode</strong></summary>
+
+Add to `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "mcp": {
+    "claude-prompts": {
+      "type": "local",
+      "command": ["npx", "-y", "claude-prompts@latest"]
+    }
+  }
+}
+```
+
+Restart OpenCode and test: `>>research_chain topic:'AI safety'`
+
+**With hooks** (recommended): Use the [opencode-prompts](https://github.com/minipuft/opencode-prompts) plugin for chain tracking and gate reminders.
+
+</details>
+
+<details>
+<summary><strong>Gemini CLI</strong></summary>
+
+Install from the dedicated extension repo:
 
 ```bash
-# Install from the dedicated Gemini extension repo
 gemini extensions install https://github.com/minipuft/gemini-prompts
 ```
 
-The extension provides the same tools (`prompt_engine`, `resource_manager`, `system_control`) with Gemini-optimized hooks and context files.
+The extension provides the same tools (`prompt_engine`, `resource_manager`, `system_control`) with Gemini-optimized hooks.
 
 → **Repository**: [github.com/minipuft/gemini-prompts](https://github.com/minipuft/gemini-prompts)
 
-Works with the same prompts, gates, and methodologies as Claude Code. See the [gemini-prompts README](https://github.com/minipuft/gemini-prompts) for hooks setup.
+</details>
 
-### Claude Desktop
+<details>
+<summary><strong>Claude Desktop</strong></summary>
 
-| Method | Best For | Updates |
-|--------|----------|---------|
-| **GitHub Release** (.mcpb) | Quick install, offline use | Manual download |
-| **NPX** | Auto-updates, always latest | Automatic |
+**Option A: GitHub Release** (recommended)
 
-**GitHub Release** (recommended):
-```
-1. Download claude-prompts-{version}.mcpb from:
-   → github.com/minipuft/claude-prompts/releases/latest
+1. Download `claude-prompts-{version}.mcpb` from [Releases](https://github.com/minipuft/claude-prompts/releases/latest)
 2. Drag into Claude Desktop Settings → MCP Servers
-3. Done. Set custom prompts folder when prompted (optional).
-```
+3. Done
 
-The `.mcpb` bundle is **self-contained** (~5MB)—no npm install or node_modules required.
+The `.mcpb` bundle is self-contained (~5MB)—no npm required.
 
-**NPX** (auto-updates):
+**Option B: NPX** (auto-updates)
+
+Add to your config file:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
 ```json
-// ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
-// %APPDATA%\Claude\claude_desktop_config.json (Windows)
 {
   "mcpServers": {
     "claude-prompts": {
@@ -97,32 +114,15 @@ The `.mcpb` bundle is **self-contained** (~5MB)—no npm install or node_modules
 }
 ```
 
-The npm package is also **self-contained**—all dependencies bundled, no postinstall required.
+Restart Claude Desktop and test: `>>research_chain topic:'remote team policies'`
 
-Restart Claude Desktop. Test it:
-```
->>research_chain topic:'remote team policies' purpose:'handbook update'
-```
+</details>
 
-### Cursor
+<details>
+<summary><strong>Cursor</strong></summary>
 
-| Method | When to Use |
-|--------|-------------|
-| **1-Click Install** | From Cursor or local README preview |
-| **Manual Config** | From GitHub web (deeplinks blocked) |
-
-**1-Click Install** (from Cursor):
-
-<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=claude-prompts&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNsYXVkZS1wcm9tcHRzQGxhdGVzdCJdfQ==">
-  <img src="https://cursor.com/deeplink/mcp-install-dark.png" alt="Add to Cursor" height="32" />
-</a>
-
-> **Note**: The button above uses `cursor://` protocol which works in Cursor's README preview but not on GitHub's web interface.
-
-**Manual Config** (works everywhere):
-
-1. Open Cursor Settings → MCP → Edit Config (or edit `~/.cursor/mcp.json`)
-2. Add this configuration:
+1. Open Settings → MCP → Edit Config (or edit `~/.cursor/mcp.json`)
+2. Add:
 
 ```json
 {
@@ -137,10 +137,10 @@ Restart Claude Desktop. Test it:
 
 3. Restart Cursor and test: `resource_manager(resource_type:"prompt", action:"list")`
 
-### Other MCP Clients
+</details>
 
 <details>
-<summary><strong>Generic MCP config (Windsurf, Zed, etc.)</strong></summary>
+<summary><strong>Other MCP Clients</strong> (Windsurf, Zed, etc.)</summary>
 
 Add to your MCP configuration file:
 
@@ -158,23 +158,17 @@ Add to your MCP configuration file:
 </details>
 
 <details>
-<summary><strong>From Source (developers only)</strong></summary>
-
-For contributing or customizing the server itself:
+<summary><strong>From Source</strong> (developers only)</summary>
 
 ```bash
 git clone https://github.com/minipuft/claude-prompts.git
 cd claude-prompts/server
-npm install
-npm run build   # Creates bundled dist/index.js (~4.5MB)
-npm test        # Verify everything works
+npm install && npm run build && npm test
 ```
 
-Point your MCP config to `server/dist/index.js`. The esbuild bundle is self-contained—no `node_modules` required at runtime.
+Point your MCP config to `server/dist/index.js`. The esbuild bundle is self-contained.
 
-**Note**: `server/dist/` is not committed to git. You must run `npm run build` after cloning.
-
-**Transport options**: `--transport=stdio` (default), `--transport=streamable-http` (for HTTP clients).
+**Transport options**: `--transport=stdio` (default), `--transport=streamable-http` (HTTP clients).
 
 </details>
 
