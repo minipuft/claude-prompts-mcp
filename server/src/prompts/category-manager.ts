@@ -227,8 +227,8 @@ export class CategoryManager {
         categoryName: category.name,
         promptIds: categoryPrompts.map((p) => p.id),
         promptCount: categoryPrompts.length,
-        hasChains: categoryPrompts.some((p) => p.file && p.file.includes('chain')),
-        hasTemplates: categoryPrompts.some((p) => p.file && p.file.includes('template')),
+        hasChains: categoryPrompts.some((p) => p.file?.includes('chain')),
+        hasTemplates: categoryPrompts.some((p) => p.file?.includes('template')),
       };
     });
   }
