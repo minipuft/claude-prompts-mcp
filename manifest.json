@@ -51,7 +51,8 @@
         "type": "node"
     },
     "support": "https://github.com/minipuft/claude-prompts/issues",
-    "tools": [{
+    "tools": [
+        {
             "description": "Execute prompts with frameworks, gates, and chains. Supports symbolic syntax (>>prompt --> >>chain).",
             "name": "prompt_engine"
         },
@@ -73,5 +74,5 @@
             "type": "directory"
         }
     },
-    "version": "1.2.0"
+    "version": "1.3.0"
 }
