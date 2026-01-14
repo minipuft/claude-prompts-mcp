@@ -3,38 +3,36 @@
 # Navigate to server directory
 cd server
 
-# Contract integrity check: If contracts changed, generated files must also change
+# Contract auto-regeneration: If contracts or generator changed, regenerate and stage
 CONTRACTS_CHANGED=$(git diff --cached --name-only | grep "tooling/contracts/.*\.json" || true)
 GENERATOR_CHANGED=$(git diff --cached --name-only | grep "scripts/generate-contracts\.ts" || true)
-GENERATED_CHANGED=$(git diff --cached --name-only | grep "_generated/" || true)
 
-if [ -n "$CONTRACTS_CHANGED" ] && [ -z "$GENERATED_CHANGED" ]; then
-  echo ""
-  echo "❌ Contract files modified but generated files not updated!"
-  echo ""
-  echo "Modified contracts:"
-  echo "$CONTRACTS_CHANGED"
-  echo ""
-  echo "Run: npm run generate:contracts"
-  echo "Then stage the generated files: git add src/tooling/contracts/_generated/"
-  exit 1
-fi
-
-# Prevent direct edits to generated TypeScript source files (exclude dist/ build output)
-MANUAL_GEN_EDITS=$(git diff --cached --name-only | grep "src/.*_generated/.*\.ts$" || true)
-if [ -n "$MANUAL_GEN_EDITS" ]; then
-  # Check if contracts or generator were also changed (legitimate regeneration)
-  if [ -z "$CONTRACTS_CHANGED" ] && [ -z "$GENERATOR_CHANGED" ]; then
-    echo ""
-    echo "❌ Direct edits to generated files detected without contract/generator changes!"
-    echo ""
-    echo "Modified generated files:"
-    echo "$MANUAL_GEN_EDITS"
-    echo ""
-    echo "Edit contracts in tooling/contracts/*.json or scripts/generate-contracts.ts, then run:"
-    echo "  npm run generate:contracts"
+if [ -n "$CONTRACTS_CHANGED" ] || [ -n "$GENERATOR_CHANGED" ]; then
+  echo "📝 Contract source changed - auto-regenerating..."
+  npm run -s generate:contracts
+  if [ $? -ne 0 ]; then
+    echo "❌ Contract generation failed!"
     exit 1
   fi
+  # Stage regenerated files
+  git add src/tooling/contracts/_generated/
+  echo "✅ Generated files updated and staged"
+fi
+
+# Prevent direct edits to generated files (without contract/generator changes)
+MANUAL_GEN_EDITS=$(git diff --cached --name-only | grep "src/.*_generated/.*\.ts$" || true)
+if [ -n "$MANUAL_GEN_EDITS" ] && [ -z "$CONTRACTS_CHANGED" ] && [ -z "$GENERATOR_CHANGED" ]; then
+  echo ""
+  echo "❌ Direct edits to generated files detected!"
+  echo ""
+  echo "Modified: $MANUAL_GEN_EDITS"
+  echo ""
+  echo "Edit source files instead:"
+  echo "  - tooling/contracts/*.json (contract definitions)"
+  echo "  - scripts/generate-contracts.ts (generator logic)"
+  echo ""
+  echo "Then run: npm run generate:contracts"
+  exit 1
 fi
 
 # Run lint-staged for formatting (prettier)
