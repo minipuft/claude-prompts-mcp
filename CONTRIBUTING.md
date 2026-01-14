@@ -4,7 +4,7 @@ Thank you for helping maintain the Claude Prompts server. This guide consolidate
 
 ## 1. Development Environment
 
-- **Node.js**: 16/18/20 supported. Use the version defined in `.nvmrc` (if present) or match CI.
+- **Node.js**: 18–24 supported. Use the version defined in `.nvmrc` (pinned to 24) or match CI.
 - **npm**: Comes with Node; ensure `npm install` runs inside `server/`.
 - **Git**: Required for Husky hooks and for keeping runtime-state files out of commits.
 

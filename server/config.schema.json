@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/minipuft/claude-prompts-mcp/server/config.schema.json",
+  "$id": "https://github.com/minipuft/claude-prompts/server/config.schema.json",
   "title": "Claude Prompts MCP Configuration",
   "description": "Configuration for the Claude Prompts MCP server",
   "type": "object",
