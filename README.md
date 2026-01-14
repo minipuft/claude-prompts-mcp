@@ -48,18 +48,15 @@ Raw MCP works, but models sometimes miss the syntax. The hooks catch that. → [
 <details>
 <summary>Development setup</summary>
 
-For plugin development, use `--plugin-dir` to load from local source:
+Load plugin from local source for development:
 
 ```bash
-# Clone and build
 git clone https://github.com/minipuft/claude-prompts ~/Applications/claude-prompts
 cd ~/Applications/claude-prompts/server && npm install && npm run build
-
-# Run Claude Code with local plugin
 claude --plugin-dir ~/Applications/claude-prompts
 ```
 
-Changes to hooks and resources are picked up on restart. Rebuild (`npm run build`) after modifying TypeScript source.
+Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
 
 </details>
 
@@ -83,34 +80,27 @@ Changes to hooks and resources are picked up on restart. Rebuild (`npm run build
 }
 ```
 
-**Development Setup** — For local development with custom resources:
+**Development Setup** — Use the [opencode-prompts](https://github.com/minipuft/opencode-prompts) plugin (includes hooks):
+
+```bash
+git clone https://github.com/minipuft/opencode-prompts ~/Applications/opencode-prompts
+cd ~/Applications/opencode-prompts && git submodule update --init
+ln -s ~/Applications/opencode-prompts ~/.config/opencode/plugin/opencode-prompts
+cd server && npm install && npm run build
+```
+
+Then point MCP to your local server in `~/.config/opencode/opencode.json`:
 
 ```json
 {
   "mcp": {
     "claude-prompts": {
       "type": "local",
-      "command": ["node", "/path/to/claude-prompts/server/dist/index.js", "--transport=stdio"],
-      "environment": {
-        "MCP_WORKSPACE": "/path/to/claude-prompts/server"
-      }
+      "command": ["node", "~/Applications/opencode-prompts/server/dist/index.js", "--transport=stdio"],
+      "environment": { "MCP_WORKSPACE": "~/Applications/opencode-prompts/server" }
     }
   }
 }
-```
-
-**With hooks** (recommended): Symlink the [opencode-prompts](https://github.com/minipuft/opencode-prompts) plugin:
-
-```bash
-# Clone the plugin repo
-git clone https://github.com/minipuft/opencode-prompts ~/Applications/opencode-prompts
-cd ~/Applications/opencode-prompts && git submodule update --init
-
-# Symlink to OpenCode plugins directory
-ln -s ~/Applications/opencode-prompts ~/.config/opencode/plugin/opencode-prompts
-
-# Build the MCP server
-cd ~/Applications/opencode-prompts/server && npm install && npm run build
 ```
 
 </details>
@@ -124,23 +114,16 @@ cd ~/Applications/opencode-prompts/server && npm install && npm run build
 gemini extensions install https://github.com/minipuft/gemini-prompts
 ```
 
-**Development Setup** — For local development:
+**Development Setup** — Load from local source:
 
 ```bash
-# Clone the extension repo with submodule
 git clone https://github.com/minipuft/gemini-prompts ~/Applications/gemini-prompts
 cd ~/Applications/gemini-prompts && git submodule update --init
-
-# Build the MCP server
-cd ~/Applications/gemini-prompts/core/server && npm install && npm run build
-
-# Symlink to Gemini extensions directory
+cd core/server && npm install && npm run build
 ln -s ~/Applications/gemini-prompts ~/.gemini/extensions/gemini-prompts
 ```
 
-The extension provides the same tools (`prompt_engine`, `resource_manager`, `system_control`) with Gemini-optimized hooks.
-
-→ **Repository**: [github.com/minipuft/gemini-prompts](https://github.com/minipuft/gemini-prompts)
+Same tools (`prompt_engine`, `resource_manager`, `system_control`) with Gemini-optimized hooks.
 
 </details>
 

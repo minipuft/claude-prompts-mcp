@@ -52,6 +52,8 @@ Thumbs.db
 
 # Runtime and Cache Files
 server/cache/
+server/.npm-cache/
+.npm-cache/
 tmp/
 temp/
 pids/

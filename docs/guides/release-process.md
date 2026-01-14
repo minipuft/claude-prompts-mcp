@@ -1,6 +1,6 @@
 # Release Process
 
-Automated release workflow for claude-prompts-mcp and gemini-prompts extension.
+Automated release workflow for claude-prompts and gemini-prompts extension.
 
 ## Workflow Chain
 
@@ -54,7 +54,7 @@ Push to main
 
 **GitHub PAT (Fine-grained):**
 1. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. Repository access: `claude-prompts-mcp` AND `gemini-prompts`
+2. Repository access: `claude-prompts` AND `gemini-prompts`
 3. Permissions:
    - Contents: Read and write
    - Pull requests: Read and write
@@ -69,17 +69,17 @@ Push to main
 
 ```bash
 # Same GitHub PAT for both
-gh secret set RELEASE_PLEASE_TOKEN -R minipuft/claude-prompts-mcp
-gh secret set DOWNSTREAM_PAT -R minipuft/claude-prompts-mcp
+gh secret set RELEASE_PLEASE_TOKEN -R minipuft/claude-prompts
+gh secret set DOWNSTREAM_PAT -R minipuft/claude-prompts
 
 # npm token
-gh secret set NPM_TOKEN -R minipuft/claude-prompts-mcp
+gh secret set NPM_TOKEN -R minipuft/claude-prompts
 ```
 
 ### Checking Secrets
 
 ```bash
-gh secret list --repo minipuft/claude-prompts-mcp
+gh secret list --repo minipuft/claude-prompts
 ```
 
 ## Configuration Files
@@ -96,7 +96,7 @@ gh secret list --repo minipuft/claude-prompts-mcp
 ### Trigger Release Manually
 
 ```bash
-gh workflow run release-please.yml --repo minipuft/claude-prompts-mcp
+gh workflow run release-please.yml --repo minipuft/claude-prompts
 ```
 
 ### Create Release Without release-please
