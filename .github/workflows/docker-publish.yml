@@ -45,7 +45,7 @@ jobs:
         with:
           cosign-release: 'v2.2.2'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
 
