@@ -31,10 +31,10 @@ RUN npm ci --only=production && \
 
 # Copy built artifacts from builder
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prompts ./prompts
-COPY --from=builder /app/methodologies ./methodologies
-COPY --from=builder /app/gates ./gates
-COPY --from=builder /app/styles ./styles
+COPY --from=builder /app/resources/prompts ./prompts
+COPY --from=builder /app/resources/methodologies ./methodologies
+COPY --from=builder /app/resources/gates ./gates
+COPY --from=builder /app/resources/styles ./styles
 # Copy config and potentially other static assets if needed
 COPY --from=builder /app/config.json ./config.json
 

@@ -1,32 +1,130 @@
-name: CI Validation
+name: CI
 
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/*.md'
+      - 'LICENSE'
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/*.md'
+      - 'LICENSE'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   NODE_ENV: test
+  NODE_LTS: '22.x'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  actions: read
 
 jobs:
-  validation:
-    name: Jest Unit Suite (Node ${{ matrix.node }})
+  # ============================================================
+  # Stage 1: Fast validation (single Node LTS)
+  # Deterministic checks that don't depend on Node version
+  # ============================================================
+  lint:
+    name: Lint & Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_LTS }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Validate contracts
+        run: npm run validate:contracts
+
+      - name: Validate metadata
+        run: npm run validate:metadata
+
+      - name: Validate versions
+        run: npm run validate:versions
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint (ratchet)
+        run: npm run lint:ratchet
+
+  # ============================================================
+  # Stage 2: Build (single Node LTS, upload artifact)
+  # Build once, share with test matrix
+  # ============================================================
+  build:
+    name: Build
+    needs: lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_LTS }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Build bundled distribution
+        run: npm run build
+
+      - name: Startup smoke test
+        run: npm run start:test
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: server/dist/
+          retention-days: 1
+
+  # ============================================================
+  # Stage 3: Test matrix (LTS versions only)
+  # Download artifact, run tests on multiple Node versions
+  # ============================================================
+  test:
+    name: Test (Node ${{ matrix.node }})
+    needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        node: [18.x, 20.x, 22.x, 24.x]
+        node: ['18.x', '20.x', '22.x']
     defaults:
       run:
-        shell: bash
         working-directory: server
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -39,29 +137,137 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline --no-audit
 
-      - name: Validate generated artifacts (contracts)
-        run: npm run validate:contracts
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: server/dist/
 
-      - name: Validate action inventory (metadata)
-        run: npm run validate:metadata
-
-      - name: Validate version consistency
-        run: npm run validate:versions
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint (ratchet)
-        run: npm run lint:ratchet
-
-      - name: Build bundled distribution
-        run: npm run build
-
-      - name: Startup smoke test
-        run: npm run start:test
-
-      - name: Jest unit tests
+      - name: Unit tests
         run: npm run test:ci
+        timeout-minutes: 15
 
-      - name: Plugin & hooks validation (E2E)
+      - name: E2E tests
         run: npm run test:e2e
+
+  # ============================================================
+  # Stage 4: Architecture validation (MCP paths only)
+  # Runs only when MCP/runtime code changes
+  # ============================================================
+  architecture:
+    name: Architecture Validation
+    needs: lint
+    runs-on: ubuntu-latest
+    if: |
+      contains(github.event.head_commit.modified, 'server/src/mcp-tools/') ||
+      contains(github.event.head_commit.modified, 'server/src/transport/') ||
+      contains(github.event.head_commit.modified, 'server/src/runtime/') ||
+      github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_LTS }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Validate architecture rules
+        run: npm run validate:arch
+
+  # ============================================================
+  # PR Summary: Comment with validation results
+  # ============================================================
+  pr-summary:
+    name: PR Summary
+    needs: [lint, build, test, architecture]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Analyze changed files
+        id: changes
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD > changed_files.txt 2>/dev/null; then
+            echo "files=$(cat changed_files.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          else
+            git diff --name-only HEAD~1 HEAD > changed_files.txt 2>/dev/null || echo "No changes" > changed_files.txt
+            echo "files=$(cat changed_files.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment PR with results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let changedFiles = 'Unable to determine';
+            try {
+              changedFiles = fs.readFileSync('changed_files.txt', 'utf8').trim() || 'No changes detected';
+            } catch (e) {
+              console.log(`Could not read changed_files.txt: ${e.message}`);
+            }
+
+            const lintResult = '${{ needs.lint.result }}';
+            const buildResult = '${{ needs.build.result }}';
+            const testResult = '${{ needs.test.result }}';
+            const archResult = '${{ needs.architecture.result }}';
+            const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+
+            const statusEmoji = (result) => result === 'success' ? '✅' : result === 'skipped' ? '⏭️' : '❌';
+            const allPassed = lintResult === 'success' && buildResult === 'success' && testResult === 'success' && (archResult === 'success' || archResult === 'skipped');
+
+            const message = [
+              allPassed ? '## ✅ CI Passed' : '## ❌ CI Failed',
+              '',
+              '| Stage | Status |',
+              '|-------|--------|',
+              `| Lint & Validate | ${statusEmoji(lintResult)} ${lintResult} |`,
+              `| Build | ${statusEmoji(buildResult)} ${buildResult} |`,
+              `| Test Matrix (Node 18, 20, 22) | ${statusEmoji(testResult)} ${testResult} |`,
+              `| Architecture | ${statusEmoji(archResult)} ${archResult} |`,
+              '',
+              '<details>',
+              '<summary>Files changed</summary>',
+              '',
+              '```',
+              changedFiles,
+              '```',
+              '</details>',
+              '',
+              `[View workflow run](${runUrl})`
+            ].join('\n');
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+            const botComment = comments.data.find(c => c.user.type === 'Bot' && c.body.includes('CI Passed') || c.body.includes('CI Failed'));
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: message
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: message
+              });
+            }
