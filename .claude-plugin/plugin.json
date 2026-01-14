@@ -7,6 +7,13 @@
   "homepage": "https://github.com/minipuft/claude-prompts",
   "repository": "https://github.com/minipuft/claude-prompts",
   "license": "MIT",
-  "keywords": ["mcp", "prompts", "templates", "gates", "chains", "workflows"],
-  "version": "1.2.0"
+  "keywords": [
+    "mcp",
+    "prompts",
+    "templates",
+    "gates",
+    "chains",
+    "workflows"
+  ],
+  "version": "1.3.0"
 }
