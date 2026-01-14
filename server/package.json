@@ -114,7 +114,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.1",
+    "@modelcontextprotocol/sdk": "^1.25.2",
     "@types/nunjucks": "^3.2.6",
     "cors": "^2.8.5",
     "diff": "^8.0.2",
