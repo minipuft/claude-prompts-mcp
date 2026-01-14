@@ -324,6 +324,19 @@ function escapeTsComment(text: string): string {
   return text.replace(/\*\//g, '*\\/').replace(/\n/g, ' ');
 }
 
+/**
+ * Format TypeScript content with prettier for consistent output
+ */
+function formatWithPrettier(content: string, cwd: string): string {
+  const prettierBin = path.join(cwd, 'node_modules', '.bin', 'prettier');
+  const result = spawnSync(prettierBin, ['--parser', 'typescript'], {
+    input: content,
+    encoding: 'utf-8',
+    cwd,
+  });
+  return result.status === 0 ? result.stdout : content;
+}
+
 async function main(): Promise<void> {
   const checkMode = process.argv.includes('--check');
   const contracts = await loadContracts();
@@ -392,7 +405,9 @@ async function main(): Promise<void> {
     ].join('\n');
 
     const tsPath = path.join(GENERATED_META_DIR, `${contract.tool}.generated.ts`);
-    const tsChanged = await writeFileIfChanged(tsPath, `${tsContent}\n`, checkMode);
+    const formattedTsContent = formatWithPrettier(tsContent, ROOT);
+    // Prettier already adds trailing newline, don't add another
+    const tsChanged = await writeFileIfChanged(tsPath, formattedTsContent, checkMode);
     changed = changed || tsChanged;
   }
 
@@ -445,19 +460,12 @@ async function main(): Promise<void> {
   // Generate mcp-schemas.ts (Zod schemas for MCP registration)
   const mcpSchemasPath = path.join(GENERATED_META_DIR, 'mcp-schemas.ts');
   const mcpSchemasContent = generateMcpSchemas(contracts);
+  const formattedSchemas = formatWithPrettier(mcpSchemasContent, ROOT);
 
-  // Format with prettier to match project style (prevents lint ratchet failures)
-  const prettierBin = path.join(ROOT, 'node_modules', '.bin', 'prettier');
-  const formatted = spawnSync(prettierBin, ['--parser', 'typescript'], {
-    input: mcpSchemasContent,
-    encoding: 'utf-8',
-    cwd: ROOT,
-  });
-  const formattedContent = formatted.status === 0 ? formatted.stdout : mcpSchemasContent;
-
+  // Prettier already adds trailing newline, don't add another
   const mcpSchemasChanged = await writeFileIfChanged(
     mcpSchemasPath,
-    `${formattedContent}\n`,
+    formattedSchemas,
     checkMode
   );
   changed = changed || mcpSchemasChanged;
