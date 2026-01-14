@@ -15,8 +15,8 @@
     },
     "description": "Hot-reloadable versioned prompts with easy tools for prompt engineering, chain workflows, quality gates, Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
     "display_name": "Claude Prompts",
-    "documentation": "https://github.com/minipuft/claude-prompts-mcp#readme",
-    "homepage": "https://github.com/minipuft/claude-prompts-mcp",
+    "documentation": "https://github.com/minipuft/claude-prompts#readme",
+    "homepage": "https://github.com/minipuft/claude-prompts",
     "keywords": [
         "mcp",
         "prompts",
@@ -33,7 +33,7 @@
     "name": "claude-prompts",
     "repository": {
         "type": "git",
-        "url": "https://github.com/minipuft/claude-prompts-mcp.git"
+        "url": "https://github.com/minipuft/claude-prompts.git"
     },
     "server": {
         "entry_point": "server/dist/index.js",
@@ -50,7 +50,7 @@
         },
         "type": "node"
     },
-    "support": "https://github.com/minipuft/claude-prompts-mcp/issues",
+    "support": "https://github.com/minipuft/claude-prompts/issues",
     "tools": [{
             "description": "Execute prompts with frameworks, gates, and chains. Supports symbolic syntax (>>prompt --> >>chain).",
             "name": "prompt_engine"

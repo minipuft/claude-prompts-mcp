@@ -129,7 +129,7 @@ plans/_backup-commands/
 scripts/dev-link.sh
 
 # IDE workspace files
-plans/claude-prompts-mcp.code-workspace
+plans/claude-prompts.code-workspace
 
 # Claude Desktop Extension artifacts
 *.mcpb

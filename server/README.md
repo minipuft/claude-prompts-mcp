@@ -14,7 +14,7 @@ MCP server for prompt management, thinking frameworks, and quality gates. Hot-re
 | **NPX** | `npx -y claude-prompts` | Auto-updates |
 | **Local Dev** | `npm run start:stdio` | Contributors |
 
-**Desktop Extension** — [Download `.mcpb`](https://github.com/minipuft/claude-prompts-mcp/releases), drag into Claude Desktop Settings. Done.
+**Desktop Extension** — [Download `.mcpb`](https://github.com/minipuft/claude-prompts/releases), drag into Claude Desktop Settings. Done.
 
 **NPX** — Add to `claude_desktop_config.json`:
 ```json
@@ -253,7 +253,7 @@ my-workspace/
 
 **Minimum required:** Just `prompts/` with at least one prompt directory.
 
-Script tools enable validation scripts that auto-trigger on schema match. See [Script Tools Guide](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/script-tools.md) for details.
+Script tools enable validation scripts that auto-trigger on schema match. See [Script Tools Guide](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/script-tools.md) for details.
 
 ---
 
@@ -389,21 +389,21 @@ npx claude-prompts --startup-test --verbose
 
 ## Documentation
 
-Full guides in the [main repository](https://github.com/minipuft/claude-prompts-mcp):
+Full guides in the [main repository](https://github.com/minipuft/claude-prompts):
 
-- [Architecture](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/architecture/overview.md) — System design
-- [MCP Tooling](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/reference/mcp-tools.md) — Complete tool reference
-- [Prompt Authoring](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/prompt-authoring-guide.md) — Template structure
-- [Chains](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/chains.md) — Multi-step patterns
-- [Gates](https://github.com/minipuft/claude-prompts-mcp/blob/main/docs/guides/gates.md) — Quality validation
+- [Architecture](https://github.com/minipuft/claude-prompts/blob/main/docs/architecture/overview.md) — System design
+- [MCP Tooling](https://github.com/minipuft/claude-prompts/blob/main/docs/reference/mcp-tools.md) — Complete tool reference
+- [Prompt Authoring](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/prompt-authoring-guide.md) — Template structure
+- [Chains](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/chains.md) — Multi-step patterns
+- [Gates](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/gates.md) — Quality validation
 
 ---
 
 ## Development
 
 ```bash
-git clone https://github.com/minipuft/claude-prompts-mcp.git
-cd claude-prompts-mcp/server
+git clone https://github.com/minipuft/claude-prompts.git
+cd claude-prompts/server
 npm install && npm run build
 npm run start:stdio
 ```

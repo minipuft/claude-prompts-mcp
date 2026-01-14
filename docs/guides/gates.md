@@ -87,9 +87,10 @@ Control gates via `server/config.json`:
 
 | Setting | Default | Effect |
 |---------|---------|--------|
-| `frameworks.enableMethodologyGates` | `true` | `false` = skip framework gates |
-| `frameworks.enableSystemPromptInjection` | `true` | `false` = no framework context in prompts |
-| `frameworks.enableDynamicToolDescriptions` | `true` | `false` = static tool descriptions |
+| `gates.enabled` | `true` | `false` = disable entire gate system |
+| `gates.methodologyGates` | `true` | `false` = skip framework gates |
+| `methodologies.enabled` | `true` | `false` = no framework context in prompts |
+| `methodologies.dynamicToolDescriptions` | `true` | `false` = static tool descriptions |
 
 Use for prototyping or leaner validation.
 

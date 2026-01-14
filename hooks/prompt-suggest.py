@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UserPromptSubmit hook: Context injection for claude-prompts-mcp.
+UserPromptSubmit hook: Context injection for claude-prompts.
 
 Detects and provides guidance for:
 - `>>prompt_id` - Prompt invocation with args, types, tool call

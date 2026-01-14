@@ -28,12 +28,23 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "*prompt_engine*",
+        "matcher": "prompt_engine",
         "hooks": [
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-prompt-engine.py",
             "name": "chain-tracker",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/ralph-context-tracker.py",
+            "name": "ralph-context-tracker",
             "timeout": 5
           }
         ]
@@ -46,7 +57,7 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/ralph-stop.py",
             "name": "ralph-stop",
-            "timeout": 5
+            "timeout": 120
           }
         ]
       }

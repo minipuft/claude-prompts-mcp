@@ -153,9 +153,55 @@ export interface ChainSessionConfig {
  */
 export interface GatesConfig {
   /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
-  definitionsDirectory: string;
+  definitionsDirectory?: string;
+  /** New-style: directory path */
+  directory?: string;
   /** Enable/disable the gate subsystem entirely */
   enabled?: boolean;
+  /** Enable methodology-specific quality gates */
+  enableMethodologyGates?: boolean;
+  /** New-style: methodology gates */
+  methodologyGates?: boolean;
+}
+
+/**
+ * New-style methodologies configuration (replaces frameworks)
+ */
+export interface MethodologiesConfig {
+  /** Enable methodology system */
+  enabled?: boolean;
+  /** Adapt MCP tool descriptions based on active methodology */
+  dynamicToolDescriptions?: boolean;
+  /** Inject methodology guidance every N chain steps */
+  systemPromptFrequency?: number;
+  /** Include response formatting guidance */
+  styleGuidance?: boolean;
+}
+
+/**
+ * Verification (Ralph Loops) configuration
+ */
+export interface VerificationConfig {
+  /** Fix attempts within current context before spawning isolation */
+  inContextAttempts?: number;
+  /** Context isolation settings */
+  isolation?: {
+    enabled?: boolean;
+    maxBudget?: number;
+    timeout?: number;
+    permissionMode?: 'delegate' | 'ask' | 'deny';
+  };
+}
+
+/**
+ * Advanced settings (internal/rarely-changed)
+ */
+export interface AdvancedConfig {
+  sessions?: {
+    timeoutMinutes?: number;
+    reviewTimeoutMinutes?: number;
+    cleanupIntervalMinutes?: number;
+  };
 }
 
 export interface Config {
@@ -169,9 +215,11 @@ export interface Config {
   gates?: GatesConfig;
   /** Execution strategy configuration (judge mode, etc.) */
   execution?: ExecutionConfig;
-  /** Framework feature configuration (injection, tool descriptions) */
+  /** Framework feature configuration (injection, tool descriptions) - LEGACY */
   frameworks?: FrameworksConfig;
-  /** Chain session lifecycle configuration */
+  /** New-style: Methodology configuration */
+  methodologies?: MethodologiesConfig;
+  /** Chain session lifecycle configuration - LEGACY */
   chainSessions?: ChainSessionConfig;
   /**
    * Transport mode: 'stdio' (default), 'sse', or 'both'
@@ -184,6 +232,10 @@ export interface Config {
   toolDescriptions?: ToolDescriptionsOptions;
   /** Version history configuration for resources */
   versioning?: import('./versioning/types.js').VersioningConfig;
+  /** New-style: Verification (Ralph Loops) configuration */
+  verification?: VerificationConfig;
+  /** New-style: Advanced internal settings */
+  advanced?: AdvancedConfig;
 }
 
 // ===== Prompt Types =====

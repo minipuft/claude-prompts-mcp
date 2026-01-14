@@ -48,7 +48,7 @@ Triggers on session start. Syncs source files to the plugin cache.
 **⚠️ Superseded by `--plugin-dir`**: For active development, use Claude Code's direct loading:
 
 ```bash
-cc --plugin-dir /path/to/claude-prompts-mcp
+cc --plugin-dir /path/to/claude-prompts
 ```
 
 This bypasses the cache entirely, making dev-sync unnecessary. The hook remains for:

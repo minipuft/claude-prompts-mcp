@@ -2,7 +2,7 @@
 """
 PostToolUse hook: Track chain/gate state from prompt_engine responses.
 
-Triggers after: mcp__claude-prompts-mcp__prompt_engine
+Triggers after: mcp__claude-prompts__prompt_engine
 
 Parses the response to:
 1. Track current chain step
@@ -27,29 +27,9 @@ from session_state import (
 
 def parse_hook_input() -> dict:
     """Parse JSON input from Claude Code hook system."""
-    debug_log = Path(__file__).parent / "debug_hook.log"
-
-    # Capture raw stdin first
-    raw_input = sys.stdin.read()
-
-    with open(debug_log, "a") as f:
-        f.write(f"\n=== PostToolUse Hook ===\n")
-        f.write(f"raw_input_len: {len(raw_input)}\n")
-        f.write(f"raw_input_preview: {raw_input[:500] if raw_input else '(empty)'}\n")
-
-    if not raw_input:
-        return {}
-
     try:
-        data = json.loads(raw_input)
-        with open(debug_log, "a") as f:
-            f.write(f"tool_name: {data.get('tool_name', 'MISSING')}\n")
-            f.write(f"session_id: {data.get('session_id', 'MISSING')}\n")
-            f.write(f"keys: {list(data.keys())}\n")
-        return data
-    except json.JSONDecodeError as e:
-        with open(debug_log, "a") as f:
-            f.write(f"JSON parse error: {e}\n")
+        return json.load(sys.stdin)
+    except json.JSONDecodeError:
         return {}
 
 

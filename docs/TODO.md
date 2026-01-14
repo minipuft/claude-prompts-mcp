@@ -116,6 +116,6 @@ See [test-modernization-roadmap.md](../plans/test-modernization-roadmap.md) for 
 
 ## Contributing
 
-Ideas welcome. [Open an issue](https://github.com/minipuft/claude-prompts-mcp/issues) with the `enhancement` label.
+Ideas welcome. [Open an issue](https://github.com/minipuft/claude-prompts/issues) with the `enhancement` label.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for dev setup.

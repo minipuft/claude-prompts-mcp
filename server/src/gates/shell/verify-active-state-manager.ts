@@ -68,6 +68,7 @@ export class VerifyActiveStateManager {
         maxIterations: shellVerify.maxIterations ?? SHELL_VERIFY_DEFAULT_MAX_ITERATIONS,
         workingDir: shellVerify.workingDir,
         preset: shellVerify.preset,
+        originalGoal: pending.originalGoal,
       },
       state: {
         iteration: pending.attemptCount,

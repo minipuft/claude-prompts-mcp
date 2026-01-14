@@ -6,7 +6,7 @@ version: 1.0.0
 
 # Prompt Authoring Guide
 
-This skill provides patterns for creating prompts in the claude-prompts-mcp system.
+This skill provides patterns for creating prompts in the claude-prompts system.
 
 ## CAGEERF Methodology
 

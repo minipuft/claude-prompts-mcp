@@ -505,12 +505,20 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       preset: shellVerifyConfig.preset,
     };
 
+    // Extract original goal from the parsed command or MCP request for context-isolated loops
+    const originalGoal =
+      context.parsedCommand?.metadata?.originalCommand ??
+      context.mcpRequest.command ??
+      context.parsedCommand?.promptId ??
+      'Fix verification failures';
+
     const pending: PendingShellVerification = {
       gateId,
       shellVerify,
       attemptCount: 0,
       maxAttempts: resolvedMaxIterations,
       previousResults: [],
+      originalGoal,
     };
 
     context.state.gates.pendingShellVerification = pending;

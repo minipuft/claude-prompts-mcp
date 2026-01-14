@@ -1,6 +1,6 @@
-# Contributing to Claude Prompts MCP (Canonical)
+# Contributing to Claude Prompts (Canonical)
 
-Thank you for helping maintain the Claude Prompts MCP server. This guide consolidates our contributor expectations, operational workflows, and automation guardrails. It replaces older scattered docs (`docs/contributing.md`, legacy READMEs) so please keep it up to date whenever workflows change.
+Thank you for helping maintain the Claude Prompts server. This guide consolidates our contributor expectations, operational workflows, and automation guardrails. It replaces older scattered docs (`docs/contributing.md`, legacy READMEs) so please keep it up to date whenever workflows change.
 
 ## 1. Development Environment
 
@@ -9,8 +9,8 @@ Thank you for helping maintain the Claude Prompts MCP server. This guide consoli
 - **Git**: Required for Husky hooks and for keeping runtime-state files out of commits.
 
 ```bash
-git clone https://github.com/minipuft/claude-prompts-mcp.git
-cd claude-prompts-mcp/server
+git clone https://github.com/minipuft/claude-prompts.git
+cd claude-prompts/server
 npm install
 npm run build
 ```
@@ -204,6 +204,8 @@ All version references must match:
 - `.claude-plugin/plugin.json`
 
 The `validate:versions` script enforces this in CI and pre-push hooks.
+
+**Detailed documentation:** See [`docs/guides/release-process.md`](docs/guides/release-process.md) for troubleshooting, token rotation, and workflow diagrams.
 
 ## 12. Transport-Agnostic Development
 

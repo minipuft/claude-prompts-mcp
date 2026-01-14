@@ -9,7 +9,7 @@
 - [x] Surface engagement signals despite low discussions: npm downloads, install counts, or internal usage stats; add to the case study and brief mention in `README.md`.
   - **Done**: Added GitHub stars badge + collapsible Ecosystem section linking Smithery/Playbooks
   - **Current metrics** (Dec 2025): 115 stars, 27 forks, 228 npm downloads/month
-  - **Indexed on**: [Smithery](https://smithery.ai/server/@minipuft/claude-prompts-mcp), [Playbooks](https://playbooks.com/mcp/minipuft-claude-prompts), DeepWiki
+  - **Indexed on**: [Smithery](https://smithery.ai/server/@minipuft/claude-prompts), [Playbooks](https://playbooks.com/mcp/minipuft-claude-prompts), DeepWiki
   - **Case study framing**: "115 GitHub stars, 27 forks in specialized MCP ecosystem; indexed on major directories"
 - [x] Create demo chains for video showcases
   - **Tech Evaluation Chain** (`>>tech_evaluation_chain`) - 4-step library/framework evaluation for developers

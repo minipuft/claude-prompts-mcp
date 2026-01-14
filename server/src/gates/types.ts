@@ -294,15 +294,15 @@ export interface LightweightGateDefinition {
 
 /**
  * Unified gate configuration settings.
- * Consolidates all gate-related config (previously split across gates, frameworks, and injection).
+ * Consolidates all gate-related config.
  */
 export interface GatesConfig {
   /** Enable/disable the gate subsystem entirely */
   enabled: boolean;
   /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
-  definitionsDirectory: string;
+  definitionsDirectory?: string;
   /** Enable methodology-specific gates (auto-added based on active framework) */
-  enableMethodologyGates: boolean;
+  enableMethodologyGates?: boolean;
 }
 
 /**

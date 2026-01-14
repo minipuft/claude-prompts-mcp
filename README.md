@@ -5,7 +5,6 @@
 <img src="assets/logo.png" alt="Claude Prompts MCP Server Logo" width="200" />
 
 [![npm version](https://img.shields.io/npm/v/claude-prompts.svg?style=for-the-badge&logo=npm&color=0066cc)](https://www.npmjs.com/package/claude-prompts)
-<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=claude-prompts&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNsYXVkZS1wcm9tcHRzQGxhdGVzdCJdfQ=="><img src="https://cursor.com/deeplink/mcp-install-dark.png" alt="Add claude-prompts MCP server to Cursor" height="28" /></a>
 [![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge&logo=opensource)](https://opensource.org/licenses/MIT)
 
 **Hot-reloadable prompts with chains, gates, and structured reasoning for AI assistants.**
@@ -77,7 +76,7 @@ Works with the same prompts, gates, and methodologies as Claude Code. See the [g
 **GitHub Release** (recommended):
 ```
 1. Download claude-prompts-{version}.mcpb from:
-   → github.com/minipuft/claude-prompts-mcp/releases/latest
+   → github.com/minipuft/claude-prompts/releases/latest
 2. Drag into Claude Desktop Settings → MCP Servers
 3. Done. Set custom prompts folder when prompted (optional).
 ```
@@ -105,12 +104,25 @@ Restart Claude Desktop. Test it:
 >>research_chain topic:'remote team policies' purpose:'handbook update'
 ```
 
-### Other MCP Clients
+### Cursor
 
-<details>
-<summary><strong>Generic MCP clients (.cursor/mcp.json, etc.)</strong></summary>
+| Method | When to Use |
+|--------|-------------|
+| **1-Click Install** | From Cursor or local README preview |
+| **Manual Config** | From GitHub web (deeplinks blocked) |
 
-Add to your MCP config:
+**1-Click Install** (from Cursor):
+
+<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=claude-prompts&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNsYXVkZS1wcm9tcHRzQGxhdGVzdCJdfQ==">
+  <img src="https://cursor.com/deeplink/mcp-install-dark.png" alt="Add to Cursor" height="32" />
+</a>
+
+> **Note**: The button above uses `cursor://` protocol which works in Cursor's README preview but not on GitHub's web interface.
+
+**Manual Config** (works everywhere):
+
+1. Open Cursor Settings → MCP → Edit Config (or edit `~/.cursor/mcp.json`)
+2. Add this configuration:
 
 ```json
 {
@@ -123,16 +135,25 @@ Add to your MCP config:
 }
 ```
 
-Test: `resource_manager(resource_type:"prompt", action:"list")`
+3. Restart Cursor and test: `resource_manager(resource_type:"prompt", action:"list")`
 
-</details>
+### Other MCP Clients
 
 <details>
-<summary><strong>Cursor 1-click install</strong></summary>
+<summary><strong>Generic MCP config (Windsurf, Zed, etc.)</strong></summary>
 
-<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=claude-prompts&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNsYXVkZS1wcm9tcHRzQGxhdGVzdCJdfQ==">
-  <img src="https://cursor.com/deeplink/mcp-install-dark.png" alt="Add to Cursor" height="28" />
-</a>
+Add to your MCP configuration file:
+
+```json
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts@latest"]
+    }
+  }
+}
+```
 
 </details>
 
@@ -142,8 +163,8 @@ Test: `resource_manager(resource_type:"prompt", action:"list")`
 For contributing or customizing the server itself:
 
 ```bash
-git clone https://github.com/minipuft/claude-prompts-mcp.git
-cd claude-prompts-mcp/server
+git clone https://github.com/minipuft/claude-prompts.git
+cd claude-prompts/server
 npm install
 npm run build   # Creates bundled dist/index.js (~4.5MB)
 npm test        # Verify everything works
@@ -267,20 +288,25 @@ resource_manager(resource_type:"checkpoint", action:"list")
 
 Uses git stash under the hood. Pairs with [verification gates](#verification-gates) for safe autonomous loops.
 
-### ✅ Verification Gates
+### ✅ Verification Gates (Ralph Loops)
 
 Ground-truth validation via shell commands—Claude keeps trying until tests pass:
 
 ```text
-# Run tests after implementation
->>implement-feature :: verify:"npm test"
+# You say this:
+>>implement-feature :: verify:"npm test" loop:true
 
-# Quick feedback loop
->>fix-typo :: verify:"npm run lint" :fast
-
-# Full CI validation
->>refactor-auth :: verify:"npm test" :full
+# Claude does this:
+# 1. Implements feature
+# 2. Runs npm test → FAIL
+# 3. Reads error, fixes code
+# 4. Runs npm test → FAIL
+# 5. Tries again...
+# 6. Runs npm test → PASS ✓
+# You get working code.
 ```
+
+**Context Isolation**: After 3 failed attempts, spawns a fresh Claude instance with session context—no context rot, fresh perspective, automatic handoff.
 
 | Preset | Max Tries | Timeout | Use Case |
 |--------|-----------|---------|----------|
@@ -288,7 +314,7 @@ Ground-truth validation via shell commands—Claude keeps trying until tests pas
 | `:full` | 5 | 5 min | CI validation |
 | `:extended` | 10 | 10 min | Large test suites |
 
-See [Ralph Loops Guide](docs/guides/ralph-loops.md) for autonomous verification patterns.
+See [Ralph Loops Guide](docs/guides/ralph-loops.md) for autonomous verification patterns and cost tracking.
 
 ---
 

@@ -1,8 +1,10 @@
 /**
  * E2E Plugin Validation Tests
  *
- * Validates that both Claude Code plugin and Gemini CLI extension
- * configurations are valid and won't break due to downstream changes.
+ * Validates that Claude Code plugin configuration is valid
+ * and won't break due to downstream changes.
+ *
+ * Note: Gemini CLI extension tests have been moved to the gemini-prompts repo.
  */
 
 import { describe, expect, it } from '@jest/globals';
@@ -22,19 +24,19 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 // Validation Schemas
 // =============================================================================
 
+// Current plugin.json schema (without mcpServers - uses .mcp.json separately)
 const claudePluginSchema = z.object({
   name: z.string().min(1),
   version: z.string().regex(/^\d+\.\d+\.\d+$/, 'Must be semver format'),
   description: z.string(),
-  mcpServers: z.string(), // path to mcp.json
   author: z.object({ name: z.string() }),
-  repository: z.string().url().optional(),
+  repository: z.string().optional(),
   homepage: z.string().url().optional(),
   license: z.string().optional(),
   keywords: z.array(z.string()).optional(),
-  skills: z.string().optional(),
 });
 
+// .mcp.json schema - MCP server configuration
 const claudeMcpConfigSchema = z.record(
   z.object({
     command: z.string(),
@@ -57,41 +59,6 @@ const claudeHooksSchema = z.object({
       })
     )
   ),
-});
-
-const geminiExtensionSchema = z.object({
-  name: z.string().regex(/^[a-z0-9-]+$/, 'Must be lowercase with dashes'),
-  version: z.string().regex(/^\d+\.\d+\.\d+$/, 'Must be semver format'),
-  mcpServers: z.record(
-    z.object({
-      command: z.string(),
-      args: z.array(z.string()).optional(),
-      env: z.record(z.string()).optional(),
-      cwd: z.string().optional(),
-    })
-  ),
-  contextFileName: z.string().optional(),
-  excludeTools: z.array(z.string()).optional(),
-});
-
-const geminiSettingsSchema = z.object({
-  hooks: z
-    .record(
-      z.array(
-        z.object({
-          matcher: z.string().optional(),
-          hooks: z.array(
-            z.object({
-              name: z.string(),
-              type: z.string(),
-              command: z.string(),
-              description: z.string().optional(),
-            })
-          ),
-        })
-      )
-    )
-    .optional(),
 });
 
 // =============================================================================
@@ -125,11 +92,7 @@ async function loadJson<T>(filePath: string): Promise<T> {
 function extractScriptPaths(command: string): string[] {
   // Extract paths from commands like "bash ${CLAUDE_PLUGIN_ROOT}/hooks/setup.sh"
   const matches = command.match(/\$\{[^}]+\}\/[^\s"']+/g) || [];
-  return matches.map((m) =>
-    m
-      .replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, PROJECT_ROOT)
-      .replace(/\$\{extensionPath\}/g, PROJECT_ROOT)
-  );
+  return matches.map((m) => m.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, PROJECT_ROOT));
 }
 
 // =============================================================================
@@ -138,7 +101,7 @@ function extractScriptPaths(command: string): string[] {
 
 describe('Claude Code Plugin', () => {
   const pluginJsonPath = path.join(PROJECT_ROOT, '.claude-plugin', 'plugin.json');
-  const mcpJsonPath = path.join(PROJECT_ROOT, 'mcp.json');
+  const mcpJsonPath = path.join(PROJECT_ROOT, '.mcp.json'); // Note: dot prefix
   const hooksJsonPath = path.join(PROJECT_ROOT, 'hooks', 'hooks.json');
   const skillsDir = path.join(PROJECT_ROOT, 'skills');
 
@@ -159,26 +122,16 @@ describe('Claude Code Plugin', () => {
       expect(result.success).toBe(true);
     });
 
-    it('references existing mcp.json file', async () => {
-      const plugin = await loadJson<{ mcpServers: string }>(pluginJsonPath);
-      // mcpServers is a relative path from PROJECT_ROOT (plugin root), not from plugin.json
-      const mcpPath = path.join(PROJECT_ROOT, plugin.mcpServers);
-      expect(await fileExists(mcpPath)).toBe(true);
-    });
-
-    it('uses ${CLAUDE_PLUGIN_ROOT} variable syntax', async () => {
-      // Verify mcp.json uses correct variable syntax
-      if (await fileExists(mcpJsonPath)) {
-        const content = await fs.readFile(mcpJsonPath, 'utf-8');
-        if (content.includes('${')) {
-          expect(content).toContain('${CLAUDE_PLUGIN_ROOT}');
-          expect(content).not.toContain('${extensionPath}');
-        }
-      }
+    it('version matches server package.json', async () => {
+      const plugin = await loadJson<{ version: string }>(pluginJsonPath);
+      const serverPkg = await loadJson<{ version: string }>(
+        path.join(PROJECT_ROOT, 'server', 'package.json')
+      );
+      expect(plugin.version).toBe(serverPkg.version);
     });
   });
 
-  describe('mcp.json', () => {
+  describe('.mcp.json', () => {
     it('exists and is valid JSON', async () => {
       expect(await fileExists(mcpJsonPath)).toBe(true);
       const content = await loadJson(mcpJsonPath);
@@ -195,10 +148,18 @@ describe('Claude Code Plugin', () => {
       expect(result.success).toBe(true);
     });
 
+    it('uses ${CLAUDE_PLUGIN_ROOT} variable syntax', async () => {
+      const content = await fs.readFile(mcpJsonPath, 'utf-8');
+      if (content.includes('${')) {
+        expect(content).toContain('${CLAUDE_PLUGIN_ROOT}');
+        expect(content).not.toContain('${extensionPath}');
+      }
+    });
+
     it('references server entry point that exists', async () => {
       const mcpConfig = await loadJson<Record<string, { args?: string[] }>>(mcpJsonPath);
 
-      for (const [serverName, config] of Object.entries(mcpConfig)) {
+      for (const config of Object.values(mcpConfig)) {
         if (config.args) {
           for (const arg of config.args) {
             if (arg.includes('index.js') || arg.includes('dist')) {
@@ -224,11 +185,11 @@ describe('Claude Code Plugin', () => {
     });
 
     it('all hook scripts exist', async () => {
-      const hooks = await loadJson<{ hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>> }>(
-        hooksJsonPath
-      );
+      const hooks = await loadJson<{
+        hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
+      }>(hooksJsonPath);
 
-      for (const [eventName, eventHooks] of Object.entries(hooks.hooks)) {
+      for (const eventHooks of Object.values(hooks.hooks)) {
         for (const hookGroup of eventHooks) {
           for (const hook of hookGroup.hooks) {
             const scriptPaths = extractScriptPaths(hook.command);
@@ -243,7 +204,7 @@ describe('Claude Code Plugin', () => {
     it('Python hook scripts are executable', async () => {
       const hooksDir = path.join(PROJECT_ROOT, 'hooks');
       const files = await fs.readdir(hooksDir);
-      const pythonScripts = files.filter((f) => f.endsWith('.py'));
+      const pythonScripts = files.filter((f: string) => f.endsWith('.py'));
 
       for (const script of pythonScripts) {
         const scriptPath = path.join(hooksDir, script);
@@ -274,197 +235,11 @@ describe('Claude Code Plugin', () => {
 });
 
 // =============================================================================
-// Gemini CLI Extension Tests
+// Server Validation
 // =============================================================================
 
-describe('Gemini CLI Extension', () => {
-  const extensionJsonPath = path.join(PROJECT_ROOT, 'gemini-extension.json');
-  const geminiMdPath = path.join(PROJECT_ROOT, 'GEMINI.md');
-  const settingsJsonPath = path.join(PROJECT_ROOT, '.gemini', 'settings.json');
-  const geminiHooksDir = path.join(PROJECT_ROOT, '.gemini', 'hooks');
-
-  describe('gemini-extension.json', () => {
-    it('exists and is valid JSON', async () => {
-      expect(await fileExists(extensionJsonPath)).toBe(true);
-      const content = await loadJson(extensionJsonPath);
-      expect(content).toBeDefined();
-    });
-
-    it('has required fields with correct types', async () => {
-      const extension = await loadJson(extensionJsonPath);
-      const result = geminiExtensionSchema.safeParse(extension);
-
-      if (!result.success) {
-        console.error('Validation errors:', result.error.format());
-      }
-      expect(result.success).toBe(true);
-    });
-
-    it('name is lowercase with dashes only', async () => {
-      const extension = await loadJson<{ name: string }>(extensionJsonPath);
-      expect(extension.name).toMatch(/^[a-z0-9-]+$/);
-    });
-
-    it('uses ${extensionPath} variable syntax (not ${CLAUDE_PLUGIN_ROOT})', async () => {
-      const content = await fs.readFile(extensionJsonPath, 'utf-8');
-      if (content.includes('${')) {
-        expect(content).toContain('${extensionPath}');
-        expect(content).not.toContain('${CLAUDE_PLUGIN_ROOT}');
-      }
-    });
-
-    it('uses ${/} for cross-platform path separator', async () => {
-      const content = await fs.readFile(extensionJsonPath, 'utf-8');
-      // If there are paths with separators, they should use ${/}
-      if (content.includes('${extensionPath}') && content.includes('/')) {
-        // Allow either hardcoded / or ${/} - Gemini accepts both
-        // But if using variable, should be ${/}
-        expect(content).not.toContain('${pathSep}');
-      }
-    });
-
-    it('references server entry point that exists', async () => {
-      const extension = await loadJson<{
-        mcpServers: Record<string, { args?: string[] }>;
-      }>(extensionJsonPath);
-
-      for (const [serverName, config] of Object.entries(extension.mcpServers)) {
-        if (config.args) {
-          for (const arg of config.args) {
-            if (arg.includes('index.js') || arg.includes('dist')) {
-              const resolvedPath = arg
-                .replace(/\$\{extensionPath\}/g, PROJECT_ROOT)
-                .replace(/\$\{\/\}/g, path.sep);
-              expect(await fileExists(resolvedPath)).toBe(true);
-            }
-          }
-        }
-      }
-    });
-  });
-
-  describe('GEMINI.md', () => {
-    it('exists and is readable', async () => {
-      expect(await fileExists(geminiMdPath)).toBe(true);
-      const content = await fs.readFile(geminiMdPath, 'utf-8');
-      expect(content.length).toBeGreaterThan(100);
-    });
-
-    it('documents the MCP tools', async () => {
-      const content = await fs.readFile(geminiMdPath, 'utf-8');
-      expect(content).toContain('prompt_engine');
-      expect(content).toContain('resource_manager');
-    });
-
-    it('is referenced in gemini-extension.json', async () => {
-      const extension = await loadJson<{ contextFileName?: string }>(extensionJsonPath);
-      if (extension.contextFileName) {
-        expect(extension.contextFileName).toBe('GEMINI.md');
-      }
-    });
-  });
-
-  describe('.gemini/settings.json', () => {
-    it('exists and is valid JSON', async () => {
-      expect(await fileExists(settingsJsonPath)).toBe(true);
-      const content = await loadJson(settingsJsonPath);
-      expect(content).toBeDefined();
-    });
-
-    it('has valid hooks structure', async () => {
-      const settings = await loadJson(settingsJsonPath);
-      const result = geminiSettingsSchema.safeParse(settings);
-
-      if (!result.success) {
-        console.error('Validation errors:', result.error.format());
-      }
-      expect(result.success).toBe(true);
-    });
-  });
-
-  describe('.gemini/hooks', () => {
-    it('hook scripts directory exists', async () => {
-      expect(await fileExists(geminiHooksDir)).toBe(true);
-    });
-
-    it('all referenced hook scripts exist', async () => {
-      const settings = await loadJson<{
-        hooks?: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
-      }>(settingsJsonPath);
-
-      if (settings.hooks) {
-        for (const [eventName, eventHooks] of Object.entries(settings.hooks)) {
-          for (const hookGroup of eventHooks) {
-            for (const hook of hookGroup.hooks) {
-              // Extract script path from command
-              const match = hook.command.match(/["']?([^"'\s]+\.(py|sh))["']?/);
-              if (match) {
-                const scriptPath = match[1]
-                  .replace(/\$\{extensionPath\}/g, PROJECT_ROOT)
-                  .replace(/~\/\.gemini\/extensions\/gemini-prompts/g, PROJECT_ROOT);
-                expect(await fileExists(scriptPath)).toBe(true);
-              }
-            }
-          }
-        }
-      }
-    });
-
-    it('Python hook scripts are executable', async () => {
-      const files = await fs.readdir(geminiHooksDir);
-      const pythonScripts = files.filter((f) => f.endsWith('.py'));
-
-      for (const script of pythonScripts) {
-        const scriptPath = path.join(geminiHooksDir, script);
-        expect(await isExecutable(scriptPath)).toBe(true);
-      }
-    });
-
-    it('shell scripts are executable', async () => {
-      const files = await fs.readdir(geminiHooksDir);
-      const shellScripts = files.filter((f) => f.endsWith('.sh'));
-
-      for (const script of shellScripts) {
-        const scriptPath = path.join(geminiHooksDir, script);
-        expect(await isExecutable(scriptPath)).toBe(true);
-      }
-    });
-  });
-});
-
-// =============================================================================
-// Cross-Plugin Consistency Tests
-// =============================================================================
-
-describe('Cross-Plugin Consistency', () => {
-  it('both plugins reference the same server entry point', async () => {
-    const mcpJsonPath = path.join(PROJECT_ROOT, 'mcp.json');
-    const extensionJsonPath = path.join(PROJECT_ROOT, 'gemini-extension.json');
-
-    const claudeMcp = await loadJson<Record<string, { args?: string[] }>>(mcpJsonPath);
-    const geminiExt = await loadJson<{
-      mcpServers: Record<string, { args?: string[] }>;
-    }>(extensionJsonPath);
-
-    // Extract server paths (normalize variables)
-    const claudeServerPath = Object.values(claudeMcp)[0]?.args?.find((a) => a.includes('index.js'));
-    const geminiServerPath = Object.values(geminiExt.mcpServers)[0]?.args?.find((a) =>
-      a.includes('index.js')
-    );
-
-    if (claudeServerPath && geminiServerPath) {
-      const normalizedClaude = claudeServerPath
-        .replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, '')
-        .replace(/\//g, '/');
-      const normalizedGemini = geminiServerPath
-        .replace(/\$\{extensionPath\}/g, '')
-        .replace(/\$\{\/\}/g, '/');
-
-      expect(normalizedClaude).toBe(normalizedGemini);
-    }
-  });
-
-  it('server dist/index.js exists (required by both plugins)', async () => {
+describe('Server Build', () => {
+  it('server dist/index.js exists', async () => {
     const serverPath = path.join(PROJECT_ROOT, 'server', 'dist', 'index.js');
     expect(await fileExists(serverPath)).toBe(true);
   });

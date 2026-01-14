@@ -32,6 +32,9 @@ import {
   GatesConfig,
   TransportMode,
   VersioningConfig,
+  MethodologiesConfig,
+  VerificationConfig,
+  AdvancedConfig,
   DEFAULT_VERSIONING_CONFIG,
 } from '../types/index.js';
 import {
@@ -236,58 +239,52 @@ export class ConfigManager extends EventEmitter {
 
   /**
    * Get frameworks configuration (includes injection settings)
+   * Reads from methodologies config section
    */
   getFrameworksConfig(): FrameworksConfig {
-    const frameworksConfig = this.config.frameworks;
+    const methodologies = this.config.methodologies;
     return {
       dynamicToolDescriptions:
-        frameworksConfig?.dynamicToolDescriptions ??
+        methodologies?.dynamicToolDescriptions ??
         DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
       injection: {
         systemPrompt: {
-          enabled:
-            frameworksConfig?.injection?.systemPrompt?.enabled ??
-            DEFAULT_FRAMEWORKS_CONFIG.injection?.systemPrompt?.enabled ??
-            true,
-          frequency:
-            frameworksConfig?.injection?.systemPrompt?.frequency ??
-            DEFAULT_FRAMEWORKS_CONFIG.injection?.systemPrompt?.frequency ??
-            2,
+          enabled: methodologies?.enabled ?? true,
+          frequency: methodologies?.systemPromptFrequency ?? 2,
         },
-        styleGuidance:
-          frameworksConfig?.injection?.styleGuidance ??
-          DEFAULT_FRAMEWORKS_CONFIG.injection?.styleGuidance ??
-          true,
+        styleGuidance: methodologies?.styleGuidance ?? true,
       },
     };
   }
 
   /**
    * Get gates configuration (unified gate settings)
+   * Reads from gates config section with new property names
    */
   getGatesConfig(): GatesConfig {
-    const gatesConfig: Partial<GatesConfig> = this.config.gates ?? {};
+    const gatesConfig = this.config.gates ?? {};
     return {
       enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
       definitionsDirectory:
-        gatesConfig.definitionsDirectory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
+        gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
       enableMethodologyGates:
-        gatesConfig.enableMethodologyGates ?? DEFAULT_GATES_CONFIG.enableMethodologyGates,
+        gatesConfig.methodologyGates ?? DEFAULT_GATES_CONFIG.enableMethodologyGates,
     };
   }
 
   /**
    * Get chain session lifecycle configuration
+   * Reads from advanced.sessions config section
    */
   getChainSessionConfig(): ChainSessionConfig {
-    const chainConfig: Partial<ChainSessionConfig> = this.config.chainSessions ?? {};
+    const sessions = this.config.advanced?.sessions;
     return {
       sessionTimeoutMinutes:
-        chainConfig.sessionTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
+        sessions?.timeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
       reviewTimeoutMinutes:
-        chainConfig.reviewTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
+        sessions?.reviewTimeoutMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
       cleanupIntervalMinutes:
-        chainConfig.cleanupIntervalMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
+        sessions?.cleanupIntervalMinutes ?? DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
     };
   }
 
@@ -470,29 +467,30 @@ export class ConfigManager extends EventEmitter {
       this.config.transport = DEFAULT_TRANSPORT_MODE;
     }
 
-    // Ensure frameworks config exists
-    if (!this.config.frameworks) {
-      this.config.frameworks = { ...DEFAULT_FRAMEWORKS_CONFIG };
-    } else {
-      this.config.frameworks = {
-        ...DEFAULT_FRAMEWORKS_CONFIG,
-        ...this.config.frameworks,
+    // Ensure methodologies config exists (new-style)
+    if (!this.config.methodologies) {
+      this.config.methodologies = {
+        enabled: true,
+        dynamicToolDescriptions: DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
+        systemPromptFrequency: DEFAULT_FRAMEWORKS_CONFIG.injection?.systemPrompt?.frequency ?? 2,
+        styleGuidance: DEFAULT_FRAMEWORKS_CONFIG.injection?.styleGuidance ?? true,
       };
     }
 
-    if (!this.config.chainSessions) {
-      this.config.chainSessions = { ...DEFAULT_CHAIN_SESSION_CONFIG };
-    } else {
-      this.config.chainSessions = {
-        sessionTimeoutMinutes:
-          this.config.chainSessions.sessionTimeoutMinutes ??
-          DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
-        reviewTimeoutMinutes:
-          this.config.chainSessions.reviewTimeoutMinutes ??
-          DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
-        cleanupIntervalMinutes:
-          this.config.chainSessions.cleanupIntervalMinutes ??
-          DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
+    // Ensure advanced.sessions config exists (new-style)
+    if (!this.config.advanced) {
+      this.config.advanced = {
+        sessions: {
+          timeoutMinutes: DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
+          reviewTimeoutMinutes: DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
+          cleanupIntervalMinutes: DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
+        },
+      };
+    } else if (!this.config.advanced.sessions) {
+      this.config.advanced.sessions = {
+        timeoutMinutes: DEFAULT_CHAIN_SESSION_CONFIG.sessionTimeoutMinutes,
+        reviewTimeoutMinutes: DEFAULT_CHAIN_SESSION_CONFIG.reviewTimeoutMinutes,
+        cleanupIntervalMinutes: DEFAULT_CHAIN_SESSION_CONFIG.cleanupIntervalMinutes,
       };
     }
 

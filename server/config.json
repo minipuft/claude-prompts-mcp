@@ -1,41 +1,60 @@
 {
+  "$schema": "./config.schema.json",
+
   "server": {
-    "name": "claude-prompts-mcp",
-    "version": "1.3.0",
+    "name": "claude-prompts",
+    "transport": "stdio",
     "port": 9090
   },
-  "versioning": {
-    "enabled": true,
-    "max_versions": 50,
-    "auto_version": true
-  },
+
   "prompts": {
     "directory": "resources/prompts",
     "registerWithMcp": true
   },
+
+  "methodologies": {
+    "enabled": true,
+    "dynamicToolDescriptions": true,
+    "systemPromptFrequency": 3,
+    "styleGuidance": true
+  },
+
   "gates": {
     "enabled": true,
-    "definitionsDirectory": "resources/gates",
-    "enableMethodologyGates": true
+    "directory": "resources/gates",
+    "methodologyGates": true
   },
+
+  "verification": {
+    "inContextAttempts": 3,
+    "isolation": {
+      "enabled": true,
+      "maxBudget": 1.00,
+      "timeout": 300,
+      "permissionMode": "delegate"
+    }
+  },
+
+  "versioning": {
+    "enabled": true,
+    "autoVersion": true,
+    "maxVersions": 50
+  },
+
   "execution": {
     "judge": true
   },
-  "frameworks": {
-    "dynamicToolDescriptions": true,
-    "injection": {
-      "systemPrompt": { "enabled": true, "frequency": 3 },
-      "styleGuidance": true
-    }
-  },
-  "transport": "stdio",
+
   "logging": {
-    "directory": "./logs",
-    "level": "debug"
+    "level": "debug",
+    "directory": "./logs"
   },
-  "chainSessions": {
-    "sessionTimeoutMinutes": 1440,
-    "reviewTimeoutMinutes": 30,
-    "cleanupIntervalMinutes": 5
+
+  "advanced": {
+    "sessions": {
+      "timeoutMinutes": 1440,
+      "reviewTimeoutMinutes": 30,
+      "cleanupIntervalMinutes": 5
+    }
   }
 }

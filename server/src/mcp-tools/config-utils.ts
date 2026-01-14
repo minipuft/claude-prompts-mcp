@@ -14,18 +14,21 @@ import { Config } from '../types/index.js';
 
 export const CONFIG_VALID_KEYS = [
   'server.name',
-  'server.version',
   'server.port',
-  'transport',
+  'server.transport',
   'logging.level',
   'logging.directory',
   'gates.enabled',
-  'gates.enableMethodologyGates',
+  'gates.methodologyGates',
   'execution.judge',
-  'frameworks.dynamicToolDescriptions',
-  'frameworks.injection.systemPrompt.enabled',
-  'frameworks.injection.systemPrompt.frequency',
-  'frameworks.injection.styleGuidance',
+  'methodologies.enabled',
+  'methodologies.dynamicToolDescriptions',
+  'methodologies.systemPromptFrequency',
+  'methodologies.styleGuidance',
+  'verification.inContextAttempts',
+  'verification.isolation.enabled',
+  'verification.isolation.maxBudget',
+  'verification.isolation.timeout',
   'analysis.semanticAnalysis.llmIntegration.enabled',
   'analysis.semanticAnalysis.llmIntegration.model',
   'analysis.semanticAnalysis.llmIntegration.maxTokens',
@@ -36,7 +39,7 @@ export type ConfigKey = (typeof CONFIG_VALID_KEYS)[number];
 
 export const CONFIG_RESTART_REQUIRED_KEYS: ConfigKey[] = [
   'server.port',
-  'transport',
+  'server.transport',
   'analysis.semanticAnalysis.llmIntegration.enabled',
 ];
 
@@ -73,7 +76,7 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
       return { valid: true, convertedValue: trimmed, valueType: 'string' };
     }
 
-    case 'transport': {
+    case 'server.transport': {
       const normalized = value.trim().toLowerCase();
       if (!['stdio', 'sse', 'both'].includes(normalized)) {
         return {
@@ -85,11 +88,12 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
     }
 
     case 'gates.enabled':
-    case 'gates.enableMethodologyGates':
+    case 'gates.methodologyGates':
     case 'execution.judge':
-    case 'frameworks.dynamicToolDescriptions':
-    case 'frameworks.injection.systemPrompt.enabled':
-    case 'frameworks.injection.styleGuidance': {
+    case 'methodologies.enabled':
+    case 'methodologies.dynamicToolDescriptions':
+    case 'methodologies.styleGuidance':
+    case 'verification.isolation.enabled': {
       const boolValue = value.trim().toLowerCase();
       if (!['true', 'false'].includes(boolValue)) {
         return {
@@ -104,7 +108,7 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
       };
     }
 
-    case 'frameworks.injection.systemPrompt.frequency': {
+    case 'methodologies.systemPromptFrequency': {
       const freq = parseInt(value, 10);
       if (isNaN(freq) || freq < 1 || freq > 100) {
         return {
@@ -113,6 +117,39 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
         };
       }
       return { valid: true, convertedValue: freq, valueType: 'number' };
+    }
+
+    case 'verification.inContextAttempts': {
+      const attempts = parseInt(value, 10);
+      if (isNaN(attempts) || attempts < 1 || attempts > 10) {
+        return {
+          valid: false,
+          error: 'In-context attempts must be a number between 1-10',
+        };
+      }
+      return { valid: true, convertedValue: attempts, valueType: 'number' };
+    }
+
+    case 'verification.isolation.maxBudget': {
+      const budget = parseFloat(value);
+      if (isNaN(budget) || budget < 0.01 || budget > 10) {
+        return {
+          valid: false,
+          error: 'Max budget must be a number between 0.01-10',
+        };
+      }
+      return { valid: true, convertedValue: budget, valueType: 'number' };
+    }
+
+    case 'verification.isolation.timeout': {
+      const timeout = parseInt(value, 10);
+      if (isNaN(timeout) || timeout < 30 || timeout > 3600) {
+        return {
+          valid: false,
+          error: 'Timeout must be a number between 30-3600 seconds',
+        };
+      }
+      return { valid: true, convertedValue: timeout, valueType: 'number' };
     }
 
     case 'logging.level': {

@@ -15,6 +15,7 @@ export type { McpToolRequest } from './execution.js';
 
 // Core configuration and protocol types
 export type {
+  AdvancedConfig,
   AnalysisConfig,
   BaseMessageContent,
   ChainSessionConfig,
@@ -28,11 +29,13 @@ export type {
   Message,
   MessageContent,
   MessageRole,
+  MethodologiesConfig,
   SemanticAnalysisConfig,
   ServerConfig,
   TextMessageContent,
   ToolDescriptionsOptions,
   TransportMode,
+  VerificationConfig,
 } from '../types.js';
 
 // Prompt system types

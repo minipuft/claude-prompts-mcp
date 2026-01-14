@@ -74,3 +74,12 @@ def get_skills_dir(fallback: Path) -> Path:
     if workspace:
         return workspace / ".claude-plugin" / "skills"
     return fallback
+
+
+def get_runtime_state_dir(fallback: Path) -> Path:
+    """Get the runtime-state directory for transient state files."""
+    workspace = get_workspace_root()
+    if workspace:
+        # MCP server writes to {workspace}/runtime-state/ (process.cwd() is workspace root)
+        return workspace / "runtime-state"
+    return fallback

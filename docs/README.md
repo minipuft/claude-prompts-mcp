@@ -20,6 +20,7 @@ This is the map for the Claude Prompts MCP server. Canonical operational docs li
 - `docs/guides/script-tools.md`
 - `docs/guides/chains.md`
 - `docs/guides/gates.md`
+- `docs/guides/release-process.md`
 - `docs/guides/troubleshooting.md`
 
 ## Reference (Stable Surfaces)

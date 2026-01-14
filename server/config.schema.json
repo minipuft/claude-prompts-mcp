@@ -1,0 +1,227 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/minipuft/claude-prompts-mcp/server/config.schema.json",
+  "title": "Claude Prompts MCP Configuration",
+  "description": "Configuration for the Claude Prompts MCP server",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE validation"
+    },
+
+    "server": {
+      "type": "object",
+      "description": "Server identity and transport settings",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": "claude-prompts",
+          "description": "Server name reported to MCP clients"
+        },
+        "transport": {
+          "type": "string",
+          "enum": ["stdio", "sse"],
+          "default": "stdio",
+          "description": "Transport protocol: 'stdio' for CLI tools (Claude Code), 'sse' for web clients"
+        },
+        "port": {
+          "type": "integer",
+          "default": 9090,
+          "description": "Port for SSE transport (ignored for stdio)"
+        }
+      }
+    },
+
+    "prompts": {
+      "type": "object",
+      "description": "Prompt loading and registration",
+      "properties": {
+        "directory": {
+          "type": "string",
+          "default": "resources/prompts",
+          "description": "Directory containing prompt definitions (relative to server root)"
+        },
+        "registerWithMcp": {
+          "type": "boolean",
+          "default": true,
+          "description": "Register prompts as MCP resources for client discovery"
+        }
+      }
+    },
+
+    "methodologies": {
+      "type": "object",
+      "description": "Framework methodologies (CAGEERF, ReACT, etc.) that guide LLM behavior",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable methodology system"
+        },
+        "dynamicToolDescriptions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Adapt MCP tool descriptions based on active methodology"
+        },
+        "systemPromptFrequency": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 1,
+          "description": "Inject methodology guidance every N chain steps (reduces token usage)"
+        },
+        "styleGuidance": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include response formatting guidance in prompts"
+        }
+      }
+    },
+
+    "gates": {
+      "type": "object",
+      "description": "Quality gates for validating LLM outputs",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the gate validation system"
+        },
+        "directory": {
+          "type": "string",
+          "default": "resources/gates",
+          "description": "Directory containing gate definitions"
+        },
+        "methodologyGates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply methodology-specific quality gates"
+        }
+      }
+    },
+
+    "verification": {
+      "type": "object",
+      "description": "Ralph Loops: autonomous verification via shell commands",
+      "properties": {
+        "inContextAttempts": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 0,
+          "description": "Fix attempts within current context before spawning isolation. Set to 0 for immediate isolation."
+        },
+        "isolation": {
+          "type": "object",
+          "description": "Context isolation spawns a fresh Claude CLI to fix issues",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable spawning isolated Claude instances after in-context attempts fail"
+            },
+            "maxBudget": {
+              "type": "number",
+              "default": 1.0,
+              "minimum": 0.01,
+              "description": "Maximum cost (USD) per isolation spawn"
+            },
+            "timeout": {
+              "type": "integer",
+              "default": 300,
+              "minimum": 30,
+              "description": "Timeout in seconds for each isolation spawn"
+            },
+            "permissionMode": {
+              "type": "string",
+              "enum": ["delegate", "ask", "deny"],
+              "default": "delegate",
+              "description": "How spawned instance handles permission requests"
+            }
+          }
+        }
+      }
+    },
+
+    "versioning": {
+      "type": "object",
+      "description": "Prompt version control",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Track prompt versions"
+        },
+        "autoVersion": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-create versions on prompt changes"
+        },
+        "maxVersions": {
+          "type": "integer",
+          "default": 50,
+          "minimum": 1,
+          "description": "Maximum versions to retain per prompt"
+        }
+      }
+    },
+
+    "execution": {
+      "type": "object",
+      "description": "Prompt execution behavior",
+      "properties": {
+        "judge": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable %judge modifier for framework comparison"
+        }
+      }
+    },
+
+    "logging": {
+      "type": "object",
+      "description": "Server logging configuration",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["error", "warn", "info", "debug"],
+          "default": "info",
+          "description": "Minimum log level"
+        },
+        "directory": {
+          "type": "string",
+          "default": "./logs",
+          "description": "Log file directory"
+        }
+      }
+    },
+
+    "advanced": {
+      "type": "object",
+      "description": "Internal settings (most users won't need to change)",
+      "properties": {
+        "sessions": {
+          "type": "object",
+          "description": "Chain session lifecycle management",
+          "properties": {
+            "timeoutMinutes": {
+              "type": "integer",
+              "default": 1440,
+              "description": "Idle session timeout (default: 24 hours)"
+            },
+            "reviewTimeoutMinutes": {
+              "type": "integer",
+              "default": 30,
+              "description": "Gate review timeout"
+            },
+            "cleanupIntervalMinutes": {
+              "type": "integer",
+              "default": 5,
+              "description": "Background cleanup frequency"
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

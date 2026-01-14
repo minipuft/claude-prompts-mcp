@@ -31,7 +31,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - `pre-compact.py` (PreCompact) — Cleans up chain session state before context compaction
   - `dev-sync.py` (SessionStart) — Synchronizes development cache on session start
   - Solves: models missing `>>` syntax, forgetting to continue chains, skipping gate reviews
-- **Gemini CLI extension**: Install via `gemini extensions install https://github.com/minipuft/claude-prompts-mcp`. Same MCP server with Gemini-specific context file (`GEMINI.md`).
+- **Gemini CLI extension**: Install via `gemini extensions install https://github.com/minipuft/claude-prompts`. Same MCP server with Gemini-specific context file (`GEMINI.md`).
 - **Unified resources path**: New `MCP_RESOURCES_PATH` environment variable for pointing to a custom resources directory containing `prompts/`, `gates/`, `methodologies/`, `styles/`, and `scripts/`. Simplifies customization without cloning the repo.
 - **Styles path override**: Added `MCP_STYLES_PATH` environment variable for fine-grained style directory control.
 - **Template references**: `{{ref:id}}` includes other prompts; `{{script:id}}` runs scripts inline during render.

@@ -89,25 +89,25 @@ def write_sync_marker(cache_dir: Path, mtime: float) -> None:
 def find_source_dir() -> Path | None:
     """Find the plugin source directory at known dev locations.
 
-    Searches common development directories for claude-prompts-mcp.
+    Searches common development directories for claude-prompts.
     Returns None if not found (e.g., marketplace install).
     """
     # Check common dev locations across different OS conventions
     candidates = [
         # macOS/Linux common locations
-        Path.home() / "Applications/claude-prompts-mcp",
-        Path.home() / "projects/claude-prompts-mcp",
-        Path.home() / "dev/claude-prompts-mcp",
-        Path.home() / "src/claude-prompts-mcp",
-        Path.home() / "code/claude-prompts-mcp",
-        Path.home() / "repos/claude-prompts-mcp",
-        Path.home() / "git/claude-prompts-mcp",
-        Path.home() / "workspace/claude-prompts-mcp",
+        Path.home() / "Applications/claude-prompts",
+        Path.home() / "projects/claude-prompts",
+        Path.home() / "dev/claude-prompts",
+        Path.home() / "src/claude-prompts",
+        Path.home() / "code/claude-prompts",
+        Path.home() / "repos/claude-prompts",
+        Path.home() / "git/claude-prompts",
+        Path.home() / "workspace/claude-prompts",
         # Windows common locations
-        Path.home() / "Documents/claude-prompts-mcp",
-        Path.home() / "Documents/GitHub/claude-prompts-mcp",
+        Path.home() / "Documents/claude-prompts",
+        Path.home() / "Documents/GitHub/claude-prompts",
         # XDG conventions
-        Path.home() / ".local/src/claude-prompts-mcp",
+        Path.home() / ".local/src/claude-prompts",
     ]
 
     for candidate in candidates:

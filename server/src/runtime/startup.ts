@@ -289,7 +289,7 @@ This usually happens when:
 SOLUTIONS:
 
 If running from source:
-  cd /path/to/claude-prompts-mcp/server
+  cd /path/to/claude-prompts/server
   node dist/index.js
 
 If installed via npm:
@@ -299,7 +299,7 @@ If installed via npm:
 For Claude Desktop, ensure claude_desktop_config.json uses absolute paths:
   {
     "mcpServers": {
-      "claude-prompts-mcp": {
+      "claude-prompts": {
         "command": "node",
         "args": ["/full/path/to/server/dist/index.js"]
       }

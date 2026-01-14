@@ -26,7 +26,7 @@ find_cache_dir() {
     # Method 2: Check known cache locations in priority order
     local KNOWN_PATHS=(
         "$HOME/.claude/plugins/cache/minipuft/claude-prompts"
-        "$HOME/.claude/plugins/cache/minipuft-marketplace/claude-prompts-mcp"
+        "$HOME/.claude/plugins/cache/minipuft-marketplace/claude-prompts"
     )
 
     for BASE_PATH in "${KNOWN_PATHS[@]}"; do

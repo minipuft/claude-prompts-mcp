@@ -129,7 +129,7 @@ system_control(action: "framework", operation: "switch", framework: "CAGEERF")
 **Cause**: Injection disabled in config or using `%clean` modifier.
 
 **Fix**:
-1. Check `frameworks.enableSystemPromptInjection: true` in `config.json`
+1. Check `methodologies.enabled: true` in `config.json`
 2. Remove `%clean` or `%lean` modifiers from command
 3. Use `%guided` to force injection
 
@@ -143,7 +143,7 @@ system_control(action: "framework", operation: "switch", framework: "CAGEERF")
 
 **Fix**:
 1. Add gates explicitly: `gates: ["code-quality"]` or `:: 'criteria'`
-2. Check `frameworks.enableMethodologyGates: true` in config
+2. Check `gates.methodologyGates: true` in config
 3. Verify gate activation rules match your prompt category
 
 ### Gate Keeps Failing

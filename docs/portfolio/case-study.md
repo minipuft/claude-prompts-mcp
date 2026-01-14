@@ -149,7 +149,7 @@ Same pattern for `>>create_prompt` and `>>create_methodology`. Zero API memoriza
 
 ## Links
 
-- [GitHub](https://github.com/minipuft/claude-prompts-mcp)
+- [GitHub](https://github.com/minipuft/claude-prompts)
 - [NPM](https://www.npmjs.com/package/claude-prompts)
 - [Architecture](../architecture/overview.md)
 - [Design Decisions](design-decisions.md)

@@ -4,23 +4,23 @@
       "release-type": "node",
       "component": "claude-prompts",
       "package-name": "claude-prompts",
-      "changelog-path": "server/CHANGELOG.md",
+      "changelog-path": "../CHANGELOG.md",
       "include-component-in-tag": true,
       "include-v-in-tag": true,
       "tag-separator": "-",
-      "draft": false,
-      "extra-files": [
-        {
-          "type": "json",
-          "path": "../manifest.json",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "json",
-          "path": "../.claude-plugin/plugin.json",
-          "jsonpath": "$.version"
-        }
-      ]
+      "draft": false
     }
-  }
+  },
+  "extra-files": [
+    {
+      "type": "json",
+      "path": "manifest.json",
+      "jsonpath": "$.version"
+    },
+    {
+      "type": "json",
+      "path": ".claude-plugin/plugin.json",
+      "jsonpath": "$.version"
+    }
+  ]
 }

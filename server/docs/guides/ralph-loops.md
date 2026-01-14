@@ -114,10 +114,158 @@ When `loop:true` is enabled, the Stop hook prevents Claude from stopping until v
 ### How Stop Hook Works
 
 1. When verification starts with `loop:true`, state is written to `runtime-state/verify-active.json`
-2. If Claude tries to stop (user presses Ctrl+C or Claude decides to stop), the Stop hook reads this file
-3. If verification is pending and not at max attempts, the Stop hook blocks the stop and feeds the error back to Claude
-4. Claude sees the error and automatically tries again
-5. Only when verification passes or max attempts are reached can Claude stop
+2. Claude makes changes and attempts to finish responding (end of turn)
+3. The Stop hook intercepts the stop and runs the verification command
+4. If PASS → Claude stops normally, user sees success
+5. If FAIL → Stop hook blocks, feeds error back to Claude, Claude continues automatically
+6. Only when verification passes or max attempts are reached can Claude stop
+
+**Important:** The Stop hook runs at the **end of Claude's turn**, not after each tool call. This means:
+- Claude makes all changes in one turn
+- When Claude finishes responding, the hook verifies the work
+- If verification fails, Claude gets another turn to fix issues
+
+## Context Isolation (Advanced)
+
+Long-running verification loops can accumulate significant context - code changes, test output, reasoning about failures. After several iterations, this "context rot" consumes tokens and may hit context limits.
+
+**Context isolation** addresses this by spawning fresh Claude CLI instances for later iterations, keeping the parent context lean.
+
+### How It Works
+
+```
+Iteration 1-3: In-context (fast, direct feedback)
+Iteration 4+:  CLI spawn (isolated, fresh context)
+```
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Parent Claude Session                        │
+│  (context preserved - only sees spawn/result summaries)          │
+├─────────────────────────────────────────────────────────────────┤
+│  Iteration 1: [in-context] Fix attempt → FAIL → bounce back     │
+│  Iteration 2: [in-context] Fix attempt → FAIL → bounce back     │
+│  Iteration 3: [in-context] Fix attempt → FAIL → trigger isolation│
+│  Iteration 4: [CLI spawn] ──────────────────────┐               │
+│                                                  ↓               │
+│                              ┌──────────────────────────────────┐│
+│                              │  claude --print process          ││
+│                              │  - Fresh context                 ││
+│                              │  - Receives session story        ││
+│                              │  - Makes fix, runs verification  ││
+│                              │  - Returns PASS/FAIL + summary   ││
+│                              └──────────────────────────────────┘│
+│  [Reads result] ← PASS → Report success to user                 │
+│  [Reads result] ← FAIL → Report isolated attempt, bounce back   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Session Story
+
+Spawned instances receive rich context about the debugging journey:
+
+- **Original Goal**: What the user asked for
+- **Session Story**: What was tried, what failed, what was learned
+- **Git-Style Diff Summary**: Files modified during the session
+- **Last Failure Output**: The error that triggered isolation
+- **What To Try Next**: Suggestions based on accumulated lessons
+
+This ensures spawned instances don't repeat previous mistakes.
+
+### Configuration
+
+Configure isolation in `server/config.json`:
+
+```json
+{
+  "verification": {
+    "inContextAttempts": 3,
+    "isolation": {
+      "enabled": true,
+      "maxBudget": 1.00,
+      "timeout": 300,
+      "permissionMode": "delegate"
+    }
+  }
+}
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `verification.inContextAttempts` | `3` | Iterations before spawning CLI (1-3 = in-context, 4+ = isolated) |
+| `verification.isolation.enabled` | `true` | Enable context isolation |
+| `verification.isolation.maxBudget` | `1.00` | Max USD budget per spawn |
+| `verification.isolation.timeout` | `300` | Timeout in seconds for spawned instance |
+| `verification.isolation.permissionMode` | `delegate` | CLI permission mode (`delegate`, `ask`, `deny`) |
+
+### Spawn Output (What You Get Back)
+
+When isolation runs, the Stop hook returns structured data:
+
+```
+## ✅ Verification PASSED (Iteration 4)
+
+**Method:** Isolated execution (fresh context)
+**Command:** `npm test`
+
+**Spawn Stats:**
+- Cost: $0.1770
+- Duration: 31.0s
+- Tokens: 2 in / 509 out (cache: 168,511)
+- Turns: 6
+
+### Result
+Spawned instance fixed the issue.
+PASS: all tests passing
+```
+
+The response includes orchestration metadata:
+
+```json
+{
+  "metadata": {
+    "type": "ralph_verification",
+    "passed": true,
+    "iteration": 4,
+    "method": "isolated",
+    "stats": {
+      "input_tokens": 2,
+      "output_tokens": 509,
+      "cache_read_tokens": 168511,
+      "total_cost_usd": 0.177,
+      "duration_ms": 31000,
+      "num_turns": 6
+    }
+  }
+}
+```
+
+Use this metadata to:
+- Track costs across verification loops
+- Make budget-based decisions
+- Log debugging sessions
+- Build dashboards
+
+### Disabling Isolation
+
+To keep all iterations in-context (no spawning):
+
+```json
+{
+  "verification": {
+    "isolation": {
+      "enabled": false
+    }
+  }
+}
+```
+
+### Best Practices for Isolation
+
+1. **Use for long loops**: Isolation shines when you expect 5+ iterations
+2. **Monitor budget**: Each spawn costs up to `maxBudgetPerIteration`
+3. **Review spawned output**: The parent session reports what the isolated instance tried
+4. **Checkpoint before isolation**: Use `resource_manager checkpoint` for safety
 
 ## Escalation and Gate Actions
 

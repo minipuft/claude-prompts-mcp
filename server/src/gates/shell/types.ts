@@ -87,6 +87,8 @@ export interface PendingShellVerification {
   maxAttempts: number;
   /** Unique identifier for this verification gate */
   gateId: string;
+  /** Original user goal/request for context-isolated loops */
+  originalGoal?: string;
 }
 
 /**
@@ -130,6 +132,8 @@ export interface VerifyActiveState {
     maxIterations: number;
     workingDir?: string;
     preset?: 'fast' | 'full' | 'extended';
+    /** Original user goal for context-isolated loops */
+    originalGoal?: string;
   };
   /** Runtime state updated by Stop hook */
   state: {

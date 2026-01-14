@@ -52,7 +52,7 @@ Moving verification from the **Edge** (user's terminal) to the **Protocol** (MCP
 
 ## Summary
 
-Add shell-based verification gates to claude-prompts-mcp using the `:: verify:"command"` syntax. This enables autonomous loops where Claude's work is validated by real shell command execution (ground truth) rather than LLM self-evaluation.
+Add shell-based verification gates to claude-prompts using the `:: verify:"command"` syntax. This enables autonomous loops where Claude's work is validated by real shell command execution (ground truth) rather than LLM self-evaluation.
 
 ## Syntax
 
@@ -370,7 +370,7 @@ User: >>implement-feature :: verify:"npm test"
 ## Marketing Value Proposition
 
 > "Everyone is running 'Ralph Loops' with dumb bash scripts. That's dangerous.
-> `claude-prompts-mcp` introduces **Universal Verification Middleware**.
+> `claude-prompts` introduces **Universal Verification Middleware**.
 > - **Safe:** Stops infinite loops server-side with configurable limits
 > - **Smart:** Uses Shell Execution (ground truth) alongside LLM Gates
 > - **Portable:** Works with Claude Desktop, Cursor, VS Code—any MCP client
