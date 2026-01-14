@@ -1,21 +1,21 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-01-12T23:37:07.764Z",
+  "lastUpdated": "2026-01-14T09:35:21.171Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
-      "description": "🚀 PROMPT ENGINE [CAGEERF]: Expands prompts with C.A.G.E.E.R.F methodology for you to follow.\n\nWHAT IT RETURNS: Prepared prompt + CAGEERF phase instructions (Context→Analysis→Goals→Execution→Evaluation→Refinement).\nWHAT YOU DO: Execute each phase yourself using the returned structure.\n\nSYNTAX: >>prompt_id key=\"value\" | Chain: >>s1 --> >>s2\nOPERATORS: @CAGEERF | :: \"criteria\" | %clean/%lean\n",
-      "shortDescription": "Expand and return prompt templates",
+      "description": "🚀 PROMPT ENGINE: Execute prompts with methodology guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply methodology (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
+      "shortDescription": "Execute prompts with validation and methodology",
       "category": "execution",
       "parameters": {
-        "command": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: \"criteria\" %clean/%lean",
+        "command": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: \"criteria\" %clean/%lean | Shell verify: :: verify:\"cmd\" :preset",
         "chain_id": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command.",
         "user_response": "Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming.",
         "gate_verdict": "Gate review verdict with flexible format support. Primary: 'GATE_REVIEW: PASS|FAIL - reason'. Also accepts: 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason' (minimal).",
         "gate_action": "User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely.",
         "gates": {
           "type": "array",
-          "description": "Quality gates for output validation. Three formats supported:\n\n**1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.\n\n**2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.\n\n**3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows."
+          "description": "Quality gates for output validation. Four formats supported:\n\n**1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.\n\n**2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.\n\n**3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows.\n\n**4. Shell Verification** (ground-truth validation): `:: verify:\"command\"` runs shell commands; exit 0 = PASS.\n   - **Presets**: `:fast` (1 attempt, 30s), `:full` (5 attempts, 5min), `:extended` (10 attempts, 10min)\n   - **Options**: `max:N` (attempts), `timeout:N` (seconds), `loop:true` (autonomous Stop hook)\n   - **Example**: `>>fix-bug :: verify:\"npm test\" :full loop:true`"
         },
         "force_restart": "Restart chain from step 1, ignoring cached state.",
         "options": "Execution options forwarded downstream."
@@ -25,7 +25,8 @@
         "disabled": "🚀 PROMPT ENGINE: Returns prompts without methodology injection. Raw template expansion only."
       },
       "triggerExamples": [
-        "User: '>>analyze this code' → prompt_engine(command: '>>analyze this code')"
+        "User: '>>analyze this code' → prompt_engine(command: '>>analyze this code')",
+        "User: 'fix tests' → prompt_engine(command: '>>fix-bug :: verify:\"npm test\" :full')"
       ]
     },
     "resource_manager": {

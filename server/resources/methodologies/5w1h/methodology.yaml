@@ -165,23 +165,23 @@ argumentSuggestions:
       - meet compliance
 toolDescriptions:
   prompt_engine:
-    description: >
-      🚀 PROMPT ENGINE [5W1H]: Expands prompts with Who/What/When/Where/Why/How
-      questioning framework for you to apply.
-
+    description: |
+      🚀 PROMPT ENGINE [5W1H]: Execute prompts with Who/What/When/Where/Why/How questioning and ground-truth validation.
 
       WHAT IT RETURNS: Prepared prompt + 5W1H question structure.
-
       WHAT YOU DO: Answer each question yourself using the returned framework.
 
+      SYNTAX:
+      - >>prompt_id key:"value"              # Run prompt with arguments
+      - >>step1 --> >>step2                  # Chain multiple steps
+      - @5W1H >>prompt                       # Apply 5W1H methodology
+      - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
+      - :: verify:"cmd" loop:true            # Autonomous until pass
 
-      SYNTAX: >>prompt_id key="value" | Chain: >>s1 --> >>s2
-
-      OPERATORS: @5W1H | :: "criteria" | %clean/%lean
+      PRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)
+      MODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)
     parameters:
-      command: >-
-        Prompt ID to expand. Resulting prompt will include 5W1H questioning
-        guidance for you to apply.
+      command: 'Prompt ID to expand. Resulting prompt will include 5W1H questioning guidance for you to apply.'
   resource_manager:
     description: >
       🗂️ RESOURCE MANAGER [5W1H]: Unified CRUD for prompts, gates, and

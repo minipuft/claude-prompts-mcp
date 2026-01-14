@@ -7,7 +7,7 @@ import { z } from 'zod';
  */
 export const promptEngineSchema = z
   .object({
-    /** Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: "criteria" %clean/%lean */
+    /** Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: "criteria" %clean/%lean | Shell verify: :: verify:"cmd" :preset */
     command: z.string().trim().optional(),
     /** Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command. */
     chain_id: z
@@ -32,7 +32,7 @@ export const promptEngineSchema = z
       .optional(),
     /** User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely. */
     gate_action: z.enum(['retry', 'skip', 'abort']).optional(),
-    /** Quality gates for output validation. Three formats supported:  **1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.  **2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.  **3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows. */
+    /** Quality gates for output validation. Four formats supported:  **1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.  **2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.  **3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows.  **4. Shell Verification** (ground-truth validation): `:: verify:"command"` runs shell commands; exit 0 = PASS.    - **Presets**: `:fast` (1 attempt, 30s), `:full` (5 attempts, 5min), `:extended` (10 attempts, 10min)    - **Options**: `max:N` (attempts), `timeout:N` (seconds), `loop:true` (autonomous Stop hook)    - **Example**: `>>fix-bug :: verify:"npm test" :full loop:true` */
     gates: z
       .array(
         z.union([

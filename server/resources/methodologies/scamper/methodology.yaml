@@ -165,13 +165,20 @@ argumentSuggestions:
 toolDescriptions:
   prompt_engine:
     description: |
-      🚀 PROMPT ENGINE [SCAMPER]: Expands prompts with Substitute/Combine/Adapt/Modify/Put-to-other-uses/Eliminate/Reverse creative techniques for you to apply.
+      🚀 PROMPT ENGINE [SCAMPER]: Execute prompts with Substitute/Combine/Adapt/Modify/Put-to-other-uses/Eliminate/Reverse creative techniques and ground-truth validation.
 
       WHAT IT RETURNS: Prepared prompt + SCAMPER technique prompts.
       WHAT YOU DO: Apply each creative technique yourself using the returned framework.
 
-      SYNTAX: >>prompt_id key="value" | Chain: >>s1 --> >>s2
-      OPERATORS: @SCAMPER | :: "criteria" | %clean/%lean
+      SYNTAX:
+      - >>prompt_id key:"value"              # Run prompt with arguments
+      - >>step1 --> >>step2                  # Chain multiple steps
+      - @SCAMPER >>prompt                    # Apply SCAMPER methodology
+      - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
+      - :: verify:"cmd" loop:true            # Autonomous until pass
+
+      PRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)
+      MODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)
     parameters:
       command: 'Prompt ID to expand. Resulting prompt will include SCAMPER creative techniques for you to apply.'
   resource_manager:

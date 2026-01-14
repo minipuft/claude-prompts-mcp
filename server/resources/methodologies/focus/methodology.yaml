@@ -26,7 +26,23 @@ gates:
     - framework-compliance
 toolDescriptions:
   prompt_engine:
-    description: Execute prompts following FOCUS phases
+    description: |
+      🚀 PROMPT ENGINE [FOCUS]: Execute prompts with Frame→Observe→Conceptualize→Undertake→Synthesize phases and ground-truth validation.
+
+      WHAT IT RETURNS: Prepared prompt + FOCUS phase instructions.
+      WHAT YOU DO: Apply each phase yourself using the returned framework.
+
+      SYNTAX:
+      - >>prompt_id key:"value"              # Run prompt with arguments
+      - >>step1 --> >>step2                  # Chain multiple steps
+      - @FOCUS >>prompt                      # Apply FOCUS methodology
+      - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
+      - :: verify:"cmd" loop:true            # Autonomous until pass
+
+      PRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)
+      MODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)
+    parameters:
+      command: 'Prompt ID to expand. Resulting prompt will include FOCUS phase guidance for you to apply.'
 methodologyGates:
   - id: problem_framing
     name: Problem Framing Quality

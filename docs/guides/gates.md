@@ -345,15 +345,36 @@ prompt_engine(command: ">>refactor :: verify:'npm test' checkpoint:true rollback
 
 **Flow**: Git stash created → Verification runs → If FAIL with rollback: changes restored → If PASS: stash cleared
 
+### Presets
+
+Presets configure common retry patterns:
+
+| Preset | Attempts | Timeout | Use Case |
+|--------|----------|---------|----------|
+| `:fast` | 1 | 30s | Quick checks, unit tests |
+| `:full` | 5 | 5 min | CI-style validation (recommended) |
+| `:extended` | 10 | 10 min | Long test suites, integration tests |
+
+```bash
+# Apply preset
+>>fix-bug :: verify:"npm test" :full
+
+# Preset with loop
+>>implement :: verify:"npm test" :extended loop:true
+```
+
 ### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
+| `:fast`/`:full`/`:extended` | preset | — | Preconfigured retry settings |
 | `timeout:N` | number | 300 | Timeout in seconds |
 | `loop:true` | boolean | false | Enable Stop hook for autonomous loops |
 | `max:N` | number | 10 | Max iterations when loop enabled |
 | `checkpoint:true` | boolean | false | Git stash before verification |
 | `rollback:true` | boolean | false | Git restore on failure |
+
+> **Advanced patterns**: See [Ralph Loops Guide](ralph-loops.md) for context isolation, Stop hook integration, and bounce-back/escalation flows.
 
 ### Example Patterns
 

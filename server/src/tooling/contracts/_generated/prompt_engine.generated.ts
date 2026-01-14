@@ -35,14 +35,18 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'command',
     type: 'string',
     description:
-      'Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: "criteria" %clean/%lean',
+      'Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: "criteria" %clean/%lean | Shell verify: :: verify:"cmd" :preset',
     required: false,
     status: 'working',
     compatibility: 'canonical',
-    examples: ["@CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'"],
+    examples: [
+      "@CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'",
+      ">>fix-bug :: verify:'npm test' :full loop:true",
+    ],
     notes: [
       'Every step needs prompt ID prefix (>> or /). Modifiers apply to whole chain.',
       'Script tools: tool:<id> to invoke; confirm:true tools need approval.',
+      'Shell verification: :: verify:"cmd" with :fast/:full/:extended presets, loop:true for autonomous.',
     ],
   },
   {
@@ -82,13 +86,17 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'gates',
     type: 'array<string|{name,description}|gate>',
     description:
-      "Quality gates for output validation. Three formats supported:\n\n**1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.\n\n**2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.\n\n**3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows.",
+      "Quality gates for output validation. Four formats supported:\n\n**1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.\n\n**2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.\n\n**3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows.\n\n**4. Shell Verification** (ground-truth validation): `:: verify:\"command\"` runs shell commands; exit 0 = PASS.\n   - **Presets**: `:fast` (1 attempt, 30s), `:full` (5 attempts, 5min), `:extended` (10 attempts, 10min)\n   - **Options**: `max:N` (attempts), `timeout:N` (seconds), `loop:true` (autonomous Stop hook)\n   - **Example**: `>>fix-bug :: verify:\"npm test\" :full loop:true`",
     status: 'working',
     compatibility: 'canonical',
-    examples: ['[{"name": "Source Quality", "description": "All sources must be official docs"}]'],
+    examples: [
+      '[{"name": "Source Quality", "description": "All sources must be official docs"}]',
+      ':: verify:"npm test" :full loop:true',
+    ],
     notes: [
       'RECOMMENDED: Quick Gates {name, description} auto-default to severity:medium, type:validation.',
       'Full schema: id, name, severity, criteria[], pass_criteria[], guidance, apply_to_steps[].',
+      'Shell Verification: Use presets for common patterns. loop:true enables autonomous retry until pass.',
     ],
   },
   {

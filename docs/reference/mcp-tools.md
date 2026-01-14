@@ -193,6 +193,52 @@ prompt_engine(command:"code_review", gates:[
 - Multiple distinct validation criteria in one command
 - Self-documenting commands that LLMs can parse unambiguously
 
+### Shell Verification Gates (Ralph Mode)
+
+Ground-truth validation via shell command exit codes. Exit 0 = PASS, non-zero = FAIL.
+
+```bash
+# Basic verification
+prompt_engine(command:">>implement :: verify:'npm test'")
+
+# With preset (controls retry limits)
+prompt_engine(command:">>fix-bug :: verify:'pytest' :full")
+
+# Presets: :fast (1 attempt), :full (5), :extended (10)
+prompt_engine(command:">>refactor :: verify:'cargo test' :extended")
+
+# Explicit options override presets
+prompt_engine(command:">>feature :: verify:'npm test' max:8 timeout:120")
+
+# Autonomous loop (Stop hook integration)
+prompt_engine(command:">>bugfix :: verify:'npm test' :full loop:true")
+```
+
+**How it works:**
+
+1. Command runs after each response
+2. If FAIL + attempts remain → bounce-back (Claude retries automatically)
+3. If FAIL + max reached → escalation (user chooses `retry`/`skip`/`abort` via `gate_action`)
+4. With `loop:true` → Stop hook blocks completion until tests pass
+
+**Presets:**
+
+| Preset      | Attempts | Timeout |
+| ----------- | -------- | ------- |
+| `:fast`     | 1        | 30s     |
+| `:full`     | 5        | 5 min   |
+| `:extended` | 10       | 10 min  |
+
+**Options:**
+
+| Option    | Description                                   |
+| --------- | --------------------------------------------- |
+| `max:N`   | Override max attempts                         |
+| `timeout:N` | Override timeout in seconds                 |
+| `loop:true` | Enable autonomous Stop hook integration     |
+
+See [Ralph Loops Guide](../guides/ralph-loops.md) for advanced patterns including context isolation and checkpoints.
+
 ### Built-in Commands
 
 These work without defining prompts:
