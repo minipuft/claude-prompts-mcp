@@ -1,0 +1,416 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Methodology Builder Input",
+  "description": "Comprehensive schema for methodology definitions with all CAGEERF-level fields",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Lowercase-hyphenated identifier (e.g., 'cageerf', 'iterate')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable name (e.g., 'C.A.G.E.E.R.F Framework')"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "Framework type identifier in UPPERCASE (e.g., 'CAGEERF', 'ITERATE')"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version (e.g., '1.0.0')"
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether the methodology is enabled (set to true)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description of the methodology's purpose"
+    },
+    "system_prompt_guidance": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Multiline guidance with **Phase**: description format for system prompt injection"
+    },
+
+    "phases": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 10,
+      "description": "Core methodology phases (minimum 2, maximum 10)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Phase ID in snake_case"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable phase name"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this phase accomplishes"
+          }
+        },
+        "required": ["id", "name", "description"]
+      }
+    },
+
+    "gates": {
+      "type": "object",
+      "description": "Gate configuration for framework compliance",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Gate IDs to include (e.g., ['framework-compliance'])"
+        },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Gate IDs to exclude"
+        }
+      }
+    },
+
+    "methodology_gates": {
+      "type": "array",
+      "description": "Methodology-specific quality gates with validation criteria",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Gate ID in snake_case"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable gate name"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this gate validates"
+          },
+          "methodologyArea": {
+            "type": "string",
+            "description": "Which phase/area this gate validates (must match a phase name)"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Gate priority level"
+          },
+          "validationCriteria": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2,
+            "description": "Criteria that must be met for this gate to pass (minimum 2 required)"
+          }
+        },
+        "required": ["id", "name", "methodologyArea", "validationCriteria"]
+      }
+    },
+
+    "template_suggestions": {
+      "type": "array",
+      "description": "Suggestions for prompt template enhancement",
+      "items": {
+        "type": "object",
+        "properties": {
+          "section": {
+            "type": "string",
+            "enum": ["system", "user"],
+            "description": "Which prompt section to enhance"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["addition", "structure", "modification"],
+            "description": "Type of enhancement"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this suggestion does"
+          },
+          "content": {
+            "type": "string",
+            "description": "The content to add or modify"
+          },
+          "methodologyJustification": {
+            "type": "string",
+            "description": "Why this enhancement supports the methodology"
+          },
+          "impact": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "Impact level of this suggestion"
+          }
+        },
+        "required": ["section", "type", "content"]
+      }
+    },
+
+    "methodology_elements": {
+      "type": "object",
+      "description": "Required and optional sections for methodology compliance",
+      "properties": {
+        "requiredSections": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Sections that must be present (phase names)"
+        },
+        "optionalSections": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional sections that can be included"
+        },
+        "sectionDescriptions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Description for each section"
+        }
+      }
+    },
+
+    "argument_suggestions": {
+      "type": "array",
+      "description": "Suggested arguments for prompts using this methodology",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Argument name"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["string", "number", "boolean", "array", "object"],
+            "description": "Argument data type"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this argument provides"
+          },
+          "methodologyReason": {
+            "type": "string",
+            "description": "Why this argument supports the methodology"
+          },
+          "examples": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Example values for this argument"
+          }
+        },
+        "required": ["name", "type", "description"]
+      }
+    },
+
+    "processing_steps": {
+      "type": "array",
+      "description": "Ordered steps for methodology processing",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Step ID in snake_case"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable step name"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this step does"
+          },
+          "methodologyBasis": {
+            "type": "string",
+            "description": "Which methodology phase this step implements"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Execution order (1-based)"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Whether this step is required"
+          }
+        },
+        "required": ["id", "name", "description", "order"]
+      }
+    },
+
+    "execution_steps": {
+      "type": "array",
+      "description": "Steps with dependencies for execution graph",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Step ID in snake_case"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable step name"
+          },
+          "action": {
+            "type": "string",
+            "description": "What action to perform"
+          },
+          "methodologyPhase": {
+            "type": "string",
+            "description": "Which phase this step belongs to"
+          },
+          "dependencies": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "IDs of steps this depends on"
+          },
+          "expected_output": {
+            "type": "string",
+            "description": "What this step should produce"
+          }
+        },
+        "required": ["id", "name", "action", "dependencies"]
+      }
+    },
+
+    "template_enhancements": {
+      "type": "object",
+      "description": "Template enhancement configuration",
+      "properties": {
+        "systemPromptAdditions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Lines to add to system prompt"
+        },
+        "userPromptModifications": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Modifications for user prompt"
+        },
+        "contextualHints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Contextual hints for the LLM"
+        }
+      }
+    },
+
+    "execution_flow": {
+      "type": "object",
+      "description": "Pre/post processing hooks for execution",
+      "properties": {
+        "preProcessingSteps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Steps to run before main execution"
+        },
+        "postProcessingSteps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Steps to run after main execution"
+        },
+        "validationSteps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Validation steps to run"
+        }
+      }
+    },
+
+    "execution_type_enhancements": {
+      "type": "object",
+      "description": "Chain-specific step enhancements for different execution types",
+      "properties": {
+        "chain": {
+          "type": "object",
+          "description": "Enhancements for chain execution",
+          "properties": {
+            "advancedChain": {
+              "type": "object",
+              "description": "Enhancements for advanced chain features",
+              "additionalProperties": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "simpleChain": {
+              "type": "object",
+              "description": "Enhancements for simple chain features",
+              "additionalProperties": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "quality_indicators": {
+      "type": "object",
+      "description": "Keywords and patterns for quality detection per phase",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "keywords": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Keywords indicating phase presence"
+          },
+          "patterns": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Regex patterns for phase detection"
+          }
+        }
+      }
+    },
+
+    "tool_descriptions": {
+      "type": "object",
+      "description": "Tool description overlays when this framework is active",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Override description for the tool"
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Override descriptions for parameters"
+          }
+        }
+      }
+    },
+
+    "judge_prompt": {
+      "type": "string",
+      "description": "Custom judge prompt content for %judge modifier"
+    },
+
+    "completeness_level": {
+      "type": "string",
+      "enum": ["minimal", "standard", "full"],
+      "default": "full",
+      "description": "Controls how many advanced features to generate"
+    }
+  },
+  "required": ["id", "name", "system_prompt_guidance", "phases"],
+  "additionalProperties": false
+}

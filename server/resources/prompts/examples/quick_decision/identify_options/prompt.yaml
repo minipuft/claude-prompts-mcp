@@ -1,0 +1,5 @@
+id: identify_options
+name: Identify Options
+category: examples
+description: Identify 3-5 viable options for the decision
+userMessageTemplateFile: user-message.md

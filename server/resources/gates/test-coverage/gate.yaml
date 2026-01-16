@@ -1,0 +1,17 @@
+id: test-coverage
+name: Test Coverage Standards
+type: validation
+description: Ensures code changes include appropriate test coverage
+guidanceFile: guidance.md
+pass_criteria:
+  - type: content_check
+    required_patterns:
+      - test
+      - expect
+      - assert
+    min_length: 50
+activation:
+  prompt_categories:
+    - code
+    - development
+  explicit_request: false

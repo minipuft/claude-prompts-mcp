@@ -1,0 +1,42 @@
+id: framework-compliance
+name: Framework Methodology Compliance
+type: validation
+gate_type: framework
+description: >-
+  Ensures responses follow the active framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER).
+  Requires BOTH a matching framework context AND a relevant prompt category to activate.
+  This prevents methodology gates from applying to simple prompts like greetings.
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: content_check
+    min_length: 300
+    required_patterns:
+      - context
+      - analysis
+      - systematic
+  - type: pattern_check
+    keyword_count:
+      framework: 1
+      methodology: 1
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - development
+    - analysis
+    - research
+    - architecture
+    - debugging
+    - documentation
+    - planning
+  explicit_request: false
+  framework_context:
+    - CAGEERF
+    - ReACT
+    - 5W1H
+    - SCAMPER

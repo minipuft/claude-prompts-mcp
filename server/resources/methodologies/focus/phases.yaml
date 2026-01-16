@@ -1,0 +1,80 @@
+phases:
+  - id: frame
+    name: Frame
+    description: Define the problem scope, constraints, and success criteria
+  - id: observe
+    name: Observe
+    description: Gather relevant information and identify patterns
+  - id: conceptualize
+    name: Conceptualize
+    description: Brainstorm solutions and evaluate trade-offs
+  - id: undertake
+    name: Undertake
+    description: Execute the chosen approach systematically
+  - id: synthesize
+    name: Synthesize
+    description: Consolidate learnings and document outcomes
+processingSteps:
+  - id: frame_processing
+    name: Problem Framing
+    description: Frame the problem clearly
+    methodologyBasis: FOCUS Frame phase
+    order: 1
+    required: true
+  - id: observe_processing
+    name: Information Gathering
+    description: Gather relevant information
+    methodologyBasis: FOCUS Observe phase
+    order: 2
+    required: true
+  - id: undertake_processing
+    name: Implementation
+    description: Execute the solution
+    methodologyBasis: FOCUS Undertake phase
+    order: 3
+    required: true
+executionSteps:
+  - id: frame_execution
+    name: Frame Execution
+    action: Define problem scope and criteria
+    methodologyPhase: Frame
+    dependencies: []
+    expected_output: Clear problem statement
+  - id: observe_execution
+    name: Observe Execution
+    action: Gather and analyze information
+    methodologyPhase: Observe
+    dependencies:
+      - frame_execution
+    expected_output: Relevant data and patterns
+  - id: undertake_execution
+    name: Undertake Execution
+    action: Implement solution
+    methodologyPhase: Undertake
+    dependencies:
+      - observe_execution
+    expected_output: Working solution
+executionFlow:
+  preProcessingSteps:
+    - Validate problem clarity
+  postProcessingSteps:
+    - Review solution effectiveness
+  validationSteps:
+    - Check phase completion
+qualityIndicators:
+  frame:
+    keywords:
+      - problem
+      - scope
+      - criteria
+      - constraint
+    patterns:
+      - define|scope|frame|clarify
+  observe:
+    keywords:
+      - data
+      - pattern
+      - information
+      - gather
+    patterns:
+      - observe|collect|analyze|identify

@@ -1,0 +1,34 @@
+id: security-awareness
+name: Security Best Practices
+type: validation
+description: Ensures security-conscious development practices and prevents common vulnerabilities
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: content_check
+    forbidden_patterns:
+      - 'password="'
+      - 'api_key="'
+      - 'secret="'
+      - 'token="'
+      - password123
+      - admin123
+      - 'root:root'
+      - SELECT * FROM
+  - type: pattern_check
+    regex_patterns:
+      - validate|sanitize|escape
+      - parameterized|prepared
+      - authentication|authorization
+      - 'https://|ssl|tls'
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - code
+    - development
+  explicit_request: false

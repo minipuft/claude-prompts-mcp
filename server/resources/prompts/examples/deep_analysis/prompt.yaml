@@ -1,0 +1,29 @@
+id: deep_analysis
+name: Deep Analysis Chain
+category: examples
+description: >-
+  Progressive analysis workflow for thorough research. Scans the topic,
+  deep dives into key areas, synthesizes findings, and produces a
+  structured notepage for reference.
+arguments:
+  - name: topic
+    type: string
+    description: The topic or subject to analyze
+    required: true
+  - name: focus_areas
+    type: string
+    description: Specific areas to emphasize in the analysis
+    required: false
+  - name: context
+    type: string
+    description: Background context or prior knowledge to consider
+    required: false
+chainSteps:
+  - promptId: initial_scan
+    stepName: Initial Scan (1/4)
+  - promptId: deep_dive
+    stepName: Deep Dive (2/4)
+  - promptId: synthesis
+    stepName: Synthesis (3/4)
+  - promptId: notepage
+    stepName: Notepage (4/4)

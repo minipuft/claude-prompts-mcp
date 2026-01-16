@@ -1,0 +1,7 @@
+# Ignore all user prompts except examples and internal guidance
+*
+!.gitignore
+!examples/
+!examples/**
+!guidance/
+!guidance/**

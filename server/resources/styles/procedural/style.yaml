@@ -1,0 +1,21 @@
+id: procedural
+name: Procedural Response Style
+description: Step-by-step instructions with numbered actions and verification points
+
+guidanceFile: guidance.md
+
+priority: 0
+enabled: true
+enhancementMode: prepend
+
+activation:
+  prompt_categories:
+    - tutorial
+    - guide
+    - setup
+    - installation
+    - workflow
+
+compatibleFrameworks:
+  - CAGEERF
+  - ReACT

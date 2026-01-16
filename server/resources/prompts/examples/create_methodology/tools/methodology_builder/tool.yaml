@@ -1,0 +1,24 @@
+# Methodology Builder Script Tool Configuration
+# Validates and transforms methodology definitions for resource_manager
+
+id: methodology_builder
+name: Methodology Builder
+description: Validates comprehensive methodology definitions and prepares them for resource_manager execution
+runtime: python
+script: script.py
+timeout: 30000
+enabled: true
+
+# Execution configuration:
+# - trigger: schema_match (auto-detect when ALL required fields present)
+# - strict: true (require all schema fields)
+# - autoApproveOnValid: true (bypass confirmation when validation passes)
+#
+# With autoApproveOnValid, the script validates first:
+# - valid: true + no warnings → auto-approve, proceed to auto_execute
+# - valid: true + warnings → show warnings, still proceed
+# - valid: false → show errors, block execution
+execution:
+  trigger: schema_match
+  strict: false # Allow partial matches - Python script provides detailed tier feedback
+  autoApproveOnValid: true

@@ -1,0 +1,66 @@
+id: create_gate
+name: Create Gate
+description: Guided quality gate creation with examples and validation. Outputs structured JSON for resource_manager.
+category: gate-authoring
+userMessageTemplateFile: user-message.md
+
+# Script tools for validation and auto-execution
+tools:
+  - gate_builder
+
+arguments:
+  # Design workflow arguments
+  - name: name
+    type: string
+    description: Gate name (e.g., "API Documentation", "Test Coverage")
+    required: false
+  - name: purpose
+    type: string
+    description: Core purpose in 1-2 sentences
+    required: false
+  - name: gate_type
+    type: string
+    description: 'validation (pass/fail) or guidance (advisory)'
+    required: false
+
+  # Validation workflow - flat args matching schema.json for script tool detection
+  - name: id
+    type: string
+    description: Lowercase-hyphenated identifier (e.g., 'api-docs', 'test-coverage')
+    required: false
+  - name: type
+    type: string
+    description: "'validation' or 'guidance'"
+    required: false
+  - name: description
+    type: string
+    description: Brief description of what the gate validates
+    required: false
+  - name: guidanceFile
+    type: string
+    description: Path to guidance.md file (default creates inline guidance)
+    required: false
+  - name: guidance
+    type: string
+    description: Inline guidance content (alternative to guidanceFile)
+    required: false
+  - name: pass_criteria
+    type: array
+    description: Array of pass criteria objects
+    required: false
+  - name: retry_config
+    type: object
+    description: Retry configuration object
+    required: false
+  - name: activation
+    type: object
+    description: Activation rules object
+    required: false
+  - name: severity
+    type: string
+    description: 'critical | high | medium | low'
+    required: false
+  - name: enforcementMode
+    type: string
+    description: 'blocking | advisory | informational'
+    required: false

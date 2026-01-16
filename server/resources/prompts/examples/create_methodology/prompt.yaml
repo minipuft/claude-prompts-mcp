@@ -1,0 +1,82 @@
+id: create_methodology
+name: Create Methodology
+description: Guided framework creation with examples from CAGEERF, ReACT. Outputs structured JSON for resource_manager.
+category: framework-authoring
+userMessageTemplateFile: user-message.md
+
+# Script tools for validation and auto-execution
+tools:
+  - methodology_builder
+
+arguments:
+  # Design workflow arguments
+  - name: name
+    type: string
+    description: Framework name (e.g., "CRISP", "FOCUS", "ITERATE")
+    required: false
+  - name: concept
+    type: string
+    description: Core concept/approach in 1-2 sentences
+    required: false
+  - name: phase_count
+    type: number
+    description: Number of phases (default 5-7, range 3-10)
+    required: false
+
+  # Validation workflow - flat args matching schema.json for script tool detection
+  - name: id
+    type: string
+    description: Lowercase-hyphenated identifier (e.g., 'focus', 'iterate')
+    required: false
+  - name: type
+    type: string
+    description: Framework type identifier in UPPERCASE (e.g., 'CAGEERF', 'ITERATE')
+    required: false
+  - name: version
+    type: string
+    description: Semantic version (e.g., '1.0.0')
+    required: false
+  - name: enabled
+    type: boolean
+    description: Whether the methodology is enabled (set to true)
+    required: false
+  - name: system_prompt_guidance
+    type: string
+    description: 'Multiline guidance with **Phase**: format for injection'
+    required: false
+  - name: phases
+    type: array
+    description: 'Array of phase objects [{id, name, description}]'
+    required: false
+  - name: methodology_gates
+    type: array
+    description: Quality gates with validationCriteria
+    required: false
+  - name: processing_steps
+    type: array
+    description: Ordered processing steps
+    required: false
+  - name: execution_steps
+    type: array
+    description: Execution steps with dependencies
+    required: false
+  - name: template_enhancements
+    type: object
+    description: Template enhancement configuration
+    required: false
+  - name: execution_flow
+    type: object
+    description: Pre/post processing hooks
+    required: false
+  - name: quality_indicators
+    type: object
+    description: Keywords/patterns for quality detection per phase
+    required: false
+  - name: gates
+    type: object
+    description: 'Gate configuration {include, exclude}'
+    required: false
+  - name: judge_prompt
+    type: string
+    description: Custom judge prompt content for %judge modifier
+    required: false

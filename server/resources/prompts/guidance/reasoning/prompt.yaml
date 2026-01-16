@@ -1,0 +1,6 @@
+id: reasoning
+name: Reasoning Structure
+category: guidance
+description: Step-by-step reasoning structure
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md

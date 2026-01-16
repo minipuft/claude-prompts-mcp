@@ -1,0 +1,6 @@
+id: analytical
+name: Analytical Framework
+category: guidance
+description: Systematic analysis framework guidance
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md

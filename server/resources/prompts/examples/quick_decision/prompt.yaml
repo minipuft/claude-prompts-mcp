@@ -1,0 +1,23 @@
+id: quick_decision
+name: Quick Decision Chain
+category: examples
+description: >-
+  Fast decision-making workflow with concise prompts. Identifies options, weighs
+  tradeoffs, and provides a recommendation.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: topic
+    required: true
+    description: The decision topic or question to analyze
+    type: string
+  - name: constraints
+    required: false
+    description: Any constraints or requirements to consider
+    type: string
+chainSteps:
+  - promptId: identify_options
+    stepName: Options (1/3)
+  - promptId: weigh_tradeoffs
+    stepName: Tradeoffs (2/3)
+  - promptId: recommend
+    stepName: Recommendation (3/3)

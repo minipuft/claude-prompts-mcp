@@ -1,0 +1,5 @@
+id: notepage
+name: Notepage
+category: examples
+description: Structured reference note for future use
+userMessageTemplateFile: user-message.md

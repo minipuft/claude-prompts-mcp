@@ -1,0 +1,136 @@
+{
+  "resource_type": "prompt",
+  "resource_id": "quick_decision",
+  "current_version": 3,
+  "versions": [
+    {
+      "version": 3,
+      "date": "2025-12-31T00:40:01.703Z",
+      "snapshot": {
+        "id": "quick_decision",
+        "name": "Quick Decision Chain",
+        "description": "Fast decision-making workflow. Identifies options, weighs tradeoffs, and recommends. (v2 test)",
+        "category": "examples",
+        "systemMessage": "",
+        "userMessageTemplate": "",
+        "arguments": [
+          {
+            "name": "topic",
+            "required": true,
+            "description": "The decision topic or question to analyze",
+            "type": "string"
+          },
+          {
+            "name": "constraints",
+            "required": false,
+            "description": "Any constraints or requirements to consider",
+            "type": "string"
+          }
+        ],
+        "chainSteps": [
+          {
+            "promptId": "identify_options",
+            "stepName": "Options (1/3)"
+          },
+          {
+            "promptId": "weigh_tradeoffs",
+            "stepName": "Tradeoffs (2/3)"
+          },
+          {
+            "promptId": "recommend",
+            "stepName": "Recommendation (3/3)"
+          }
+        ],
+        "registerWithMcp": true
+      },
+      "diff_summary": "",
+      "description": "Pre-rollback snapshot (before reverting to v1)"
+    },
+    {
+      "version": 2,
+      "date": "2025-12-30T17:10:32.166Z",
+      "snapshot": {
+        "id": "quick_decision",
+        "name": "Quick Decision Chain",
+        "description": "Fast decision-making workflow with concise prompts. Identifies options, weighs tradeoffs, and provides a recommendation. (Updated for versioning test)",
+        "category": "examples",
+        "systemMessage": "",
+        "userMessageTemplate": "",
+        "arguments": [
+          {
+            "name": "topic",
+            "required": true,
+            "description": "The decision topic or question to analyze",
+            "type": "string"
+          },
+          {
+            "name": "constraints",
+            "required": false,
+            "description": "Any constraints or requirements to consider",
+            "type": "string"
+          }
+        ],
+        "chainSteps": [
+          {
+            "promptId": "identify_options",
+            "stepName": "Options (1/3)"
+          },
+          {
+            "promptId": "weigh_tradeoffs",
+            "stepName": "Tradeoffs (2/3)"
+          },
+          {
+            "promptId": "recommend",
+            "stepName": "Recommendation (3/3)"
+          }
+        ],
+        "registerWithMcp": true
+      },
+      "diff_summary": "+1/-3",
+      "description": "Update via resource_manager"
+    },
+    {
+      "version": 1,
+      "date": "2025-12-30T17:10:08.452Z",
+      "snapshot": {
+        "id": "quick_decision",
+        "name": "Quick Decision Chain",
+        "description": "Fast decision-making workflow with concise prompts. Identifies options, weighs tradeoffs, and provides a recommendation.",
+        "category": "examples",
+        "systemMessage": "",
+        "userMessageTemplate": "",
+        "arguments": [
+          {
+            "name": "topic",
+            "required": true,
+            "description": "The decision topic or question to analyze",
+            "type": "string"
+          },
+          {
+            "name": "constraints",
+            "required": false,
+            "description": "Any constraints or requirements to consider",
+            "type": "string"
+          }
+        ],
+        "chainSteps": [
+          {
+            "promptId": "identify_options",
+            "stepName": "Options (1/3)"
+          },
+          {
+            "promptId": "weigh_tradeoffs",
+            "stepName": "Tradeoffs (2/3)"
+          },
+          {
+            "promptId": "recommend",
+            "stepName": "Recommendation (3/3)"
+          }
+        ],
+        "registerWithMcp": true
+      },
+      "diff_summary": "+1/-1",
+      "description": "Update via resource_manager"
+    }
+  ]
+}
