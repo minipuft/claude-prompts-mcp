@@ -98,6 +98,92 @@ jobs:
           name: claude-prompts-${{ steps.version.outputs.version }}.mcpb
           path: claude-prompts-${{ steps.version.outputs.version }}.mcpb
 
+  plugin-dist:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            branch='${{ github.event.workflow_run.head_branch }}'
+            if [[ "$branch" =~ ^claude-prompts-v ]]; then
+              version="${branch#claude-prompts-v}"
+            else
+              version=$(node -p "require('./server/package.json').version")
+            fi
+            echo "version=$version" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate required files
+        run: |
+          echo "Validating required files for dist publish..."
+          required_files=".claude-plugin/plugin.json .mcp.json"
+          for file in $required_files; do
+            if [[ ! -f "$file" ]]; then
+              echo "ERROR: Missing required file: $file"
+              exit 1
+            fi
+            echo "  ✓ $file exists"
+          done
+          echo "All required files present."
+
+      - name: Install and build server
+        working-directory: server
+        run: |
+          npm ci
+          npm run build
+
+      - name: Stage dist plugin tree
+        run: |
+          set -euo pipefail
+          STAGING_DIR=$(mktemp -d)
+          echo "STAGING_DIR=$STAGING_DIR" >> $GITHUB_ENV
+          mkdir -p "$STAGING_DIR/server"
+          cp -r .claude-plugin "$STAGING_DIR/"
+          cp .mcp.json "$STAGING_DIR/"
+          cp -r skills "$STAGING_DIR/" 2>/dev/null || true
+          cp -r hooks "$STAGING_DIR/" 2>/dev/null || true
+          cp -r server/dist "$STAGING_DIR/server/"
+          cp -r server/resources "$STAGING_DIR/server/"
+          cp server/config.json "$STAGING_DIR/server/"
+          cp -r server/cache "$STAGING_DIR/server/" 2>/dev/null || true
+
+      - name: Validate dist artifact
+        run: |
+          test -f "$STAGING_DIR/server/dist/index.js"
+          test -f "$STAGING_DIR/server/config.json"
+          test -d "$STAGING_DIR/server/resources"
+
+      - name: Publish dist branch
+        run: |
+          git checkout --orphan dist
+          git clean -fdx
+          cp -r "$STAGING_DIR"/. .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "chore: publish dist ${{ steps.version.outputs.version }}"
+          git push origin dist --force
+
   # Build Claude Code plugin archive (manual only)
   claude-code-plugin:
     if: github.event_name == 'workflow_dispatch'
@@ -149,6 +235,7 @@ jobs:
 
       - name: Create plugin archive
         run: |
+          set -euo pipefail
           mkdir -p .plugin-staging
 
           # Copy plugin manifest and config
@@ -163,7 +250,13 @@ jobs:
           mkdir -p .plugin-staging/server
           cp -r server/dist .plugin-staging/server/
           cp -r server/resources .plugin-staging/server/
+          cp server/config.json .plugin-staging/server/
           cp -r server/cache .plugin-staging/server/ 2>/dev/null || true
+
+          # Validate staged runtime
+          test -f .plugin-staging/server/dist/index.js
+          test -f .plugin-staging/server/config.json
+          test -d .plugin-staging/server/resources
 
           # Create archive
           cd .plugin-staging

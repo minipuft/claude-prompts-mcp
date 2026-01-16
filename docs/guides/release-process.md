@@ -1,6 +1,6 @@
 # Release Process
 
-Automated release workflow for claude-prompts and gemini-prompts extension.
+Purpose: ship claude-prompts releases, publish dist artifacts, and update downstream extensions.
 
 ## Workflow Chain
 
@@ -31,6 +31,13 @@ Push to main
 │  - Builds and tests                     │
 │  - Publishes to npm with provenance     │
 │  - Dispatches to gemini-prompts         │
+└─────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│  extension-publish.yml                  │
+│  - Builds desktop extension             │
+│  - Publishes dist branch (marketplace)  │
 └─────────────────────────────────────────┘
        │
        ▼
@@ -90,6 +97,7 @@ gh secret list --repo minipuft/claude-prompts
 | `.release-please-manifest.json` | Current version tracker |
 | `.github/workflows/release-please.yml` | Release PR creation |
 | `.github/workflows/npm-publish.yml` | npm publishing + downstream dispatch |
+| `.github/workflows/extension-publish.yml` | Desktop extension build + dist branch publish |
 
 ## Manual Operations
 
@@ -97,6 +105,7 @@ gh secret list --repo minipuft/claude-prompts
 
 ```bash
 gh workflow run release-please.yml --repo minipuft/claude-prompts
+# Outcome: release PR opened/updated
 ```
 
 ### Create Release Without release-please
@@ -106,13 +115,22 @@ gh workflow run release-please.yml --repo minipuft/claude-prompts
 git tag claude-prompts-v1.2.0
 git push origin claude-prompts-v1.2.0
 gh release create claude-prompts-v1.2.0 --title "v1.2.0" --notes "See CHANGELOG.md"
+# Outcome: release published, extension-publish.yml can run
+```
+
+### Publish dist Branch Manually
+
+```bash
+# Triggers dist publish + desktop extension build
+gh workflow run extension-publish.yml --repo minipuft/claude-prompts -f version=1.3.1
+# Outcome: dist branch updated
 ```
 
 ### Sync Submodule Manually
 
 ```bash
 # In gemini-prompts repo
-git submodule update --remote core
+git submodule update --remote --merge
 git add core
 git commit -m "chore: update core submodule"
 git push
@@ -151,7 +169,13 @@ Check that `RELEASE_PLEASE_TOKEN` is set. The default `GITHUB_TOKEN` cannot trig
 
 1. Verify `DOWNSTREAM_PAT` has access to gemini-prompts repo
 2. Check Actions tab in gemini-prompts for failed runs
-3. Manual sync: `git submodule update --remote core`
+3. Manual sync: `git submodule update --remote --merge`
+
+### dist branch missing or stale
+
+1. Confirm `extension-publish.yml` ran and succeeded
+2. Verify `dist` branch exists and includes `server/dist/index.js`
+3. Re-run the workflow with `version` input
 
 ### Version mismatch between files
 
