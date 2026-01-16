@@ -366,7 +366,7 @@ export class CommandParsingStage extends BasePipelineStage {
     const normalizedSeed = Array.from(new Set(seed));
 
     if (!sanitizedArgs?.trim()) {
-      if (fallbackArgs && Object.keys(fallbackArgs).length > 0) {
+      if (Object.keys(fallbackArgs ?? {}).length > 0) {
         return {
           processedArgs: { ...fallbackArgs },
           resolvedPlaceholders: {},

@@ -191,11 +191,11 @@ export class ChainSessionManager implements ChainSessionService {
 
       this.ensureRunMappingConsistency();
 
-      this.logger?.debug?.(
+      this.logger.debug(
         `Loaded ${this.activeSessions.size} persisted chain runs from session store`
       );
     } catch (error) {
-      this.logger?.warn(
+      this.logger.warn(
         `Failed to load persisted sessions: ${
           error instanceof Error ? error.message : String(error)
         }`
@@ -246,7 +246,7 @@ export class ChainSessionManager implements ChainSessionService {
       const data = this.serializeSessions();
       await this.runRegistry.save(data);
     } catch (error) {
-      this.logger?.error(
+      this.logger.error(
         `Failed to save sessions: ${error instanceof Error ? error.message : String(error)}`
       );
     }
@@ -254,7 +254,7 @@ export class ChainSessionManager implements ChainSessionService {
 
   private persistSessionsAsync(context: string): void {
     this.saveSessions().catch((error) => {
-      this.logger?.warn?.(
+      this.logger.warn(
         `[ChainSessionManager] Failed to persist sessions (${context}): ${
           error instanceof Error ? error.message : String(error)
         }`
@@ -306,11 +306,9 @@ export class ChainSessionManager implements ChainSessionService {
     // Persist to file
     await this.saveSessions();
 
-    if (this.logger) {
-      this.logger.debug(
-        `Created chain session ${sessionId} for chain ${chainId} with ${totalSteps} steps`
-      );
-    }
+    this.logger.debug(
+      `Created chain session ${sessionId} for chain ${chainId} with ${totalSteps} steps`
+    );
     return session;
   }
 

@@ -189,16 +189,16 @@ async function loadPromptYaml(promptDir: string): Promise<PromptCacheEntry | nul
 
     if (!data || typeof data !== 'object') return null;
 
-    const promptId = data['id'] as string;
+    const promptId = data['id'] as string | undefined;
     if (!promptId) return null;
 
     const name = (data['name'] as string) || '';
     const description = (data['description'] as string) || '';
-    const chainSteps = (data['chainSteps'] as unknown[]) || [];
+    const chainSteps = (data['chainSteps'] as unknown[]) ?? [];
     const isChain = chainSteps.length > 0;
 
     // Extract arguments
-    const rawArgs = (data['arguments'] as Array<Record<string, unknown>>) || [];
+    const rawArgs = (data['arguments'] as Array<Record<string, unknown>>) ?? [];
     const args: ArgumentInfo[] = rawArgs
       .filter((arg) => arg['name'])
       .map((arg) => ({
@@ -211,13 +211,13 @@ async function loadPromptYaml(promptDir: string): Promise<PromptCacheEntry | nul
 
     // Extract gates
     const gateConfig = data['gateConfiguration'] as Record<string, unknown> | undefined;
-    const gates = (gateConfig?.['include'] as string[]) || [];
+    const gates = (gateConfig?.['include'] as string[]) ?? [];
 
     // Extract keywords
     const keywords = extractKeywords(`${name} ${description}`);
 
     // Get category from parent directory or YAML
-    const category = (data['category'] as string) || path.basename(path.dirname(promptDir));
+    const category = (data['category'] as string) ?? path.basename(path.dirname(promptDir));
 
     return {
       id: promptId,

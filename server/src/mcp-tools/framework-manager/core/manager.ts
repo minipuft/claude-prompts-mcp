@@ -677,8 +677,7 @@ export class ConsolidatedFrameworkManager {
       return this.createErrorResponse(`Methodology '${id}' not found`);
     }
 
-    const activeFramework = this.frameworkStateManager?.getActiveFramework();
-    const isActive = activeFramework !== undefined && activeFramework.id === framework.id;
+    const isActive = this.frameworkStateManager?.getActiveFramework()?.id === framework.id;
     const activeStatus = isActive ? 'Active' : 'Inactive';
 
     // Load methodology data from disk to calculate validation score
@@ -756,8 +755,7 @@ export class ConsolidatedFrameworkManager {
     }
 
     // Check if already active (compare by ID, not type - multiple frameworks can share a type)
-    const currentFramework = this.frameworkStateManager?.getActiveFramework();
-    if (currentFramework !== undefined && currentFramework.id === targetFramework.id) {
+    if (this.frameworkStateManager?.getActiveFramework()?.id === targetFramework.id) {
       return this.createSuccessResponse(`ℹ️ Framework '${id}' is already active`);
     }
 

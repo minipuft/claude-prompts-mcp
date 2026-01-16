@@ -411,7 +411,7 @@ export class ToolDescriptionManager extends EventEmitter {
         }
       }
 
-      if (existing && existing.trim() === serialized.trim()) {
+      if (existing?.trim() === serialized.trim()) {
         return false;
       }
 

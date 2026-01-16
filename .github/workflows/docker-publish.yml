@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # For workflow_run: use the branch/tag from the triggering workflow
           # For pull_request: use default ref
@@ -45,7 +45,7 @@ jobs:
         with:
           cosign-release: 'v2.2.2'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
 
