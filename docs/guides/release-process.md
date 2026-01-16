@@ -38,6 +38,7 @@ Push to main
 │  extension-publish.yml                  │
 │  - Builds desktop extension             │
 │  - Publishes dist branch (marketplace)  │
+│  - Uses dist runtime artifact handoff   │
 └─────────────────────────────────────────┘
        │
        ▼
@@ -176,6 +177,7 @@ Check that `RELEASE_PLEASE_TOKEN` is set. The default `GITHUB_TOKEN` cannot trig
 1. Confirm `extension-publish.yml` ran and succeeded
 2. Verify `dist` branch exists and includes `server/dist/index.js`
 3. Re-run the workflow with `version` input
+4. If dist still contains `.github` or `docs/`, the dist publish step failed validation
 
 ### Version mismatch between files
 

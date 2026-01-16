@@ -86,9 +86,9 @@ Only bypass hooks to unblock CI or for emergency hotfixes. Use `HUSKY=0 git comm
 - **TypeScript**: Strict mode, descriptive interfaces, prefer dependency injection over global state.
 - **Runtime lifecycle**: Register new modules through the `Application` orchestrator (`server/src/runtime/`).
 - **Transports**: Keep STDIO and SSE behavior in parity; mention both when updating docs.
-- **Prompts**: Only modify via `prompt_manager`. See `docs/prompt-authoring-guide.md` for schema expectations.
-- **Chains**: Define/edit steps via `prompt_manager`. Reference `docs/chains.md` for schema details.
-- **Gates**: Add definitions under `server/gates/{id}/gate.yaml` and update `docs/gates.md` when behavior changes.
+- **Prompts**: Only modify via `prompt_manager`. See `docs/tutorials/build-first-prompt.md` for schema expectations.
+- **Chains**: Define/edit steps via `prompt_manager`. Reference `docs/concepts/chains-lifecycle.md` for schema details.
+- **Gates**: Add definitions under `server/gates/{id}/gate.yaml` and update `docs/concepts/quality-gates.md` when behavior changes.
 
 ### Pipeline State Management Patterns
 

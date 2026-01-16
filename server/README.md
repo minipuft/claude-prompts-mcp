@@ -8,15 +8,16 @@ MCP server for prompt management, thinking frameworks, and quality gates. Hot-re
 
 ## Quick Start
 
-| Method | Command | Best For |
-|--------|---------|----------|
-| **Desktop Extension** | Drag `.mcpb` into Settings | End users |
-| **NPX** | `npx -y claude-prompts` | Auto-updates |
-| **Local Dev** | `npm run start:stdio` | Contributors |
+| Method                | Command                    | Best For     |
+| --------------------- | -------------------------- | ------------ |
+| **Desktop Extension** | Drag `.mcpb` into Settings | End users    |
+| **NPX**               | `npx -y claude-prompts`    | Auto-updates |
+| **Local Dev**         | `npm run start:stdio`      | Contributors |
 
 **Desktop Extension** — [Download `.mcpb`](https://github.com/minipuft/claude-prompts/releases), drag into Claude Desktop Settings. Done.
 
 **NPX** — Add to `claude_desktop_config.json`:
+
 ```json
 {
   "mcpServers": {
@@ -26,9 +27,11 @@ MCP server for prompt management, thinking frameworks, and quality gates. Hot-re
 ```
 
 Restart Claude Desktop. Verify:
+
 ```
 resource_manager(resource_type: "prompt", action: "list")
 ```
+
 → Returns available prompts. Now try `>>analyze` or `>>research_chain`.
 
 ---
@@ -266,11 +269,13 @@ This repo uses a Release PR flow to ensure the npm package version and changelog
 - Tag format: `claude-prompts-vX.Y.Z` (created by release-please)
 
 **One-time GitHub setup**
+
 - Add repo secret `RELEASE_PLEASE_TOKEN` (PAT) so release tags/releases can trigger workflows.
 - Add repo secret `NPM_TOKEN` (npm automation token for `claude-prompts`).
 - (Recommended) Create GitHub Environment `npm` with required reviewers to gate publishing.
 
 **Release steps**
+
 1. Merge normal work into `main`.
 2. Release Please opens a Release PR; review the version bump + `server/CHANGELOG.md`.
 3. Merge the Release PR.
@@ -281,6 +286,7 @@ This repo uses a Release PR flow to ensure the npm package version and changelog
 ### Claude Desktop Configurations
 
 **Basic — Use package defaults (good for trying it out):**
+
 ```json
 {
   "mcpServers": {
@@ -293,6 +299,7 @@ This repo uses a Release PR flow to ensure the npm package version and changelog
 ```
 
 **Recommended — Your own workspace:**
+
 ```json
 {
   "mcpServers": {
@@ -308,6 +315,7 @@ This repo uses a Release PR flow to ensure the npm package version and changelog
 ```
 
 **Advanced — Per-project prompts:**
+
 ```json
 {
   "mcpServers": {
@@ -326,14 +334,14 @@ This repo uses a Release PR flow to ensure the npm package version and changelog
 
 ### Environment Variables
 
-| Variable | Purpose | Example |
-|----------|---------|---------|
-| `MCP_WORKSPACE` | Base directory containing prompts/, config.json | `/home/user/my-prompts` |
-| `MCP_PROMPTS_PATH` | Direct path to a prompts directory | `/path/to/prompts` |
-| `MCP_METHODOLOGIES_PATH` | Custom methodologies directory | `/path/to/methodologies` |
-| `MCP_GATES_PATH` | Custom gates directory | `/path/to/gates` |
-| `MCP_CONFIG_PATH` | Custom server config.json | `/path/to/config.json` |
-| `LOG_LEVEL` | Logging verbosity | `debug`, `info`, `warn`, `error` |
+| Variable                 | Purpose                                         | Example                          |
+| ------------------------ | ----------------------------------------------- | -------------------------------- |
+| `MCP_WORKSPACE`          | Base directory containing prompts/, config.json | `/home/user/my-prompts`          |
+| `MCP_PROMPTS_PATH`       | Direct path to a prompts directory              | `/path/to/prompts`               |
+| `MCP_METHODOLOGIES_PATH` | Custom methodologies directory                  | `/path/to/methodologies`         |
+| `MCP_GATES_PATH`         | Custom gates directory                          | `/path/to/gates`                 |
+| `MCP_CONFIG_PATH`        | Custom server config.json                       | `/path/to/config.json`           |
+| `LOG_LEVEL`              | Logging verbosity                               | `debug`, `info`, `warn`, `error` |
 
 **Resolution priority:** CLI flags > Environment variables > Workspace subdirectory > Package defaults
 
@@ -356,32 +364,36 @@ npx claude-prompts --debug-startup
 npx claude-prompts --startup-test --verbose
 ```
 
-| Flag | Purpose |
-|------|---------|
-| `--workspace=/path` | Base directory for all user assets |
-| `--prompts=/path` | Direct path to a prompts directory |
-| `--methodologies=/path` | Custom methodologies directory |
-| `--gates=/path` | Custom gates directory |
-| `--config=/path` | Custom server config.json |
-| `--verbose` | Detailed logging |
-| `--startup-test` | Validate and exit (good for testing setup) |
+| Flag                    | Purpose                                    |
+| ----------------------- | ------------------------------------------ |
+| `--workspace=/path`     | Base directory for all user assets         |
+| `--prompts=/path`       | Direct path to a prompts directory         |
+| `--methodologies=/path` | Custom methodologies directory             |
+| `--gates=/path`         | Custom gates directory                     |
+| `--config=/path`        | Custom server config.json                  |
+| `--verbose`             | Detailed logging                           |
+| `--startup-test`        | Validate and exit (good for testing setup) |
 
 ---
 
 ### Troubleshooting
 
 **"No prompts found"**
+
 - Check `MCP_WORKSPACE` points to a directory containing `prompts/`
 - Run `npx claude-prompts --startup-test --verbose` to see resolved paths
 
 **"Methodology not found"**
+
 - Custom methodologies need `methodology.yaml` in each subdirectory
 - Use `MCP_METHODOLOGIES_PATH` to point to your methodologies folder
 
 **"Permission denied"**
+
 - Ensure the user running Claude Desktop can read your workspace directory
 
 **Changes not appearing**
+
 - Confirm you're editing files under your configured `MCP_WORKSPACE` / `MCP_PROMPTS_PATH`
 - If needed, restart Claude Desktop (most clients restart MCP servers on reconnect)
 
@@ -393,9 +405,9 @@ Full guides in the [main repository](https://github.com/minipuft/claude-prompts)
 
 - [Architecture](https://github.com/minipuft/claude-prompts/blob/main/docs/architecture/overview.md) — System design
 - [MCP Tooling](https://github.com/minipuft/claude-prompts/blob/main/docs/reference/mcp-tools.md) — Complete tool reference
-- [Prompt Authoring](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/prompt-authoring-guide.md) — Template structure
-- [Chains](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/chains.md) — Multi-step patterns
-- [Gates](https://github.com/minipuft/claude-prompts/blob/main/docs/guides/gates.md) — Quality validation
+- [Prompt Authoring](https://github.com/minipuft/claude-prompts/blob/main/docs/tutorials/build-first-prompt.md) — Tutorial
+- [Chains](https://github.com/minipuft/claude-prompts/blob/main/docs/concepts/chains-lifecycle.md) — Multi-step patterns
+- [Gates](https://github.com/minipuft/claude-prompts/blob/main/docs/concepts/quality-gates.md) — Quality validation
 
 ---
 

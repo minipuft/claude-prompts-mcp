@@ -483,9 +483,9 @@ flowchart TB
 ## Documentation
 
 - **[MCP Tooling Guide](docs/reference/mcp-tools.md)** — Full command reference
-- **[Prompt Authoring](docs/guides/prompt-authoring-guide.md)** — Template syntax and schema
-- **[Chains](docs/guides/chains.md)** — Multi-step workflows
-- **[Gates](docs/guides/gates.md)** — Quality validation
+- **[Prompt Authoring](docs/tutorials/build-first-prompt.md)** — Tutorial
+- **[Chains](docs/concepts/chains-lifecycle.md)** — Multi-step patterns
+- **[Gates](docs/concepts/quality-gates.md)** — Quality validation
 - **[Ralph Loops](docs/guides/ralph-loops.md)** — Autonomous verification patterns
 - **[Architecture](docs/architecture/overview.md)** — System internals
 

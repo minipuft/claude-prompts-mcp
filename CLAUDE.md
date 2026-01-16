@@ -42,9 +42,9 @@ This handbook trains Claude Code (and any assistant) to behave like a senior dev
 | ------------------------------ | -------------------------------- |
 | Architecture & runtime phases  | `docs/architecture/overview.md`  |
 | MCP tooling workflows          | `docs/reference/mcp-tools.md`    |
-| Prompt/template authoring      | `docs/guides/prompt-authoring-guide.md` |
+| Prompt/template authoring      | `docs/tutorials/build-first-prompt.md` |
 | Script tools & auto-execute    | `docs/guides/script-tools.md`    |
-| Chains                         | `docs/guides/chains.md`          |
+| Chains                         | `docs/concepts/chains-lifecycle.md`          |
 | Gate system                    | `docs/guides/gates.md`           |
 | Troubleshooting                | `docs/guides/troubleshooting.md` |
 | Release highlights             | `CHANGELOG.md`                   |
@@ -190,7 +190,7 @@ system_control(action:"status")
 
 ## 8. Prompt & Chain Authoring Rules
 
-1. Follow the template structure from `docs/guides/prompt-authoring-guide.md` (title, optional system message, `## User Message`, sections).
+1. Follow the template structure from `docs/tutorials/build-first-prompt.md` (title, optional system message, `## User Message`, sections).
 2. Define arguments in metadata with accurate types + validation. The runtime derives Zod schemas from these definitions.
 3. Use `{{ref:path.md}}` for shared snippets; maintain references via the text reference manager.
 4. For chains, provide complete `chainSteps` (IDs, dependencies, input/output mapping, optional `inlineGateIds`, `parallelGroup`, `timeout`, `retries`, `stepType`). Conditional execution uses the `?` operator in symbolic commands. Validate chains with `prompt_engine` using `force_restart`.
@@ -216,8 +216,8 @@ system_control(action:"status")
 |-------------------|----------------|-------------------|
 | MCP tool parameters/behavior | `docs/reference/mcp-tools.md` | Parameter is internal-only |
 | Pipeline stages or execution flow | `docs/architecture/overview.md` | Refactor without behavior change |
-| Prompt/chain schema or authoring patterns | `docs/guides/prompt-authoring-guide.md` | - |
-| Chain step mapping, dependencies, or session handling | `docs/guides/chains.md` | - |
+| Prompt/chain schema or authoring patterns | `docs/tutorials/build-first-prompt.md` | - |
+| Chain step mapping, dependencies, or session handling | `docs/concepts/chains-lifecycle.md` | - |
 | Gate definitions, activation rules, or enforcement | `docs/guides/gates.md` | - |
 | CLI flags, env vars, or config options | `docs/reference/mcp-tools.md` + README.md | - |
 | Error messages or recovery flows | `docs/guides/troubleshooting.md` | Trivial wording fix |

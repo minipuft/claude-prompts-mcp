@@ -104,7 +104,10 @@ jobs:
       || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact-name: dist-runtime-${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -153,8 +156,8 @@ jobs:
       - name: Stage dist plugin tree
         run: |
           set -euo pipefail
-          STAGING_DIR=$(mktemp -d)
-          echo "STAGING_DIR=$STAGING_DIR" >> $GITHUB_ENV
+          STAGING_DIR="$RUNNER_TEMP/dist-staging"
+          rm -rf "$STAGING_DIR"
           mkdir -p "$STAGING_DIR/server"
           cp -r .claude-plugin "$STAGING_DIR/"
           cp .mcp.json "$STAGING_DIR/"
@@ -164,24 +167,77 @@ jobs:
           cp -r server/resources "$STAGING_DIR/server/"
           cp server/config.json "$STAGING_DIR/server/"
           cp -r server/cache "$STAGING_DIR/server/" 2>/dev/null || true
+          tar -czf "$RUNNER_TEMP/dist-runtime.tar.gz" -C "$STAGING_DIR" .
 
       - name: Validate dist artifact
         run: |
-          test -f "$STAGING_DIR/server/dist/index.js"
-          test -f "$STAGING_DIR/server/config.json"
-          test -d "$STAGING_DIR/server/resources"
+          set -euo pipefail
+          VERIFY_DIR="$RUNNER_TEMP/dist-verify"
+          rm -rf "$VERIFY_DIR"
+          mkdir -p "$VERIFY_DIR"
+          tar -xzf "$RUNNER_TEMP/dist-runtime.tar.gz" -C "$VERIFY_DIR"
+          test -f "$VERIFY_DIR/server/dist/index.js"
+          test -f "$VERIFY_DIR/server/config.json"
+          test -d "$VERIFY_DIR/server/resources"
+          test -f "$VERIFY_DIR/.mcp.json"
+          test -f "$VERIFY_DIR/.claude-plugin/plugin.json"
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: dist-runtime-${{ steps.version.outputs.version }}
+          path: ${{ runner.temp }}/dist-runtime.tar.gz
+
+  publish-dist:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
+    needs: plugin-dist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: dist-runtime-${{ needs.plugin-dist.outputs.version }}
+          path: ${{ runner.temp }}/dist-artifact
 
       - name: Publish dist branch
         run: |
+          set -euo pipefail
+          ARTIFACT="$RUNNER_TEMP/dist-artifact/dist-runtime.tar.gz"
+          UNPACKED="$RUNNER_TEMP/dist-unpacked"
+          rm -rf "$UNPACKED"
+          mkdir -p "$UNPACKED"
+          tar -xzf "$ARTIFACT" -C "$UNPACKED"
+
           git checkout --orphan dist
+          git rm -rf . >/dev/null 2>&1 || true
           git clean -fdx
-          cp -r "$STAGING_DIR"/. .
+          cp -r "$UNPACKED"/. .
+
+          test -f server/dist/index.js
+          test -f server/config.json
+          test -d server/resources
+          test -f .mcp.json
+          test -f .claude-plugin/plugin.json
+
+          if [ -d .github ] || [ -d .claude ] || [ -d docs ] || [ -d server/src ] || [ -d server/tests ]; then
+            echo "ERROR: dist branch includes source-only paths."
+            exit 1
+          fi
+
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to publish."
             exit 0
           fi
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "chore: publish dist ${{ steps.version.outputs.version }}"
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "chore: publish dist ${{ needs.plugin-dist.outputs.version }}"
           git push origin dist --force
 
   # Build Claude Code plugin archive (manual only)

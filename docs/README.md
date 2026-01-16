@@ -2,50 +2,58 @@
 
 > Status: canonical
 
-This is the map for the Claude Prompts MCP server. Canonical operational docs live under
-`docs/architecture/`, `docs/guides/`, and `docs/reference/`. Narrative/portfolio docs live under
-`docs/portfolio/`.
+This is the map for the Claude Prompts MCP server. Canonical operational docs are organized by **user intent** (Diátaxis framework).
 
-## Start Here (Learning Path)
+## Why This Matters
 
-1. **[Main README](../README.md)**: Quick start and installation options.
-2. **[MCP Tooling Guide](reference/mcp-tools.md)**: Tool surface (`prompt_engine`, `resource_manager`, `system_control`).
-3. **[Prompt Authoring Guide](guides/prompt-authoring-guide.md)**: Prompt/template structure and schema.
-4. **[Chains](guides/chains.md)**: Multi-step workflows and step mapping.
-5. **[Architecture Overview](architecture/overview.md)**: Runtime, transports, pipeline, and state.
+| Problem | Solution | Result |
+|---------|----------|--------|
+| **Learner Overwhelm** | Dedicated Tutorials | Step-by-step learning |
+| **Expert Friction** | Pure Reference | Fast lookup without fluff |
+| **Maintenance Drift** | Intent Separation | Clear home for every doc |
 
-## Guides (How-To)
+---
 
-- `docs/guides/prompt-authoring-guide.md`
-- `docs/guides/script-tools.md`
-- `docs/guides/chains.md`
-- `docs/guides/gates.md`
-- `docs/guides/release-process.md`
-- `docs/guides/troubleshooting.md`
+## 1. Tutorials (Learning-Oriented)
 
-## Reference (Stable Surfaces)
+*I want to learn by doing.*
 
-- `docs/reference/mcp-tools.md`
-- `docs/_generated/` (generated param tables)
+- **[Build Your First Prompt](tutorials/build-first-prompt.md)**: Create and run a hot-reloadable prompt.
+- *(Coming Soon)*: Create an Approval Chain.
 
-## Architecture
+## 2. How-To (Problem-Oriented)
 
-- `docs/architecture/overview.md`
+*I have a specific problem to solve.*
 
-## Decisions (ADR)
+- **[Add Validation](how-to/add-validation.md)**: Ensure arguments match patterns (e.g., URLs).
+- **[Script Tools](guides/script-tools.md)**: Run Python scripts inside prompts.
+- **[Troubleshooting](guides/troubleshooting.md)**: Diagnose common errors.
+- **[Release Process](guides/release-process.md)**: How we ship updates.
 
-- `docs/adr/README.md`
+## 3. Reference (Information-Oriented)
 
-## Portfolio / Narrative
+*I need to look up syntax or API details.*
 
-- `docs/portfolio/case-study.md`
-- `docs/portfolio/design-decisions.md`
+- **[MCP Tools](reference/mcp-tools.md)**: `prompt_engine`, `resource_manager`, `system_control`.
+- **[Prompt Schema](reference/prompt-yaml-schema.md)**: `prompt.yaml` configuration.
+- **[Chain Schema](reference/chain-schema.md)**: `chainSteps` configuration.
+- **[Gate Configuration](reference/gate-configuration.md)**: `gate.yaml` configuration.
+- **[Template Syntax](reference/template-syntax.md)**: Nunjucks + custom extensions.
 
-## Meta
+## 4. Concepts (Understanding-Oriented)
 
-- `docs/TODO.md`
-- `plans/`
-- `server/CHANGELOG.md`
-- `CONTRIBUTING.md`
+*I want to understand how it works.*
 
-**Note**: If you find a discrepancy between docs and `server/src/`, the code is the source of truth. Please submit a PR to fix the doc.
+- **[Chains Lifecycle](concepts/chains-lifecycle.md)**: State machine and session management.
+- **[Quality Gates](concepts/quality-gates.md)**: Precedence ladder and verification types.
+- **[Architecture Overview](architecture/overview.md)**: Runtime, transports, pipeline.
+
+---
+
+## Meta & Portfolio
+
+- **Decisions**: `docs/adr/`
+- **Portfolio**: `docs/portfolio/`
+- **Plans**: `plans/`
+- **Changelog**: `server/CHANGELOG.md`
+- **Contributing**: `CONTRIBUTING.md`

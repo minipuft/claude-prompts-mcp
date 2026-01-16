@@ -618,6 +618,6 @@ Analysis for {{name}}: {{script:analyzer user='{{name}}'}}
 
 ## Related
 
-- [Prompt Authoring Guide](prompt-authoring-guide.md) — Template structure and arguments
+- [Prompt Authoring Guide](../tutorials/build-first-prompt.md) — Template structure and arguments
 - [MCP Tools Reference](../reference/mcp-tools.md) — `prompt_engine` command syntax
-- [Chains](chains.md) — Multi-step workflows
+- [Chains](../concepts/chains-lifecycle.md) — Multi-step workflows

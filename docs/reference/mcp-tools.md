@@ -125,7 +125,7 @@ prompt_engine(command:"%judge analysis_report")
 
 ### Chain Execution
 
-For step schemas, conditional branching, and parallel execution patterns, see the [Chains Guide](../guides/chains.md).
+For step schemas, conditional branching, and parallel execution patterns, see the [Chain Schema Reference](../reference/chain-schema.md).
 
 **Start a chain:**
 
@@ -167,7 +167,7 @@ Notes:
 
 ### Gates: Four Ways to Validate
 
-For gate configuration, enforcement modes, and custom definitions, see the [Gates Guide](../guides/gates.md).
+For gate configuration, enforcement modes, and custom definitions, see the [Gate Configuration Reference](../reference/gate-configuration.md).
 
 ```bash
 # 1. Anonymous inline criteria (simplest)
@@ -797,8 +797,9 @@ Path resolution follows this priority (first match wins):
 
 **Related docs:**
 
-- [Prompt Authoring Guide](../guides/prompt-authoring-guide.md) — Template syntax and schema
-- [Chains](../guides/chains.md) — Multi-step execution patterns
-- [Gates](../guides/gates.md) — Quality validation configuration
+- [Prompt Authoring](../tutorials/build-first-prompt.md) — Tutorial
+- [Prompt Schema](../reference/prompt-yaml-schema.md) — Configuration reference
+- [Chain Schema](../reference/chain-schema.md) — Chain configuration
+- [Gate Configuration](../reference/gate-configuration.md) — Gate configuration
 - [Architecture](../architecture/overview.md) — System internals
 - [Script Tools](../guides/script-tools.md) — Prompt-scoped script tool configuration

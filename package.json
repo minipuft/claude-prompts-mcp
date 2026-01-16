@@ -16,6 +16,7 @@
     "husky": "^9.1.7"
   },
   "dependencies": {
+    "@mailshieldai/opencode-canvas": "^0.1.2",
     "graphviz": "^0.0.9"
   }
 }
