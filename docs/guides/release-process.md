@@ -1,193 +1,233 @@
 # Release Process
 
-Purpose: ship claude-prompts releases, publish dist artifacts, and update downstream extensions.
+Ship releases to npm, update the `dist` branch, and sync downstream extensions—automatically.
+
+## Why This Matters
+
+| Problem | Solution | Result |
+|---------|----------|--------|
+| Manual version bumps across 4 files | release-please automation | Merge PR → versions sync |
+| Downstream projects need pre-built runtime | `dist` branch with bundled artifacts | `git submodule update` pulls latest |
+| Extension repos get stale | Automatic dispatch + PR creation | gemini-prompts stays in sync |
+
+---
+
+## Quick Reference
+
+```bash
+# Check current version
+cd server && npm run validate:versions
+
+# Trigger a release
+gh workflow run release-please.yml
+
+# Force-update dist branch
+gh workflow run extension-publish.yml -f version=1.3.3
+
+# Sync downstream manually
+cd ../gemini-prompts && git submodule update --remote --merge
+```
+
+---
+
+## Distribution Architecture
+
+### Branch Strategy
+
+| Branch | Contains | Consumers |
+|--------|----------|-----------|
+| `main` | Full source, tests, CI, docs | Developers |
+| `dist` | Pre-built runtime only | Extensions via submodule |
+
+The `dist` branch is **force-pushed** after each release. No source code, no node_modules—just what's needed to run:
+
+```
+dist/
+├── .claude-plugin/plugin.json
+├── .mcp.json
+├── skills/
+├── hooks/
+└── server/
+    ├── dist/index.js          # ~4.5MB bundled runtime
+    ├── config.json
+    └── resources/             # prompts, gates, methodologies
+```
+
+### Downstream Consumers
+
+Both extension projects track `dist` as a git submodule:
+
+| Project | Submodule | Purpose |
+|---------|-----------|---------|
+| [gemini-prompts](https://github.com/minipuft/gemini-prompts) | `core/` → `origin/dist` | Gemini CLI extension |
+| [opencode-prompts](https://github.com/minipuft/opencode-prompts) | `core/` → `origin/dist` | OpenCode extension |
+
+```ini
+# .gitmodules (both projects)
+[submodule "core"]
+    path = core
+    url = https://github.com/minipuft/claude-prompts-mcp.git
+    branch = dist
+```
+
+**Why submodules?** No build step. Consumers run `git submodule update` and get the latest runtime instantly.
+
+---
 
 ## Workflow Chain
 
 ```
 Push to main
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│  release-please.yml                     │
-│  - Creates/updates Release PR           │
-│  - Bumps versions in:                   │
-│    • server/package.json                │
-│    • manifest.json                      │
-│    • .claude-plugin/plugin.json         │
-└─────────────────────────────────────────┘
-       │
-       │ (merge Release PR)
-       ▼
-┌─────────────────────────────────────────┐
-│  GitHub Release Created                 │
-│  - Tag: claude-prompts-v{version}       │
-│  - Triggers: release:published event    │
-└─────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│  npm-publish.yml                        │
-│  - Builds and tests                     │
-│  - Publishes to npm with provenance     │
-│  - Dispatches to gemini-prompts         │
-└─────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│  extension-publish.yml                  │
-│  - Builds desktop extension             │
-│  - Publishes dist branch (marketplace)  │
-│  - Uses dist runtime artifact handoff   │
-└─────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│  gemini-prompts/update-submodule.yml    │
-│  - Updates core submodule               │
-│  - Syncs version to gemini-extension    │
-│  - Creates PR in gemini-prompts repo    │
-└─────────────────────────────────────────┘
+     │
+     ▼
+┌────────────────────────────────────┐
+│  release-please.yml                │
+│  Creates Release PR, bumps:        │
+│  • server/package.json             │
+│  • manifest.json                   │
+│  • .claude-plugin/plugin.json      │
+└────────────────────────────────────┘
+     │ (merge PR)
+     ▼
+┌────────────────────────────────────┐
+│  GitHub Release                    │
+│  Tag: claude-prompts-v{version}    │
+└────────────────────────────────────┘
+     │
+     ▼
+┌────────────────────────────────────┐
+│  npm-publish.yml                   │
+│  • Publishes to npm with provenance│
+│  • Dispatches to gemini-prompts    │
+└────────────────────────────────────┘
+     │
+     ▼
+┌────────────────────────────────────┐
+│  extension-publish.yml             │
+│  • Builds desktop extension        │
+│  • Force-pushes dist branch        │
+└────────────────────────────────────┘
+     │
+     ▼
+┌────────────────────────────────────┐
+│  gemini-prompts/update-submodule   │
+│  • Updates core submodule          │
+│  • Creates sync PR                 │
+└────────────────────────────────────┘
 ```
 
-## Required Secrets
+---
 
-| Secret | Source | Purpose | Rotation |
-|--------|--------|---------|----------|
-| `RELEASE_PLEASE_TOKEN` | GitHub PAT | Create releases that trigger workflows | 2 years |
-| `DOWNSTREAM_PAT` | GitHub PAT (same) | Dispatch to gemini-prompts | 2 years |
-| `NPM_TOKEN` | npmjs.com | Publish to npm registry | 60 days |
-
-### Creating Tokens
-
-**GitHub PAT (Fine-grained):**
-1. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. Repository access: `claude-prompts` AND `gemini-prompts`
-3. Permissions:
-   - Contents: Read and write
-   - Pull requests: Read and write
-   - Actions: Read and write
-
-**npm Token:**
-1. npmjs.com → Access Tokens → Generate New Token
-2. Type: Automation
-3. Copy immediately (cannot be retrieved later)
-
-### Setting Secrets
-
-```bash
-# Same GitHub PAT for both
-gh secret set RELEASE_PLEASE_TOKEN -R minipuft/claude-prompts
-gh secret set DOWNSTREAM_PAT -R minipuft/claude-prompts
-
-# npm token
-gh secret set NPM_TOKEN -R minipuft/claude-prompts
-```
-
-### Checking Secrets
-
-```bash
-gh secret list --repo minipuft/claude-prompts
-```
-
-## Configuration Files
+## Configuration
 
 | File | Purpose |
 |------|---------|
-| `release-please-config.json` | Release-please settings, extra-files to version |
-| `.release-please-manifest.json` | Current version tracker |
-| `.github/workflows/release-please.yml` | Release PR creation |
-| `.github/workflows/npm-publish.yml` | npm publishing + downstream dispatch |
-| `.github/workflows/extension-publish.yml` | Desktop extension build + dist branch publish |
+| `release-please-config.json` | Version bump settings, extra-files |
+| `.release-please-manifest.json` | Current version state |
+| `.github/workflows/release-please.yml` | Release PR automation |
+| `.github/workflows/npm-publish.yml` | npm + downstream dispatch |
+| `.github/workflows/extension-publish.yml` | dist branch + desktop extension |
+
+---
+
+## Secrets
+
+| Secret | Source | Purpose |
+|--------|--------|---------|
+| `RELEASE_PLEASE_TOKEN` | GitHub PAT | Create releases that trigger workflows |
+| `DOWNSTREAM_PAT` | GitHub PAT | Dispatch to gemini-prompts |
+| `NPM_TOKEN` | npmjs.com | Publish to registry |
+
+### Setup
+
+```bash
+# GitHub PAT (fine-grained, repos: claude-prompts + gemini-prompts)
+# Permissions: Contents, Pull requests, Actions (read/write)
+gh secret set RELEASE_PLEASE_TOKEN
+gh secret set DOWNSTREAM_PAT
+
+# npm automation token
+gh secret set NPM_TOKEN
+```
+
+---
 
 ## Manual Operations
 
-### Trigger Release Manually
+### Trigger Release
 
 ```bash
-gh workflow run release-please.yml --repo minipuft/claude-prompts
-# Outcome: release PR opened/updated
+gh workflow run release-please.yml
+# → Opens/updates release PR
 ```
 
-### Create Release Without release-please
+### Create Release Without Automation
 
 ```bash
-# Tag and release manually
-git tag claude-prompts-v1.2.0
-git push origin claude-prompts-v1.2.0
-gh release create claude-prompts-v1.2.0 --title "v1.2.0" --notes "See CHANGELOG.md"
-# Outcome: release published, extension-publish.yml can run
+git tag claude-prompts-v1.3.3
+git push origin claude-prompts-v1.3.3
+gh release create claude-prompts-v1.3.3 --title "v1.3.3" --notes "See CHANGELOG.md"
+# → Triggers npm-publish and extension-publish
 ```
 
-### Publish dist Branch Manually
+### Force-Update dist Branch
 
 ```bash
-# Triggers dist publish + desktop extension build
-gh workflow run extension-publish.yml --repo minipuft/claude-prompts -f version=1.3.1
-# Outcome: dist branch updated
+gh workflow run extension-publish.yml -f version=1.3.3
+# → Rebuilds and force-pushes dist
 ```
 
 ### Sync Submodule Manually
 
 ```bash
-# In gemini-prompts repo
+# In gemini-prompts or opencode-prompts
 git submodule update --remote --merge
 git add core
 git commit -m "chore: update core submodule"
 git push
 ```
 
+---
+
 ## Troubleshooting
 
-### release-please fails with "illegal pathing characters"
+### release-please fails: "illegal pathing characters"
 
-The `extra-files` paths cannot use `../`. Use root-level `extra-files` config instead of package-level.
+`extra-files` paths can't use `../`. Put them at root level:
 
-**Wrong:**
 ```json
-{
-  "packages": {
-    "server": {
-      "extra-files": [{"path": "../manifest.json"}]  // ❌
-    }
-  }
-}
+// ❌ Wrong
+{ "packages": { "server": { "extra-files": [{"path": "../manifest.json"}] }}}
+
+// ✅ Correct
+{ "packages": { "server": {} }, "extra-files": [{"path": "manifest.json"}] }
 ```
 
-**Correct:**
-```json
-{
-  "packages": { "server": { ... } },
-  "extra-files": [{"path": "manifest.json"}]  // ✅ Root-level
-}
-```
+### npm-publish doesn't trigger
 
-### npm-publish doesn't trigger after release
+`GITHUB_TOKEN` can't trigger cross-workflow events. Verify `RELEASE_PLEASE_TOKEN` is set.
 
-Check that `RELEASE_PLEASE_TOKEN` is set. The default `GITHUB_TOKEN` cannot trigger cross-workflow events.
+### Submodule not updating
 
-### gemini-prompts submodule not updating
+1. Check `DOWNSTREAM_PAT` has gemini-prompts access
+2. Check Actions tab in gemini-prompts for failures
+3. Manual fix: `git submodule update --remote --merge`
 
-1. Verify `DOWNSTREAM_PAT` has access to gemini-prompts repo
-2. Check Actions tab in gemini-prompts for failed runs
-3. Manual sync: `git submodule update --remote --merge`
+### dist branch stale or invalid
 
-### dist branch missing or stale
+1. Verify `extension-publish.yml` succeeded
+2. Check `dist` branch has `server/dist/index.js`
+3. Re-run: `gh workflow run extension-publish.yml -f version=X.Y.Z`
+4. If dist contains `.github/` or `docs/`, validation failed—check workflow logs
 
-1. Confirm `extension-publish.yml` ran and succeeded
-2. Verify `dist` branch exists and includes `server/dist/index.js`
-3. Re-run the workflow with `version` input
-4. If dist still contains `.github` or `docs/`, the dist publish step failed validation
+### Version mismatch
 
-### Version mismatch between files
-
-Run version validation:
 ```bash
 cd server && npm run validate:versions
 ```
 
-Files that should have matching versions:
+Files that must match:
 - `server/package.json`
 - `manifest.json`
 - `.claude-plugin/plugin.json`
-- `gemini-prompts/gemini-extension.json` (after submodule sync)
+- `gemini-prompts/gemini-extension.json` (after sync)
