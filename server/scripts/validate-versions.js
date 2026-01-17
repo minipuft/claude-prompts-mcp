@@ -138,51 +138,13 @@ const distributionChecks = [
     validate: (data) => assertVersion('Gemini extension', data.version),
   },
   {
-    label: 'gemini-prompts core manifest',
-    url: 'https://raw.githubusercontent.com/minipuft/gemini-prompts/main/core/manifest.json',
-    validate: (data) => assertVersion('Gemini core manifest', data.version),
-  },
-  {
-    label: 'gemini-prompts core server package',
-    url: 'https://raw.githubusercontent.com/minipuft/gemini-prompts/main/core/server/package.json',
-    validate: (data) => assertVersion('Gemini core server package', data.version),
-  },
-  {
-    label: 'gemini-prompts core package',
-    url: 'https://raw.githubusercontent.com/minipuft/gemini-prompts/main/core/package.json',
-    validate: (data) => assertVersion('Gemini core package', data.version),
-  },
-  {
-    label: 'gemini-prompts release manifest',
-    url: 'https://raw.githubusercontent.com/minipuft/gemini-prompts/main/core/.release-please-manifest.json',
-    validate: (data) => {
-      const version = data.server || data['.'];
-      assertVersion('Gemini release manifest', version);
-    },
-  },
-  {
-    label: 'opencode-prompts package',
+    label: 'opencode-prompts package.json',
     url: 'https://raw.githubusercontent.com/minipuft/opencode-prompts/main/package.json',
     validate: (data) => assertVersion('OpenCode package', data.version),
   },
   {
-    label: 'opencode-prompts core manifest',
-    url: 'https://raw.githubusercontent.com/minipuft/opencode-prompts/main/core/manifest.json',
-    validate: (data) => assertVersion('OpenCode core manifest', data.version),
-  },
-  {
-    label: 'opencode-prompts core server package',
-    url: 'https://raw.githubusercontent.com/minipuft/opencode-prompts/main/core/server/package.json',
-    validate: (data) => assertVersion('OpenCode core server package', data.version),
-  },
-  {
-    label: 'opencode-prompts core package',
-    url: 'https://raw.githubusercontent.com/minipuft/opencode-prompts/main/core/package.json',
-    validate: (data) => assertVersion('OpenCode core package', data.version),
-  },
-  {
     label: 'opencode-prompts release manifest',
-    url: 'https://raw.githubusercontent.com/minipuft/opencode-prompts/main/core/.release-please-manifest.json',
+    url: 'https://raw.githubusercontent.com/minipuft/opencode-prompts/main/.release-please-manifest.json',
     validate: (data) => {
       const version = data.server || data['.'];
       assertVersion('OpenCode release manifest', version);
