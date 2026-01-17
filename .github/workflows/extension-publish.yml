@@ -240,6 +240,29 @@ jobs:
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "chore: publish dist ${{ needs.plugin-dist.outputs.version }}"
           git push origin dist --force
 
+  validate-distribution:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
+    needs: publish-dist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Validate distribution versions
+        working-directory: server
+        run: node scripts/validate-versions.js --distribution --skip-npm
+
   # Build Claude Code plugin archive (manual only)
   claude-code-plugin:
     if: github.event_name == 'workflow_dispatch'

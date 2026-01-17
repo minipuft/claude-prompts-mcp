@@ -63,6 +63,10 @@ jobs:
             exit 1
           fi
 
+      - name: Validate distribution versions
+        working-directory: server
+        run: node scripts/validate-versions.js --distribution
+
       - name: Install
         working-directory: server
         run: npm ci
