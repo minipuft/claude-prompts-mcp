@@ -7,6 +7,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-01-18
+
+### Added
+
+- **Hooks included in npm package**: Python hooks are now bundled with the npm package at `hooks/`. This enables downstream projects (opencode-prompts, gemini-prompts) to use npm dependencies instead of git submodules.
+  - Includes: `prompt-suggest.py`, `post-prompt-engine.py`, `pre-compact.py`, `dev-sync.py`, and shared `lib/` utilities
+  - Hooks are copied during `npm pack` via prepack script
+  - `__pycache__` and `.pyc` files are excluded
+
 ## [1.2.0] - 2026-01-10
 
 ### Added

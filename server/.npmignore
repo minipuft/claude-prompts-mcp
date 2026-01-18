@@ -42,3 +42,8 @@ graphs/
 .vscode/
 .cursor/
 .claude/
+
+# Python cache (for hooks)
+__pycache__/
+*.pyc
+*.pyo

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-01-14T06:52:39.327Z",
+  "generatedAt": "2026-01-18T13:01:02.666Z",
   "eslintTarget": "src",
   "totals": {
-    "errors": 3717,
+    "errors": 3710,
     "warnings": 1070
   },
   "byRule": {
@@ -20,7 +20,7 @@
       "warnings": 0
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2354,
+      "errors": 2347,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
@@ -36,7 +36,7 @@
       "warnings": 0
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 447,
+      "errors": 445,
       "warnings": 0
     },
     "@typescript-eslint/no-floating-promises": {
@@ -64,12 +64,16 @@
       "warnings": 0
     },
     "claude/require-file-lifecycle": {
-      "errors": 1,
+      "errors": 2,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
       "warnings": 55
+    },
+    "prettier/prettier": {
+      "errors": 1,
+      "warnings": 0
     },
     "no-useless-escape": {
       "errors": 4,
