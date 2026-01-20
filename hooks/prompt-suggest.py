@@ -303,6 +303,33 @@ def format_chain_step_args(
     return lines
 
 
+def format_chain_preview(prompt_info: dict | None) -> list[str]:
+    """
+    Format a chain preview showing all steps before execution.
+
+    Args:
+        prompt_info: Prompt metadata from cache (may be None)
+
+    Returns:
+        Lines for chain preview, or empty list if not a chain
+    """
+    if not prompt_info or not prompt_info.get("is_chain"):
+        return []
+
+    step_names = prompt_info.get("chain_step_names") or []
+    total_steps = prompt_info.get("chain_steps", 0)
+
+    if not step_names:
+        # Fallback: no step names in cache (backwards compat)
+        return [f"[Chain Workflow] {total_steps} steps"]
+
+    lines = [f"[Chain Workflow] {total_steps} steps:"]
+    for i, name in enumerate(step_names, 1):
+        lines.append(f"  {i}. {name}")
+
+    return lines
+
+
 def format_tool_call(prompt_id: str, info: dict) -> str:
     """Generate a copy-paste ready tool call."""
     args = info.get("arguments", [])
@@ -335,6 +362,7 @@ def format_user_message(
     operators: dict[str, list[str]],
     arguments: dict[str, str] | None = None,
     expanded: bool = False,
+    prompt_info: dict | None = None,
 ) -> str:
     """
     Format user-visible confirmation message.
@@ -345,6 +373,7 @@ def format_user_message(
         operators: Detected operators dict
         arguments: Prompt arguments with types (from format_arguments)
         expanded: If True, show detailed multi-line output
+        prompt_info: Prompt metadata from cache (for chain preview)
 
     Returns:
         Compact: "[>>] deep_analysis | content:'foo'"
@@ -355,7 +384,7 @@ def format_user_message(
     prompt_id = match.group(1) if match else command
 
     if expanded:
-        return _format_expanded_message(prompt_id, command, parsed_args, operators, arguments)
+        return _format_expanded_message(prompt_id, command, parsed_args, operators, arguments, prompt_info)
 
     # Compact mode (default)
     parts = [f"[>>] {prompt_id}"]
@@ -381,7 +410,14 @@ def format_user_message(
     if op_indicators:
         parts.append(" [" + ", ".join(op_indicators) + "]")
 
-    return "".join(parts)
+    base_message = "".join(parts)
+
+    # Add chain preview for chain prompts (shows workflow upfront)
+    chain_preview = format_chain_preview(prompt_info)
+    if chain_preview:
+        return base_message + "\n" + "\n".join(chain_preview)
+
+    return base_message
 
 
 def _format_expanded_message(
@@ -390,11 +426,17 @@ def _format_expanded_message(
     parsed_args: dict[str, str],
     operators: dict[str, list[str]],
     arguments: dict[str, str] | None = None,
+    prompt_info: dict | None = None,
 ) -> str:
     """
     Format expanded multi-line user message with full details.
     """
     lines = [f"[MCP] >>{prompt_id}"]
+
+    # Add chain workflow preview for chain prompts
+    chain_preview = format_chain_preview(prompt_info)
+    if chain_preview:
+        lines.extend(chain_preview)
 
     # Show operators with descriptions
     if operators:
@@ -432,6 +474,7 @@ def format_directive(
     required_args: list[str],
     operators: dict[str, list[str]],
     arguments: dict[str, str] | None = None,
+    prompt_info: dict | None = None,
 ) -> str:
     """
     Format structured directive for Claude.
@@ -442,11 +485,19 @@ def format_directive(
         required_args: Required args not yet provided
         operators: Detected operators dict
         arguments: Prompt arguments with types (from format_arguments)
+        prompt_info: Prompt metadata from cache (for chain workflow context)
 
     Returns:
         Structured directive string for additionalContext
     """
     lines = [f"[TOOL:prompt_engine] {command}"]
+
+    # Add chain workflow context for Claude (shows full workflow upfront)
+    if prompt_info and prompt_info.get("is_chain"):
+        step_names = prompt_info.get("chain_step_names") or []
+        if step_names:
+            lines.append(f"chain_workflow: {json.dumps(step_names)}")
+            lines.append("Execute steps sequentially. Wait for each step to complete before proceeding.")
 
     # Add detected operators if any
     if operators:
@@ -536,9 +587,14 @@ def main():
         command = user_message.strip()
 
         # Format outputs (check config for expanded mode)
+        # Pass prompt_info for chain workflow visibility
         expanded = is_expanded_output()
-        system_message = format_user_message(command, parsed_args, operators, arguments, expanded)
-        directive = format_directive(command, parsed_args, required_args, operators, arguments)
+        system_message = format_user_message(
+            command, parsed_args, operators, arguments, expanded, prompt_info
+        )
+        directive = format_directive(
+            command, parsed_args, required_args, operators, arguments, prompt_info
+        )
 
         hook_response = {
             "systemMessage": system_message,  # Compact user confirmation

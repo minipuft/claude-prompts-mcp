@@ -27,6 +27,7 @@ class PromptInfo(TypedDict):
     description: str
     is_chain: bool
     chain_steps: int
+    chain_step_names: list[str] | None
     arguments: list[ArgumentInfo]
     gates: list[str]
     keywords: list[str]
@@ -201,3 +202,16 @@ def get_single_prompts_only(cache: dict | None = None) -> dict[str, PromptInfo]:
     """Get only single (non-chain) prompts from cache."""
     prompts = get_all_prompts(cache)
     return {k: v for k, v in prompts.items() if not v.get("is_chain")}
+
+
+def get_chain_step_names(prompt_id: str, cache: dict | None = None) -> list[str]:
+    """
+    Get step names for a chain prompt.
+
+    Returns:
+        List of step names if prompt is a chain, empty list otherwise.
+    """
+    info = get_prompt_by_id(prompt_id, cache)
+    if not info or not info.get("is_chain"):
+        return []
+    return info.get("chain_step_names") or []
