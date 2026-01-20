@@ -57,7 +57,7 @@ export class ResourceLoader {
       const fileStat = await stat(filePath);
       const cached = this.cache.get(filePath);
 
-      if (useCache && cached && cached.mtimeMs === fileStat.mtimeMs) {
+      if (useCache && cached?.mtimeMs === fileStat.mtimeMs) {
         return {
           success: true,
           data: cached.data as T,

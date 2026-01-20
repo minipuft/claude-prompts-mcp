@@ -58,8 +58,6 @@ export class ExecutionPlanner {
   private gateLoader: GateDefinitionProvider | undefined;
   private gateManager: GateManager | undefined;
   private readonly categoryExtractor: CategoryExtractor;
-  /** Cached methodology gate IDs loaded from GateLoader */
-  private methodologyGateIdsCache: Set<string> | null = null;
 
   constructor(
     private readonly semanticAnalyzer: SemanticAnalyzerLike | null,
@@ -74,8 +72,6 @@ export class ExecutionPlanner {
 
   setGateLoader(loader?: GateDefinitionProvider): void {
     this.gateLoader = loader;
-    // Invalidate cache when loader changes
-    this.methodologyGateIdsCache = null;
   }
 
   /**
@@ -87,14 +83,10 @@ export class ExecutionPlanner {
   }
 
   /**
-   * Get methodology gate IDs dynamically from GateLoader.
-   * Caches the result to avoid repeated disk reads.
+   * Load methodology gate IDs from GateLoader.
+   * Returns fresh data each call - GateLoader handles hot-reload internally.
    */
-  private async getMethodologyGateIds(): Promise<Set<string>> {
-    if (this.methodologyGateIdsCache) {
-      return this.methodologyGateIdsCache;
-    }
-
+  private async loadMethodologyGateIds(): Promise<Set<string>> {
     if (!this.gateLoader) {
       this.logger.debug(
         '[ExecutionPlanner] No GateLoader available for methodology gate detection'
@@ -104,8 +96,7 @@ export class ExecutionPlanner {
 
     try {
       const ids = await this.gateLoader.getMethodologyGateIds();
-      this.methodologyGateIdsCache = new Set(ids);
-      return this.methodologyGateIdsCache;
+      return new Set(ids);
     } catch (error) {
       this.logger.warn('[ExecutionPlanner] Failed to load methodology gate IDs', { error });
       return new Set();
@@ -164,7 +155,7 @@ export class ExecutionPlanner {
 
     // Filter methodology gates if framework_gates is explicitly disabled
     if (convertedPrompt.enhancedGateConfiguration?.framework_gates === false) {
-      const methodologyGateIds = await this.getMethodologyGateIds();
+      const methodologyGateIds = await this.loadMethodologyGateIds();
       methodologyGateIds.forEach((gateId: string) => mergedGates.delete(gateId));
     }
 

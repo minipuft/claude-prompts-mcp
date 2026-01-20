@@ -21,6 +21,7 @@ export interface CommandParseResultBase<TOperators = unknown, TPlan = unknown> {
     detectedFormat: string;
     warnings: string[];
     prefixesNormalized?: boolean;
+    repetitionExpanded?: boolean;
     modifierToken?: ExecutionModifier;
   };
   operators?: TOperators;

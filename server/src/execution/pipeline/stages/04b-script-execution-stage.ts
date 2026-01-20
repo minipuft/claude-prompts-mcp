@@ -155,33 +155,31 @@ export class ScriptExecutionStage extends BasePipelineStage {
       scriptResults
     );
 
-    // Store results in pipeline state
-    const scriptsState: NonNullable<typeof context.state.scripts> = {
-      results: scriptResults,
-    };
+    // Store results in pipeline state using centralized initialization
+    const scripts = context.ensureScriptState();
+    scripts.results = scriptResults;
     if (toolsSkipped.length > 0) {
-      scriptsState.toolsSkipped = toolsSkipped;
+      scripts.toolsSkipped = toolsSkipped;
     }
     if (toolsPendingConfirmation.length > 0) {
-      scriptsState.toolsPendingConfirmation = toolsPendingConfirmation;
+      scripts.toolsPendingConfirmation = toolsPendingConfirmation;
     }
     if (filterResult.requiresConfirmation) {
-      scriptsState.confirmationRequired = this.executionModeService.buildConfirmationResponse(
+      scripts.confirmationRequired = this.executionModeService.buildConfirmationResponse(
         filterResult,
         prompt.id
       );
     }
     // Store validation state
     if (validationErrors.length > 0) {
-      scriptsState.validationErrors = validationErrors;
+      scripts.validationErrors = validationErrors;
     }
     if (validationWarnings.length > 0) {
-      scriptsState.validationWarnings = validationWarnings;
+      scripts.validationWarnings = validationWarnings;
     }
     if (autoApprovedTools.length > 0) {
-      scriptsState.autoApprovedTools = autoApprovedTools;
+      scripts.autoApprovedTools = autoApprovedTools;
     }
-    context.state.scripts = scriptsState;
 
     this.logExit({
       executed: scriptResults.size,

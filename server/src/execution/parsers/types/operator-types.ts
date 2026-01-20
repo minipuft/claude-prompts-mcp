@@ -103,13 +103,30 @@ export interface ConditionalOperator {
   falseBranch?: string;
 }
 
+/**
+ * Repetition operator - chain shorthand for executing a prompt N times.
+ *
+ * `>>prompt * 3` unfolds to `>>prompt --> >>prompt --> >>prompt`
+ *
+ * Combines naturally with other operators:
+ * - `@CAGEERF >>analyze * 3` - Framework applies to each iteration
+ * - `>>step1 * 2 --> >>step2` - Repeat step1, then chain to step2
+ * - `>>prompt * 5 :: 'validate'` - Gate validates final result
+ */
+export interface RepetitionOperator {
+  type: 'repetition';
+  /** Number of times to execute (unfolds to chain steps) */
+  count: number;
+}
+
 export type SymbolicOperator =
   | ChainOperator
   | GateOperator
   | FrameworkOperator
   | ParallelOperator
   | ConditionalOperator
-  | StyleOperator;
+  | StyleOperator
+  | RepetitionOperator;
 
 export interface OperatorDetectionResult {
   hasOperators: boolean;

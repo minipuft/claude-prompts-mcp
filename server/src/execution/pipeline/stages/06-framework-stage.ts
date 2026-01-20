@@ -26,8 +26,12 @@ type FrameworkEnabledProvider = () => boolean;
  */
 export class FrameworkResolutionStage extends BasePipelineStage {
   readonly name = 'FrameworkResolution';
-  /** Cached methodology gate IDs loaded from GateLoader */
-  private methodologyGateIdsCache: Set<string> | null = null;
+
+  /**
+   * Request-scoped methodology gate IDs (set during execute, used synchronously within).
+   * Reset to null after execute completes to prevent stale data across requests.
+   */
+  private currentRequestMethodologyGates: Set<string> | null = null;
 
   constructor(
     private readonly frameworkManager: FrameworkManager,
@@ -39,14 +43,10 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   }
 
   /**
-   * Get methodology gate IDs dynamically from GateLoader.
-   * Caches the result to avoid repeated disk reads.
+   * Load methodology gate IDs from GateLoader for the current request.
+   * Returns fresh data each call - GateLoader handles hot-reload internally.
    */
-  private async getMethodologyGateIds(): Promise<Set<string>> {
-    if (this.methodologyGateIdsCache) {
-      return this.methodologyGateIdsCache;
-    }
-
+  private async loadMethodologyGateIds(): Promise<Set<string>> {
     if (!this.gateLoader) {
       this.logger.debug(
         '[FrameworkResolutionStage] No GateLoader available for methodology gate detection'
@@ -56,8 +56,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
 
     try {
       const ids = await this.gateLoader.getMethodologyGateIds();
-      this.methodologyGateIdsCache = new Set(ids);
-      return this.methodologyGateIdsCache;
+      return new Set(ids);
     } catch (error) {
       this.logger.warn('[FrameworkResolutionStage] Failed to load methodology gate IDs', { error });
       return new Set();
@@ -67,8 +66,8 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    // Initialize methodology gate IDs cache for dynamic checks
-    await this.getMethodologyGateIds();
+    // Load fresh methodology gate IDs for this request (prevents stale cache after hot-reload)
+    this.currentRequestMethodologyGates = await this.loadMethodologyGateIds();
 
     if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
@@ -343,7 +342,8 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   }
 
   /**
-   * Check if any gates in the array are methodology gates (synchronous check using cache).
+   * Check if any gates in the array are methodology gates.
+   * Uses request-scoped data loaded at start of execute().
    */
   private hasMethodologyGate(gates?: readonly string[] | null): boolean {
     if (!Array.isArray(gates)) {
@@ -351,7 +351,8 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     }
 
     return gates.some(
-      (gateId) => Boolean(gateId) && (this.methodologyGateIdsCache?.has(gateId as string) ?? false)
+      (gateId) =>
+        Boolean(gateId) && (this.currentRequestMethodologyGates?.has(gateId as string) ?? false)
     );
   }
 }

@@ -172,7 +172,8 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     }
 
     if (registeredIds.length > 0) {
-      const existing = context.state.gates.registeredInlineGateIds ?? [];
+      // registeredInlineGateIds is always initialized in ExecutionContext
+      const existing = context.state.gates.registeredInlineGateIds;
       context.state.gates.registeredInlineGateIds = Array.from(
         new Set([...existing, ...registeredIds])
       );

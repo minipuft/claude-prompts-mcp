@@ -107,8 +107,12 @@ export class GateEnhancementStage extends BasePipelineStage {
   readonly name = 'GateEnhancement';
   private readonly metricsProvider?: () => MetricsCollector | undefined;
   private readonly gatesConfigProvider?: GatesConfigProvider;
-  /** Cached methodology gate IDs loaded from GateLoader */
-  private methodologyGateIdsCache: Set<string> | null = null;
+
+  /**
+   * Request-scoped methodology gate IDs (set during execute, used synchronously within).
+   * Loaded fresh each request to prevent stale data after hot-reload.
+   */
+  private currentRequestMethodologyGates: Set<string> | null = null;
 
   constructor(
     private readonly gateService: IGateService | null,
@@ -132,14 +136,10 @@ export class GateEnhancementStage extends BasePipelineStage {
   }
 
   /**
-   * Get methodology gate IDs dynamically from GateLoader.
-   * Caches the result to avoid repeated disk reads.
+   * Load methodology gate IDs from GateLoader for the current request.
+   * Returns fresh data each call - GateLoader handles hot-reload internally.
    */
-  private async getMethodologyGateIds(): Promise<Set<string>> {
-    if (this.methodologyGateIdsCache) {
-      return this.methodologyGateIdsCache;
-    }
-
+  private async loadMethodologyGateIds(): Promise<Set<string>> {
     if (!this.gateLoader) {
       this.logger.debug(
         '[GateEnhancementStage] No GateLoader available for methodology gate detection'
@@ -149,8 +149,7 @@ export class GateEnhancementStage extends BasePipelineStage {
 
     try {
       const ids = await this.gateLoader.getMethodologyGateIds();
-      this.methodologyGateIdsCache = new Set(ids);
-      return this.methodologyGateIdsCache;
+      return new Set(ids);
     } catch (error) {
       this.logger.warn('[GateEnhancementStage] Failed to load methodology gate IDs', { error });
       return new Set();
@@ -158,19 +157,11 @@ export class GateEnhancementStage extends BasePipelineStage {
   }
 
   /**
-   * Check if a gate ID is a methodology gate (synchronous check using cache).
+   * Check if a gate ID is a methodology gate.
+   * Uses request-scoped data loaded at start of execute().
    */
   private isMethodologyGate(gateId: string): boolean {
-    return this.methodologyGateIdsCache?.has(gateId) ?? false;
-  }
-
-  /**
-   * Clear the methodology gate cache.
-   * Should be called when gates are hot-reloaded to ensure fresh data.
-   */
-  public clearMethodologyCache(): void {
-    this.methodologyGateIdsCache = null;
-    this.logger.debug('[GateEnhancementStage] Methodology gate cache cleared');
+    return this.currentRequestMethodologyGates?.has(gateId) ?? false;
   }
 
   /**
@@ -403,8 +394,8 @@ export class GateEnhancementStage extends BasePipelineStage {
       return;
     }
 
-    // Initialize methodology gate IDs cache for dynamic filtering
-    await this.getMethodologyGateIds();
+    // Load fresh methodology gate IDs for this request (prevents stale cache after hot-reload)
+    this.currentRequestMethodologyGates = await this.loadMethodologyGateIds();
 
     const registeredGates = await this.registerTemporaryGates(context);
 
@@ -1033,6 +1024,27 @@ export class GateEnhancementStage extends BasePipelineStage {
   }
 
   /**
+   * Resolve effective guidance for a gate using fallback chain.
+   * Priority: explicit guidance → criteria-derived → description
+   *
+   * @param gate - Normalized gate input
+   * @param criteria - Array of criteria strings
+   * @returns Resolved guidance string, or empty string if none available
+   */
+  private resolveGateGuidance(gate: NormalizedGateInput, criteria: string[]): string {
+    if (gate.guidance) {
+      return gate.guidance;
+    }
+    if (criteria.length > 0) {
+      return formatCriteriaAsGuidance(criteria);
+    }
+    if (gate.description) {
+      return gate.description;
+    }
+    return '';
+  }
+
+  /**
    * Register temporary gates from normalized gate specifications.
    * Uses unified 'gates' parameter (already normalized from legacy parameters).
    */
@@ -1174,22 +1186,17 @@ export class GateEnhancementStage extends BasePipelineStage {
         }
         seenGateSignatures.add(gateSignature);
 
-        let effectiveGuidance = gate.guidance || '';
+        // Use centralized guidance resolution
+        const effectiveGuidance = this.resolveGateGuidance(gate, criteriaArray);
 
-        if (!effectiveGuidance && criteriaArray.length > 0) {
-          effectiveGuidance = formatCriteriaAsGuidance(criteriaArray);
-          this.logger.debug('[GateEnhancementStage] Auto-generated guidance from criteria', {
-            criteriaCount: criteriaArray.length,
-            guidanceLength: effectiveGuidance.length,
-          });
-        } else if (!effectiveGuidance && gate.description) {
-          effectiveGuidance = gate.description;
-          this.logger.debug('[GateEnhancementStage] Using description as guidance', {
+        if (effectiveGuidance && !gate.guidance) {
+          this.logger.debug('[GateEnhancementStage] Resolved guidance from fallback', {
+            source: criteriaArray.length > 0 ? 'criteria' : 'description',
             guidanceLength: effectiveGuidance.length,
           });
         }
 
-        if (!effectiveGuidance && criteriaArray.length === 0 && !gate.description) {
+        if (!effectiveGuidance) {
           this.logger.warn(
             '[GateEnhancementStage] Skipping gate with no usable content (no guidance, criteria, or description)',
             { gate }

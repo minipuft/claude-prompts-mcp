@@ -42,6 +42,8 @@ export const prompt_engineParameters: ToolParameter[] = [
     examples: [
       "@CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'",
       ">>fix-bug :: verify:'npm test' :full loop:true",
+      ">>brainstorm * 5 topic:'product ideas'",
+      ">>strategicImplement * 3 plan_path:'./plan.md'",
     ],
     notes: [
       'Every step needs prompt ID prefix (>> or /). Modifiers apply to whole chain.',

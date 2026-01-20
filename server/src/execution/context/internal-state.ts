@@ -114,17 +114,17 @@ export interface PipelineInternalState {
     /** Call-to-action string returned by gate review */
     reviewCallToAction?: string;
     /** IDs of methodology-specific gates registered for this execution */
-    methodologyGateIds?: string[];
+    methodologyGateIds: string[];
     /** IDs of canonical gates that were resolved from temporary inputs */
-    canonicalGateIdsFromTemporary?: string[];
+    canonicalGateIdsFromTemporary: string[];
     /** IDs of inline gates registered during extraction */
-    registeredInlineGateIds?: string[];
+    registeredInlineGateIds: string[];
     /** Whether the gate retry limit has been exceeded */
     retryLimitExceeded?: boolean;
     /** Gate IDs that have exhausted their retry attempts */
     retryExhaustedGateIds?: string[];
     /** Advisory warnings from non-blocking gate failures */
-    advisoryWarnings?: string[];
+    advisoryWarnings: string[];
     /** Resolved enforcement mode for the current gate set (most restrictive wins) */
     enforcementMode?: GateEnforcementMode;
     /** Whether user choice is being awaited after retry exhaustion */
@@ -165,33 +165,48 @@ export interface PipelineInternalState {
    * State related to Script Tool Execution.
    * Holds results from script tools executed during pipeline processing.
    */
-  scripts?: {
-    /** Results from executed script tools, keyed by tool ID */
-    results?: Map<string, ScriptExecutionResult>;
-    /** Results from auto-executed MCP tools, keyed by script tool ID */
-    autoExecuteResults?: Map<string, ToolResponse>;
-    /** Tool IDs skipped due to mode: manual (without explicit request) */
-    toolsSkipped?: string[];
-    /** Tool IDs awaiting user confirmation (mode: confirm) */
-    toolsPendingConfirmation?: string[];
-    /** Structured confirmation response when tools require user approval */
-    confirmationRequired?: ConfirmationRequired;
-    /**
-     * Validation errors from script tools with autoApproveOnValid: true.
-     * When validation fails (valid: false), these errors are captured
-     * and the auto_execute is blocked.
-     */
-    validationErrors?: string[];
-    /**
-     * Validation warnings from script tools with autoApproveOnValid: true.
-     * When validation passes with warnings, these are captured and shown
-     * to the user while still proceeding with auto_execute.
-     */
-    validationWarnings?: string[];
-    /**
-     * Tool IDs that were auto-approved via autoApproveOnValid mechanism.
-     * Tracked for diagnostics and logging purposes.
-     */
-    autoApprovedTools?: string[];
-  };
+  scripts?: ScriptState;
+}
+
+/**
+ * Full script state with optional fields.
+ * Use InitializedScriptState when accessing via ensureScriptState().
+ */
+export interface ScriptState {
+  /** Results from executed script tools, keyed by tool ID */
+  results?: Map<string, ScriptExecutionResult>;
+  /** Results from auto-executed MCP tools, keyed by script tool ID */
+  autoExecuteResults?: Map<string, ToolResponse>;
+  /** Tool IDs skipped due to mode: manual (without explicit request) */
+  toolsSkipped?: string[];
+  /** Tool IDs awaiting user confirmation (mode: confirm) */
+  toolsPendingConfirmation?: string[];
+  /** Structured confirmation response when tools require user approval */
+  confirmationRequired?: ConfirmationRequired;
+  /**
+   * Validation errors from script tools with autoApproveOnValid: true.
+   * When validation fails (valid: false), these errors are captured
+   * and the auto_execute is blocked.
+   */
+  validationErrors?: string[];
+  /**
+   * Validation warnings from script tools with autoApproveOnValid: true.
+   * When validation passes with warnings, these are captured and shown
+   * to the user while still proceeding with auto_execute.
+   */
+  validationWarnings?: string[];
+  /**
+   * Tool IDs that were auto-approved via autoApproveOnValid mechanism.
+   * Tracked for diagnostics and logging purposes.
+   */
+  autoApprovedTools?: string[];
+}
+
+/**
+ * Script state after initialization via ensureScriptState().
+ * Guarantees results and autoExecuteResults Maps exist.
+ */
+export interface InitializedScriptState extends ScriptState {
+  results: Map<string, ScriptExecutionResult>;
+  autoExecuteResults: Map<string, ToolResponse>;
 }

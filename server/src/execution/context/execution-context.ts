@@ -4,7 +4,7 @@ import { DiagnosticAccumulator } from '../pipeline/state/accumulators/diagnostic
 import { GateAccumulator } from '../pipeline/state/accumulators/gate-accumulator.js';
 import { McpToolRequestValidator } from '../validation/request-validator.js';
 
-import type { PipelineInternalState } from './internal-state.js';
+import type { InitializedScriptState, PipelineInternalState } from './internal-state.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { Logger } from '../../logging/index.js';
 import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
@@ -138,6 +138,7 @@ export class ExecutionContext {
         methodologyGateIds: [],
         canonicalGateIdsFromTemporary: [],
         registeredInlineGateIds: [],
+        advisoryWarnings: [],
       },
     };
   }
@@ -257,6 +258,22 @@ export class ExecutionContext {
       throw new Error('ParsedCommand not available - CommandParsingStage not executed');
     }
     return this.parsedCommand;
+  }
+
+  /**
+   * Ensures script state is initialized and returns a typed reference.
+   * Guarantees results and autoExecuteResults Maps exist.
+   * Use this instead of `context.state.scripts ??= {}` to centralize initialization.
+   */
+  ensureScriptState(): InitializedScriptState {
+    if (!this.state.scripts) {
+      this.state.scripts = {
+        results: new Map(),
+        autoExecuteResults: new Map(),
+      };
+    }
+    // Type assertion is safe because we guarantee both maps are initialized
+    return this.state.scripts as InitializedScriptState;
   }
 
   /**

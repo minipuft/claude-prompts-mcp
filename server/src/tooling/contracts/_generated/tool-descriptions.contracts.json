@@ -1,10 +1,10 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-01-14T09:35:21.171Z",
+  "lastUpdated": "2026-01-18T12:35:23.259Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
-      "description": "🚀 PROMPT ENGINE: Execute prompts with methodology guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply methodology (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
+      "description": "🚀 PROMPT ENGINE: Execute prompts with methodology guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply methodology (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION: * N unfolds to chain (>>p * 3 = >>p --> >>p --> >>p)\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
       "shortDescription": "Execute prompts with validation and methodology",
       "category": "execution",
       "parameters": {

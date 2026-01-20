@@ -123,14 +123,12 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
         continue;
       }
 
+      // Get script state once (already initialized with autoExecuteResults by helper)
+      const scripts = context.ensureScriptState();
+
       try {
         const toolResult = await this.resourceManagerHandler(autoExecute.params, {});
-
-        // Initialize scripts and autoExecuteResults map if needed
-        context.state.scripts ??= {};
-        context.state.scripts.autoExecuteResults ??= new Map();
-
-        context.state.scripts.autoExecuteResults.set(toolId, toolResult);
+        scripts.autoExecuteResults.set(toolId, toolResult);
         autoExecuteCount++;
 
         context.diagnostics.info(this.name, `Auto-executed ${autoExecute.tool} for ${toolId}`, {
@@ -140,11 +138,7 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
         const message = error instanceof Error ? error.message : String(error);
         context.diagnostics.error(this.name, `Auto-execute failed for ${toolId}: ${message}`);
 
-        // Initialize scripts and store error result so template can access it
-        context.state.scripts ??= {};
-        context.state.scripts.autoExecuteResults ??= new Map();
-
-        context.state.scripts.autoExecuteResults.set(toolId, {
+        scripts.autoExecuteResults.set(toolId, {
           content: [{ type: 'text', text: `Auto-execute failed: ${message}` }],
           isError: true,
         });

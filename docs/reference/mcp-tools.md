@@ -78,9 +78,23 @@ prompt_engine(command:"@ReACT analysis --> synthesis --> report :: 'include data
 | ------------ | -------------- | -------------------------- | ---------------------------- |
 | Framework    | `@NAME`        | `@CAGEERF prompt`          | Apply methodology            |
 | Chain        | `-->`          | `step1 --> step2`          | Sequential execution         |
+| Repetition   | `* N`          | `>>prompt * 3`             | Chain shorthand (repeat N×)  |
 | Gate (anon)  | `:: "text"`    | `:: 'cite sources'`        | Anonymous quality criteria   |
 | Gate (named) | `:: id:"text"` | `:: security:"no secrets"` | Named gate with trackable ID |
 | Style        | `#id`          | `#analytical`              | Response formatting          |
+
+**Repetition examples:**
+
+```bash
+# Run brainstorm 5 times for diverse ideas
+prompt_engine(command:">>brainstorm * 5 topic:'startup ideas'")
+
+# Repeat step1 twice, then chain to step2
+prompt_engine(command:">>analyze * 2 --> >>summarize")
+
+# Execute implementation prompt for each phase in a plan
+prompt_engine(command:">>strategicImplement * 3 plan_path:'./plan.md'")
+```
 
 **Style examples:**
 

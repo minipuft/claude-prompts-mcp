@@ -29,7 +29,7 @@
     "inContextAttempts": 3,
     "isolation": {
       "enabled": true,
-      "maxBudget": 1.00,
+      "maxBudget": 1.0,
       "timeout": 300,
       "permissionMode": "delegate"
     }
@@ -43,6 +43,10 @@
 
   "execution": {
     "judge": true
+  },
+
+  "hooks": {
+    "expandedOutput": true
   },
 
   "logging": {

@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.4] - 2026-01-20
+
+### Added
+
+- Generate operator patterns from single source (TypeScript + Python via generate-operators.ts)
+- Add config_loader.py for hook configuration
+
+### Changed
+
+- Enhance symbolic-operator-parser with improved pattern matching
+- Refactor prompt-suggest hook with extended capabilities
+- Update pipeline stages for improved execution context handling
+- Move detect-skills.py to global ~/.claude/hooks (not plugin-bundled)
+
+## [1.4.3] - 2026-01-19
+
+### Added
+
+- Include hooks directory in npm package distribution
+
+## [1.4.2] - 2026-01-18
+
+### Changed
+
+- Migrate Gemini-specific hooks to gemini-prompts repository
+
+## [1.4.1] - 2026-01-17
+
+### Fixed
+
+- Remove submodule path checks from distribution validation
+
+## [1.4.0] - 2026-01-16
+
+### Added
+
+- Global version integrity check across ecosystem (npm, marketplace, extensions)
+
+### Changed
+
+- Migrate documentation guides to Diátaxis framework
+
 ## [1.3.2](https://github.com/minipuft/claude-prompts/compare/v1.3.1...v1.3.2) (2026-01-14)
 
 

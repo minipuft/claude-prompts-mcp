@@ -243,8 +243,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
               }
 
               case 'advisory': {
-                // Log warning but allow advancement
-                context.state.gates.advisoryWarnings ??= [];
+                // Log warning but allow advancement (advisoryWarnings initialized in ExecutionContext)
                 const gateIds = session.pendingGateReview.gateIds.join(', ');
                 context.state.gates.advisoryWarnings.push(
                   `Gate ${gateIds} failed: ${verdictPayload.rationale}`

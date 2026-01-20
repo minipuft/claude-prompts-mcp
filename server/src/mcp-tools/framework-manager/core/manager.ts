@@ -648,7 +648,7 @@ export class ConsolidatedFrameworkManager {
     const frameworkList = frameworks
       .map((fw) => {
         // Use id comparison only to avoid multiple frameworks showing as active
-        const isActive = activeFramework !== undefined && activeFramework.id === fw.id;
+        const isActive = activeFramework?.id === fw.id;
         const activeIndicator = isActive ? ' ← Active' : '';
         return `  🧭 ${fw.id}: ${fw.name}${activeIndicator}`;
       })

@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-UserPromptSubmit hook: Context injection for claude-prompts.
+UserPromptSubmit hook: Directive injection for claude-prompts.
 
-Detects and provides guidance for:
-- `>>prompt_id` - Prompt invocation with args, types, tool call
-- `>>a --> >>b` - Chain syntax with step info
-- `:: 'criteria'` - Inline gate syntax (reminds Claude of responsibility)
-- Active chain state - Shows current step, pending gates
+Detects >>syntax and operators, outputs:
+- systemMessage: Compact user confirmation
+- additionalContext: Structured directive for Claude
 
-Output: Rich context injected for Claude to act on.
+Architecture:
+- Layer 1: MCP-native prompts (via registerPrompt) - standard protocol
+- Layer 2: This hook - efficiency layer translating >>syntax to prompt_engine calls
+
+Operators detected (from contract):
+- `-->` chain, `::` gate, `@` framework, `#` style, `* N` repetition
 """
 
 import json
@@ -18,6 +21,7 @@ from pathlib import Path
 
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
+sys.path.insert(0, str(Path(__file__).parent / "lib" / "_generated"))
 
 from cache_manager import (
     load_prompts_cache,
@@ -26,6 +30,30 @@ from cache_manager import (
     get_chains_only,
 )
 from session_state import load_session_state, format_chain_reminder
+from config_loader import is_expanded_output
+
+# Import generated operator patterns (SSOT: server/tooling/contracts/operators.json)
+try:
+    from operators import detect_operator, detect_all_operators, OPERATORS
+    HAS_GENERATED_OPERATORS = True
+except ImportError:
+    HAS_GENERATED_OPERATORS = False
+    OPERATORS = {}
+
+def format_arguments(prompt_id: str, cache: dict) -> dict[str, str]:
+    """
+    Extract argument info from cached prompt metadata.
+
+    Returns dict of arg_name -> "type (required|optional)"
+    """
+    prompts = cache.get("prompts", {})
+    prompt = prompts.get(prompt_id, {})
+    args = prompt.get("arguments", [])
+    return {
+        arg.get("name", ""): f"{arg.get('type', 'string')} ({'required' if arg.get('required') else 'optional'})"
+        for arg in args
+        if isinstance(arg, dict) and arg.get("name")
+    }
 
 
 def parse_hook_input() -> dict:
@@ -45,10 +73,19 @@ def detect_prompt_invocation(message: str) -> str | None:
         >>deep_analysis -> "deep_analysis"
         >> code_review -> "code_review"
         >>research-comprehensive -> "research-comprehensive"
+        @CAGEERF >>analyze -> "analyze"
+        #analytical >>report -> "report"
     """
+    # Try exact start first
     match = re.match(r'^>>\s*([a-zA-Z0-9_-]+)', message.strip())
     if match:
         return match.group(1)
+
+    # Also check for >> after operators (@framework, #style)
+    match = re.search(r'>>\s*([a-zA-Z0-9_-]+)', message)
+    if match:
+        return match.group(1)
+
     return None
 
 
@@ -99,8 +136,11 @@ def detect_inline_gates(message: str) -> list[str]:
     Examples:
         :: 'must check security' -> ["must check security"]
         :: security-check -> ["security-check"]
+
+    Note: Always uses semantic extraction (not generated patterns) because
+    we need gate content, not the :: symbol itself.
     """
-    # Match :: 'quoted criteria' or :: gate_id
+    # Always use semantic patterns - generated pattern returns operator symbol too
     quoted_pattern = r'::\s*[\'"]([^\'"]+)[\'"]'
     id_pattern = r'::\s*([a-zA-Z][a-zA-Z0-9_-]*)\b'
 
@@ -108,6 +148,80 @@ def detect_inline_gates(message: str) -> list[str]:
     ids = re.findall(id_pattern, message)
 
     return quoted + ids
+
+
+def detect_framework(message: str) -> str | None:
+    """
+    Detect @FRAMEWORK syntax in message.
+    Returns the framework ID if found.
+
+    Examples:
+        @CAGEERF >>analyze -> "CAGEERF"
+        @ReACT >>debug -> "ReACT"
+    """
+    if HAS_GENERATED_OPERATORS:
+        matches = detect_operator(message, 'framework')
+        return matches[0] if matches else None
+
+    # Fallback: hardcoded pattern
+    match = re.search(r'(?:^|\s)@([A-Za-z0-9_-]+)(?=\s|$)', message)
+    return match.group(1) if match else None
+
+
+def detect_repetition(message: str) -> int | None:
+    """
+    Detect * N repetition syntax in message.
+    Returns the repetition count if found.
+
+    Examples:
+        >>prompt * 3 -> 3
+        >>analyze * 5 --> >>summarize -> 5
+    """
+    if HAS_GENERATED_OPERATORS:
+        matches = detect_operator(message, 'repetition')
+        return int(matches[0]) if matches else None
+
+    # Fallback: hardcoded pattern
+    match = re.search(r'\s+\*\s*(\d+)(?=\s|$|-->)', message)
+    return int(match.group(1)) if match else None
+
+
+def parse_inline_args(message: str) -> dict[str, str]:
+    """
+    Parse key:"value" or key:'value' argument patterns from message.
+    Only parses quoted values for safety (avoids misparsing URLs/special chars).
+
+    Examples:
+        >>prompt content:"hello world" -> {"content": "hello world"}
+        >>prompt scope:'global' limit:"10" -> {"scope": "global", "limit": "10"}
+    """
+    pattern = r'(\w+):["\']([^"\']+)["\']'
+    matches = re.findall(pattern, message)
+    return dict(matches)
+
+
+def get_required_args(prompt_info: dict | None, parsed_args: dict[str, str]) -> list[str]:
+    """
+    Get list of required arguments that haven't been provided.
+
+    Args:
+        prompt_info: Prompt metadata from cache (may be None)
+        parsed_args: Already parsed arguments from message
+
+    Returns:
+        List of required argument names not in parsed_args
+    """
+    if not prompt_info:
+        return []
+
+    args = prompt_info.get("arguments", [])
+    required = []
+    for arg in args:
+        if isinstance(arg, dict) and arg.get("required", False):
+            name = arg.get("name", "")
+            if name and name not in parsed_args:
+                required.append(name)
+    return required
 
 
 def get_chain_step_args(
@@ -215,6 +329,145 @@ def format_prompt_suggestion(prompt_id: str, info: dict, score: int = 0) -> str:
     return f"  >>{prompt_id}{chain_tag}: {desc}"
 
 
+def format_user_message(
+    command: str,
+    parsed_args: dict[str, str],
+    operators: dict[str, list[str]],
+    arguments: dict[str, str] | None = None,
+    expanded: bool = False,
+) -> str:
+    """
+    Format user-visible confirmation message.
+
+    Args:
+        command: The full command string (e.g., ">>deep_analysis" or "@CAGEERF >>analyze")
+        parsed_args: Parsed arguments from message
+        operators: Detected operators dict
+        arguments: Prompt arguments with types (from format_arguments)
+        expanded: If True, show detailed multi-line output
+
+    Returns:
+        Compact: "[>>] deep_analysis | content:'foo'"
+        Expanded: Multi-line with operators, arguments, and support info
+    """
+    # Extract prompt ID from command (handle @framework >>prompt syntax)
+    match = re.search(r'>>\s*([a-zA-Z0-9_-]+)', command)
+    prompt_id = match.group(1) if match else command
+
+    if expanded:
+        return _format_expanded_message(prompt_id, command, parsed_args, operators, arguments)
+
+    # Compact mode (default)
+    parts = [f"[>>] {prompt_id}"]
+
+    # Add parsed args
+    if parsed_args:
+        arg_strs = [f'{k}:"{v}"' for k, v in list(parsed_args.items())[:3]]
+        parts.append(" | " + ", ".join(arg_strs))
+
+    # Add operator indicators (compact)
+    op_indicators = []
+    if operators.get("chain"):
+        op_indicators.append(f"chain:{len(operators['chain'])}steps")
+    if operators.get("repetition"):
+        op_indicators.append(f"*{operators['repetition'][0]}")
+    if operators.get("framework"):
+        op_indicators.append(f"@{operators['framework'][0]}")
+    if operators.get("style"):
+        op_indicators.append(f"#{operators['style'][0]}")
+    if operators.get("gate"):
+        op_indicators.append(f"gates:{len(operators['gate'])}")
+
+    if op_indicators:
+        parts.append(" [" + ", ".join(op_indicators) + "]")
+
+    return "".join(parts)
+
+
+def _format_expanded_message(
+    prompt_id: str,
+    command: str,
+    parsed_args: dict[str, str],
+    operators: dict[str, list[str]],
+    arguments: dict[str, str] | None = None,
+) -> str:
+    """
+    Format expanded multi-line user message with full details.
+    """
+    lines = [f"[MCP] >>{prompt_id}"]
+
+    # Show operators with descriptions
+    if operators:
+        op_parts = []
+        if operators.get("chain"):
+            op_parts.append(f"chain ({len(operators['chain'])} steps)")
+        if operators.get("framework"):
+            op_parts.append(f"@{operators['framework'][0]}")
+        if operators.get("style"):
+            op_parts.append(f"#{operators['style'][0]}")
+        if operators.get("repetition"):
+            op_parts.append(f"repeat ×{operators['repetition'][0]}")
+        if operators.get("gate"):
+            gate_list = ", ".join(operators['gate'][:2])
+            op_parts.append(f"gates: {gate_list}")
+        if op_parts:
+            lines.append(f"  Operators: {' | '.join(op_parts)}")
+
+    # Show arguments with types (always show, even if empty)
+    arg_strs = [f"{k}: {v}" for k, v in list((arguments or {}).items())[:4]]
+    args_line = ', '.join(arg_strs) if arg_strs else "(none)"
+    lines.append(f"  Arguments: {args_line}")
+
+    # Show provided options
+    if parsed_args:
+        opt_strs = [f'{k}="{v}"' for k, v in list(parsed_args.items())[:3]]
+        lines.append(f"  Provided: {', '.join(opt_strs)}")
+
+    return "\n".join(lines)
+
+
+def format_directive(
+    command: str,
+    parsed_args: dict[str, str],
+    required_args: list[str],
+    operators: dict[str, list[str]],
+    arguments: dict[str, str] | None = None,
+) -> str:
+    """
+    Format structured directive for Claude.
+
+    Args:
+        command: The full command string
+        parsed_args: Parsed arguments from message
+        required_args: Required args not yet provided
+        operators: Detected operators dict
+        arguments: Prompt arguments with types (from format_arguments)
+
+    Returns:
+        Structured directive string for additionalContext
+    """
+    lines = [f"[TOOL:prompt_engine] {command}"]
+
+    # Add detected operators if any
+    if operators:
+        lines.append(f"operators: {json.dumps(operators)}")
+
+    # Add prompt arguments with types (always show)
+    lines.append(f"arguments: {json.dumps(arguments if arguments else {})}")
+
+    # Add parsed options
+    if parsed_args:
+        lines.append(f"options: {json.dumps(parsed_args)}")
+
+    # Add required args that are missing
+    if required_args:
+        lines.append(f"required: {json.dumps(required_args)}")
+
+    lines.append("Execute immediately.")
+
+    return "\n".join(lines)
+
+
 def main():
     hook_input = parse_hook_input()
 
@@ -232,96 +485,91 @@ def main():
         # No cache available - silent exit
         sys.exit(0)
 
+    # Check for direct prompt invocation (>>prompt_id) or chain syntax
+    invoked_prompt = detect_prompt_invocation(user_message)
+    chain_prompts = detect_chain_syntax(user_message)
+    is_prompt_invocation = invoked_prompt or (chain_prompts and len(chain_prompts) > 0)
+
+    if is_prompt_invocation:
+        # === DIRECTIVE MODE: >>syntax detected ===
+        # Generate split output: compact systemMessage + structured directive
+
+        # Detect operators - use semantic detection for chain/gate (need content),
+        # use generated patterns for framework/style/repetition (symbol detection OK)
+        operators: dict[str, list[str]] = {}
+
+        # Chain and gate ALWAYS use semantic extraction (need prompt IDs / gate criteria)
+        if chain_prompts and len(chain_prompts) > 1:
+            operators["chain"] = chain_prompts
+
+        inline_gates = detect_inline_gates(user_message)
+        if inline_gates:
+            operators["gate"] = inline_gates
+
+        # Framework, style, repetition use generated patterns when available
+        if HAS_GENERATED_OPERATORS:
+            for op_id in ['framework', 'style', 'repetition']:
+                matches = detect_operator(user_message, op_id)
+                if matches:
+                    operators[op_id] = matches
+        else:
+            # Fallback: manual detection for remaining operators
+            framework = detect_framework(user_message)
+            if framework:
+                operators["framework"] = [framework]
+            repetition = detect_repetition(user_message)
+            if repetition:
+                operators["repetition"] = [str(repetition)]
+
+        # Parse inline arguments (quoted only)
+        parsed_args = parse_inline_args(user_message)
+
+        # Get required args that are missing
+        prompt_info = get_prompt_by_id(invoked_prompt, cache) if invoked_prompt else None
+        required_args = get_required_args(prompt_info, parsed_args)
+
+        # Get argument type info for LLM guidance
+        arguments = format_arguments(invoked_prompt, cache) if invoked_prompt else None
+
+        # Use full message as command (server parses it)
+        # Preserve @framework, #style prefixes and all operators
+        command = user_message.strip()
+
+        # Format outputs (check config for expanded mode)
+        expanded = is_expanded_output()
+        system_message = format_user_message(command, parsed_args, operators, arguments, expanded)
+        directive = format_directive(command, parsed_args, required_args, operators, arguments)
+
+        hook_response = {
+            "systemMessage": system_message,  # Compact user confirmation
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": directive  # Structured directive for Claude
+            }
+        }
+        print(json.dumps(hook_response))
+        sys.exit(0)
+
+    # === INFORMATIONAL MODE: No >>syntax ===
+    # Fall back to suggestions/chain state (no tool directive)
     output_lines = []
-    chain_state_inline = ""
 
     # Check for active chain state from previous prompt_engine calls
     if session_id:
         session_state = load_session_state(session_id)
         if session_state:
             chain_state_inline = format_chain_reminder(session_state, mode="inline")
-
-    # Check for chain syntax FIRST (to avoid duplicate output with single prompt)
-    chain_prompts = detect_chain_syntax(user_message)
-    is_chain_invocation = chain_prompts and len(chain_prompts) > 1
-
-    # Check for direct prompt invocation (>>prompt_id)
-    # Skip if chain detected - chain output will show all prompts
-    invoked_prompt = detect_prompt_invocation(user_message)
-    if invoked_prompt and not is_chain_invocation:
-        # Look up the specific prompt
-        prompt_info = get_prompt_by_id(invoked_prompt, cache)
-
-        if prompt_info:
-            # Line 1: [MCP] >>id (category) | Step counter if active session
-            category = prompt_info.get("category", "unknown")
-            # Check for active session with step tracking
-            active_session = load_session_state(session_id) if session_id else None
-            if active_session and active_session.get("total_steps", 0) > 0:
-                current = active_session.get("current_step", 1)
-                total = active_session.get("total_steps", 0)
-                header = f"[MCP] >>{invoked_prompt} ({category}) | Step {current}/{total}"
-            else:
-                chain_tag = f" [{prompt_info.get('chain_steps', 0)} steps]" if prompt_info.get("is_chain") else ""
-                header = f"[MCP] >>{invoked_prompt} ({category}){chain_tag}"
-            output_lines.append(header)
-
-            # Line 2: Args OR chain continuation instruction
-            args = prompt_info.get("arguments", [])
-            if chain_state_inline and "\n" in chain_state_inline:
-                # Show continuation instruction from chain state
-                output_lines.append(chain_state_inline.split("\n")[1])
-            elif args:
-                if isinstance(args[0], dict):
-                    # Show descriptions for first 5 args (token-efficient)
-                    # Remaining args shown without description to keep output compact
-                    formatted = []
-                    for i, a in enumerate(args):
-                        include_desc = i < 5  # First 5 get descriptions
-                        formatted.append(format_arg_signature(a, include_desc))
-                    arg_str = ", ".join(formatted)
-                else:
-                    arg_str = ", ".join(args)
-                output_lines.append(f"  Args: {arg_str}")
-        else:
-            # Prompt not found - suggest similar
-            output_lines.append(f"[MCP Prompt Not Found] >>{invoked_prompt}")
-            matches = match_prompts_to_intent(invoked_prompt, cache, max_results=3)
-            if matches:
-                output_lines.append("Did you mean:")
-                for pid, pinfo, score in matches:
-                    output_lines.append(format_prompt_suggestion(pid, pinfo, score))
-
-    # Output chain info (already detected above)
-    if is_chain_invocation:
-        step_args = get_chain_step_args(chain_prompts, cache)
-        # Determine current step: 1 for new chains, or from session state
-        current_step = 1
-        if session_id:
-            active_session = load_session_state(session_id)
-            if active_session:
-                current_step = active_session.get("current_step", 1)
-        output_lines.extend(format_chain_step_args(step_args, current_step))
-
-    # Check for inline gate syntax
-    inline_gates = detect_inline_gates(user_message)
-    if inline_gates:
-        gates_str = " | ".join(g[:40] for g in inline_gates[:3])
-        output_lines.append(f"[Gates] {gates_str}")
-        output_lines.append("  Respond: GATE_REVIEW: PASS|FAIL - <reason>")
-
-    # If no prompt invoked but chain state exists, show it standalone
-    if chain_state_inline and not invoked_prompt and not chain_prompts:
-        output_lines.append(chain_state_inline)
+            if chain_state_inline:
+                output_lines.append(chain_state_inline)
 
     # Check for explicit suggestion request
-    elif detect_explicit_request(user_message) and not invoked_prompt:
+    if detect_explicit_request(user_message):
         matches = match_prompts_to_intent(user_message, cache, max_results=3)
 
         if matches:
             output_lines.append("[MCP Suggestions]")
-            for prompt_id, info, score in matches:
-                output_lines.append(format_prompt_suggestion(prompt_id, info, score))
+            for prompt_id, info, _score in matches:
+                output_lines.append(format_prompt_suggestion(prompt_id, info))
         else:
             chains = get_chains_only(cache)
             if chains:
@@ -329,16 +577,14 @@ def main():
                 for prompt_id, info in list(chains.items())[:3]:
                     output_lines.append(format_prompt_suggestion(prompt_id, info))
 
-    # Use JSON format for proper hook protocol
-    # - systemMessage: shown to user
-    # - additionalContext: injected to Claude
+    # Output informational context (same to both user and Claude)
     if output_lines:
         output = "\n".join(output_lines)
         hook_response = {
-            "systemMessage": output,  # Visible to user
+            "systemMessage": output,
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
-                "additionalContext": output  # Context for Claude
+                "additionalContext": output
             }
         }
         print(json.dumps(hook_response))

@@ -1,0 +1,110 @@
+{
+  "$schema": "./operators.schema.json",
+  "version": 1,
+  "description": "Symbolic command operators - SSOT for TypeScript parser and Python hooks",
+  "operators": [
+    {
+      "id": "chain",
+      "symbol": "-->",
+      "description": "Sequential execution of prompts",
+      "purpose": "Chain multiple steps together",
+      "pattern": {
+        "typescript": "-->",
+        "flags": "g"
+      },
+      "examples": [
+        ">>step1 --> >>step2",
+        ">>analyze --> >>implement --> >>test"
+      ],
+      "status": "implemented",
+      "detectInHooks": true
+    },
+    {
+      "id": "gate",
+      "symbol": "::",
+      "description": "Quality gate for validation",
+      "purpose": "Add inline validation criteria",
+      "pattern": {
+        "typescript": "\\s+(::|=)\\s*(?:([a-z][a-z0-9_-]*):[\"']([^\"']+)[\"']|[\"']([^\"']+)[\"']|([^\\s\"']+))",
+        "flags": "gi"
+      },
+      "variants": [
+        { "syntax": ":: 'text'", "description": "Anonymous criteria" },
+        { "syntax": ":: id:'text'", "description": "Named gate" },
+        { "syntax": ":: verify:'cmd'", "description": "Shell verification" }
+      ],
+      "examples": [
+        ":: 'cite sources'",
+        ":: security:'no secrets'",
+        ":: verify:'npm test' :full"
+      ],
+      "status": "implemented",
+      "detectInHooks": true
+    },
+    {
+      "id": "framework",
+      "symbol": "@",
+      "description": "Apply methodology framework",
+      "purpose": "Inject framework guidance (CAGEERF, ReACT, etc.)",
+      "pattern": {
+        "typescript": "(?:^|\\s)@([A-Za-z0-9_-]+)(?=\\s|$)"
+      },
+      "examples": ["@CAGEERF >>analyze", "@ReACT >>debug"],
+      "status": "implemented",
+      "detectInHooks": true
+    },
+    {
+      "id": "style",
+      "symbol": "#",
+      "description": "Response formatting style",
+      "purpose": "Apply style guidance (analytical, procedural, etc.)",
+      "pattern": {
+        "typescript": "(?:^|\\s)#([A-Za-z][A-Za-z0-9_-]*)(?=\\s|$)"
+      },
+      "examples": ["#analytical >>report", "#procedural >>tutorial"],
+      "status": "implemented",
+      "detectInHooks": true
+    },
+    {
+      "id": "repetition",
+      "symbol": "* N",
+      "description": "Chain shorthand - repeat N times",
+      "purpose": "Execute prompt N times (unfolds to chain)",
+      "pattern": {
+        "typescript": "\\s+\\*\\s*(\\d+)(?=\\s|$|-->)"
+      },
+      "examples": [">>prompt * 3", ">>analyze * 2 --> >>summarize"],
+      "status": "implemented",
+      "detectInHooks": true
+    },
+    {
+      "id": "parallel",
+      "symbol": "+",
+      "description": "Concurrent execution",
+      "purpose": "Execute prompts in parallel",
+      "pattern": {
+        "typescript": "\\s*\\+\\s*",
+        "flags": "g"
+      },
+      "examples": [">>task1 + >>task2 + >>task3"],
+      "status": "reserved",
+      "detectInHooks": false
+    },
+    {
+      "id": "conditional",
+      "symbol": "?",
+      "description": "Conditional branching",
+      "purpose": "Branch execution based on condition",
+      "pattern": {
+        "typescript": "\\s*\\?\\s*[\"'](.+?)[\"']\\s*:\\s*(?:>>)?\\s*([A-Za-z0-9_-]+)"
+      },
+      "examples": [">>check ? 'condition' : >>fallback"],
+      "status": "reserved",
+      "detectInHooks": false
+    }
+  ],
+  "hookDetection": {
+    "description": "Simplified patterns for Python hooks (user context hints only)",
+    "note": "Generated from operators with detectInHooks: true"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "claude-prompts",
-  "version": "1.4.0",
+  "version": "1.4.4",
   "description": "Claude Custom Prompts MCP Server",
   "author": "minipuft",
   "license": "MIT",
@@ -26,7 +26,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "prebuild": "npm run generate:contracts",
+    "prebuild": "npm run generate:contracts && npm run generate:operators",
     "build": "node esbuild.config.mjs",
     "postbuild": "chmod +x dist/index.js || true",
     "build:prod": "NODE_ENV=production node esbuild.config.mjs",
@@ -71,10 +71,12 @@
     "validate:build": "npm run build && npm run start:test",
     "generate:contracts": "tsx scripts/generate-contracts.ts",
     "validate:contracts": "tsx scripts/generate-contracts.ts --check",
+    "generate:operators": "tsx scripts/generate-operators.ts",
+    "validate:operators": "tsx scripts/generate-operators.ts --check",
     "validate:methodologies": "node scripts/validate-methodologies.js",
     "validate:versions": "node scripts/validate-versions.js",
     "validate:dist-fresh": "bash scripts/validate-dist-fresh.sh",
-    "validate:all": "npm run lint && npm run validate:arch && npm run validate:filesize && npm run validate:metadata && npm run validate:contracts && npm run validate:methodologies && npm run validate:versions",
+    "validate:all": "npm run lint && npm run validate:arch && npm run validate:filesize && npm run validate:metadata && npm run validate:contracts && npm run validate:operators && npm run validate:methodologies && npm run validate:versions",
     "verify:action-metadata": "node scripts/verify-action-inventory.js",
     "dev:graph": "madge --ts-config ./tsconfig.json --extensions ts src --image graph.svg",
     "dev:graph:json": "madge --ts-config ./tsconfig.json --extensions ts src --json",

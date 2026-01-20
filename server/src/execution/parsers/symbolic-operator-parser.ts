@@ -1,4 +1,5 @@
 // @lifecycle canonical - Parses symbolic command expressions into operators.
+import { GENERATED_OPERATOR_PATTERNS } from './_generated/operator-patterns.js';
 import { stripStyleOperators } from './parser-utils.js';
 import {
   type ChainOperator,
@@ -8,6 +9,7 @@ import {
   type GateOperator,
   type OperatorDetectionResult,
   type ParallelOperator,
+  type RepetitionOperator,
   type StyleOperator,
   type SymbolicCommandParseResult,
   type SymbolicExecutionPlan,
@@ -26,36 +28,158 @@ import { ValidationError } from '../../utils/index.js';
 export class SymbolicCommandParser {
   private readonly logger: Logger;
 
+  /**
+   * Operator patterns derived from SSOT registry.
+   * Pattern documentation and examples: see tooling/contracts/operators.json
+   *
+   * Gate pattern groups: 1=operator, 2=namedColonId, 3=namedColonText, 4=anonQuoted, 5=canonicalOrUnquoted
+   */
   private readonly OPERATOR_PATTERNS = {
-    chain: /-->/g,
-    /**
-     * Enhanced gate pattern supporting named inline gates.
-     * Formats supported:
-     * - `:: id:"criteria"` - Named gate with colon separator (Group 2=id, 3=text)
-     * - `:: "criteria"` - Anonymous inline criteria (Group 4=text)
-     * - `:: code-quality` - Canonical gate reference (Group 5=ref)
-     * - `= value` - Deprecated syntax (Group 1 detects =)
-     *
-     * Groups: 1=operator, 2=namedColonId, 3=namedColonText, 4=anonQuoted, 5=canonicalOrUnquoted
-     */
-    gate: /\s+(::|=)\s*(?:([a-z][a-z0-9_-]*):["']([^"']+)["']|["']([^"']+)["']|([^\s"']+))/gi,
-    // Framework pattern: matches @FRAMEWORK at start OR after whitespace
-    // Uses non-capturing group for word boundary at start or after space
-    framework: /(?:^|\s)@([A-Za-z0-9_-]+)(?=\s|$)/,
-    // Style pattern: matches #styleid (e.g., #analytical, #procedural)
-    // Must start with letter to avoid matching things like #123
-    style: /(?:^|\s)#([A-Za-z][A-Za-z0-9_-]*)(?=\s|$)/,
-    parallel: /\s*\+\s*/g,
-    conditional: /\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-9_-]+)/,
+    chain: GENERATED_OPERATOR_PATTERNS.chain.pattern,
+    gate: GENERATED_OPERATOR_PATTERNS.gate.pattern,
+    framework: GENERATED_OPERATOR_PATTERNS.framework.pattern,
+    style: GENERATED_OPERATOR_PATTERNS.style.pattern,
+    repetition: GENERATED_OPERATOR_PATTERNS.repetition.pattern,
+    parallel: GENERATED_OPERATOR_PATTERNS.parallel.pattern,
+    conditional: GENERATED_OPERATOR_PATTERNS.conditional.pattern,
   } as const;
 
   constructor(logger: Logger) {
     this.logger = logger;
   }
 
+  /**
+   * Preprocess command to expand repetition operator.
+   * Call this before strategy selection so all strategies see the expanded form.
+   *
+   * @example ">>prompt *3" → ">>prompt --> >>prompt --> >>prompt"
+   */
+  preprocessRepetition(command: string): string {
+    return this.expandRepetition(command).expandedCommand;
+  }
+
+  /**
+   * Expand repetition operator into chain syntax.
+   *
+   * Transforms `>>prompt * 3` into `>>prompt --> >>prompt --> >>prompt`
+   * before other operator detection runs.
+   *
+   * Handles combinations like:
+   * - `>>prompt * 3` → `>>prompt --> >>prompt --> >>prompt`
+   * - `>>prompt topic:"AI" * 2` → `>>prompt topic:"AI" --> >>prompt topic:"AI"`
+   * - `>>step1 * 2 --> >>step2` → `>>step1 --> >>step1 --> >>step2`
+   *
+   * @returns Object with expandedCommand and optional RepetitionOperator
+   */
+  private expandRepetition(command: string): {
+    expandedCommand: string;
+    repetitionOp: RepetitionOperator | null;
+  } {
+    const match = command.match(this.OPERATOR_PATTERNS.repetition);
+    const countStr = match?.[1];
+    if (match === null || countStr === undefined) {
+      return { expandedCommand: command, repetitionOp: null };
+    }
+
+    const count = parseInt(countStr, 10);
+    if (count < 1 || isNaN(count)) {
+      throw new ValidationError('Repetition count must be at least 1');
+    }
+
+    this.logger.debug(`[expandRepetition] Detected * ${count} in: ${command}`);
+
+    // Find the segment to repeat (everything before * N, after last -->)
+    const matchIndex = match.index ?? 0;
+    const beforeRepetition = command.slice(0, matchIndex);
+    const afterRepetition = command.slice(matchIndex + match[0].length);
+
+    // Split by --> to find the last segment to repeat
+    // Handle: ">>step1 --> >>step2 * 3" → repeat step2
+    // Handle: ">>prompt * 3 --> >>final" → repeat prompt, then final
+    const segments = this.splitByChainDelimiter(beforeRepetition);
+    const segmentToRepeat = segments.pop() ?? beforeRepetition;
+    const precedingSegments = segments;
+
+    this.logger.debug(`[expandRepetition] Segment to repeat: "${segmentToRepeat}"`);
+
+    // Build expanded command
+    const repeatedSegments = Array(count).fill(segmentToRepeat.trim());
+    const expandedRepetition = repeatedSegments.join(' --> ');
+
+    // Reconstruct: preceding --> repeated --> after
+    let expandedCommand = '';
+    if (precedingSegments.length > 0) {
+      expandedCommand = precedingSegments.join(' --> ') + ' --> ';
+    }
+    expandedCommand += expandedRepetition;
+    if (afterRepetition.trim()) {
+      // afterRepetition might start with --> or be a continuation
+      const trimmedAfter = afterRepetition.trim();
+      if (trimmedAfter.startsWith('-->')) {
+        expandedCommand += ' ' + trimmedAfter;
+      } else {
+        expandedCommand += ' --> ' + trimmedAfter;
+      }
+    }
+
+    this.logger.debug(`[expandRepetition] Expanded to: ${expandedCommand}`);
+
+    return {
+      expandedCommand,
+      repetitionOp: { type: 'repetition', count },
+    };
+  }
+
+  /**
+   * Split command by --> delimiter while respecting quoted strings.
+   * Used for repetition expansion to find the segment to repeat.
+   */
+  private splitByChainDelimiter(command: string): string[] {
+    const segments: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < command.length; i++) {
+      const char = command[i];
+
+      // Toggle quote state
+      if (char === '"' && (i === 0 || command[i - 1] !== '\\')) {
+        inQuotes = !inQuotes;
+        current += char;
+        continue;
+      }
+
+      // Check for --> outside quotes
+      if (!inQuotes && command.slice(i, i + 3) === '-->') {
+        if (current.trim()) {
+          segments.push(current.trim());
+        }
+        current = '';
+        i += 2; // Skip past -->
+        continue;
+      }
+
+      current += char;
+    }
+
+    if (current.trim()) {
+      segments.push(current.trim());
+    }
+
+    return segments;
+  }
+
   detectOperators(command: string): OperatorDetectionResult {
     const operators: SymbolicOperator[] = [];
     const operatorTypes: string[] = [];
+
+    // Expand repetition BEFORE other detection (transforms * N to chain syntax)
+    const { expandedCommand, repetitionOp } = this.expandRepetition(command);
+    if (repetitionOp) {
+      operatorTypes.push('repetition');
+      operators.push(repetitionOp);
+      command = expandedCommand;
+    }
 
     const frameworkMatch = command.match(this.OPERATOR_PATTERNS.framework);
     if (frameworkMatch) {

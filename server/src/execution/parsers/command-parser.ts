@@ -146,17 +146,21 @@ export class UnifiedCommandParser {
     // Normalize symbolic prefixes centrally (ONE primary implementation)
     const { normalized, hadPrefixes } = normalizeSymbolicPrefixes(commandWithoutModifier);
 
+    // Expand repetition operator before strategy selection (e.g., ">>p *3" → ">>p --> >>p --> >>p")
+    const preprocessed = this.symbolicParser.preprocessRepetition(normalized);
+    const hadRepetition = preprocessed !== normalized;
+
     this.logger.debug(
-      `Parsing command: "${normalized.substring(0, 100)}..."${hadPrefixes ? ' (prefixes normalized)' : ''}`
+      `Parsing command: "${preprocessed.substring(0, 100)}..."${hadPrefixes ? ' (prefixes normalized)' : ''}${hadRepetition ? ' (repetition expanded)' : ''}`
     );
 
-    // Try each strategy in order of confidence (now operating on normalized command)
+    // Try each strategy in order of confidence (now operating on preprocessed command)
     const sortedStrategies = [...this.strategies].sort((a, b) => b.confidence - a.confidence);
 
     for (const strategy of sortedStrategies) {
-      if (strategy.canHandle(normalized)) {
+      if (strategy.canHandle(preprocessed)) {
         try {
-          const result = strategy.parse(normalized);
+          const result = strategy.parse(preprocessed);
           if (result) {
             // Preserve original command in metadata for debugging/error messages
             if (!result.metadata) {
@@ -170,6 +174,9 @@ export class UnifiedCommandParser {
             result.metadata.originalCommand = trimmed;
             if (hadPrefixes) {
               result.metadata.prefixesNormalized = true;
+            }
+            if (hadRepetition) {
+              result.metadata.repetitionExpanded = true;
             }
             if (modifierToken) {
               const hasExistingModifier =
@@ -256,12 +263,14 @@ export class UnifiedCommandParser {
         // - + (parallel)
         // - ? (conditional)
         // - #id style selector (e.g., #analytical, #procedural)
+        // - * N repetition (e.g., >>prompt *3)
         return (
-          /-->|(::|=)\s*\S|\s@[A-Za-z0-9_-]+|^@[A-Za-z0-9_-]+|\+|\?/.test(command) ||
+          /-->|(::|=)\s*\S|\s@[A-Za-z0-9_-]+|^@[A-Za-z0-9_-]+|\+|\?|\s+\*\s*\d+/.test(command) ||
           /(?:^|\s)#[A-Za-z][A-Za-z0-9_-]*(?=\s|$|>>)/.test(command)
         );
       },
       parse: (command: string): SymbolicCommandParseResult | null => {
+        // Command arrives already preprocessed (repetition expanded in parseCommand)
         const operators = this.symbolicParser.detectOperators(command);
         if (!operators.hasOperators) {
           return null;
