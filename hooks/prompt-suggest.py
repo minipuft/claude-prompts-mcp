@@ -45,15 +45,25 @@ def format_arguments(prompt_id: str, cache: dict) -> dict[str, str]:
     Extract argument info from cached prompt metadata.
 
     Returns dict of arg_name -> "type (required|optional)"
+    If options are available, shows: "opt1 | opt2 | opt3 (required)"
     """
     prompts = cache.get("prompts", {})
     prompt = prompts.get(prompt_id, {})
     args = prompt.get("arguments", [])
-    return {
-        arg.get("name", ""): f"{arg.get('type', 'string')} ({'required' if arg.get('required') else 'optional'})"
-        for arg in args
-        if isinstance(arg, dict) and arg.get("name")
-    }
+    result: dict[str, str] = {}
+    for arg in args:
+        if not isinstance(arg, dict) or not arg.get("name"):
+            continue
+        name = arg.get("name", "")
+        options = arg.get("options")
+        if options and isinstance(options, list) and len(options) > 0:
+            # Show options inline: "tutorial | howto | reference"
+            type_str = " | ".join(options)
+        else:
+            type_str = arg.get("type", "string")
+        req = "required" if arg.get("required") else "optional"
+        result[name] = f"{type_str} ({req})"
+    return result
 
 
 def parse_hook_input() -> dict:

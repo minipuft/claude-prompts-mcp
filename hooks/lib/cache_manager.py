@@ -18,6 +18,7 @@ class ArgumentInfo(TypedDict):
     required: bool
     description: str
     default: str | None
+    options: list[str] | None
 
 
 class PromptInfo(TypedDict):

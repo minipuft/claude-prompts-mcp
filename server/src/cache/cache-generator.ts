@@ -118,6 +118,7 @@ interface ArgumentInfo {
   required: boolean;
   description: string;
   default?: string | null;
+  options?: string[];
 }
 
 interface PromptCacheEntry {
@@ -179,6 +180,58 @@ function extractKeywords(text: string, maxWords = 15): string[] {
 }
 
 /**
+ * Extract argument options from Nunjucks template conditionals.
+ * Parses {% if var == "value" %} and {% elif var == "value" %} patterns.
+ */
+function extractTemplateOptions(templatePath: string): Map<string, string[]> {
+  const options = new Map<string, string[]>();
+  try {
+    // Use sync read since this runs at cache generation time
+    const fsSync = require('node:fs') as typeof import('node:fs');
+    const content = fsSync.readFileSync(templatePath, 'utf-8');
+    // Match: {% if var == "value" %} or {% elif var == "value" %}
+    const pattern = /\{%\s*(?:el)?if\s+(\w+)\s*==\s*["']([^"']+)["']/g;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(content)) !== null) {
+      const varName = match[1];
+      const value = match[2];
+      if (!varName || !value) continue;
+      let values = options.get(varName);
+      if (!values) {
+        values = [];
+        options.set(varName, values);
+      }
+      if (!values.includes(value)) values.push(value);
+    }
+  } catch {
+    // Template file not found, skip extraction
+  }
+  return options;
+}
+
+/**
+ * Extract argument options from description patterns.
+ * Parses "foo | bar | baz" patterns from argument descriptions.
+ * Examples:
+ *   "Primary language: typescript | python | hybrid" -> ["typescript", "python", "hybrid"]
+ *   "Package manager: npm | pnpm | yarn" -> ["npm", "pnpm", "yarn"]
+ */
+function extractDescriptionOptions(description: string): string[] | undefined {
+  if (!description) return undefined;
+  // Match: word | word | word pattern (at least 2 options separated by |)
+  // Handles optional leading text like "Primary language: " before the options
+  const match = description.match(/:\s*([a-zA-Z0-9_-]+(?:\s*\|\s*[a-zA-Z0-9_-]+)+)\s*$/);
+  if (match?.[1]) {
+    const options = match[1]
+      .split(/\s*\|\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return options.length >= 2 ? options : undefined;
+  }
+  return undefined;
+}
+
+/**
  * Load and parse a prompt YAML file.
  */
 async function loadPromptYaml(promptDir: string): Promise<PromptCacheEntry | null> {
@@ -204,17 +257,31 @@ async function loadPromptYaml(promptDir: string): Promise<PromptCacheEntry | nul
       ? chainSteps.map((step) => step.stepName || step.promptId || 'Unknown')
       : undefined;
 
-    // Extract arguments
+    // Extract argument options from template conditionals
+    const templatePath = path.join(promptDir, 'user-message.md');
+    const templateOptions = extractTemplateOptions(templatePath);
+
+    // Extract arguments and merge options from multiple sources
+    // Priority: YAML options > template conditionals > description patterns
     const rawArgs = (data['arguments'] as Array<Record<string, unknown>>) ?? [];
     const args: ArgumentInfo[] = rawArgs
       .filter((arg) => arg['name'])
-      .map((arg) => ({
-        name: arg['name'] as string,
-        type: (arg['type'] as string) || 'string',
-        required: (arg['required'] as boolean) || false,
-        description: ((arg['description'] as string) || '').slice(0, 100),
-        default: arg['defaultValue'] as string | null | undefined,
-      }));
+      .map((arg) => {
+        const argName = arg['name'] as string;
+        const argDesc = (arg['description'] as string) || '';
+        // Priority chain: YAML explicit > template conditionals > description patterns
+        const yamlOptions = arg['options'] as string[] | undefined;
+        const options =
+          yamlOptions ?? templateOptions.get(argName) ?? extractDescriptionOptions(argDesc);
+        return {
+          name: argName,
+          type: (arg['type'] as string) || 'string',
+          required: (arg['required'] as boolean) || false,
+          description: argDesc.slice(0, 100),
+          default: arg['defaultValue'] as string | null | undefined,
+          ...(options && options.length > 0 ? { options } : {}),
+        };
+      });
 
     // Extract gates
     const gateConfig = data['gateConfiguration'] as Record<string, unknown> | undefined;
