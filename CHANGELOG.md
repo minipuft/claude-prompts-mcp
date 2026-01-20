@@ -9,14 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Generate operator patterns from single source (TypeScript + Python via generate-operators.ts)
-- Add config_loader.py for hook configuration
+- **Chain workflow preview**: Hooks show all chain steps before execution begins (e.g., "1/4 Initial Scan → 2/4 Deep Dive → ...")
+- **scaffold_project chain**: Interactive project scaffolding for TypeScript, Python, or hybrid projects with modern tooling
+- **Nested chain discovery**: Chain steps can reference prompts in subdirectories (e.g., `scaffold_analyze` under `scaffold_project/`)
+- **System-only prompts**: Prompts with only system message (no user template required)
+- Operator patterns generated from single source (TypeScript + Python via generate-operators.ts)
 
 ### Changed
 
-- Enhance symbolic-operator-parser with improved pattern matching
-- Refactor prompt-suggest hook with extended capabilities
-- Update pipeline stages for improved execution context handling
+- Symbolic parser with unified pattern matching across all operators
+- Hook configuration now loaded from `config.json` via config_loader.py
 - Move detect-skills.py to global ~/.claude/hooks (not plugin-bundled)
 
 ## [1.4.4] - 2026-01-19

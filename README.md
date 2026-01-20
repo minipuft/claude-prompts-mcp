@@ -366,6 +366,7 @@ See [Ralph Loops Guide](docs/guides/ralph-loops.md) for autonomous verification 
 |:------:|:-----|:-------------|:--------|
 | `>>` | Prompt | Execute template | `>>code_review` |
 | `-->` | Chain | Pipe to next step | `step1 --> step2` |
+| `*` | Repeat | Run prompt N times | `>>brainstorm * 5` |
 | `@` | Framework | Inject methodology | `@CAGEERF` |
 | `::` | Gate | Add quality criteria | `:: 'cite sources'` |
 | `%` | Modifier | Toggle behavior | `%clean`, `%judge` |
