@@ -1,6 +1,6 @@
 {
   "name": "claude-prompts",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "Claude Custom Prompts MCP Server",
   "author": "minipuft",
   "license": "MIT",
@@ -75,6 +75,8 @@
     "validate:operators": "tsx scripts/generate-operators.ts --check",
     "validate:methodologies": "node scripts/validate-methodologies.js",
     "validate:versions": "node scripts/validate-versions.js",
+    "sync:versions": "node scripts/sync-versions.js",
+    "version": "npm run sync:versions && git add ../.release-please-manifest.json ../manifest.json ../.claude-plugin/plugin.json",
     "validate:dist-fresh": "bash scripts/validate-dist-fresh.sh",
     "validate:all": "npm run lint && npm run validate:arch && npm run validate:filesize && npm run validate:metadata && npm run validate:contracts && npm run validate:operators && npm run validate:methodologies && npm run validate:versions",
     "verify:action-metadata": "node scripts/verify-action-inventory.js",
