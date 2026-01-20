@@ -1,6 +1,7 @@
 id: scaffold_project
 name: Project Scaffold
 category: codebase-setup
+userMessageTemplateFile: user-message.md
 description: >-
   Interactive project scaffolding with LLM-friendly patterns. Creates complete
   project structures for TypeScript, Python, or hybrid projects with modern

@@ -317,14 +317,19 @@ export const PromptYamlSchema = z
   .passthrough() // Allow additional fields for extensibility
   .refine(
     (data) => {
-      // Must have either userMessageTemplate/userMessageTemplateFile OR chainSteps
-      const hasTemplate = data.userMessageTemplate || data.userMessageTemplateFile;
-      const hasChainSteps = data.chainSteps && data.chainSteps.length > 0;
-      return hasTemplate || hasChainSteps;
+      // Must have either userMessageTemplate/userMessageTemplateFile, chainSteps, or systemMessage
+      const hasTemplate =
+        (data.userMessageTemplate !== undefined && data.userMessageTemplate !== '') ||
+        (data.userMessageTemplateFile !== undefined && data.userMessageTemplateFile !== '');
+      const hasChainSteps = data.chainSteps !== undefined && data.chainSteps.length > 0;
+      const hasSystemMessage =
+        (data.systemMessage !== undefined && data.systemMessage !== '') ||
+        (data.systemMessageFile !== undefined && data.systemMessageFile !== '');
+      return hasTemplate || hasChainSteps || hasSystemMessage;
     },
     {
       message:
-        'Prompt must have either userMessageTemplate/userMessageTemplateFile or chainSteps defined',
+        'Prompt must have userMessageTemplate/userMessageTemplateFile, chainSteps, or systemMessage defined',
     }
   );
 

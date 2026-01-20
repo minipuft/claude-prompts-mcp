@@ -817,8 +817,13 @@ export class PromptLoader {
         }
       }
 
-      if (!userMessageTemplate && !(chainSteps.length > 0)) {
-        throw new Error(`No user message template found in ${filePath}`);
+      const hasNoUserMessage = userMessageTemplate === '';
+      const hasNoChainSteps = chainSteps.length === 0;
+      const hasNoSystemMessage = systemMessage === undefined || systemMessage === '';
+      if (hasNoUserMessage && hasNoChainSteps && hasNoSystemMessage) {
+        throw new Error(
+          `Prompt requires user message template, chain steps, or system message: ${filePath}`
+        );
       }
 
       const result: LoadedPromptFile = {
@@ -908,26 +913,28 @@ export class PromptLoader {
       if (entry.isDirectory()) {
         // Directory pattern: {prompt_id}/prompt.yaml
         const promptYamlPath = path.join(categoryDir, entry.name, 'prompt.yaml');
+        const nestedPrefix = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
+
         if (existsSync(promptYamlPath)) {
           // Directory takes precedence over file with same ID
-          const id = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
-          discoveries.set(id, {
+          discoveries.set(nestedPrefix, {
             path: path.join(categoryDir, entry.name),
             format: 'directory',
           });
-        } else {
-          // No prompt.yaml - recurse into subdirectory for nested prompts
-          const nestedPrefix = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
-          const nested = this.discoverYamlPrompts(path.join(categoryDir, entry.name), nestedPrefix);
-          nestedPaths.push(...nested);
         }
+
+        // ALWAYS recurse into subdirectories (parent-child pattern)
+        // This enables chain directories to contain both the parent prompt AND nested step prompts
+        const nested = this.discoverYamlPrompts(path.join(categoryDir, entry.name), nestedPrefix);
+        nestedPaths.push(...nested);
       } else if (
         entry.isFile() &&
         entry.name.endsWith('.yaml') &&
         entry.name !== 'prompts.yaml' &&
-        entry.name !== 'category.yaml'
+        entry.name !== 'category.yaml' &&
+        entry.name !== 'prompt.yaml'
       ) {
-        // File pattern: {prompt_id}.yaml (skip metadata files)
+        // File pattern: {prompt_id}.yaml (skip metadata and directory-indicator files)
         const baseName = entry.name.replace(/\.yaml$/, '');
         const id = prefix.length > 0 ? `${prefix}/${baseName}` : baseName;
         // Only add if no directory version exists
@@ -1012,8 +1019,11 @@ export class PromptLoader {
       const cached = this.promptFileCache.get(cacheKey)!;
       // Reconstruct promptData from cached content - need to reload yaml for metadata
       const yamlData = loadYamlFileSync(yamlPath) as PromptYaml;
+      const promptData = this.yamlToPromptData(yamlData, relativeFilePath);
+      // Override ID with path-based ID for nested prompts (parent-child pattern)
+      promptData.id = promptId;
       return {
-        promptData: this.yamlToPromptData(yamlData, relativeFilePath),
+        promptData,
         loadedContent: cached,
       };
     }
@@ -1028,7 +1038,13 @@ export class PromptLoader {
     let yamlData: PromptYaml;
     try {
       const rawData = loadYamlFileSync(yamlPath);
-      const validation = validatePromptYaml(rawData, promptId);
+      // For validation, use the basename (last segment) of the promptId
+      // This allows nested prompts to have IDs like "step_one" while being
+      // discovered as "my_chain/step_one" based on their directory path
+      const validationId = promptId.includes('/')
+        ? (promptId.split('/').pop() ?? promptId)
+        : promptId;
+      const validation = validatePromptYaml(rawData, validationId);
 
       if (!validation.valid) {
         this.logger.error(
@@ -1082,9 +1098,15 @@ export class PromptLoader {
     } else if (yamlData.chainSteps && yamlData.chainSteps.length > 0) {
       // Chain prompts may not have a user message template
       userMessageTemplate = '';
+    } else if (systemMessage !== undefined && systemMessage !== '') {
+      // System-only prompts (guidance, overlays) don't require user message
+      userMessageTemplate = '';
+      this.logger.debug(
+        `[PromptLoader] System-only prompt (no user message template): ${yamlPath}`
+      );
     } else {
       this.logger.error(
-        `[PromptLoader] No userMessageTemplate or userMessageTemplateFile in ${yamlPath}`
+        `[PromptLoader] Prompt requires userMessageTemplate, userMessageTemplateFile, chainSteps, or systemMessage: ${yamlPath}`
       );
       this.stats.loadErrors++;
       return null;
@@ -1158,8 +1180,12 @@ export class PromptLoader {
       }
     }
 
+    const promptData = this.yamlToPromptData(yamlData, relativeFilePath);
+    // Override ID with path-based ID for nested prompts (parent-child pattern)
+    promptData.id = promptId;
+
     return {
-      promptData: this.yamlToPromptData(yamlData, relativeFilePath),
+      promptData,
       loadedContent,
     };
   }

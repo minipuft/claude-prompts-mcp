@@ -224,9 +224,12 @@ export class PromptConverter {
       errors.push('Missing required field: category');
     }
 
-    // Check that either userMessageTemplate exists or it's a valid chain
-    if (!prompt.userMessageTemplate && !((prompt.chainSteps?.length || 0) > 0)) {
-      errors.push('Either userMessageTemplate must be provided or prompt must be a valid chain');
+    // Check that either userMessageTemplate exists, it's a valid chain, or has systemMessage
+    const hasUserMessage = prompt.userMessageTemplate.length > 0;
+    const hasChainSteps = (prompt.chainSteps?.length ?? 0) > 0;
+    const hasSystemMessage = prompt.systemMessage !== undefined && prompt.systemMessage.length > 0;
+    if (!hasUserMessage && !hasChainSteps && !hasSystemMessage) {
+      errors.push('Prompt must have userMessageTemplate, chainSteps, or systemMessage defined');
     }
 
     // Validate chain prompts

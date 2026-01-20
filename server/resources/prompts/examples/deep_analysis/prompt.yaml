@@ -19,11 +19,11 @@ arguments:
     description: Background context or prior knowledge to consider
     required: false
 chainSteps:
-  - promptId: initial_scan
+  - promptId: deep_analysis/initial_scan
     stepName: Initial Scan (1/4)
-  - promptId: deep_dive
+  - promptId: deep_analysis/deep_dive
     stepName: Deep Dive (2/4)
-  - promptId: synthesis
+  - promptId: deep_analysis/synthesis
     stepName: Synthesis (3/4)
-  - promptId: notepage
+  - promptId: deep_analysis/notepage
     stepName: Notepage (4/4)

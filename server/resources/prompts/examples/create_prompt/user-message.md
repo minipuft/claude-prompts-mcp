@@ -455,8 +455,12 @@ prompt_engine(
 
 Plus ONE of:
 
-- `userMessageTemplate` / `userMessageTemplateFile`
-- `chainSteps` (for chains)
+- `userMessageTemplate` / `userMessageTemplateFile` - For template prompts
+- `chainSteps` (for chains) - For multi-step workflows
+- `systemMessage` / `systemMessageFile` only - For system-only prompts (guidance, overlays)
+
+**Note:** This guided workflow (`>>create_prompt`) requires user message or chain steps.
+System-only prompts can be created directly via `resource_manager`.
 
 ## Your Task
 

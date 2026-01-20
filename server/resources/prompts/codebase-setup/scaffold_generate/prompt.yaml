@@ -1,6 +1,7 @@
 id: scaffold_generate
 name: Scaffold Generate
 category: codebase-setup
+userMessageTemplateFile: user-message.md
 description: >-
   Step 2 of project scaffolding. Takes the configuration from scaffold_analyze
   and generates all project files with appropriate templates, configs, and

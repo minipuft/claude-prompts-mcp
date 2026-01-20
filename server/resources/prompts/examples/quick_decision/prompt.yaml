@@ -15,9 +15,9 @@ arguments:
     description: Any constraints or requirements to consider
     type: string
 chainSteps:
-  - promptId: identify_options
+  - promptId: quick_decision/identify_options
     stepName: Options (1/3)
-  - promptId: weigh_tradeoffs
+  - promptId: quick_decision/weigh_tradeoffs
     stepName: Tradeoffs (2/3)
-  - promptId: recommend
+  - promptId: quick_decision/recommend
     stepName: Recommendation (3/3)
