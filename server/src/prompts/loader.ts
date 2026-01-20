@@ -885,29 +885,41 @@ export class PromptLoader {
    *    - All content inline in a single YAML file
    *    - Best for simple prompts with short templates
    *
+   * 3. **Nested pattern** (chain sub-folders): `{category}/{folder}/{prompt_id}.yaml`
+   *    - Organize related prompts (e.g., chain steps) in sub-folders
+   *    - IDs include folder prefix: "folder/prompt_id"
+   *
    * @param categoryDir - Path to the category directory
+   * @param prefix - Optional prefix for nested prompt IDs (used in recursion)
    * @returns Array of prompt paths (directories take precedence over files with same ID)
    */
-  discoverYamlPrompts(categoryDir: string): string[] {
+  discoverYamlPrompts(categoryDir: string, prefix: string = ''): string[] {
     if (!existsSync(categoryDir)) {
       return [];
     }
 
     const entries = readdirSync(categoryDir, { withFileTypes: true });
     const discoveries: Map<string, { path: string; format: 'directory' | 'file' }> = new Map();
+    const nestedPaths: string[] = [];
 
     for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
+      if (entry.name.startsWith('.') || entry.name.startsWith('_')) continue;
 
       if (entry.isDirectory()) {
         // Directory pattern: {prompt_id}/prompt.yaml
         const promptYamlPath = path.join(categoryDir, entry.name, 'prompt.yaml');
         if (existsSync(promptYamlPath)) {
           // Directory takes precedence over file with same ID
-          discoveries.set(entry.name, {
+          const id = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
+          discoveries.set(id, {
             path: path.join(categoryDir, entry.name),
             format: 'directory',
           });
+        } else {
+          // No prompt.yaml - recurse into subdirectory for nested prompts
+          const nestedPrefix = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
+          const nested = this.discoverYamlPrompts(path.join(categoryDir, entry.name), nestedPrefix);
+          nestedPaths.push(...nested);
         }
       } else if (
         entry.isFile() &&
@@ -916,10 +928,11 @@ export class PromptLoader {
         entry.name !== 'category.yaml'
       ) {
         // File pattern: {prompt_id}.yaml (skip metadata files)
-        const promptId = entry.name.replace(/\.yaml$/, '');
+        const baseName = entry.name.replace(/\.yaml$/, '');
+        const id = prefix.length > 0 ? `${prefix}/${baseName}` : baseName;
         // Only add if no directory version exists
-        if (!discoveries.has(promptId)) {
-          discoveries.set(promptId, {
+        if (!discoveries.has(id)) {
+          discoveries.set(id, {
             path: path.join(categoryDir, entry.name),
             format: 'file',
           });
@@ -928,13 +941,14 @@ export class PromptLoader {
     }
 
     // Return paths (backward compatible - just paths, format handled in loadYamlPrompt)
-    return Array.from(discoveries.values()).map((d) => d.path);
+    const directPaths = Array.from(discoveries.values()).map((d) => d.path);
+    return [...directPaths, ...nestedPaths];
   }
 
   /**
    * Load a prompt from YAML format (directory or single file).
    *
-   * Supports two patterns:
+   * Supports three patterns:
    *
    * **Directory pattern** (for complex prompts with external files):
    * ```
@@ -949,10 +963,21 @@ export class PromptLoader {
    * {prompt_id}.yaml          # Complete prompt with inline userMessageTemplate
    * ```
    *
+   * **Nested pattern** (for chain sub-folders):
+   * ```
+   * {folder}/
+   * ├── step1.yaml            # ID: "folder/step1"
+   * └── step2.yaml            # ID: "folder/step2"
+   * ```
+   *
    * @param promptPath - Path to the prompt directory OR single YAML file
+   * @param categoryRoot - Optional category root for calculating relative IDs (enables nested prompts)
    * @returns Loaded prompt data with inlined content
    */
-  loadYamlPrompt(promptPath: string): {
+  loadYamlPrompt(
+    promptPath: string,
+    categoryRoot?: string
+  ): {
     promptData: PromptData;
     loadedContent: LoadedPromptFile;
   } | null {
@@ -960,12 +985,25 @@ export class PromptLoader {
     const isFile = promptPath.endsWith('.yaml');
     const yamlPath = isFile ? promptPath : path.join(promptPath, 'prompt.yaml');
     const baseDir = isFile ? path.dirname(promptPath) : promptPath;
-    const promptId = isFile ? path.basename(promptPath, '.yaml') : path.basename(promptPath);
+
+    // Derive prompt ID from relative path if categoryRoot provided, otherwise use basename
+    let promptId: string;
+    if (categoryRoot !== undefined) {
+      // For nested prompts: derive ID from relative path to category root
+      const relativePath = path.relative(categoryRoot, promptPath);
+      promptId = isFile ? relativePath.replace(/\.yaml$/, '') : relativePath;
+      // Normalize path separators for consistent IDs across platforms
+      promptId = promptId.split(path.sep).join('/');
+    } else {
+      // Backwards compatible: use basename only
+      promptId = isFile ? path.basename(promptPath, '.yaml') : path.basename(promptPath);
+    }
 
     // Check cache first
     // Compute relative file path for PromptData.file
     // - Directory format: {id}/prompt.yaml
     // - File format: {id}.yaml
+    // For nested prompts, include the full relative path
     const relativeFilePath = isFile ? `${promptId}.yaml` : `${promptId}/prompt.yaml`;
 
     const cacheKey = yamlPath.toLowerCase();
@@ -1303,6 +1341,9 @@ export class PromptLoader {
   /**
    * Load all YAML prompts from a category directory.
    *
+   * Supports nested directories for organizing related prompts (e.g., chain steps).
+   * Nested prompts get IDs based on their relative path from categoryDir.
+   *
    * @param categoryDir - Path to the category directory
    * @returns Array of loaded prompt data
    */
@@ -1311,7 +1352,8 @@ export class PromptLoader {
     const prompts: PromptData[] = [];
 
     for (const promptDir of promptDirs) {
-      const result = this.loadYamlPrompt(promptDir);
+      // Pass categoryDir as root to enable relative ID calculation for nested prompts
+      const result = this.loadYamlPrompt(promptDir, categoryDir);
       if (result) {
         prompts.push(result.promptData);
       }

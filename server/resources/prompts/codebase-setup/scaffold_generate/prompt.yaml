@@ -1,0 +1,12 @@
+id: scaffold_generate
+name: Scaffold Generate
+category: codebase-setup
+description: >-
+  Step 2 of project scaffolding. Takes the configuration from scaffold_analyze
+  and generates all project files with appropriate templates, configs, and
+  LLM-friendly patterns.
+arguments:
+  - name: config
+    type: string
+    description: JSON configuration from scaffold_analyze step
+    required: true

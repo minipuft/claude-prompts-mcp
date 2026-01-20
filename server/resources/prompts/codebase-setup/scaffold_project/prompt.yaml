@@ -1,0 +1,35 @@
+id: scaffold_project
+name: Project Scaffold
+category: codebase-setup
+description: >-
+  Interactive project scaffolding with LLM-friendly patterns. Creates complete
+  project structures for TypeScript, Python, or hybrid projects with modern
+  tooling, testing, and documentation.
+arguments:
+  - name: name
+    type: string
+    description: Project name (kebab-case recommended)
+    required: false
+  - name: language
+    type: string
+    description: 'Primary language: typescript | python | hybrid'
+    required: false
+  - name: type
+    type: string
+    description: 'Project type: mcp-server | cli | library | api | webapp'
+    required: false
+  - name: features
+    type: string
+    description: 'Comma-separated features: linting, testing, hooks, contracts, versioning'
+    required: false
+  - name: package_manager
+    type: string
+    description: 'Package manager: npm | pnpm | yarn | pip | poetry | uv'
+    required: false
+chainSteps:
+  - promptId: scaffold_analyze
+    stepName: Gather Requirements (1/3)
+  - promptId: scaffold_generate
+    stepName: Generate Files (2/3)
+  - promptId: scaffold_review
+    stepName: Review & Confirm (3/3)
