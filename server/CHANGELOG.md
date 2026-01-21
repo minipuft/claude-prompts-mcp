@@ -7,6 +7,31 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.4.6] - 2026-01-21
+
+### Added
+
+- **Resource change tracking**: New `ResourceChangeTracker` service for audit logging of resource modifications. Query history via `system_control(action:"changes")`
+- **Chain workflow preview**: Hooks now display all chain steps before execution, giving visibility into the full workflow
+- **Argument options extraction**: Hooks auto-extract available argument values from templates and descriptions without manual YAML specification
+- **scaffold_project chain**: 3-step interactive chain for creating new projects with LLM-friendly patterns
+- **Generated operator patterns**: Enhanced symbolic parsing with auto-generated operator pattern definitions
+- **New workflow prompts**: `github_repo_setup` for repository configuration, `triage` for task analysis and routing
+
+### Changed
+
+- **Downstream sync**: Both `gemini-prompts` and `opencode-prompts` now receive `upstream-release` events via repository dispatch
+- **File observer**: Migrated to Chokidar with WSL2 polling support (300ms interval) for reliable file watching
+- **Simplified typecheck**: Removed legacy `validate-execution-modifiers` script; `ExecutionPlan.modifiers` is the canonical field
+- **Removed plugin skills**: Skills directory removed; plugin description and hooks provide equivalent guidance
+
+### Fixed
+
+- **System-only prompts**: Loader now accepts prompts with only `systemMessage` defined (no `userMessageTemplate` required)
+- **Scaffold prompt loading**: Fixed missing `userMessageTemplateFile` in scaffold prompts
+- **Nested chain step IDs**: Fixed step IDs in `deep_analysis` and `quick_decision` chains
+- **Automatic version sync**: `npm version` now syncs versions across all manifest files
+
 ## [1.4.0] - 2026-01-18
 
 ### Added
