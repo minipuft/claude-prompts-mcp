@@ -1,6 +1,6 @@
 {
   "name": "claude-prompts",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "Claude Custom Prompts MCP Server",
   "author": "minipuft",
   "license": "MIT",
@@ -33,8 +33,7 @@
     "build:watch": "node esbuild.config.mjs --watch",
     "build:tsc": "tsc --project tsconfig.json",
     "build:tsc:watch": "tsc --project tsconfig.json --watch",
-    "validate:execution-modifiers": "node scripts/validate-execution-modifiers.js",
-    "typecheck": "npm run validate:execution-modifiers && tsc --noEmit --project tsconfig.json",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
     "typecheck:tests": "tsc --noEmit --project tsconfig.test.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

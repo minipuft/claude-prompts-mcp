@@ -45,7 +45,6 @@ The `dist` branch is **force-pushed** after each release. No source code, no nod
 dist/
 ├── .claude-plugin/plugin.json
 ├── .mcp.json
-├── skills/
 ├── hooks/
 └── server/
     ├── dist/index.js          # ~4.5MB bundled runtime
