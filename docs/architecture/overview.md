@@ -189,6 +189,7 @@ server/src/
 │   └── core/                   # Definition loader
 ├── chain-session/              # Multi-step workflow state
 ├── text-references/            # ArgumentHistoryTracker
+├── tracking/                   # Resource change audit logging
 └── tooling/contracts/          # Generated Zod schemas
 server/resources/               # Hot-reloaded resource definitions
 ├── methodologies/              # Methodology definitions
@@ -231,6 +232,7 @@ server/resources/               # Hot-reloaded resource definitions
 | `src/gates/gate-manager.ts`                           | Gate orchestration          |
 | `src/gates/registry/gate-registry.ts`                 | Gate lifecycle management   |
 | `src/styles/style-manager.ts`                         | Style orchestration         |
+| `src/tracking/resource-change-tracker.ts`             | Change audit logging        |
 
 ---
 
@@ -464,12 +466,14 @@ const review = chainSessionManager.getPendingGateReview(sessionId);
 
 Survives server restarts:
 
-| State               | Manager                  | File                                   |
-| ------------------- | ------------------------ | -------------------------------------- |
-| Framework selection | `FrameworkStateManager`  | `runtime-state/framework-state.json`   |
-| Gate system enabled | `GateSystemManager`      | `runtime-state/gate-system-state.json` |
-| Chain sessions      | `ChainSessionManager`    | `runtime-state/chain-sessions.json`    |
-| Argument history    | `ArgumentHistoryTracker` | `runtime-state/argument-history.json`  |
+| State               | Manager                  | File                                    |
+| ------------------- | ------------------------ | --------------------------------------- |
+| Framework selection | `FrameworkStateManager`  | `runtime-state/framework-state.json`    |
+| Gate system enabled | `GateSystemManager`      | `runtime-state/gate-system-state.json`  |
+| Chain sessions      | `ChainSessionManager`    | `runtime-state/chain-sessions.json`     |
+| Argument history    | `ArgumentHistoryTracker` | `runtime-state/argument-history.json`   |
+| Resource changes    | `ResourceChangeTracker`  | `runtime-state/resource-changes.jsonl`  |
+| Resource hashes     | `ResourceChangeTracker`  | `runtime-state/resource-hashes.json`    |
 
 ### State Flow Diagram
 

@@ -411,6 +411,45 @@ gateConfiguration:
 {% raw %}{% endif %}{% endraw %}
 ```
 
+### Conditional Content for Mode Arguments (Recommended)
+
+When an argument has discrete options, use **equality conditionals** instead of existence checks.
+This enables **automatic options discovery** in hooks and documentation.
+
+```markdown
+{# ✅ GOOD: Options are auto-extracted for hooks #}
+{% raw %}{% if doc_type == "tutorial" %}{% endraw %}
+Focus on learning outcomes and step-by-step guidance.
+{% raw %}{% elif doc_type == "howto" %}{% endraw %}
+Focus on solving a specific problem efficiently.
+{% raw %}{% elif doc_type == "reference" %}{% endraw %}
+Focus on completeness and lookup-friendly formatting.
+{% raw %}{% endif %}{% endraw %}
+```
+
+**Result:** Hooks display `doc_type: tutorial | howto | reference (required)` automatically.
+
+```markdown
+{# ❌ AVOID: Existence check - options not discoverable #}
+{% raw %}{% if doc_type %}{% endraw %}
+Process document of type {% raw %}{{doc_type}}{% endraw %}
+{% raw %}{% endif %}{% endraw %}
+```
+
+**When to use conditionals:**
+
+| Argument Type                  | Pattern                                        | Example                                 |
+| ------------------------------ | ---------------------------------------------- | --------------------------------------- |
+| Mode/Type with discrete values | `{% raw %}{% if arg == "value" %}{% endraw %}` | `doc_type`, `output_format`, `language` |
+| Boolean flags                  | `{% raw %}{% if flag %}{% endraw %}`           | `include_examples`, `verbose`           |
+| Free-form text                 | `{% raw %}{{arg}}{% endraw %}`                 | `content`, `description`                |
+
+**Priority for options discovery:**
+
+1. YAML `options` array (explicit, highest priority)
+2. Template conditionals (`{% raw %}{% if arg == "val" %}{% endraw %}`)
+3. Description patterns (`'Type: foo | bar | baz'`)
+
 ### Argument Types
 
 | Type      | Input                   | Coercion         |

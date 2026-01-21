@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Resource change tracking**: Audit log for prompts and gates with source attribution
+  - Tracks filesystem hot-reloads, MCP tool operations, and external changes
+  - Content hashing detects actual modifications (skips no-op saves)
+  - Baseline comparison at startup surfaces changes made while server was down
+- **`system_control(action:"changes")`**: Query the audit log with filters (`source`, `resourceType`, `since`, `limit`)
+
+### Changed
+
+- **File watching**: Migrate from `fs.watch` to Chokidar with automatic polling for WSL2/network filesystems
+  - Auto-detects WSL2 environments and enables polling mode
+  - Configurable via `usePolling` ('auto' | true | false) and `pollingInterval` (default: 300ms)
+  - Fixes hot-reload not working in WSL2 due to virtualized filesystem limitations
+
+### Fixed
+
+- **Resource ID extraction**: Baseline comparison now correctly extracts prompt/gate IDs from directory names (was incorrectly extracting "prompt" from nested file paths)
+
 ## [1.4.5] - 2026-01-20
 
 ### Added
@@ -207,6 +228,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release with MCP server, prompts, gates, and frameworks
 
-[Unreleased]: https://github.com/minipuft/claude-prompts/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/minipuft/claude-prompts/compare/v1.4.5...HEAD
+[1.4.5]: https://github.com/minipuft/claude-prompts/compare/v1.4.4...v1.4.5
+[1.4.4]: https://github.com/minipuft/claude-prompts/compare/v1.4.2...v1.4.4
+[1.4.2]: https://github.com/minipuft/claude-prompts/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/minipuft/claude-prompts/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/minipuft/claude-prompts/compare/v1.3.2...v1.4.0
+[1.3.2]: https://github.com/minipuft/claude-prompts/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/minipuft/claude-prompts/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/minipuft/claude-prompts/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/minipuft/claude-prompts/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/minipuft/claude-prompts/releases/tag/v1.1.0

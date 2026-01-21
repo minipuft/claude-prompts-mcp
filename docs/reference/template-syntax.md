@@ -41,6 +41,34 @@ Format: {{ format | default("markdown") }}
 {% endif %}
 ```
 
+### Equality Conditionals (Options Discovery)
+
+Use equality checks for arguments with discrete options. The server automatically extracts these as discoverable options at cache-generation time.
+
+```django
+{# These options are auto-extracted: tutorial, howto, reference #}
+{% if doc_type == "tutorial" %}
+  Focus on learning outcomes...
+{% elif doc_type == "howto" %}
+  Focus on problem-solving...
+{% elif doc_type == "reference" %}
+  Focus on completeness...
+{% endif %}
+```
+
+**Extraction behavior:**
+
+| Source | Priority | Example |
+|--------|----------|---------|
+| YAML `options` array | 1 (highest) | `options: ["a", "b", "c"]` |
+| Template `{% if x == "val" %}` | 2 | Parsed at cache-generation |
+| Description pattern | 3 (lowest) | `'Type: a \| b \| c'` |
+
+**Hook output example:**
+```
+doc_type: tutorial | howto | reference (required)
+```
+
 ### Loops
 
 ```django

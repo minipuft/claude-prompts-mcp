@@ -356,6 +356,8 @@ jobs:
           name: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
           path: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
 
-  # NOTE: Gemini CLI extension is now maintained in a separate repository:
-  # https://github.com/minipuft/gemini-prompts
-  # It uses this repo as a git submodule for the core server.
+  # NOTE: Gemini CLI extension and OpenCode plugin are maintained in separate repositories:
+  # - https://github.com/minipuft/gemini-prompts
+  # - https://github.com/minipuft/opencode-prompts
+  # Both use claude-prompts as an npm dependency. Upstream releases trigger
+  # dependency update PRs via repository_dispatch in npm-publish.yml.

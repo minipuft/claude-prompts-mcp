@@ -23,6 +23,7 @@ import { buildHealthReport } from './health.js';
 import { buildMethodologyAuxiliaryReloadConfig } from './methodology-hot-reload.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
+import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
 import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
 import { startServerWithManagers } from './startup-server.js';
 import { ConfigManager } from '../config/index.js';
@@ -351,6 +352,7 @@ export class Application {
       textReferenceManager: this.textReferenceManager,
       mcpServer: this.mcpServer,
       serviceManager: this.serviceManager,
+      serverRoot: this.serverRoot,
       callbacks: {
         fullServerRefresh: () => this.fullServerRefresh(),
         restartServer: (reason: string) => this.restartServer(reason),
@@ -727,12 +729,19 @@ export class Application {
               ? buildClaudeCodeCacheAuxiliaryReloadConfig(this.logger, this.serverRoot)
               : undefined;
 
+            // Build resource change tracking auxiliary reload config
+            const resourceChangeTrackerAux = buildResourceChangeTrackerAuxiliaryReloadConfig(
+              this.logger,
+              this.configManager
+            );
+
             // Collect all auxiliary reloads
             const auxiliaryReloads = [
               methodologyAux,
               gateAux,
               scriptAux,
               claudeCodeCacheAux,
+              resourceChangeTrackerAux,
             ].filter((aux): aux is NonNullable<typeof aux> => aux !== undefined);
 
             const hotReloadOptions: Parameters<typeof this.promptManager.startHotReload>[2] = {};

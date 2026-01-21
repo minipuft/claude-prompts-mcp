@@ -5,7 +5,7 @@ description: Tests defaultValue rendering
 userMessageTemplateFile: user-message.md
 arguments:
   - name: count
-    type: number
-    description: Number of items
     required: false
+    description: Number of items
+    type: number
     defaultValue: 42

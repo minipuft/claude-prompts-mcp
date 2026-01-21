@@ -14,6 +14,7 @@ import { PromptReferenceValidator } from '../../../execution/reference/index.js'
 import { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import { FrameworkStateManager } from '../../../frameworks/framework-state-manager.js';
 import { Logger } from '../../../logging/index.js';
+import { logMcpToolChange } from '../../../runtime/resource-change-tracking.js';
 import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
 import { promptManagerMetadata } from '../../../tooling/action-metadata/definitions/prompt-manager.js';
 import { recordActionInvocation } from '../../../tooling/action-metadata/usage-tracker.js';
@@ -258,6 +259,28 @@ export class ConsolidatedPromptManager {
 
       response = this.appendActionWarnings(response, action);
       recordActionInvocation('prompt_manager', action, 'success');
+
+      // Track CRUD operations for audit logging
+      const resourceId = args['id'] as string | undefined;
+      if (
+        ['create', 'update', 'delete'].includes(action) &&
+        response.isError !== true &&
+        resourceId !== undefined &&
+        resourceId !== ''
+      ) {
+        const operation =
+          action === 'create' ? 'added' : action === 'delete' ? 'removed' : 'modified';
+        const promptsDir = this.configManager.getResolvedPromptsFilePath();
+        const category = (args['category'] as string | undefined) ?? 'general';
+        const filePath = `${promptsDir}/${category.toLowerCase().replace(/\s+/g, '-')}/${resourceId}/prompt.yaml`;
+        void logMcpToolChange(this.logger, {
+          operation,
+          resourceType: 'prompt',
+          resourceId,
+          filePath,
+        });
+      }
+
       return response;
     } catch (error) {
       recordActionInvocation('prompt_manager', action, 'failure', {

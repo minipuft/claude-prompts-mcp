@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { logMcpToolChange } from '../../../runtime/resource-change-tracking.js';
 import { serializeYaml } from '../../../utils/yaml/yaml-parser.js';
 import { VersionHistoryService } from '../../../versioning/index.js';
 import { TextDiffService } from '../../prompt-manager/analysis/text-diff-service.js';
@@ -54,28 +55,64 @@ export class ConsolidatedGateManager {
     const { action } = args;
 
     try {
+      let response: ToolResponse;
+
       switch (action) {
         case 'create':
-          return await this.handleCreate(args);
+          response = await this.handleCreate(args);
+          break;
         case 'update':
-          return await this.handleUpdate(args);
+          response = await this.handleUpdate(args);
+          break;
         case 'delete':
-          return await this.handleDelete(args);
+          response = await this.handleDelete(args);
+          break;
         case 'list':
-          return await this.handleList(args);
+          response = await this.handleList(args);
+          break;
         case 'inspect':
-          return await this.handleInspect(args);
+          response = await this.handleInspect(args);
+          break;
         case 'reload':
-          return await this.handleReload(args);
+          response = await this.handleReload(args);
+          break;
         case 'history':
-          return await this.handleHistory(args);
+          response = await this.handleHistory(args);
+          break;
         case 'rollback':
-          return await this.handleRollback(args);
+          response = await this.handleRollback(args);
+          break;
         case 'compare':
-          return await this.handleCompare(args);
+          response = await this.handleCompare(args);
+          break;
         default:
           return this.createErrorResponse(`Unknown action: ${action}`);
       }
+
+      // Track CRUD operations for audit logging
+      if (
+        ['create', 'update', 'delete'].includes(action) &&
+        response.isError !== true &&
+        args.id !== undefined &&
+        args.id !== ''
+      ) {
+        const operation =
+          action === 'create' ? 'added' : action === 'delete' ? 'removed' : 'modified';
+        try {
+          const gatesDir = this.configManager.getGatesDirectory();
+          const filePath = `${gatesDir}/${args.id}/gate.yaml`;
+          void logMcpToolChange(this.logger, {
+            operation,
+            resourceType: 'gate',
+            resourceId: args.id,
+            filePath,
+          });
+        } catch {
+          // Gates directory may not be configured
+        }
+      }
+
+      return response;
     } catch (error) {
       this.logger.error(`gate_manager error:`, error);
       return this.createErrorResponse(

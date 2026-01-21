@@ -104,14 +104,80 @@ prompt_engine(command: ">>code_review code='function x() {}'")
 
 ---
 
-## 3. Hot Reload in Action
+## 3. Mode Arguments with Auto-Discovery
+
+When your prompt has arguments with discrete options (like `format`, `style`, or `doc_type`), use **equality conditionals** in templates. The server automatically extracts these options and surfaces them in hooks.
+
+### Update `prompt.yaml`
+
+```yaml
+id: code_review
+name: Code Review
+description: Analyze code for quality issues
+userMessageTemplateFile: user-message.md
+
+arguments:
+  - name: code
+    required: true
+  - name: language
+    defaultValue: "typescript"
+  - name: focus
+    type: string
+    description: "Review focus: security | performance | readability"
+    required: false
+```
+
+### Update `user-message.md`
+
+```markdown
+# Code Review: {{language}}
+
+{% if focus == "security" %}
+**Focus: Security Analysis**
+- Check for injection vulnerabilities
+- Validate input handling
+- Review authentication patterns
+{% elif focus == "performance" %}
+**Focus: Performance Analysis**
+- Identify bottlenecks
+- Check algorithmic complexity
+- Review memory usage
+{% elif focus == "readability" %}
+**Focus: Readability Analysis**
+- Check naming conventions
+- Review code structure
+- Assess documentation
+{% else %}
+**Focus: General Review**
+{% endif %}
+
+```{{language}}
+{{code}}
+```
+```
+
+### What happens
+
+When you invoke `>>code_review`, hooks display:
+
+```
+focus: security | performance | readability (optional)
+```
+
+The options are **automatically extracted** from your template conditionals—no manual `options` array needed.
+
+---
+
+## 4. Hot Reload in Action
 
 You don't need to restart the server to see changes.
 
 1. Run `>>hello name='Dev'`
 2. Edit `prompt.yaml`: Change "Hello" to "Greetings"
 3. Run `>>hello name='Dev'` again
-4. **Result**: "Greetings Dev!" appears instantly.
+4. **Result**: "Greetings Dev!" appears instantly
+
+This works for template content too—update your conditionals and see changes immediately.
 
 ---
 

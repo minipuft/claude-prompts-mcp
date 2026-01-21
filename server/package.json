@@ -58,6 +58,7 @@
     "test": "npm run pretest && npm run test:unit",
     "pretest": "npm run generate:contracts",
     "test:unit": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --runInBand tests/unit",
+    "test:match": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --runInBand --testPathPatterns",
     "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --watch tests/unit",
     "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage tests/unit",
     "test:integration": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --runInBand tests/integration",
@@ -123,6 +124,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@types/nunjucks": "^3.2.6",
+    "chokidar": "^3.6.0",
     "cors": "^2.8.5",
     "diff": "^8.0.3",
     "express": "^4.18.2",

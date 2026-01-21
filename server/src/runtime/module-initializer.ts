@@ -7,6 +7,10 @@
 import * as path from 'node:path';
 
 import {
+  initializeResourceChangeTracker,
+  compareResourceBaseline,
+} from './resource-change-tracking.js';
+import {
   createFrameworkStateManager,
   FrameworkStateManager,
 } from '../frameworks/framework-state-manager.js';
@@ -16,6 +20,7 @@ import {
   createToolDescriptionManager,
   ToolDescriptionManager,
 } from '../mcp-tools/tool-description-manager.js';
+import { ResourceChangeTracker } from '../tracking/index.js';
 import { isChainPrompt } from '../utils/chainUtils.js';
 
 import type { RuntimeLaunchOptions } from './options.js';
@@ -47,6 +52,8 @@ export interface ModuleInitParams {
   mcpServer: McpServer;
   serviceManager: ServiceManager;
   callbacks: ModuleInitCallbacks;
+  /** Server root for runtime state directories */
+  serverRoot?: string;
 }
 
 export interface ModuleInitResult {
@@ -54,6 +61,8 @@ export interface ModuleInitResult {
   gateManager: GateManager;
   mcpToolsManager: McpToolsManager;
   toolDescriptionManager: ToolDescriptionManager;
+  /** Resource change tracker for audit logging (undefined if serverRoot not provided) */
+  resourceChangeTracker?: ResourceChangeTracker;
 }
 
 export async function initializeModules(params: ModuleInitParams): Promise<ModuleInitResult> {
@@ -70,9 +79,37 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     mcpServer,
     serviceManager,
     callbacks,
+    serverRoot,
   } = params;
 
   const isVerbose = runtimeOptions.verbose;
+
+  // Initialize Resource Change Tracker early (for audit logging)
+  let resourceChangeTracker: ResourceChangeTracker | undefined;
+  if (serverRoot !== undefined && serverRoot !== '') {
+    if (isVerbose) logger.info('🔄 Initializing Resource Change Tracker...');
+    try {
+      resourceChangeTracker = await initializeResourceChangeTracker(logger, serverRoot);
+      // Compare baseline to detect external changes
+      const baselineResult = await compareResourceBaseline(
+        resourceChangeTracker,
+        configManager,
+        logger
+      );
+      if (isVerbose) {
+        const { added, modified, removed } = baselineResult;
+        if (added > 0 || modified > 0 || removed > 0) {
+          logger.info(
+            `📊 External changes detected: ${added} added, ${modified} modified, ${removed} removed`
+          );
+        } else {
+          logger.info('✅ ResourceChangeTracker initialized (no external changes detected)');
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to initialize ResourceChangeTracker:', error);
+    }
+  }
 
   if (isVerbose) logger.info('🔄 Initializing Framework State Manager...');
   const frameworkStateRoot =
@@ -139,5 +176,6 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     gateManager,
     mcpToolsManager,
     toolDescriptionManager,
+    resourceChangeTracker,
   };
 }

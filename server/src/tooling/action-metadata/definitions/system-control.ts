@@ -163,6 +163,15 @@ const operations: ActionDescriptor[] = [
     requiredArgs: ['session_id'],
     description: 'Inspect session details.',
   },
+  {
+    id: 'changes:list',
+    displayName: 'List Resource Changes',
+    category: 'changes',
+    status: 'working',
+    requiredArgs: [],
+    description:
+      'Query resource change audit log with optional filters (source, resourceType, since, limit).',
+  },
 ];
 
 export const SYSTEM_CONTROL_ACTION_IDS = [
@@ -175,6 +184,7 @@ export const SYSTEM_CONTROL_ACTION_IDS = [
   'guide',
   'injection',
   'session',
+  'changes',
 ] as const;
 
 export type SystemControlActionId = (typeof SYSTEM_CONTROL_ACTION_IDS)[number];

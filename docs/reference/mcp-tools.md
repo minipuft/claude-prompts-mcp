@@ -484,13 +484,47 @@ system_control(action:"gates", operation:"list")
 
 ### Actions
 
-| Action      | Operations                            | Purpose                |
-| ----------- | ------------------------------------- | ---------------------- |
-| `status`    | —                                     | Runtime overview       |
-| `framework` | `list`, `switch`, `enable`, `disable` | Methodology management |
-| `gates`     | `list`, `enable`, `disable`, `status` | Gate management        |
-| `analytics` | —                                     | Execution metrics      |
-| `config`    | —                                     | View config overlays   |
+| Action      | Operations                            | Purpose                       |
+| ----------- | ------------------------------------- | ----------------------------- |
+| `status`    | —                                     | Runtime overview              |
+| `framework` | `list`, `switch`, `enable`, `disable` | Methodology management        |
+| `gates`     | `list`, `enable`, `disable`, `status` | Gate management               |
+| `analytics` | —                                     | Execution metrics             |
+| `config`    | —                                     | View config overlays          |
+| `changes`   | `list`                                | Resource change audit log     |
+
+### Resource Change Tracking
+
+Know what changed, when, and how. The server logs every prompt and gate modification—whether from MCP tools, filesystem edits, or external processes.
+
+```bash
+# View recent changes
+system_control(action:"changes", operation:"list")
+
+# Filter by source (who made the change)
+system_control(action:"changes", operation:"list", source:"filesystem")
+system_control(action:"changes", operation:"list", source:"mcp-tool")
+
+# Filter by resource type
+system_control(action:"changes", operation:"list", resourceType:"prompt")
+system_control(action:"changes", operation:"list", resourceType:"gate")
+
+# Filter by time
+system_control(action:"changes", operation:"list", since:"2026-01-20T00:00:00Z")
+
+# Limit results
+system_control(action:"changes", operation:"list", limit:10)
+```
+
+**Change Sources:**
+
+| Source       | Meaning                                    |
+| ------------ | ------------------------------------------ |
+| `filesystem` | Hot-reload detected file change            |
+| `mcp-tool`   | Created/updated via `resource_manager`     |
+| `external`   | Changed while server was down (on startup) |
+
+**Why this matters:** Debug sync issues between your editor and the server. Track which prompts changed during a session. Audit who modified what before a deploy.
 
 ---
 
@@ -807,6 +841,7 @@ Path resolution follows this priority (first match wins):
 | Style definitions  | `server/resources/styles/{id}/style.yaml`           |
 | Methodologies      | `server/resources/methodologies/{id}/methodology.yaml` |
 | Chain sessions     | `runtime-state/chain-sessions.json`                 |
+| Resource changes   | `runtime-state/resource-changes.jsonl`              |
 | Server config      | `server/config.json`                                |
 
 **Related docs:**

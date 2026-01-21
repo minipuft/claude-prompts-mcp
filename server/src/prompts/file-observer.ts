@@ -2,12 +2,16 @@
 /**
  * File Observer Module
  * Handles file system watching for automatic change detection and hot reload triggers
+ *
+ * Uses Chokidar for cross-platform file watching with polling support for WSL2/network filesystems.
  */
 
 import { EventEmitter } from 'events';
 import * as fs from 'node:fs';
-import { FSWatcher } from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+
+import chokidar from 'chokidar';
 
 import { ConfigManager } from '../config/index.js';
 import { Logger } from '../logging/index.js';
@@ -73,6 +77,18 @@ export interface FileObserverConfig {
   maxRetries: number;
   retryDelayMs: number;
   frameworkIntegration?: FrameworkIntegration;
+  /**
+   * Use polling for file watching (required for WSL2 and network filesystems).
+   * - 'auto': Detect WSL2/network filesystems and enable polling automatically (default)
+   * - true: Always use polling
+   * - false: Never use polling (uses native fs events)
+   */
+  usePolling?: boolean | 'auto';
+  /**
+   * Polling interval in milliseconds when usePolling is enabled.
+   * Default: 300ms (balances responsiveness vs CPU usage)
+   */
+  pollingInterval?: number;
 }
 
 /**
@@ -89,6 +105,19 @@ export interface FileObserverStats {
   frameworkEvents: number;
   frameworkCacheInvalidations: number;
   methodologyFileEvents: number;
+}
+
+/**
+ * Detect if running in WSL2 environment
+ * WSL2's virtualized filesystem doesn't propagate fs.watch events reliably
+ */
+function isWSL2(): boolean {
+  try {
+    const release = os.release().toLowerCase();
+    return release.includes('wsl2') || release.includes('microsoft');
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -119,6 +148,8 @@ const DEFAULT_CONFIG: FileObserverConfig = {
     cacheInvalidation: false,
     performanceTracking: false,
   },
+  usePolling: 'auto',
+  pollingInterval: 300,
 };
 
 /**
@@ -128,7 +159,7 @@ const DEFAULT_CONFIG: FileObserverConfig = {
 export class FileObserver extends EventEmitter {
   protected logger: Logger;
   private config: FileObserverConfig;
-  private watchers: Map<string, FSWatcher> = new Map();
+  private watchers: Map<string, chokidar.FSWatcher> = new Map();
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
   private stats: FileObserverStats;
   private isStarted: boolean = false;
@@ -137,6 +168,7 @@ export class FileObserver extends EventEmitter {
   private configManager: ConfigManager | undefined;
   private sigintHandler: (() => void) | undefined;
   private sigtermHandler: (() => void) | undefined;
+  private shouldUsePolling: boolean = false;
 
   constructor(logger: Logger, config?: Partial<FileObserverConfig>, configManager?: ConfigManager) {
     super();
@@ -154,6 +186,13 @@ export class FileObserver extends EventEmitter {
       frameworkCacheInvalidations: 0,
       methodologyFileEvents: 0,
     };
+
+    // Determine if polling should be used
+    if (this.config.usePolling === 'auto') {
+      this.shouldUsePolling = isWSL2();
+    } else {
+      this.shouldUsePolling = this.config.usePolling ?? false;
+    }
 
     // Set max listeners to prevent warning for multiple prompt directories
     this.setMaxListeners(50);
@@ -191,7 +230,12 @@ export class FileObserver extends EventEmitter {
       process.on('SIGTERM', this.sigtermHandler);
     }
 
-    this.logger.info(`✅ FileObserver started with debounce: ${this.config.debounceMs}ms`);
+    const pollingStatus = this.shouldUsePolling
+      ? `polling enabled (interval: ${this.config.pollingInterval}ms)`
+      : 'native fs events';
+    this.logger.info(
+      `✅ FileObserver started with debounce: ${this.config.debounceMs}ms, ${pollingStatus}`
+    );
   }
 
   /**
@@ -210,15 +254,16 @@ export class FileObserver extends EventEmitter {
     }
     this.debounceTimers.clear();
 
-    // Close all watchers
-    for (const [path, watcher] of this.watchers.entries()) {
+    // Close all watchers (chokidar close() returns a Promise)
+    const closePromises = Array.from(this.watchers.entries()).map(async ([watchPath, watcher]) => {
       try {
-        watcher.close();
-        this.logger.debug(`Closed watcher for: ${path}`);
+        await watcher.close();
+        this.logger.debug(`Closed watcher for: ${watchPath}`);
       } catch (error) {
-        this.logger.warn(`Failed to close watcher for ${path}:`, error);
+        this.logger.warn(`Failed to close watcher for ${watchPath}:`, error);
       }
-    }
+    });
+    await Promise.all(closePromises);
     this.watchers.clear();
 
     this.isStarted = false;
@@ -256,17 +301,38 @@ export class FileObserver extends EventEmitter {
         throw new Error(`Path is not a directory: ${directoryPath}`);
       }
 
-      const watcher = fs.watch(
-        directoryPath,
-        { recursive: this.config.recursive },
-        (eventType, filename) => {
-          this.handleFileEvent(eventType, directoryPath, filename, category);
-        }
-      );
+      // Configure chokidar options
+      const watchOptions: chokidar.WatchOptions = {
+        persistent: true,
+        ignoreInitial: true,
+        followSymlinks: true,
+        depth: this.config.recursive ? undefined : 0,
+        ignored: this.config.ignoredPatterns,
+        usePolling: this.shouldUsePolling,
+        interval: this.config.pollingInterval,
+        binaryInterval: this.config.pollingInterval,
+        awaitWriteFinish: {
+          stabilityThreshold: 100,
+          pollInterval: 100,
+        },
+      };
 
-      watcher.on('error', (error) => {
-        this.handleWatcherError(directoryPath, error);
-      });
+      const watcher = chokidar.watch(directoryPath, watchOptions);
+
+      // Handle chokidar events
+      watcher
+        .on('add', (filePath: string) => {
+          this.handleChokidarEvent('add', directoryPath, filePath, category);
+        })
+        .on('change', (filePath: string) => {
+          this.handleChokidarEvent('change', directoryPath, filePath, category);
+        })
+        .on('unlink', (filePath: string) => {
+          this.handleChokidarEvent('unlink', directoryPath, filePath, category);
+        })
+        .on('error', (error: Error) => {
+          this.handleWatcherError(directoryPath, error);
+        });
 
       this.watchers.set(directoryPath, watcher);
       this.stats.watchersActive = this.watchers.size;
@@ -274,7 +340,7 @@ export class FileObserver extends EventEmitter {
       this.logger.info(
         `👁️ FileObserver: Watching directory: ${directoryPath}${
           category ? ` (category: ${category})` : ''
-        }`
+        }${this.shouldUsePolling ? ' (polling)' : ''}`
       );
     } catch (error) {
       this.logger.error(`Failed to watch directory ${directoryPath}:`, error);
@@ -292,6 +358,30 @@ export class FileObserver extends EventEmitter {
   }
 
   /**
+   * Handle chokidar file events
+   * Translates chokidar event types to our internal event format
+   */
+  private handleChokidarEvent(
+    eventType: 'add' | 'change' | 'unlink',
+    directoryPath: string,
+    filePath: string,
+    category?: string
+  ): void {
+    const filename = path.relative(directoryPath, filePath);
+    const chokidarToInternal: Record<string, string> = {
+      add: 'rename',
+      change: 'change',
+      unlink: 'rename',
+    };
+    this.handleFileEvent(
+      chokidarToInternal[eventType] ?? 'change',
+      directoryPath,
+      filename,
+      category
+    );
+  }
+
+  /**
    * Remove a directory from watching
    */
   async unwatchDirectory(directoryPath: string): Promise<void> {
@@ -302,7 +392,7 @@ export class FileObserver extends EventEmitter {
     }
 
     try {
-      watcher.close();
+      await watcher.close();
       this.watchers.delete(directoryPath);
       this.stats.watchersActive = this.watchers.size;
 

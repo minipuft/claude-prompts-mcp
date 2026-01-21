@@ -97,6 +97,7 @@ CLAUDE.md
 .claude/settings.local.json
 .claude/settings.json
 server/.claude/
+server/.opencode/
 
 .agent/
 # Temporary test files
