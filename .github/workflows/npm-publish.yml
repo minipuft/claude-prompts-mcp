@@ -63,9 +63,9 @@ jobs:
             exit 1
           fi
 
-      - name: Validate distribution versions
-        working-directory: server
-        run: node scripts/validate-versions.js --distribution
+      # Note: Distribution version check removed - downstream repos are updated
+      # AFTER npm publish via repository-dispatch events (see end of workflow).
+      # Local version consistency is validated by the tag/version/changelog check above.
 
       - name: Install
         working-directory: server
