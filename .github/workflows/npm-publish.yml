@@ -94,7 +94,8 @@ jobs:
         working-directory: server
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+        # Note: If provenance fails due to tlog conflict (409), retry without provenance
+        run: npm publish --access public --provenance || npm publish --access public
 
       - name: Trigger gemini-prompts dependency update
         if: success()
