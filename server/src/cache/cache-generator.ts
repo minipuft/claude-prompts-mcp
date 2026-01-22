@@ -128,6 +128,7 @@ interface PromptCacheEntry {
   description: string;
   is_chain: boolean;
   chain_steps: number;
+  chain_step_ids?: string[];
   chain_step_names?: string[];
   arguments: ArgumentInfo[];
   gates: string[];
@@ -258,7 +259,8 @@ async function loadPromptYaml(promptDir: string): Promise<PromptCacheEntry | nul
       (data['chainSteps'] as Array<{ promptId?: string; stepName?: string }>) ?? [];
     const isChain = chainSteps.length > 0;
 
-    // Extract step names for chain workflow visibility
+    // Extract step IDs and names for chain workflow visibility
+    const chainStepIds = isChain ? chainSteps.map((step) => step.promptId ?? 'unknown') : undefined;
     const chainStepNames = isChain
       ? chainSteps.map((step) => step.stepName || step.promptId || 'Unknown')
       : undefined;
@@ -306,6 +308,7 @@ async function loadPromptYaml(promptDir: string): Promise<PromptCacheEntry | nul
       description: description.slice(0, 200),
       is_chain: isChain,
       chain_steps: chainSteps.length,
+      chain_step_ids: chainStepIds,
       chain_step_names: chainStepNames,
       arguments: args,
       gates,

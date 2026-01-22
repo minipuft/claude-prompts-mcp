@@ -325,31 +325,46 @@ def format_chain_step_args(
     return lines
 
 
-def format_chain_preview(prompt_info: dict | None) -> list[str]:
+def format_chain_preview(
+    prompt_info: dict | None = None,
+    adhoc_chain: list[str] | None = None,
+) -> list[str]:
     """
     Format a chain preview showing all steps before execution.
+    Handles both predefined chains (from prompt_info) and ad-hoc chains (from --> syntax).
 
     Args:
-        prompt_info: Prompt metadata from cache (may be None)
+        prompt_info: Prompt metadata from cache (for predefined chains)
+        adhoc_chain: List of prompt IDs from --> syntax (for ad-hoc chains)
 
     Returns:
         Lines for chain preview, or empty list if not a chain
     """
-    if not prompt_info or not prompt_info.get("is_chain"):
-        return []
+    # Case 1: Predefined chain prompt (has chainSteps in YAML)
+    if prompt_info and prompt_info.get("is_chain"):
+        step_ids = prompt_info.get("chain_step_ids") or []
+        step_names = prompt_info.get("chain_step_names") or []
+        total_steps = prompt_info.get("chain_steps", 0)
 
-    step_names = prompt_info.get("chain_step_names") or []
-    total_steps = prompt_info.get("chain_steps", 0)
+        if not step_names and not step_ids:
+            return [f"[Chain Workflow] {total_steps} steps"]
 
-    if not step_names:
-        # Fallback: no step names in cache (backwards compat)
-        return [f"[Chain Workflow] {total_steps} steps"]
+        lines = [f"[Chain Workflow] {total_steps} steps:"]
+        max_steps = max(len(step_ids), len(step_names), total_steps)
+        for i in range(max_steps):
+            step_id = step_ids[i] if i < len(step_ids) else "unknown"
+            step_name = step_names[i] if i < len(step_names) else step_id
+            lines.append(f"  {i + 1}. {step_id}: {step_name}")
+        return lines
 
-    lines = [f"[Chain Workflow] {total_steps} steps:"]
-    for i, name in enumerate(step_names, 1):
-        lines.append(f"  {i}. {name}")
+    # Case 2: Ad-hoc chain (using --> syntax)
+    if adhoc_chain and len(adhoc_chain) > 1:
+        lines = [f"[Chain Workflow] {len(adhoc_chain)} steps:"]
+        for i, prompt_id in enumerate(adhoc_chain):
+            lines.append(f"  {i + 1}. {prompt_id}")
+        return lines
 
-    return lines
+    return []
 
 
 def format_tool_call(prompt_id: str, info: dict) -> str:
@@ -435,8 +450,8 @@ def format_user_message(
 
     base_message = "".join(parts)
 
-    # Add chain preview for chain prompts (shows workflow upfront)
-    chain_preview = format_chain_preview(prompt_info)
+    # Add chain preview for chain prompts (predefined or ad-hoc)
+    chain_preview = format_chain_preview(prompt_info, operators.get("chain"))
     if chain_preview:
         return base_message + "\n" + "\n".join(chain_preview)
 
@@ -456,8 +471,8 @@ def _format_expanded_message(
     """
     lines = [f"[MCP] >>{prompt_id}"]
 
-    # Add chain workflow preview for chain prompts
-    chain_preview = format_chain_preview(prompt_info)
+    # Add chain workflow preview for chain prompts (predefined or ad-hoc)
+    chain_preview = format_chain_preview(prompt_info, operators.get("chain"))
     if chain_preview:
         lines.extend(chain_preview)
 

@@ -28,6 +28,7 @@ class PromptInfo(TypedDict):
     description: str
     is_chain: bool
     chain_steps: int
+    chain_step_ids: list[str] | None
     chain_step_names: list[str] | None
     arguments: list[ArgumentInfo]
     gates: list[str]

@@ -22,21 +22,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Chain step visibility**: User-facing hook messages now show detailed step breakdowns for chain workflows
+  - **Predefined chains** (YAML-defined): Display both step ID and step name (`1. deep_analysis/initial_scan: Initial Scan (1/4)`)
+  - **Ad-hoc chains** (`-->` syntax): Display prompt IDs in execution order (`1. strategicimplement`, `2. test_default`)
+  - Cache now includes `chain_step_ids` alongside `chain_step_names` for complete step metadata
+
 - **Extension dependency sync**: `.mcpb` package now reads dependencies dynamically from `server/package.json` at build time (SSOT pattern)
   - `scripts/build-extension.sh` refactored to generate deps dynamically, eliminating version drift
   - `npm run validate:extension-deps` validates extension configuration as part of `validate:all`
   - Bundled packages (like chokidar) are correctly excluded from runtime deps
 
-- **MCP Resources protocol**: Token-efficient read-only access to prompts and gates via `resources/list` and `resources/read`
-  - `resource://prompt/` — List all prompts with minimal metadata (5-16x more token efficient than tool-based listing)
-  - `resource://prompt/{id}` — Full prompt content with metadata header
-  - `resource://prompt/{id}/template` — Raw template content only
-  - `resource://gate/` — List all gates with metadata
-  - `resource://gate/{id}` — Gate definition with guidance content
-  - `resource://gate/{id}/guidance` — Raw guidance content only
+- **MCP Resources protocol**: Token-efficient read-only access to prompts, gates, methodologies, and observability data via `resources/list` and `resources/read`
+  - **Prompts** (Phase 1):
+    - `resource://prompt/` — List all prompts with minimal metadata (5-16x more token efficient than tool-based listing)
+    - `resource://prompt/{id}` — Full prompt content with metadata header
+    - `resource://prompt/{id}/template` — Raw template content only
+  - **Gates** (Phase 1):
+    - `resource://gate/` — List all gates with metadata
+    - `resource://gate/{id}` — Gate definition with guidance content
+    - `resource://gate/{id}/guidance` — Raw guidance content only
+  - **Methodologies** (Phase 2):
+    - `resource://methodology/` — List all frameworks/methodologies with type, priority, and enabled status
+    - `resource://methodology/{id}` — Framework definition with execution guidelines
+    - `resource://methodology/{id}/system-prompt` — Raw system prompt template only
+  - **Observability** (Phase 2):
+    - `resource://session/` — List active chain sessions with progress status
+    - `resource://session/{chainId}` — Individual session state with step progress, timing, and original arguments
+    - `resource://metrics/pipeline` — Pipeline execution metrics and analytics summary
   - Hot-reload compatible: connected clients receive `notifications/resources/list_changed` on prompt/gate changes
 
 ### Improved
+
+- **MCP Resources list format**: Optimized for token efficiency
+  - Resource lists now return compact plain text format (~7KB) instead of verbose JSON (~26KB)
+  - Format: `id: title - args` for prompts, `id: name (type)` for gates, `id: name [disabled]` for methodologies
+  - Approximately **4x more token efficient** than tool-based list calls
+  - Observability resources (sessions, metrics) retain JSON format for structured data needs
 
 - **Repetition operator (`* N`)**: Enhanced usability and documentation
   - Pattern relaxed to accept all whitespace variations: `>>p * 3`, `>>p *3`, `>>p* 3`, `>>p*3`
@@ -48,6 +69,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Release Please workflow**: Modernized with dry run support, job outputs, and GitHub summary reporting
 - **npm-publish workflow**: Simplified structure with cleaner version parsing and downstream triggers via direct curl
+
+### Fixed
+
+- **MCP Resources Phase 2 wiring**: Methodology and observability resources now properly registered
+  - Added `getFrameworkManager()` getter to `FrameworkStateManager` for resource access
+  - Added `getChainSessionManager()` and `getMetricsCollector()` getters to `McpToolsManager`
+  - Wired all Phase 2 dependencies in `Application.registerMcpResources()`
+  - Fixed `getSessionStats()` type mismatch between `ResourceDependencies` interface and actual `ChainSessionManager` implementation
 
 ## [1.5.0] - 2026-01-21
 
