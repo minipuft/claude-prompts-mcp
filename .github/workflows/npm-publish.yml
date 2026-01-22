@@ -87,32 +87,9 @@ jobs:
           # OIDC trusted publishing - no token needed, provenance auto-enabled
           npm publish --access public --provenance
 
-      - name: Trigger downstream updates
-        if: success()
-        run: |
-          echo "## Downstream Notifications" >> $GITHUB_STEP_SUMMARY
-
-          # Trigger gemini-prompts
-          if curl -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.DOWNSTREAM_PAT }}" \
-            https://api.github.com/repos/minipuft/gemini-prompts/dispatches \
-            -d '{"event_type":"upstream-release","client_payload":{"version":"${{ steps.version.outputs.version }}"}}'; then
-            echo "✅ Triggered gemini-prompts" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ Failed to trigger gemini-prompts" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          # Trigger opencode-prompts
-          if curl -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.DOWNSTREAM_PAT }}" \
-            https://api.github.com/repos/minipuft/opencode-prompts/dispatches \
-            -d '{"event_type":"upstream-release","client_payload":{"version":"${{ steps.version.outputs.version }}"}}'; then
-            echo "✅ Triggered opencode-prompts" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ Failed to trigger opencode-prompts" >> $GITHUB_STEP_SUMMARY
-          fi
+      # Downstream updates handled by Dependabot in each repo
+      # - gemini-prompts: dependabot watches claude-prompts weekly
+      # - opencode-prompts: dependabot watches claude-prompts weekly
 
       - name: Summary
         if: always()
