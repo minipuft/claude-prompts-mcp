@@ -4,9 +4,15 @@ on:
   release:
     types: [published]
 
+# OIDC Trusted Publishing - no NPM_TOKEN needed
+# Setup required on npmjs.com:
+#   1. Go to https://www.npmjs.com/package/claude-prompts/access
+#   2. Add Trusted Publisher → GitHub Actions
+#   3. Configure: minipuft / claude-prompts / npm-publish.yml / npm
+
 permissions:
   contents: read
-  id-token: write # Required for npm provenance
+  id-token: write # Required for OIDC trusted publishing
 
 jobs:
   publish:
@@ -74,14 +80,12 @@ jobs:
         working-directory: server
         run: npm run test:ci
 
-      - name: Publish to npm
+      - name: Publish to npm (OIDC Trusted Publishing)
         working-directory: server
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          echo "Publishing claude-prompts@${{ steps.version.outputs.version }}"
-          # Try with provenance first, fall back to without if tlog conflict
-          npm publish --access public --provenance || npm publish --access public
+          echo "Publishing claude-prompts@${{ steps.version.outputs.version }} via OIDC"
+          # OIDC trusted publishing - no token needed, provenance auto-enabled
+          npm publish --access public --provenance
 
       - name: Trigger downstream updates
         if: success()
