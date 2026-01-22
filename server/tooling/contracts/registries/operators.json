@@ -68,12 +68,17 @@
     {
       "id": "repetition",
       "symbol": "* N",
-      "description": "Chain shorthand - repeat N times",
-      "purpose": "Execute prompt N times (unfolds to chain)",
+      "description": "Chain shorthand - repeat N times with SAME arguments",
+      "purpose": "Execute prompt N times (unfolds to chain). Arguments are duplicated across all steps. For different args per step, use explicit --> chain syntax.",
       "pattern": {
-        "typescript": "\\s+\\*\\s*(\\d+)(?=\\s|$|-->)"
+        "typescript": "\\s*\\*\\s*(\\d+)(?=\\s|$|-->)"
       },
-      "examples": [">>prompt * 3", ">>analyze * 2 --> >>summarize"],
+      "examples": [
+        ">>prompt * 3",
+        ">>analyze * 2 --> >>summarize",
+        ">>brainstorm topic:'AI' * 5"
+      ],
+      "semanticNote": "* N duplicates arguments. Use >>p arg1 --> >>p arg2 for varied args per step.",
       "status": "implemented",
       "detectInHooks": true
     },

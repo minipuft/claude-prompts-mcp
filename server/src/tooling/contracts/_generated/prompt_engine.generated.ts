@@ -44,11 +44,15 @@ export const prompt_engineParameters: ToolParameter[] = [
       ">>fix-bug :: verify:'npm test' :full loop:true",
       ">>brainstorm * 5 topic:'product ideas'",
       ">>strategicImplement * 3 plan_path:'./plan.md'",
+      ">>research topic:'A' --> >>research topic:'B' --> >>compare",
+      ">>validate input:'step1' --> >>validate input:'step2' --> >>synthesize",
     ],
     notes: [
       'Every step needs prompt ID prefix (>> or /). Modifiers apply to whole chain.',
       'Script tools: tool:<id> to invoke; confirm:true tools need approval.',
       'Shell verification: :: verify:"cmd" with :fast/:full/:extended presets, loop:true for autonomous.',
+      'REPETITION (* N): Repeats with SAME arguments. For different args per step, use explicit --> chain syntax.',
+      "CONTEXT: Each chain step receives previous step's output automatically. Arguments are optional per step.",
     ],
   },
   {

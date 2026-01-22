@@ -31,9 +31,9 @@ export const GENERATED_OPERATOR_PATTERNS = {
     symbol: '#',
     status: 'implemented',
   },
-  /** Chain shorthand - repeat N times - * N */
+  /** Chain shorthand - repeat N times with SAME arguments - * N */
   repetition: {
-    pattern: /\s+\*\s*(\d+)(?=\s|$|-->)/,
+    pattern: /\s*\*\s*(\d+)(?=\s|$|-->)/,
     symbol: '* N',
     status: 'implemented',
   },

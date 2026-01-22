@@ -45,9 +45,9 @@ OPERATORS: dict[str, OperatorInfo] = {
     },
     'repetition': {
         'symbol': '* N',
-        'description': 'Chain shorthand - repeat N times',
-        'pattern': re.compile(r'''\s+\*\s*(\d+)(?=\s|$|-->)'''),
-        'examples': [">>prompt * 3",">>analyze * 2 --> >>summarize"],
+        'description': 'Chain shorthand - repeat N times with SAME arguments',
+        'pattern': re.compile(r'''\s*\*\s*(\d+)(?=\s|$|-->)'''),
+        'examples': [">>prompt * 3",">>analyze * 2 --> >>summarize",">>brainstorm topic:'AI' * 5"],
     },
 }
 

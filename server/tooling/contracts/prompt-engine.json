@@ -3,7 +3,7 @@
   "version": 1,
   "summary": "Execute prompts/chains with ground-truth validation. >>prompt_id | * N | -->chain | :: verify:\"cmd\" :full loop:true | @Framework | %modifiers",
   "toolDescription": {
-    "description": "\ud83d\ude80 PROMPT ENGINE: Execute prompts with methodology guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply methodology (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION: * N unfolds to chain (>>p * 3 = >>p --> >>p --> >>p)\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
+    "description": "\ud83d\ude80 PROMPT ENGINE: Execute prompts with methodology guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply methodology (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
     "shortDescription": "Execute prompts with validation and methodology",
     "category": "execution",
     "triggerExamples": [
@@ -25,13 +25,17 @@
       "notes": [
         "Every step needs prompt ID prefix (>> or /). Modifiers apply to whole chain.",
         "Script tools: tool:<id> to invoke; confirm:true tools need approval.",
-        "Shell verification: :: verify:\"cmd\" with :fast/:full/:extended presets, loop:true for autonomous."
+        "Shell verification: :: verify:\"cmd\" with :fast/:full/:extended presets, loop:true for autonomous.",
+        "REPETITION (* N): Repeats with SAME arguments. For different args per step, use explicit --> chain syntax.",
+        "CONTEXT: Each chain step receives previous step's output automatically. Arguments are optional per step."
       ],
       "examples": [
         "@CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'",
         ">>fix-bug :: verify:'npm test' :full loop:true",
         ">>brainstorm * 5 topic:'product ideas'",
-        ">>strategicImplement * 3 plan_path:'./plan.md'"
+        ">>strategicImplement * 3 plan_path:'./plan.md'",
+        ">>research topic:'A' --> >>research topic:'B' --> >>compare",
+        ">>validate input:'step1' --> >>validate input:'step2' --> >>synthesize"
       ]
     },
     {

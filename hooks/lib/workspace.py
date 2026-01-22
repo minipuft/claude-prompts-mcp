@@ -42,10 +42,20 @@ def get_workspace_root() -> Path | None:
             return gemini_path
 
     # 4. Self-resolution from script location
-    # .claude-plugin/hooks/lib/workspace.py -> lib -> hooks -> .claude-plugin -> project_root
-    script_dir = Path(__file__).resolve().parent
-    plugin_dir = script_dir.parent.parent  # .claude-plugin
-    project_root = plugin_dir.parent       # repo root
+    # Supports both:
+    #   - hooks/lib/workspace.py (development: lib -> hooks -> project_root)
+    #   - .claude-plugin/hooks/lib/workspace.py (packaged: lib -> hooks -> .claude-plugin -> project_root)
+    script_dir = Path(__file__).resolve().parent  # lib/
+    hooks_dir = script_dir.parent                  # hooks/
+
+    # Try development structure first (hooks at project root)
+    project_root = hooks_dir.parent
+    if (project_root / "server").exists():
+        return project_root
+
+    # Try packaged structure (.claude-plugin/hooks/)
+    plugin_dir = hooks_dir.parent  # .claude-plugin/
+    project_root = plugin_dir.parent
     if (project_root / "server").exists():
         return project_root
 

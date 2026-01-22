@@ -660,6 +660,10 @@ export class SymbolicCommandParser {
   ): SymbolicCommandParseResult {
     const executionPlan = this.generateExecutionPlan(operators, basePromptId, baseArgs);
 
+    // Check if repetition operator was used (and thus expanded)
+    const repetitionOp = operators.operators.find((op) => op.type === 'repetition');
+    const repetitionExpanded = repetitionOp !== undefined;
+
     return {
       promptId: basePromptId,
       rawArgs: baseArgs,
@@ -672,6 +676,7 @@ export class SymbolicCommandParser {
         parseStrategy: 'symbolic',
         detectedFormat: `Symbolic (${operators.operatorTypes.join(', ')})`,
         warnings: [],
+        ...(repetitionExpanded && { repetitionExpanded: true }),
       },
     };
   }

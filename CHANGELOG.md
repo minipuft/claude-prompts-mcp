@@ -20,6 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Extension dependency sync**: `.mcpb` package now reads dependencies dynamically from `server/package.json` at build time (SSOT pattern)
+  - `scripts/build-extension.sh` refactored to generate deps dynamically, eliminating version drift
+  - `npm run validate:extension-deps` validates extension configuration as part of `validate:all`
+  - Bundled packages (like chokidar) are correctly excluded from runtime deps
+
+- **MCP Resources protocol**: Token-efficient read-only access to prompts and gates via `resources/list` and `resources/read`
+  - `resource://prompt/` — List all prompts with minimal metadata (5-16x more token efficient than tool-based listing)
+  - `resource://prompt/{id}` — Full prompt content with metadata header
+  - `resource://prompt/{id}/template` — Raw template content only
+  - `resource://gate/` — List all gates with metadata
+  - `resource://gate/{id}` — Gate definition with guidance content
+  - `resource://gate/{id}/guidance` — Raw guidance content only
+  - Hot-reload compatible: connected clients receive `notifications/resources/list_changed` on prompt/gate changes
+
+### Improved
+
+- **Repetition operator (`* N`)**: Enhanced usability and documentation
+  - Pattern relaxed to accept all whitespace variations: `>>p * 3`, `>>p *3`, `>>p* 3`, `>>p*3`
+  - Clarified semantics: `* N` repeats with **same arguments** (for varied args, use explicit `-->` chains)
+  - Comprehensive test coverage (34 tests) for all expansion scenarios
+  - Updated documentation in `docs/reference/mcp-tools.md` with decision guide for same-args vs varied-args patterns
+
 ### Changed
 
 - **Release Please workflow**: Modernized with dry run support, job outputs, and GitHub summary reporting

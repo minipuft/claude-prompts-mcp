@@ -43,7 +43,22 @@ cd "$STAGING_DIR/server"
 VERSION=$(node -p "require('$ROOT_DIR/server/package.json').version")
 echo "    Version: $VERSION"
 
-# Create minimal package.json with only production deps (version from source)
+# Create minimal package.json with production deps read dynamically from server/package.json
+# NOTE: These deps are safety net for CJS interop - most are bundled in dist/index.js
+# SSOT: server/package.json is the source of truth; deps are filtered at build time
+echo "==> Generating package.json from server/package.json..."
+
+# Read deps dynamically, excluding packages that are bundled inline by esbuild
+DEPS=$(node -p "
+  const pkg = require('$ROOT_DIR/server/package.json');
+  // Packages bundled inline by esbuild - don't need as runtime deps
+  const exclude = ['chokidar'];
+  Object.entries(pkg.dependencies)
+    .filter(([name]) => exclude.includes(name) === false && name.startsWith('@types/') === false)
+    .map(([name, ver]) => '    \"' + name + '\": \"' + ver + '\"')
+    .join(',\n');
+")
+
 cat > package.json << EOF
 {
   "name": "claude-prompts",
@@ -51,16 +66,13 @@ cat > package.json << EOF
   "type": "module",
   "main": "dist/index.js",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.1",
-    "cors": "^2.8.5",
-    "diff": "^8.0.2",
-    "express": "^4.18.2",
-    "js-yaml": "^4.1.1",
-    "nunjucks": "^3.2.4",
-    "zod": "^3.22.4"
+$DEPS
   }
 }
 EOF
+
+echo "    Dependencies:"
+echo "$DEPS" | sed 's/^/      /'
 
 npm install --omit=dev --ignore-scripts
 

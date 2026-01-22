@@ -48,8 +48,10 @@ def format_arguments(prompt_id: str, cache: dict) -> dict[str, str]:
     Returns dict of arg_name -> "type (required|optional)"
     If options are available, shows: "opt1 | opt2 | opt3 (required)"
     """
-    prompts = cache.get("prompts", {})
-    prompt = prompts.get(prompt_id, {})
+    # Use case-insensitive lookup (prompt_id may be lowercase after normalization)
+    prompt = get_prompt_by_id(prompt_id, cache)
+    if not prompt:
+        return {}
     args = prompt.get("arguments", [])
     result: dict[str, str] = {}
     for arg in args:
@@ -90,12 +92,14 @@ def detect_prompt_invocation(message: str) -> str | None:
     # Try exact start first
     match = re.match(r'^>>\s*([a-zA-Z0-9_-]+)', message.strip())
     if match:
-        return match.group(1)
+        # Normalize to lowercase for case-insensitive matching (aligns with MCP server)
+        return match.group(1).lower()
 
     # Also check for >> after operators (@framework, #style)
     match = re.search(r'>>\s*([a-zA-Z0-9_-]+)', message)
     if match:
-        return match.group(1)
+        # Normalize to lowercase for case-insensitive matching (aligns with MCP server)
+        return match.group(1).lower()
 
     return None
 
@@ -118,14 +122,16 @@ def detect_explicit_request(message: str) -> bool:
 def detect_chain_syntax(message: str) -> list[str]:
     """
     Detect --> chain syntax in message.
-    Returns list of prompt IDs in chain order.
+    Returns list of prompt IDs in chain order (normalized to lowercase).
 
     Example: >>analyze --> >>implement --> >>test
     Example with gate: >>a --> >>b :: "criteria"
     """
     # Match: >>prompt_id --> >>prompt_id pattern
     chain_pattern = r'>>\s*([a-zA-Z0-9_-]+)\s*(?:-->|→)'
-    matches = re.findall(chain_pattern, message)
+    raw_matches = re.findall(chain_pattern, message)
+    # Normalize to lowercase for case-insensitive matching (aligns with MCP server)
+    matches = [m.lower() for m in raw_matches]
 
     # Get the last prompt (after final -->) by splitting on chain operators
     # then extracting the prompt ID from the last segment
@@ -134,7 +140,7 @@ def detect_chain_syntax(message: str) -> list[str]:
         last_part = parts[-1]
         last_match = re.match(r'>>\s*([a-zA-Z0-9_-]+)', last_part)
         if last_match:
-            matches.append(last_match.group(1))
+            matches.append(last_match.group(1).lower())
 
     return matches
 
@@ -164,19 +170,22 @@ def detect_inline_gates(message: str) -> list[str]:
 def detect_framework(message: str) -> str | None:
     """
     Detect @FRAMEWORK syntax in message.
-    Returns the framework ID if found.
+    Returns the framework ID if found (normalized to lowercase).
 
     Examples:
-        @CAGEERF >>analyze -> "CAGEERF"
-        @ReACT >>debug -> "ReACT"
+        @CAGEERF >>analyze -> "cageerf"
+        @ReACT >>debug -> "react"
+
+    Note: Framework IDs are normalized to lowercase to align with MCP server storage.
     """
     if HAS_GENERATED_OPERATORS:
         matches = detect_operator(message, 'framework')
-        return matches[0] if matches else None
+        # Normalize to lowercase (MCP server stores framework keys as lowercase)
+        return matches[0].lower() if matches else None
 
     # Fallback: hardcoded pattern
     match = re.search(r'(?:^|\s)@([A-Za-z0-9_-]+)(?=\s|$)', message)
-    return match.group(1) if match else None
+    return match.group(1).lower() if match else None
 
 
 def detect_repetition(message: str) -> int | None:
@@ -391,8 +400,9 @@ def format_user_message(
         Expanded: Multi-line with operators, arguments, and support info
     """
     # Extract prompt ID from command (handle @framework >>prompt syntax)
+    # Normalize to lowercase for case-insensitive matching (aligns with MCP server)
     match = re.search(r'>>\s*([a-zA-Z0-9_-]+)', command)
-    prompt_id = match.group(1) if match else command
+    prompt_id = match.group(1).lower() if match else command.lower()
 
     if expanded:
         return _format_expanded_message(prompt_id, command, parsed_args, operators, arguments, prompt_info)

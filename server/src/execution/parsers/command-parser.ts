@@ -315,15 +315,25 @@ export class UnifiedCommandParser {
       name: 'simple',
       confidence: 0.95, // Increased confidence for primary strategy
       canHandle: (command: string) => {
-        // More flexible pattern - handles spaces in prompt names via underscore conversion
-        return /^(>>|\/)[a-zA-Z0-9_\-\s]+(\s|$)/.test(command.trim());
+        const trimmed = command.trim();
+        // Skip if JSON-like (handled by JSON strategy)
+        if (trimmed.startsWith('{') || trimmed.startsWith('"')) return false;
+        // Skip if has symbolic operators (handled by symbolic strategy)
+        // Note: Gate operators (:: or =) must be preceded by whitespace to avoid
+        // matching argument assignment syntax like input="value"
+        if (/-->|\s(::|=)\s*\S|\s@[A-Za-z]|^@[A-Za-z]|\+|\?|\s+\*\s*\d+/.test(trimmed))
+          return false;
+        // Accept with or without >> or / prefix (bare prompt names now supported)
+        return /^(?:>>|\/)?[a-zA-Z][a-zA-Z0-9_-]*(?:\s|$)/.test(trimmed);
       },
       parse: (command: string): CommandParseResult | null => {
         // Enhanced regex to handle more natural command formats
-        const match = command.trim().match(/^(>>|\/)([a-zA-Z0-9_\-\s]+?)(?:\s+([\s\S]*))?$/);
+        // Prefix (>> or /) is now optional to support bare prompt names
+        // Prompt name: starts with letter, contains letters/numbers/underscores/hyphens (no spaces)
+        const match = command.trim().match(/^(?:>>|\/)?([a-zA-Z][a-zA-Z0-9_-]*)(?:\s+([\s\S]*))?$/);
         if (!match) return null;
 
-        const [, prefix, rawPromptId, rawArgs] = match;
+        const [, rawPromptId, rawArgs] = match;
         if (!rawPromptId) {
           return null;
         }
@@ -338,9 +348,13 @@ export class UnifiedCommandParser {
           .replace(/^_|_$/g, ''); // Trim leading/trailing underscores
 
         const warnings: string[] = [];
-        if (rawPromptId !== promptId) {
-          warnings.push(`Normalized prompt name: "${rawPromptId}" → "${promptId}"`);
+        if (rawPromptId.trim() !== promptId) {
+          warnings.push(`Normalized prompt name: "${rawPromptId.trim()}" → "${promptId}"`);
         }
+
+        // Detect if original had prefix for metadata
+        const hadPrefix = /^(>>|\/)/.test(command.trim());
+        const detectedFormat = hadPrefix ? 'prefixed prompt format' : 'bare prompt name';
 
         return {
           promptId: promptId,
@@ -350,7 +364,7 @@ export class UnifiedCommandParser {
           metadata: {
             originalCommand: command,
             parseStrategy: 'simple_enhanced',
-            detectedFormat: `${prefix}prompt format (normalized)`,
+            detectedFormat,
             warnings,
           },
         };
@@ -375,7 +389,7 @@ export class UnifiedCommandParser {
           return null;
         }
 
-        const data = parseResult.data;
+        let data = parseResult.data;
 
         // Handle different JSON formats
         let actualCommand = '';
@@ -391,17 +405,57 @@ export class UnifiedCommandParser {
           return null;
         }
 
+        // Handle double-encoded JSON (command field is itself a JSON string)
+        // This can happen when clients double-escape JSON payloads
+        if (typeof actualCommand === 'string' && actualCommand.trim().startsWith('{')) {
+          const innerParse = safeJsonParse(actualCommand);
+          if (
+            innerParse.success === true &&
+            innerParse.data !== null &&
+            typeof innerParse.data === 'object'
+          ) {
+            // Extract command from the inner JSON object with proper type guards
+            const innerData = innerParse.data as Record<string, unknown>;
+            const innerCommand = innerData['command'];
+            const innerPrompt = innerData['prompt'];
+            const innerArgs = innerData['args'];
+
+            if (typeof innerCommand === 'string') {
+              actualCommand = innerCommand;
+              // Merge args if present in inner object and not in outer
+              // Use bracket notation with type assertion for data.args access
+              const outerData = data as Record<string, unknown>;
+              if (innerArgs !== undefined && outerData['args'] === undefined) {
+                data = { ...outerData, args: innerArgs };
+              }
+            } else if (typeof innerPrompt === 'string') {
+              actualCommand = innerPrompt;
+            }
+          }
+        }
+
         const { command: innerCommand, modifier: modifierToken } = this.extractModifier(
           String(actualCommand)
         );
 
-        // Recursively parse the inner command
+        // Recursively parse the inner command - try both strategies
+        // The symbolic strategy handles commands with operators (-->, ::, @, etc.)
+        // The simple strategy handles plain prompt names
+        const symbolicStrategy = this.createSymbolicCommandStrategy();
         const simpleStrategy = this.createSimpleCommandStrategy();
-        if (!simpleStrategy.canHandle(innerCommand)) {
-          return null;
+
+        let innerResult: CommandParseResult | null = null;
+
+        // Try symbolic strategy first (for chains and operators)
+        if (symbolicStrategy.canHandle(innerCommand)) {
+          innerResult = symbolicStrategy.parse(innerCommand);
         }
 
-        const innerResult = simpleStrategy.parse(innerCommand);
+        // Fall back to simple strategy (for plain prompt names)
+        if (!innerResult && simpleStrategy.canHandle(innerCommand)) {
+          innerResult = simpleStrategy.parse(innerCommand);
+        }
+
         if (!innerResult) return null;
 
         if (modifierToken) {
@@ -457,10 +511,11 @@ export class UnifiedCommandParser {
     );
     if (!found) {
       const suggestions = this.generatePromptSuggestions(promptId, availablePrompts);
-      const builtinHint = this.getBuiltinCommandHint(promptId);
-      throw new PromptError(
-        `Unknown prompt: "${promptId}". ${suggestions}${builtinHint}\n\nTry: >>listprompts, >>help, >>status`
-      );
+      const msg =
+        suggestions !== ''
+          ? `Unknown prompt "${promptId}". ${suggestions}`
+          : `Unknown prompt "${promptId}"`;
+      throw new PromptError(msg);
     }
   }
 
@@ -485,42 +540,46 @@ export class UnifiedCommandParser {
   }
 
   /**
-   * Generate hint for built-in commands that might have been mistyped
-   */
-  private getBuiltinCommandHint(promptId: string): string {
-    const lower = promptId.toLowerCase();
-
-    // Check for common variations/typos of built-in commands
-    if (lower.includes('list') && lower.includes('prompt')) {
-      return '\n\nDid you mean >>listprompts?';
-    }
-    if (lower === 'commands' || lower === 'help') {
-      return '\n\nTry >>help for available commands.';
-    }
-    if (lower === 'stat' || lower === 'status') {
-      return '\n\nTry >>status for system status.';
-    }
-
-    return '';
-  }
-
-  /**
-   * Generate helpful prompt suggestions for typos
+   * Generate helpful prompt suggestions using multi-factor scoring
+   * Considers: prefix matches, word overlap, and Levenshtein distance
    */
   private generatePromptSuggestions(promptId: string, availablePrompts: ConvertedPrompt[]): string {
-    // Simple Levenshtein distance for suggestions
-    const suggestions = availablePrompts
-      .map((prompt) => ({
-        prompt,
-        distance: this.levenshteinDistance(promptId.toLowerCase(), prompt.id.toLowerCase()),
-      }))
-      .filter((item) => item.distance <= 3)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 3)
-      .map((item) => item.prompt.id);
+    const query = promptId.toLowerCase();
 
-    if (suggestions.length > 0) {
-      return `Did you mean: ${suggestions.join(', ')}?`;
+    const scored = availablePrompts
+      .map((prompt) => {
+        const id = prompt.id.toLowerCase();
+        let score = 0;
+
+        // Exact prefix match (highest value - user typing partial name)
+        if (id.startsWith(query) || query.startsWith(id)) {
+          score += 100;
+        }
+
+        // Word overlap (medium value - related prompts)
+        const queryWords = query.split(/[_-]/);
+        const idWords = id.split(/[_-]/);
+        const wordOverlap = queryWords.filter((w) =>
+          idWords.some((iw) => iw.includes(w) || w.includes(iw))
+        ).length;
+        score += wordOverlap * 30;
+
+        // Levenshtein distance (inverse - lower distance = higher score)
+        const distance = this.levenshteinDistance(query, id);
+        // Dynamic threshold based on query length (longer queries allow more edits)
+        const threshold = Math.max(3, Math.floor(query.length / 2));
+        if (distance <= threshold) {
+          score += Math.max(0, 50 - distance * 10);
+        }
+
+        return { prompt, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    if (scored.length > 0) {
+      return `Did you mean: ${scored.map((s) => s.prompt.id).join(', ')}?`;
     }
 
     return '';
@@ -564,76 +623,29 @@ export class UnifiedCommandParser {
   }
 
   /**
-   * Generate helpful error message for parsing failures
+   * Generate concise error message for parsing failures
    */
   private generateHelpfulError(command: string, availablePrompts: ConvertedPrompt[]): string {
-    let message = `Could not parse command: "${command}"\n\n`;
+    // Extract prompt name for suggestions
+    const promptMatch = command.match(/^(?:>>|\/)?([a-zA-Z][a-zA-Z0-9_-]*)/);
+    const promptName = promptMatch?.[1];
 
-    message += 'Supported command formats:\n';
-    message += '• Simple: >>prompt_name arguments\n';
-    message += '• Simple: /prompt_name arguments\n';
-    message += '• JSON: {"command": ">>prompt_name", "args": "arguments"}\n';
-    message += '• JSON: {"command": ">>prompt_name", "args": {"key": "value"}}\n\n';
-
-    // Try to give specific suggestions based on command analysis
-    if (command.includes('>>') || command.includes('/')) {
-      const promptMatch = command.match(/^(>>|\/)([a-zA-Z0-9_\-]+)/);
-      if (promptMatch) {
-        const promptName = promptMatch[2];
-        message += `Prompt name "${promptName}" not found. `;
-        message += 'Prompt names are case-insensitive.\n\n';
-
-        // Show some available prompts as examples
-        const examplePrompts = availablePrompts
-          .slice(0, 5)
-          .map((p) => p.id)
-          .join(', ');
-        message += `Available prompts include: ${examplePrompts}...\n\n`;
-      } else {
-        message +=
-          'Invalid prompt name format. Use letters, numbers, underscores, and hyphens only.\n\n';
-
-        // Check if this is a chain command with operators on individual steps
-        if (command.includes('-->') && (command.includes('%') || command.includes('@'))) {
-          message += '💡 Operator Scope Guidance:\n';
-          message +=
-            '   Execution modifiers (%) and framework operators (@) apply to the ENTIRE chain.\n';
-          message += '   Place them at the start, not on individual steps.\n';
-          message +=
-            '   ✅ %judge @CAGEERF >>step1 --> >>step2   ❌ >>step1 --> %lean @ReACT >>step2\n\n';
-        }
-      }
-    } else if (command.startsWith('{')) {
-      message += 'JSON format detected but could not parse. Check JSON syntax and structure.\n\n';
-    } else if (command.startsWith('>')) {
-      // Detect likely >> prefix that got stripped to single >
-      message +=
-        '⚠️  Detected single ">" prefix - this suggests the ">>" prefix was partially stripped.\n';
-      message += 'This is a known limitation when calling MCP tools via XML-based clients.\n\n';
-      message += 'Workarounds:\n';
-      message += `• Use symbolic operators: "${command.slice(1)} --> " (makes >> optional)\n`;
-      message += `• Use JSON format: {"command": "${command.slice(1).split(' ')[0]}", "args": {...}}\n`;
-      message += `• Add framework operator: "@CAGEERF ${command.slice(1)}"\n\n`;
-    } else {
-      // Bare prompt name without >> or operators
-      const barePromptMatch = command.match(/^([a-zA-Z0-9_\-]+)(?:\s|$)/);
-      if (barePromptMatch) {
-        const promptName = barePromptMatch[1];
-        message += `⚠️  Bare prompt name detected: "${promptName}"\n`;
-        message +=
-          'The >> prefix is required for simple commands, but may not work via MCP tools.\n\n';
-        message += 'Recommended alternatives:\n';
-        message += `• Add chain operator: "${command} --> " (even for single prompts)\n`;
-        message += `• Add framework operator: "@CAGEERF ${command}"\n`;
-        message += `• Use JSON format: {"command": "${promptName}", "args": {...}}\n\n`;
-      } else {
-        message += 'Command format not recognized. Use >>prompt_name or /prompt_name format.\n\n';
-      }
+    if (promptName) {
+      const suggestions = this.generatePromptSuggestions(promptName, availablePrompts);
+      return suggestions !== ''
+        ? `Unknown prompt "${promptName}". ${suggestions}`
+        : `Unknown prompt "${promptName}"`;
     }
 
-    message += 'Use >>listprompts to see all available prompts, or >>help for assistance.';
+    // Specific parse errors
+    if (command.startsWith('{')) {
+      return `Invalid JSON: "${command.slice(0, 50)}${command.length > 50 ? '...' : ''}"`;
+    }
+    if (command.startsWith('>') && !command.startsWith('>>')) {
+      return `Single ">" detected (XML encoding issue). Use: ${command.slice(1).split(' ')[0]}`;
+    }
 
-    return message;
+    return `Parse error: "${command.slice(0, 50)}${command.length > 50 ? '...' : ''}"`;
   }
 
   /**

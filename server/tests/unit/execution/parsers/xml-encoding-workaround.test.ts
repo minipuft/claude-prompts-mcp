@@ -144,16 +144,19 @@ describe('XML Encoding Workaround - Symbolic Operators Without >> Prefix', () =>
   });
 
   describe('Error cases', () => {
-    test('bare prompt name without >> or operators fails with helpful message', async () => {
-      await expect(parser.parseCommand('test_prompt input="value"', mockPrompts)).rejects.toThrow(
-        /Bare prompt name detected/
-      );
-    });
-
     test('single > prefix (from >> being stripped) provides XML encoding warning', async () => {
       await expect(parser.parseCommand('>test_prompt input="value"', mockPrompts)).rejects.toThrow(
-        /single ">" prefix.*partially stripped/
+        /Single ">" detected.*XML encoding/
       );
+    });
+  });
+
+  describe('Bare prompt name support', () => {
+    test('bare prompt name without >> prefix is now accepted', async () => {
+      const result = await parser.parseCommand('test_prompt input="value"', mockPrompts);
+      expect(result.promptId).toBe('test_prompt');
+      expect(result.format).toBe('simple');
+      expect(result.metadata?.detectedFormat).toBe('bare prompt name');
     });
   });
 });

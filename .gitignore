@@ -139,3 +139,4 @@ plans/claude-prompts.code-workspace
 .mcpb-staging/
 # Test environments
 .test-gemini-home/
+.history/

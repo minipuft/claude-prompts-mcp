@@ -83,12 +83,18 @@ def load_gates_cache() -> dict | None:
 
 
 def get_prompt_by_id(prompt_id: str, cache: dict | None = None) -> PromptInfo | None:
-    """Get a specific prompt by ID."""
+    """Get a specific prompt by ID (case-insensitive lookup)."""
     if cache is None:
         cache = load_prompts_cache()
     if not cache:
         return None
-    return cache.get("prompts", {}).get(prompt_id)
+    prompts = cache.get("prompts", {})
+    # Case-insensitive lookup to align with MCP server behavior
+    prompt_id_lower = prompt_id.lower()
+    for key, value in prompts.items():
+        if key.lower() == prompt_id_lower:
+            return value
+    return None
 
 
 def match_prompts_to_intent(
@@ -298,8 +304,9 @@ def fuzzy_match_prompt_id(
             score += max(0, 50 - distance * 10)
 
         if score > 0:
-            scored.append((prompt_id, score))
+            # Store lowercase ID to align with MCP server case-insensitive matching
+            scored.append((id_lower, score))
 
-    # Sort by score descending, return top N
+    # Sort by score descending, return top N (already lowercase)
     scored.sort(key=lambda x: x[1], reverse=True)
     return [pid for pid, _ in scored[:max_results]]
