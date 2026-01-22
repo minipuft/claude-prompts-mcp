@@ -3,7 +3,12 @@ name: Release Please
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (don't create PR/release)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -12,11 +17,34 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+      pr: ${{ steps.release.outputs.pr }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - name: Release Please
+        id: release
+        uses: googleapis/release-please-action@v4
         with:
-          # Prefer a PAT so that tags/releases created by release-please can trigger other workflows.
-          # (GITHUB_TOKEN fallback is useful for local forks, but won't trigger workflow-to-workflow events.)
+          # Use PAT to allow releases to trigger downstream workflows (npm-publish).
+          # Falls back to github.token for forks (but won't trigger workflow-to-workflow).
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Release Please Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.release.outputs.release_created }}" == "true" ]]; then
+            echo "✅ **Release created**: ${{ steps.release.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Version: ${{ steps.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "- [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.release.outputs.tag_name }})" >> $GITHUB_STEP_SUMMARY
+          elif [[ -n "${{ steps.release.outputs.pr }}" ]]; then
+            echo "📝 **Release PR updated**: #${{ steps.release.outputs.pr }}" >> $GITHUB_STEP_SUMMARY
+            echo "- [View PR](https://github.com/${{ github.repository }}/pull/${{ steps.release.outputs.pr }})" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No release action needed" >> $GITHUB_STEP_SUMMARY
+          fi

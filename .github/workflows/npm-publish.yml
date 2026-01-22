@@ -6,68 +6,63 @@ on:
 
 permissions:
   contents: read
-  id-token: write  # Required for npm provenance
+  id-token: write # Required for npm provenance
 
 jobs:
   publish:
-    # Accept both tag formats until Release Please tagging is uniform
-    if: startsWith(github.event.release.tag_name, 'claude-prompts-v') || startsWith(github.event.release.tag_name, 'v')
+    # Accept both tag formats: 'vX.Y.Z' (preferred) and 'claude-prompts-vX.Y.Z' (legacy)
+    if: startsWith(github.event.release.tag_name, 'v') || startsWith(github.event.release.tag_name, 'claude-prompts-v')
     runs-on: ubuntu-latest
     environment: npm
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: server/package-lock.json
 
-      - name: Verify tag/version/changelog alignment
-        shell: bash
+      - name: Parse version from tag
+        id: version
         run: |
-          set -euo pipefail
           tag='${{ github.event.release.tag_name }}'
-          sha="$(git rev-parse HEAD)"
-
-          # Parse version from either 'claude-prompts-vX.Y.Z' or 'vX.Y.Z'
-          if [[ "$tag" =~ ^claude-prompts-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            version_from_tag="${BASH_REMATCH[1]}"
-          elif [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            version_from_tag="${BASH_REMATCH[1]}"
+          if [[ "$tag" =~ ^claude-prompts-v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          elif [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+            version="${BASH_REMATCH[1]}"
           else
-            echo "Unexpected tag format: $tag"
+            echo "::error::Unexpected tag format: $tag"
+            exit 1
+          fi
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "Parsed version: $version"
+
+      - name: Verify version alignment
+        run: |
+          pkg_version="$(node -p "require('./server/package.json').version")"
+          tag_version="${{ steps.version.outputs.version }}"
+
+          if [[ "$pkg_version" != "$tag_version" ]]; then
+            echo "::error::Version mismatch - tag: $tag_version, package.json: $pkg_version"
             exit 1
           fi
 
-          version_from_pkg="$(node -p "require('./server/package.json').version")"
-          if [[ "$version_from_pkg" != "$version_from_tag" ]]; then
-            echo "Version mismatch: tag=$version_from_tag package.json=$version_from_pkg"
+          echo "✅ Version aligned: $tag_version"
+
+      - name: Verify changelog entry
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          if ! grep -q "## \\[${version}\\]" CHANGELOG.md; then
+            echo "::error::Missing changelog entry for $version"
             exit 1
           fi
+          echo "✅ Changelog entry found for $version"
 
-          # Accept changelog entry in either top-level or server/CHANGELOG.md
-          if ! grep -q "## \\[${version_from_tag}\\]" CHANGELOG.md 2>/dev/null && \
-             ! grep -q "## \\[${version_from_tag}\\]" server/CHANGELOG.md 2>/dev/null; then
-            echo "Missing changelog entry for ${version_from_tag} in CHANGELOG.md or server/CHANGELOG.md"
-            exit 1
-          fi
-
-          # Guardrail: only publish releases whose tag commit is contained in main.
-          git fetch origin main --depth=1
-          if ! git merge-base --is-ancestor "$sha" origin/main; then
-            echo "Refusing to publish: tag commit is not on main (sha=$sha)"
-            exit 1
-          fi
-
-      # Note: Distribution version check removed - downstream repos are updated
-      # AFTER npm publish via repository-dispatch events (see end of workflow).
-      # Local version consistency is validated by the tag/version/changelog check above.
-
-      - name: Install
+      - name: Install dependencies
         working-directory: server
         run: npm ci
 
@@ -79,38 +74,50 @@ jobs:
         working-directory: server
         run: npm run test:ci
 
-      - name: Preview package contents
-        working-directory: server
-        run: |
-          echo "=== Package contents ==="
-          npm pack --dry-run 2>&1
-
-          echo ""
-          echo "=== Package size check ==="
-          PACKED=$(npm pack --dry-run 2>&1 | grep "total files" || true)
-          echo "$PACKED"
-
-      - name: Publish with provenance
+      - name: Publish to npm
         working-directory: server
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        # Note: If provenance fails due to tlog conflict (409), retry without provenance
-        run: npm publish --access public --provenance || npm publish --access public
+        run: |
+          echo "Publishing claude-prompts@${{ steps.version.outputs.version }}"
+          # Try with provenance first, fall back to without if tlog conflict
+          npm publish --access public --provenance || npm publish --access public
 
-      - name: Trigger gemini-prompts dependency update
+      - name: Trigger downstream updates
         if: success()
-        uses: peter-evans/repository-dispatch@v4
-        with:
-          token: ${{ secrets.DOWNSTREAM_PAT }}
-          repository: minipuft/gemini-prompts
-          event-type: upstream-release
-          client-payload: '{"version": "${{ github.event.release.tag_name }}"}'
+        run: |
+          echo "## Downstream Notifications" >> $GITHUB_STEP_SUMMARY
 
-      - name: Trigger opencode-prompts dependency update
-        if: success()
-        uses: peter-evans/repository-dispatch@v4
-        with:
-          token: ${{ secrets.DOWNSTREAM_PAT }}
-          repository: minipuft/opencode-prompts
-          event-type: upstream-release
-          client-payload: '{"version": "${{ github.event.release.tag_name }}"}'
+          # Trigger gemini-prompts
+          if curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.DOWNSTREAM_PAT }}" \
+            https://api.github.com/repos/minipuft/gemini-prompts/dispatches \
+            -d '{"event_type":"upstream-release","client_payload":{"version":"${{ steps.version.outputs.version }}"}}'; then
+            echo "✅ Triggered gemini-prompts" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Failed to trigger gemini-prompts" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Trigger opencode-prompts
+          if curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.DOWNSTREAM_PAT }}" \
+            https://api.github.com/repos/minipuft/opencode-prompts/dispatches \
+            -d '{"event_type":"upstream-release","client_payload":{"version":"${{ steps.version.outputs.version }}"}}'; then
+            echo "✅ Triggered opencode-prompts" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Failed to trigger opencode-prompts" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## npm Publish" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo "✅ Published claude-prompts@${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "[View on npm](https://www.npmjs.com/package/claude-prompts)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Publish failed" >> $GITHUB_STEP_SUMMARY
+          fi

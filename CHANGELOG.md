@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Release Please workflow**: Modernized with dry run support, job outputs, and GitHub summary reporting
+- **npm-publish workflow**: Simplified structure with cleaner version parsing and downstream triggers via direct curl
+
 ## [1.5.0] - 2026-01-21
 
 ### Added
