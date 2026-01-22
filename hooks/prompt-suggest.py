@@ -28,6 +28,7 @@ from cache_manager import (
     get_prompt_by_id,
     match_prompts_to_intent,
     get_chains_only,
+    fuzzy_match_prompt_id,
 )
 from session_state import load_session_state, format_chain_reminder
 from config_loader import is_expanded_output
@@ -585,8 +586,31 @@ def main():
         # Parse inline arguments (quoted only)
         parsed_args = parse_inline_args(user_message)
 
-        # Get required args that are missing
+        # Get prompt info from cache
         prompt_info = get_prompt_by_id(invoked_prompt, cache) if invoked_prompt else None
+
+        # Early return for unknown prompts: provide fuzzy suggestions without tool call
+        # This saves tokens by avoiding a failing server round-trip
+        if invoked_prompt and prompt_info is None:
+            suggestions = fuzzy_match_prompt_id(invoked_prompt, cache)
+
+            if suggestions:
+                message = f"Unknown prompt '{invoked_prompt}'. Did you mean: {', '.join(suggestions)}?"
+            else:
+                message = f"Unknown prompt '{invoked_prompt}'. No similar prompts found."
+
+            # Return message WITHOUT directive (no tool call needed)
+            hook_response = {
+                "systemMessage": message,
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": f"Prompt '{invoked_prompt}' not found. Suggest user correct the name."
+                }
+            }
+            print(json.dumps(hook_response))
+            sys.exit(0)
+
+        # Get required args that are missing
         required_args = get_required_args(prompt_info, parsed_args)
 
         # Get argument type info for LLM guidance

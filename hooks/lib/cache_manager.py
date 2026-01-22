@@ -216,3 +216,90 @@ def get_chain_step_names(prompt_id: str, cache: dict | None = None) -> list[str]
     if not info or not info.get("is_chain"):
         return []
     return info.get("chain_step_names") or []
+
+
+def levenshtein_distance(a: str, b: str) -> int:
+    """
+    Calculate Levenshtein edit distance between two strings.
+
+    Uses dynamic programming for O(m*n) time and O(n) space.
+    Same algorithm as TypeScript generatePromptSuggestions().
+    """
+    if len(a) < len(b):
+        return levenshtein_distance(b, a)
+    if len(b) == 0:
+        return len(a)
+
+    previous_row = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        current_row = [i + 1]
+        for j, cb in enumerate(b):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (ca != cb)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
+
+
+def fuzzy_match_prompt_id(
+    query: str,
+    cache: dict | None = None,
+    max_results: int = 3
+) -> list[str]:
+    """
+    Find fuzzy matches for a prompt ID using multi-factor scoring.
+    Same algorithm as TypeScript generatePromptSuggestions().
+
+    Scoring:
+    - Prefix match: 100 points
+    - Word overlap: 30 points per word
+    - Levenshtein: 50 - (distance * 10) points
+
+    Args:
+        query: The prompt ID to match against
+        cache: Prompts cache dict (loads if None)
+        max_results: Maximum number of suggestions to return
+
+    Returns:
+        List of prompt IDs sorted by score descending.
+    """
+    if cache is None:
+        cache = load_prompts_cache()
+    if not cache:
+        return []
+
+    query_lower = query.lower()
+    query_words = set(query_lower.replace('-', '_').split('_'))
+
+    scored: list[tuple[str, int]] = []
+
+    for prompt_id in cache.get("prompts", {}).keys():
+        id_lower = prompt_id.lower()
+        score = 0
+
+        # Prefix match (highest value - user typing partial name)
+        if id_lower.startswith(query_lower) or query_lower.startswith(id_lower):
+            score += 100
+
+        # Word overlap (medium value - related prompts)
+        id_words = set(id_lower.replace('-', '_').split('_'))
+        for qw in query_words:
+            for iw in id_words:
+                if qw in iw or iw in qw:
+                    score += 30
+                    break
+
+        # Levenshtein distance (lower = better)
+        distance = levenshtein_distance(query_lower, id_lower)
+        threshold = max(3, len(query_lower) // 2)
+        if distance <= threshold:
+            score += max(0, 50 - distance * 10)
+
+        if score > 0:
+            scored.append((prompt_id, score))
+
+    # Sort by score descending, return top N
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [pid for pid, _ in scored[:max_results]]
