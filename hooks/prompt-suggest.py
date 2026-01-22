@@ -29,6 +29,8 @@ from cache_manager import (
     match_prompts_to_intent,
     get_chains_only,
     fuzzy_match_prompt_id,
+    is_valid_style,
+    is_valid_framework,
 )
 from session_state import load_session_state, format_chain_reminder
 from config_loader import is_expanded_output
@@ -498,7 +500,7 @@ def format_directive(
     prompt_info: dict | None = None,
 ) -> str:
     """
-    Format structured directive for Claude.
+    Format token-efficient directive for Claude using function-call syntax.
 
     Args:
         command: The full command string
@@ -509,35 +511,33 @@ def format_directive(
         prompt_info: Prompt metadata from cache (for chain workflow context)
 
     Returns:
-        Structured directive string for additionalContext
+        Single-line function-call directive for additionalContext
     """
-    lines = [f"[TOOL:prompt_engine] {command}"]
+    # Build parameters in function-call syntax (LLM recognizes this pattern)
+    params = [f'command:"{command}"']
 
-    # Add chain workflow context for Claude (shows full workflow upfront)
+    # Add gates if present
+    if operators.get("gate"):
+        params.append(f'gates:{json.dumps(operators["gate"])}')
+
+    # Add parsed options if present
+    if parsed_args:
+        params.append(f'options:{json.dumps(parsed_args)}')
+
+    # Build the function call
+    call = f"prompt_engine({', '.join(params)})"
+
+    # For chains, add workflow context on second line
     if prompt_info and prompt_info.get("is_chain"):
         step_names = prompt_info.get("chain_step_names") or []
         if step_names:
-            lines.append(f"chain_workflow: {json.dumps(step_names)}")
-            lines.append("Execute steps sequentially. Wait for each step to complete before proceeding.")
+            return f"→ {call}\nchain: {json.dumps(step_names)}"
 
-    # Add detected operators if any
-    if operators:
-        lines.append(f"operators: {json.dumps(operators)}")
-
-    # Add prompt arguments with types (always show)
-    lines.append(f"arguments: {json.dumps(arguments if arguments else {})}")
-
-    # Add parsed options
-    if parsed_args:
-        lines.append(f"options: {json.dumps(parsed_args)}")
-
-    # Add required args that are missing
+    # Add required args hint if any missing
     if required_args:
-        lines.append(f"required: {json.dumps(required_args)}")
+        return f"→ {call}\nmissing: {json.dumps(required_args)}"
 
-    lines.append("Execute immediately.")
-
-    return "\n".join(lines)
+    return f"→ {call}"
 
 
 def main():
@@ -579,15 +579,30 @@ def main():
             operators["gate"] = inline_gates
 
         # Framework, style, repetition use generated patterns when available
+        # Only include operators with VALID values (registered in server)
         if HAS_GENERATED_OPERATORS:
-            for op_id in ['framework', 'style', 'repetition']:
-                matches = detect_operator(user_message, op_id)
-                if matches:
-                    operators[op_id] = matches
+            # Framework - only include if registered in server methodologies
+            fw_matches = detect_operator(user_message, 'framework')
+            if fw_matches:
+                valid_fws = [fw for fw in fw_matches if is_valid_framework(fw, cache)]
+                if valid_fws:
+                    operators["framework"] = valid_fws
+
+            # Style - only include if registered in server styles
+            style_matches = detect_operator(user_message, 'style')
+            if style_matches:
+                valid_styles = [s for s in style_matches if is_valid_style(s, cache)]
+                if valid_styles:
+                    operators["style"] = valid_styles
+
+            # Repetition - no validation needed (it's a number)
+            rep_matches = detect_operator(user_message, 'repetition')
+            if rep_matches:
+                operators["repetition"] = rep_matches
         else:
-            # Fallback: manual detection for remaining operators
+            # Fallback: manual detection with validation
             framework = detect_framework(user_message)
-            if framework:
+            if framework and is_valid_framework(framework, cache):
                 operators["framework"] = [framework]
             repetition = detect_repetition(user_message)
             if repetition:

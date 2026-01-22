@@ -310,3 +310,64 @@ def fuzzy_match_prompt_id(
     # Sort by score descending, return top N (already lowercase)
     scored.sort(key=lambda x: x[1], reverse=True)
     return [pid for pid, _ in scored[:max_results]]
+
+
+# =============================================================================
+# Operator Value Validation
+# =============================================================================
+
+
+def get_valid_styles(cache: dict | None = None) -> list[str]:
+    """
+    Get list of valid style names from cache metadata.
+
+    Returns lowercase style names that can be used with the # operator.
+    """
+    if cache is None:
+        cache = load_prompts_cache()
+    if not cache:
+        return []
+    return cache.get("_meta", {}).get("valid_styles", [])
+
+
+def get_valid_frameworks(cache: dict | None = None) -> list[str]:
+    """
+    Get list of valid framework names from cache metadata.
+
+    Returns lowercase framework names that can be used with the @ operator.
+    """
+    if cache is None:
+        cache = load_prompts_cache()
+    if not cache:
+        return []
+    return cache.get("_meta", {}).get("valid_frameworks", [])
+
+
+def is_valid_style(style: str, cache: dict | None = None) -> bool:
+    """
+    Check if style name is valid (case-insensitive).
+
+    Args:
+        style: Style name to validate (e.g., "analytical", "creative")
+        cache: Prompts cache dict (loads if None)
+
+    Returns:
+        True if style exists in server's registered styles
+    """
+    valid = get_valid_styles(cache)
+    return style.lower() in valid
+
+
+def is_valid_framework(framework: str, cache: dict | None = None) -> bool:
+    """
+    Check if framework name is valid (case-insensitive).
+
+    Args:
+        framework: Framework name to validate (e.g., "CAGEERF", "ReACT")
+        cache: Prompts cache dict (loads if None)
+
+    Returns:
+        True if framework exists in server's registered methodologies
+    """
+    valid = get_valid_frameworks(cache)
+    return framework.lower() in valid

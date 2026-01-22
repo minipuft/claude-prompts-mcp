@@ -142,6 +142,11 @@ interface GateCacheEntry {
   triggers: string[];
 }
 
+interface OperatorValuesMeta {
+  valid_styles: string[];
+  valid_frameworks: string[];
+}
+
 interface PromptCache {
   version: string;
   generated_at: string;
@@ -149,6 +154,7 @@ interface PromptCache {
   prompts: Record<string, PromptCacheEntry>;
   categories: Record<string, string[]>;
   count: number;
+  _meta: OperatorValuesMeta;
 }
 
 interface GateCache {
@@ -370,6 +376,34 @@ async function findPromptYamls(dir: string): Promise<string[]> {
 }
 
 /**
+ * Get valid style names from styles directory.
+ * Used by hooks to validate #style operator values.
+ */
+async function getValidStyles(resourcesDir: string): Promise<string[]> {
+  const stylesDir = path.join(resourcesDir, 'styles');
+  try {
+    const entries = await fs.readdir(stylesDir, { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name.toLowerCase());
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get valid framework names from methodologies directory.
+ * Used by hooks to validate @framework operator values.
+ */
+async function getValidFrameworks(resourcesDir: string): Promise<string[]> {
+  const methodsDir = path.join(resourcesDir, 'methodologies');
+  try {
+    const entries = await fs.readdir(methodsDir, { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name.toLowerCase());
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Generate prompts cache from resources directory.
  */
 async function generatePromptsCache(resourcesDir: string): Promise<PromptCache> {
@@ -400,6 +434,10 @@ async function generatePromptsCache(resourcesDir: string): Promise<PromptCache> 
     // Prompts directory may not exist
   }
 
+  // Get valid operator values for hook validation
+  const validStyles = await getValidStyles(resourcesDir);
+  const validFrameworks = await getValidFrameworks(resourcesDir);
+
   return {
     version: '1.0',
     generated_at: new Date().toISOString(),
@@ -407,6 +445,10 @@ async function generatePromptsCache(resourcesDir: string): Promise<PromptCache> 
     prompts,
     categories,
     count: Object.keys(prompts).length,
+    _meta: {
+      valid_styles: validStyles,
+      valid_frameworks: validFrameworks,
+    },
   };
 }
 
