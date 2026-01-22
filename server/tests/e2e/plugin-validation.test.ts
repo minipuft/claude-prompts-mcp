@@ -36,14 +36,16 @@ const claudePluginSchema = z.object({
   keywords: z.array(z.string()).optional(),
 });
 
-// .mcp.json schema - MCP server configuration
-const claudeMcpConfigSchema = z.record(
-  z.object({
-    command: z.string(),
-    args: z.array(z.string()).optional(),
-    env: z.record(z.string()).optional(),
-  })
-);
+// .mcp.json schema - MCP server configuration (with mcpServers wrapper)
+const claudeMcpConfigSchema = z.object({
+  mcpServers: z.record(
+    z.object({
+      command: z.string(),
+      args: z.array(z.string()).optional(),
+      env: z.record(z.string()).optional(),
+    })
+  ),
+});
 
 const claudeHooksSchema = z.object({
   hooks: z.record(
@@ -103,7 +105,6 @@ describe('Claude Code Plugin', () => {
   const pluginJsonPath = path.join(PROJECT_ROOT, '.claude-plugin', 'plugin.json');
   const mcpJsonPath = path.join(PROJECT_ROOT, '.mcp.json'); // Note: dot prefix
   const hooksJsonPath = path.join(PROJECT_ROOT, 'hooks', 'hooks.json');
-  const skillsDir = path.join(PROJECT_ROOT, 'skills');
 
   describe('plugin.json', () => {
     it('exists and is valid JSON', async () => {
@@ -157,9 +158,11 @@ describe('Claude Code Plugin', () => {
     });
 
     it('references server entry point that exists', async () => {
-      const mcpConfig = await loadJson<Record<string, { args?: string[] }>>(mcpJsonPath);
+      const mcpConfig = await loadJson<{ mcpServers: Record<string, { args?: string[] }> }>(
+        mcpJsonPath
+      );
 
-      for (const config of Object.values(mcpConfig)) {
+      for (const config of Object.values(mcpConfig.mcpServers)) {
         if (config.args) {
           for (const arg of config.args) {
             if (arg.includes('index.js') || arg.includes('dist')) {
@@ -213,25 +216,7 @@ describe('Claude Code Plugin', () => {
     });
   });
 
-  describe('skills', () => {
-    it('skills directory exists', async () => {
-      expect(await fileExists(skillsDir)).toBe(true);
-    });
-
-    it('skill directories contain SKILL.md files', async () => {
-      const skillDirs = await fs.readdir(skillsDir);
-
-      for (const dir of skillDirs) {
-        const skillPath = path.join(skillsDir, dir);
-        const stat = await fs.stat(skillPath);
-
-        if (stat.isDirectory()) {
-          const skillMdPath = path.join(skillPath, 'SKILL.md');
-          expect(await fileExists(skillMdPath)).toBe(true);
-        }
-      }
-    });
-  });
+  // Note: skills directory was removed in fe6992c5 - skills are now user-level, not plugin-bundled
 });
 
 // =============================================================================
