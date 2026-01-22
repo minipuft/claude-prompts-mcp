@@ -21,7 +21,6 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
-      pr: ${{ steps.release.outputs.pr }}
     steps:
       - name: Release Please
         id: release
@@ -35,16 +34,22 @@ jobs:
 
       - name: Summary
         if: always()
+        env:
+          RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
+          TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          VERSION: ${{ steps.release.outputs.version }}
+          PR_JSON: ${{ steps.release.outputs.pr }}
         run: |
           echo "## Release Please Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [[ "${{ steps.release.outputs.release_created }}" == "true" ]]; then
-            echo "✅ **Release created**: ${{ steps.release.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Version: ${{ steps.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "- [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.release.outputs.tag_name }})" >> $GITHUB_STEP_SUMMARY
-          elif [[ -n "${{ steps.release.outputs.pr }}" ]]; then
-            echo "📝 **Release PR updated**: #${{ steps.release.outputs.pr }}" >> $GITHUB_STEP_SUMMARY
-            echo "- [View PR](https://github.com/${{ github.repository }}/pull/${{ steps.release.outputs.pr }})" >> $GITHUB_STEP_SUMMARY
+          if [[ "$RELEASE_CREATED" == "true" ]]; then
+            echo "✅ **Release created**: $TAG_NAME" >> $GITHUB_STEP_SUMMARY
+            echo "- Version: $VERSION" >> $GITHUB_STEP_SUMMARY
+            echo "- [View Release](https://github.com/${{ github.repository }}/releases/tag/$TAG_NAME)" >> $GITHUB_STEP_SUMMARY
+          elif [[ -n "$PR_JSON" ]]; then
+            PR_NUMBER=$(echo "$PR_JSON" | jq -r '.number')
+            echo "📝 **Release PR updated**: #$PR_NUMBER" >> $GITHUB_STEP_SUMMARY
+            echo "- [View PR](https://github.com/${{ github.repository }}/pull/$PR_NUMBER)" >> $GITHUB_STEP_SUMMARY
           else
             echo "ℹ️ No release action needed" >> $GITHUB_STEP_SUMMARY
           fi
