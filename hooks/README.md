@@ -1,118 +1,90 @@
 # Claude Prompts Hooks
 
-Hooks that guide Claude's behavior when using the prompt engine. These solve common issues where models miss `>>` syntax, forget to continue chains, or skip gate reviews.
+Behavior guardrails for Claude when using the prompt engine. Catches missed `>>` syntax, forgotten chain continuations, and skipped gate reviews.
 
-## Why Hooks?
-
-| Problem | Hook Solution |
-|---------|---------------|
-| Model ignores `>>analyze` syntax | `prompt-suggest.py` detects it and suggests the correct MCP call |
-| User forgets to continue chain | `post-prompt-engine.py` injects `[Chain] Step 2/5 - call prompt_engine to continue` |
-| Gate review skipped | `post-prompt-engine.py` reminds: `[Gate] Respond: GATE_REVIEW: PASS\|FAIL` |
-| Gate FAIL verdict ignored | `gate-enforce.py` blocks execution until criteria addressed |
-| Session state bloat | `pre-compact.py` cleans up before context compaction |
-
-## Included Hooks
-
-### `prompt-suggest.py` (UserPromptSubmit)
-
-Triggers on every user message. Detects `>>prompt` syntax and injects a system message suggesting the correct `prompt_engine` call with available arguments.
-
-**Example output:**
-
-```
-[MCP] >>diagnose (general)
-  Args: scope:string, focus:string, symptoms:string
-  prompt_engine(command:">>diagnose", options:{...})
-```
-
-### `post-prompt-engine.py` (PostToolUse)
-
-Triggers after `prompt_engine` calls. Parses the response to track chain state and pending gates, then injects reminders.
-
-**Example outputs:**
-
-```
-[Chain] Step 2/5 - call prompt_engine to continue
-[Gate] code-quality
-  Respond: GATE_REVIEW: PASS|FAIL - <reason>
-```
-
-### `pre-compact.py` (PreCompact)
-
-Triggers before context compaction (`/compact`). Cleans up chain session state to prevent stale data from persisting across compaction boundaries.
-
-### `gate-enforce.py` (PreToolUse)
-
-Triggers before `prompt_engine` calls. Enforces gate review discipline by blocking:
-
-1. **FAIL verdicts without retry** - Guides Claude to address gate criteria before proceeding
-2. **Missing gate_verdict** - Requires explicit PASS/FAIL when resuming chains with pending gates
-3. **Missing user_response** - Ensures chain resumes include completed work
-
-**Example denial:**
-
-```
-Gate failed: code has security issues. Review the gate criteria and retry with improvements.
-Resubmit with GATE_REVIEW: PASS once criteria are met.
-```
-
-## Installation
-
-These hooks are included when you install via the Claude Code plugin:
+## Quick Start
 
 ```bash
-# First time: add the marketplace
+# Add the marketplace (first time only)
 /plugin marketplace add minipuft/minipuft-plugins
 
 # Install the plugin (includes hooks)
 /plugin install claude-prompts@minipuft
 ```
 
-## Architecture
+Hooks activate automatically. Type `>>analyze` and watch the suggestion appear.
 
+## Why Hooks?
+
+| Problem | Hook | Result |
+|---------|------|--------|
+| Model ignores `>>analyze` syntax | `prompt-suggest.py` | Suggests correct MCP call |
+| Forgets to continue chain | `post-prompt-engine.py` | Injects `[Chain] Step 2/5` reminder |
+| Skips gate review | `post-prompt-engine.py` | Prompts `GATE_REVIEW: PASS\|FAIL` |
+| Ignores FAIL verdict | `gate-enforce.py` | Blocks until criteria addressed |
+| Session state bloat | `pre-compact.py` | Cleans up before `/compact` |
+
+## Hooks Reference
+
+### `prompt-suggest.py` (UserPromptSubmit)
+
+Triggers on every user message. Detects `>>prompt` syntax and suggests the correct `prompt_engine` call.
+
+**Output:**
+
+```text
+[>>] diagnose | scope:"auth" [chain:3steps, @CAGEERF]
+[Chain Workflow] 3 steps:
+  1. initial_scan: Initial Scan (1/3)
+  2. deep_dive: Deep Dive (2/3)
+  3. synthesis: Synthesis (3/3)
 ```
-hooks/
-├── hooks.json              # Claude Code hooks config
-├── prompt-suggest.py       # UserPromptSubmit (syntax detection)
-├── gate-enforce.py         # PreToolUse (gate verdict enforcement)
-├── post-prompt-engine.py   # PostToolUse (chain/gate tracking)
-├── pre-compact.py          # PreCompact (session cleanup)
-├── ralph-stop.py           # Stop (graceful shutdown)
-└── lib/                    # Shared utilities
-    ├── cache_manager.py    # Reads server/cache/prompts.cache.json
-    ├── session_state.py    # Chain/gate state tracking
-    └── workspace.py        # MCP_WORKSPACE resolution
+
+### `post-prompt-engine.py` (PostToolUse)
+
+Triggers after `prompt_engine` calls. Tracks chain state and pending gates.
+
+**Output:**
+
+```text
+[Chain] Step 2/5 - call prompt_engine to continue
+[Gate] code-quality
+  Respond: GATE_REVIEW: PASS|FAIL - <reason>
 ```
+
+### `gate-enforce.py` (PreToolUse)
+
+Blocks `prompt_engine` calls that violate gate discipline:
+
+| Check | Trigger | Denial Message |
+|-------|---------|----------------|
+| FAIL verdict | `gate_verdict: "GATE_REVIEW: FAIL - ..."` | "Gate failed: {reason}. Review criteria and retry." |
+| Missing user_response | `chain_id` without `user_response` | "Chain resume requires user_response." |
+| Pending gate | `chain_id` with unresolved gate | "Include gate_verdict: PASS\|FAIL" |
+
+**Test manually:**
+
+```bash
+# FAIL verdict - should deny
+echo '{"tool_name": "prompt_engine", "tool_input": {"gate_verdict": "GATE_REVIEW: FAIL - bad code"}}' \
+  | python3 hooks/gate-enforce.py | jq '.hookSpecificOutput.permissionDecision'
+# Output: "deny"
+
+# PASS verdict - should allow (exit 0, no output)
+echo '{"tool_name": "prompt_engine", "tool_input": {"gate_verdict": "GATE_REVIEW: PASS - looks good"}}' \
+  | python3 hooks/gate-enforce.py
+echo $?  # Output: 0
+```
+
+### `pre-compact.py` (PreCompact)
+
+Cleans up chain session state before context compaction to prevent stale data.
 
 ## Configuration
 
-Claude Code hooks are configured in `hooks/hooks.json`:
+### Output Format
 
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [{
-      "matcher": "*",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt-suggest.py"
-      }]
-    }],
-    "PostToolUse": [{
-      "matcher": "*prompt_engine*",
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-prompt-engine.py"
-      }]
-    }]
-  }
-}
-```
-
-### Server Configuration
-
-Hook behavior can be customized in `server/config.json`:
+Set in `server/config.json`:
 
 ```json
 {
@@ -122,41 +94,42 @@ Hook behavior can be customized in `server/config.json`:
 }
 ```
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `expandedOutput` | `false` | Show detailed multi-line output instead of compact single-line |
+| Mode | Setting | Example |
+|------|---------|---------|
+| Compact (default) | `false` | `[>>] diagnose \| scope:"auth"` |
+| Expanded | `true` | Multi-line with full argument details |
 
-**Compact mode** (default):
+### hooks.json
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{"matcher": "*", "hooks": [{"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt-suggest.py"}]}],
+    "PostToolUse": [{"matcher": "*prompt_engine*", "hooks": [{"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-prompt-engine.py"}]}],
+    "PreToolUse": [{"matcher": "*prompt_engine*", "hooks": [{"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/gate-enforce.py"}]}]
+  }
+}
 ```
-[>>] diagnose | scope:"auth" [chain:3steps, @CAGEERF]
+
+## Architecture
+
+```text
+hooks/
+├── hooks.json              # Claude Code hooks config
+├── prompt-suggest.py       # UserPromptSubmit - syntax detection
+├── post-prompt-engine.py   # PostToolUse - chain/gate tracking
+├── gate-enforce.py         # PreToolUse - gate verdict enforcement
+├── pre-compact.py          # PreCompact - session cleanup
+└── lib/
+    ├── cache_manager.py    # Reads server/cache/prompts.cache.json
+    ├── session_state.py    # Chain/gate state tracking
+    └── workspace.py        # MCP_WORKSPACE resolution
 ```
 
-**Expanded mode** (`expandedOutput: true`):
-```
-[MCP] >>diagnose
-  Operators: chain (3 steps) | @CAGEERF
-  Arguments: scope: string (required), focus: string (optional)
-  Provided: scope="auth"
-```
+## Cache
 
-## Cache Access
-
-Hooks read prompt metadata from `server/cache/prompts.cache.json`, which is generated by the MCP server on startup and updated on hot-reload. This enables `prompt-suggest.py` to show available arguments without calling the server.
-
----
-
-## Shared Utilities (`lib/`)
-
-The `lib/` directory contains shared utilities used by hooks. These are also available to downstream projects (like gemini-prompts) via the dist branch submodule.
-
-| Module | Purpose |
-|--------|---------|
-| `cache_manager.py` | Read prompt cache, match prompts to intent |
-| `session_state.py` | Chain/gate state tracking |
-| `workspace.py` | MCP_WORKSPACE resolution |
-
----
+Hooks read from `server/cache/prompts.cache.json` (generated on server startup, updated on hot-reload). This enables argument suggestions without server calls.
 
 ## Other Platforms
 
-For Gemini CLI hooks, see [gemini-prompts/hooks/](https://github.com/minipuft/gemini-prompts/tree/main/hooks). Gemini hooks are maintained separately but share the `lib/` utilities via submodule.
+Gemini CLI hooks: [gemini-prompts/hooks/](https://github.com/minipuft/gemini-prompts/tree/main/hooks) (shares `lib/` via submodule).
