@@ -67,7 +67,7 @@ describe('CommandParsingStage', () => {
     const stage = new CommandParsingStage(
       mockCommandParser as UnifiedCommandParser,
       mockArgumentParser as ArgumentParser,
-      [convertedPrompt],
+      () => [convertedPrompt],
       createLogger()
     );
 
@@ -148,7 +148,7 @@ describe('CommandParsingStage', () => {
     const stage = new CommandParsingStage(
       mockCommandParser as UnifiedCommandParser,
       mockArgumentParser as ArgumentParser,
-      [convertedPrompt],
+      () => [convertedPrompt],
       createLogger()
     );
 
@@ -251,7 +251,7 @@ describe('CommandParsingStage', () => {
     const stage = new CommandParsingStage(
       mockCommandParser as UnifiedCommandParser,
       mockArgumentParser as ArgumentParser,
-      convertedPrompts,
+      () => convertedPrompts,
       createLogger()
     );
 
@@ -324,7 +324,7 @@ describe('CommandParsingStage', () => {
     const stage = new CommandParsingStage(
       mockCommandParser as UnifiedCommandParser,
       mockArgumentParser as ArgumentParser,
-      [convertedPrompt, stepPreparePrompt, stepReviewPrompt],
+      () => [convertedPrompt, stepPreparePrompt, stepReviewPrompt],
       createLogger()
     );
 

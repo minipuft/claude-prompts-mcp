@@ -24,6 +24,12 @@ type ParsedArgumentsResult = {
 };
 
 /**
+ * Provider function to get all converted prompts.
+ * Ensures fresh data on each access (supports hot-reload).
+ */
+type PromptsProvider = () => ConvertedPrompt[];
+
+/**
  * Canonical Pipeline Stage 1: Command Parsing
  *
  * Parses incoming commands using UnifiedCommandParser, resolves arguments,
@@ -36,19 +42,21 @@ type ParsedArgumentsResult = {
 export class CommandParsingStage extends BasePipelineStage {
   readonly name = 'CommandParsing';
 
-  private readonly convertedPrompts: ConvertedPrompt[];
-  private readonly promptLookup: Map<string, ConvertedPrompt>;
-
   constructor(
     private readonly commandParser: UnifiedCommandParser,
     private readonly argumentParser: ArgumentParser,
-    convertedPrompts: ConvertedPrompt[],
+    private readonly promptsProvider: PromptsProvider,
     logger: Logger,
     private readonly chainSessionManager?: ChainSessionService
   ) {
     super(logger);
-    this.convertedPrompts = convertedPrompts;
-    this.promptLookup = this.createPromptLookup(convertedPrompts);
+  }
+
+  /**
+   * Get current prompts from provider (supports hot-reload).
+   */
+  private getPrompts(): ConvertedPrompt[] {
+    return this.promptsProvider();
   }
 
   async execute(context: ExecutionContext): Promise<void> {
@@ -74,10 +82,7 @@ export class CommandParsingStage extends BasePipelineStage {
     }
 
     try {
-      const parseResult = await this.commandParser.parseCommand(
-        incomingCommand,
-        this.convertedPrompts
-      );
+      const parseResult = await this.commandParser.parseCommand(incomingCommand, this.getPrompts());
 
       if (
         parseResult.format === 'symbolic' &&
@@ -202,7 +207,8 @@ export class CommandParsingStage extends BasePipelineStage {
   }
 
   private findConvertedPrompt(idOrName: string): ConvertedPrompt | undefined {
-    return this.promptLookup.get(idOrName.toLowerCase());
+    const lookup = this.createPromptLookup(this.getPrompts());
+    return lookup.get(idOrName.toLowerCase());
   }
 
   private async buildSymbolicCommand(

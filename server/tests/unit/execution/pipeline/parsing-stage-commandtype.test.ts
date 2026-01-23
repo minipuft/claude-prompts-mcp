@@ -60,7 +60,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     stage = new CommandParsingStage(
       commandParser,
       argumentParser,
-      [singleConverted, stepConverted, chainConverted],
+      () => [singleConverted, stepConverted, chainConverted],
       logger
     );
   });
