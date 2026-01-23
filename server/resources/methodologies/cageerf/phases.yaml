@@ -1,0 +1,251 @@
+# CAGEERF Phase Definitions
+# Defines the processing and execution steps for the CAGEERF methodology
+
+# Processing steps used in template processing
+processingSteps:
+  - id: context_establishment
+    name: Context Establishment
+    description: Establish clear situational context and environmental awareness
+    methodologyBasis: CAGEERF Context phase
+    order: 1
+    required: true
+
+  - id: systematic_analysis
+    name: Systematic Analysis
+    description: Apply structured analytical approach to the problem
+    methodologyBasis: CAGEERF Analysis phase
+    order: 2
+    required: true
+
+  - id: goal_definition
+    name: Goal Definition
+    description: Establish specific, measurable objectives
+    methodologyBasis: CAGEERF Goals phase
+    order: 3
+    required: true
+
+  - id: execution_planning
+    name: Execution Planning
+    description: Develop actionable implementation approach
+    methodologyBasis: CAGEERF Execution phase
+    order: 4
+    required: true
+
+  - id: evaluation_setup
+    name: Evaluation Setup
+    description: Define success criteria and measurement methods
+    methodologyBasis: CAGEERF Evaluation phase
+    order: 5
+    required: false
+
+  - id: refinement_preparation
+    name: Refinement Preparation
+    description: Establish iteration and improvement processes
+    methodologyBasis: CAGEERF Refinement phase
+    order: 6
+    required: false
+
+# Execution steps used in step guidance
+executionSteps:
+  - id: context_analysis
+    name: Context Analysis
+    action: Analyze situational context and environmental factors
+    methodologyPhase: Context
+    dependencies: []
+    expected_output: Comprehensive situational understanding
+
+  - id: systematic_examination
+    name: Systematic Examination
+    action: Apply structured analytical approach
+    methodologyPhase: Analysis
+    dependencies:
+      - context_analysis
+    expected_output: Detailed problem or opportunity analysis
+
+  - id: goal_establishment
+    name: Goal Establishment
+    action: Define specific, measurable objectives
+    methodologyPhase: Goals
+    dependencies:
+      - systematic_examination
+    expected_output: Clear, actionable goal statements
+
+  - id: execution_design
+    name: Execution Design
+    action: Develop implementation approach and action plan
+    methodologyPhase: Execution
+    dependencies:
+      - goal_establishment
+    expected_output: Detailed execution strategy
+
+  - id: evaluation_framework
+    name: Evaluation Framework
+    action: Establish success criteria and measurement approach
+    methodologyPhase: Evaluation
+    dependencies:
+      - execution_design
+    expected_output: Success metrics and evaluation plan
+
+  - id: refinement_process
+    name: Refinement Process
+    action: Define iteration and improvement mechanisms
+    methodologyPhase: Refinement
+    dependencies:
+      - evaluation_framework
+    expected_output: Continuous improvement framework
+
+# Execution type-specific step enhancements
+executionTypeEnhancements:
+  chain:
+    advancedChain:
+      execution_design:
+        - Design workflow states and transitions
+        - Define decision points and branching logic
+        - Establish error handling and recovery procedures
+    simpleChain:
+      execution_design:
+        - Define sequential step dependencies
+        - Establish data flow between steps
+        - Create checkpoint validation points
+
+# Template enhancements for processing guidance
+templateEnhancements:
+  systemPromptAdditions:
+    - Apply CAGEERF methodology systematically
+    - Begin with contextual establishment
+    - Follow structured analytical approach
+    - Ensure goals are specific and measurable
+
+  userPromptModifications:
+    - Structure response using CAGEERF phases
+    - Provide explicit reasoning for each phase
+    - Include evaluation of approach effectiveness
+
+  contextualHints:
+    - Consider environmental factors and constraints
+    - Apply systematic thinking to complex problems
+    - Focus on actionable, measurable outcomes
+
+# Execution flow hooks
+executionFlow:
+  preProcessingSteps:
+    - Validate context completeness
+    - Confirm analytical scope is defined
+    - Verify goals are specific and measurable
+
+  postProcessingSteps:
+    - Review CAGEERF phase coverage
+    - Assess goal achievement potential
+    - Identify refinement opportunities
+
+  validationSteps:
+    - Context adequacy check
+    - Analysis depth validation
+    - Goal specificity verification
+    - Execution feasibility assessment
+
+# Quality assessment indicators for compliance validation
+qualityIndicators:
+  context:
+    keywords:
+      - context
+      - situation
+      - background
+      - environment
+      - circumstance
+      - setting
+    patterns:
+      - stakeholder|environment|constraint|factor
+      - background|history|situation
+      - current.{0,20}state|status.{0,20}quo
+      - challenge|opportunity|problem.{0,20}space
+
+  analysis:
+    keywords:
+      - analyze
+      - examine
+      - investigate
+      - assess
+      - evaluate
+      - study
+      - research
+    patterns:
+      - systematic|structured|methodical
+      - perspective|viewpoint|angle|lens
+      - root.{0,10}cause|underlying|fundamental
+      - evidence|data|information|research
+      - examine|investigate|explore|study
+
+  goals:
+    keywords:
+      - goal
+      - objective
+      - target
+      - outcome
+      - aim
+      - purpose
+      - result
+    patterns:
+      - specific|measurable|quantifiable
+      - success.{0,20}criteria|metric|indicator
+      - timeline|deadline|timeframe
+      - actionable|achievable|realistic
+
+  execution:
+    keywords:
+      - execute
+      - implement
+      - action
+      - step
+      - process
+      - approach
+      - method
+      - strategy
+    patterns:
+      - step|phase|stage|milestone
+      - resource|capability|skill|tool
+      - risk|mitigation|contingency
+      - practical|feasible|implementable
+
+  evaluation:
+    keywords:
+      - evaluate
+      - measure
+      - assess
+      - criteria
+      - success
+      - metric
+      - validation
+    patterns:
+      - measure|metric|indicator|kpi
+      - success|criteria|threshold|benchmark
+      - assess|evaluate|validate|verify
+      - feedback|monitoring|tracking
+
+  refinement:
+    keywords:
+      - refine
+      - improve
+      - iterate
+      - enhance
+      - optimize
+      - adjust
+      - feedback
+    patterns:
+      - iterate|continuous|ongoing
+      - improve|enhance|optimize|refine
+      - feedback|learn|adapt|adjust
+      - version|evolution|development
+
+  framework:
+    keywords:
+      - framework
+      - methodology
+      - systematic
+      - structured
+      - comprehensive
+    patterns:
+      - framework|methodology|systematic
+      - structured|organized|comprehensive
+      - consistent|coherent|integrated
+      - cageerf|phases|holistic

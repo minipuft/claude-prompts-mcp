@@ -1,0 +1,29 @@
+id: pr-performance
+name: PR Performance Check
+type: validation
+severity: medium
+enforcementMode: advisory
+description: Flags performance concerns without blocking. Warns but allows merge.
+guidanceFile: guidance.md
+gate_type: category
+
+pass_criteria:
+  - type: content_check
+    forbidden_patterns:
+      - 'console.log'
+      - 'debugger'
+  - type: pattern_check
+    regex_patterns:
+      - memo|useMemo|useCallback
+      - async|await|Promise
+      - cache|memoize
+
+retry_config:
+  max_attempts: 1
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - pr-review
+  explicit_request: true

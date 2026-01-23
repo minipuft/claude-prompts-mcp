@@ -1,0 +1,21 @@
+id: analytical
+name: Analytical Response Style
+description: Systematic analysis with data-driven reasoning and logical organization
+
+guidanceFile: guidance.md
+
+priority: 0
+enabled: true
+enhancementMode: prepend
+
+activation:
+  prompt_categories:
+    - analysis
+    - research
+    - debugging
+    - investigation
+
+compatibleFrameworks:
+  - CAGEERF
+  - ReACT
+  - 5W1H

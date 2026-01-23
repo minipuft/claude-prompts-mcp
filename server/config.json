@@ -1,0 +1,76 @@
+{
+  "$schema": "./config.schema.json",
+  "advanced": {
+    "sessions": {
+      "cleanupIntervalMinutes": 5,
+      "reviewTimeoutMinutes": 30,
+      "timeoutMinutes": 1440
+    }
+  },
+  "execution": {
+    "judge": true
+  },
+  "gates": {
+    "directory": "resources/gates",
+    "enabled": true,
+    "methodologyGates": true
+  },
+  "hooks": {
+    "expandedOutput": true
+  },
+  "logging": {
+    "directory": "./logs",
+    "level": "debug"
+  },
+  "methodologies": {
+    "dynamicToolDescriptions": true,
+    "enabled": true,
+    "styleGuidance": true,
+    "systemPromptFrequency": 3
+  },
+  "prompts": {
+    "directory": "resources/prompts",
+    "registerWithMcp": true
+  },
+  "resources": {
+    "gates": {
+      "enabled": true
+    },
+    "logs": {
+      "defaultLevel": "info",
+      "enabled": true,
+      "maxEntries": 500
+    },
+    "methodologies": {
+      "enabled": true
+    },
+    "observability": {
+      "enabled": true,
+      "metrics": true,
+      "sessions": true
+    },
+    "prompts": {
+      "enabled": true
+    },
+    "registerWithMcp": false
+  },
+  "server": {
+    "name": "claude-prompts",
+    "port": 9090,
+    "transport": "stdio"
+  },
+  "verification": {
+    "inContextAttempts": 3,
+    "isolation": {
+      "enabled": true,
+      "maxBudget": 1,
+      "permissionMode": "delegate",
+      "timeout": 300
+    }
+  },
+  "versioning": {
+    "autoVersion": true,
+    "enabled": true,
+    "maxVersions": 50
+  }
+}

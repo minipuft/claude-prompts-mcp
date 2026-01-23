@@ -1,0 +1,100 @@
+id: focus
+name: FOCUS Framework
+type: FOCUS
+methodology: FOCUS
+enabled: true
+systemPromptGuidance: >-
+  Apply the FOCUS methodology systematically:
+
+
+  **Frame**: Frame the problem clearly - define scope, constraints, and success
+  criteria
+
+  **Observe**: Observe and gather relevant information - collect data, identify
+  patterns
+
+  **Conceptualize**: Conceptualize solutions - brainstorm approaches, evaluate
+  trade-offs
+
+  **Undertake**: Undertake implementation - execute the chosen approach step by
+  step
+
+  **Synthesize**: Synthesize results - consolidate learnings, document outcomes
+phasesFile: phases.yaml
+gates:
+  include:
+    - framework-compliance
+toolDescriptions:
+  prompt_engine:
+    description: |
+      🚀 PROMPT ENGINE [FOCUS]: Execute prompts with Frame→Observe→Conceptualize→Undertake→Synthesize phases and ground-truth validation.
+
+      WHAT IT RETURNS: Prepared prompt + FOCUS phase instructions.
+      WHAT YOU DO: Apply each phase yourself using the returned framework.
+
+      SYNTAX:
+      - >>prompt_id key:"value"              # Run prompt with arguments
+      - >>step1 --> >>step2                  # Chain multiple steps
+      - @FOCUS >>prompt                      # Apply FOCUS methodology
+      - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
+      - :: verify:"cmd" loop:true            # Autonomous until pass
+
+      PRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)
+      MODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)
+    parameters:
+      command: 'Prompt ID to expand. Resulting prompt will include FOCUS phase guidance for you to apply.'
+methodologyGates:
+  - id: problem_framing
+    name: Problem Framing Quality
+    description: Verify problem is clearly framed
+    methodologyArea: Frame
+    priority: high
+    validationCriteria:
+      - Problem scope is defined
+      - Success criteria are measurable
+  - id: solution_quality
+    name: Solution Quality
+    description: Verify solution approach is sound
+    methodologyArea: Conceptualize
+    priority: high
+    validationCriteria:
+      - Multiple approaches considered
+      - Trade-offs documented
+templateSuggestions:
+  - section: system
+    type: addition
+    description: Add FOCUS methodology guidance
+    content: Apply FOCUS methodology systematically
+    methodologyJustification: Ensures focused problem-solving
+    impact: high
+methodologyElements:
+  requiredSections:
+    - Frame
+    - Observe
+    - Undertake
+  optionalSections:
+    - Conceptualize
+    - Synthesize
+  sectionDescriptions:
+    Frame: Problem definition and scoping
+    Observe: Information gathering
+    Conceptualize: Solution design
+    Undertake: Implementation
+    Synthesize: Results consolidation
+argumentSuggestions:
+  - name: problem
+    type: string
+    description: The problem to solve
+    methodologyReason: Frame phase requires clear problem statement
+    examples:
+      - performance issue
+      - user experience gap
+  - name: constraints
+    type: string
+    description: Known constraints
+    methodologyReason: Frame phase needs boundaries
+    examples:
+      - time limit
+      - budget
+judgePromptFile: judge-prompt.md
+version: 1.0.0

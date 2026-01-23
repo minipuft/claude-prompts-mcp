@@ -1,0 +1,30 @@
+# Example script tool definition
+id: word_count
+name: Word Counter
+description: Counts words, characters, and lines in text
+runtime: python
+script: script.py
+timeout: 5000
+enabled: true
+
+# Execution control configuration
+# Controls when and how this script tool executes
+execution:
+  # trigger: schema_match | explicit | always | never
+  #   - schema_match: Execute when user args match schema parameters (default)
+  #   - explicit: Only execute when user explicitly requests tool:<id>
+  #   - always: Execute on every prompt run
+  #   - never: Tool is disabled
+  trigger: schema_match
+
+  # confirm: true | false (default: false)
+  #   - false: Execute immediately when triggered
+  #   - true: Ask for confirmation before executing
+  confirm: true
+  # confirmMessage: string (optional)
+  # confirmMessage: "Run word count analysis on the provided text?"
+
+  # strict: true | false (default: false)
+  #   - false: Match if ANY required param is present
+  #   - true: Match only if ALL required params are present
+  strict: false

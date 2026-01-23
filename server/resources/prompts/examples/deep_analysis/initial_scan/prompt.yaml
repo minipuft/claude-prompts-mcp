@@ -1,0 +1,5 @@
+id: initial_scan
+name: Initial Scan
+category: examples
+description: Broad overview and key themes identification
+userMessageTemplateFile: user-message.md

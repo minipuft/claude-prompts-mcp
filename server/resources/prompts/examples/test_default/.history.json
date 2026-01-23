@@ -1,0 +1,57 @@
+{
+  "resource_type": "prompt",
+  "resource_id": "test_default",
+  "current_version": 2,
+  "versions": [
+    {
+      "version": 2,
+      "date": "2026-01-20T22:24:33.098Z",
+      "snapshot": {
+        "id": "test_default",
+        "name": "Test Default Value",
+        "description": "Tests defaultValue rendering (MCP tracking test)",
+        "category": "examples",
+        "systemMessage": "",
+        "userMessageTemplate": "Generate exactly {{count}} items.\n",
+        "arguments": [
+          {
+            "name": "count",
+            "required": false,
+            "description": "Number of items",
+            "type": "number",
+            "defaultValue": 42
+          }
+        ],
+        "chainSteps": [],
+        "registerWithMcp": true
+      },
+      "diff_summary": "+1/-1",
+      "description": "Update via resource_manager"
+    },
+    {
+      "version": 1,
+      "date": "2026-01-20T22:20:31.725Z",
+      "snapshot": {
+        "id": "test_default",
+        "name": "Test Default Value",
+        "description": "Tests defaultValue rendering",
+        "category": "examples",
+        "systemMessage": "",
+        "userMessageTemplate": "Generate exactly {{count}} items.\n",
+        "arguments": [
+          {
+            "name": "count",
+            "required": false,
+            "description": "Number of items",
+            "type": "number",
+            "defaultValue": 42
+          }
+        ],
+        "chainSteps": [],
+        "registerWithMcp": true
+      },
+      "diff_summary": "+1/-1",
+      "description": "Update via resource_manager"
+    }
+  ]
+}
