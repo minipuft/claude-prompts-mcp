@@ -97,6 +97,10 @@ export async function createRuntimeFoundation(
     logger.info('PathResolver resolved paths:', pathResolver.getAllPaths());
   }
 
+  // Expose resolved prompts path for stateless utilities (jsonUtils template rendering)
+  // This bridges PathResolver with utilities that can't receive dependency injection
+  process.env['PROMPTS_PATH'] = pathResolver.getPromptsPath();
+
   return {
     logger,
     configManager,
