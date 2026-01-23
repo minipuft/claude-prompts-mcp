@@ -370,5 +370,5 @@ jobs:
   # NOTE: Gemini CLI extension and OpenCode plugin are maintained in separate repositories:
   # - https://github.com/minipuft/gemini-prompts
   # - https://github.com/minipuft/opencode-prompts
-  # Both use claude-prompts as an npm dependency. Upstream releases trigger
-  # dependency update PRs via repository_dispatch in npm-publish.yml.
+  # Both use claude-prompts as an npm dependency (^1.x semver range).
+  # Dependabot creates weekly PRs to update the explicit version in package.json.
