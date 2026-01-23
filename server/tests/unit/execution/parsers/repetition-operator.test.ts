@@ -74,6 +74,32 @@ describe('Repetition Operator (* N)', () => {
       const result = parser.preprocessRepetition('>>task key1:"val1" key2:"val2" * 2');
       expect(result).toBe('>>task key1:"val1" key2:"val2" --> >>task key1:"val1" key2:"val2"');
     });
+
+    // Arguments AFTER * N operator tests (bug fix)
+    test('preserves arguments AFTER * N operator', () => {
+      const result = parser.preprocessRepetition('>>prompt * 2 arg:"value"');
+      expect(result).toBe('>>prompt arg:"value" --> >>prompt arg:"value"');
+    });
+
+    test('handles arguments after * N with chain continuation', () => {
+      const result = parser.preprocessRepetition('>>prompt * 2 arg:"x" --> >>final');
+      expect(result).toBe('>>prompt arg:"x" --> >>prompt arg:"x" --> >>final');
+    });
+
+    test('handles multiple arguments after * N', () => {
+      const result = parser.preprocessRepetition('>>prompt * 2 a:"1" b:"2"');
+      expect(result).toBe('>>prompt a:"1" b:"2" --> >>prompt a:"1" b:"2"');
+    });
+
+    test('handles single-quoted arguments after * N', () => {
+      const result = parser.preprocessRepetition(">>prompt * 2 arg:'value'");
+      expect(result).toBe(">>prompt arg:'value' --> >>prompt arg:'value'");
+    });
+
+    test('handles mixed args before and after * N', () => {
+      const result = parser.preprocessRepetition('>>prompt before:"x" * 2 after:"y"');
+      expect(result).toBe('>>prompt before:"x" after:"y" --> >>prompt before:"x" after:"y"');
+    });
   });
 
   describe('expandRepetition() error handling', () => {
@@ -219,20 +245,6 @@ describe('Repetition Operator (* N)', () => {
       expect(result.metadata?.originalCommand).toBe('>>prompt * 2');
       expect(result.metadata?.detectedFormat).toContain('repetition');
       expect(result.metadata?.detectedFormat).toContain('chain');
-    });
-
-    test('metadata includes repetitionExpanded flag when repetition used', () => {
-      const detection = parser.detectOperators('>>brainstorm * 3');
-      const result = parser.buildParseResult('>>brainstorm * 3', detection, 'brainstorm', '');
-
-      expect(result.metadata?.repetitionExpanded).toBe(true);
-    });
-
-    test('metadata does not include repetitionExpanded when no repetition', () => {
-      const detection = parser.detectOperators('>>analyze --> >>summarize');
-      const result = parser.buildParseResult('>>analyze --> >>summarize', detection, 'analyze', '');
-
-      expect(result.metadata?.repetitionExpanded).toBeUndefined();
     });
   });
 

@@ -96,9 +96,42 @@ export class SymbolicCommandParser {
     // Split by --> to find the last segment to repeat
     // Handle: ">>step1 --> >>step2 * 3" → repeat step2
     // Handle: ">>prompt * 3 --> >>final" → repeat prompt, then final
+    // Handle: ">>prompt * 3 arg:'x'" → repeat prompt with args
     const segments = this.splitByChainDelimiter(beforeRepetition);
-    const segmentToRepeat = segments.pop() ?? beforeRepetition;
+    let segmentToRepeat = segments.pop() ?? beforeRepetition;
     const precedingSegments = segments;
+
+    // Check if afterRepetition contains arguments to attach to the repeated segment
+    // Arguments pattern: key:"value" or key:'value' (not starting with --> or >>)
+    const trimmedAfter = afterRepetition.trim();
+    let chainContinuation = '';
+
+    if (trimmedAfter !== '') {
+      // Pattern for arguments: starts with identifier followed by colon and quoted value
+      const argPattern = /^[a-zA-Z_][a-zA-Z0-9_]*:["'][^"']*["']/;
+
+      if (argPattern.test(trimmedAfter)) {
+        // afterRepetition starts with arguments - attach them to each repeated segment
+        // Find where chain operators start (if any): look for --> not inside quotes
+        const chainStart = this.findChainDelimiterOutsideQuotes(trimmedAfter);
+
+        if (chainStart === -1) {
+          // All arguments, no chain continuation
+          segmentToRepeat = segmentToRepeat.trim() + ' ' + trimmedAfter;
+        } else {
+          // Arguments before -->, chain after
+          const args = trimmedAfter.slice(0, chainStart).trim();
+          chainContinuation = trimmedAfter.slice(chainStart).trim();
+          segmentToRepeat = segmentToRepeat.trim() + ' ' + args;
+        }
+      } else if (trimmedAfter.startsWith('-->')) {
+        // Chain continuation (e.g., "* 3 --> >>final")
+        chainContinuation = trimmedAfter;
+      } else {
+        // Legacy: treat as chain step (e.g., bare prompt name)
+        chainContinuation = '--> ' + trimmedAfter;
+      }
+    }
 
     this.logger.debug(`[expandRepetition] Segment to repeat: "${segmentToRepeat}"`);
 
@@ -106,20 +139,14 @@ export class SymbolicCommandParser {
     const repeatedSegments = Array(count).fill(segmentToRepeat.trim());
     const expandedRepetition = repeatedSegments.join(' --> ');
 
-    // Reconstruct: preceding --> repeated --> after
+    // Reconstruct: preceding --> repeated --> chainContinuation
     let expandedCommand = '';
     if (precedingSegments.length > 0) {
       expandedCommand = precedingSegments.join(' --> ') + ' --> ';
     }
     expandedCommand += expandedRepetition;
-    if (afterRepetition.trim()) {
-      // afterRepetition might start with --> or be a continuation
-      const trimmedAfter = afterRepetition.trim();
-      if (trimmedAfter.startsWith('-->')) {
-        expandedCommand += ' ' + trimmedAfter;
-      } else {
-        expandedCommand += ' --> ' + trimmedAfter;
-      }
+    if (chainContinuation !== '') {
+      expandedCommand += ' ' + chainContinuation;
     }
 
     this.logger.debug(`[expandRepetition] Expanded to: ${expandedCommand}`);
@@ -167,6 +194,39 @@ export class SymbolicCommandParser {
     }
 
     return segments;
+  }
+
+  /**
+   * Find the position of --> delimiter outside of quoted strings.
+   * Returns -1 if no delimiter found outside quotes.
+   * Used to separate arguments from chain continuation in repetition expansion.
+   */
+  private findChainDelimiterOutsideQuotes(str: string): number {
+    let inQuotes = false;
+    let quoteChar = '';
+
+    for (let i = 0; i < str.length; i++) {
+      const char = str[i];
+
+      // Toggle quote state (handle both ' and ")
+      if ((char === '"' || char === "'") && (i === 0 || str[i - 1] !== '\\')) {
+        if (!inQuotes) {
+          inQuotes = true;
+          quoteChar = char;
+        } else if (char === quoteChar) {
+          inQuotes = false;
+          quoteChar = '';
+        }
+        continue;
+      }
+
+      // Check for --> outside quotes
+      if (!inQuotes && str.slice(i, i + 3) === '-->') {
+        return i;
+      }
+    }
+
+    return -1;
   }
 
   detectOperators(command: string): OperatorDetectionResult {
@@ -660,10 +720,6 @@ export class SymbolicCommandParser {
   ): SymbolicCommandParseResult {
     const executionPlan = this.generateExecutionPlan(operators, basePromptId, baseArgs);
 
-    // Check if repetition operator was used (and thus expanded)
-    const repetitionOp = operators.operators.find((op) => op.type === 'repetition');
-    const repetitionExpanded = repetitionOp !== undefined;
-
     return {
       promptId: basePromptId,
       rawArgs: baseArgs,
@@ -676,7 +732,6 @@ export class SymbolicCommandParser {
         parseStrategy: 'symbolic',
         detectedFormat: `Symbolic (${operators.operatorTypes.join(', ')})`,
         warnings: [],
-        ...(repetitionExpanded && { repetitionExpanded: true }),
       },
     };
   }
