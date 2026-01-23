@@ -13,7 +13,6 @@
  * - Independent of semantic layer and conversation history
  */
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 
 import { ArgumentHistoryEntry, ReviewContext, PersistedArgumentHistory } from './types.js';
 import { Logger } from '../logging/index.js';
@@ -46,16 +45,15 @@ export class ArgumentHistoryTracker {
    *
    * @param logger - Logger instance
    * @param maxEntriesPerChain - Maximum entries per chain (default: 50)
-   * @param persistencePath - Path to persistence file (optional)
+   * @param persistencePath - Path to persistence file (required - no default)
    */
   constructor(
     private logger: Logger,
     maxEntriesPerChain: number = 50,
-    persistencePath?: string
+    persistencePath: string
   ) {
     this.maxEntriesPerChain = maxEntriesPerChain;
-    this.persistencePath =
-      persistencePath || path.join(process.cwd(), 'runtime-state', 'argument-history.json');
+    this.persistencePath = persistencePath;
     this.persistenceEnabled = true;
 
     // Load persisted history if available

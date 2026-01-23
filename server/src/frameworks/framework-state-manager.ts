@@ -106,12 +106,12 @@ export class FrameworkStateManager extends EventEmitter {
   private isInitialized: boolean = false;
   private runtimeStatePath: string;
 
-  constructor(logger: Logger, serverRoot?: string) {
+  constructor(logger: Logger, serverRoot: string) {
     super();
     this.logger = logger;
 
     // Set state file path - place in config directory for better organization
-    const rootPath = path.resolve(serverRoot || process.cwd());
+    const rootPath = path.resolve(serverRoot);
     this.runtimeStatePath = path.join(rootPath, 'runtime-state', 'framework-state.json');
 
     // Initialize with default framework state (will be overridden by loadPersistedState)
@@ -603,7 +603,7 @@ export class FrameworkStateManager extends EventEmitter {
  */
 export async function createFrameworkStateManager(
   logger: Logger,
-  serverRoot?: string
+  serverRoot: string
 ): Promise<FrameworkStateManager> {
   const manager = new FrameworkStateManager(logger, serverRoot);
   await manager.initialize();

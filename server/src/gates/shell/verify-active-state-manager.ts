@@ -21,8 +21,8 @@ import type { Logger } from '../../logging/index.js';
  * Configuration for the state manager.
  */
 export interface VerifyActiveStateManagerConfig {
-  /** Directory for runtime state files (default: cwd/runtime-state) */
-  runtimeStateDir?: string;
+  /** Directory for runtime state files (required - no default) */
+  runtimeStateDir: string;
 }
 
 /**
@@ -36,9 +36,9 @@ export class VerifyActiveStateManager {
   private readonly runtimeStateDir: string;
   private readonly logger: Logger;
 
-  constructor(logger: Logger, config: VerifyActiveStateManagerConfig = {}) {
+  constructor(logger: Logger, config: VerifyActiveStateManagerConfig) {
     this.logger = logger;
-    this.runtimeStateDir = config.runtimeStateDir ?? path.join(process.cwd(), 'runtime-state');
+    this.runtimeStateDir = config.runtimeStateDir;
   }
 
   /**
@@ -139,7 +139,7 @@ export class VerifyActiveStateManager {
  */
 export function createVerifyActiveStateManager(
   logger: Logger,
-  config?: VerifyActiveStateManagerConfig
+  config: VerifyActiveStateManagerConfig
 ): VerifyActiveStateManager {
   return new VerifyActiveStateManager(logger, config);
 }

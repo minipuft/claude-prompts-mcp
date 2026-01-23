@@ -302,16 +302,13 @@ export class RuntimeMethodologyLoader {
     }
 
     // Priority 4: Common relative paths from dist (resources/methodologies first)
+    // NOTE: process.cwd() paths removed - use explicit PathResolver configuration
     const relativePaths = [
       join(__dirname, '..', '..', '..', 'resources', 'methodologies'),
       join(__dirname, '..', '..', 'resources', 'methodologies'),
-      join(process.cwd(), 'resources', 'methodologies'),
-      join(process.cwd(), 'server', 'resources', 'methodologies'),
-      // Legacy paths
+      // Legacy paths (package-relative only)
       join(__dirname, '..', '..', '..', 'methodologies'),
       join(__dirname, '..', '..', 'methodologies'),
-      join(process.cwd(), 'methodologies'),
-      join(process.cwd(), 'server', 'methodologies'),
     ];
 
     for (const path of relativePaths) {

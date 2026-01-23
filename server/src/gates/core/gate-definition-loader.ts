@@ -357,16 +357,13 @@ export class GateDefinitionLoader {
     }
 
     // Priority 4: Common relative paths from dist (resources/gates first)
+    // NOTE: process.cwd() paths removed - use explicit PathResolver configuration
     const relativePaths = [
       join(__dirname, '..', '..', '..', 'resources', 'gates'),
       join(__dirname, '..', '..', 'resources', 'gates'),
-      join(process.cwd(), 'resources', 'gates'),
-      join(process.cwd(), 'server', 'resources', 'gates'),
-      // Legacy paths
+      // Legacy paths (package-relative only)
       join(__dirname, '..', '..', '..', 'gates'),
       join(__dirname, '..', '..', 'gates'),
-      join(process.cwd(), 'gates'),
-      join(process.cwd(), 'server', 'gates'),
     ];
 
     for (const path of relativePaths) {

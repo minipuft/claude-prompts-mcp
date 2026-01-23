@@ -56,9 +56,11 @@ function getPromptTemplatesPath(): string {
     const currentDirPath = path.dirname(currentFileUrl);
     return path.resolve(currentDirPath, '../../prompts');
   } catch (error) {
-    // Fallback for any environment where import.meta is not available
-    // Use process.cwd() as last resort
-    return path.resolve(process.cwd(), 'server/prompts');
+    // No fallback - environment must support either __dirname (CommonJS/Jest) or import.meta.url (ESM)
+    throw new Error(
+      'Cannot determine prompt templates path: neither __dirname nor import.meta.url available. ' +
+        'Set PROMPTS_PATH environment variable explicitly.'
+    );
   }
 }
 

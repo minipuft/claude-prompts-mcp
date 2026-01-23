@@ -69,7 +69,12 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
 
   // Normalize to absolute path if needed
   if (!path.isAbsolute(promptsPath)) {
-    const baseRoot = serverRoot ?? configManager.getServerRoot?.() ?? process.cwd();
+    const baseRoot = serverRoot ?? configManager.getServerRoot?.();
+    if (!baseRoot) {
+      throw new Error(
+        'Cannot resolve relative prompts path: serverRoot not provided and configManager.getServerRoot() unavailable'
+      );
+    }
     promptsPath = path.resolve(baseRoot, promptsPath);
     if (isVerbose) {
       logger.info(`🔧 Converting prompts path to absolute: ${promptsPath}`);

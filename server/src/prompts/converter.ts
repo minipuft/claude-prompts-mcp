@@ -92,8 +92,13 @@ export class PromptConverter {
 
     for (const promptData of promptsData) {
       try {
-        // Determine base path for loading files
-        const fileBasePath = basePath || path.join(process.cwd(), '..');
+        // Determine base path for loading files - basePath is required
+        if (basePath == null || basePath === '') {
+          throw new Error(
+            `Cannot convert prompt '${promptData.id}': basePath is required for file loading`
+          );
+        }
+        const fileBasePath = basePath;
 
         // Load the prompt file content using the loader
         const promptFile = await this.loader.loadPromptFile(promptData.file, fileBasePath);

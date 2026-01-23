@@ -5,7 +5,6 @@
  */
 
 import { appendFile, writeFile } from 'node:fs/promises';
-import * as path from 'node:path';
 
 import { LogLevel, TransportType } from '../types/index.js';
 
@@ -383,11 +382,17 @@ export function createLogger(config: EnhancedLoggingConfig): EnhancedLogger {
 export function getDefaultLoggerConfig(
   overrides: Partial<EnhancedLoggingConfig> = {}
 ): EnhancedLoggingConfig {
-  const defaultLogDir = path.join(process.cwd(), 'logs');
-  const defaultLogFile = overrides.logFile ?? path.join(defaultLogDir, 'mcp-server.log');
+  // Require explicit logFile - no process.cwd() guessing
+  // Callers should pass logFile from PathResolver or ConfigManager
+  if (!overrides.logFile) {
+    throw new Error(
+      'getDefaultLoggerConfig requires logFile in overrides. ' +
+        'Use PathResolver.getLogsPath() or ConfigManager to determine log location.'
+    );
+  }
 
   return {
-    logFile: defaultLogFile,
+    logFile: overrides.logFile,
     transport: overrides.transport ?? TransportType.SSE,
     enableDebug: overrides.enableDebug ?? false,
     configuredLevel: overrides.configuredLevel ?? 'info',

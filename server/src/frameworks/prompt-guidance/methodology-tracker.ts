@@ -72,8 +72,11 @@ export class MethodologyTracker extends EventEmitter {
   constructor(logger: Logger, config?: Partial<MethodologyTrackerConfig>) {
     super();
     this.logger = logger;
-    // Use provided serverRoot, fallback to cwd() - no env var dependency
-    const rootPath = path.resolve(config?.serverRoot || process.cwd());
+    // Require serverRoot - no fallback to process.cwd()
+    if (config?.serverRoot == null || config.serverRoot === '') {
+      throw new Error('MethodologyTracker requires serverRoot in config');
+    }
+    const rootPath = path.resolve(config.serverRoot);
     this.rootPath = rootPath;
     const runtimeStatePath = path.join(rootPath, 'runtime-state', 'framework-state.json');
 

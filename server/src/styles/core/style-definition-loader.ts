@@ -360,16 +360,13 @@ export class StyleDefinitionLoader {
     }
 
     // Priority 4: Common relative paths from dist (resources/styles first)
+    // NOTE: process.cwd() paths removed - use explicit PathResolver configuration
     const relativePaths = [
       join(__dirname, '..', '..', '..', 'resources', 'styles'),
       join(__dirname, '..', '..', 'resources', 'styles'),
-      join(process.cwd(), 'resources', 'styles'),
-      join(process.cwd(), 'server', 'resources', 'styles'),
-      // Legacy paths
+      // Legacy paths (package-relative only)
       join(__dirname, '..', '..', '..', 'styles'),
       join(__dirname, '..', '..', 'styles'),
-      join(process.cwd(), 'styles'),
-      join(process.cwd(), 'server', 'styles'),
     ];
 
     for (const path of relativePaths) {
