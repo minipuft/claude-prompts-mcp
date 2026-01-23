@@ -12,7 +12,12 @@
  * - Command validation and sanitization
  */
 
-import { normalizeSymbolicPrefixes, stripStyleOperators } from './parser-utils.js';
+import {
+  normalizeSymbolicPrefixes,
+  stripStyleOperators,
+  findFrameworkOperatorOutsideQuotes,
+  stripFrameworkOperatorOutsideQuotes,
+} from './parser-utils.js';
 import { SymbolicCommandParser, createSymbolicCommandParser } from './symbolic-operator-parser.js';
 import { Logger } from '../../logging/index.js';
 import { PromptError, ValidationError, safeJsonParse } from '../../utils/index.js';
@@ -58,6 +63,7 @@ export class UnifiedCommandParser {
   private logger: Logger;
   private strategies: ParsingStrategy[];
   private symbolicParser: SymbolicCommandParser;
+  private registeredFrameworkIds: Set<string>;
 
   // Parsing statistics for monitoring
   private stats = {
@@ -68,12 +74,34 @@ export class UnifiedCommandParser {
     averageConfidence: 0,
   };
 
-  constructor(logger: Logger) {
+  /**
+   * @param logger - Logger instance
+   * @param registeredFrameworkIds - Optional set of registered framework IDs (uppercase).
+   *   When provided, only @framework operators matching registered IDs are detected.
+   *   Unregistered @word patterns are silently skipped (treated as literal text).
+   */
+  constructor(logger: Logger, registeredFrameworkIds?: Set<string>) {
     this.logger = logger;
-    this.symbolicParser = createSymbolicCommandParser(logger);
+    this.registeredFrameworkIds = registeredFrameworkIds ?? new Set();
+    this.symbolicParser = createSymbolicCommandParser(logger, this.registeredFrameworkIds);
     this.strategies = this.initializeStrategies();
     this.logger.debug(
       `UnifiedCommandParser initialized with ${this.strategies.length} parsing strategies`
+    );
+  }
+
+  /**
+   * Update the set of registered framework IDs.
+   * This allows late binding when FrameworkManager becomes available after construction.
+   * @param frameworkIds Set of framework IDs (will be normalized to uppercase)
+   */
+  updateRegisteredFrameworkIds(frameworkIds: Set<string>): void {
+    // Normalize to uppercase for consistent matching
+    this.registeredFrameworkIds = new Set(Array.from(frameworkIds).map((id) => id.toUpperCase()));
+    // Recreate symbolic parser with updated framework IDs
+    this.symbolicParser = createSymbolicCommandParser(this.logger, this.registeredFrameworkIds);
+    this.logger.debug(
+      `[UnifiedCommandParser] Updated registered framework IDs: ${Array.from(this.registeredFrameworkIds).join(', ')}`
     );
   }
 
@@ -259,15 +287,17 @@ export class UnifiedCommandParser {
         // Match symbolic operators:
         // - --> (chain)
         // - :: or = followed by any value (quoted or unquoted)
-        // - @FRAMEWORK at start OR after whitespace
+        // - @FRAMEWORK at start OR after whitespace (ONLY outside quoted strings)
         // - + (parallel)
         // - ? (conditional)
         // - #id style selector (e.g., #analytical, #procedural)
         // - * N repetition (e.g., >>prompt *3)
-        return (
-          /-->|(::|=)\s*\S|\s@[A-Za-z0-9_-]+|^@[A-Za-z0-9_-]+|\+|\?|\s+\*\s*\d+/.test(command) ||
-          /(?:^|\s)#[A-Za-z][A-Za-z0-9_-]*(?=\s|$|>>)/.test(command)
-        );
+        const hasChainGateOrOther = /-->|(::|=)\s*\S|\+|\?|\s+\*\s*\d+/.test(command);
+        const hasStyleOperator = /(?:^|\s)#[A-Za-z][A-Za-z0-9_-]*(?=\s|$|>>)/.test(command);
+        // Use quote-aware detection for framework operators to avoid matching @word inside quotes
+        const hasFrameworkOperator = findFrameworkOperatorOutsideQuotes(command) !== null;
+
+        return hasChainGateOrOther || hasStyleOperator || hasFrameworkOperator;
       },
       parse: (command: string): SymbolicCommandParseResult | null => {
         // Command arrives already preprocessed (repetition expanded in parseCommand)
@@ -276,8 +306,8 @@ export class UnifiedCommandParser {
           return null;
         }
 
-        // Strip framework operator from anywhere in command
-        let cleanCommand = command.replace(/(?:^|\s)@[A-Za-z0-9_-]+\s*/g, ' ');
+        // Strip framework operator from command (quote-aware to preserve @word in quoted args)
+        let cleanCommand = stripFrameworkOperatorOutsideQuotes(command);
         // Strip ALL gate operators - handles both named and anonymous formats:
         // - Named colon: :: id:"criteria" or :: id:'criteria'
         // - Named paren: :: id(criteria)
@@ -321,8 +351,10 @@ export class UnifiedCommandParser {
         // Skip if has symbolic operators (handled by symbolic strategy)
         // Note: Gate operators (:: or =) must be preceded by whitespace to avoid
         // matching argument assignment syntax like input="value"
-        if (/-->|\s(::|=)\s*\S|\s@[A-Za-z]|^@[A-Za-z]|\+|\?|\s+\*\s*\d+/.test(trimmed))
-          return false;
+        // Use quote-aware detection for framework operators
+        const hasOtherOperators = /-->|\s(::|=)\s*\S|\+|\?|\s+\*\s*\d+/.test(trimmed);
+        const hasFrameworkOp = findFrameworkOperatorOutsideQuotes(trimmed) !== null;
+        if (hasOtherOperators || hasFrameworkOp) return false;
         // Accept with or without >> or / prefix (bare prompt names now supported)
         return /^(?:>>|\/)?[a-zA-Z][a-zA-Z0-9_-]*(?:\s|$)/.test(trimmed);
       },
@@ -691,7 +723,13 @@ export class UnifiedCommandParser {
 
 /**
  * Factory function to create unified command parser
+ * @param logger - Logger instance
+ * @param registeredFrameworkIds - Optional set of registered framework IDs (uppercase).
+ *   When provided, only @framework operators matching registered IDs are detected.
  */
-export function createUnifiedCommandParser(logger: Logger): UnifiedCommandParser {
-  return new UnifiedCommandParser(logger);
+export function createUnifiedCommandParser(
+  logger: Logger,
+  registeredFrameworkIds?: Set<string>
+): UnifiedCommandParser {
+  return new UnifiedCommandParser(logger, registeredFrameworkIds);
 }

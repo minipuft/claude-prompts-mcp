@@ -160,9 +160,12 @@ export class PromptExecutionService {
     this.promptGuidanceService = promptGuidanceService;
 
     const resolvedServerRoot =
-      typeof configManager.getServerRoot === 'function'
-        ? configManager.getServerRoot()
-        : path.dirname(configManager.getConfigPath?.() ?? path.join(process.cwd(), 'config.json'));
+      typeof configManager.getServerRoot === 'function' ? configManager.getServerRoot() : undefined;
+    if (!resolvedServerRoot) {
+      throw new Error(
+        'PromptExecutionService requires serverRoot: configManager.getServerRoot() returned undefined'
+      );
+    }
     this.serverRoot = resolvedServerRoot;
 
     const sessionConfig = configManager.getChainSessionConfig?.();
@@ -282,6 +285,11 @@ export class PromptExecutionService {
     this.chainOperatorExecutor = this.createChainOperatorExecutor();
     this.resetPipeline();
     void this.initializePromptGuidanceService();
+
+    // Update parsing system with registered framework IDs for quote-aware @framework detection
+    // This allows @docs/, @mention, etc. to be treated as literal text while @CAGEERF works
+    const frameworkIds = new Set(frameworkManager.getFrameworkIds(false));
+    this.parsingSystem.updateRegisteredFrameworkIds(frameworkIds);
   }
 
   setToolDescriptionManager(manager: ToolDescriptionManager): void {
@@ -561,6 +569,7 @@ export class PromptExecutionService {
             persistStateToDisk: true,
             enableHealthMonitoring: true,
             stateFilePath: methodologyStatePath,
+            serverRoot: this.serverRoot,
           },
         },
         this.frameworkManager
@@ -702,7 +711,7 @@ export class PromptExecutionService {
     const commandParsingStage = new CommandParsingStage(
       this.parsingSystem.commandParser,
       this.parsingSystem.argumentParser,
-      this.convertedPrompts,
+      () => this.convertedPrompts,
       this.logger,
       this.chainSessionManager
     );
@@ -797,7 +806,9 @@ export class PromptExecutionService {
     // Shell verification stage (08b) - executes shell commands for ground-truth validation
     // Enables "Ralph Wiggum" style loops where Claude's work is validated by real command execution
     const shellVerifyExecutor = createShellVerifyExecutor({ debug: false });
-    const verifyActiveStateManager = createVerifyActiveStateManager(this.logger);
+    const verifyActiveStateManager = createVerifyActiveStateManager(this.logger, {
+      runtimeStateDir: path.join(this.serverRoot, 'runtime-state'),
+    });
     const shellVerificationStage = createShellVerificationStage(
       shellVerifyExecutor,
       verifyActiveStateManager,

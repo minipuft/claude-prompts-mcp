@@ -1,6 +1,6 @@
 // @lifecycle canonical - Parses symbolic command expressions into operators.
 import { GENERATED_OPERATOR_PATTERNS } from './_generated/operator-patterns.js';
-import { stripStyleOperators } from './parser-utils.js';
+import { stripStyleOperators, findFrameworkOperatorOutsideQuotes } from './parser-utils.js';
 import {
   type ChainOperator,
   type ChainStep,
@@ -27,6 +27,11 @@ import { ValidationError } from '../../utils/index.js';
  */
 export class SymbolicCommandParser {
   private readonly logger: Logger;
+  /**
+   * Set of registered framework IDs (normalized to uppercase).
+   * Used to validate @framework operators - unregistered IDs are skipped.
+   */
+  private readonly registeredFrameworkIds: Set<string>;
 
   /**
    * Operator patterns derived from SSOT registry.
@@ -44,8 +49,15 @@ export class SymbolicCommandParser {
     conditional: GENERATED_OPERATOR_PATTERNS.conditional.pattern,
   } as const;
 
-  constructor(logger: Logger) {
+  /**
+   * @param logger - Logger instance
+   * @param registeredFrameworkIds - Optional set of registered framework IDs (uppercase).
+   *   When provided, only @framework operators matching registered IDs are detected.
+   *   Unregistered @word patterns are silently skipped (treated as literal text).
+   */
+  constructor(logger: Logger, registeredFrameworkIds?: Set<string>) {
     this.logger = logger;
+    this.registeredFrameworkIds = registeredFrameworkIds ?? new Set();
   }
 
   /**
@@ -241,18 +253,26 @@ export class SymbolicCommandParser {
       command = expandedCommand;
     }
 
-    const frameworkMatch = command.match(this.OPERATOR_PATTERNS.framework);
-    if (frameworkMatch) {
-      const matchedId = frameworkMatch[1];
-      if (matchedId) {
+    // Use quote-aware framework detection to avoid matching @word inside quoted strings
+    const frameworkResult = findFrameworkOperatorOutsideQuotes(command);
+    if (frameworkResult) {
+      const normalizedId = frameworkResult.frameworkId.toUpperCase();
+
+      // Only treat as framework operator if it's a registered framework
+      // This allows @docs/, @mention, etc. to pass through as literal text
+      if (this.registeredFrameworkIds.size === 0 || this.registeredFrameworkIds.has(normalizedId)) {
         operatorTypes.push('framework');
         operators.push({
           type: 'framework',
-          frameworkId: matchedId,
-          normalizedId: matchedId.toUpperCase(),
+          frameworkId: frameworkResult.frameworkId,
+          normalizedId,
           temporary: true,
           scopeType: 'execution',
         });
+      } else {
+        this.logger.debug(
+          `[detectOperators] Skipping unregistered framework operator: @${frameworkResult.frameworkId}`
+        );
       }
     }
 
@@ -737,6 +757,9 @@ export class SymbolicCommandParser {
   }
 }
 
-export function createSymbolicCommandParser(logger: Logger): SymbolicCommandParser {
-  return new SymbolicCommandParser(logger);
+export function createSymbolicCommandParser(
+  logger: Logger,
+  registeredFrameworkIds?: Set<string>
+): SymbolicCommandParser {
+  return new SymbolicCommandParser(logger, registeredFrameworkIds);
 }
