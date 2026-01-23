@@ -388,5 +388,5 @@ resource_manager(resource_type:"checkpoint", action:"rollback", name:"pre-refact
 ## See Also
 
 - [Gates Guide](./gates.md) - Quality validation gates
-- [Chains Guide](./chains.md) - Multi-step execution
+- [Chains Lifecycle](../concepts/chains-lifecycle.md) - Multi-step execution
 - [MCP Tools Reference](../reference/mcp-tools.md) - Full parameter documentation

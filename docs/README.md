@@ -26,6 +26,8 @@ This is the map for the Claude Prompts MCP server. Canonical operational docs ar
 *I have a specific problem to solve.*
 
 - **[Add Validation](how-to/add-validation.md)**: Ensure arguments match patterns (e.g., URLs).
+- **[Gates](guides/gates.md)**: Quality validation with criteria, shell verification, and canonical gates.
+- **[Ralph Loops](guides/ralph-loops.md)**: Autonomous verification loops until tests pass.
 - **[Script Tools](guides/script-tools.md)**: Run Python scripts inside prompts.
 - **[Troubleshooting](guides/troubleshooting.md)**: Diagnose common errors.
 - **[Release Process](guides/release-process.md)**: How we ship updates.
