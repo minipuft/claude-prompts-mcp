@@ -1,11 +1,11 @@
 /**
  * esbuild configuration for bundled distribution
  *
- * Produces a single self-contained server.js that includes all dependencies.
+ * Produces a single self-contained index.js that includes all dependencies.
  * This eliminates the need for node_modules at runtime.
  *
  * Usage:
- *   npm run build:bundle
+ *   npm run build
  *   node dist/index.js --transport=stdio
  */
 

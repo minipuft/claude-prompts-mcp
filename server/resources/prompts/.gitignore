@@ -9,3 +9,4 @@
 !codebase-setup/**
 !workflow/
 !workflow/**
+workflow/sync_indexes/

@@ -140,3 +140,10 @@ plans/claude-prompts.code-workspace
 # Test environments
 .test-gemini-home/
 .history/
+
+# Large assets (moodboards, design files)
+assets/moodboard.png
+
+# CLI config files (user-specific)
+opencode.json
+
