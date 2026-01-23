@@ -6,6 +6,13 @@
 // Set test environment
 process.env.NODE_ENV = 'test';
 
+// Set PROMPTS_PATH for tests that use template rendering (required after removing process.cwd() fallback)
+// This path is relative to where Jest runs from (server/)
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+process.env.PROMPTS_PATH = path.resolve(__dirname, '..', 'resources', 'prompts');
+
 // Provide require() polyfill for ESM tests where some utilities use dynamic require()
 import { createRequire } from 'module';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
