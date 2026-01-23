@@ -74,6 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive test coverage (34 tests) for all expansion scenarios
   - Updated documentation in `docs/reference/mcp-tools.md` with decision guide for same-args vs varied-args patterns
 
+- **MCP Tools documentation**: Added "Resources vs Tools" guidance for clear usage patterns
+  - New section in `docs/reference/mcp-tools.md` with decision table (when to use resources vs tools)
+  - Updated subsections (Prompts, Gates, Methodologies) to show resources as preferred for read operations
+  - Rule: Resources for READ (token efficient), Tools for WRITE (required for mutations)
+
 ### Changed
 
 - **Release Please workflow**: Modernized with dry run support, job outputs, and GitHub summary reporting

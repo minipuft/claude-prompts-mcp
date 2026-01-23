@@ -297,6 +297,18 @@ Let Claude pick the right tools:
 
 Claude analyzes available frameworks, gates, and styles, then applies the best combination.
 
+### 📊 MCP Resources
+
+Token-efficient read-only access for discovery and context recovery:
+
+```text
+resource://prompt/          # List all prompts (4x fewer tokens than tool call)
+resource://session/         # Active chains (recover context after compaction)
+resource://metrics/pipeline # System health (lean aggregates, not raw samples)
+```
+
+Use `chainId` directly: `resource://session/chain-quick_decision#1` → same ID used to resume.
+
 ### 📜 Version History
 
 Every update is versioned. Compare, rollback, undo:

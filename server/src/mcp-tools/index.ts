@@ -24,7 +24,6 @@ import { z } from 'zod';
 
 import { ConsolidatedSystemControl, createConsolidatedSystemControl } from './system-control.js';
 import { ToolDescriptionManager } from './tool-description-manager.js';
-import { ChainSessionManager, createChainSessionManager } from '../chain-session/manager.js';
 import { ConfigManager } from '../config/index.js';
 import { FrameworkManager, createFrameworkManager } from '../frameworks/framework-manager.js';
 import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
@@ -59,6 +58,7 @@ import { Category, ConvertedPrompt, PromptData, ToolResponse } from '../types/in
 import { ServiceManager } from '../utils/service-manager.js';
 import { PromptExecutionService, createPromptExecutionService } from './prompt-engine/index.js';
 
+import type { ChainSessionManager } from '../chain-session/manager.js';
 import type { GateManager } from '../gates/gate-manager.js';
 import type { GateSpecification } from '../types/execution.js';
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
@@ -92,7 +92,7 @@ export class ConsolidatedMcpToolsManager {
   private semanticAnalyzer!: ReturnType<typeof createContentAnalyzer>;
   private frameworkStateManager?: FrameworkStateManager;
   private frameworkManager?: FrameworkManager;
-  private chainSessionManager?: ChainSessionManager;
+  // ChainSessionManager is owned by PromptExecutionService, accessed via getter
   // REMOVED: chainOrchestrator - modular chain system removed
   private conversationManager: ConversationManager;
   private textReferenceManager: TextReferenceManager;
@@ -161,14 +161,8 @@ export class ConsolidatedMcpToolsManager {
     const analyzerMode = analysisConfig.llmIntegration.enabled ? 'semantic' : 'minimal';
     this.logger.info(`Semantic analyzer initialized (mode: ${analyzerMode})`);
 
-    // Initialize chain session manager
-    this.chainSessionManager = createChainSessionManager(
-      this.logger,
-      this.textReferenceManager,
-      this.configManager.getServerRoot()
-    );
-
     // Initialize consolidated tools
+    // Note: ChainSessionManager is created inside PromptExecutionService and exposed via getter
     this.promptExecutionService = createPromptExecutionService(
       this.logger,
       this.mcpServer,
@@ -202,7 +196,8 @@ export class ConsolidatedMcpToolsManager {
 
     // Set managers in system control
     this.systemControl.setGateSystemManager(this.gateSystemManager);
-    this.systemControl.setChainSessionManager(this.chainSessionManager);
+    // ChainSessionManager is owned by promptExecutionService (definite at this point)
+    this.systemControl.setChainSessionManager(this.promptExecutionService.getChainSessionManager());
     this.systemControl.setGateGuidanceRenderer(
       this.promptExecutionService.getGateGuidanceRenderer()
     );
@@ -430,6 +425,21 @@ export class ConsolidatedMcpToolsManager {
    */
   getFrameworkManager(): FrameworkManager | undefined {
     return this.frameworkManager;
+  }
+
+  /**
+   * Get chain session manager for MCP resource access.
+   * Delegates to PromptExecutionService which owns the canonical instance.
+   */
+  getChainSessionManager(): ChainSessionManager | undefined {
+    return this.promptExecutionService.getChainSessionManager() as ChainSessionManager | undefined;
+  }
+
+  /**
+   * Get metrics collector for MCP resource access.
+   */
+  getMetricsCollector(): MetricsCollector {
+    return this.analyticsService;
   }
 
   /**

@@ -298,6 +298,14 @@ export class FrameworkStateManager extends EventEmitter {
   }
 
   /**
+   * Get the underlying FrameworkManager for resource access.
+   * Returns null if not initialized.
+   */
+  getFrameworkManager(): FrameworkManager | null {
+    return this.frameworkManager;
+  }
+
+  /**
    * Switch to a different framework (persistence layer only).
    * Validation is handled by FrameworkManager - this method trusts the input.
    *

@@ -305,6 +305,14 @@ export class PromptExecutionService {
     return this.gateGuidanceRenderer;
   }
 
+  /**
+   * Get chain session manager for external access (MCP resources).
+   * This is the canonical instance that tracks all chain sessions.
+   */
+  getChainSessionManager(): ChainSessionService {
+    return this.chainSessionManager;
+  }
+
   async cleanup(): Promise<void> {
     this.logger.debug('[PromptExecutionService] Cleaning up');
 

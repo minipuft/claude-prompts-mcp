@@ -32,6 +32,7 @@ import { GateManager } from '../gates/gate-manager.js';
 import { Logger } from '../logging/index.js';
 import { PromptAssetManager } from '../prompts/index.js';
 import { reloadPromptData } from '../prompts/prompt-refresh-service.js';
+import { registerResources, notifyResourcesChanged } from '../resources/index.js';
 import { ConversationManager, createConversationManager } from '../text-references/conversation.js';
 import { TextReferenceManager } from '../text-references/index.js';
 
@@ -53,6 +54,7 @@ import {
 } from '../types/index.js';
 // Import chain utilities
 import { ServiceManager } from '../utils/service-manager.js';
+// Import MCP resources registration
 
 import type { PathResolver } from './paths.js';
 import type { ApiManager } from '../api/index.js';
@@ -280,6 +282,7 @@ export class Application {
         capabilities: {
           prompts: { listChanged: true },
           tools: { listChanged: true },
+          resources: { listChanged: true },
         },
       }
     );
@@ -379,7 +382,58 @@ export class Application {
       await generateCacheOnStartup(this.logger, this.serverRoot);
     }
 
+    // Register MCP resources for token-efficient read-only access
+    this.registerMcpResources();
+
     this.logger.info('All modules initialized successfully');
+  }
+
+  /**
+   * Register MCP resources for prompts, gates, methodologies, and observability.
+   * Resources provide 5-16x more token-efficient discovery than tool-based list operations.
+   */
+  private registerMcpResources(): void {
+    // Get optional dependencies from managers (members are definite-assigned at this point)
+    const fm = this.frameworkStateManager.getFrameworkManager();
+    const csm = this.mcpToolsManager.getChainSessionManager();
+    const mc = this.mcpToolsManager.getMetricsCollector();
+
+    registerResources(this.mcpServer, {
+      logger: this.logger,
+      // Wrap convertedPrompts array as a getter function for hot-reload compatibility
+      promptManager: {
+        getConvertedPrompts: () => this._convertedPrompts,
+      },
+      // Gate manager uses BaseResourceManager public methods: list() and get()
+      gateManager: this.gateManager
+        ? {
+            list: (enabledOnly?: boolean) => this.gateManager!.list(enabledOnly),
+            get: (id: string) => this.gateManager!.get(id),
+          }
+        : undefined,
+      // Phase 2: Methodology resources
+      frameworkManager:
+        fm != null
+          ? {
+              listFrameworks: (enabledOnly?: boolean) => fm.listFrameworks(enabledOnly),
+              getFramework: (id: string) => fm.getFramework(id),
+            }
+          : undefined,
+      // Phase 2: Observability resources
+      chainSessionManager:
+        csm != null
+          ? {
+              listActiveSessions: (limit?: number) => csm.listActiveSessions(limit),
+              getSession: (sessionId: string) => csm.getSession(sessionId),
+              getSessionByChainIdentifier: (chainId: string) =>
+                csm.getSessionByChainIdentifier(chainId),
+              getSessionStats: () => csm.getSessionStats(),
+            }
+          : undefined,
+      metricsCollector: {
+        getAnalyticsSummary: () => mc.getAnalyticsSummary(),
+      },
+    });
   }
 
   // Workflow registration completely removed - chains handle all multi-step execution

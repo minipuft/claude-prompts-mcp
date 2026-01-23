@@ -11,8 +11,8 @@ Stop copy-pasting prompt templates. This guide shows you how to create, execute,
 ## Quick Start
 
 ```bash
-# List available prompts
-resource_manager(resource_type:"prompt", action:"list")
+# Discover prompts (use resources for token efficiency)
+ReadMcpResourceTool uri="resource://prompt/"
 
 # Execute a prompt with arguments
 prompt_engine(command:"@CAGEERF analysis_report content:'Q4 metrics'")
@@ -23,14 +23,14 @@ prompt_engine(command:"research topic:'AI safety' --> summary")
 # Check server status
 system_control(action:"status")
 
-# Create a gate
+# Create a gate (use tools for mutations)
 resource_manager(resource_type:"gate", action:"create", id:"my-gate", guidance:"...")
 
 # Switch methodology
 resource_manager(resource_type:"methodology", action:"switch", id:"cageerf")
 ```
 
-**That's it.** Three tools, one syntax. Everything below is details.
+**That's it.** Resources for READ, tools for WRITE. Everything below is details.
 
 ---
 
@@ -43,6 +43,120 @@ resource_manager(resource_type:"methodology", action:"switch", id:"cageerf")
 | `system_control`   | View status, analytics, check health               | Admin operations       |
 
 > **Migrating from v1.x?** See [Migration Guide](#migration-guide) for transitioning from the legacy `prompt_manager`, `gate_manager`, and `framework_manager` tools to the unified `resource_manager`.
+
+---
+
+## MCP Resources — Token-Efficient Discovery
+
+MCP Resources provide a **read-only, token-efficient** alternative to tool-based list/inspect operations. Use resources when you need to:
+
+- **Discover** available prompts, gates, and methodologies without consuming execution tokens
+- **Read** prompt templates, gate guidance, or methodology configs in a structured format
+- **Monitor** active chain sessions and pipeline metrics for observability
+- **Recover context** after compaction or long tasks via session resources
+
+### Resource URIs
+
+#### Content Resources (Prompts, Gates, Methodologies)
+
+| URI Pattern | Returns | Use Case |
+|-------------|---------|----------|
+| `resource://prompt/` | All prompts (minimal metadata) | Discovery - find available prompts |
+| `resource://prompt/{id}` | Full prompt with metadata + template | Inspect a specific prompt |
+| `resource://prompt/{id}/template` | Raw template content only | Minimal token usage |
+| `resource://gate/` | All gates (minimal metadata) | Discovery - find available gates |
+| `resource://gate/{id}` | Gate definition + guidance | Inspect a specific gate |
+| `resource://gate/{id}/guidance` | Raw guidance content only | Minimal token usage |
+| `resource://methodology/` | All frameworks (name, enabled) | Discovery - find methodologies |
+| `resource://methodology/{id}` | Framework config + system prompt | Inspect methodology details |
+
+#### Observability Resources (Sessions, Metrics)
+
+| URI Pattern | Returns | Use Case |
+|-------------|---------|----------|
+| `resource://session/` | Active chain sessions | Context recovery - what chains are running? |
+| `resource://session/{chainId}` | Session state + progress | Inspect chain for resumption |
+| `resource://metrics/pipeline` | Execution analytics (lean) | Observability - system health |
+
+> **Note:** Session URIs use the user-facing `chainId` (e.g., `chain-quick_decision#1`) — the same identifier used to resume chains with `chain_id` parameter.
+
+### Token Efficiency
+
+Resources are **4-30x more token efficient** than equivalent tool calls:
+
+| Operation | Tool Call | Resource | Savings |
+|-----------|-----------|----------|---------|
+| List 80 prompts | ~4500 chars | ~2800 chars | **38%** |
+| List 13 gates | ~600 chars | ~400 chars | **33%** |
+| List 5 methodologies | ~350 chars | ~200 chars | **43%** |
+| Pipeline metrics | ~15KB (raw samples) | ~500 bytes | **97%** |
+
+### Session Resources — Context Recovery
+
+After compaction or long tasks, use session resources to recover chain context:
+
+```bash
+# List active chains (what am I working on?)
+ReadMcpResourceTool uri="resource://session/"
+
+# Response shows chainId for direct resumption:
+# [{ "uri": "resource://session/chain-quick_decision#1", "name": "chain-quick_decision#1", ... }]
+
+# Get details for a specific chain
+ReadMcpResourceTool uri="resource://session/chain-quick_decision#1"
+
+# Resume the chain directly using the chainId
+prompt_engine(chain_id:"chain-quick_decision#1", user_response:"your output here")
+```
+
+### Example Usage (MCP Protocol)
+
+```json
+// List all prompts
+{"method": "resources/list"}
+
+// Read a specific prompt
+{"method": "resources/read", "params": {"uri": "resource://prompt/code_review"}}
+
+// Read just the template
+{"method": "resources/read", "params": {"uri": "resource://prompt/code_review/template"}}
+
+// Check active sessions (context recovery)
+{"method": "resources/read", "params": {"uri": "resource://session/"}}
+
+// Get pipeline metrics
+{"method": "resources/read", "params": {"uri": "resource://metrics/pipeline"}}
+```
+
+### Resources vs Tools — When to Use What
+
+Both MCP Resources and `resource_manager` tool can list/inspect content. Use the right one:
+
+| Need | Use | Why |
+|------|-----|-----|
+| **Discovery** (list, browse) | Resources | 4-30x fewer tokens |
+| **Inspection** (read details) | Resources | Direct URI, no params needed |
+| **Context recovery** | Resources | Sessions use `chainId` directly |
+| **Create/Update/Delete** | Tools | Resources are read-only |
+| **Filtered search** | Tools | `filter:"category:analysis"` supported |
+| **Client lacks resources support** | Tools | Fallback compatibility |
+
+**Default rule: Resources for READ, Tools for WRITE.**
+
+```bash
+# ✅ Preferred: Use resources for discovery
+ReadMcpResourceTool uri="resource://prompt/"
+
+# ⚠️ Fallback: Use tools only if resources unavailable or need filtering
+resource_manager(resource_type:"prompt", action:"list", filter:"category:analysis")
+
+# ✅ Required: Use tools for mutations
+resource_manager(resource_type:"prompt", action:"create", id:"my-prompt", ...)
+```
+
+### Hot-Reload Notifications
+
+When prompts or gates are modified (via `resource_manager` or file changes), connected clients receive a `notifications/resources/list_changed` event. Use this to refresh cached resource lists.
 
 ---
 
@@ -78,23 +192,46 @@ prompt_engine(command:"@ReACT analysis --> synthesis --> report :: 'include data
 | ------------ | -------------- | -------------------------- | ---------------------------- |
 | Framework    | `@NAME`        | `@CAGEERF prompt`          | Apply methodology            |
 | Chain        | `-->`          | `step1 --> step2`          | Sequential execution         |
-| Repetition   | `* N`          | `>>prompt * 3`             | Chain shorthand (repeat N×)  |
+| Repetition   | `* N`          | `>>prompt * 3`             | Repeat with same args (chain shorthand) |
 | Gate (anon)  | `:: "text"`    | `:: 'cite sources'`        | Anonymous quality criteria   |
 | Gate (named) | `:: id:"text"` | `:: security:"no secrets"` | Named gate with trackable ID |
 | Style        | `#id`          | `#analytical`              | Response formatting          |
 
-**Repetition examples:**
+**Repetition (`* N`) - Same Arguments:**
+
+The `* N` operator unfolds to a chain with **identical arguments** on each step:
 
 ```bash
-# Run brainstorm 5 times for diverse ideas
+# Expansion: >>brainstorm topic:'ideas' --> >>brainstorm topic:'ideas' --> ...
 prompt_engine(command:">>brainstorm * 5 topic:'startup ideas'")
 
-# Repeat step1 twice, then chain to step2
+# Mid-chain repetition: >>analyze --> >>analyze --> >>summarize
 prompt_engine(command:">>analyze * 2 --> >>summarize")
 
-# Execute implementation prompt for each phase in a plan
+# Each iteration uses the same plan_path
 prompt_engine(command:">>strategicImplement * 3 plan_path:'./plan.md'")
 ```
+
+**Varied Arguments per Step (use explicit chain):**
+
+For **different arguments** on each step, use explicit `-->` chain syntax instead:
+
+```bash
+# Different topics per research step
+prompt_engine(command:">>research topic:'A' --> >>research topic:'B' --> >>compare")
+
+# Different inputs per validation step
+prompt_engine(command:">>validate input:'step1' --> >>validate input:'step2' --> >>synthesize")
+```
+
+**Repetition vs Chain Decision:**
+
+| Pattern | Syntax | Use When |
+| ------- | ------ | -------- |
+| Same-args | `>>p * N` | Same task repeated for variety (brainstorming, validation) |
+| Varied-args | `>>p arg1 --> >>p arg2` | Different inputs per step |
+
+> **Context propagation:** Each chain step receives the previous step's output automatically, regardless of whether you use `* N` or explicit chains.
 
 **Style examples:**
 
@@ -324,29 +461,31 @@ resource_manager(resource_type:"prompt|gate|methodology", action:"...", ...)
 
 All resource types support these actions:
 
-| Action     | Purpose                  | Required Params                    |
-| ---------- | ------------------------ | ---------------------------------- |
-| `list`     | List all resources       | —                                  |
-| `inspect`  | Get resource details     | `id`                               |
-| `create`   | Create new resource      | `id`, type-specific                |
-| `update`   | Modify existing resource | `id`, fields to update             |
-| `delete`   | Remove resource          | `id`, `confirm:true`               |
-| `reload`   | Hot-reload from disk     | `id` (optional)                    |
-| `history`  | View version history     | `id`                               |
-| `rollback` | Restore previous version | `id`, `version`, `confirm:true`    |
-| `compare`  | Compare two versions     | `id`, `from_version`, `to_version` |
+| Action     | Purpose                  | Required Params                    | Note |
+| ---------- | ------------------------ | ---------------------------------- | ---- |
+| `list`     | List all resources       | —                                  | *Prefer `resource://` URIs* |
+| `inspect`  | Get resource details     | `id`                               | *Prefer `resource://` URIs* |
+| `create`   | Create new resource      | `id`, type-specific                | |
+| `update`   | Modify existing resource | `id`, fields to update             | |
+| `delete`   | Remove resource          | `id`, `confirm:true`               | |
+| `reload`   | Hot-reload from disk     | `id` (optional)                    | |
+| `history`  | View version history     | `id`                               | |
+| `rollback` | Restore previous version | `id`, `version`, `confirm:true`    | |
+| `compare`  | Compare two versions     | `id`, `from_version`, `to_version` | |
+
+> **Note:** For `list` and `inspect`, prefer [MCP Resources](#mcp-resources--token-efficient-discovery) (4-30x more token efficient). Use tool actions as fallback when filtering is needed or client doesn't support resources.
 
 ### Prompts
 
 ```bash
-# List all prompts
-resource_manager(resource_type:"prompt", action:"list")
+# List all prompts (prefer resources)
+ReadMcpResourceTool uri="resource://prompt/"
 
-# Filter by category
+# Filter by category (use tools when filtering needed)
 resource_manager(resource_type:"prompt", action:"list", filter:"category:analysis")
 
-# Get prompt details
-resource_manager(resource_type:"prompt", action:"inspect", id:"security_audit")
+# Get prompt details (prefer resources)
+ReadMcpResourceTool uri="resource://prompt/security_audit"
 
 # Create a prompt
 resource_manager(
@@ -379,10 +518,16 @@ resource_manager(resource_type:"prompt", action:"analyze_gates", id:"my_prompt")
 ### Gates
 
 ```bash
-# List all gates
-resource_manager(resource_type:"gate", action:"list")
+# List all gates (prefer resources for discovery)
+ReadMcpResourceTool uri="resource://gate/"
 
-# Create a gate
+# Inspect gate (prefer resources — includes inline guidance)
+ReadMcpResourceTool uri="resource://gate/source-verification"
+
+# Guidance only (resources-exclusive)
+ReadMcpResourceTool uri="resource://gate/source-verification/guidance"
+
+# Create a gate (tools required)
 resource_manager(
   resource_type:"gate",
   action:"create",
@@ -404,13 +549,13 @@ resource_manager(resource_type:"gate", action:"delete", id:"old-gate", confirm:t
 ### Methodologies
 
 ```bash
-# List all methodologies
-resource_manager(resource_type:"methodology", action:"list")
+# List all methodologies (prefer resources for discovery)
+ReadMcpResourceTool uri="resource://methodology/"
 
-# Inspect a methodology
-resource_manager(resource_type:"methodology", action:"inspect", id:"cageerf")
+# Inspect methodology (prefer resources — full content)
+ReadMcpResourceTool uri="resource://methodology/cageerf"
 
-# Switch active methodology
+# Switch active methodology (tools required)
 resource_manager(resource_type:"methodology", action:"switch", id:"react", persist:true)
 
 # Create a custom methodology

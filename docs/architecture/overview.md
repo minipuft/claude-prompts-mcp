@@ -366,6 +366,48 @@ The server exposes **3 MCP tools** to clients but internally uses **5 specialize
 3. **Separation of Concerns**: Internal managers can evolve independently
 4. **Contract Stability**: External API (3 tools) stays stable while internal structure can change
 
+### MCP Resources (Read-Only Discovery)
+
+In addition to tools, the server exposes **MCP Resources** for token-efficient read-only access:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          MCP Resources Protocol                               │
+│  resources/list  ←───────────────────────────────────────────────────────────┤
+│  resources/read   ───────────────────────────────────────────────────────────┤
+└──────────────────────────────────────────────────────────────────────────────┘
+     │              │              │              │              │
+     ▼              ▼              ▼              ▼              ▼
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│ Prompts  │  │  Gates   │  │Methodol- │  │ Sessions │  │ Metrics  │
+│ prompt/  │  │  gate/   │  │  ogies   │  │ session/ │  │ metrics/ │
+│ prompt/  │  │  gate/   │  │methodol- │  │ session/ │  │ pipeline │
+│   {id}   │  │   {id}   │  │  ogy/    │  │{chainId} │  │          │
+└──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
+     │              │              │              │              │
+     ▼              ▼              ▼              ▼              ▼
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│ Prompt   │  │  Gate    │  │Framework │  │  Chain   │  │ Metrics  │
+│ Manager  │  │ Manager  │  │ Manager  │  │ Session  │  │Collector │
+│          │  │          │  │          │  │ Manager  │  │          │
+└──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘
+```
+
+**Resource Categories**:
+
+| Category | Resources | Purpose |
+|----------|-----------|---------|
+| Content | `prompt/`, `gate/`, `methodology/` | Discover and inspect templates/configs |
+| Observability | `session/`, `metrics/pipeline` | Monitor active chains and system health |
+
+**Token Efficiency**: Resources are 4-30x more efficient than tool-based operations. Metrics reduced from ~15KB (raw samples) to ~500 bytes (lean aggregates).
+
+**Context Recovery**: Session resources use `chainId` (e.g., `chain-quick_decision#1`) — the same identifier used to resume chains. No lookup required.
+
+**Hot-Reload Compatibility**: Resources read from singleton registries at request time. When hot-reload updates a registry, resources immediately reflect the change. Connected clients receive `notifications/resources/list_changed` to trigger cache refresh.
+
+See [MCP Resources documentation](../reference/mcp-tools.md#mcp-resources--token-efficient-discovery) for URI patterns and usage.
+
 ---
 
 ## Pipeline State Management
