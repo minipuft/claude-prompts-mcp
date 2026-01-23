@@ -41,6 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: Removed implicit `process.cwd()` path guessing from all services and loaders
+  - All runtime-state paths must now be explicitly configured via `PathResolver` or passed to constructors
+  - Loaders (`StyleDefinitionLoader`, `GateDefinitionLoader`, `RuntimeMethodologyLoader`) no longer check `process.cwd()` candidates
+  - Services (`VerifyActiveStateManager`, `ArgumentHistoryTracker`, `FrameworkStateManager`, `MethodologyTracker`) require explicit paths
+  - `getDefaultLoggerConfig()` now requires `logFile` parameter
+  - `PromptConverter.convertMarkdownPromptsToJson()` requires `basePath` parameter
+  - Users running via npx must provide `--workspace` or set `MCP_WORKSPACE` environment variable
+  - This prevents `runtime-state/` directory duplication that occurred when launching from different directories
+
 ### Added
 
 - **Resources configuration**: Granular control over MCP resources registration
