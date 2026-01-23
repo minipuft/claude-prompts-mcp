@@ -43,10 +43,13 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
-            # For workflow_run, extract from head_branch (tag name) or package.json
+            # Extract version from head_branch (tag name) or package.json
+            # Supports both 'vX.Y.Z' (current) and 'claude-prompts-vX.Y.Z' (legacy)
             branch='${{ github.event.workflow_run.head_branch }}'
-            if [[ "$branch" =~ ^claude-prompts-v ]]; then
-              version="${branch#claude-prompts-v}"
+            if [[ "$branch" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+              version="${BASH_REMATCH[1]}"
+            elif [[ "$branch" =~ ^claude-prompts-v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+              version="${BASH_REMATCH[1]}"
             else
               # Fallback: read from package.json
               version=$(node -p "require('./server/package.json').version")
@@ -89,7 +92,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: claude-prompts-${{ steps.version.outputs.version }}.mcpb
-          tag_name: claude-prompts-v${{ steps.version.outputs.version }}
+          # Match Release Please tag format (include-component-in-tag: false)
+          tag_name: v${{ steps.version.outputs.version }}
 
       - name: Upload Artifact (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
@@ -125,9 +129,12 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
+            # Supports both 'vX.Y.Z' (current) and 'claude-prompts-vX.Y.Z' (legacy)
             branch='${{ github.event.workflow_run.head_branch }}'
-            if [[ "$branch" =~ ^claude-prompts-v ]]; then
-              version="${branch#claude-prompts-v}"
+            if [[ "$branch" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+              version="${BASH_REMATCH[1]}"
+            elif [[ "$branch" =~ ^claude-prompts-v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+              version="${BASH_REMATCH[1]}"
             else
               version=$(node -p "require('./server/package.json').version")
             fi
@@ -284,9 +291,12 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
+            # Supports both 'vX.Y.Z' (current) and 'claude-prompts-vX.Y.Z' (legacy)
             branch='${{ github.event.workflow_run.head_branch }}'
-            if [[ "$branch" =~ ^claude-prompts-v ]]; then
-              version="${branch#claude-prompts-v}"
+            if [[ "$branch" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+              version="${BASH_REMATCH[1]}"
+            elif [[ "$branch" =~ ^claude-prompts-v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+              version="${BASH_REMATCH[1]}"
             else
               version=$(node -p "require('./server/package.json').version")
             fi
@@ -347,7 +357,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
-          tag_name: claude-prompts-v${{ steps.version.outputs.version }}
+          # Match Release Please tag format (include-component-in-tag: false)
+          tag_name: v${{ steps.version.outputs.version }}
 
       - name: Upload Artifact (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
