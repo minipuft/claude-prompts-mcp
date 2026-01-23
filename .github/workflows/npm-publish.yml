@@ -16,8 +16,8 @@ permissions:
 
 jobs:
   publish:
-    # Accept both tag formats: 'vX.Y.Z' (preferred) and 'claude-prompts-vX.Y.Z' (legacy)
-    if: startsWith(github.event.release.tag_name, 'v') || startsWith(github.event.release.tag_name, 'claude-prompts-v')
+    # Accept only tag format: 'vX.Y.Z'
+    if: startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     environment: npm
     steps:
@@ -36,9 +36,7 @@ jobs:
         id: version
         run: |
           tag='${{ github.event.release.tag_name }}'
-          if [[ "$tag" =~ ^claude-prompts-v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
-            version="${BASH_REMATCH[1]}"
-          elif [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+          if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
             version="${BASH_REMATCH[1]}"
           else
             echo "::error::Unexpected tag format: $tag"

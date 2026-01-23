@@ -44,11 +44,8 @@ jobs:
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
             # Extract version from head_branch (tag name) or package.json
-            # Supports both 'vX.Y.Z' (current) and 'claude-prompts-vX.Y.Z' (legacy)
             branch='${{ github.event.workflow_run.head_branch }}'
             if [[ "$branch" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-              version="${BASH_REMATCH[1]}"
-            elif [[ "$branch" =~ ^claude-prompts-v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
               version="${BASH_REMATCH[1]}"
             else
               # Fallback: read from package.json
@@ -129,11 +126,8 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
-            # Supports both 'vX.Y.Z' (current) and 'claude-prompts-vX.Y.Z' (legacy)
             branch='${{ github.event.workflow_run.head_branch }}'
             if [[ "$branch" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-              version="${BASH_REMATCH[1]}"
-            elif [[ "$branch" =~ ^claude-prompts-v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
               version="${BASH_REMATCH[1]}"
             else
               version=$(node -p "require('./server/package.json').version")
@@ -291,11 +285,8 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
-            # Supports both 'vX.Y.Z' (current) and 'claude-prompts-vX.Y.Z' (legacy)
             branch='${{ github.event.workflow_run.head_branch }}'
             if [[ "$branch" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-              version="${BASH_REMATCH[1]}"
-            elif [[ "$branch" =~ ^claude-prompts-v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
               version="${BASH_REMATCH[1]}"
             else
               version=$(node -p "require('./server/package.json').version")

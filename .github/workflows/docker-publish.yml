@@ -56,10 +56,10 @@ jobs:
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            # For workflow_run, extract from head_branch (tag name like claude-prompts-v1.1.0)
+            # For workflow_run, extract from head_branch (tag name like v1.1.0)
             branch='${{ github.event.workflow_run.head_branch }}'
-            if [[ "$branch" =~ ^claude-prompts-v ]]; then
-              version="${branch#claude-prompts-v}"
+            if [[ "$branch" =~ ^v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+              version="${BASH_REMATCH[1]}"
             else
               # Fallback: read from package.json
               version=$(node -p "require('./server/package.json').version")
