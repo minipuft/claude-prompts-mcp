@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Gate enforcement hook**: `hooks/gate-enforce.py` now registered as PreToolUse hook
+  - Blocks `prompt_engine` calls with FAIL verdict until criteria addressed
+  - Requires `gate_verdict` parameter when resuming chains with pending gates
+  - Requires `user_response` parameter when resuming chains
+
+- **Hooks config schema**: Added `hooks.expandedOutput` to `config.schema.json`
+  - Controls compact vs expanded hook output format
+  - Documented in `hooks/README.md` with examples
+
 - **Chain step visibility**: User-facing hook messages now show detailed step breakdowns for chain workflows
   - **Predefined chains** (YAML-defined): Display both step ID and step name (`1. deep_analysis/initial_scan: Initial Scan (1/4)`)
   - **Ad-hoc chains** (`-->` syntax): Display prompt IDs in execution order (`1. strategicimplement`, `2. test_default`)
@@ -77,6 +86,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `getChainSessionManager()` and `getMetricsCollector()` getters to `McpToolsManager`
   - Wired all Phase 2 dependencies in `Application.registerMcpResources()`
   - Fixed `getSessionStats()` type mismatch between `ResourceDependencies` interface and actual `ChainSessionManager` implementation
+
+- **Session resources returning empty**: Fixed duplicate `ChainSessionManager` instances causing `resource://session/` to return empty
+  - Root cause: `McpToolsManager` created its own instance (unused), while `PromptExecutionService` created the canonical instance
+  - Fix: `McpToolsManager.getChainSessionManager()` now delegates to `PromptExecutionService.getChainSessionManager()`
+  - Removed duplicate creation in `McpToolsManager`, added getter to `PromptExecutionService`
+
+- **Metrics resource token waste**: Removed `performanceTrends` array (~15KB of raw memory samples) from `resource://metrics/pipeline`
+  - Added useful aggregates instead: `framework` (current framework, switch count), `gates` (validation stats), `recommendations`
+  - Response reduced from ~15KB to ~500 bytes (~30x improvement)
+
+- **Session resource URIs**: Now use user-facing `chainId` instead of internal `sessionId`
+  - `resource://session/chain-quick_decision#1` directly usable for resuming chains
+  - List shows `chainId` as the primary identifier for LLM context recovery after compaction
+  - No need to first list sessions to discover opaque internal IDs
+
+### Removed
+
+- **Obsolete hooks cleaned up**: Bundled distribution and `CLAUDE_PLUGIN_ROOT` supersede these
+  - `hooks/setup.sh` — npm install hook (bundled dist is self-contained, no node_modules needed)
+  - `hooks/dev-sync.py` — Dev-to-cache sync hook (running from source via `--plugin-dir` handles this)
+  - SessionStart hook entry removed from `hooks/hooks.json`
 
 ## [1.5.0] - 2026-01-21
 

@@ -177,6 +177,18 @@
       }
     },
 
+    "hooks": {
+      "type": "object",
+      "description": "Claude Code hook behavior (affects prompt-suggest.py output)",
+      "properties": {
+        "expandedOutput": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show detailed multi-line output instead of compact single-line. Useful for debugging or verbose mode."
+        }
+      }
+    },
+
     "logging": {
       "type": "object",
       "description": "Server logging configuration",

@@ -92,7 +92,7 @@ async function loadJson<T>(filePath: string): Promise<T> {
 }
 
 function extractScriptPaths(command: string): string[] {
-  // Extract paths from commands like "bash ${CLAUDE_PLUGIN_ROOT}/hooks/setup.sh"
+  // Extract paths from commands like "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dev-sync.py"
   const matches = command.match(/\$\{[^}]+\}\/[^\s"']+/g) || [];
   return matches.map((m) => m.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, PROJECT_ROOT));
 }

@@ -9,6 +9,7 @@ Hooks that guide Claude's behavior when using the prompt engine. These solve com
 | Model ignores `>>analyze` syntax | `prompt-suggest.py` detects it and suggests the correct MCP call |
 | User forgets to continue chain | `post-prompt-engine.py` injects `[Chain] Step 2/5 - call prompt_engine to continue` |
 | Gate review skipped | `post-prompt-engine.py` reminds: `[Gate] Respond: GATE_REVIEW: PASS\|FAIL` |
+| Gate FAIL verdict ignored | `gate-enforce.py` blocks execution until criteria addressed |
 | Session state bloat | `pre-compact.py` cleans up before context compaction |
 
 ## Included Hooks
@@ -41,28 +42,20 @@ Triggers after `prompt_engine` calls. Parses the response to track chain state a
 
 Triggers before context compaction (`/compact`). Cleans up chain session state to prevent stale data from persisting across compaction boundaries.
 
-### `dev-sync.py` (SessionStart)
+### `gate-enforce.py` (PreToolUse)
 
-Triggers on session start. Syncs source files to the plugin cache.
+Triggers before `prompt_engine` calls. Enforces gate review discipline by blocking:
 
-**Superseded by `--plugin-dir`**: For active development, use Claude Code's direct loading:
+1. **FAIL verdicts without retry** - Guides Claude to address gate criteria before proceeding
+2. **Missing gate_verdict** - Requires explicit PASS/FAIL when resuming chains with pending gates
+3. **Missing user_response** - Ensures chain resumes include completed work
 
-```bash
-cc --plugin-dir /path/to/claude-prompts
+**Example denial:**
+
 ```
-
-This bypasses the cache entirely, making dev-sync unnecessary. The hook remains for:
-
-- Users who prefer marketplace install + automatic sync
-- Fallback when `--plugin-dir` is forgotten
-
-**Quick-check mode** minimizes startup delay:
-
-| Scenario | Time | Action |
-|----------|------|--------|
-| No changes since last sync | <100ms | Instant skip |
-| Source files modified | 2-5s | Full sync |
-| First run / marker missing | 2-5s | Full sync + create marker |
+Gate failed: code has security issues. Review the gate criteria and retry with improvements.
+Resubmit with GATE_REVIEW: PASS once criteria are met.
+```
 
 ## Installation
 
@@ -82,11 +75,10 @@ These hooks are included when you install via the Claude Code plugin:
 hooks/
 ├── hooks.json              # Claude Code hooks config
 ├── prompt-suggest.py       # UserPromptSubmit (syntax detection)
+├── gate-enforce.py         # PreToolUse (gate verdict enforcement)
 ├── post-prompt-engine.py   # PostToolUse (chain/gate tracking)
 ├── pre-compact.py          # PreCompact (session cleanup)
-├── dev-sync.py             # SessionStart (quick-check sync)
 ├── ralph-stop.py           # Stop (graceful shutdown)
-├── setup.sh                # Manual: npm install (not auto-run)
 └── lib/                    # Shared utilities
     ├── cache_manager.py    # Reads server/cache/prompts.cache.json
     ├── session_state.py    # Chain/gate state tracking
@@ -116,6 +108,35 @@ Claude Code hooks are configured in `hooks/hooks.json`:
     }]
   }
 }
+```
+
+### Server Configuration
+
+Hook behavior can be customized in `server/config.json`:
+
+```json
+{
+  "hooks": {
+    "expandedOutput": false
+  }
+}
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `expandedOutput` | `false` | Show detailed multi-line output instead of compact single-line |
+
+**Compact mode** (default):
+```
+[>>] diagnose | scope:"auth" [chain:3steps, @CAGEERF]
+```
+
+**Expanded mode** (`expandedOutput: true`):
+```
+[MCP] >>diagnose
+  Operators: chain (3 steps) | @CAGEERF
+  Arguments: scope: string (required), focus: string (optional)
+  Provided: scope="auth"
 ```
 
 ## Cache Access

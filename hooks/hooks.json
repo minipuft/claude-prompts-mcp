@@ -1,14 +1,15 @@
 {
   "description": "Claude Prompts plugin hooks - syntax detection, chain tracking, gate reminders",
   "hooks": {
-    "SessionStart": [
+    "PreToolUse": [
       {
+        "matcher": "prompt_engine",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dev-sync.py",
-            "name": "dev-sync",
-            "timeout": 15
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/gate-enforce.py",
+            "name": "gate-enforce",
+            "timeout": 5
           }
         ]
       }
