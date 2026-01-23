@@ -237,9 +237,12 @@ Your resources directory can contain: `prompts/`, `gates/`, `methodologies/`, `s
 |-----------------|---------|
 | All resources | `MCP_RESOURCES_PATH=/path/to/resources` |
 | Just prompts | `MCP_PROMPTS_PATH=/path/to/prompts` |
-| CLI flag (dev) | `--prompts=/path/to/prompts` |
+| Workspace root | `MCP_WORKSPACE=/path/to/server` |
+| CLI flag (dev) | `--workspace=/path/to/server` |
 
 **Priority:** CLI flags > individual env vars > `MCP_RESOURCES_PATH` > package defaults.
+
+> **Note:** When running via npx, paths are resolved relative to the package cache location, not your current working directory. Use `MCP_WORKSPACE` or `MCP_RESOURCES_PATH` to ensure consistent path resolution.
 
 See [CLI Configuration](docs/reference/mcp-tools.md#cli-configuration) for all options.
 

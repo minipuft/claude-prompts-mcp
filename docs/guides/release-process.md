@@ -90,7 +90,7 @@ Push to main
      ▼
 ┌────────────────────────────────────┐
 │  GitHub Release                    │
-│  Tag: claude-prompts-v{version}    │
+│  Tag: v{version}                   │
 └────────────────────────────────────┘
      │
      ▼
@@ -163,9 +163,9 @@ gh workflow run release-please.yml
 ### Create Release Without Automation
 
 ```bash
-git tag claude-prompts-v1.3.3
-git push origin claude-prompts-v1.3.3
-gh release create claude-prompts-v1.3.3 --title "v1.3.3" --notes "See CHANGELOG.md"
+git tag v1.3.3
+git push origin v1.3.3
+gh release create v1.3.3 --title "v1.3.3" --notes "See CHANGELOG.md"
 # → Triggers npm-publish and extension-publish
 ```
 

@@ -266,7 +266,7 @@ This repo uses a Release PR flow to ensure the npm package version and changelog
 
 - Changelog: `server/CHANGELOG.md`
 - Package version: `server/package.json#version`
-- Tag format: `claude-prompts-vX.Y.Z` (created by release-please)
+- Tag format: `vX.Y.Z` (created by release-please)
 
 **One-time GitHub setup**
 

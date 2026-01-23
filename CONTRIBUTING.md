@@ -167,7 +167,7 @@ Conventional commits → Release-Please PR → Merge → GitHub Release → npm 
 
 1. **Commit with conventional format**: `feat:`, `fix:`, `chore:`, etc.
 2. **Release-Please** auto-creates a PR bumping version + CHANGELOG
-3. **Merge the PR** → Creates GitHub Release with tag `claude-prompts-vX.Y.Z`
+3. **Merge the PR** → Creates GitHub Release with tag `vX.Y.Z`
 4. **npm-publish.yml** triggers → validates, tests, publishes with provenance
 5. **gemini-prompts** receives dispatch → creates PR to update submodule
 
