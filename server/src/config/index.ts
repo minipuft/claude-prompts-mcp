@@ -35,6 +35,7 @@ import {
   MethodologiesConfig,
   VerificationConfig,
   AdvancedConfig,
+  ResourcesConfig,
   DEFAULT_VERSIONING_CONFIG,
 } from '../types/index.js';
 import {
@@ -82,6 +83,15 @@ const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
 
 const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
   judge: true,
+};
+
+const DEFAULT_RESOURCES_CONFIG: ResourcesConfig = {
+  registerWithMcp: true,
+  logs: {
+    enabled: true,
+    maxEntries: 500,
+    defaultLevel: 'info',
+  },
 };
 
 /**
@@ -313,6 +323,22 @@ export class ConfigManager extends EventEmitter {
       enabled: versioningConfig.enabled ?? DEFAULT_VERSIONING_CONFIG.enabled,
       max_versions: versioningConfig.max_versions ?? DEFAULT_VERSIONING_CONFIG.max_versions,
       auto_version: versioningConfig.auto_version ?? DEFAULT_VERSIONING_CONFIG.auto_version,
+    };
+  }
+
+  /**
+   * Get MCP resources configuration
+   */
+  getResourcesConfig(): ResourcesConfig {
+    const resourcesConfig = this.config.resources ?? {};
+    const defaults = DEFAULT_RESOURCES_CONFIG;
+    return {
+      registerWithMcp: resourcesConfig.registerWithMcp ?? defaults.registerWithMcp,
+      logs: {
+        enabled: resourcesConfig.logs?.enabled ?? defaults.logs?.enabled ?? true,
+        maxEntries: resourcesConfig.logs?.maxEntries ?? defaults.logs?.maxEntries ?? 500,
+        defaultLevel: resourcesConfig.logs?.defaultLevel ?? defaults.logs?.defaultLevel ?? 'info',
+      },
     };
   }
 

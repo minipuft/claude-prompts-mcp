@@ -211,6 +211,11 @@
       "type": "object",
       "description": "MCP resources configuration",
       "properties": {
+        "registerWithMcp": {
+          "type": "boolean",
+          "default": true,
+          "description": "Register resources with MCP (resource://prompt/, resource://gate/, etc.)"
+        },
         "logs": {
           "type": "object",
           "description": "Logs resource for debugging and observability",

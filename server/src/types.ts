@@ -204,6 +204,23 @@ export interface AdvancedConfig {
   };
 }
 
+/**
+ * MCP Resources configuration
+ */
+export interface ResourcesConfig {
+  /** Register resources with MCP (resource://...) */
+  registerWithMcp?: boolean;
+  /** Logs resource configuration */
+  logs?: {
+    /** Enable logs resource (resource://logs/) */
+    enabled?: boolean;
+    /** Maximum log entries to retain in memory */
+    maxEntries?: number;
+    /** Minimum level to buffer */
+    defaultLevel?: 'error' | 'warn' | 'info' | 'debug';
+  };
+}
+
 export interface Config {
   /** Server configuration */
   server: ServerConfig;
@@ -236,6 +253,8 @@ export interface Config {
   verification?: VerificationConfig;
   /** New-style: Advanced internal settings */
   advanced?: AdvancedConfig;
+  /** MCP Resources configuration */
+  resources?: ResourcesConfig;
 }
 
 // ===== Prompt Types =====

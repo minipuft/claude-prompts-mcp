@@ -393,6 +393,13 @@ export class Application {
    * Resources provide 5-16x more token-efficient discovery than tool-based list operations.
    */
   private registerMcpResources(): void {
+    // Check if resources registration is enabled
+    const resourcesConfig = this.configManager.getResourcesConfig();
+    if (resourcesConfig.registerWithMcp === false) {
+      this.logger.info('[Resources] MCP resources registration disabled by config');
+      return;
+    }
+
     // Get optional dependencies from managers (members are definite-assigned at this point)
     const fm = this.frameworkStateManager.getFrameworkManager();
     const csm = this.mcpToolsManager.getChainSessionManager();

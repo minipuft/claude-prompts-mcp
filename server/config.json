@@ -55,6 +55,7 @@
   },
 
   "resources": {
+    "registerWithMcp": true,
     "logs": {
       "enabled": true,
       "maxEntries": 500,

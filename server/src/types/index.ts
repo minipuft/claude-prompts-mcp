@@ -30,6 +30,7 @@ export type {
   MessageContent,
   MessageRole,
   MethodologiesConfig,
+  ResourcesConfig,
   SemanticAnalysisConfig,
   ServerConfig,
   TextMessageContent,
