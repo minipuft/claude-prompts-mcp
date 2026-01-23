@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0](https://github.com/minipuft/claude-prompts/compare/v1.6.0...v1.7.0) (2026-01-23)
+
+
+### Features
+
+* **ci:** migrate to OIDC trusted publishing for npm ([e71d272](https://github.com/minipuft/claude-prompts/commit/e71d272f833d1e983f717eb11d31b6a492c24a59))
+* **config:** add registerWithMcp toggle for MCP resources ([471ed14](https://github.com/minipuft/claude-prompts/commit/471ed14e8a2a4bd63dd44aabbec8f97a5869e513))
+* **config:** expand resources config with granular per-type controls ([ddcdba2](https://github.com/minipuft/claude-prompts/commit/ddcdba2f62a700bfaf013f17ee16f21927cba110))
+* **docs:** add Remotion animation system for documentation videos ([0a40c4d](https://github.com/minipuft/claude-prompts/commit/0a40c4de20807ae4600294bee983ce852992311f))
+* extension dep sync, repetition operator, hook fuzzy matching ([efbdc30](https://github.com/minipuft/claude-prompts/commit/efbdc3018b44b50bb7383d30f23b3239cc0b7905))
+* **hooks:** add chain step visibility with IDs for workflow preview ([ff25d5e](https://github.com/minipuft/claude-prompts/commit/ff25d5ec0f26c1556f55353fb41e97e897ff6792))
+* **hooks:** improve prompt_engine directive clarity and token efficiency ([b62f8d3](https://github.com/minipuft/claude-prompts/commit/b62f8d3dd3e7aa4794e9b29bccb0ccc081bd49b1))
+* **hooks:** validate operator values against registered server resources ([30cba3a](https://github.com/minipuft/claude-prompts/commit/30cba3ac12c88e74b0b7e70bbcd8bfe079a9505b))
+* **resources:** add MCP logs resources for runtime observability ([5f0025f](https://github.com/minipuft/claude-prompts/commit/5f0025fcece76e3ed593246d30da54554e7be58f))
+* **resources:** implement MCP Resources protocol for token-efficient access ([80d56d2](https://github.com/minipuft/claude-prompts/commit/80d56d22a4b25b93270e9d8718c3b0ad95641f68))
+
+
+### Bug Fixes
+
+* **parsers:** preserve arguments after * N repetition operator ([649bae3](https://github.com/minipuft/claude-prompts/commit/649bae3d3dcaf7c6ec53fda1da18a90aaed6d705))
+
 ## [1.6.0](https://github.com/minipuft/claude-prompts/compare/v1.5.0...v1.6.0) (2026-01-22)
 
 
