@@ -1,6 +1,6 @@
 {
   "name": "claude-prompts-root",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "description": "Root package for git hooks and workspace management",
   "scripts": {
