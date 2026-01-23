@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Output
+out/
+*.mp4
+*.webm
+*.gif
+
+# Remotion cache
+.remotion/
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
