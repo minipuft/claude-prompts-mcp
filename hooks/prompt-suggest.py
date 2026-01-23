@@ -425,7 +425,8 @@ def format_user_message(
         return _format_expanded_message(prompt_id, command, parsed_args, operators, arguments, prompt_info)
 
     # Compact mode (default)
-    parts = [f"[>>] {prompt_id}"]
+    # Include prompt_engine hint so user knows a tool is being invoked
+    parts = [f"[>> prompt_engine] {prompt_id}"]
 
     # Add parsed args
     if parsed_args:
@@ -469,7 +470,8 @@ def _format_expanded_message(
     """
     Format expanded multi-line user message with full details.
     """
-    lines = [f"[MCP] >>{prompt_id}"]
+    # Include prompt_engine hint so user knows a tool is being invoked
+    lines = [f"[>> prompt_engine] {prompt_id}"]
 
     # Add chain workflow preview for chain prompts (predefined or ad-hoc)
     chain_preview = format_chain_preview(prompt_info, operators.get("chain"))
@@ -515,7 +517,12 @@ def format_directive(
     prompt_info: dict | None = None,
 ) -> str:
     """
-    Format token-efficient directive for Claude using function-call syntax.
+    Format token-efficient tool directive for Claude.
+
+    Uses structured tags and minimal imperative language to ensure Claude
+    recognizes this as a required action, not optional context.
+
+    Design: ~40 tokens base, scales with params. One blocking instruction.
 
     Args:
         command: The full command string
@@ -526,33 +533,37 @@ def format_directive(
         prompt_info: Prompt metadata from cache (for chain workflow context)
 
     Returns:
-        Single-line function-call directive for additionalContext
+        Structured directive that Claude will execute immediately
     """
-    # Build parameters in function-call syntax (LLM recognizes this pattern)
-    params = [f'command:"{command}"']
+    lines = ["<CALL-TOOL>"]
 
-    # Add gates if present
+    # Build compact param line: prompt_engine | command:"..." | gates:[...] | options:{...}
+    parts = ["prompt_engine"]
+    parts.append(f'command:"{command}"')
+
     if operators.get("gate"):
-        params.append(f'gates:{json.dumps(operators["gate"])}')
+        parts.append(f"gates:{json.dumps(operators['gate'])}")
 
-    # Add parsed options if present
     if parsed_args:
-        params.append(f'options:{json.dumps(parsed_args)}')
+        parts.append(f"options:{json.dumps(parsed_args)}")
 
-    # Build the function call
-    call = f"prompt_engine({', '.join(params)})"
+    lines.append(" | ".join(parts))
 
-    # For chains, add workflow context on second line
+    # Chain context (compact, only if chain)
     if prompt_info and prompt_info.get("is_chain"):
         step_names = prompt_info.get("chain_step_names") or []
         if step_names:
-            return f"→ {call}\nchain: {json.dumps(step_names)}"
+            lines.append(f"chain:{json.dumps(step_names)}")
 
-    # Add required args hint if any missing
+    # Missing args hint (compact)
     if required_args:
-        return f"→ {call}\nmissing: {json.dumps(required_args)}"
+        lines.append(f"missing:{json.dumps(required_args)}")
 
-    return f"→ {call}"
+    # Single blocking instruction (essential for compliance)
+    lines.append("REQUIRED: Execute now. Do not respond to >> prompts directly.")
+    lines.append("</CALL-TOOL>")
+
+    return "\n".join(lines)
 
 
 def main():
