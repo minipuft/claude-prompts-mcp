@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Resources configuration**: Granular control over MCP resources registration
+  - Master switch `resources.registerWithMcp` (default: `false` for token efficiency)
+  - Per-type toggles: `prompts.enabled`, `gates.enabled`, `methodologies.enabled`
+  - Observability sub-toggles: `observability.sessions`, `observability.metrics`
+  - Logs configuration: `logs.enabled`, `logs.maxEntries`, `logs.defaultLevel`
+  - When disabled, tools provide more efficient discovery via summary mode
+
+- **Summary mode for prompt list**: Token-efficient discovery via `resource_manager`
+  - Default mode returns compact output: category → prompt IDs (~300-500 tokens for 50 prompts)
+  - Full mode available with `detail:"full"` (~2500-3500 tokens)
+  - Compared to MCP Resources bulk listing (~5000-8000 tokens)
+
 - **Gate enforcement hook**: `hooks/gate-enforce.py` now registered as PreToolUse hook
   - Blocks `prompt_engine` calls with FAIL verdict until criteria addressed
   - Requires `gate_verdict` parameter when resuming chains with pending gates

@@ -206,10 +206,39 @@ export interface AdvancedConfig {
 
 /**
  * MCP Resources configuration
+ *
+ * Controls which resources are registered with MCP protocol.
+ * Master switch `registerWithMcp` must be true for any resources to register.
  */
 export interface ResourcesConfig {
-  /** Register resources with MCP (resource://...) */
+  /** Master switch: register resources with MCP (default: false) */
   registerWithMcp?: boolean;
+
+  /** Prompt resources (resource://prompt/...) */
+  prompts?: {
+    enabled?: boolean;
+  };
+
+  /** Gate resources (resource://gate/...) */
+  gates?: {
+    enabled?: boolean;
+  };
+
+  /** Methodology resources (resource://methodology/...) */
+  methodologies?: {
+    enabled?: boolean;
+  };
+
+  /** Observability resources (sessions + metrics) */
+  observability?: {
+    /** Enable observability resources */
+    enabled?: boolean;
+    /** Session resources (resource://session/...) */
+    sessions?: boolean;
+    /** Metrics resources (resource://metrics/...) */
+    metrics?: boolean;
+  };
+
   /** Logs resource configuration */
   logs?: {
     /** Enable logs resource (resource://logs/) */

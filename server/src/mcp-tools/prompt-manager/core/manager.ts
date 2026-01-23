@@ -710,9 +710,6 @@ export class ConsolidatedPromptManager {
       };
     }
 
-    // Generate response using existing format
-    let result = `📚 **Prompt Library** (${matchingPrompts.length} prompts)\n\n`;
-
     // Group by category for better organization
     const groupedByCategory = matchingPrompts.reduce(
       (acc, item) => {
@@ -724,44 +721,63 @@ export class ConsolidatedPromptManager {
       {} as Record<string, typeof matchingPrompts>
     );
 
-    for (const [category, prompts] of Object.entries(groupedByCategory)) {
-      result += `\n## 📁 ${category.toUpperCase()}\n`;
+    // Summary mode: compact token-efficient output (default)
+    const detailLevel = args.detail ?? 'summary';
+    let result: string;
 
-      for (const { prompt, classification } of prompts) {
-        const executionIcon = this.getExecutionTypeIcon(classification.executionType);
-        const frameworkIcon = classification.requiresFramework ? '🧠' : '⚡';
+    if (detailLevel === 'summary') {
+      // Compact format: just IDs grouped by category
+      result = `📚 **Prompts** (${matchingPrompts.length})\n`;
 
-        result += `\n**${executionIcon} ${prompt.name}** \`${prompt.id}\`\n`;
-        result += `   ${frameworkIcon} **Type**: ${classification.executionType}\n`;
+      for (const [category, prompts] of Object.entries(groupedByCategory)) {
+        const ids = prompts.map(({ prompt }) => prompt.id).join(', ');
+        result += `\n**${category}**: ${ids}`;
+      }
 
-        if (prompt.description) {
-          const shortDesc =
-            prompt.description.length > 80
-              ? prompt.description.substring(0, 80) + '...'
-              : prompt.description;
-          result += `   📝 ${shortDesc}\n`;
-        }
+      result += `\n\n_Use \`detail:"full"\` for descriptions, or \`>>id\` to execute._`;
+    } else {
+      // Full mode: detailed output with descriptions and types
+      result = `📚 **Prompt Library** (${matchingPrompts.length} prompts)\n\n`;
 
-        if (prompt.arguments?.length > 0) {
-          result += `   🔧 **Args**: ${prompt.arguments.map((arg: any) => arg.name).join(', ')}\n`;
+      for (const [category, prompts] of Object.entries(groupedByCategory)) {
+        result += `\n## 📁 ${category.toUpperCase()}\n`;
+
+        for (const { prompt, classification } of prompts) {
+          const executionIcon = this.getExecutionTypeIcon(classification.executionType);
+          const frameworkIcon = classification.requiresFramework ? '🧠' : '⚡';
+
+          result += `\n**${executionIcon} ${prompt.name}** \`${prompt.id}\`\n`;
+          result += `   ${frameworkIcon} **Type**: ${classification.executionType}\n`;
+
+          if (prompt.description) {
+            const shortDesc =
+              prompt.description.length > 80
+                ? prompt.description.substring(0, 80) + '...'
+                : prompt.description;
+            result += `   📝 ${shortDesc}\n`;
+          }
+
+          if (prompt.arguments?.length > 0) {
+            result += `   🔧 **Args**: ${prompt.arguments.map((arg: any) => arg.name).join(', ')}\n`;
+          }
         }
       }
-    }
 
-    // Add filter summary if filters were applied
-    if (args.filter) {
-      const filterDescriptions = this.filterParser.buildFilterDescription(filters);
-      if (filterDescriptions.length > 0) {
-        result += `\n\n🔍 **Applied Filters**:\n`;
-        filterDescriptions.forEach((desc) => {
-          result += `- ${desc}\n`;
-        });
+      // Add filter summary if filters were applied
+      if (args.filter) {
+        const filterDescriptions = this.filterParser.buildFilterDescription(filters);
+        if (filterDescriptions.length > 0) {
+          result += `\n\n🔍 **Applied Filters**:\n`;
+          filterDescriptions.forEach((desc) => {
+            result += `- ${desc}\n`;
+          });
+        }
       }
-    }
 
-    result += `\n\n💡 **Usage Tips**:\n`;
-    result += `• Use \`>>prompt_id\` to execute prompts\n`;
-    result += `• Use \`analyze_type\` to get type recommendations\n`;
+      result += `\n\n💡 **Usage Tips**:\n`;
+      result += `• Use \`>>prompt_id\` to execute prompts\n`;
+      result += `• Use \`analyze_type\` to get type recommendations\n`;
+    }
 
     return {
       content: [{ type: 'text' as const, text: result }],

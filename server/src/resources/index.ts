@@ -50,43 +50,65 @@ export type {
  * Resources are registered once at startup but read from singleton registries
  * at request time, ensuring hot-reload compatibility.
  *
+ * Respects granular config flags in dependencies.resourcesConfig:
+ * - prompts.enabled: Enable prompt resources
+ * - gates.enabled: Enable gate resources
+ * - methodologies.enabled: Enable methodology resources
+ * - observability.enabled: Enable observability resources (sessions + metrics)
+ * - logs.enabled: Enable logs resources
+ *
  * @param server - The MCP server instance
  * @param dependencies - Singleton manager references for data access
  */
 export function registerResources(server: McpServer, dependencies: ResourceDependencies): void {
-  const { logger } = dependencies;
+  const { logger, resourcesConfig } = dependencies;
+  const cfg = resourcesConfig ?? {};
 
   logger.info('[Resources] Registering MCP resources...');
 
-  // Phase 1: Prompts and Gates
-  if (dependencies.promptManager !== undefined) {
+  // Prompts
+  const promptsEnabled = cfg.prompts?.enabled !== false;
+  if (promptsEnabled && dependencies.promptManager !== undefined) {
     registerPromptResources(server, dependencies);
     logger.debug('[Resources] Prompt resources registered');
+  } else if (!promptsEnabled) {
+    logger.debug('[Resources] Prompt resources disabled by config');
   } else {
     logger.warn('[Resources] PromptManager not available, skipping prompt resources');
   }
 
-  if (dependencies.gateManager !== undefined) {
+  // Gates
+  const gatesEnabled = cfg.gates?.enabled !== false;
+  if (gatesEnabled && dependencies.gateManager !== undefined) {
     registerGateResources(server, dependencies);
     logger.debug('[Resources] Gate resources registered');
+  } else if (!gatesEnabled) {
+    logger.debug('[Resources] Gate resources disabled by config');
   } else {
     logger.warn('[Resources] GateManager not available, skipping gate resources');
   }
 
-  // Phase 2: Methodologies and Observability
-  if (dependencies.frameworkManager !== undefined) {
+  // Methodologies
+  const methodologiesEnabled = cfg.methodologies?.enabled !== false;
+  if (methodologiesEnabled && dependencies.frameworkManager !== undefined) {
     registerMethodologyResources(server, dependencies);
     logger.debug('[Resources] Methodology resources registered');
+  } else if (!methodologiesEnabled) {
+    logger.debug('[Resources] Methodology resources disabled by config');
   } else {
     logger.warn('[Resources] FrameworkManager not available, skipping methodology resources');
   }
 
-  if (
-    dependencies.chainSessionManager !== undefined ||
-    dependencies.metricsCollector !== undefined
-  ) {
+  // Observability (sessions + metrics)
+  const observabilityEnabled = cfg.observability?.enabled !== false;
+  const hasObservabilityDeps =
+    dependencies.chainSessionManager !== undefined || dependencies.metricsCollector !== undefined;
+
+  if (observabilityEnabled && hasObservabilityDeps) {
     registerObservabilityResources(server, dependencies);
     logger.debug('[Resources] Observability resources registered');
+  } else if (!observabilityEnabled) {
+    logger.debug('[Resources] Observability resources disabled by config');
   } else {
     logger.warn(
       '[Resources] Session/Metrics managers not available, skipping observability resources'

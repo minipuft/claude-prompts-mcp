@@ -249,6 +249,18 @@ export interface ResourceDependencies {
     getLogEntry(id: string): LogEntryResource | undefined;
     getBufferStats(): { count: number; maxSize: number; oldestId: string | null };
   };
+  /** Resources configuration for granular enable/disable control */
+  resourcesConfig?: {
+    prompts?: { enabled?: boolean };
+    gates?: { enabled?: boolean };
+    methodologies?: { enabled?: boolean };
+    observability?: {
+      enabled?: boolean;
+      sessions?: boolean;
+      metrics?: boolean;
+    };
+    logs?: { enabled?: boolean };
+  };
 }
 
 /**

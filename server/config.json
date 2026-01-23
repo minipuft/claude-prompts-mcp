@@ -1,73 +1,76 @@
 {
   "$schema": "./config.schema.json",
-
-  "server": {
-    "name": "claude-prompts",
-    "transport": "stdio",
-    "port": 9090
+  "advanced": {
+    "sessions": {
+      "cleanupIntervalMinutes": 5,
+      "reviewTimeoutMinutes": 30,
+      "timeoutMinutes": 1440
+    }
   },
-
+  "execution": {
+    "judge": true
+  },
+  "gates": {
+    "directory": "resources/gates",
+    "enabled": true,
+    "methodologyGates": true
+  },
+  "hooks": {
+    "expandedOutput": true
+  },
+  "logging": {
+    "directory": "./logs",
+    "level": "debug"
+  },
+  "methodologies": {
+    "dynamicToolDescriptions": true,
+    "enabled": true,
+    "styleGuidance": true,
+    "systemPromptFrequency": 3
+  },
   "prompts": {
     "directory": "resources/prompts",
     "registerWithMcp": true
   },
-
-  "methodologies": {
-    "enabled": true,
-    "dynamicToolDescriptions": true,
-    "systemPromptFrequency": 3,
-    "styleGuidance": true
+  "resources": {
+    "gates": {
+      "enabled": true
+    },
+    "logs": {
+      "defaultLevel": "info",
+      "enabled": true,
+      "maxEntries": 500
+    },
+    "methodologies": {
+      "enabled": true
+    },
+    "observability": {
+      "enabled": true,
+      "metrics": true,
+      "sessions": true
+    },
+    "prompts": {
+      "enabled": true
+    },
+    "registerWithMcp": false
   },
-
-  "gates": {
-    "enabled": true,
-    "directory": "resources/gates",
-    "methodologyGates": true
+  "server": {
+    "name": "claude-prompts",
+    "port": 9090,
+    "transport": "stdio"
   },
-
   "verification": {
     "inContextAttempts": 3,
     "isolation": {
       "enabled": true,
-      "maxBudget": 1.0,
-      "timeout": 300,
-      "permissionMode": "delegate"
+      "maxBudget": 1,
+      "permissionMode": "delegate",
+      "timeout": 300
     }
   },
-
   "versioning": {
-    "enabled": true,
     "autoVersion": true,
+    "enabled": true,
     "maxVersions": 50
-  },
-
-  "execution": {
-    "judge": true
-  },
-
-  "hooks": {
-    "expandedOutput": true
-  },
-
-  "logging": {
-    "level": "debug",
-    "directory": "./logs"
-  },
-
-  "resources": {
-    "registerWithMcp": true,
-    "logs": {
-      "enabled": true,
-      "maxEntries": 500,
-      "defaultLevel": "info"
-    }
-  },
-
-  "advanced": {
-    "sessions": {
-      "timeoutMinutes": 1440,
-      "reviewTimeoutMinutes": 30,
-      "cleanupIntervalMinutes": 5
-    }
   }
 }

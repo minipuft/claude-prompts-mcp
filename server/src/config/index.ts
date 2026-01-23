@@ -86,7 +86,15 @@ const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
 };
 
 const DEFAULT_RESOURCES_CONFIG: ResourcesConfig = {
-  registerWithMcp: true,
+  registerWithMcp: false, // Disabled by default - tools provide more efficient discovery
+  prompts: { enabled: true },
+  gates: { enabled: true },
+  methodologies: { enabled: true },
+  observability: {
+    enabled: true,
+    sessions: true,
+    metrics: true,
+  },
   logs: {
     enabled: true,
     maxEntries: 500,
@@ -330,14 +338,28 @@ export class ConfigManager extends EventEmitter {
    * Get MCP resources configuration
    */
   getResourcesConfig(): ResourcesConfig {
-    const resourcesConfig = this.config.resources ?? {};
-    const defaults = DEFAULT_RESOURCES_CONFIG;
+    const cfg = this.config.resources ?? {};
+    const def = DEFAULT_RESOURCES_CONFIG;
     return {
-      registerWithMcp: resourcesConfig.registerWithMcp ?? defaults.registerWithMcp,
+      registerWithMcp: cfg.registerWithMcp ?? def.registerWithMcp,
+      prompts: {
+        enabled: cfg.prompts?.enabled ?? def.prompts?.enabled ?? true,
+      },
+      gates: {
+        enabled: cfg.gates?.enabled ?? def.gates?.enabled ?? true,
+      },
+      methodologies: {
+        enabled: cfg.methodologies?.enabled ?? def.methodologies?.enabled ?? true,
+      },
+      observability: {
+        enabled: cfg.observability?.enabled ?? def.observability?.enabled ?? true,
+        sessions: cfg.observability?.sessions ?? def.observability?.sessions ?? true,
+        metrics: cfg.observability?.metrics ?? def.observability?.metrics ?? true,
+      },
       logs: {
-        enabled: resourcesConfig.logs?.enabled ?? defaults.logs?.enabled ?? true,
-        maxEntries: resourcesConfig.logs?.maxEntries ?? defaults.logs?.maxEntries ?? 500,
-        defaultLevel: resourcesConfig.logs?.defaultLevel ?? defaults.logs?.defaultLevel ?? 'info',
+        enabled: cfg.logs?.enabled ?? def.logs?.enabled ?? true,
+        maxEntries: cfg.logs?.maxEntries ?? def.logs?.maxEntries ?? 500,
+        defaultLevel: cfg.logs?.defaultLevel ?? def.logs?.defaultLevel ?? 'info',
       },
     };
   }

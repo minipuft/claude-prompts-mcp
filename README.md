@@ -309,6 +309,28 @@ resource://metrics/pipeline # System health (lean aggregates, not raw samples)
 
 Use `chainId` directly: `resource://session/chain-quick_decision#1` → same ID used to resume.
 
+**Configuration** (in `config.json`):
+
+```json
+"resources": {
+  "registerWithMcp": false,           // Master switch (default: off for token efficiency)
+  "prompts": { "enabled": true },     // resource://prompt/...
+  "gates": { "enabled": true },       // resource://gate/...
+  "methodologies": { "enabled": true }, // resource://methodology/...
+  "observability": {                  // resource://session/..., resource://metrics/...
+    "enabled": true,
+    "sessions": true,
+    "metrics": true
+  },
+  "logs": { "enabled": true, "maxEntries": 500, "defaultLevel": "info" }
+}
+```
+
+**Why disabled by default?** Tools provide more efficient discovery:
+- `resource_manager(action:"list")` returns compact summary (~300 tokens)
+- Use `detail:"full"` when you need descriptions
+- MCP Resources bulk-loads everything (~5000+ tokens)
+
 ### 📜 Version History
 
 Every update is versioned. Compare, rollback, undo:

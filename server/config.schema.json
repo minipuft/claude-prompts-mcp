@@ -209,12 +209,66 @@
 
     "resources": {
       "type": "object",
-      "description": "MCP resources configuration",
+      "description": "MCP resources configuration. Master switch must be enabled for any resources to register.",
       "properties": {
         "registerWithMcp": {
           "type": "boolean",
-          "default": true,
-          "description": "Register resources with MCP (resource://prompt/, resource://gate/, etc.)"
+          "default": false,
+          "description": "Master switch: register resources with MCP protocol (default: false for token efficiency)"
+        },
+        "prompts": {
+          "type": "object",
+          "description": "Prompt resources (resource://prompt/...)",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable prompt resources"
+            }
+          }
+        },
+        "gates": {
+          "type": "object",
+          "description": "Gate resources (resource://gate/...)",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable gate resources"
+            }
+          }
+        },
+        "methodologies": {
+          "type": "object",
+          "description": "Methodology resources (resource://methodology/...)",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable methodology resources"
+            }
+          }
+        },
+        "observability": {
+          "type": "object",
+          "description": "Observability resources (sessions and metrics)",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable observability resources"
+            },
+            "sessions": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable session resources (resource://session/...)"
+            },
+            "metrics": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable metrics resources (resource://metrics/...)"
+            }
+          }
         },
         "logs": {
           "type": "object",

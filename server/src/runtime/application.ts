@@ -449,6 +449,14 @@ export class Application {
               getBufferStats: () => (this.logger as EnhancedLogger).getBufferStats(),
             }
           : undefined,
+      // Pass granular resource config for per-type enable/disable
+      resourcesConfig: {
+        prompts: resourcesConfig.prompts,
+        gates: resourcesConfig.gates,
+        methodologies: resourcesConfig.methodologies,
+        observability: resourcesConfig.observability,
+        logs: resourcesConfig.logs,
+      },
     });
   }
 
