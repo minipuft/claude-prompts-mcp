@@ -29,7 +29,7 @@ import { startServerWithManagers } from './startup-server.js';
 import { ConfigManager } from '../config/index.js';
 import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
 import { GateManager } from '../gates/gate-manager.js';
-import { Logger } from '../logging/index.js';
+import { EnhancedLogger, Logger } from '../logging/index.js';
 import { PromptAssetManager } from '../prompts/index.js';
 import { reloadPromptData } from '../prompts/prompt-refresh-service.js';
 import { registerResources, notifyResourcesChanged } from '../resources/index.js';
@@ -433,6 +433,15 @@ export class Application {
       metricsCollector: {
         getAnalyticsSummary: () => mc.getAnalyticsSummary(),
       },
+      // Phase 3: Log resources (only if logger is EnhancedLogger with ring buffer)
+      logManager:
+        this.logger instanceof EnhancedLogger
+          ? {
+              getRecentLogs: (opts) => (this.logger as EnhancedLogger).getRecentLogs(opts),
+              getLogEntry: (id) => (this.logger as EnhancedLogger).getLogEntry(id),
+              getBufferStats: () => (this.logger as EnhancedLogger).getBufferStats(),
+            }
+          : undefined,
     });
   }
 

@@ -58,6 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `resource://session/` — List active chain sessions with progress status
     - `resource://session/{chainId}` — Individual session state with step progress, timing, and original arguments
     - `resource://metrics/pipeline` — Pipeline execution metrics and analytics summary
+  - **Logs** (Phase 3):
+    - `resource://logs/` — List recent logs with compact JSONL format (newest first)
+    - `resource://logs/{level}` — Filter by level (error/warn/info/debug)
+    - `resource://logs/entry/{id}` — Individual log entry with full details
+    - Configurable via `resources.logs` in config.json (enabled, maxEntries, defaultLevel)
+    - In-memory ring buffer (default 500 entries) for bounded storage
   - Hot-reload compatible: connected clients receive `notifications/resources/list_changed` on prompt/gate changes
 
 ### Improved
@@ -105,6 +111,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `resource://session/chain-quick_decision#1` directly usable for resuming chains
   - List shows `chainId` as the primary identifier for LLM context recovery after compaction
   - No need to first list sessions to discover opaque internal IDs
+
+- **Repetition operator arguments**: Arguments after `* N` now properly attach to each repeated segment
+  - Before: `>>prompt * 3 arg:"x"` → `>>prompt --> >>prompt --> >>prompt --> arg:"x"` (broken)
+  - After: `>>prompt * 3 arg:"x"` → `>>prompt arg:"x" --> >>prompt arg:"x" --> >>prompt arg:"x"` (correct)
+  - Fixes "Unknown prompt" errors when using syntax like `>>strategicImplement * 5 plan:"path"`
 
 ### Removed
 

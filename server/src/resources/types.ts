@@ -32,6 +32,11 @@ export const RESOURCE_URI_PATTERNS = {
   SESSION_LIST: 'resource://session/',
   SESSION_ITEM: 'resource://session/{chainId}',
   METRICS_PIPELINE: 'resource://metrics/pipeline',
+
+  // Logs resources (Phase 3)
+  LOGS_LIST: 'resource://logs/',
+  LOGS_BY_LEVEL: 'resource://logs/{level}',
+  LOGS_ENTRY: 'resource://logs/entry/{id}',
 } as const;
 
 /**
@@ -235,6 +240,26 @@ export interface ResourceDependencies {
       recommendations: string[];
     };
   };
+  /** Log manager for MCP resources access to recent logs */
+  logManager?: {
+    getRecentLogs(options?: {
+      level?: LogEntryResource['level'];
+      limit?: number;
+    }): LogEntryResource[];
+    getLogEntry(id: string): LogEntryResource | undefined;
+    getBufferStats(): { count: number; maxSize: number; oldestId: string | null };
+  };
+}
+
+/**
+ * Log entry structure for MCP resources
+ */
+export interface LogEntryResource {
+  id: string;
+  timestamp: number;
+  level: 'error' | 'warn' | 'info' | 'debug';
+  message: string;
+  context?: Record<string, unknown>;
 }
 
 /**

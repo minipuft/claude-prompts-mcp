@@ -207,6 +207,37 @@
       }
     },
 
+    "resources": {
+      "type": "object",
+      "description": "MCP resources configuration",
+      "properties": {
+        "logs": {
+          "type": "object",
+          "description": "Logs resource for debugging and observability",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable logs resource (resource://logs/)"
+            },
+            "maxEntries": {
+              "type": "integer",
+              "default": 500,
+              "minimum": 50,
+              "maximum": 5000,
+              "description": "Maximum log entries to retain in memory"
+            },
+            "defaultLevel": {
+              "type": "string",
+              "enum": ["error", "warn", "info", "debug"],
+              "default": "info",
+              "description": "Minimum level to buffer (entries below this level are not stored)"
+            }
+          }
+        }
+      }
+    },
+
     "advanced": {
       "type": "object",
       "description": "Internal settings (most users won't need to change)",

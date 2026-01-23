@@ -54,6 +54,14 @@
     "directory": "./logs"
   },
 
+  "resources": {
+    "logs": {
+      "enabled": true,
+      "maxEntries": 500,
+      "defaultLevel": "info"
+    }
+  },
+
   "advanced": {
     "sessions": {
       "timeoutMinutes": 1440,

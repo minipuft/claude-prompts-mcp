@@ -61,6 +61,14 @@ export function registerObservabilityResources(
     );
   }
 
+  // Register log resources if LogManager is available
+  if (dependencies.logManager !== undefined) {
+    registerLogResources(server, dependencies);
+    logger.debug('[ObservabilityResources] Log resources registered');
+  } else {
+    logger.warn('[ObservabilityResources] LogManager not available, skipping log resources');
+  }
+
   logger.info('[ObservabilityResources] Registered observability resources');
 }
 
@@ -271,4 +279,151 @@ function buildSessionContent(session: {
   };
 
   return JSON.stringify(content, null, 2);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Logs Resources
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Register log-related MCP resources for debugging and observability.
+ *
+ * URI Patterns:
+ * - resource://logs/              → List recent logs (all levels)
+ * - resource://logs/{level}       → Filter by level (error/warn/info/debug)
+ * - resource://logs/entry/{id}    → Individual log entry details
+ */
+export function registerLogResources(server: McpServer, dependencies: ResourceDependencies): void {
+  const { logger, logManager } = dependencies;
+
+  if (logManager === undefined) {
+    logger.warn('[LogResources] LogManager not available, skipping log resources');
+    return;
+  }
+
+  // Resource: List recent logs (newest first)
+  server.registerResource(
+    'logs',
+    new ResourceTemplate(RESOURCE_URI_PATTERNS.LOGS_LIST, {
+      list: undefined, // Single resource, no enumeration
+    }),
+    {
+      description: 'Recent server logs for debugging (newest first)',
+      mimeType: 'application/json',
+    },
+    async (uri): Promise<ReadResourceResult> => {
+      const logs = logManager.getRecentLogs({ limit: 100 });
+      const stats = logManager.getBufferStats();
+      logger.debug(`[LogResources] Listing ${logs.length} recent logs`);
+
+      // Compact format for token efficiency
+      const compactLogs = logs.map((e) => ({
+        id: e.id,
+        ts: e.timestamp,
+        level: e.level,
+        msg: e.message.substring(0, 200), // Truncate long messages
+        ...(e.context !== undefined ? { ctx: e.context } : {}),
+      }));
+
+      return {
+        contents: [
+          {
+            uri: uri.toString(),
+            mimeType: 'application/json',
+            text: JSON.stringify({ logs: compactLogs, stats }, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Resource: Logs filtered by level
+  server.registerResource(
+    'logs-by-level',
+    new ResourceTemplate(RESOURCE_URI_PATTERNS.LOGS_BY_LEVEL, {
+      list: undefined,
+    }),
+    {
+      description: 'Server logs filtered by level (error/warn/info/debug)',
+      mimeType: 'application/json',
+    },
+    async (uri, variables): Promise<ReadResourceResult> => {
+      const level = variables['level'] as string;
+
+      // Validate level
+      const validLevels = ['error', 'warn', 'info', 'debug'];
+      if (!validLevels.includes(level)) {
+        throw new ResourceNotFoundError('Log level', level);
+      }
+
+      const logs = logManager.getRecentLogs({
+        level: level as 'error' | 'warn' | 'info' | 'debug',
+        limit: 100,
+      });
+      logger.debug(`[LogResources] Listing ${logs.length} logs at level: ${level}`);
+
+      // Compact format
+      const compactLogs = logs.map((e) => ({
+        id: e.id,
+        ts: e.timestamp,
+        level: e.level,
+        msg: e.message.substring(0, 200),
+        ...(e.context !== undefined ? { ctx: e.context } : {}),
+      }));
+
+      return {
+        contents: [
+          {
+            uri: uri.toString(),
+            mimeType: 'application/json',
+            text: JSON.stringify({ level, count: logs.length, logs: compactLogs }, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  // Resource: Individual log entry
+  server.registerResource(
+    'log-entry',
+    new ResourceTemplate(RESOURCE_URI_PATTERNS.LOGS_ENTRY, {
+      list: undefined,
+    }),
+    {
+      description: 'Individual log entry with full details',
+      mimeType: 'application/json',
+    },
+    async (uri, variables): Promise<ReadResourceResult> => {
+      const id = variables['id'] as string;
+      const entry = logManager.getLogEntry(id);
+
+      if (entry === undefined) {
+        throw new ResourceNotFoundError('Log entry', id);
+      }
+
+      logger.debug(`[LogResources] Reading log entry: ${id}`);
+
+      // Full format for individual entry
+      const fullEntry = {
+        id: entry.id,
+        timestamp: entry.timestamp,
+        timestampISO: new Date(entry.timestamp).toISOString(),
+        level: entry.level,
+        message: entry.message,
+        context: entry.context,
+      };
+
+      return {
+        contents: [
+          {
+            uri: uri.toString(),
+            mimeType: 'application/json',
+            text: JSON.stringify(fullEntry, null, 2),
+          },
+        ],
+      };
+    }
+  );
+
+  logger.info('[LogResources] Registered log resources');
 }

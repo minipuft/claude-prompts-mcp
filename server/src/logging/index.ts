@@ -20,13 +20,36 @@ export interface Logger {
 }
 
 /**
+ * Log entry for the in-memory ring buffer (exposed via MCP resources)
+ */
+export interface LogEntry {
+  id: string;
+  timestamp: number;
+  level: 'error' | 'warn' | 'info' | 'debug';
+  message: string;
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Options for retrieving recent logs
+ */
+export interface GetRecentLogsOptions {
+  level?: 'error' | 'warn' | 'info' | 'debug';
+  limit?: number;
+}
+
+/**
  * Logging configuration options for EnhancedLogger
  */
 export interface EnhancedLoggingConfig {
   logFile: string;
   transport: string;
   enableDebug?: boolean;
-  configuredLevel?: string; // NEW: Support config-based log level
+  configuredLevel?: string;
+  /** Maximum entries to retain in ring buffer (default: 500) */
+  maxBufferEntries?: number;
+  /** Minimum level to buffer for resource access (default: 'info') */
+  bufferLevel?: string;
 }
 
 /**
@@ -45,6 +68,12 @@ export class EnhancedLogger implements Logger {
     [LogLevel.DEBUG]: 3,
   };
 
+  // Ring buffer for MCP resources access
+  private logBuffer: LogEntry[] = [];
+  private readonly maxBufferSize: number;
+  private nextEntryId: number = 1;
+  private bufferLevel: LogLevel;
+
   constructor(config: EnhancedLoggingConfig) {
     this.logFile = config.logFile;
     this.transport = config.transport;
@@ -53,6 +82,10 @@ export class EnhancedLogger implements Logger {
 
     // Map config level to LogLevel enum with fallback to INFO
     this.configuredLevel = this.parseLogLevel(config.configuredLevel || 'info');
+
+    // Ring buffer configuration
+    this.maxBufferSize = config.maxBufferEntries ?? 500;
+    this.bufferLevel = this.parseLogLevel(config.bufferLevel ?? 'info');
   }
 
   /**
@@ -179,6 +212,7 @@ export class EnhancedLogger implements Logger {
   info(message: string, ...args: any[]): void {
     this.logToConsole(LogLevel.INFO, message, ...args);
     this.logToFile(LogLevel.INFO, message, ...args);
+    this.addToBuffer(LogLevel.INFO, message, args);
   }
 
   /**
@@ -187,6 +221,7 @@ export class EnhancedLogger implements Logger {
   error(message: string, ...args: any[]): void {
     this.logToConsole(LogLevel.ERROR, message, ...args);
     this.logToFile(LogLevel.ERROR, message, ...args);
+    this.addToBuffer(LogLevel.ERROR, message, args);
   }
 
   /**
@@ -195,6 +230,7 @@ export class EnhancedLogger implements Logger {
   warn(message: string, ...args: any[]): void {
     this.logToConsole(LogLevel.WARN, message, ...args);
     this.logToFile(LogLevel.WARN, message, ...args);
+    this.addToBuffer(LogLevel.WARN, message, args);
   }
 
   /**
@@ -203,6 +239,7 @@ export class EnhancedLogger implements Logger {
   debug(message: string, ...args: any[]): void {
     this.logToConsole(LogLevel.DEBUG, message, ...args);
     this.logToFile(LogLevel.DEBUG, message, ...args);
+    this.addToBuffer(LogLevel.DEBUG, message, args);
   }
 
   /**
@@ -236,6 +273,99 @@ export class EnhancedLogger implements Logger {
    */
   logMemoryUsage(): void {
     this.info(`Server process memory usage: ${JSON.stringify(process.memoryUsage())}`);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Ring Buffer Methods (for MCP resources access)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Add a log entry to the ring buffer
+   */
+  private addToBuffer(level: LogLevel, message: string, args: unknown[]): void {
+    // Check if this level should be buffered
+    const levelPriority = EnhancedLogger.LOG_LEVEL_PRIORITY[level];
+    const bufferPriority = EnhancedLogger.LOG_LEVEL_PRIORITY[this.bufferLevel];
+    if (levelPriority > bufferPriority) {
+      return; // Skip entries below buffer threshold
+    }
+
+    const entry: LogEntry = {
+      id: `log-${this.nextEntryId++}`,
+      timestamp: Date.now(),
+      level: level.toLowerCase() as LogEntry['level'],
+      message,
+      context: this.extractContext(args),
+    };
+
+    this.logBuffer.push(entry);
+    if (this.logBuffer.length > this.maxBufferSize) {
+      this.logBuffer.shift(); // Remove oldest entry
+    }
+  }
+
+  /**
+   * Extract structured context from log arguments
+   */
+  private extractContext(args: unknown[]): Record<string, unknown> | undefined {
+    if (args.length === 0) {
+      return undefined;
+    }
+
+    // Extract component tag from message if present (e.g., "[Pipeline]")
+    const context: Record<string, unknown> = {};
+
+    for (const arg of args) {
+      if (typeof arg === 'object' && arg !== null) {
+        Object.assign(context, arg);
+      } else if (typeof arg === 'string') {
+        // Check for component pattern like "[Component]"
+        const componentMatch = arg.match(/^\[([^\]]+)\]/);
+        if (componentMatch !== null) {
+          context['component'] = componentMatch[1];
+        }
+      }
+    }
+
+    return Object.keys(context).length > 0 ? context : undefined;
+  }
+
+  /**
+   * Get recent log entries from the ring buffer
+   * @param options.level - Filter to this level and above (e.g., 'warn' returns warn + error)
+   * @param options.limit - Maximum entries to return (default: 100)
+   */
+  getRecentLogs(options?: GetRecentLogsOptions): LogEntry[] {
+    const { level, limit = 100 } = options ?? {};
+    let filtered = this.logBuffer;
+
+    if (level !== undefined) {
+      const levelPriority: Record<string, number> = { error: 0, warn: 1, info: 2, debug: 3 };
+      const maxPriority = levelPriority[level] ?? 3;
+      filtered = filtered.filter((e) => (levelPriority[e.level] ?? 3) <= maxPriority);
+    }
+
+    // Return newest first, limited
+    return filtered.slice(-limit).reverse();
+  }
+
+  /**
+   * Get a specific log entry by ID
+   */
+  getLogEntry(id: string): LogEntry | undefined {
+    return this.logBuffer.find((e) => e.id === id);
+  }
+
+  /**
+   * Get buffer statistics
+   */
+  getBufferStats(): { count: number; maxSize: number; oldestId: string | null } {
+    const oldest = this.logBuffer[0];
+    return {
+      count: this.logBuffer.length,
+      maxSize: this.maxBufferSize,
+      oldestId: oldest?.id ?? null,
+    };
   }
 }
 
