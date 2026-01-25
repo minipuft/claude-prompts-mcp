@@ -29,7 +29,9 @@ import { startServerWithManagers } from './startup-server.js';
 import { ConfigManager } from '../config/index.js';
 import { FrameworkStateManager } from '../frameworks/framework-state-manager.js';
 import { GateManager } from '../gates/gate-manager.js';
+import { HookRegistry } from '../hooks/index.js';
 import { EnhancedLogger, Logger } from '../logging/index.js';
+import { McpNotificationEmitter } from '../notifications/index.js';
 import { PromptAssetManager } from '../prompts/index.js';
 import { reloadPromptData } from '../prompts/prompt-refresh-service.js';
 import { registerResources, notifyResourcesChanged } from '../resources/index.js';
@@ -79,6 +81,8 @@ export class Application {
   private toolDescriptionManager!: ToolDescriptionManager;
   private frameworkStateManager!: FrameworkStateManager;
   private gateManager?: GateManager;
+  private hookRegistry!: HookRegistry;
+  private notificationEmitter!: McpNotificationEmitter;
   private pathResolver!: PathResolver;
   private transportManager!: TransportManager;
   private apiManager: ApiManager | undefined;
@@ -288,6 +292,16 @@ export class Application {
     );
     this.debugLog('McpServer created successfully');
 
+    // Initialize hook registry and notification emitter
+    this.hookRegistry = new HookRegistry(this.logger);
+    this.notificationEmitter = new McpNotificationEmitter(this.logger);
+    // McpServer has notification() at runtime - cast to the expected interface
+    // The emitter has canSend() guard that checks typeof notification === 'function'
+    this.notificationEmitter.setServer(
+      this.mcpServer as unknown as import('../notifications/index.js').McpNotificationServer
+    );
+    this.debugLog('HookRegistry and McpNotificationEmitter initialized');
+
     // Only log completion in verbose mode
     if (isVerbose) {
       this.debugLog('About to log foundation initialized');
@@ -356,6 +370,8 @@ export class Application {
       mcpServer: this.mcpServer,
       serviceManager: this.serviceManager,
       serverRoot: this.serverRoot,
+      hookRegistry: this.hookRegistry,
+      notificationEmitter: this.notificationEmitter,
       callbacks: {
         fullServerRefresh: () => this.fullServerRefresh(),
         restartServer: (reason: string) => this.restartServer(reason),

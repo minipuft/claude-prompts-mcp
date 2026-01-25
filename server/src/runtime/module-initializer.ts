@@ -25,7 +25,9 @@ import { isChainPrompt } from '../utils/chainUtils.js';
 
 import type { RuntimeLaunchOptions } from './options.js';
 import type { ConfigManager } from '../config/index.js';
+import type { HookRegistry } from '../hooks/index.js';
 import type { Logger } from '../logging/index.js';
+import type { McpNotificationEmitter } from '../notifications/index.js';
 import type { PromptAssetManager } from '../prompts/index.js';
 import type { ConversationManager } from '../text-references/conversation.js';
 import type { TextReferenceManager } from '../text-references/index.js';
@@ -54,6 +56,10 @@ export interface ModuleInitParams {
   callbacks: ModuleInitCallbacks;
   /** Server root for runtime state directories */
   serverRoot?: string;
+  /** Hook registry for pipeline event emissions */
+  hookRegistry?: HookRegistry;
+  /** Notification emitter for MCP client notifications */
+  notificationEmitter?: McpNotificationEmitter;
 }
 
 export interface ModuleInitResult {
@@ -80,6 +86,8 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     serviceManager,
     callbacks,
     serverRoot,
+    hookRegistry,
+    notificationEmitter,
   } = params;
 
   const isVerbose = runtimeOptions.verbose;
@@ -167,6 +175,14 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
 
   if (isVerbose) logger.info('🔄 Connecting Tool Description Manager to MCP Tools...');
   mcpToolsManager.setToolDescriptionManager(toolDescriptionManager);
+
+  // Wire up hook registry and notification emitter for pipeline events
+  if (hookRegistry) {
+    mcpToolsManager.setHookRegistry(hookRegistry);
+  }
+  if (notificationEmitter) {
+    mcpToolsManager.setNotificationEmitter(notificationEmitter);
+  }
 
   if (isVerbose) logger.info('🔄 Registering all MCP tools...');
   await mcpToolsManager.registerAllTools();

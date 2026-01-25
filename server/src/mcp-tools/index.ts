@@ -263,6 +263,22 @@ export class ConsolidatedMcpToolsManager {
   }
 
   /**
+   * Set hook registry for pipeline event emissions
+   */
+  setHookRegistry(hookRegistry: import('../hooks/index.js').HookRegistry): void {
+    this.promptExecutionService.setHookRegistry(hookRegistry);
+  }
+
+  /**
+   * Set notification emitter for MCP client notifications
+   */
+  setNotificationEmitter(
+    emitter: import('../notifications/index.js').McpNotificationEmitter
+  ): void {
+    this.promptExecutionService.setNotificationEmitter(emitter);
+  }
+
+  /**
    * Setup hot-reload event listeners for tool descriptions
    */
   private setupToolDescriptionHotReload(manager: ToolDescriptionManager): void {
