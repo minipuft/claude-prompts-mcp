@@ -18,10 +18,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from session_state import (
-    load_session_state,
     save_session_state,
     parse_prompt_engine_response,
-    format_chain_reminder,
 )
 
 
@@ -72,37 +70,38 @@ def main():
     # Save state for this session
     save_session_state(session_id, state)
 
-    # Output reminder if gate is pending
-    output_lines = []
+    # Check if gate review is pending - guide Claude to submit verdict
+    chain_id = state.get("chain_id", "")
+    pending_gate = state.get("pending_gate")
+    step = state.get("current_step", 0)
+    total = state.get("total_steps", 0)
 
-    if state.get("pending_gate"):
-        criteria = state.get("gate_criteria", [])
-        criteria_str = " | ".join(c[:40] for c in criteria[:3]) if criteria else ""
-        output_lines.append(f"[Gate] {state['pending_gate']}")
-        output_lines.append("  Respond: GATE_REVIEW: PASS|FAIL - <reason>")
-        if criteria_str:
-            output_lines.append(f"  Check: {criteria_str}")
+    if pending_gate:
+        # CLAUDE DIRECTIVE ONLY: Guide Claude to submit verdict (token-efficient)
+        # User sees server's "Gate Review Required" message in tool response
+        directive = f'<GATE-REVIEW>chain_id="{chain_id}" gates="{pending_gate}" → Submit gate_verdict</GATE-REVIEW>'
 
-    if state.get("current_step") > 0 and state.get("total_steps") > 0:
-        step = state["current_step"]
-        total = state["total_steps"]
-        if step < total:
-            output_lines.append(f"[Chain] Step {step}/{total} - call prompt_engine to continue")
-
-    # Use JSON format for proper PostToolUse hook protocol
-    # - additionalContext: injected to Claude for next steps
-    if output_lines:
-        output = "\n".join(output_lines)
         hook_response = {
             "hookSpecificOutput": {
                 "hookEventName": "PostToolUse",
-                "additionalContext": output
+                "additionalContext": directive
             }
         }
         print(json.dumps(hook_response))
         sys.exit(0)
-    else:
-        sys.exit(0)  # No output needed
+
+    # Non-blocking: Just guide Claude to continue chain
+    if step > 0 and total > 0 and step < total:
+        hook_response = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": f'Continue chain: prompt_engine(chain_id="{chain_id}")'
+            }
+        }
+        print(json.dumps(hook_response))
+        sys.exit(0)
+
+    sys.exit(0)  # No output needed
 
 
 if __name__ == "__main__":

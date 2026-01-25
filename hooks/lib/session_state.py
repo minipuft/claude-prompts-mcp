@@ -116,9 +116,27 @@ def parse_prompt_engine_response(response: str | dict) -> ChainState | None:
     if chain_match:
         state["chain_id"] = chain_match.group(1)
 
-    # Detect inline gates section
-    if "## Inline Gates" in content or "Gate" in content:
-        # Extract gate names
+    # Detect gate review required (new server format from 11-call-to-action-stage.ts)
+    # Format: ⚠️ **Gate Review Required** (attempt X/Y)
+    #         **Gates**: gate-id-1, gate-id-2
+    gate_review_match = re.search(r'\*\*Gate Review Required\*\*', content)
+    gates_list_match = re.search(r'\*\*Gates\*\*:\s*(.+?)(?:\n|$)', content)
+
+    if gate_review_match or gates_list_match:
+        # Extract gate IDs from new format: **Gates**: id1, id2
+        if gates_list_match:
+            gates_str = gates_list_match.group(1).strip()
+            state["pending_gate"] = gates_str  # Store comma-separated gate IDs
+
+        # Extract attempt info: (attempt X/Y)
+        attempt_match = re.search(r'\(attempt\s+(\d+)/(\d+)\)', content)
+        if attempt_match:
+            # Store attempt count in shell_verify_attempts for now (reusing field)
+            state["shell_verify_attempts"] = int(attempt_match.group(1))
+
+    # Fallback: Detect legacy inline gates section
+    elif "## Inline Gates" in content:
+        # Extract gate names from legacy format
         gate_names = re.findall(r'###\s*([A-Za-z][A-Za-z0-9 _-]+)\n', content)
         if gate_names:
             state["pending_gate"] = gate_names[0].strip()
@@ -174,7 +192,7 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
         if verify_cmd:
             line2 = f"→ Shell verify: `{verify_cmd}` will validate"
         elif gate:
-            line2 = "→ GATE_REVIEW: PASS|FAIL - <reason>"
+            line2 = '→ gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"'
         elif step > 0 and step < total:
             line2 = f"→ prompt_engine(chain_id:\"{chain_id}\") to continue"
         else:
@@ -191,7 +209,7 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
             lines.append(f"[Chain] Step {step}/{total}")
 
     if gate:
-        lines.append(f"[Gate] {gate} - Respond: GATE_REVIEW: PASS|FAIL - <reason>")
+        lines.append(f'[Gate] {gate} - Submit: gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"')
 
     if verify_cmd:
         lines.append(f"[Verify] `{verify_cmd}` - Attempt {verify_attempts}/5")

@@ -42,7 +42,6 @@ def main():
     # Extract parameters
     chain_id = tool_input.get("chain_id", "")
     gate_verdict = tool_input.get("gate_verdict", "")
-    user_response = tool_input.get("user_response", "")
 
     # Check 1: FAIL verdict should trigger retry guidance
     if gate_verdict:
@@ -51,17 +50,13 @@ def main():
         if fail_match:
             # Extract the reason
             reason_match = re.search(r'FAIL\s*[-:]\s*(.+)', gate_verdict, re.IGNORECASE)
-            reason = reason_match.group(1).strip() if reason_match else "unspecified"
+            reason = reason_match.group(1).strip()[:50] if reason_match else "unspecified"
 
             hook_response = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"Gate failed: {reason}. "
-                        "Review the gate criteria and retry with improvements. "
-                        "Resubmit with GATE_REVIEW: PASS once criteria are met."
-                    )
+                    "permissionDecisionReason": f"Gate FAIL: {reason}. Improve and retry with PASS."
                 }
             }
             print(json.dumps(hook_response))
@@ -74,34 +69,16 @@ def main():
         state = load_session_state(session_id) if session_id else None
 
         if state and state.get("pending_gate"):
+            gate = state['pending_gate']
             hook_response = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"Chain resume requires gate verdict. "
-                        f"Pending gate: {state['pending_gate']}. "
-                        "Include gate_verdict: GATE_REVIEW: PASS|FAIL - <reason>"
-                    )
+                    "permissionDecisionReason": f"Gate pending: {gate}. Submit gate_verdict first."
                 }
             }
             print(json.dumps(hook_response))
             sys.exit(0)
-
-    # Check 3: Resuming chain without user_response
-    if chain_id and not user_response:
-        hook_response = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    "Chain resume requires user_response with your output from the previous step. "
-                    "Include user_response parameter with the work completed."
-                )
-            }
-        }
-        print(json.dumps(hook_response))
-        sys.exit(0)
 
     # All checks passed - allow tool execution
     sys.exit(0)
