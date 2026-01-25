@@ -432,11 +432,11 @@ export class ArgumentParser {
   }
 
   /**
-   * Apply intelligent defaults for arguments when user provides plain text
+   * Apply defaults for arguments when user provides plain text
    * and prompt has multiple arguments.
    *
-   * Uses name-based semantic matching to assign content to the most appropriate
-   * argument, then fills remaining arguments with contextual defaults.
+   * Simple strategy: Unstructured content goes to the first argument.
+   * Priority: first required arg > first arg. Remaining args get defaults.
    */
   private applyIntelligentDefaults(
     userContent: string,
@@ -446,51 +446,25 @@ export class ArgumentParser {
     contextSources: Record<string, string>,
     context: ExecutionContext
   ): void {
-    // Essential content argument patterns (simplified from 12 to 5)
-    // These cover the vast majority of real-world prompt argument naming
-    const contentPriority = ['content', 'input', 'text', 'code', 'data'];
-
-    // Find the most appropriate argument for user content
-    let targetArg = null;
-
-    // Strategy 1: Name-based semantic match (primary strategy)
-    for (const priority of contentPriority) {
-      targetArg = promptData.arguments.find((arg) => arg.name.toLowerCase().includes(priority));
-      if (targetArg) {
-        this.logger.debug(`Semantic match found: ${targetArg.name} (matched: ${priority})`);
-        break;
-      }
-    }
-
-    // Strategy 2: First required argument
-    if (!targetArg) {
-      targetArg = promptData.arguments.find((arg) => arg.required);
-      if (targetArg) {
-        this.logger.debug(`First required argument selected: ${targetArg.name}`);
-      }
-    }
-
-    // Strategy 3: First argument (fallback)
+    // Simple strategy: Unstructured content goes to first argument
+    // Priority: first required arg > first arg
+    let targetArg: PromptArgument | undefined = promptData.arguments.find((arg) => arg.required);
     if (!targetArg && promptData.arguments.length > 0) {
-      const firstArg = promptData.arguments[0];
-      if (firstArg) {
-        targetArg = firstArg;
-        this.logger.debug(`First argument fallback: ${targetArg.name}`);
-      }
+      targetArg = promptData.arguments[0];
     }
 
     // Assign user content to target argument
     if (targetArg && userContent) {
       processedArgs[targetArg.name] = userContent.trim();
-      contextSources[targetArg.name] = 'user_provided_smart_mapped';
+      contextSources[targetArg.name] = 'user_provided';
       this.logger.debug(
-        `Mapped user content to ${targetArg.name}: "${userContent.substring(0, 50)}..."`
+        `Assigned content to ${targetArg.name}: "${userContent.substring(0, 50)}..."`
       );
     }
 
     // Fill remaining arguments with contextual defaults
     for (const arg of promptData.arguments) {
-      if (!processedArgs[arg.name]) {
+      if (processedArgs[arg.name] === undefined) {
         const defaultValue = this.resolveContextualDefault(arg, context);
         processedArgs[arg.name] = defaultValue.value;
         contextSources[arg.name] = defaultValue.source;
@@ -500,7 +474,7 @@ export class ArgumentParser {
       }
     }
 
-    this.logger.debug(`Intelligent defaults applied:`, {
+    this.logger.debug(`Defaults applied:`, {
       promptId: promptData.id,
       userContentLength: userContent.length,
       targetArgument: targetArg?.name,
