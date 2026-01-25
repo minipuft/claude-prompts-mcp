@@ -11,6 +11,7 @@
  * @see GateManager for the pattern this follows
  */
 
+import { isGateActiveForContext } from '../gates/utils/gate-activation.js';
 import { Logger } from '../logging/index.js';
 import {
   StyleDefinitionLoader,
@@ -182,6 +183,9 @@ export class StyleManager {
   /**
    * Check if a style should be auto-applied for a given context
    *
+   * Uses the canonical gate activation utility for rule checking.
+   * Note: Styles differ from gates in that no activation rules = NOT auto-applied.
+   *
    * @param styleId - The style ID
    * @param context - Activation context
    * @returns true if the style should be auto-applied
@@ -190,32 +194,14 @@ export class StyleManager {
     const style = this.getStyle(styleId);
     if (!style) return false;
     if (!style.enabled) return false;
-    if (!style.activation) return false;
+    if (!style.activation) return false; // Styles require explicit activation rules
 
-    // Check explicit request requirement
-    if (style.activation.explicit_request && !context.explicitRequest) {
-      return false;
-    }
-
-    // Check category match
-    if (style.activation.prompt_categories?.length && context.promptCategory) {
-      if (!style.activation.prompt_categories.includes(context.promptCategory)) {
-        return false;
-      }
-    }
-
-    // Check framework context
-    if (style.activation.framework_context?.length && context.framework) {
-      if (
-        !style.activation.framework_context.some(
-          (f) => f.toUpperCase() === context.framework!.toUpperCase()
-        )
-      ) {
-        return false;
-      }
-    }
-
-    return true;
+    // Use canonical gate activation utility for rule checking
+    return isGateActiveForContext(style.activation, {
+      promptCategory: context.promptCategory,
+      framework: context.framework,
+      explicitRequest: context.explicitRequest,
+    });
   }
 
   /**

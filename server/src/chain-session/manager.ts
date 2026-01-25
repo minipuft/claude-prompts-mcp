@@ -31,7 +31,7 @@ import type {
   PersistedChainRunRegistry,
   SessionBlueprint,
 } from './types.js';
-import type { ParsedCommand } from '../execution/context/execution-context.js';
+import type { ParsedCommand } from '../execution/context/index.js';
 import type { GateReviewPrompt } from '../execution/types.js';
 
 interface ChainSessionManagerOptions {

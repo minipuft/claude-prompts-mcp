@@ -1,5 +1,5 @@
 // @lifecycle canonical - Type definitions for chain sessions.
-import type { ParsedCommand } from '../execution/context/execution-context.js';
+import type { ParsedCommand } from '../execution/context/index.js';
 import type { ExecutionPlan } from '../execution/types.js';
 import type {
   ChainState,

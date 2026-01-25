@@ -391,8 +391,10 @@ export class ConfigManager extends EventEmitter {
       'gate-guidance': {
         ...DEFAULT_INJECTION_CONFIG['gate-guidance'],
         enabled: this.getGatesConfig().enabled,
-        // Guide quality criteria to gate review steps by default
-        target: 'gates' as const,
+        // Inject gates on first step (to set expectations) and all gate reviews (for guidance)
+        // Frequency 'first-only' limits step injection; gate reviews bypass frequency check
+        frequency: { mode: 'first-only' as const },
+        target: 'both' as const,
       },
       'style-guidance': {
         ...DEFAULT_INJECTION_CONFIG['style-guidance'],
