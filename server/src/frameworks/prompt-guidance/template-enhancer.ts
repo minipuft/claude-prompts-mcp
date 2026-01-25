@@ -2,8 +2,7 @@
 /**
  * Template Enhancer - Resource-Driven Implementation
  *
- * Enhances user templates by injecting methodology guidance and framework-specific
- * improvements selected by the Semantic Judge.
+ * Enhances user templates by applying lightweight structural guidance.
  *
  * Architecture Shift:
  * - Legacy: Hardcoded TypeScript methods generating strings.
@@ -13,22 +12,18 @@
 import { Logger } from '../../logging/index.js';
 import { ConvertedPrompt } from '../../types/index.js';
 
-import type { ContentAnalysisResult } from '../../semantic/types.js';
-
 /**
  * Template enhancement configuration
  */
 export interface TemplateEnhancerConfig {
   enableArgumentSuggestions: boolean; // Kept for compat
   enableStructureOptimization: boolean; // Kept for compat
-  enableSemanticAwareness: boolean;
 }
 
 /**
  * Template Enhancer
  *
- * Applies methodology-specific enhancements to user templates by injecting
- * static resources selected by the Semantic Judge (LLM).
+ * Applies lightweight structure improvements to user templates.
  */
 export class TemplateEnhancer {
   private logger: Logger;
@@ -39,7 +34,6 @@ export class TemplateEnhancer {
     this.config = {
       enableArgumentSuggestions: true,
       enableStructureOptimization: true,
-      enableSemanticAwareness: true,
       ...config,
     };
   }
@@ -54,9 +48,7 @@ export class TemplateEnhancer {
     // Legacy args kept for interface compatibility but unused
     _methodologyGuide?: any,
     _framework?: any,
-    _context?: any,
-    semanticAnalysis?: ContentAnalysisResult,
-    availableResources?: ConvertedPrompt[]
+    _context?: any
   ): Promise<{
     originalTemplate: string;
     enhancedTemplate: string;
@@ -65,42 +57,8 @@ export class TemplateEnhancer {
   }> {
     const startTime = Date.now();
     let enhancedTemplate = template;
-    const injectedResources: string[] = [];
-
-    // 1. Apply Semantic Enhancements (Resource Injection)
-    if (
-      this.config.enableSemanticAwareness &&
-      semanticAnalysis?.executionCharacteristics?.advancedChainFeatures?.selected_resources &&
-      availableResources
-    ) {
-      const selectedIds =
-        semanticAnalysis.executionCharacteristics.advancedChainFeatures.selected_resources;
-
-      this.logger.debug(`[TemplateEnhancer] Injecting resources: ${selectedIds.join(', ')}`);
-
-      for (const resourceId of selectedIds) {
-        // Fuzzy match: "analytical" or "guidance/analytical"
-        const resource = availableResources.find(
-          (r) => r.id === resourceId || r.id === `guidance/${resourceId}`
-        );
-
-        if (resource) {
-          // Append the resource content (Methodology Frameworks typically go at the end)
-          enhancedTemplate += `\n\n${resource.userMessageTemplate}`;
-          injectedResources.push(resource.id);
-        } else {
-          this.logger.warn(`[TemplateEnhancer] Resource not found: ${resourceId}`);
-        }
-      }
-    }
-
-    // 2. Legacy Structure Fallback (Minimal)
-    // If no resources selected but structure requested, add basic header
-    if (
-      injectedResources.length === 0 &&
-      this.config.enableStructureOptimization &&
-      !template.startsWith('##')
-    ) {
+    // Legacy Structure Fallback (Minimal)
+    if (this.config.enableStructureOptimization && !template.startsWith('##')) {
       enhancedTemplate = `## Task Context\n\n${template}`;
     }
 
@@ -113,8 +71,7 @@ export class TemplateEnhancer {
       },
       metadata: {
         processingTimeMs: Date.now() - startTime,
-        enhancementLevel: 'resource-driven',
-        injectedResources,
+        enhancementLevel: 'structure-fallback',
       },
     };
   }

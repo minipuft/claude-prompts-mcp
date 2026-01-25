@@ -33,7 +33,6 @@ export interface ContentAnalysisResult {
     hasMethodologyKeywords: boolean;
     hasComplexAnalysis: boolean;
     advancedChainFeatures?: {
-      selected_resources?: string[];
       hasDependencies: boolean;
       hasParallelSteps: boolean;
       hasAdvancedStepTypes: boolean;

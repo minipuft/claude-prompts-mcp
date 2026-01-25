@@ -153,8 +153,6 @@ export class PromptGuidanceService {
       includeTemplateEnhancement?: boolean;
       frameworkOverride?: string;
       semanticAnalysis?: ContentAnalysisResult;
-      selectedResources?: string[];
-      availableResources?: ConvertedPrompt[];
     } = {}
   ): Promise<PromptGuidanceResult> {
     const startTime = Date.now();
@@ -243,53 +241,9 @@ export class PromptGuidanceService {
       // Apply template enhancement if enabled
       if (this.config.templateEnhancement.enabled && options.includeTemplateEnhancement !== false) {
         try {
-          let effectiveSemanticAnalysis = options.semanticAnalysis;
-          if (options.selectedResources?.length && effectiveSemanticAnalysis) {
-            effectiveSemanticAnalysis = {
-              ...effectiveSemanticAnalysis,
-              executionCharacteristics: {
-                ...effectiveSemanticAnalysis.executionCharacteristics,
-                advancedChainFeatures: {
-                  ...effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures,
-                  selected_resources: options.selectedResources,
-                  hasDependencies:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasDependencies ?? false,
-                  hasParallelSteps:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasParallelSteps ?? false,
-                  hasAdvancedStepTypes:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasAdvancedStepTypes ?? false,
-                  hasAdvancedErrorHandling:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasAdvancedErrorHandling ?? false,
-                  hasStepConfigurations:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasStepConfigurations ?? false,
-                  hasCustomTimeouts:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.hasCustomTimeouts ?? false,
-                  requiresAdvancedExecution:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.requiresAdvancedExecution ?? false,
-                  complexityScore:
-                    effectiveSemanticAnalysis.executionCharacteristics?.advancedChainFeatures
-                      ?.complexityScore ?? 0,
-                },
-              },
-            };
-          }
-
-          const availableResources = options.availableResources ?? [];
           const enhancementResult = await this.templateEnhancer.enhanceTemplate(
             enhancedPrompt.userMessageTemplate,
-            enhancedPrompt,
-            undefined,
-            undefined,
-            undefined,
-            effectiveSemanticAnalysis,
-            availableResources
+            enhancedPrompt
           );
 
           enhancedPrompt.userMessageTemplate = enhancementResult.enhancedTemplate;
@@ -393,101 +347,6 @@ export class PromptGuidanceService {
         validationPassed: true,
       },
     };
-  }
-
-  /**
-   * Apply runtime enhancement based on LLM judge result
-   */
-  async applyRuntimeEnhancement(
-    template: string,
-    judgeResult: any,
-    availableResources: ConvertedPrompt[],
-    frameworkOverride?: string
-  ): Promise<string> {
-    if (!this.initialized) {
-      this.logger.warn('PromptGuidanceService not initialized for runtime enhancement');
-      return template;
-    }
-
-    try {
-      const semanticAnalysis: ContentAnalysisResult = {
-        complexity: judgeResult.complexity || 'low',
-        confidence: judgeResult.confidence || 0.5,
-        reasoning: [judgeResult.reasoning || 'Runtime judge decision'],
-        executionCharacteristics: {
-          hasStructuredReasoning:
-            judgeResult.intent === 'analytical' || judgeResult.intent === 'procedural',
-          hasComplexAnalysis: judgeResult.intent === 'analytical',
-          hasMethodologyKeywords: judgeResult.intent === 'creative',
-          hasConditionals: false,
-          hasLoops: false,
-          hasChainSteps: false,
-          argumentCount: 0,
-          templateComplexity: 0,
-          hasSystemMessage: false,
-          hasUserTemplate: true,
-          advancedChainFeatures: {
-            selected_resources: judgeResult.selected_resources || [],
-            hasDependencies: false,
-            hasParallelSteps: false,
-            hasAdvancedStepTypes: false,
-            hasAdvancedErrorHandling: false,
-            hasStepConfigurations: false,
-            hasCustomTimeouts: false,
-            requiresAdvancedExecution: false,
-            complexityScore: 0,
-          },
-        },
-        executionType: 'single',
-        requiresExecution: true,
-        requiresFramework: true,
-        capabilities: {
-          canDetectStructure: true,
-          canAnalyzeComplexity: true,
-          canRecommendFramework: true,
-          hasSemanticUnderstanding: true,
-        },
-        limitations: [],
-        warnings: [],
-        suggestedGates: [],
-        frameworkRecommendation: {
-          shouldUseFramework: true,
-          reasoning: [],
-          confidence: 0.8,
-        },
-        analysisMetadata: {
-          version: '1.0',
-          mode: 'semantic',
-          analysisTime: 0,
-          analyzer: 'content',
-          cacheHit: false,
-          llmUsed: true,
-        },
-      };
-
-      const activeFramework = await this.getActiveFramework(frameworkOverride);
-      const methodologyGuide = await this.getMethodologyGuide(activeFramework.type);
-
-      const result = await this.templateEnhancer.enhanceTemplate(
-        template,
-        {
-          id: 'runtime-enhancement',
-          name: 'Runtime Enhancement',
-          userMessageTemplate: template,
-          arguments: [],
-        } as unknown as ConvertedPrompt,
-        methodologyGuide,
-        activeFramework,
-        undefined,
-        semanticAnalysis,
-        availableResources
-      );
-
-      return result.enhancedTemplate;
-    } catch (error) {
-      this.logger.error('Runtime enhancement failed:', error);
-      return template;
-    }
   }
 
   /**
