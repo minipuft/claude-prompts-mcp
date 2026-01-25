@@ -313,6 +313,74 @@ export enum StepStatus {
   SKIPPED = 'skipped',
 }
 
+// ===== MCP Error Codes for Structured Response Contract =====
+
+/**
+ * Standardized error codes for MCP tool responses.
+ * Enables programmatic error routing in client hooks.
+ */
+export enum McpErrorCode {
+  /** Gate verdict is required to continue chain execution */
+  GATE_VERDICT_REQUIRED = 'GATE_VERDICT_REQUIRED',
+  /** Maximum gate retry attempts have been exceeded */
+  GATE_RETRY_EXCEEDED = 'GATE_RETRY_EXCEEDED',
+  /** Response content blocked due to gate failure with blockResponseOnFail */
+  GATE_RESPONSE_BLOCKED = 'GATE_RESPONSE_BLOCKED',
+  /** Chain session not found for the provided chain_id */
+  CHAIN_SESSION_NOT_FOUND = 'CHAIN_SESSION_NOT_FOUND',
+  /** Framework is disabled but framework-specific operation was requested */
+  FRAMEWORK_DISABLED = 'FRAMEWORK_DISABLED',
+  /** Prompt not found in registry */
+  PROMPT_NOT_FOUND = 'PROMPT_NOT_FOUND',
+  /** Invalid gate verdict format */
+  INVALID_GATE_VERDICT = 'INVALID_GATE_VERDICT',
+}
+
+/**
+ * Gate retry information for structured responses.
+ * Provides clients with retry state for implementing retry logic.
+ */
+export interface GateRetryInfo {
+  /** Maximum number of retry attempts allowed */
+  maxAttempts: number;
+  /** Current attempt number (1-indexed) */
+  currentAttempt: number;
+  /** Whether more retries are allowed */
+  retryAllowed: boolean;
+}
+
+/**
+ * Extended gate validation info for structured responses.
+ * Provides explicit fields for client hook consumption.
+ */
+export interface GateValidationInfo {
+  /** Whether gate validation is enabled */
+  enabled: boolean;
+  /** Whether all gates passed */
+  passed: boolean;
+  /** Total number of gates evaluated */
+  totalGates: number;
+  /** Gates that failed with reasons */
+  failedGates: Array<{ id: string; reason: string }>;
+  /** Gates that passed (optional, for debugging) */
+  passedGates?: Array<{ id: string }>;
+  /** Gate evaluation execution time in ms */
+  executionTime: number;
+  /** Legacy retry count field */
+  retryCount?: number;
+
+  // ===== New Fields for Structured Response Contract =====
+
+  /** Gate IDs awaiting verdict from client */
+  pendingGateIds: string[];
+  /** Whether client must provide gate_verdict to proceed */
+  requiresGateVerdict: boolean;
+  /** Whether response content was suppressed due to gate failure */
+  responseBlocked: boolean;
+  /** Detailed retry information for client retry logic */
+  gateRetryInfo: GateRetryInfo;
+}
+
 // ===== End of Consolidated Type Definitions =====
 // Types are now organized by domain for better maintainability:
 // - Core types: ../types.js

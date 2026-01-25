@@ -454,6 +454,25 @@ export function setupConsoleRedirection(logger: Logger): void {
 }
 
 /**
+ * Create a no-op logger for tests and cases where logging isn't needed.
+ * All methods are empty functions that discard log messages.
+ */
+export function createNoopLogger(): Logger {
+  return {
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  };
+}
+
+/**
+ * Pre-instantiated no-op logger singleton for convenience.
+ * Use this when you need a logger instance but don't want any output.
+ */
+export const noopLogger: Logger = createNoopLogger();
+
+/**
  * Setup process event handlers for logging
  */
 export function setupProcessEventHandlers(logger: Logger): void {

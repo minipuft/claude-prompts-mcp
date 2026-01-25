@@ -1,28 +1,23 @@
 // @lifecycle canonical - Holds runtime execution context data and helpers.
+import { noopLogger } from '../../logging/index.js';
 import { FrameworkDecisionAuthority } from '../pipeline/decisions/index.js';
 import { DiagnosticAccumulator } from '../pipeline/state/accumulators/diagnostic-accumulator.js';
 import { GateAccumulator } from '../pipeline/state/accumulators/gate-accumulator.js';
 import { McpToolRequestValidator } from '../validation/request-validator.js';
 
+import type {
+  NamedInlineGate,
+  ParsedCommand,
+  SessionContext,
+  ExecutionResults,
+} from './context-types.js';
 import type { InitializedScriptState, PipelineInternalState } from './internal-state.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { Logger } from '../../logging/index.js';
-import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
 import type { ConvertedPrompt, ToolResponse, McpToolRequest } from '../../types/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
-import type { CommandParseResult } from '../parsers/command-parser.js';
 import type { GateEnforcementAuthority } from '../pipeline/decisions/index.js';
 import type { ExecutionModifiers, ExecutionPlan } from '../types.js';
-
-/**
- * No-op logger for tests and cases where logging isn't needed.
- */
-const noopLogger: Logger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
 
 /**
  * Unified execution context that flows through the new pipeline
@@ -356,68 +351,4 @@ export class ExecutionContext {
   }
 }
 
-// McpToolRequest interface moved to server/src/types/execution.ts
-// Import from centralized types instead
-
-/**
- * Named inline gate from symbolic syntax (e.g., `:: security:"no secrets"`)
- * Also supports shell verification gates (e.g., `:: verify:"npm test"`)
- */
-export interface NamedInlineGate {
-  /** Explicit gate ID from symbolic syntax */
-  gateId: string;
-  /** Criteria associated with this named gate */
-  criteria: string[];
-  /** Shell verification config for Ralph Wiggum loops (when using `:: verify:"command"`) */
-  shellVerify?: {
-    command: string;
-    timeout?: number;
-    workingDir?: string;
-  };
-}
-
-/**
- * Parsed command representation shared between parsing and planning stages.
- */
-export interface ParsedCommand extends CommandParseResult {
-  commandType?: 'single' | 'chain';
-  convertedPrompt?: ConvertedPrompt;
-  promptArgs?: Record<string, unknown>;
-  /** Anonymous inline criteria (merged from `:: "criteria"` without explicit ID) */
-  inlineGateCriteria?: string[];
-  inlineGateIds?: string[];
-  /** Named inline gates with explicit IDs from symbolic syntax (e.g., `:: id:"criteria"`) */
-  namedInlineGates?: NamedInlineGate[];
-  chainId?: string;
-  steps?: ChainStepPrompt[];
-  modifiers?: ExecutionModifiers;
-  styleSelection?: string;
-}
-
-// ExecutionPlan and ExecutionStrategyType are now imported from ../types.js
-// This eliminates the circular dependency with operators/types.ts
-
-/**
- * Session state propagated through the pipeline.
- */
-export interface SessionContext {
-  sessionId: string;
-  chainId?: string;
-  isChainExecution: boolean;
-  currentStep?: number;
-  totalSteps?: number;
-  pendingReview?: PendingGateReview;
-  /** Result status from the previous step (for injection condition evaluation) */
-  previousStepResult?: 'success' | 'failure' | 'skipped';
-  /** Quality score from the previous step (0-100, if gate evaluation provided one) */
-  previousStepQualityScore?: number;
-}
-
-/**
- * Holds raw execution results before formatting into ToolResponse objects.
- */
-export interface ExecutionResults {
-  content: unknown;
-  metadata?: Record<string, unknown>;
-  generatedAt?: number;
-}
+// ExecutionPlan and ExecutionStrategyType are imported from ../types.js

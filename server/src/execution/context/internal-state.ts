@@ -49,10 +49,6 @@ export interface PipelineInternalState {
     systemPromptApplied?: boolean;
     /** The specific style guidance text applied */
     selectedStyleGuidance?: string;
-    /** Resources selected during judge phase for prompt guidance */
-    selectedResources?: string[];
-    /** Available guidance resources from judge selection stage */
-    availableResources?: unknown[];
     /** Results from prompt guidance service, keyed by prompt ID */
     guidanceResults?: Record<string, unknown>;
   };
@@ -133,6 +129,16 @@ export interface PipelineInternalState {
     accumulatedGateIds?: string[];
     /** Whether blocking gates are present that require review */
     hasBlockingGates?: boolean;
+    /**
+     * Whether response content should be blocked due to gate failure.
+     * Set when a gate with blockResponseOnFail: true receives a FAIL verdict.
+     */
+    responseBlocked?: boolean;
+    /**
+     * Gate IDs that triggered response blocking.
+     * These are gates with blockResponseOnFail: true that received FAIL verdicts.
+     */
+    blockedGateIds?: string[];
     /** Parsed verdict detection metadata from gate review processing */
     verdictDetection?: {
       verdict: 'PASS' | 'FAIL';
