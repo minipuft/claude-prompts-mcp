@@ -11,7 +11,7 @@ import type { Logger } from '../../logging/index.js';
 import type { ContentAnalyzer } from '../../semantic/configurable-semantic-analyzer.js';
 import type { ContentAnalysisResult } from '../../semantic/types.js';
 import type { ConvertedPrompt, GateDefinition } from '../../types/index.js';
-import type { ParsedCommand } from '../context/execution-context.js';
+import type { ParsedCommand } from '../context/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 import type {
   ExecutionModifier,

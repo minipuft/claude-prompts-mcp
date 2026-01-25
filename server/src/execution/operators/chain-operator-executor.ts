@@ -1,8 +1,8 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
+import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
 import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
 import { composeReviewPrompt } from '../../gates/core/review-utils.js';
 import { Logger } from '../../logging/index.js';
-import { safeJsonParse } from '../../utils/index.js';
 import { processTemplate, processTemplateWithRefs } from '../../utils/jsonUtils.js';
 
 import type {
@@ -12,7 +12,6 @@ import type {
   GateReviewInput,
   NormalStepInput,
 } from './types.js';
-import type { PromptGuidanceService } from '../../frameworks/prompt-guidance/index.js';
 import type { PendingGateReview } from '../../mcp-tools/prompt-engine/core/types.js';
 import type { ConvertedPrompt } from '../../types/index.js';
 import type { IScriptReferenceResolver } from '../../utils/jsonUtils.js';
@@ -44,7 +43,6 @@ export class ChainOperatorExecutor {
       category?: string;
       systemPrompt?: string;
     } | null>,
-    private readonly promptGuidanceService?: PromptGuidanceService,
     private readonly referenceResolver?: PromptReferenceResolver,
     private readonly scriptReferenceResolver?: IScriptReferenceResolver
   ) {}
@@ -383,39 +381,8 @@ export class ChainOperatorExecutor {
       }
     }
 
-    // Runtime Semantic Enhancement (Self-Loop)
-    let templateToRender = convertedPrompt.userMessageTemplate;
-
-    if (this.promptGuidanceService && templateContext['previous_step_output']) {
-      const previousOutputStr = String(templateContext['previous_step_output']);
-      // Simple check to see if it looks like JSON
-      if (previousOutputStr.trim().startsWith('{')) {
-        const parseResult = safeJsonParse(previousOutputStr);
-        if (
-          parseResult.success &&
-          parseResult.data &&
-          (parseResult.data.complexity ||
-            parseResult.data.intent ||
-            parseResult.data.selected_resources)
-        ) {
-          this.logger.info(
-            `[SymbolicChain] Applying runtime enhancement based on Judge result for step ${step.stepNumber}`
-          );
-          try {
-            templateToRender = await this.promptGuidanceService.applyRuntimeEnhancement(
-              templateToRender,
-              parseResult.data,
-              this.convertedPrompts
-            );
-          } catch (error) {
-            this.logger.warn('[SymbolicChain] Runtime enhancement failed', error);
-          }
-        }
-      }
-    }
-
     const renderedTemplate = await this.renderTemplateString(
-      templateToRender,
+      convertedPrompt.userMessageTemplate,
       templateContext,
       step.promptId
     );
@@ -436,7 +403,7 @@ export class ChainOperatorExecutor {
     const suppressFrameworkInjection = this.shouldSuppressFrameworkForSteps(chainContext);
     const gateGuidanceEnabled = this.isGateGuidanceEnabled(chainContext);
 
-    if (!suppressFrameworkInjection && !this.hasFrameworkGuidance(convertedPrompt?.systemMessage)) {
+    if (!suppressFrameworkInjection && !hasFrameworkGuidance(convertedPrompt?.systemMessage)) {
       const frameworkGuidance = await this.buildFrameworkGuidance(step);
       if (frameworkGuidance) {
         lines.push(frameworkGuidance);
@@ -641,27 +608,6 @@ export class ChainOperatorExecutor {
       return false;
     }
     return gateId.startsWith('temp_') || gateId.startsWith('inline_gate_');
-  }
-
-  private hasFrameworkGuidance(systemMessage?: string): boolean {
-    if (!systemMessage) {
-      return false;
-    }
-
-    const frameworkIndicators = [
-      'Apply the C.A.G.E.E.R.F methodology systematically',
-      'Apply the ReACT methodology systematically',
-      'Apply the 5W1H methodology systematically',
-      'Apply the SCAMPER methodology systematically',
-      'You are operating under the C.A.G.E.E.R.F',
-      'You are operating under the ReACT',
-      'You are operating under the 5W1H',
-      'You are operating under the SCAMPER',
-      '**Context**: Establish comprehensive situational awareness',
-      '**Reasoning**: Think through the problem',
-    ];
-
-    return frameworkIndicators.some((indicator) => systemMessage.includes(indicator));
   }
 
   private getStoredStepResult(

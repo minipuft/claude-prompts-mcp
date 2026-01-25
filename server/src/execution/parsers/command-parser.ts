@@ -66,6 +66,8 @@ export class UnifiedCommandParser {
   private registeredFrameworkIds: Set<string>;
 
   // Parsing statistics for monitoring
+  // TODO: Wire stats to MetricsCollector for telemetry dashboard
+  // These are tracked but not yet exposed via system_control analytics
   private stats = {
     totalParses: 0,
     successfulParses: 0,
@@ -289,10 +291,14 @@ export class UnifiedCommandParser {
         // - :: or = followed by any value (quoted or unquoted)
         // - @FRAMEWORK at start OR after whitespace (ONLY outside quoted strings)
         // - + (parallel)
-        // - ? (conditional)
+        // - ? "condition" : >>branch (conditional - must match full pattern, not bare ?)
         // - #id style selector (e.g., #analytical, #procedural)
         // - * N repetition (e.g., >>prompt *3)
-        const hasChainGateOrOther = /-->|(::|=)\s*\S|\+|\?|\s+\*\s*\d+/.test(command);
+        // Note: Bare ? in natural language (e.g., "is there a bug?") should NOT trigger symbolic
+        const hasConditionalOperator =
+          /\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-9_-]+)/.test(command);
+        const hasChainGateOrOther =
+          /-->|(::|=)\s*\S|\+|\s+\*\s*\d+/.test(command) || hasConditionalOperator;
         const hasStyleOperator = /(?:^|\s)#[A-Za-z][A-Za-z0-9_-]*(?=\s|$|>>)/.test(command);
         // Use quote-aware detection for framework operators to avoid matching @word inside quotes
         const hasFrameworkOperator = findFrameworkOperatorOutsideQuotes(command) !== null;
@@ -351,8 +357,13 @@ export class UnifiedCommandParser {
         // Skip if has symbolic operators (handled by symbolic strategy)
         // Note: Gate operators (:: or =) must be preceded by whitespace to avoid
         // matching argument assignment syntax like input="value"
+        // Note: Bare ? is allowed (natural language questions); only full conditional pattern triggers symbolic
         // Use quote-aware detection for framework operators
-        const hasOtherOperators = /-->|\s(::|=)\s*\S|\+|\?|\s+\*\s*\d+/.test(trimmed);
+        const hasConditionalOp = /\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-9_-]+)/.test(
+          trimmed
+        );
+        const hasOtherOperators =
+          /-->|\s(::|=)\s*\S|\+|\s+\*\s*\d+/.test(trimmed) || hasConditionalOp;
         const hasFrameworkOp = findFrameworkOperatorOutsideQuotes(trimmed) !== null;
         if (hasOtherOperators || hasFrameworkOp) return false;
         // Accept with or without >> or / prefix (bare prompt names now supported)

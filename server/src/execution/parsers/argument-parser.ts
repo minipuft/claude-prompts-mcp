@@ -76,6 +76,8 @@ export class ArgumentParser {
   private schemaValidator: ArgumentSchemaValidator;
 
   // Processing statistics
+  // TODO: Wire stats to MetricsCollector for telemetry dashboard
+  // These are tracked but not yet exposed via system_control analytics
   private stats = {
     totalProcessed: 0,
     successfulProcessing: 0,
@@ -430,8 +432,11 @@ export class ArgumentParser {
   }
 
   /**
-   * Apply intelligent defaults for arguments
-   * ENHANCED: Smarter content mapping and auto-fill for 100% success rate
+   * Apply intelligent defaults for arguments when user provides plain text
+   * and prompt has multiple arguments.
+   *
+   * Uses name-based semantic matching to assign content to the most appropriate
+   * argument, then fills remaining arguments with contextual defaults.
    */
   private applyIntelligentDefaults(
     userContent: string,
@@ -441,27 +446,14 @@ export class ArgumentParser {
     contextSources: Record<string, string>,
     context: ExecutionContext
   ): void {
-    // Enhanced priority order for content assignment with better semantic matching
-    const contentPriority = [
-      'content',
-      'text',
-      'input',
-      'data',
-      'message',
-      'query',
-      'prompt',
-      'description',
-      'topic',
-      'subject',
-      'analysis',
-      'code',
-      'file',
-    ];
+    // Essential content argument patterns (simplified from 12 to 5)
+    // These cover the vast majority of real-world prompt argument naming
+    const contentPriority = ['content', 'input', 'text', 'code', 'data'];
 
-    // Find the most appropriate argument for user content using multiple strategies
+    // Find the most appropriate argument for user content
     let targetArg = null;
 
-    // Strategy 1: Exact semantic match
+    // Strategy 1: Name-based semantic match (primary strategy)
     for (const priority of contentPriority) {
       targetArg = promptData.arguments.find((arg) => arg.name.toLowerCase().includes(priority));
       if (targetArg) {
@@ -470,22 +462,7 @@ export class ArgumentParser {
       }
     }
 
-    // Strategy 2: Description-based matching
-    if (!targetArg && userContent) {
-      targetArg = promptData.arguments.find(
-        (arg) =>
-          arg.description &&
-          (arg.description.toLowerCase().includes('content') ||
-            arg.description.toLowerCase().includes('text') ||
-            arg.description.toLowerCase().includes('input') ||
-            arg.description.toLowerCase().includes('analyze'))
-      );
-      if (targetArg) {
-        this.logger.debug(`Description match found: ${targetArg.name}`);
-      }
-    }
-
-    // Strategy 3: First required argument
+    // Strategy 2: First required argument
     if (!targetArg) {
       targetArg = promptData.arguments.find((arg) => arg.required);
       if (targetArg) {
@@ -493,7 +470,7 @@ export class ArgumentParser {
       }
     }
 
-    // Strategy 4: First argument (fallback)
+    // Strategy 3: First argument (fallback)
     if (!targetArg && promptData.arguments.length > 0) {
       const firstArg = promptData.arguments[0];
       if (firstArg) {
@@ -502,31 +479,27 @@ export class ArgumentParser {
       }
     }
 
-    // Assign user content to target argument with intelligent processing
+    // Assign user content to target argument
     if (targetArg && userContent) {
-      processedArgs[targetArg.name] = this.processContentForArgument(userContent, targetArg);
+      processedArgs[targetArg.name] = userContent.trim();
       contextSources[targetArg.name] = 'user_provided_smart_mapped';
       this.logger.debug(
         `Mapped user content to ${targetArg.name}: "${userContent.substring(0, 50)}..."`
       );
     }
 
-    // Fill remaining arguments with enhanced contextual defaults
+    // Fill remaining arguments with contextual defaults
     for (const arg of promptData.arguments) {
       if (!processedArgs[arg.name]) {
-        const defaultValue = this.resolveEnhancedContextualDefault(
-          arg,
-          context,
-          userContent,
-          promptData
-        );
+        const defaultValue = this.resolveContextualDefault(arg, context);
         processedArgs[arg.name] = defaultValue.value;
         contextSources[arg.name] = defaultValue.source;
-        appliedDefaults.push(arg.name);
+        if (defaultValue.source !== 'none' && defaultValue.source !== 'empty_fallback') {
+          appliedDefaults.push(arg.name);
+        }
       }
     }
 
-    // Log the mapping for debugging
     this.logger.debug(`Intelligent defaults applied:`, {
       promptId: promptData.id,
       userContentLength: userContent.length,
@@ -534,27 +507,6 @@ export class ArgumentParser {
       totalArguments: promptData.arguments.length,
       appliedDefaults,
     });
-  }
-
-  /**
-   * Process content specifically for an argument type
-   */
-  private processContentForArgument(content: string, arg: PromptArgument): string {
-    // Basic content processing - can be enhanced further
-    const trimmed = content.trim();
-
-    // If argument name suggests it wants a specific format, attempt to extract it
-    if (arg.name.toLowerCase().includes('json') && !trimmed.startsWith('{')) {
-      // For JSON arguments, wrap simple content appropriately
-      return `{"content": "${trimmed.replace(/"/g, '\\"')}"}`;
-    }
-
-    if (arg.name.toLowerCase().includes('url') && !trimmed.match(/^https?:\/\//)) {
-      // Basic URL validation/enhancement could go here
-      this.logger.debug(`Argument ${arg.name} expects URL but got: ${trimmed.substring(0, 50)}`);
-    }
-
-    return trimmed;
   }
 
   /**
@@ -566,34 +518,6 @@ export class ArgumentParser {
       return { value: arg.defaultValue, source: 'argument_default' };
     }
     return { value: null, source: 'none' };
-  }
-
-  /**
-   * Enhanced contextual default resolver
-   * Simplified priority chain - no magic inference
-   */
-  private resolveEnhancedContextualDefault(
-    arg: PromptArgument,
-    context: ExecutionContext,
-    _userContent: string,
-    _promptData: PromptDefinition
-  ): { value: any; source: string } {
-    // Clean priority order - no guessing
-    const strategies = [
-      () => this.getFromArgumentDefault(arg), // Author-defined defaultValue
-      () => this.getFromPromptDefaults(arg, context.promptDefaults), // Runtime overrides
-      () => this.getFromEnvironment(arg, context.environmentVars), // Environment config
-    ];
-
-    for (const strategy of strategies) {
-      const result = strategy();
-      if (result.value !== null && result.value !== undefined && result.value !== '') {
-        return result;
-      }
-    }
-
-    // No value found - return empty, let template conditionals handle it
-    return { value: '', source: 'empty_fallback' };
   }
 
   /**
@@ -652,49 +576,37 @@ export class ArgumentParser {
   }
 
   /**
-   * Type coercion for arguments based on prompt definitions
+   * Type coercion for arguments based on explicit type field in prompt definitions.
+   *
+   * Uses argDef.type (not description parsing) for reliable type coercion.
+   * Also handles obvious boolean strings and JSON-like values.
    */
   private coerceArgumentType(
     value: string,
     argDef: PromptArgument
   ): { value: any; wasCoerced: boolean } {
-    const originalType = typeof value;
+    const argType = argDef.type?.toLowerCase();
 
-    // If argument has type hints in description, use them
-    const description = (argDef.description || '').toLowerCase();
-
-    if (description.includes('number') || description.includes('integer')) {
+    // Coerce based on explicit type field
+    if (argType === 'number') {
       const numValue = Number(value);
       if (!isNaN(numValue)) {
-        return { value: numValue, wasCoerced: originalType !== 'number' };
+        return { value: numValue, wasCoerced: true };
       }
     }
 
-    if (
-      description.includes('boolean') ||
-      value.toLowerCase() === 'true' ||
-      value.toLowerCase() === 'false'
-    ) {
-      return {
-        value: value.toLowerCase() === 'true',
-        wasCoerced: originalType !== 'boolean',
-      };
+    if (argType === 'boolean') {
+      return { value: value.toLowerCase() === 'true', wasCoerced: true };
     }
 
-    if (
-      description.includes('array') ||
-      description.includes('list') ||
-      argDef.name.toLowerCase().includes('list') ||
-      description.includes('A list of') ||
-      description.includes('list of')
-    ) {
+    if (argType === 'array') {
       try {
         const parsed = JSON.parse(value);
         if (Array.isArray(parsed)) {
           return { value: parsed, wasCoerced: true };
         }
       } catch {
-        // If not valid JSON, split by comma and clean up
+        // Split by comma as fallback for array type
         const arrayValue = value
           .split(',')
           .map((item) => item.trim())
@@ -703,24 +615,22 @@ export class ArgumentParser {
       }
     }
 
-    // Handle JSON objects
-    if (
-      description.includes('json') ||
-      description.includes('object') ||
-      description.includes('objects') ||
-      value.startsWith('{') ||
-      value.startsWith('[')
-    ) {
+    // Handle explicit object type OR auto-detect JSON-like values
+    if (argType === 'object' || value.startsWith('{') || value.startsWith('[')) {
       try {
         const parsed = JSON.parse(value);
         return { value: parsed, wasCoerced: true };
       } catch {
-        // Invalid JSON, keep as string
         return { value, wasCoerced: false };
       }
     }
 
-    // No coercion needed or possible
+    // Auto-detect obvious boolean strings (works regardless of type field)
+    if (value.toLowerCase() === 'true' || value.toLowerCase() === 'false') {
+      return { value: value.toLowerCase() === 'true', wasCoerced: true };
+    }
+
+    // No coercion needed
     return { value, wasCoerced: false };
   }
 
