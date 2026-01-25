@@ -9,7 +9,7 @@
 import { FormatterExecutionContext, SimpleResponseFormatter } from '../core/types.js';
 
 import type { Logger } from '../../../logging/index.js';
-import type { ToolResponse } from '../../../types/index.js';
+import type { GateValidationInfo, ToolResponse } from '../../../types/index.js';
 
 const fallbackLogger: Logger = {
   info: () => {},
@@ -41,14 +41,21 @@ interface AnalyticsService {
 }
 
 /**
- * Gate validation result interface
+ * Gate validation result interface (legacy, for backward compatibility)
+ * For full structured response contract, use GateValidationInfo from types.
  */
-interface GateValidationResult {
+interface LegacyGateValidationResult {
   passed: boolean;
   gateResults?: Array<{ passed: boolean; name?: string; message?: string }>;
   executionTime?: number;
   retryRequired?: boolean;
 }
+
+/**
+ * Combined gate validation result type.
+ * Accepts either legacy format or full GateValidationInfo for structured response contract.
+ */
+type GateValidationResult = LegacyGateValidationResult | Partial<GateValidationInfo>;
 
 /**
  * Response format options
@@ -223,15 +230,43 @@ export class ResponseFormatter implements SimpleResponseFormatter {
         }
 
         if (gateResults !== undefined) {
-          const gateResultsArray = gateResults.gateResults ?? [];
-          structuredContent['gates'] = {
-            enabled: true,
-            passed: gateResults.passed,
-            total: gateResultsArray.length,
-            failed: gateResultsArray.filter((g) => !g.passed),
-            execution_ms: gateResults.executionTime ?? 0,
-            retries: gateResults.retryRequired === true ? 1 : 0,
-          };
+          // Check for full GateValidationInfo (structured response contract)
+          const hasFullInfo = 'pendingGateIds' in gateResults;
+
+          if (hasFullInfo) {
+            // Use structured response contract format
+            const fullInfo = gateResults;
+            const gateValidation: Partial<GateValidationInfo> = {
+              enabled: fullInfo.enabled ?? true,
+              passed: fullInfo.passed ?? false,
+              totalGates: fullInfo.totalGates ?? 0,
+              failedGates: fullInfo.failedGates ?? [],
+              executionTime: fullInfo.executionTime ?? 0,
+              pendingGateIds: fullInfo.pendingGateIds ?? [],
+              requiresGateVerdict: fullInfo.requiresGateVerdict ?? false,
+              responseBlocked: fullInfo.responseBlocked ?? false,
+              gateRetryInfo: fullInfo.gateRetryInfo ?? {
+                maxAttempts: 2,
+                currentAttempt: 0,
+                retryAllowed: true,
+              },
+            };
+            structuredContent['gateValidation'] = gateValidation;
+          } else {
+            // Legacy format
+            const legacyResults = gateResults as LegacyGateValidationResult;
+            const gateResultsArray = legacyResults.gateResults ?? [];
+            structuredContent['gates'] = {
+              enabled: true,
+              passed: legacyResults.passed,
+              total: gateResultsArray.length,
+              failed: gateResultsArray.filter(
+                (g: { passed: boolean; name?: string; message?: string }) => !g.passed
+              ),
+              execution_ms: legacyResults.executionTime ?? 0,
+              retries: legacyResults.retryRequired === true ? 1 : 0,
+            };
+          }
         }
 
         toolResponse.structuredContent = structuredContent;

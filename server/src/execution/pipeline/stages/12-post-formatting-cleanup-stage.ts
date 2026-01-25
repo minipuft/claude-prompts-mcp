@@ -4,7 +4,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { ChainSessionService, SessionBlueprint } from '../../../chain-session/types.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 
 type TrackedScope = {
   scope: 'execution' | 'session' | 'chain' | 'step';

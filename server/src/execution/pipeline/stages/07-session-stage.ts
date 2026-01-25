@@ -9,11 +9,7 @@ import type {
   SessionBlueprint,
 } from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
-import type {
-  ExecutionContext,
-  ParsedCommand,
-  SessionContext,
-} from '../../context/execution-context.js';
+import type { ExecutionContext, ParsedCommand, SessionContext } from '../../context/index.js';
 import type { ExecutionPlan } from '../../types.js';
 import type { CreateReviewOptions } from '../decisions/gates/gate-enforcement-types.js';
 
@@ -135,8 +131,9 @@ export class SessionManagementStage extends BasePipelineStage {
       context.sessionContext = sessionContext;
       context.state.session.lifecycleDecision = decision;
 
-      // Deferred gate review: Do not create PendingGateReview up front.
-      // Gate reviews are created only when a FAIL verdict is received.
+      // Create pending gate review for chain steps with blocking gates
+      // This enables upfront enforcement: chains pause until gate_verdict is submitted
+      await this.createPendingGateReviewIfNeeded(context, sessionContext);
 
       this.logExit({
         sessionId: sessionContext.sessionId,
@@ -182,10 +179,24 @@ export class SessionManagementStage extends BasePipelineStage {
     const currentStep = steps?.find((s) => s.stepNumber === currentStepNumber);
     const stepRetries = currentStep?.retries;
 
+    // Determine maxAttempts with priority: step-level > gate-level > default
+    // Step-level retries take priority (explicit user/chain configuration)
+    // Gate-level retry configs are used if no step-level override exists
+    let maxAttempts: number | undefined;
+    if (stepRetries !== undefined) {
+      maxAttempts = stepRetries;
+    } else {
+      // Check for gate-level retry configs from accumulator
+      const gateMaxRetry = context.gates.getMaxRetryLimit();
+      if (gateMaxRetry !== undefined) {
+        maxAttempts = gateMaxRetry;
+      }
+    }
+
     const reviewOptions: CreateReviewOptions = {
       gateIds,
       instructions: context.gateInstructions ?? '',
-      ...(stepRetries !== undefined ? { maxAttempts: stepRetries } : {}),
+      ...(maxAttempts !== undefined ? { maxAttempts } : {}),
       metadata: {
         sessionId: sessionContext.sessionId,
         stepNumber: currentStepNumber,

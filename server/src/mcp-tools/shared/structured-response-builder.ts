@@ -9,7 +9,7 @@
  * when they declare an outputSchema, as required by MCP protocol.
  */
 
-import type { ToolResponse } from '../../types/index.js';
+import type { GateValidationInfo, McpErrorCode, ToolResponse } from '../../types/index.js';
 import type { ErrorContext } from '../types/shared-types.js';
 
 /**
@@ -32,6 +32,8 @@ export interface ResponseMetadata {
   stepsExecuted?: number;
   /** Session ID for tracking related operations */
   sessionId?: string;
+  /** Chain ID for chain execution tracking */
+  chainId?: string;
   /** Tool-specific operation data */
   operationData?: Record<string, any>;
   /** Analytics data to include */
@@ -46,16 +48,26 @@ export interface ResponseMetadata {
         uptime: number;
       }
     | Record<string, any>;
-  /** Gate validation results */
-  gateValidation?: {
-    enabled: boolean;
-    passed: boolean;
-    totalGates: number;
-    failedGates: Array<any>;
-    passedGates?: Array<any>;
-    executionTime: number;
-    retryCount?: number;
-  };
+  /**
+   * Gate validation results.
+   * Use the full GateValidationInfo type for complete structured response contract.
+   */
+  gateValidation?:
+    | Partial<GateValidationInfo>
+    | {
+        enabled: boolean;
+        passed: boolean;
+        totalGates: number;
+        failedGates: Array<any>;
+        passedGates?: Array<any>;
+        executionTime: number;
+        retryCount?: number;
+      };
+  /**
+   * Error code for programmatic error handling by client hooks.
+   * When set, clients can route errors without parsing text.
+   */
+  errorCode?: McpErrorCode;
 }
 
 /**
@@ -87,9 +99,15 @@ export class StructuredResponseBuilder {
           frameworkUsed: metadata.frameworkUsed,
           stepsExecuted: metadata.stepsExecuted,
           sessionId: metadata.sessionId,
+          chainId: metadata.chainId,
         },
       },
     };
+
+    // Add error code for programmatic client routing
+    if (metadata.errorCode !== undefined) {
+      response.structuredContent!['errorCode'] = metadata.errorCode;
+    }
 
     if (metadata.analytics) {
       response.structuredContent!['analytics'] = metadata.analytics;

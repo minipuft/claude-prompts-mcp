@@ -128,6 +128,10 @@ export class PromptExecutionService {
   private referenceResolver?: PromptReferenceResolver;
   /** Resolver for {{script:id}} references in templates */
   private scriptReferenceResolver?: ScriptReferenceResolver;
+  /** Hook registry for pipeline event emissions */
+  private hookRegistry?: import('../../../hooks/index.js').HookRegistry;
+  /** Notification emitter for MCP client notifications */
+  private notificationEmitter?: import('../../../notifications/index.js').McpNotificationEmitter;
 
   private convertedPrompts: ConvertedPrompt[] = [];
   private readonly serverRoot: string;
@@ -298,7 +302,16 @@ export class PromptExecutionService {
 
   setAnalyticsService(analyticsService: MetricsCollector): void {
     this.analyticsService = analyticsService;
-    this.responseFormatter.setAnalyticsService(analyticsService);
+  }
+
+  setHookRegistry(hookRegistry: import('../../../hooks/index.js').HookRegistry): void {
+    this.hookRegistry = hookRegistry;
+  }
+
+  setNotificationEmitter(
+    emitter: import('../../../notifications/index.js').McpNotificationEmitter
+  ): void {
+    this.notificationEmitter = emitter;
   }
 
   setGateSystemManager(gateSystemManager: any): void {
@@ -623,7 +636,6 @@ export class PromptExecutionService {
       this.convertedPrompts,
       this.gateGuidanceRenderer,
       this.resolveFrameworkContextForPrompt.bind(this),
-      this.promptGuidanceService,
       this.referenceResolver,
       this.scriptReferenceResolver
     );
@@ -703,7 +715,9 @@ export class PromptExecutionService {
       () => this.frameworkStateManager?.isFrameworkSystemEnabled() ?? false,
       () => this.analyticsService,
       'canonical-stage-0',
-      this.logger
+      this.logger,
+      this.hookRegistry,
+      this.notificationEmitter
     );
 
     const lifecycleStage = new ExecutionLifecycleStage(temporaryGateRegistry, this.logger);

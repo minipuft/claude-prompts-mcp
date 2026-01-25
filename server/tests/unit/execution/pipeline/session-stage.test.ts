@@ -261,15 +261,15 @@ describe('SessionManagementStage', () => {
     expect(context.sessionContext?.currentStep).toBe(1);
   });
 
-  test('defers gate review creation (no upfront pending review)', async () => {
-    // Gate reviews are now created on FAIL verdict in response-capture-stage,
-    // not upfront during session creation
+  test('creates upfront pending gate review when blocking gates present', async () => {
+    // Gate reviews are created upfront during session creation for chains with blocking gates
+    // This enables enforcement: chains pause until gate_verdict is submitted
     const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
     context.parsedCommand = createParsedCommand();
     context.gateInstructions = 'Review these gates carefully.';
 
-    // Set up gate state (would have triggered review in old behavior)
+    // Set up gate state that triggers upfront review
     context.state.gates.hasBlockingGates = true;
     context.state.gates.accumulatedGateIds = ['gate-alpha', 'gate-beta'];
 
@@ -281,20 +281,21 @@ describe('SessionManagementStage', () => {
 
     await stage.execute(context);
 
-    // Session created but NO pending review (deferred)
+    // Session created WITH pending review (upfront blocking)
     expect(manager.createSession).toHaveBeenCalledTimes(1);
-    expect(manager.setPendingGateReview).not.toHaveBeenCalled();
-    expect(context.sessionContext?.pendingReview).toBeUndefined();
+    expect(manager.setPendingGateReview).toHaveBeenCalledTimes(1);
+    expect(context.sessionContext?.pendingReview).toBeDefined();
+    expect(context.sessionContext?.pendingReview?.gateIds).toEqual(['gate-alpha', 'gate-beta']);
 
     dateSpy.mockRestore();
   });
 
-  test('creates session without review when gates present but authority available', async () => {
+  test('creates session with pending review when gates present and authority available', async () => {
     const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
     context.parsedCommand = createParsedCommand();
 
-    // Set up gate state with authority
+    // Set up gate state with authority - triggers upfront review
     context.state.gates.hasBlockingGates = true;
     context.state.gates.accumulatedGateIds = ['gate-alpha'];
     context.gateEnforcement = new GateEnforcementAuthority(manager as any, createLogger() as any);
@@ -303,9 +304,9 @@ describe('SessionManagementStage', () => {
 
     await stage.execute(context);
 
-    // Session created, no pending review (deferred gate review behavior)
+    // Session created WITH pending review (upfront blocking behavior)
     expect(manager.createSession).toHaveBeenCalledTimes(1);
-    expect(manager.setPendingGateReview).not.toHaveBeenCalled();
-    expect(context.sessionContext?.pendingReview).toBeUndefined();
+    expect(manager.setPendingGateReview).toHaveBeenCalledTimes(1);
+    expect(context.sessionContext?.pendingReview).toBeDefined();
   });
 });

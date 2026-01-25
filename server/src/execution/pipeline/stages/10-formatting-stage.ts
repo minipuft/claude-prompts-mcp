@@ -4,7 +4,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '../../../logging/index.js';
 import type { FormatterExecutionContext } from '../../../mcp-tools/prompt-engine/core/types.js';
 import type { ResponseFormatter } from '../../../mcp-tools/prompt-engine/processors/response-formatter.js';
-import type { ExecutionContext, SessionContext } from '../../context/execution-context.js';
+import type { ExecutionContext, SessionContext } from '../../context/index.js';
 
 /**
  * Chain execution formatting context
@@ -72,6 +72,21 @@ export class ResponseFormattingStage extends BasePipelineStage {
       return;
     }
 
+    // Check for response blocking due to gate failure
+    // When a gate with blockResponseOnFail: true fails, suppress the execution content
+    if (context.state.gates.responseBlocked === true && context.hasPendingReview()) {
+      const blockedResponse = this.formatBlockedResponse(context);
+      context.setResponse({
+        content: [{ type: 'text', text: blockedResponse }],
+        isError: false,
+      });
+      context.diagnostics.info(this.name, 'Response blocked - gate failure', {
+        blockedGateIds: context.state.gates.blockedGateIds,
+      });
+      this.logExit({ blocked: true, reason: 'gate_failure' });
+      return;
+    }
+
     if (!context.executionResults) {
       this.handleError(new Error('Execution results missing before formatting'));
     }
@@ -131,13 +146,17 @@ export class ResponseFormattingStage extends BasePipelineStage {
         );
       }
 
+      // Build gate validation info for structured response contract
+      const gateValidationInfo = this.buildGateValidationInfo(context);
+
       // Format with ResponseFormatter (adds structured metadata)
       const response = this.responseFormatter.formatPromptEngineResponse(
         responseContent,
         formatterContext,
         {
           includeStructuredContent: false, // Keep model input lean; clients can opt-in when needed
-        }
+        },
+        gateValidationInfo
       );
 
       context.setResponse(response);
@@ -353,6 +372,48 @@ export class ResponseFormattingStage extends BasePipelineStage {
   }
 
   /**
+   * Formats a blocked response when gate failure suppresses content.
+   * Used when a gate with blockResponseOnFail: true receives a FAIL verdict.
+   * Only gate review instructions are shown, not the actual execution output.
+   */
+  private formatBlockedResponse(context: ExecutionContext): string {
+    const blockedGateIds = context.state.gates.blockedGateIds ?? [];
+    const gateInstructions = context.gateInstructions ?? '';
+
+    const sections: string[] = [
+      '## ⛔ Response Blocked',
+      '',
+      'Response content has been suppressed due to gate failure.',
+      '',
+      `**Blocking gates**: ${blockedGateIds.length > 0 ? blockedGateIds.join(', ') : 'unknown'}`,
+      '',
+    ];
+
+    // Include gate review instructions if present
+    if (gateInstructions !== '') {
+      sections.push('---');
+      sections.push('');
+      sections.push(gateInstructions);
+    }
+
+    sections.push('');
+    sections.push('---');
+    sections.push('');
+    sections.push('**To proceed**: Address the gate criteria and resubmit with `gate_verdict`.');
+
+    // Add chain context for resume
+    const chainId = context.sessionContext?.chainId;
+    if (chainId !== undefined && chainId !== '') {
+      sections.push('');
+      sections.push(
+        `Resume: \`chain_id="${chainId}", gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"\``
+      );
+    }
+
+    return sections.join('\n');
+  }
+
+  /**
    * Builds footer for chain execution with session and progress tracking
    */
   private buildChainFooter(
@@ -388,6 +449,62 @@ export class ResponseFormattingStage extends BasePipelineStage {
     }
 
     return lines.join('\n');
+  }
+
+  /**
+   * Builds GateValidationInfo for structured response contract.
+   * Provides explicit fields for client hook consumption.
+   */
+  private buildGateValidationInfo(context: ExecutionContext):
+    | {
+        enabled: boolean;
+        passed: boolean;
+        totalGates: number;
+        failedGates: Array<{ id: string; reason: string }>;
+        executionTime: number;
+        pendingGateIds: string[];
+        requiresGateVerdict: boolean;
+        responseBlocked: boolean;
+        gateRetryInfo: { maxAttempts: number; currentAttempt: number; retryAllowed: boolean };
+      }
+    | undefined {
+    // Only include gate validation info when gates are active
+    const gateIds = context.gates.getAll();
+    if (gateIds.length === 0) {
+      return undefined;
+    }
+
+    const hasPendingReview = context.hasPendingReview();
+    const responseBlocked = context.state.gates.responseBlocked === true;
+    const blockedGateIds = context.state.gates.blockedGateIds ?? [];
+    const retryLimitExceeded = context.state.gates.retryLimitExceeded === true;
+
+    // Build failed gates from blocked gate IDs (gates that triggered response blocking)
+    // These are the gates with blockResponseOnFail: true that received FAIL verdicts
+    const failedGates: Array<{ id: string; reason: string }> = blockedGateIds.map((id) => ({
+      id,
+      reason: 'Gate failed (blockResponseOnFail enabled)',
+    }));
+
+    // Build retry info from session context
+    const sessionRetryInfo = context.sessionContext?.pendingReview;
+    const gateRetryInfo = {
+      maxAttempts: sessionRetryInfo?.maxAttempts ?? 2,
+      currentAttempt: sessionRetryInfo?.attemptCount ?? 0,
+      retryAllowed: !retryLimitExceeded,
+    };
+
+    return {
+      enabled: true,
+      passed: failedGates.length === 0 && !hasPendingReview,
+      totalGates: gateIds.length,
+      failedGates,
+      executionTime: 0, // Could be tracked if needed
+      pendingGateIds: hasPendingReview ? [...blockedGateIds] : [],
+      requiresGateVerdict: hasPendingReview,
+      responseBlocked,
+      gateRetryInfo,
+    };
   }
 
   /**

@@ -18,7 +18,7 @@ import type {
   GateValidationResult as MetricGateValidationResult,
 } from '../../../metrics/index.js';
 import type { FrameworksConfig, GatesConfig, ConvertedPrompt } from '../../../types/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
 import type { TemporaryGateInput, ExecutionModifiers } from '../../types.js';
 import type { FrameworkDecisionInput } from '../decisions/index.js';
@@ -235,6 +235,70 @@ export class GateEnhancementStage extends BasePipelineStage {
         source,
         added,
         total: context.gates.size,
+      });
+    }
+  }
+
+  /**
+   * Add registry gates with their retry config metadata and blocking status.
+   * This allows per-gate retry limits to be used when creating pending reviews,
+   * and tracks which gates should block response content on failure.
+   */
+  private addRegistryGatesWithRetryConfig(
+    context: ExecutionContext,
+    gateIds: readonly string[]
+  ): void {
+    if (!gateIds || gateIds.length === 0) {
+      return;
+    }
+
+    const gateManager = this.gateManagerProvider?.();
+    let added = 0;
+
+    for (const gateId of gateIds) {
+      // Look up gate to get its retry config and blocking status
+      let retryLimit: number | undefined;
+      let blockResponseOnFail = false;
+
+      if (gateManager) {
+        try {
+          const registry = gateManager.getGateRegistry();
+          const gate = registry?.getGuide(gateId);
+
+          if (gate) {
+            // Get retry config
+            const retryConfig = gate.getRetryConfig();
+            if (retryConfig?.max_attempts !== undefined) {
+              retryLimit = retryConfig.max_attempts;
+            }
+
+            // Check for response blocking (from gate definition YAML)
+            const definition = gate.getDefinition();
+            if (definition.blockResponseOnFail === true) {
+              blockResponseOnFail = true;
+              context.gates.addBlockingGate(gateId);
+              this.logger.debug('[GateEnhancementStage] Gate marked as response-blocking', {
+                gateId,
+              });
+            }
+          }
+        } catch {
+          // Gate registry lookup failed - continue without config
+        }
+      }
+
+      // Add with metadata if we have a retry limit
+      const metadata = retryLimit !== undefined ? { retryLimit, blockResponseOnFail } : undefined;
+      if (context.gates.add(gateId, 'registry-auto', metadata)) {
+        added++;
+      }
+    }
+
+    if (added > 0) {
+      this.logger.debug('[GateEnhancementStage] Added registry gates with config', {
+        added,
+        total: context.gates.size,
+        blockingGates: context.gates.getBlockingGateIds(),
       });
     }
   }
@@ -460,7 +524,7 @@ export class GateEnhancementStage extends BasePipelineStage {
     }
 
     const registryGates = this.selectRegistryGates(selectionContext);
-    this.addGatesToAccumulator(context, registryGates, 'registry-auto');
+    this.addRegistryGatesWithRetryConfig(context, registryGates);
 
     // Get deduplicated gate list from accumulator
     let gateIds = [...context.gates.getAll()];
@@ -635,7 +699,7 @@ export class GateEnhancementStage extends BasePipelineStage {
       // Add step-specific gates to accumulator (they'll be deduplicated against global gates)
       this.addGatesToAccumulator(context, stepInlineGates, 'inline-operator');
       this.addGatesToAccumulator(context, plannedGates, 'prompt-config');
-      this.addGatesToAccumulator(context, registryGates, 'registry-auto');
+      this.addRegistryGatesWithRetryConfig(context, registryGates);
 
       // Get all accumulated gates (global + step-specific, deduplicated)
       let gateIds = [...context.gates.getAll()];

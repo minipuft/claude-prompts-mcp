@@ -242,7 +242,10 @@ export class EngineValidator {
   }
 
   /**
-   * Validate arguments against prompt requirements
+   * Validate arguments against prompt requirements.
+   *
+   * Note: Type validation is delegated to ArgumentSchemaValidator (Zod-based).
+   * This method only checks for required arguments and unexpected arguments.
    */
   private validateArguments(
     convertedPrompt: ConvertedPrompt,
@@ -258,29 +261,16 @@ export class EngineValidator {
 
     // Check required arguments
     for (const arg of convertedPrompt.arguments) {
-      if (arg.required && !promptArgs.hasOwnProperty(arg.name)) {
+      if (arg.required && !Object.prototype.hasOwnProperty.call(promptArgs, arg.name)) {
         errors.push(`Missing required argument: ${arg.name}`);
         score -= 20;
       }
     }
 
-    // Check argument types
-    for (const arg of convertedPrompt.arguments) {
-      if (promptArgs.hasOwnProperty(arg.name)) {
-        const value = promptArgs[arg.name];
-        if (!this.isValidArgumentType(value, arg.type || 'string')) {
-          errors.push(
-            `Argument '${arg.name}' should be of type '${arg.type}', got '${typeof value}'`
-          );
-          score -= 10;
-        }
-      }
-    }
-
-    // Check for unused arguments
-    const expectedArgs = convertedPrompt.arguments.map((arg: any) => arg.name);
+    // Check for unused arguments (warning only)
+    const expectedArgs = new Set(convertedPrompt.arguments.map((arg) => arg.name));
     for (const argName of Object.keys(promptArgs)) {
-      if (!expectedArgs.includes(argName)) {
+      if (!expectedArgs.has(argName)) {
         warnings.push(`Unexpected argument provided: ${argName}`);
         score -= 2;
       }
@@ -290,31 +280,11 @@ export class EngineValidator {
   }
 
   /**
-   * Validate argument type
-   */
-  private isValidArgumentType(value: any, expectedType: string): boolean {
-    switch (expectedType.toLowerCase()) {
-      case 'string':
-        return typeof value === 'string';
-      case 'number':
-        return typeof value === 'number' && !isNaN(value);
-      case 'boolean':
-        return typeof value === 'boolean';
-      case 'array':
-        return Array.isArray(value);
-      case 'object':
-        return typeof value === 'object' && value !== null && !Array.isArray(value);
-      default:
-        return true; // Unknown types are considered valid
-    }
-  }
-
-  /**
    * Validate execution with gates
    */
   public async validateWithGates(
     convertedPrompt: ConvertedPrompt,
-    promptArgs: Record<string, any>,
+    _promptArgs: Record<string, any>,
     suggestedGates: string[] = [],
     processedContent?: string
   ): Promise<GateValidationResult> {

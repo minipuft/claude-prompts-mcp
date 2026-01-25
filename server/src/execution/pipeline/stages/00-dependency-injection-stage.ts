@@ -4,9 +4,11 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
+import type { HookRegistry } from '../../../hooks/index.js';
 import type { Logger } from '../../../logging/index.js';
 import type { MetricsCollector } from '../../../metrics/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { McpNotificationEmitter } from '../../../notifications/index.js';
+import type { ExecutionContext } from '../../context/index.js';
 
 type MetricsProvider = () => MetricsCollector | undefined;
 type FrameworkEnabledProvider = () => boolean;
@@ -14,9 +16,10 @@ type FrameworkEnabledProvider = () => boolean;
 /**
  * Canonical Pipeline Stage 0.2: Dependency Injection
  *
- * Records execution dependencies (framework state, gate registry, analytics)
- * directly on the ExecutionContext so downstream stages can access a single
- * source of truth without recreating wiring from PromptExecutionService.
+ * Records execution dependencies (framework state, gate registry, analytics,
+ * hook registry, notification emitter) directly on the ExecutionContext so
+ * downstream stages can access a single source of truth without recreating
+ * wiring from PromptExecutionService.
  */
 export class DependencyInjectionStage extends BasePipelineStage {
   readonly name = 'DependencyInjection';
@@ -27,7 +30,9 @@ export class DependencyInjectionStage extends BasePipelineStage {
     private readonly frameworkEnabledProvider: FrameworkEnabledProvider | null,
     private readonly metricsProvider: MetricsProvider | null,
     private readonly pipelineVersion: string,
-    logger: Logger
+    logger: Logger,
+    private readonly hookRegistry?: HookRegistry,
+    private readonly notificationEmitter?: McpNotificationEmitter
   ) {
     super(logger);
   }
@@ -46,6 +51,8 @@ export class DependencyInjectionStage extends BasePipelineStage {
       analyticsService,
       temporaryGateRegistry: this.temporaryGateRegistry,
       pipelineVersion: this.pipelineVersion,
+      hookRegistry: this.hookRegistry,
+      notificationEmitter: this.notificationEmitter,
     };
 
     if (!context.metadata['executionOptions']) {
@@ -58,6 +65,8 @@ export class DependencyInjectionStage extends BasePipelineStage {
       frameworkEnabled,
       analyticsAttached: Boolean(analyticsService),
       gateEnforcementInitialized: true,
+      hookRegistryAttached: Boolean(this.hookRegistry),
+      notificationEmitterAttached: Boolean(this.notificationEmitter),
     });
   }
 }

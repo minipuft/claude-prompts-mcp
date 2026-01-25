@@ -6,7 +6,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ChainManagementService } from '../../../mcp-tools/prompt-engine/core/chain-management.js';
 import type { ToolResponse } from '../../../types/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 
 type ToolRouter = (
   targetTool: string,

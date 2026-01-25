@@ -1,5 +1,6 @@
 // @lifecycle canonical - Evaluates inline gates before heavy execution work.
-import { SHELL_VERIFY_DEFAULTS, SHELL_VERIFY_PRESETS } from '../../../gates/constants.js';
+import { loadShellPresets } from '../../../gates/config/index.js';
+import { SHELL_VERIFY_DEFAULTS } from '../../../gates/constants.js';
 import { formatCriteriaAsGuidance } from '../criteria-guidance.js';
 import { BasePipelineStage } from '../stage.js';
 
@@ -11,7 +12,7 @@ import type {
 import type { PendingShellVerification, ShellVerifyGate } from '../../../gates/shell/index.js';
 import type { Logger } from '../../../logging/index.js';
 import type { GateScope } from '../../../types/execution.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
 
 /**
@@ -482,9 +483,10 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     gateId: string,
     shellVerifyConfig: ShellVerifyGate
   ): void {
-    // Resolve preset values if specified
+    // Resolve preset values if specified (loaded from YAML config)
+    const shellPresets = loadShellPresets();
     const presetValues = shellVerifyConfig.preset
-      ? SHELL_VERIFY_PRESETS[shellVerifyConfig.preset]
+      ? shellPresets[shellVerifyConfig.preset]
       : undefined;
 
     // Explicit values override preset values, which override system defaults

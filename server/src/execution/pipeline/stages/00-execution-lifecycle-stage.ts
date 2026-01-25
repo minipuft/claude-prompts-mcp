@@ -5,7 +5,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 import type { CleanupHandler } from '../../context/internal-state.js';
 
 /**

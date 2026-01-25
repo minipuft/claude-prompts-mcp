@@ -1,6 +1,6 @@
 // @lifecycle canonical - Base interface for execution pipeline stages.
 import type { Logger } from '../../logging/index.js';
-import type { ExecutionContext } from '../context/execution-context.js';
+import type { ExecutionContext } from '../context/index.js';
 
 /**
  * Contract for all pipeline stages.

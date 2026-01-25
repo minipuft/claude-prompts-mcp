@@ -5,7 +5,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { ChainSessionService, SessionBlueprint } from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
 import type { ConvertedPrompt } from '../../../types/index.js';
-import type { ExecutionContext, ParsedCommand } from '../../context/execution-context.js';
+import type { ExecutionContext, ParsedCommand } from '../../context/index.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
 import type {
   ArgumentParser,

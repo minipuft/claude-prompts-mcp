@@ -297,6 +297,21 @@ export class InjectionDecisionService {
 
     // Check frequency for chains
     if (input.currentStep !== undefined && resolved.config.frequency) {
+      // Bypass frequency check for gate reviews when target includes gates
+      // This ensures gate guidance always appears on review steps regardless of step number
+      const isGateReviewWithGateTarget =
+        input.executionContext === 'gate_review' && (target === 'both' || target === 'gates');
+
+      if (isGateReviewWithGateTarget) {
+        return {
+          inject: true,
+          reason: 'Gate review step (frequency bypassed)',
+          source: resolved.source,
+          decidedAt: timestamp,
+          target,
+        };
+      }
+
       const frequencyDecision = this.checkFrequency(
         input.injectionType,
         input.currentStep,

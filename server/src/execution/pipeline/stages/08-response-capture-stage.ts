@@ -3,8 +3,10 @@ import { StepState } from '../../../mcp-tools/prompt-engine/core/types.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { ChainSessionService } from '../../../chain-session/types.js';
+import type { HookRegistry, HookExecutionContext } from '../../../hooks/index.js';
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { McpNotificationEmitter } from '../../../notifications/index.js';
+import type { ExecutionContext, SessionContext } from '../../context/index.js';
 import type { GateAction } from '../decisions/index.js';
 
 const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
@@ -61,7 +63,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     const currentStepAtStart = session.state.currentStep;
 
     // Keep pipeline session context aligned with manager state (important for gate reviews)
-    const updatedSessionContext: import('../../context/execution-context.js').SessionContext = {
+    const updatedSessionContext: SessionContext = {
       sessionId,
       isChainExecution: sessionContext.isChainExecution,
     };
@@ -180,6 +182,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     if (session.pendingGateReview !== undefined) {
       const verdictPayload = parseVerdict(gateVerdictInput, 'gate_verdict');
+      // Capture gateIds before recordGateReviewOutcome - it may clear the pending review
+      const capturedGateIds = [...session.pendingGateReview.gateIds];
 
       if (verdictPayload !== null) {
         const outcome = await this.chainSessionManager.recordGateReviewOutcome(sessionId, {
@@ -209,6 +213,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           context.diagnostics.info(this.name, 'Gate PASS - advanced step', { stepToAdvance });
           delete sessionContext.pendingReview;
           passClearedThisCall = true;
+
+          // Emit gate passed event (use captured gateIds - review was cleared)
+          await this.emitGateEvents(context, 'passed', capturedGateIds, verdictPayload.rationale);
         } else {
           const pending = this.chainSessionManager.getPendingGateReview(sessionId);
           if (pending !== undefined) {
@@ -226,10 +233,11 @@ export class StepResponseCaptureStage extends BasePipelineStage {
               case 'blocking': {
                 // Stay on step, check retry limit (render review screen with context)
                 const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
-                if (
+                const isRetryExhausted =
                   pendingReview !== undefined &&
-                  this.chainSessionManager.isRetryLimitExceeded(sessionId)
-                ) {
+                  this.chainSessionManager.isRetryLimitExceeded(sessionId);
+
+                if (isRetryExhausted && pendingReview !== undefined) {
                   context.state.gates.retryLimitExceeded = true;
                   context.state.gates.retryExhaustedGateIds = [...pendingReview.gateIds];
                   context.diagnostics.warn(this.name, 'Gate retry limit exceeded', {
@@ -237,20 +245,59 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                     maxAttempts: pendingReview.maxAttempts,
                     gateIds: pendingReview.gateIds,
                   });
+
+                  // Emit retry exhausted event
+                  await this.emitGateEvents(
+                    context,
+                    'retryExhausted',
+                    pendingReview.gateIds,
+                    verdictPayload.rationale
+                  );
                 }
+
+                // Check if any gates have blockResponseOnFail enabled
+                // This suppresses response content when gate fails
+                if (context.gates.hasBlockingGates()) {
+                  const blockedGateIds = [...context.gates.getBlockingGateIds()];
+                  context.state.gates.responseBlocked = true;
+                  context.state.gates.blockedGateIds = blockedGateIds;
+                  context.diagnostics.info(this.name, 'Response content blocked by gate failure', {
+                    blockedGateIds,
+                  });
+
+                  // Emit response blocked event
+                  await this.emitGateEvents(context, 'responseBlocked', blockedGateIds);
+                }
+
+                // Emit gate failed event (use captured gateIds)
+                await this.emitGateEvents(
+                  context,
+                  'failed',
+                  capturedGateIds,
+                  verdictPayload.rationale
+                );
+
                 context.diagnostics.info(this.name, 'Gate FAIL - blocking mode, awaiting retry');
                 break;
               }
 
               case 'advisory': {
                 // Log warning but allow advancement (advisoryWarnings initialized in ExecutionContext)
-                const gateIds = session.pendingGateReview.gateIds.join(', ');
                 context.state.gates.advisoryWarnings.push(
-                  `Gate ${gateIds} failed: ${verdictPayload.rationale}`
+                  `Gate ${capturedGateIds.join(', ')} failed: ${verdictPayload.rationale}`
                 );
                 context.diagnostics.warn(this.name, 'Gate FAIL - advisory mode, continuing', {
                   rationale: verdictPayload.rationale,
                 });
+
+                // Emit gate failed event (advisory mode still counts as failure, use captured gateIds)
+                await this.emitGateEvents(
+                  context,
+                  'failed',
+                  capturedGateIds,
+                  verdictPayload.rationale
+                );
+
                 // Clear pending review and advance step (non-blocking mode continues)
                 await this.chainSessionManager.clearPendingGateReview(sessionId);
                 const stepToAdvance = currentStepAtStart;
@@ -262,9 +309,14 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
               case 'informational': {
                 // Log only, no user impact
+                const infoGateIds = [...(session.pendingGateReview?.gateIds ?? [])];
                 context.diagnostics.info(this.name, 'Gate FAIL - informational mode, logged only', {
                   rationale: verdictPayload.rationale,
                 });
+
+                // Emit gate failed event (informational mode still counts as failure)
+                await this.emitGateEvents(context, 'failed', infoGateIds, verdictPayload.rationale);
+
                 // Clear pending review and advance step (non-blocking mode continues)
                 await this.chainSessionManager.clearPendingGateReview(sessionId);
                 const stepToAdvance = currentStepAtStart;
@@ -335,10 +387,25 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         );
 
         // Only advance if no pending gate review (gated flows advance on PASS verdict)
-        const hasPendingReview =
-          this.chainSessionManager.getPendingGateReview(sessionId) !== undefined;
+        const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+        const hasPendingReview = pendingReview !== undefined;
         if (!hasPendingReview && !passClearedThisCall) {
           await this.chainSessionManager.advanceStep(sessionId, targetStepNumber);
+        } else if (hasPendingReview) {
+          // User submitted user_response but gate review is blocking advancement
+          // Add explicit feedback so user understands why chain didn't advance
+          context.diagnostics.info(
+            this.name,
+            'Response captured but advancement blocked by pending gate review',
+            {
+              capturedStep: targetStepNumber,
+              gateIds: pendingReview.gateIds,
+              attemptCount: pendingReview.attemptCount,
+              maxAttempts: pendingReview.maxAttempts,
+            }
+          );
+          // Set flag so call-to-action stage can show appropriate messaging
+          context.state.gates.awaitingUserChoice = true;
         }
 
         const updatedSession = this.chainSessionManager.getSession(sessionId);
@@ -355,6 +422,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
           capturedStep: targetStepNumber,
           responseType: 'user_response',
           advanced: !hasPendingReview,
+          blockedByGateReview: hasPendingReview,
         });
         return;
       }
@@ -366,6 +434,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     try {
       let didAdvance = false;
+      let blockedByGateReview = false;
 
       // Check for user response before creating placeholder
       if (captureResponse !== undefined) {
@@ -381,11 +450,25 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         );
 
         // Only advance if no pending gate review (gated flows advance on PASS verdict)
-        const hasPendingReview =
-          this.chainSessionManager.getPendingGateReview(sessionId) !== undefined;
+        const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+        const hasPendingReview = pendingReview !== undefined;
         if (!hasPendingReview && !passClearedThisCall) {
           await this.chainSessionManager.advanceStep(sessionId, targetStepNumber);
           didAdvance = true;
+        } else if (hasPendingReview) {
+          // User submitted user_response but gate review is blocking advancement
+          blockedByGateReview = true;
+          context.diagnostics.info(
+            this.name,
+            'Response captured but advancement blocked by pending gate review',
+            {
+              capturedStep: targetStepNumber,
+              gateIds: pendingReview.gateIds,
+              attemptCount: pendingReview.attemptCount,
+              maxAttempts: pendingReview.maxAttempts,
+            }
+          );
+          context.state.gates.awaitingUserChoice = true;
         }
       } else {
         // No response - create placeholder
@@ -412,6 +495,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         capturedStep: targetStepNumber,
         responseType,
         advanced: didAdvance,
+        blockedByGateReview,
       });
     } catch (error) {
       this.handleError(error, 'Failed to capture previous step result');
@@ -573,6 +657,105 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         });
         break;
       }
+    }
+  }
+
+  /**
+   * Create hook execution context from the current execution state.
+   */
+  private createHookContext(context: ExecutionContext): HookExecutionContext {
+    // Use session ID, execution scope ID, or generate a fallback
+    const executionId =
+      context.sessionContext?.sessionId ??
+      context.state.session.executionScopeId ??
+      `exec-${Date.now().toString(36)}`;
+
+    // Get framework decision from the authority (cached, doesn't recompute)
+    const frameworkDecision = context.frameworkAuthority.getCachedDecision();
+
+    return {
+      executionId,
+      executionType: context.sessionContext?.isChainExecution ? 'chain' : 'single',
+      chainId: context.sessionContext?.sessionId,
+      currentStep: context.sessionContext?.currentStep,
+      frameworkEnabled: frameworkDecision?.shouldApply ?? false,
+      frameworkId: frameworkDecision?.frameworkId,
+    };
+  }
+
+  /**
+   * Emit gate events via hooks and notifications.
+   */
+  private async emitGateEvents(
+    context: ExecutionContext,
+    event: 'passed' | 'failed' | 'retryExhausted' | 'responseBlocked',
+    gateIds: string[],
+    reason?: string
+  ): Promise<void> {
+    const deps = context.metadata['pipelineDependencies'] as
+      | { hookRegistry?: HookRegistry; notificationEmitter?: McpNotificationEmitter }
+      | undefined;
+    const hooks = deps?.hookRegistry;
+    const notifications = deps?.notificationEmitter;
+
+    if (!hooks && !notifications) return;
+
+    const hookContext = this.createHookContext(context);
+    const chainId = context.sessionContext?.sessionId;
+
+    try {
+      switch (event) {
+        case 'passed':
+          // Emit for each gate that passed
+          for (const gateId of gateIds) {
+            await hooks?.emitGateEvaluated(
+              { id: gateId } as any, // Minimal gate definition for hook
+              { passed: true, reason: reason ?? 'Gate passed', blocksResponse: false },
+              hookContext
+            );
+          }
+          break;
+
+        case 'failed':
+          for (const gateId of gateIds) {
+            await hooks?.emitGateFailed(
+              { id: gateId } as any,
+              reason ?? 'Gate failed',
+              hookContext
+            );
+            notifications?.emitGateFailed({ gateId, reason: reason ?? 'Gate failed', chainId });
+          }
+          break;
+
+        case 'retryExhausted': {
+          // Get max attempts from pending review or use default
+          const sessionId = context.sessionContext?.sessionId;
+          const pendingReview = sessionId
+            ? this.chainSessionManager.getPendingGateReview(sessionId)
+            : undefined;
+          const maxAttempts = pendingReview?.maxAttempts ?? 2;
+
+          await hooks?.emitRetryExhausted(gateIds, chainId ?? '', hookContext);
+          notifications?.emitRetryExhausted({
+            gateIds,
+            chainId: chainId ?? '',
+            maxAttempts,
+          });
+          break;
+        }
+
+        case 'responseBlocked':
+          await hooks?.emitResponseBlocked(gateIds, hookContext);
+          notifications?.emitResponseBlocked({ gateIds, chainId });
+          break;
+      }
+    } catch (error) {
+      // Hook/notification errors should not break the pipeline
+      this.logger.warn('[StepResponseCaptureStage] Failed to emit gate event', {
+        event,
+        gateIds,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

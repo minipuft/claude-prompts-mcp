@@ -23,6 +23,7 @@ import type { GateEntry, GateSource, GateSourceCounts } from '../types.js';
  */
 export class GateAccumulator {
   private readonly gates = new Map<string, GateEntry>();
+  private readonly blockingGates = new Set<string>();
   private readonly logger: Logger;
   private frozen = false;
 
@@ -174,5 +175,71 @@ export class GateAccumulator {
    */
   get size(): number {
     return this.gates.size;
+  }
+
+  /**
+   * Get the maximum retry limit from all gate entries that have retry config.
+   * Returns undefined if no gates have retry config.
+   *
+   * Used to determine maxAttempts when creating pending reviews.
+   * Uses maximum across all gates to be most lenient.
+   */
+  getMaxRetryLimit(): number | undefined {
+    let maxRetry: number | undefined;
+
+    for (const entry of this.gates.values()) {
+      const retryLimit = entry.metadata?.['retryLimit'];
+      if (typeof retryLimit === 'number' && retryLimit > 0) {
+        maxRetry = maxRetry === undefined ? retryLimit : Math.max(maxRetry, retryLimit);
+      }
+    }
+
+    return maxRetry;
+  }
+
+  /**
+   * Get the entry for a specific gate ID.
+   */
+  getEntry(gateId: string): GateEntry | undefined {
+    return this.gates.get(gateId?.trim());
+  }
+
+  // =========================================================================
+  // Response Blocking Gate Tracking
+  // =========================================================================
+
+  /**
+   * Mark a gate as a response-blocking gate.
+   * When a blocking gate fails, the execution response content will be suppressed.
+   *
+   * @param gateId - The gate ID to mark as blocking
+   */
+  addBlockingGate(gateId: string): void {
+    const trimmedId = gateId?.trim();
+    if (trimmedId) {
+      this.blockingGates.add(trimmedId);
+      this.logger.debug('[GateAccumulator] Added blocking gate', { gateId: trimmedId });
+    }
+  }
+
+  /**
+   * Check if any blocking gates have been registered.
+   */
+  hasBlockingGates(): boolean {
+    return this.blockingGates.size > 0;
+  }
+
+  /**
+   * Get all blocking gate IDs.
+   */
+  getBlockingGateIds(): readonly string[] {
+    return Array.from(this.blockingGates);
+  }
+
+  /**
+   * Check if a specific gate is marked as blocking.
+   */
+  isBlockingGate(gateId: string): boolean {
+    return this.blockingGates.has(gateId?.trim());
   }
 }

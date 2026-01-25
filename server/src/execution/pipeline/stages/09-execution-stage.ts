@@ -6,7 +6,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { ChainSessionService } from '../../../chain-session/types.js';
 import type { Logger } from '../../../logging/index.js';
 import type { IScriptReferenceResolver } from '../../../utils/jsonUtils.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 import type { ChainStepRenderResult } from '../../operators/types.js';
 import type { PromptReferenceResolver } from '../../reference/prompt-reference-resolver.js';

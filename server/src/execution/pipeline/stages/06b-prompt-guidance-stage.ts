@@ -10,7 +10,7 @@ import type { Logger } from '../../../logging/index.js';
 import type { ContentAnalysisResult } from '../../../semantic/types.js';
 import type { StyleManager } from '../../../styles/index.js';
 import type { ConvertedPrompt } from '../../../types/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 import type { FrameworkDecisionInput } from '../decisions/index.js';
 
 type GuidanceStore = Record<string, ServicePromptGuidanceResult>;
@@ -277,11 +277,6 @@ export class PromptGuidanceStage extends BasePipelineStage {
 
       // Get semantic analysis from execution plan (set by Planning Stage)
       const semanticAnalysis = context.executionPlan?.semanticAnalysis;
-      const selectedResources = context.state.framework.selectedResources;
-      const availableResources = context.state.framework.availableResources as
-        | ConvertedPrompt[]
-        | undefined;
-
       const guidanceOptions: Parameters<PromptGuidanceService['applyGuidance']>[1] = {
         includeSystemPromptInjection: includeSystemPrompt,
         includeTemplateEnhancement: true,
@@ -294,12 +289,6 @@ export class PromptGuidanceStage extends BasePipelineStage {
 
       if (semanticAnalysis) {
         guidanceOptions.semanticAnalysis = semanticAnalysis;
-      }
-      if (selectedResources) {
-        guidanceOptions.selectedResources = selectedResources;
-      }
-      if (availableResources) {
-        guidanceOptions.availableResources = availableResources;
       }
 
       const guidance = await this.promptGuidanceService!.applyGuidance(prompt, guidanceOptions);

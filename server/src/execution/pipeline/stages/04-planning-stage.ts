@@ -2,7 +2,7 @@
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 import type { ExecutionPlanner } from '../../planning/execution-planner.js';
 import type { ExecutionPlan } from '../../types.js';
 

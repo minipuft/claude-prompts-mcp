@@ -2,7 +2,7 @@
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 
 /**
  * Pipeline Stage: Call To Action
@@ -27,13 +27,20 @@ export class CallToActionStage extends BasePipelineStage {
     }
 
     const metadata = results.metadata ?? {};
-    const pendingReview = Boolean(context.sessionContext?.pendingReview);
+    const pendingReview = context.sessionContext?.pendingReview;
     const finalChainStep = this.isFinalChainStep(context);
     const callToAction =
       (metadata['callToAction'] as string | undefined) || context.state.gates.reviewCallToAction;
 
+    // When there's a pending gate review, show clear instructions
+    if (pendingReview) {
+      this.appendGateReviewInstructions(context, pendingReview);
+      this.logExit({ appended: 'gate-review-instructions' });
+      return;
+    }
+
     if (!callToAction || callToAction.trim().length === 0) {
-      if (finalChainStep && !pendingReview) {
+      if (finalChainStep) {
         this.appendFinalCallToAction(context);
         this.logExit({ appended: 'final-step' });
         return;
@@ -90,19 +97,46 @@ export class CallToActionStage extends BasePipelineStage {
     context.executionResults.content = `${context.executionResults.content}${message}`;
   }
 
-  private buildHeading(context: ExecutionContext): string {
-    const sessionContext = context.sessionContext;
-    const requiresGateVerdict = Boolean(sessionContext?.pendingReview);
-    const requiresUserResponse = !requiresGateVerdict && Boolean(sessionContext?.isChainExecution);
-
-    if (requiresGateVerdict) {
-      return '### Next Action - reply via `gate_verdict`';
+  private appendGateReviewInstructions(
+    context: ExecutionContext,
+    pendingReview: NonNullable<typeof context.sessionContext>['pendingReview']
+  ): void {
+    if (!context.executionResults || typeof context.executionResults.content !== 'string') {
+      return;
     }
 
-    if (requiresUserResponse) {
-      return '### Next Action - reply via `user_response`';
+    if (!pendingReview) {
+      return;
     }
 
-    return '### Next Action';
+    const gateIds = pendingReview.gateIds?.join(', ') || 'quality gates';
+    const chainId = context.sessionContext?.chainId || '';
+    const attemptInfo =
+      pendingReview.maxAttempts > 1
+        ? ` (attempt ${pendingReview.attemptCount}/${pendingReview.maxAttempts})`
+        : '';
+
+    const message = `
+
+---
+
+⚠️ **Gate Review Required**${attemptInfo}
+
+**Gates**: ${gateIds}
+
+Review your output above against the gate criteria, then submit:
+
+\`\`\`
+chain_id="${chainId}"
+gate_verdict="GATE_REVIEW: PASS - [your assessment]"
+\`\`\`
+
+Or if criteria are not met:
+
+\`\`\`
+gate_verdict="GATE_REVIEW: FAIL - [what needs improvement]"
+\`\`\``;
+
+    context.executionResults.content = `${context.executionResults.content}${message}`;
   }
 }

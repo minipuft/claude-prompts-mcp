@@ -29,7 +29,7 @@ import {
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 
 /**
  * Shell Verification Stage - thin orchestration layer.

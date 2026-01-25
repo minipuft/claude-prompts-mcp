@@ -35,7 +35,7 @@ describe('CallToActionStage', () => {
     expect(content).not.toContain('### Next Action');
   });
 
-  test('suppresses gate_verdict CTA when pending review exists', async () => {
+  test('appends gate review instructions when pending review exists', async () => {
     const stage = new CallToActionStage({
       debug: jest.fn(),
       info: jest.fn(),
@@ -50,28 +50,28 @@ describe('CallToActionStage', () => {
       isChainExecution: true,
       pendingReview: {
         combinedPrompt: 'p',
-        gateIds: [],
+        gateIds: ['code-quality', 'research-quality'],
         prompts: [],
         createdAt: Date.now(),
-        attemptCount: 0,
-        maxAttempts: 1,
+        attemptCount: 1,
+        maxAttempts: 3,
       } as any,
     };
     context.executionResults = {
-      content: 'Gate review instructions',
+      content: 'Step output content',
       metadata: {},
       generatedAt: Date.now(),
     };
-    const gateCTA =
-      'Use the resume shortcut below and respond via gate_verdict as `GATE_REVIEW: PASS` or `GATE_REVIEW: FAIL - reason` to resume the workflow.';
-    context.state.gates.reviewCallToAction = gateCTA;
 
     await stage.execute(context);
 
     const content = context.executionResults?.content ?? '';
-    expect(content).toBe('Gate review instructions');
-    expect(content).not.toContain('### Next Action');
-    expect(context.state.gates.reviewCallToAction).toBeUndefined();
+    // Gate review instructions are now appended
+    expect(content).toContain('Step output content');
+    expect(content).toContain('Gate Review Required');
+    expect(content).toContain('code-quality, research-quality');
+    expect(content).toContain('gate_verdict="GATE_REVIEW: PASS');
+    expect(content).toContain('attempt 1/3');
   });
 
   test('appends CTA footer when template emits final response instructions', async () => {

@@ -10,7 +10,7 @@ import {
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 import type { ExecutionContextType, InjectionConfig } from '../decisions/injection/index.js';
 
 type InjectionConfigProvider = () => InjectionConfig;

@@ -8,7 +8,7 @@ import type {
 } from '../../../frameworks/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
 import type { FrameworkDecisionInput } from '../decisions/index.js';
 

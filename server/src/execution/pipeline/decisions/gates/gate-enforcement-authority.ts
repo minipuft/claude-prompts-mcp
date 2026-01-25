@@ -1,5 +1,10 @@
 // @lifecycle canonical - Single source of truth for gate enforcement decisions.
 
+import {
+  loadVerdictPatterns,
+  isPatternRestrictedToSource,
+  type VerdictPattern,
+} from '../../../../gates/config/index.js';
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
 
 import type {
@@ -18,13 +23,7 @@ import type {
 import type { ChainSessionService } from '../../../../chain-session/types.js';
 import type { Logger } from '../../../../logging/index.js';
 
-/**
- * Verdict parsing pattern with priority for conflict resolution.
- */
-interface VerdictPattern {
-  readonly regex: RegExp;
-  readonly priority: 'primary' | 'high' | 'medium' | 'fallback';
-}
+// VerdictPattern type is now imported from gates/config
 
 /**
  * Single source of truth for gate enforcement decisions.
@@ -54,18 +53,8 @@ export class GateEnforcementAuthority {
 
   private enforcementDecision: GateEnforcementDecision | null = null;
 
-  private static readonly VERDICT_PATTERNS: VerdictPattern[] = [
-    // Pattern 1: Full format with hyphen (original - backward compatible)
-    { regex: /^GATE_REVIEW:\s*(PASS|FAIL)\s*-\s*(.+)$/i, priority: 'primary' },
-    // Pattern 2: Full format with colon separator
-    { regex: /^GATE_REVIEW:\s*(PASS|FAIL)\s*:\s*(.+)$/i, priority: 'high' },
-    // Pattern 3: Simplified format with hyphen
-    { regex: /^GATE\s+(PASS|FAIL)\s*-\s*(.+)$/i, priority: 'high' },
-    // Pattern 4: Simplified format with colon
-    { regex: /^GATE\s+(PASS|FAIL)\s*:\s*(.+)$/i, priority: 'medium' },
-    // Pattern 5: Minimal format (gate_verdict parameter only - prevents false positives)
-    { regex: /^(PASS|FAIL)\s*[-:]\s*(.+)$/i, priority: 'fallback' },
-  ];
+  // Verdict patterns loaded from YAML configuration
+  private verdictPatterns: VerdictPattern[] | null = null;
 
   constructor(chainSessionManager: ChainSessionService, logger: Logger) {
     this.chainSessionManager = chainSessionManager;
@@ -73,8 +62,19 @@ export class GateEnforcementAuthority {
   }
 
   /**
+   * Get verdict patterns, loading from YAML config on first access.
+   */
+  private getVerdictPatterns(): VerdictPattern[] {
+    if (!this.verdictPatterns) {
+      this.verdictPatterns = loadVerdictPatterns();
+    }
+    return this.verdictPatterns;
+  }
+
+  /**
    * Parse a raw string into a structured verdict.
    * Supports multiple formats for flexibility while maintaining security.
+   * Patterns are loaded from YAML configuration for runtime customization.
    *
    * @param raw - Raw verdict string from user input
    * @param source - Where the verdict came from (affects security validation)
@@ -85,13 +85,15 @@ export class GateEnforcementAuthority {
       return null;
     }
 
-    for (const { regex, priority } of GateEnforcementAuthority.VERDICT_PATTERNS) {
-      // Security: Skip minimal format for user_response to prevent false positives
-      if (priority === 'fallback' && source === 'user_response') {
+    const patterns = this.getVerdictPatterns();
+
+    for (const pattern of patterns) {
+      // Security: Skip patterns restricted to specific sources
+      if (isPatternRestrictedToSource(pattern, source)) {
         continue;
       }
 
-      const match = raw.match(regex);
+      const match = raw.match(pattern.regex);
       if (match) {
         const rationale = match[2]?.trim();
 
@@ -113,7 +115,7 @@ export class GateEnforcementAuthority {
           rationale,
           raw,
           source,
-          detectedPattern: priority,
+          detectedPattern: pattern.priority,
         };
       }
     }

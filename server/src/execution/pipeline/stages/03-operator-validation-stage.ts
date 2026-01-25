@@ -3,7 +3,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { FrameworkValidator } from '../../../frameworks/framework-validator.js';
 import type { Logger } from '../../../logging/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 import type { FrameworkOperator, SymbolicOperator } from '../../parsers/types/operator-types.js';
 
 /**

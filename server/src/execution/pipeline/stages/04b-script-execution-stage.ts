@@ -34,7 +34,7 @@ import type {
   LoadedScriptTool,
   ToolDetectionMatch,
 } from '../../../scripts/types.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 
 /**
  * Pipeline Stage 4b: Script Execution

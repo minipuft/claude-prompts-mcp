@@ -9,7 +9,7 @@ import type { LightweightGateDefinition } from '../../../gates/types.js';
 import type { Logger } from '../../../logging/index.js';
 import type { StyleManager } from '../../../styles/index.js';
 import type { ConvertedPrompt, ToolResponse } from '../../../types/index.js';
-import type { ExecutionContext } from '../../context/execution-context.js';
+import type { ExecutionContext } from '../../context/index.js';
 
 /**
  * Provider function to get all converted prompts.

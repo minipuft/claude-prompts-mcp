@@ -1,7 +1,7 @@
 // @lifecycle canonical - Coordinates prompt execution across ordered stages.
 import { randomUUID } from 'crypto';
 
-import { ExecutionContext } from '../context/execution-context.js';
+import { ExecutionContext } from '../context/index.js';
 
 import type { PipelineStage } from './stage.js';
 import type { Logger } from '../../logging/index.js';
