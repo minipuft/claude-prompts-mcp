@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-01-23T06:54:31.071Z",
+  "generatedAt": "2026-01-25T05:36:15.293Z",
   "eslintTarget": "src",
   "totals": {
-    "errors": 3705,
-    "warnings": 1076
+    "errors": 3678,
+    "warnings": 1064
   },
   "byRule": {
     "@typescript-eslint/no-unused-vars": {
-      "errors": 104,
+      "errors": 105,
       "warnings": 0
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 372,
+      "errors": 370,
       "warnings": 0
     },
     "@typescript-eslint/no-misused-promises": {
@@ -20,23 +20,23 @@
       "warnings": 0
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2345,
+      "errors": 2332,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 529
+      "warnings": 517
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "errors": 0,
-      "warnings": 303
+      "warnings": 298
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 300,
+      "errors": 292,
       "warnings": 0
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 447,
+      "errors": 444,
       "warnings": 0
     },
     "@typescript-eslint/no-floating-promises": {
@@ -57,10 +57,10 @@
     },
     "no-console": {
       "errors": 0,
-      "warnings": 73
+      "warnings": 79
     },
     "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 54,
+      "errors": 53,
       "warnings": 0
     },
     "claude/require-file-lifecycle": {
@@ -70,6 +70,10 @@
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
       "warnings": 55
+    },
+    "prettier/prettier": {
+      "errors": 1,
+      "warnings": 0
     },
     "@typescript-eslint/prefer-optional-chain": {
       "errors": 1,
@@ -81,17 +85,13 @@
     },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,
-      "warnings": 17
+      "warnings": 16
     },
     "no-useless-escape": {
       "errors": 2,
       "warnings": 0
     },
     "@typescript-eslint/await-thenable": {
-      "errors": 2,
-      "warnings": 0
-    },
-    "no-prototype-builtins": {
       "errors": 2,
       "warnings": 0
     }

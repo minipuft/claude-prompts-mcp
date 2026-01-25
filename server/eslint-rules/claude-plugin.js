@@ -1,4 +1,8 @@
 const DEFAULT_FORBIDDEN_PATTERNS = ['legacy/', '/legacy/', '@legacy/', 'legacy-'];
+const DEFAULT_CONTEXT_DEEP_IMPORTS = [
+  'execution/context/execution-context',
+  'execution/context/context-types',
+];
 const ZERO_WIDTH_JOINER = 0x200d;
 const VARIATION_SELECTORS = new Set([0xfe0f, 0xfe0e]);
 
@@ -44,6 +48,7 @@ const normalizePatterns = (patterns = DEFAULT_FORBIDDEN_PATTERNS) => {
 };
 
 const getSourceCode = (context) => context.sourceCode ?? context.getSourceCode();
+const normalizePath = (value) => value.replace(/\\/g, '/');
 const codeUnitLength = (codePoint) => (codePoint !== undefined && codePoint > 0xffff ? 2 : 1);
 const matchesRegex = (regex, codePoint) => {
   if (codePoint === undefined) {
@@ -204,6 +209,90 @@ const noLegacyImportsRule = {
   },
 };
 
+const noContextDeepImportsRule = {
+  meta: {
+    type: 'suggestion',
+    docs: {
+      description: 'Encourages importing execution context types from the barrel index',
+    },
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          allowInternal: { type: 'boolean' },
+          blockedModules: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+        additionalProperties: false,
+      },
+    ],
+    messages: {
+      contextDeepImport:
+        'Use execution/context/index.js barrel instead of importing "{{path}}" directly.',
+    },
+  },
+  create(context) {
+    const options = context.options[0] ?? {};
+    const allowInternal = options.allowInternal !== false;
+    const blockedModules = options.blockedModules ?? DEFAULT_CONTEXT_DEEP_IMPORTS;
+
+    const isAllowedInternal = () => {
+      if (!allowInternal) {
+        return false;
+      }
+      const filename = context.getFilename?.() ?? '';
+      const normalized = normalizePath(filename);
+      return normalized.includes('/src/execution/context/');
+    };
+
+    const reportIfDeepImport = (sourceNode) => {
+      if (!sourceNode || typeof sourceNode.value !== 'string') {
+        return;
+      }
+      if (isAllowedInternal()) {
+        return;
+      }
+      const specifier = normalizePath(sourceNode.value);
+      const match = blockedModules.find((pattern) => specifier.includes(pattern));
+      if (!match) {
+        return;
+      }
+      context.report({
+        node: sourceNode,
+        messageId: 'contextDeepImport',
+        data: { path: match },
+      });
+    };
+
+    return {
+      ImportDeclaration(node) {
+        reportIfDeepImport(node.source);
+      },
+      ExportAllDeclaration(node) {
+        reportIfDeepImport(node.source);
+      },
+      ExportNamedDeclaration(node) {
+        reportIfDeepImport(node.source);
+      },
+      ImportExpression(node) {
+        reportIfDeepImport(node.source);
+      },
+      CallExpression(node) {
+        if (
+          node.callee.type === 'Identifier' &&
+          node.callee.name === 'require' &&
+          node.arguments.length > 0 &&
+          node.arguments[0].type === 'Literal'
+        ) {
+          reportIfDeepImport(node.arguments[0]);
+        }
+      },
+    };
+  },
+};
+
 const LIFECYCLE_REGEX = /@lifecycle\s+([a-z-]+)/i;
 
 const requireLifecycleRule = {
@@ -351,6 +440,7 @@ const noEmojiCharactersRule = {
 };
 
 export const rules = {
+  'no-context-deep-imports': noContextDeepImportsRule,
   'no-legacy-imports': noLegacyImportsRule,
   'require-file-lifecycle': requireLifecycleRule,
   'no-emojis': noEmojiCharactersRule,

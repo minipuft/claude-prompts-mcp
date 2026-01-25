@@ -158,6 +158,13 @@ export default [
           ],
         },
       ],
+      // Prefer execution context barrel imports (non-blocking)
+      'claude/no-context-deep-imports': [
+        'warn',
+        {
+          allowInternal: true,
+        },
+      ],
       // Block legacy executor symbols that should no longer exist
       'no-restricted-syntax': [
         'error',
@@ -297,6 +304,13 @@ export default [
             'unified-command-parser',
             { type: 'regex', value: 'frameworks/methodology/guides/.*-guide' },
           ],
+        },
+      ],
+      // Prefer execution context barrel imports (non-blocking)
+      'claude/no-context-deep-imports': [
+        'warn',
+        {
+          allowInternal: true,
         },
       ],
       // Block legacy executor symbols
