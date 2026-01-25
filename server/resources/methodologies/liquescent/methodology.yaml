@@ -1,0 +1,168 @@
+id: liquescent
+name: LIQUESCENT Creative Flow
+type: LIQUESCENT
+methodology: LIQUESCENT
+enabled: true
+systemPromptGuidance: >-
+  Apply the LIQUESCENT methodology for creative concept design and
+  boundary-pushing implementation:
+
+
+  **Dissolve**: Release rigid thinking. Enter the liminal space between knowing
+  and not-knowing. Constraints are suggestions. Rules are starting points. Let
+  the mind soften into liquid state—ready to take any shape.
+
+
+  **Flow**: Let concepts ripple outward through loose connections. Follow
+  tangents. Make unexpected leaps. 'What if the gradient isn't moving—what if
+  WE'RE moving?' Honor the bizarre associations. The weird thought might be the
+  breakthrough.
+
+
+  **Crystallize**: As patterns emerge, capture them without killing the energy.
+  Name the feeling. Find the word that FEELS right, not just describes right.
+  'Liquescent'—the state of becoming liquid. The name carries the vision.
+
+
+  **Scout**: Research modern tools, patterns, libraries that could serve the
+  vision. Don't limit to what's common—find what 99% sleep on. @property,
+  oklch(), scroll-driven animations. The bleeding edge is where boundaries get
+  pushed.
+
+
+  **Iterate**: Rapid refinement cycles. Each pass adds depth without losing the
+  original spark. The fetus becomes the womb becomes the becoming. Keep the core
+  energy while sharpening the expression.
+
+
+  **Manifest**: Push boundaries with implementation. The vision isn't complete
+  until it runs. Modern CSS that makes developers say 'wait, you can do that?'
+  Code that embodies the philosophy, not just implements it.
+phasesFile: phases.yaml
+gates:
+  include:
+    - framework-compliance
+    - creative-integrity
+toolDescriptions:
+  prompt_engine:
+    description: >-
+      🌊 PROMPT ENGINE [LIQUESCENT]: Creative concept design through loose
+      connections. Dissolve→Flow→Crystallize→Scout→Iterate→Manifest.
+    parameters:
+      command: >-
+        The creative direction or concept to explore through LIQUESCENT
+        methodology
+methodologyGates:
+  - id: dissolve_openness
+    name: Dissolve Openness
+    description: Verify the creative space has been opened and constraints loosened
+    methodologyArea: Dissolve
+    priority: high
+    validationCriteria:
+      - Initial constraints acknowledged but not accepted as fixed
+      - Multiple conceptual directions considered
+      - Rigid assumptions questioned
+  - id: flow_connections
+    name: Flow Connections
+    description: Ensure loose conceptual connections have been explored
+    methodologyArea: Flow
+    priority: high
+    validationCriteria:
+      - Unexpected associations documented
+      - Tangential ideas followed rather than dismissed
+      - At least one 'weird' connection explored
+  - id: crystallize_naming
+    name: Crystallize Naming
+    description: Verify the vision has been captured in resonant language
+    methodologyArea: Crystallize
+    priority: high
+    validationCriteria:
+      - Core concept has a name that FEELS right
+      - Philosophy articulated without killing energy
+      - Emotional resonance preserved in documentation
+  - id: scout_boundaries
+    name: Scout Boundaries
+    description: Ensure modern tools and patterns have been researched
+    methodologyArea: Scout
+    priority: high
+    validationCriteria:
+      - Bleeding-edge tools identified
+      - Techniques most developers don't use discovered
+      - Fallback strategies considered
+  - id: iterate_preservation
+    name: Iterate Preservation
+    description: Verify refinement preserves original creative energy
+    methodologyArea: Iterate
+    priority: medium
+    validationCriteria:
+      - Core vision remains intact through iterations
+      - Depth added without diluting essence
+      - Spark maintained
+  - id: manifest_embodiment
+    name: Manifest Embodiment
+    description: Ensure implementation embodies the philosophy
+    methodologyArea: Manifest
+    priority: high
+    validationCriteria:
+      - Code reflects conceptual vision
+      - Boundaries actually pushed
+      - Philosophy not just implemented but FELT
+templateSuggestions:
+  - section: system
+    type: addition
+    description: Add creative flow guidance to system prompt
+    content: >-
+      Apply the LIQUESCENT methodology: Dissolve constraints, Flow through loose
+      connections, Crystallize patterns, Scout modern tools, Iterate with
+      energy, Manifest with philosophy.
+    methodologyJustification: Ensures creative thinking is systematic without being rigid
+    impact: high
+  - section: user
+    type: addition
+    description: Encourage tangential exploration
+    content: Follow the weird thought—it might be the breakthrough.
+    methodologyJustification: Loose connections often yield innovation
+    impact: medium
+methodologyElements:
+  requiredSections:
+    - Dissolve
+    - Flow
+    - Crystallize
+    - Manifest
+  optionalSections:
+    - Scout
+    - Iterate
+  sectionDescriptions:
+    Dissolve: Release rigid thinking and enter the liminal creative space
+    Flow: Follow loose conceptual connections without forcing structure
+    Crystallize: Capture and name emerging patterns with resonant language
+    Scout: Research bleeding-edge tools and boundary-pushing patterns
+    Iterate: Rapid refinement cycles preserving the original creative spark
+    Manifest: Implement with techniques that embody the philosophy
+argumentSuggestions:
+  - name: vibe
+    type: string
+    description: The emotional/conceptual direction to explore
+    methodologyReason: Dissolve phase needs a starting feeling, not a specification
+    examples:
+      - neuromorphic gradient ripple
+      - liquid becoming
+      - bioluminescent depth
+  - name: boundaries
+    type: string
+    description: Which technical boundaries to push
+    methodologyReason: Scout phase needs direction for research
+    examples:
+      - modern CSS
+      - animation techniques
+      - color systems
+  - name: energy
+    type: string
+    description: The creative energy to preserve through iterations
+    methodologyReason: Iterate phase needs to know what spark to maintain
+    examples:
+      - Erlich Bachman shroom trip
+      - calm precision
+      - chaotic emergence
+judgePromptFile: judge-prompt.md
+version: 1.0.0

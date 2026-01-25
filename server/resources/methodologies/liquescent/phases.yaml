@@ -1,0 +1,186 @@
+phases:
+  - id: dissolve
+    name: Dissolve
+    description: >-
+      Release rigid thinking and enter the liminal creative space where
+      constraints become fluid
+  - id: flow
+    name: Flow
+    description: >-
+      Let concepts ripple through loose connections, following tangents and
+      making unexpected leaps
+  - id: crystallize
+    name: Crystallize
+    description: >-
+      Capture emerging patterns and name the vision without killing the creative
+      energy
+  - id: scout
+    name: Scout
+    description: >-
+      Research modern tools, patterns, and libraries that could serve and push
+      the vision
+  - id: iterate
+    name: Iterate
+    description: Rapid refinement cycles that add depth while preserving the original spark
+  - id: manifest
+    name: Manifest
+    description: Push boundaries with implementation that embodies the philosophy
+processingSteps:
+  - id: dissolve_processing
+    name: Dissolve Processing
+    description: Enter the liminal creative space by releasing constraints
+    methodologyBasis: LIQUESCENT Dissolve phase
+    order: 1
+    required: true
+  - id: flow_processing
+    name: Flow Processing
+    description: Follow loose conceptual connections without forcing structure
+    methodologyBasis: LIQUESCENT Flow phase
+    order: 2
+    required: true
+  - id: crystallize_processing
+    name: Crystallize Processing
+    description: Capture and name emerging patterns
+    methodologyBasis: LIQUESCENT Crystallize phase
+    order: 3
+    required: true
+  - id: scout_processing
+    name: Scout Processing
+    description: Research modern tools and boundary-pushing patterns
+    methodologyBasis: LIQUESCENT Scout phase
+    order: 4
+    required: true
+  - id: iterate_processing
+    name: Iterate Processing
+    description: Refine through rapid cycles while preserving energy
+    methodologyBasis: LIQUESCENT Iterate phase
+    order: 5
+    required: true
+  - id: manifest_processing
+    name: Manifest Processing
+    description: Implement with boundary-pushing techniques
+    methodologyBasis: LIQUESCENT Manifest phase
+    order: 6
+    required: true
+executionSteps:
+  - id: dissolve_execution
+    name: Dissolve Execution
+    action: Question assumptions, loosen constraints, enter creative flow state
+    methodologyPhase: Dissolve
+    dependencies: []
+    expected_output: Open creative space with fluid constraints
+  - id: flow_execution
+    name: Flow Execution
+    action: Explore loose connections, follow tangents, make unexpected leaps
+    methodologyPhase: Flow
+    dependencies:
+      - dissolve_execution
+    expected_output: Network of conceptual connections and 'weird' associations
+  - id: crystallize_execution
+    name: Crystallize Execution
+    action: Capture patterns, name the vision, articulate philosophy
+    methodologyPhase: Crystallize
+    dependencies:
+      - flow_execution
+    expected_output: Named concept with resonant philosophy
+  - id: scout_execution
+    name: Scout Execution
+    action: Research bleeding-edge tools, modern patterns, underused techniques
+    methodologyPhase: Scout
+    dependencies:
+      - crystallize_execution
+    expected_output: Curated list of boundary-pushing tools and patterns
+  - id: iterate_execution
+    name: Iterate Execution
+    action: Rapid refinement cycles preserving original spark
+    methodologyPhase: Iterate
+    dependencies:
+      - scout_execution
+    expected_output: Refined vision with added depth
+  - id: manifest_execution
+    name: Manifest Execution
+    action: Implement with modern techniques that embody the philosophy
+    methodologyPhase: Manifest
+    dependencies:
+      - iterate_execution
+    expected_output: Working implementation that pushes boundaries
+templateEnhancements:
+  systemPromptAdditions:
+    - Channel loose creative thinking—constraints are suggestions
+    - Follow tangents and weird associations
+    - Research what 99% of developers sleep on
+    - Implementation should FEEL like the concept
+  userPromptModifications:
+    - Begin by dissolving rigid assumptions
+    - Let concepts flow before forcing structure
+    - Name things by how they FEEL, not just what they do
+  contextualHints:
+    - The weird thought might be the breakthrough
+    - Modern tools exist that most don't know about
+    - Code can embody philosophy, not just implement features
+executionFlow:
+  preProcessingSteps:
+    - Release attachment to 'correct' approach
+    - Acknowledge that boundaries are meant to be pushed
+  postProcessingSteps:
+    - Verify original spark is preserved
+    - Check that implementation embodies philosophy
+  validationSteps:
+    - Creative energy maintained check
+    - Boundary-pushing verification
+    - Philosophy embodiment assessment
+qualityIndicators:
+  dissolve:
+    keywords:
+      - release
+      - loosen
+      - fluid
+      - liminal
+      - open
+    patterns:
+      - constraint.*suggestion|rigid.*soften|assumption.*question
+  flow:
+    keywords:
+      - tangent
+      - connection
+      - ripple
+      - leap
+      - unexpected
+    patterns:
+      - what.if|weird.*thought|loose.*connection
+  crystallize:
+    keywords:
+      - name
+      - capture
+      - feel
+      - resonant
+      - vision
+    patterns:
+      - feel.*right|energy.*preserve|pattern.*emerge
+  scout:
+    keywords:
+      - modern
+      - bleeding-edge
+      - research
+      - underused
+      - boundary
+    patterns:
+      - 99%.*sleep|most.*don't|push.*boundary
+  iterate:
+    keywords:
+      - refine
+      - cycle
+      - preserve
+      - spark
+      - depth
+    patterns:
+      - rapid.*cycle|original.*spark|add.*depth
+  manifest:
+    keywords:
+      - implement
+      - embody
+      - push
+      - feel
+      - philosophy
+    patterns:
+      - embody.*philosophy|boundary.*push|code.*feel

@@ -80,6 +80,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Ad-hoc chains** (`-->` syntax): Display prompt IDs in execution order (`1. strategicimplement`, `2. test_default`)
   - Cache now includes `chain_step_ids` alongside `chain_step_names` for complete step metadata
 
+- **Response blocking for gates**: New `blockResponseOnFail` gate configuration option
+  - When a gate with `blockResponseOnFail: true` receives a FAIL verdict, response content is suppressed
+  - Only gate review instructions are returned, not the execution output
+  - Provides explicit enforcement for critical quality gates
+  - Gate YAML: `config.blockResponseOnFail: true`
+
+- **Structured response contract for gate validation**: Explicit fields for client hook consumption
+  - `gateValidation.pendingGateIds`: Gate IDs awaiting verdict from client
+  - `gateValidation.requiresGateVerdict`: Boolean flag for mandatory `gate_verdict` parameter
+  - `gateValidation.responseBlocked`: Whether content was suppressed due to gate failure
+  - `gateValidation.gateRetryInfo`: Object with `maxAttempts`, `currentAttempt`, `retryAllowed`
+  - `McpErrorCode` enum: `GATE_VERDICT_REQUIRED`, `GATE_RETRY_EXCEEDED`, `GATE_RESPONSE_BLOCKED`, etc.
+
+- **Server-side hook system**: Extensible hooks for pipeline stages and events
+  - `HookRegistry` class with `PipelineHooks`, `GateHooks`, and `ChainHooks` interfaces
+  - Pipeline hooks: `onBeforeStage`, `onAfterStage`, `onStageError`
+  - Gate hooks: `onGateEvaluated`, `onGateFailed`, `onRetryExhausted`, `onResponseBlocked`
+  - Chain hooks: `onStepComplete`, `onChainComplete`, `onChainFailed`
+  - Located in `src/hooks/hook-registry.ts`
+
+- **MCP notification emitter**: Push notifications to clients for gate/chain events
+  - `McpNotificationEmitter` class for sending MCP protocol notifications
+  - Gate notifications: `gate/failed`, `gate/response_blocked`, `gate/retry_exhausted`
+  - Framework notifications: `framework/changed`
+  - Chain notifications: `chain/step_complete`, `chain/complete`
+  - Located in `src/notifications/mcp-notification-emitter.ts`
+
 - **Extension dependency sync**: `.mcpb` package now reads dependencies dynamically from `server/package.json` at build time (SSOT pattern)
   - `scripts/build-extension.sh` refactored to generate deps dynamically, eliminating version drift
   - `npm run validate:extension-deps` validates extension configuration as part of `validate:all`

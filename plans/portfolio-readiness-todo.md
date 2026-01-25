@@ -21,11 +21,11 @@
 
 ### Video Strategy
 
-| Client | Priority | Target Audience | Focus |
-|--------|----------|-----------------|-------|
-| **Claude Code** | Primary | Developers, Twitter trend followers | Full features: hooks, chains, gates, hot-reload |
-| **Claude Desktop** | Secondary | Non-developers, enterprise | Clean MCP basics, prompt management |
-| **Cursor** | Optional | IDE-focused devs | 1-click install, inline workflow |
+| Client             | Priority  | Target Audience                     | Focus                                           |
+| ------------------ | --------- | ----------------------------------- | ----------------------------------------------- |
+| **Claude Code**    | Primary   | Developers, Twitter trend followers | Full features: hooks, chains, gates, hot-reload |
+| **Claude Desktop** | Secondary | Non-developers, enterprise          | Clean MCP basics, prompt management             |
+| **Cursor**         | Optional  | IDE-focused devs                    | 1-click install, inline workflow                |
 
 **Skip Gemini CLI** - Hooks are Claude Code-specific, not portable.
 
@@ -124,12 +124,12 @@
 
 **Location**: `server/resources/prompts/development/`
 
-| Step | Prompt | Gate | Purpose |
-|------|--------|------|---------|
-| 1 | `library_overview` | (advisory) | Quick health check |
-| 2 | `technical_deep_dive` | **Verified Claims** (BLOCKING) | Rigorous analysis |
-| 3 | `integration_assessment` | (advisory) | Compatibility check |
-| 4 | `tech_recommendation` | **Actionable Output** | Go/no-go decision |
+| Step | Prompt                   | Gate                           | Purpose             |
+| ---- | ------------------------ | ------------------------------ | ------------------- |
+| 1    | `library_overview`       | (advisory)                     | Quick health check  |
+| 2    | `technical_deep_dive`    | **Verified Claims** (BLOCKING) | Rigorous analysis   |
+| 3    | `integration_assessment` | (advisory)                     | Compatibility check |
+| 4    | `tech_recommendation`    | **Actionable Output**          | Go/no-go decision   |
 
 **Invoke**: `>>tech_evaluation_chain library:'zod' context:'API validation'`
 
@@ -137,12 +137,12 @@
 
 **Location**: `server/resources/prompts/analysis/`
 
-| Step | Prompt | Gate | Purpose |
-|------|--------|------|---------|
-| 1 | `initial_scan` | (advisory) | Map knowledge landscape |
-| 2 | `deep_investigation` | **Source Citations** (BLOCKING) | Evidence gathering |
-| 3 | `research_synthesis` | (advisory) | Reconcile findings |
-| 4 | `action_plan` | **Actionable Recommendations** | Concrete next steps |
+| Step | Prompt               | Gate                            | Purpose                 |
+| ---- | -------------------- | ------------------------------- | ----------------------- |
+| 1    | `initial_scan`       | (advisory)                      | Map knowledge landscape |
+| 2    | `deep_investigation` | **Source Citations** (BLOCKING) | Evidence gathering      |
+| 3    | `research_synthesis` | (advisory)                      | Reconcile findings      |
+| 4    | `action_plan`        | **Actionable Recommendations**  | Concrete next steps     |
 
 **Invoke**: `>>research_chain topic:'remote work' purpose:'policy update'`
 
@@ -169,3 +169,5 @@
 5. **Meta-Prompts** - `>>create_prompt` for self-improvement
 6. **Version Control** - Prompts as code in git
 7. **Hooks** (Claude Code only) - Catches syntax errors, reminds about chain state
+/
+1
