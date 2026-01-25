@@ -443,9 +443,7 @@ export class GateRegistry {
     if (typeof guide.isActive !== 'function') {
       errors.push('isActive() method is required');
     }
-    if (typeof guide.validate !== 'function') {
-      errors.push('validate() method is required');
-    }
+    // Note: validate() method was removed from IGateGuide - use GateValidator instead
 
     return { valid: errors.length === 0, errors };
   }

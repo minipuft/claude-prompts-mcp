@@ -9,6 +9,8 @@
  * Temporary gates can be merged via TemporaryGateRegistry when provided.
  */
 
+import { isGateActiveForContext } from '../utils/gate-activation.js';
+
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
@@ -116,32 +118,20 @@ export class GateManagerProvider implements GateDefinitionProvider {
     // GateManager/registry handles its own caching; no-op for compatibility
   }
 
+  /**
+   * Determine if a gate should be active for the provided context.
+   *
+   * Delegates to the canonical isGateActiveForContext utility which handles:
+   * - Framework gates (gate_type: 'framework'): AND logic for category+framework
+   * - Regular gates: blocking logic where each rule blocks independently
+   *
+   * @see isGateActiveForContext for implementation details
+   */
   isGateActive(
     gate: LightweightGateDefinition,
     context: { promptCategory?: string; framework?: string; explicitRequest?: boolean }
   ): boolean {
-    const activation = gate.activation;
-    if (!activation) return true;
-
-    if (activation.explicit_request === true && context.explicitRequest !== true) {
-      return false;
-    }
-
-    if ((activation.prompt_categories?.length ?? 0) > 0 && context.promptCategory !== undefined) {
-      if (activation.prompt_categories?.includes(context.promptCategory) === false) {
-        return false;
-      }
-    }
-
-    if ((activation.framework_context?.length ?? 0) > 0 && context.framework !== undefined) {
-      const normalizedFramework = context.framework.toUpperCase();
-      const normalizedContexts = activation.framework_context?.map((f) => f.toUpperCase()) ?? [];
-      if (!normalizedContexts.includes(normalizedFramework)) {
-        return false;
-      }
-    }
-
-    return true;
+    return isGateActiveForContext(gate.activation, context, gate.gate_type);
   }
 
   getStatistics(): { cachedGates: number; totalLoads: number; lastAccess: Date | null } {

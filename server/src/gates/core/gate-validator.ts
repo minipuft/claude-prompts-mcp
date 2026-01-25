@@ -23,7 +23,7 @@
  */
 
 import { Logger } from '../../logging/index.js';
-import { SHELL_VERIFY_PRESETS } from '../constants.js';
+import { getShellPreset } from '../config/index.js';
 import { getDefaultShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 
 import type { GateDefinitionProvider } from './gate-loader.js';
@@ -279,9 +279,9 @@ export class GateValidator {
       };
     }
 
-    // Resolve preset values if specified
+    // Resolve preset values if specified (loaded from YAML config)
     const presetValues =
-      criteria.shell_preset != null ? SHELL_VERIFY_PRESETS[criteria.shell_preset] : undefined;
+      criteria.shell_preset != null ? getShellPreset(criteria.shell_preset) : undefined;
 
     // Build shell verification gate config
     const gateConfig: ShellVerifyGate = {

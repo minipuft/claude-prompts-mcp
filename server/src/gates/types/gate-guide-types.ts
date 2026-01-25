@@ -12,13 +12,7 @@
  * - Simpler interface focused on guidance and validation
  */
 
-import type { ValidationResult } from '../../execution/types.js';
-import type {
-  GateEnforcementMode,
-  GatePassCriteria,
-  GateSeverity,
-  ValidationContext,
-} from '../types.js';
+import type { GateEnforcementMode, GatePassCriteria, GateSeverity } from '../types.js';
 
 // ============================================================================
 // Gate Activation Types
@@ -112,6 +106,14 @@ export interface GateDefinitionYaml {
    */
   gate_type?: 'framework' | 'category' | 'custom';
 
+  /**
+   * When true, gate failure (FAIL verdict) will suppress the execution response content.
+   * Only the gate review instructions will be returned, not the actual output.
+   * Useful for critical gates where invalid output should not be exposed to the user.
+   * @default false
+   */
+  blockResponseOnFail?: boolean;
+
   // File references (inlined by loader)
   /** Reference to guidance.md file (inlined into guidance field) */
   guidanceFile?: string;
@@ -127,33 +129,6 @@ export interface GateDefinitionYaml {
   // Activation rules
   /** Rules determining when this gate should be activated */
   activation?: GateActivationRules;
-}
-
-// ============================================================================
-// Gate Validation Result Types
-// ============================================================================
-
-/**
- * Result of a gate validation operation.
- * Extends the base ValidationResult with gate-specific information.
- */
-export interface GateValidationResult extends ValidationResult {
-  /** The gate ID that produced this result */
-  gateId: string;
-  /** Human-readable status message */
-  message?: string;
-  /** Validation score (0.0 to 1.0) */
-  score?: number;
-  /** Structured details from validation checks */
-  details?: Record<string, unknown>;
-  /** Hints for improving on retry */
-  retryHints?: string[];
-  /** Suggestions for improvement */
-  suggestions?: string[];
-  /** Whether the gate was skipped (e.g., not active for context) */
-  skipped?: boolean;
-  /** Reason for skipping, if applicable */
-  skipReason?: string;
 }
 
 // ============================================================================
@@ -177,7 +152,7 @@ export interface GateValidationResult extends ValidationResult {
  * const guide = registry.getGuide('code-quality');
  * if (guide?.isActive({ promptCategory: 'code' })) {
  *   const guidance = guide.getGuidance();
- *   const result = await guide.validate(content, context);
+ *   // For validation, use GateValidator.validateGate() instead
  * }
  * ```
  */
@@ -253,20 +228,6 @@ export interface IGateGuide {
    * @returns true if the gate should be active
    */
   isActive(context: GateActivationContext): boolean;
-
-  // -------------------------------------------------------------------------
-  // Validation Methods
-  // -------------------------------------------------------------------------
-
-  /**
-   * Validate content against this gate's criteria.
-   * Only meaningful for validation-type gates.
-   *
-   * @param content - The content to validate
-   * @param context - Additional validation context
-   * @returns Validation result with pass/fail status and details
-   */
-  validate(content: string, context: ValidationContext): Promise<GateValidationResult>;
 
   // -------------------------------------------------------------------------
   // Introspection Methods

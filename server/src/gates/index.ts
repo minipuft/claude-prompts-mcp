@@ -41,3 +41,6 @@ export * from './hot-reload/index.js';
 
 // Export shell verification types (Ralph Wiggum loops)
 export * from './shell/index.js';
+
+// Export gate configuration (verdict patterns, etc.)
+export * from './config/index.js';

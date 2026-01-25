@@ -74,48 +74,13 @@ export const SHELL_VERIFY_DEFAULTS = {
 } as const;
 
 // ============================================================================
-// Shell Verification Presets
+// Shell Verification Presets - MIGRATED TO YAML
 // ============================================================================
-
-/**
- * Verification presets for common use cases.
- * Users can apply these with :fast, :full, or :extended syntax.
- *
- * @example
- * :: verify:"npm test" :fast      // Quick feedback during development
- * :: verify:"npm test" :full      // CI-style validation (default-like)
- * :: verify:"npm test" :extended  // Long-running test suites
- */
-export const SHELL_VERIFY_PRESETS = {
-  /**
-   * :fast - Quick feedback during development
-   * Single attempt with short timeout for rapid iteration
-   */
-  fast: {
-    maxIterations: 1,
-    timeout: 30000, // 30 seconds
-  },
-
-  /**
-   * :full - CI-style validation (recommended for most cases)
-   * Multiple attempts with standard timeout
-   */
-  full: {
-    maxIterations: 5,
-    timeout: 300000, // 5 minutes
-  },
-
-  /**
-   * :extended - Long-running test suites
-   * More attempts with extended timeout for comprehensive testing
-   */
-  extended: {
-    maxIterations: 10,
-    timeout: 600000, // 10 minutes
-  },
-} as const;
-
-/**
- * Type for valid preset names
- */
-export type ShellVerifyPresetName = keyof typeof SHELL_VERIFY_PRESETS;
+// Presets are now loaded dynamically from:
+//   resources/gates/config/shell-presets.yaml
+//
+// Use the shell preset loader instead:
+//   import { loadShellPresets, getShellPreset } from './config/index.js';
+//
+// See: src/gates/config/shell-preset-loader.ts
+// ============================================================================

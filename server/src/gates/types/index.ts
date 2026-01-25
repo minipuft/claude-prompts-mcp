@@ -13,7 +13,6 @@ export type {
   GateActivationContext,
   GateDefinitionYaml,
   GateRetryConfig,
-  GateValidationResult,
 } from './gate-guide-types.js';
 
 // Registry types

@@ -26,7 +26,6 @@ export type {
   GateActivationContext,
   GateDefinitionYaml,
   GateRetryConfig,
-  GateValidationResult,
   // Registry types
   GateSource,
   GateGuideEntry,
@@ -290,6 +289,14 @@ export interface LightweightGateDefinition {
    * 'framework' gates are methodology-related and can be filtered when frameworks are disabled.
    */
   gate_type?: 'framework' | 'category' | 'custom';
+
+  /**
+   * When true, gate failure (FAIL verdict) will suppress the execution response content.
+   * Only the gate review instructions will be returned, not the actual output.
+   * Useful for critical gates where invalid output should not be exposed to the user.
+   * @default false
+   */
+  blockResponseOnFail?: boolean;
 }
 
 /**

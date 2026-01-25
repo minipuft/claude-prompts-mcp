@@ -7,6 +7,7 @@
 
 import { GateDefinitionLoader, type GateDefinitionLoaderConfig } from './gate-definition-loader.js';
 import { Logger } from '../../logging/index.js';
+import { isGateActiveForContext } from '../utils/gate-activation.js';
 
 import type {
   GateDefinitionYaml,
@@ -211,12 +212,13 @@ export class GateLoader implements GateDefinitionProvider {
   }
 
   /**
-   * Check if a gate should be activated based on context
-   */
-  /**
    * Determine if a gate should be active for the provided context.
-   * Exposed so other systems (e.g., guidance rendering) can reuse the
-   * canonical activation logic instead of duplicating it.
+   *
+   * Delegates to the canonical isGateActiveForContext utility which handles:
+   * - Framework gates (gate_type: 'framework'): AND logic for category+framework
+   * - Regular gates: blocking logic where each rule blocks independently
+   *
+   * @see isGateActiveForContext for implementation details
    */
   public isGateActive(
     gate: LightweightGateDefinition,
@@ -226,35 +228,7 @@ export class GateLoader implements GateDefinitionProvider {
       explicitRequest?: boolean;
     }
   ): boolean {
-    const activation = gate.activation;
-    if (activation === undefined) {
-      // No activation rules means always active
-      return true;
-    }
-
-    // Check explicit request
-    if (activation.explicit_request === true && context.explicitRequest !== true) {
-      return false;
-    }
-
-    // Check prompt categories (empty array means no restriction)
-    if ((activation.prompt_categories?.length ?? 0) > 0 && context.promptCategory !== undefined) {
-      if (activation.prompt_categories?.includes(context.promptCategory) === false) {
-        return false;
-      }
-    }
-
-    // Check framework context (empty array means no restriction)
-    // Case-insensitive comparison to handle CAGEERF vs cageerf mismatches
-    if ((activation.framework_context?.length ?? 0) > 0 && context.framework !== undefined) {
-      const normalizedFramework = context.framework.toUpperCase();
-      const normalizedContexts = activation.framework_context?.map((f) => f.toUpperCase()) ?? [];
-      if (!normalizedContexts.includes(normalizedFramework)) {
-        return false;
-      }
-    }
-
-    return true;
+    return isGateActiveForContext(gate.activation, context, gate.gate_type);
   }
 
   /**

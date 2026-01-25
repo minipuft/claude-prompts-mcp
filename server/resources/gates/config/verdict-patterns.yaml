@@ -1,0 +1,68 @@
+# Gate Verdict Patterns Configuration
+#
+# Defines regex patterns for parsing gate review verdicts from LLM output.
+# Patterns are tried in priority order (primary → high → medium → fallback).
+#
+# Security note: 'fallback' patterns are ONLY applied to the gate_verdict
+# parameter, not user_response, to prevent false positives.
+
+patterns:
+  # Pattern 1: Full format with hyphen (original - backward compatible)
+  # Example: "GATE_REVIEW: PASS - The code meets all quality standards"
+  - id: full-hyphen
+    pattern: "^GATE_REVIEW:\\s*(PASS|FAIL)\\s*-\\s*(.+)$"
+    priority: primary
+    description: "Full format with hyphen separator"
+    examples:
+      - "GATE_REVIEW: PASS - Code meets standards"
+      - "GATE_REVIEW: FAIL - Missing error handling"
+
+  # Pattern 2: Full format with colon separator
+  # Example: "GATE_REVIEW: PASS : Meets all criteria"
+  - id: full-colon
+    pattern: "^GATE_REVIEW:\\s*(PASS|FAIL)\\s*:\\s*(.+)$"
+    priority: high
+    description: "Full format with colon separator"
+    examples:
+      - "GATE_REVIEW: PASS : All tests passing"
+      - "GATE_REVIEW: FAIL : Performance issues detected"
+
+  # Pattern 3: Simplified format with hyphen
+  # Example: "GATE PASS - All checks passed"
+  - id: simple-hyphen
+    pattern: "^GATE\\s+(PASS|FAIL)\\s*-\\s*(.+)$"
+    priority: high
+    description: "Simplified format with hyphen"
+    examples:
+      - "GATE PASS - Implementation complete"
+      - "GATE FAIL - Security vulnerabilities found"
+
+  # Pattern 4: Simplified format with colon
+  # Example: "GATE PASS : Ready for merge"
+  - id: simple-colon
+    pattern: "^GATE\\s+(PASS|FAIL)\\s*:\\s*(.+)$"
+    priority: medium
+    description: "Simplified format with colon"
+    examples:
+      - "GATE PASS : All criteria met"
+      - "GATE FAIL : Documentation incomplete"
+
+  # Pattern 5: Minimal format (gate_verdict parameter only)
+  # Example: "PASS - Looks good"
+  # WARNING: Only applied to gate_verdict param, NOT user_response
+  - id: minimal
+    pattern: "^(PASS|FAIL)\\s*[-:]\\s*(.+)$"
+    priority: fallback
+    description: "Minimal format - gate_verdict only to prevent false positives"
+    restricted_sources:
+      - gate_verdict
+    examples:
+      - "PASS - Approved"
+      - "FAIL - Needs work"
+
+# Validation rules
+validation:
+  # Rationale is required for all verdicts
+  require_rationale: true
+  # Minimum rationale length (characters)
+  min_rationale_length: 1
