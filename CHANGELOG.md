@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0](https://github.com/minipuft/claude-prompts/compare/v1.7.0...v2.0.0) (2026-01-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* **paths:** All path-dependent modules now require explicit path configuration. Callers must provide paths via PathResolver or CLI flags.
+
+### Features
+
+* **eslint:** add claude-plugin custom ESLint rule ([876b431](https://github.com/minipuft/claude-prompts/commit/876b431f428b8a8df644ae4d89c31d483c45e9d2))
+* **gates:** add response blocking and gate event emission in pipeline ([914a074](https://github.com/minipuft/claude-prompts/commit/914a0740db3d793d259d502ae9a354077b85c3d3))
+* **hooks:** add server-side hook registry and MCP notification system ([86ba115](https://github.com/minipuft/claude-prompts/commit/86ba11564d6363e9353b34cfcef0a7e662d50b96))
+* **parsers:** add framework-aware quote parsing for @ operator ([9555122](https://github.com/minipuft/claude-prompts/commit/95551220836997760e735ab6b7121548f05dc504))
+
+
+### Bug Fixes
+
+* **ci:** align extension-publish tags with Release Please config ([19a0024](https://github.com/minipuft/claude-prompts/commit/19a002439ade437c7856c03164b52c4196d821a1))
+* **hooks:** allow generated file deletions for feature removal ([a8fcb24](https://github.com/minipuft/claude-prompts/commit/a8fcb24f310096fe617ac50fb1840acdeb5778f8))
+* **hooks:** update Python hooks for new gate server format ([1b0ddf5](https://github.com/minipuft/claude-prompts/commit/1b0ddf50367e8de7fb447b2e95b6d80ecec2d207))
+* **parsers:** simplify argument assignment for unstructured text ([061cd0f](https://github.com/minipuft/claude-prompts/commit/061cd0f1e8483e258ffff13e5576b61eddac15d2))
+* **pipeline:** use provider function for prompt cache synchronization ([f092837](https://github.com/minipuft/claude-prompts/commit/f09283778ff2474b1a30d8a40c6a8f0827069c97))
+* **runtime:** bridge PathResolver to jsonUtils via PROMPTS_PATH env var ([3d4505b](https://github.com/minipuft/claude-prompts/commit/3d4505b3c982f2952fc56f574ba5228b801d290e))
+* **tests:** set PROMPTS_PATH in test setup for template rendering ([34769d7](https://github.com/minipuft/claude-prompts/commit/34769d762fc9ffdb2f7c00064dc4a04bdd2a0a9e))
+
+
+### Code Refactoring
+
+* **paths:** enforce explicit path resolution, remove process.cwd() fallbacks ([b93ca78](https://github.com/minipuft/claude-prompts/commit/b93ca789abf5e2bcf318fce73dd27cd634563efa))
+
 ## [1.7.0](https://github.com/minipuft/claude-prompts/compare/v1.6.0...v1.7.0) (2026-01-23)
 
 
