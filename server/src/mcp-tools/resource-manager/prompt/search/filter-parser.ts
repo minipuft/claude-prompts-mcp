@@ -3,7 +3,7 @@
  * Intelligent filter parsing for prompt discovery
  */
 
-import { Logger } from '../../../logging/index.js';
+import { Logger } from '../../../../logging/index.js';
 import { SmartFilters } from '../core/types.js';
 import { validateFilterSyntax } from '../utils/validation.js';
 

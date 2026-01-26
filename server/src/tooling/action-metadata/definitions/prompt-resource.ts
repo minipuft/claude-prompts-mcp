@@ -1,17 +1,23 @@
-// @lifecycle canonical - Prompt manager action metadata definitions.
+// @lifecycle canonical - Prompt resource action metadata for resource_manager.
+
 import {
-  prompt_managerCommands,
-  prompt_managerParameters,
-} from '../../../tooling/contracts/_generated/prompt_manager.generated.js';
+  resource_managerCommands,
+  resource_managerParameters,
+} from '../../../tooling/contracts/_generated/resource_manager.generated.js';
 import {
   contractToCommandDescriptors,
   contractToParameterDescriptors,
 } from '../../contracts/adapter.js';
 
-import type { PromptManagerMetadataData, ToolMetadata, ParameterDescriptor } from './types.js';
-import type { prompt_managerParamName } from '../../../tooling/contracts/_generated/prompt_manager.generated.js';
+import type {
+  PromptResourceMetadataData,
+  ToolMetadata,
+  ParameterDescriptor,
+  CommandDescriptor,
+} from './types.js';
+import type { resource_managerParamName } from '../../../tooling/contracts/_generated/resource_manager.generated.js';
 
-const promptManagerActions = [
+const promptResourceActions = [
   {
     id: 'create',
     displayName: 'Create Prompt',
@@ -116,31 +122,65 @@ const promptManagerActions = [
   },
 ] as const;
 
-export type PromptManagerActionId = (typeof promptManagerActions)[number]['id'];
+export type PromptResourceActionId = (typeof promptResourceActions)[number]['id'];
 
-const promptManagerContract = {
-  tool: 'prompt_manager',
+const promptResourceContract = {
+  tool: 'resource_manager',
   version: 1,
   summary:
-    'Prompt and chain lifecycle management (create, update, list, analyze, reload, delete). One action per call—include `action` plus the fields for that operation.',
-  parameters: prompt_managerParameters,
-  commands: prompt_managerCommands,
+    'Prompt lifecycle management via resource_manager (create, update, list, analyze, reload, delete). One action per call—include resource_type:"prompt" plus the fields for that operation.',
+  parameters: resource_managerParameters,
+  commands: resource_managerCommands,
 };
 
-const parameterDescriptors: ParameterDescriptor<prompt_managerParamName>[] =
-  contractToParameterDescriptors<prompt_managerParamName>(promptManagerContract);
+const PROMPT_RESOURCE_PARAMETER_NAMES: resource_managerParamName[] = [
+  'resource_type',
+  'action',
+  'id',
+  'name',
+  'description',
+  'category',
+  'user_message_template',
+  'system_message',
+  'arguments',
+  'chain_steps',
+  'tools',
+  'gate_configuration',
+  'execution_hint',
+  'section',
+  'section_content',
+  'filter',
+  'format',
+  'detail',
+  'search_query',
+  'confirm',
+  'reason',
+  'version',
+  'from_version',
+  'to_version',
+  'skip_version',
+  'limit',
+];
 
-const commandDescriptors = contractToCommandDescriptors(promptManagerContract);
+const parameterDescriptors: ParameterDescriptor<resource_managerParamName>[] =
+  contractToParameterDescriptors<resource_managerParamName>(promptResourceContract).filter(
+    (param) => PROMPT_RESOURCE_PARAMETER_NAMES.includes(param.name)
+  );
 
-export const promptManagerMetadata: ToolMetadata<PromptManagerMetadataData> = {
-  tool: 'prompt_manager',
-  version: 1, // Matches contract version
+const commandDescriptors: CommandDescriptor[] = contractToCommandDescriptors(
+  promptResourceContract
+).filter((command) => command.id.startsWith('prompt:'));
+
+export const promptResourceMetadata: ToolMetadata<PromptResourceMetadataData> = {
+  tool: 'resource_manager',
+  version: 1,
   notes: [
-    'Parameters sourced from contracts/_generated.',
-    'Actions inventory maintained separately for guide/telemetry.',
+    'Parameters sourced from contracts/_generated/resource_manager.generated.ts.',
+    'Actions inventory maintained for prompt-specific guide and telemetry.',
+    'Requires resource_type:"prompt" on all calls.',
   ],
   data: {
-    actions: promptManagerActions,
+    actions: promptResourceActions,
     parameters: parameterDescriptors,
     commands: commandDescriptors,
   },

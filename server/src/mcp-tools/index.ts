@@ -43,9 +43,9 @@ import { ConversationManager } from '../text-references/conversation.js';
 import { TextReferenceManager } from '../text-references/index.js';
 import { ConsolidatedGateManager, createConsolidatedGateManager } from './gate-manager/index.js';
 import {
-  ConsolidatedPromptManager,
-  createConsolidatedPromptManager,
-} from './prompt-manager/index.js';
+  PromptResourceService,
+  createPromptResourceService,
+} from './resource-manager/prompt/index.js';
 import {
   promptEngineSchema,
   systemControlSchema,
@@ -81,12 +81,12 @@ export class ConsolidatedMcpToolsManager {
 
   // Consolidated tools (5 core tools)
   private promptExecutionService!: PromptExecutionService;
-  private promptManagerTool!: ConsolidatedPromptManager;
+  private promptResourceService!: PromptResourceService;
   private systemControl!: ConsolidatedSystemControl;
   private gateManagerTool!: ConsolidatedGateManager;
   private frameworkManagerTool!: ConsolidatedFrameworkManager;
   private resourceManagerRouter?: ResourceManagerRouter;
-  // Core tools: prompt engine, prompt manager, system control, gate manager, framework manager, resource manager
+  // Core tools: prompt engine, prompt resources, system control, gate manager, framework manager, resource manager
 
   // Shared components
   private semanticAnalyzer!: ReturnType<typeof createContentAnalyzer>;
@@ -179,9 +179,8 @@ export class ConsolidatedMcpToolsManager {
     // Set gate system manager in prompt engine
     this.promptExecutionService.setGateSystemManager(this.gateSystemManager);
 
-    this.promptManagerTool = createConsolidatedPromptManager(
+    this.promptResourceService = createPromptResourceService(
       this.logger,
-      this.mcpServer,
       this.configManager,
       this.semanticAnalyzer,
       this.frameworkStateManager,
@@ -231,7 +230,7 @@ export class ConsolidatedMcpToolsManager {
     this.frameworkStateManager = frameworkStateManager;
     this.promptExecutionService.setFrameworkStateManager(frameworkStateManager);
     this.systemControl.setFrameworkStateManager(frameworkStateManager);
-    this.promptManagerTool.setFrameworkStateManager?.(frameworkStateManager);
+    this.promptResourceService.setFrameworkStateManager(frameworkStateManager);
     // FIXED: Synchronize Framework Manager with Framework State Manager to prevent injection duplication
     if (this.frameworkManager != null) {
       this.frameworkManager.setFrameworkStateManager(frameworkStateManager);
@@ -251,7 +250,7 @@ export class ConsolidatedMcpToolsManager {
 
     this.promptExecutionService.setToolDescriptionManager(manager);
     this.promptExecutionService.setAnalyticsService(this.analyticsService);
-    // promptManagerTool doesn't have setToolDescriptionManager method
+    // prompt resource service does not require tool description manager
     this.systemControl.setToolDescriptionManager?.(manager);
     this.systemControl.setAnalyticsService(this.analyticsService);
     // Core tools integrated with framework-aware descriptions
@@ -383,7 +382,7 @@ export class ConsolidatedMcpToolsManager {
 
       this.promptExecutionService.setFrameworkManager(this.frameworkManager);
       this.systemControl.setFrameworkManager(this.frameworkManager);
-      this.promptManagerTool.setFrameworkManager?.(this.frameworkManager);
+      this.promptResourceService.setFrameworkManager(this.frameworkManager);
 
       // Initialize framework manager tool now that frameworkManager is available
       const frameworkManagerDeps: FrameworkManagerDependencies = {
@@ -409,7 +408,7 @@ export class ConsolidatedMcpToolsManager {
       // Initialize unified resource manager router (routes to prompt/gate/framework managers)
       this.resourceManagerRouter = createResourceManagerRouter({
         logger: this.logger,
-        promptManager: this.promptManagerTool,
+        promptResourceService: this.promptResourceService,
         gateManager: this.gateManagerTool,
         frameworkManager: this.frameworkManagerTool,
       });
@@ -1073,7 +1072,7 @@ export class ConsolidatedMcpToolsManager {
 
     // Update all consolidated tools with new data
     this.promptExecutionService.updateData(promptsData, convertedPrompts);
-    this.promptManagerTool.updateData(promptsData, convertedPrompts, categories);
+    this.promptResourceService.updateData(promptsData, convertedPrompts, categories);
     // Core tools handle data updates directly
   }
 
@@ -1090,18 +1089,6 @@ export class ConsolidatedMcpToolsManager {
         `SystemControl not yet initialized, queued analytics data (${this.pendingAnalytics.length} pending)`
       );
     }
-  }
-
-  /**
-   * Internal entry point for modules that need to reuse prompt_manager actions
-   * without going through the MCP transport (e.g., ApiManager). Keeps prompt
-   * mutations flowing through the canonical tool implementation.
-   */
-  async runPromptManagerAction(args: PromptManagerActionArgs): Promise<ToolResponse> {
-    if (!this.toolsInitialized) {
-      throw new Error('promptManagerTool is not initialized');
-    }
-    return this.promptManagerTool.handleAction(args, {});
   }
 
   /**
@@ -1179,17 +1166,3 @@ export async function createConsolidatedMcpToolsManager(
 // Legacy compatibility - export the consolidated manager as the old name
 export { ConsolidatedMcpToolsManager as McpToolsManager };
 export const createMcpToolsManager = createConsolidatedMcpToolsManager;
-
-export type PromptManagerActionArgs = {
-  action:
-    | 'create'
-    | 'analyze_type'
-    | 'update'
-    | 'delete'
-    | 'reload'
-    | 'list'
-    | 'inspect'
-    | 'analyze_gates'
-    | 'guide';
-  [key: string]: any;
-};

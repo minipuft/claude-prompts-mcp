@@ -95,7 +95,7 @@ We expose **3 MCP tools** instead of 20+ specialized tools:
 2. **Intent Accuracy**: LLMs route better through a single "Manager" tool with distinct actions than guessing parameters for 20 functions.
 3. **Maintainability**: Internal structure can evolve without changing external API.
 
-Internally, `resource_manager` routes to specialized managers (PromptManager, GateManager, FrameworkManager) based on `resource_type`.
+Internally, `resource_manager` routes to specialized services (PromptResourceService, GateManager, FrameworkManager) based on `resource_type`.
 
 ### Contract-Driven Development
 

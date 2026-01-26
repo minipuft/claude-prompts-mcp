@@ -3,12 +3,10 @@
  * Semantic analysis and classification engine
  */
 
-import { Logger } from '../../../logging/index.js';
-import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
-import { ConvertedPrompt } from '../../../types/index.js';
-import { PromptClassification, AnalysisResult, PromptManagerDependencies } from '../core/types.js';
-
-import type { ContentAnalysisResult } from '../../../semantic/types.js';
+import { Logger } from '../../../../logging/index.js';
+import { ContentAnalyzer } from '../../../../semantic/configurable-semantic-analyzer.js';
+import { ConvertedPrompt } from '../../../../types/index.js';
+import { PromptClassification, AnalysisResult, PromptResourceDependencies } from '../core/types.js';
 
 /**
  * Prompt analysis engine for semantic classification and intelligence feedback
@@ -17,7 +15,7 @@ export class PromptAnalyzer {
   private logger: Logger;
   private semanticAnalyzer: ContentAnalyzer;
 
-  constructor(dependencies: Pick<PromptManagerDependencies, 'logger' | 'semanticAnalyzer'>) {
+  constructor(dependencies: Pick<PromptResourceDependencies, 'logger' | 'semanticAnalyzer'>) {
     this.logger = dependencies.logger;
     this.semanticAnalyzer = dependencies.semanticAnalyzer;
   }

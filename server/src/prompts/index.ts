@@ -1,6 +1,6 @@
 // @lifecycle canonical - Entry point that orchestrates prompt loading, conversion, and registration.
 /**
- * Prompt Management System
+ * Prompt Asset System
  * Main module that orchestrates prompt loading, conversion, and registration
  */
 
@@ -40,7 +40,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 //  Framework capabilities integrated into enhanced HotReloadManager
 
 /**
- * Main Prompt Manager class that coordinates all prompt operations
+ * Main Prompt Asset Manager class that coordinates all prompt operations
  */
 export class PromptAssetManager {
   private logger: Logger;
@@ -520,7 +520,7 @@ export class PromptAssetManager {
   }
 
   /**
-   * Shutdown the prompt manager and cleanup resources
+   * Shutdown prompt assets and cleanup resources
    * Prevents async handle leaks by stopping hot reload manager
    */
   async shutdown(): Promise<void> {
@@ -529,5 +529,3 @@ export class PromptAssetManager {
     }
   }
 }
-
-export { PromptAssetManager as PromptManager };

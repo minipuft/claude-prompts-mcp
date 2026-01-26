@@ -7,6 +7,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **Prompt management consolidation**: Migrated all prompt lifecycle operations from standalone `prompt_manager` tool to unified `resource_manager` with `resource_type:"prompt"`. This completes the tool consolidation started in v1.2.0.
+  - All 12 prompt actions preserved: `create`, `update`, `delete`, `list`, `inspect`, `reload`, `analyze_type`, `analyze_gates`, `guide`, `history`, `rollback`, `compare`
+  - Internal architecture improved with service decomposition: `PromptLifecycleService`, `PromptDiscoveryService`, `PromptVersioningService`
+  - No API changes required—use `resource_manager(resource_type:"prompt", action:"...")` as before
+
+### Removed
+
+- **Legacy `prompt_manager` MCP tool**: Prompt lifecycle now exclusively via `resource_manager`. The standalone `prompt_manager` tool registration has been removed.
+
 ## [1.4.6] - 2026-01-21
 
 ### Added
@@ -93,7 +104,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Plugin structure**: Migrated from separate `claude-prompts-plugin` repo to this repo. Plugin files (hooks/, skills/, commands/, mcp.json) now live at repo root; only `plugin.json` remains in `.claude-plugin/`.
 - **Prompts**: bundled prompts moved to a YAML directory format (`prompt.yaml` + message templates) for better structure and hot-reloadability.
 - **Prompt schema**: `category` now optional—auto-derived from directory path.
-- **Tools**: introduced `resource_manager` as the unified CRUD surface for prompts/gates/methodologies; `prompt_manager` remains available with deprecation guidance.
+- **Tools**: introduced `resource_manager` as the unified CRUD surface for prompts/gates/methodologies.
 - **TypeScript**: tightened typing/tsconfig strictness and cleaned up types across the execution pipeline.
 - **Docs**: reorganized documentation layout and cross-links.
 - **Script tools**: Consolidated `mode` parameter into `trigger` + `confirm` options (see Migration below).
@@ -168,7 +179,7 @@ See `docs/guides/script-tools.md` for full documentation.
 **MCP Tools**
 
 - `prompt_engine` — Execute prompts with symbolic command language
-- `prompt_manager` — Create, update, delete, and inspect prompts
+- `resource_manager` — Create, update, delete, and inspect prompts
 - `system_control` — Framework switching, status, and analytics
 
 **Prompt Management**

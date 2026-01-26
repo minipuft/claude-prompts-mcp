@@ -16,7 +16,7 @@ What's next for Claude Prompts MCP.
 
 **Expect**: Open `localhost:3000`, build a prompt visually, test it—Claude sees it immediately. Zero file editing.
 
-**Foundation**: `prompts/hot-reload-manager.ts`, SSE transport, `prompt_manager` CRUD.
+**Foundation**: `prompts/hot-reload-manager.ts`, SSE transport, `resource_manager` CRUD.
 
 ---
 
@@ -60,7 +60,7 @@ prompt_engine(command:">>code_review", optimize:{runs:10, gate:"quality-score"})
 **Expect**:
 
 ```
-prompt_manager(action:"push", workspace:"team-acme")
+resource_manager(resource_type:"prompt", action:"push", workspace:"team-acme")
 → Local prompts sync to team library
 ```
 

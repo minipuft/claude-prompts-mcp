@@ -42,7 +42,7 @@ resource_manager(resource_type:"methodology", action:"switch", id:"cageerf")
 | `prompt_engine`    | Execute prompts with frameworks and gates          | Running prompts        |
 | `system_control`   | View status, analytics, check health               | Admin operations       |
 
-> **Migrating from v1.x?** See [Migration Guide](#migration-guide) for transitioning from the legacy `prompt_manager`, `gate_manager`, and `framework_manager` tools to the unified `resource_manager`.
+> **Migrating from v1.x?** Use `resource_manager` for all prompt, gate, and methodology CRUD operations.
 
 ---
 

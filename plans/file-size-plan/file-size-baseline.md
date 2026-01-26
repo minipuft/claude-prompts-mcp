@@ -54,7 +54,7 @@ This baseline report documents the current state of file size violations in the 
 |-------|------|-----------|-----------------|
 | 981 | chain-session/manager.ts | Chain Execution | 2025-Q2 |
 | 888 | frameworks/integration/framework-semantic-integration.ts | Framework Integration | 2025-Q2 |
-| 798 | mcp-tools/prompt-manager/core/manager.ts | Prompt Management | 2025-Q3 |
+| 798 | mcp-tools/resource-manager/prompt/prompt-resource-service.ts | Prompt Management | 2025-Q3 |
 | 791 | semantic/configurable-semantic-analyzer.ts | Semantic Analysis | 2025-Q3 |
 | 763 | frameworks/methodology/guides/cageerf-guide.ts | Methodology | 2025-Q3 |
 | 749 | execution/parsers/command-parser.ts | Command Parsing | 2025-Q3 |
@@ -92,7 +92,7 @@ This baseline report documents the current state of file size violations in the 
 | 590 | execution/pipeline/gate-enhancement-stage.ts | Execution Pipeline | 2025-Q3 |
 | 589 | prompts/promptUtils.ts | Prompt Utilities | 2025-Q3 |
 | 566 | prompts/category-extractor.ts | Prompt Management | 2025-Q3 |
-| 549 | mcp-tools/prompt-manager/operations/file-operations.ts | File Operations | 2025-Q3 |
+| 549 | mcp-tools/resource-manager/prompt/operations/file-operations.ts | File Operations | 2025-Q3 |
 | 503 | mcp-tools/prompt-engine/utils/validation.ts | Validation | 2025-Q3 |
 
 **Strategy**: These files are closer to the limit. Apply focused refactoring to bring under 500 lines without major architectural changes.

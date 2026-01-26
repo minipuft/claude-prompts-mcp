@@ -23,8 +23,8 @@ import type {
 import type { ConsolidatedFrameworkManager } from '../../framework-manager/index.js';
 import type { GateManagerInput } from '../../gate-manager/core/types.js';
 import type { ConsolidatedGateManager } from '../../gate-manager/index.js';
-import type { ConsolidatedPromptManager } from '../../prompt-manager/index.js';
 import type { ConsolidatedCheckpointManager } from '../checkpoint/index.js';
+import type { PromptResourceService } from '../prompt/index.js';
 
 /**
  * Script tool definition for inline tool creation
@@ -136,6 +136,8 @@ export interface ResourceManagerInput {
     framework_gates?: boolean;
   };
   execution_hint?: 'single' | 'chain';
+  is_chain?: boolean;
+  full_restart?: boolean;
   section?: string;
   section_content?: string;
   filter?: string;
@@ -203,7 +205,7 @@ export interface ResourceManagerInput {
  */
 export interface ResourceManagerDependencies {
   logger: Logger;
-  promptManager: ConsolidatedPromptManager;
+  promptResourceService: PromptResourceService;
   gateManager: ConsolidatedGateManager;
   frameworkManager: ConsolidatedFrameworkManager;
   checkpointManager?: ConsolidatedCheckpointManager;

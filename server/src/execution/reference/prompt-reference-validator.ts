@@ -45,7 +45,7 @@ const REFERENCE_PATTERN = /\{\{ref:([a-zA-Z0-9_-]+)\}\}/g;
 /**
  * Validates prompt references before creation/update.
  *
- * Used by ConsolidatedPromptManager to ensure prompts don't contain
+ * Used by PromptResourceService to ensure prompts don't contain
  * invalid references before writing to disk.
  */
 export class PromptReferenceValidator {

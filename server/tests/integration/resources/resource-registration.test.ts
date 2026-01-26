@@ -88,8 +88,8 @@ describe('MCP Resources Registration Integration', () => {
   });
 
   describe('registerResources()', () => {
-    test('registers prompt resources when promptManager is provided', () => {
-      const mockPromptManager = {
+    test('registers prompt resources when prompt assets are provided', () => {
+      const mockPromptAssetManager = {
         getConvertedPrompts: () => [
           {
             id: 'test-prompt',
@@ -104,7 +104,7 @@ describe('MCP Resources Registration Integration', () => {
 
       const dependencies: ResourceDependencies = {
         logger: mockLogger,
-        promptManager: mockPromptManager,
+        promptManager: mockPromptAssetManager,
       };
 
       registerResources(mockMcpServer as never, dependencies);
@@ -131,10 +131,10 @@ describe('MCP Resources Registration Integration', () => {
       expect(registeredResources.has('gate-guidance')).toBe(true);
     });
 
-    test('skips prompt resources when promptManager not provided', () => {
+    test('skips prompt resources when prompt assets not provided', () => {
       const dependencies: ResourceDependencies = {
         logger: mockLogger,
-        // No promptManager
+        // No prompt assets
       };
 
       registerResources(mockMcpServer as never, dependencies);

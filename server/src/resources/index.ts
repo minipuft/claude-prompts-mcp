@@ -74,7 +74,7 @@ export function registerResources(server: McpServer, dependencies: ResourceDepen
   } else if (!promptsEnabled) {
     logger.debug('[Resources] Prompt resources disabled by config');
   } else {
-    logger.warn('[Resources] PromptManager not available, skipping prompt resources');
+    logger.warn('[Resources] Prompt assets not available, skipping prompt resources');
   }
 
   // Gates

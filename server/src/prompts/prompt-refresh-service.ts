@@ -19,7 +19,7 @@ interface PromptReloadOptions {
 }
 
 /**
- * Reload prompts from disk, synchronizing downstream managers (PromptManager,
+ * Reload prompts from disk, synchronizing downstream managers (PromptAssetManager,
  * MCP tools, API caches) so every transport observes the same prompt metadata.
  */
 export async function reloadPromptData(options: PromptReloadOptions): Promise<PromptReloadResult> {

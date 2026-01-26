@@ -1,20 +1,17 @@
-// @lifecycle canonical - Type definitions for prompt manager internals.
+// @lifecycle canonical - Types for prompt resource services.
 /**
- * Shared types and interfaces for prompt manager modules
+ * Shared types and interfaces for prompt resource services.
  */
 
-import { ConfigManager } from '../../../config/index.js';
-import { FrameworkManager } from '../../../frameworks/framework-manager.js';
-import { FrameworkStateManager } from '../../../frameworks/framework-state-manager.js';
-import { Logger } from '../../../logging/index.js';
-import { ContentAnalyzer } from '../../../semantic/configurable-semantic-analyzer.js';
-import { ToolResponse, ConvertedPrompt, PromptData, Category } from '../../../types/index.js';
+import { ConfigManager } from '../../../../config/index.js';
+import { FrameworkManager } from '../../../../frameworks/framework-manager.js';
+import { FrameworkStateManager } from '../../../../frameworks/framework-state-manager.js';
+import { Logger } from '../../../../logging/index.js';
+import { ContentAnalyzer } from '../../../../semantic/configurable-semantic-analyzer.js';
+import { ToolResponse, ConvertedPrompt, PromptData, Category } from '../../../../types/index.js';
 
-export type { CategoryResult } from '../../../prompts/category-maintenance.js';
+export type { CategoryResult } from '../../../../prompts/category-maintenance.js';
 
-/**
- * Prompt classification interface for management operations
- */
 export interface PromptClassification {
   executionType: 'single' | 'chain';
   requiresExecution: boolean;
@@ -23,7 +20,6 @@ export interface PromptClassification {
   reasoning: string[];
   suggestedGates: string[];
   framework?: string;
-  // Enhanced with configurable analysis information
   analysisMode?: string;
   capabilities?: {
     canDetectStructure: boolean;
@@ -35,18 +31,12 @@ export interface PromptClassification {
   warnings?: string[];
 }
 
-/**
- * Analysis result with feedback and suggestions
- */
 export interface AnalysisResult {
   classification: PromptClassification;
   feedback: string;
   suggestions: string[];
 }
 
-/**
- * Smart filter criteria for prompt discovery
- */
 export interface SmartFilters {
   text?: string;
   type?: string;
@@ -57,12 +47,9 @@ export interface SmartFilters {
   intent?: string;
 }
 
-/**
- * Dependencies required by all prompt manager modules
- */
-export interface PromptManagerDependencies {
+export interface PromptResourceDependencies {
   logger: Logger;
-  mcpServer: any;
+  mcpServer?: any;
   configManager: ConfigManager;
   semanticAnalyzer: ContentAnalyzer;
   frameworkStateManager?: FrameworkStateManager;
@@ -71,54 +58,36 @@ export interface PromptManagerDependencies {
   onRestart: (reason: string) => Promise<void>;
 }
 
-/**
- * Data references shared across modules
- */
-export interface PromptManagerData {
+export interface PromptResourceData {
   promptsData: PromptData[];
   convertedPrompts: ConvertedPrompt[];
   categories: Category[];
 }
 
-/**
- * Common operation result interface
- */
 export interface OperationResult {
   message: string;
   affectedFiles?: string[];
   metadata?: any;
 }
 
-/**
- * Validation error details
- */
 export interface ValidationContext {
   operation: string;
   requiredFields: string[];
   providedFields: string[];
 }
 
-/**
- * File operation result
- */
 export interface FileOperationResult {
   exists: boolean;
   path?: string;
   metadata?: any;
 }
 
-/**
- * Dependency analysis result
- */
 export interface DependencyAnalysis {
   dependencies: ConvertedPrompt[];
   risks: string[];
   warnings: string[];
 }
 
-/**
- * Migration operation result
- */
 export interface MigrationResult {
   fromType: string;
   toType: string;
@@ -126,22 +95,8 @@ export interface MigrationResult {
   result: ToolResponse;
 }
 
-/**
- * Base interface for all modular components
- */
-export interface PromptManagerModule {
-  /**
-   * Update data references
-   */
-  updateData?(data: PromptManagerData): void;
-
-  /**
-   * Set framework state manager
-   */
+export interface PromptResourceModule {
+  updateData?(data: PromptResourceData): void;
   setFrameworkStateManager?(frameworkStateManager: FrameworkStateManager): void;
-
-  /**
-   * Set framework manager
-   */
   setFrameworkManager?(frameworkManager: FrameworkManager): void;
 }

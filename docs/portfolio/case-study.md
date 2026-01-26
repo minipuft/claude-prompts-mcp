@@ -23,7 +23,7 @@ npx -y claude-prompts@latest
 ```
 
 ```
-prompt_manager(action:"list")                        # See your prompts
+resource_manager(resource_type:"prompt", action:"list")                        # See your prompts
 prompt_engine(command:">>analyze_code @CAGEERF")     # Run with methodology
 ```
 
@@ -40,7 +40,7 @@ prompt_engine(command:">>analyze_code @CAGEERF")     # Run with methodology
 
 ```bash
 # List prompts
-prompt_manager(action:"list")
+resource_manager(resource_type:"prompt", action:"list")
 
 # Run with methodology
 prompt_engine(command:">>diagnose @CAGEERF scope:'performance'")
@@ -106,7 +106,7 @@ When a prompt underperforms:
 
 ```
 User: "The output is too verbose"
-Claude: prompt_manager(action:"update", id:"readme_improver", ...)
+Claude: resource_manager(resource_type:"prompt", action:"update", id:"readme_improver", ...)
 User: "Test it"
 Claude: prompt_engine(command:">>readme_improver")  # Updated version, instantly
 ```

@@ -10,22 +10,25 @@ function route(command: string): ToolRoutingResult {
 }
 
 describe('tool routing detection', () => {
-  test('routes listprompts variations to prompt_manager with optional filters', () => {
+  test('routes listprompts variations to resource_manager prompt list with optional filters', () => {
     // Bug fix regression test: >>listprompts without trailing space should not include search_query
     const bareCommand = route('>>listprompts');
-    expect(bareCommand.targetTool).toBe('prompt_manager');
+    expect(bareCommand.targetTool).toBe('resource_manager');
     expect(bareCommand.translatedParams).toEqual({
+      resource_type: 'prompt',
       action: 'list',
     });
 
     // With search filter
     expect(route('/listprompts category:analysis').translatedParams).toEqual({
+      resource_type: 'prompt',
       action: 'list',
       search_query: 'category:analysis',
     });
 
     // Trailing whitespace should also not create search_query
     expect(route('listprompts  ').translatedParams).toEqual({
+      resource_type: 'prompt',
       action: 'list',
     });
   });

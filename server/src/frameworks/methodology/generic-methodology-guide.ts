@@ -273,7 +273,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
     return (
       this.definition.toolDescriptions ?? {
         prompt_engine: { description: '' },
-        prompt_manager: { description: '' },
+        resource_manager: { description: '' },
         system_control: { description: '' },
       }
     );

@@ -3,7 +3,7 @@
  * Consolidated Gate Manager
  *
  * Provides MCP tool interface for gate lifecycle management.
- * Follows the same pattern as ConsolidatedPromptManager.
+ * Follows the same pattern as PromptResourceService.
  */
 
 import { existsSync } from 'node:fs';
@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import { logMcpToolChange } from '../../../runtime/resource-change-tracking.js';
 import { serializeYaml } from '../../../utils/yaml/yaml-parser.js';
 import { VersionHistoryService } from '../../../versioning/index.js';
-import { TextDiffService } from '../../prompt-manager/analysis/text-diff-service.js';
+import { TextDiffService } from '../../resource-manager/prompt/analysis/text-diff-service.js';
 
 import type { GateManagerInput, GateManagerDependencies, GateCreationData } from './types.js';
 import type { ConfigManager } from '../../../config/index.js';

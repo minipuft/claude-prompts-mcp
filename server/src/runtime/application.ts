@@ -627,12 +627,12 @@ export class Application {
         typeof (this.promptManager as any).shutdown === 'function'
       ) {
         if (this.logger) {
-          this.logger.debug('Shutting down prompt manager...');
+          this.logger.debug('Shutting down prompt assets...');
         }
         try {
           await (this.promptManager as any).shutdown();
         } catch (error) {
-          this.logger?.warn('Error shutting down prompt manager:', error);
+          this.logger?.warn('Error shutting down prompt assets:', error);
         }
       }
 

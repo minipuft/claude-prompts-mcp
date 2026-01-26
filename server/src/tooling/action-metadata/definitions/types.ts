@@ -63,7 +63,7 @@ export interface ToolMetadata<T = Record<string, unknown>> {
   readonly data: T;
 }
 
-export interface PromptManagerMetadataData {
+export interface PromptResourceMetadataData {
   readonly actions: readonly ActionDescriptor[];
   readonly parameters?: readonly ParameterDescriptor[];
   readonly commands?: readonly CommandDescriptor[];

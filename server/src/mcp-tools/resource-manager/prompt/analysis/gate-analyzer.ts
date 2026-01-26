@@ -6,10 +6,10 @@
  * Integrates with the temporary gate system to provide intelligent gate recommendations.
  */
 
-import { Logger } from '../../../logging/index.js';
+import { Logger } from '../../../../logging/index.js';
 
-import type { ConvertedPrompt, TemporaryGateDefinition } from '../../../execution/types.js';
-import type { PromptManagerDependencies } from '../core/types.js';
+import type { ConvertedPrompt, TemporaryGateDefinition } from '../../../../execution/types.js';
+import type { PromptResourceDependencies } from '../core/types.js';
 
 /**
  * Gate analysis result
@@ -37,9 +37,9 @@ export interface GateAnalysisResult {
  */
 export class GateAnalyzer {
   private logger: Logger;
-  private dependencies: PromptManagerDependencies;
+  private dependencies: PromptResourceDependencies;
 
-  constructor(dependencies: PromptManagerDependencies) {
+  constructor(dependencies: PromptResourceDependencies) {
     this.logger = dependencies.logger;
     this.dependencies = dependencies;
   }

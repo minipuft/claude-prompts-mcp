@@ -16,7 +16,7 @@ const mockLogger: Logger = {
   error: jest.fn(),
 } as any;
 
-const mockPromptManager: PromptAssetManager = {
+const mockPromptAssetManager: PromptAssetManager = {
   loadAndConvertPrompts: jest.fn().mockResolvedValue([]),
   processTemplateAsync: jest.fn().mockResolvedValue('mocked result'),
   convertedPrompts: [],
@@ -103,7 +103,7 @@ describe('PromptEngine Validation', () => {
     engine = new PromptExecutionService(
       mockLogger,
       mockMcpServer,
-      mockPromptManager,
+      mockPromptAssetManager,
       mockConfigManager,
       mockSemanticAnalyzer,
       mockConversationManager,

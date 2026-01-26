@@ -4,7 +4,7 @@ import {
   cleanupPromptExecutionService,
   createPromptExecutionService,
 } from '../../../src/mcp-tools/prompt-engine/index.js';
-import { createConsolidatedPromptManager } from '../../../src/mcp-tools/prompt-manager/index.js';
+import { createPromptResourceService } from '../../../src/mcp-tools/resource-manager/prompt/index.js';
 import { createConsolidatedSystemControl } from '../../../src/mcp-tools/system-control.js';
 import { MockLogger, MockMcpServer, testPrompts } from '../../helpers/test-helpers.js';
 
@@ -14,7 +14,7 @@ describe('Consolidated MCP tool factories', () => {
   let logger: MockLogger;
   let mockMcpServer: MockMcpServer;
   let promptEngine: any;
-  let promptManager: any;
+  let promptResourceService: any;
   let systemControl: any;
 
   beforeEach(() => {
@@ -22,7 +22,7 @@ describe('Consolidated MCP tool factories', () => {
     logger = new MockLogger();
     mockMcpServer = new MockMcpServer();
 
-    const mockPromptManagerComponent = {
+    const mockPromptAssetComponent = {
       processTemplateAsync: () => Promise.resolve('mocked template result'),
       convertedPrompts: [testPrompts.simple],
       promptsData: [testPrompts.simple],
@@ -101,7 +101,7 @@ describe('Consolidated MCP tool factories', () => {
     const mockMcpToolsManager = {
       initialize: () => {},
       getTools: () => [],
-      promptManagerTool: { handleAction: () => Promise.resolve({ content: [], isError: false }) },
+      getResourceManagerHandler: () => null,
       systemControl: { handleAction: () => Promise.resolve({ content: [], isError: false }) },
     };
 
@@ -123,7 +123,7 @@ describe('Consolidated MCP tool factories', () => {
     promptEngine = createPromptExecutionService(
       logger as any,
       mockMcpServer as any,
-      mockPromptManagerComponent as any,
+      mockPromptAssetComponent as any,
       mockConfigManager as any,
       mockSemanticAnalyzer as any,
       mockConversationManager as any,
@@ -132,9 +132,8 @@ describe('Consolidated MCP tool factories', () => {
       mockMcpToolsManager
     );
 
-    promptManager = createConsolidatedPromptManager(
+    promptResourceService = createPromptResourceService(
       logger as any,
-      mockMcpServer as any,
       mockConfigManager as any,
       mockSemanticAnalyzer as any,
       undefined,
@@ -161,9 +160,9 @@ describe('Consolidated MCP tool factories', () => {
     expect(typeof promptEngine.executePromptCommand).toBe('function');
   });
 
-  test('creates consolidated prompt manager with handleAction', () => {
-    expect(promptManager).toBeDefined();
-    expect(typeof promptManager.handleAction).toBe('function');
+  test('creates prompt resource service with handleAction', () => {
+    expect(promptResourceService).toBeDefined();
+    expect(typeof promptResourceService.handleAction).toBe('function');
   });
 
   test('creates consolidated system control tool', () => {

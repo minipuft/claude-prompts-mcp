@@ -41,7 +41,7 @@ const GRANDFATHERED_FILES = [
   'metrics/analytics-service.ts', // 1004 lines
   'chain-session/manager.ts', // 982 lines
   'frameworks/integration/framework-semantic-integration.ts', // 889 lines
-  'mcp-tools/prompt-manager/core/manager.ts', // 799 lines
+  'mcp-tools/resource-manager/prompt/prompt-resource-service.ts', // migrated prompt lifecycle
   'semantic/configurable-semantic-analyzer.ts', // 792 lines
   'frameworks/methodology/guides/cageerf-guide.ts', // 764 lines
   'execution/parsers/command-parser.ts', // 750 lines
@@ -60,7 +60,7 @@ const GRANDFATHERED_FILES = [
   'prompts/hot-reload-manager.ts', // 599 lines
   'mcp-tools/types/shared-types.ts', // 590 lines
   'prompts/promptUtils.ts', // 590 lines
-  'mcp-tools/prompt-manager/operations/file-operations.ts', // 550 lines
+  'mcp-tools/resource-manager/prompt/operations/file-operations.ts', // 550 lines
   'execution/pipeline/stages/gate-enhancement-stage.ts', // 524 lines
   'mcp-tools/prompt-engine/utils/category-extractor.ts', // 509 lines
   'mcp-tools/prompt-engine/utils/validation.ts', // 504 lines

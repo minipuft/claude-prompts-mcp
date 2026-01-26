@@ -2,9 +2,9 @@
 
 import { createPatch, structuredPatch } from 'diff';
 
-import { serializeYaml } from '../../../utils/yaml/yaml-parser.js';
+import { serializeYaml } from '../../../../utils/yaml/yaml-parser.js';
 
-import type { ConvertedPrompt } from '../../../execution/types.js';
+import type { ConvertedPrompt } from '../../../../execution/types.js';
 
 /** Hunk type inferred from structuredPatch return */
 type Hunk = ReturnType<typeof structuredPatch>['hunks'][number];

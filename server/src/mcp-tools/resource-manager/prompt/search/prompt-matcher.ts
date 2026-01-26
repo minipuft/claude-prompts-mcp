@@ -3,8 +3,8 @@
  * Matching and fuzzy search logic for prompt discovery
  */
 
-import { Logger } from '../../../logging/index.js';
-import { ConvertedPrompt } from '../../../types/index.js';
+import { Logger } from '../../../../logging/index.js';
+import { ConvertedPrompt } from '../../../../types/index.js';
 import { PromptClassification, SmartFilters } from '../core/types.js';
 
 /**

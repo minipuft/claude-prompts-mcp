@@ -240,7 +240,7 @@ export interface MethodologyToolDescription {
  */
 export interface MethodologyToolDescriptions {
   prompt_engine?: MethodologyToolDescription;
-  prompt_manager?: MethodologyToolDescription;
+  resource_manager?: MethodologyToolDescription;
   system_control?: MethodologyToolDescription;
 }
 

@@ -5,22 +5,21 @@
 
 import { existsSync, readdirSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
-import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { ConfigManager } from '../../../config/index.js';
-import { Logger } from '../../../logging/index.js';
+import { ConfigManager } from '../../../../config/index.js';
+import { Logger } from '../../../../logging/index.js';
 import {
   discoverYamlPromptsInCategory,
   findYamlPromptInCategory,
   hasYamlPromptsInCategory,
   deleteYamlPrompt,
-} from '../../../prompts/category-maintenance.js';
-import { safeWriteFile } from '../../../prompts/promptUtils.js';
-import { serializeYaml } from '../../../utils/yaml/yaml-parser.js';
-import { OperationResult, FileOperationResult, PromptManagerDependencies } from '../core/types.js';
+} from '../../../../prompts/category-maintenance.js';
+import { safeWriteFile } from '../../../../prompts/promptUtils.js';
+import { serializeYaml } from '../../../../utils/yaml/yaml-parser.js';
+import { OperationResult, PromptResourceDependencies } from '../core/types.js';
 
-import type { ToolDefinitionInput } from '../../resource-manager/core/types.js';
+import type { ToolDefinitionInput } from '../../core/types.js';
 
 /**
  * File system operations for prompt management
@@ -29,7 +28,7 @@ export class FileOperations {
   private logger: Logger;
   private configManager: ConfigManager;
 
-  constructor(dependencies: Pick<PromptManagerDependencies, 'logger' | 'configManager'>) {
+  constructor(dependencies: Pick<PromptResourceDependencies, 'logger' | 'configManager'>) {
     this.logger = dependencies.logger;
     this.configManager = dependencies.configManager;
   }

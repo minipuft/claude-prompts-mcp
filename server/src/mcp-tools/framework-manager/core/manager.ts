@@ -3,7 +3,7 @@
  * Consolidated Framework Manager
  *
  * Provides MCP tool interface for methodology lifecycle management.
- * Follows the same pattern as ConsolidatedPromptManager.
+ * Follows the same pattern as PromptResourceService.
  */
 
 import { existsSync } from 'node:fs';
@@ -11,7 +11,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { VersionHistoryService } from '../../../versioning/index.js';
-import { TextDiffService } from '../../prompt-manager/analysis/text-diff-service.js';
+import { TextDiffService } from '../../resource-manager/prompt/analysis/text-diff-service.js';
 import { MethodologyFileService } from '../services/index.js';
 
 import type {

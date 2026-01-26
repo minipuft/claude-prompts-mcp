@@ -55,7 +55,7 @@ const commandDescriptors: CommandDescriptor[] = [
   {
     id: '>>listprompts',
     status: 'working',
-    description: 'Routes to prompt_manager list action. Accepts optional search terms.',
+    description: 'Routes to resource_manager prompt list action. Accepts optional search terms.',
     issues: [],
   },
 ];
@@ -163,13 +163,13 @@ const usagePatterns: UsagePatternDescriptor<RequestField>[] = [
     id: 'prompt-catalog',
     title: 'Prompt Catalog Discovery',
     summary:
-      'Route list commands back to the prompt manager for semantic filtering, even when invoked from prompt engine.',
+      'Route list commands back to the resource manager for semantic filtering, even when invoked from prompt engine.',
     sampleCommand: ['prompt_engine({', '  "command": ">>listprompts security audits"', '})'].join(
       '\n'
     ),
     parameters: ['command'],
     notes: [
-      'Routing pattern handled before prompt execution; falls back to in-memory catalog if prompt_manager is offline.',
+      'Routing pattern handled before prompt execution; falls back to in-memory catalog if resource_manager is offline.',
       'Use search terms after >>listprompts to limit results (e.g., `>>listprompts security`).',
     ],
   },

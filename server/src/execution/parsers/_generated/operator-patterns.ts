@@ -53,10 +53,4 @@ export const GENERATED_OPERATOR_PATTERNS = {
 
 export type OperatorId = keyof typeof GENERATED_OPERATOR_PATTERNS;
 
-export const IMPLEMENTED_OPERATORS = [
-  'chain',
-  'gate',
-  'framework',
-  'style',
-  'repetition',
-] as const;
+export const IMPLEMENTED_OPERATORS = ['chain', 'gate', 'framework', 'style', 'repetition'] as const;

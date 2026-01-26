@@ -3,7 +3,7 @@
  * Before/after analysis comparison engine
  */
 
-import { Logger } from '../../../logging/index.js';
+import { Logger } from '../../../../logging/index.js';
 import { PromptClassification } from '../core/types.js';
 
 /**

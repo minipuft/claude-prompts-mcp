@@ -16,7 +16,7 @@ import type {
   ActionValidationResult,
 } from './types.js';
 import type { Logger } from '../../../logging/index.js';
-import type { PromptManagerActionId } from '../../../tooling/action-metadata/definitions/prompt-manager.js';
+import type { PromptResourceActionId } from '../../../tooling/action-metadata/definitions/prompt-resource.js';
 import type { ToolResponse } from '../../../types/index.js';
 import type {
   FrameworkManagerActionId,
@@ -25,23 +25,23 @@ import type {
 import type { ConsolidatedFrameworkManager } from '../../framework-manager/index.js';
 import type { GateManagerActionId, GateManagerInput } from '../../gate-manager/core/types.js';
 import type { ConsolidatedGateManager } from '../../gate-manager/index.js';
-import type { ConsolidatedPromptManager } from '../../prompt-manager/index.js';
 import type { ConsolidatedCheckpointManager } from '../checkpoint/index.js';
 import type { CheckpointManagerInput, CheckpointAction } from '../checkpoint/types.js';
+import type { PromptResourceService } from '../prompt/index.js';
 
 /**
  * ResourceManagerRouter routes requests to the appropriate handler
  */
 export class ResourceManagerRouter {
   private readonly logger: Logger;
-  private readonly promptManager: ConsolidatedPromptManager;
+  private readonly promptResourceService: PromptResourceService;
   private readonly gateManager: ConsolidatedGateManager;
   private readonly frameworkManager: ConsolidatedFrameworkManager;
   private readonly checkpointManager?: ConsolidatedCheckpointManager;
 
   constructor(deps: ResourceManagerDependencies) {
     this.logger = deps.logger;
-    this.promptManager = deps.promptManager;
+    this.promptResourceService = deps.promptResourceService;
     this.gateManager = deps.gateManager;
     this.frameworkManager = deps.frameworkManager;
     this.checkpointManager = deps.checkpointManager;
@@ -77,7 +77,7 @@ export class ResourceManagerRouter {
     try {
       switch (resource_type) {
         case 'prompt':
-          return await this.routeToPromptManager(args, context);
+          return await this.routeToPromptResource(args, context);
         case 'gate':
           return await this.routeToGateManager(args, context);
         case 'methodology':
@@ -134,16 +134,16 @@ export class ResourceManagerRouter {
   }
 
   /**
-   * Route to prompt manager
+   * Route to prompt resource service
    */
-  private async routeToPromptManager(
+  private async routeToPromptResource(
     args: ResourceManagerInput,
     context: Record<string, unknown>
   ): Promise<ToolResponse> {
-    // Transform args to prompt_manager format
+    // Transform args to prompt resource format
     // Action is validated before reaching here, so cast is safe
     const promptArgs: Record<string, unknown> = {
-      action: args.action as PromptManagerActionId,
+      action: args.action as PromptResourceActionId,
       id: args.id,
       name: args.name,
       description: args.description,
@@ -171,8 +171,8 @@ export class ResourceManagerRouter {
       limit: args.limit,
     };
 
-    return await this.promptManager.handleAction(
-      promptArgs as Parameters<typeof this.promptManager.handleAction>[0],
+    return await this.promptResourceService.handleAction(
+      promptArgs as Parameters<typeof this.promptResourceService.handleAction>[0],
       context
     );
   }

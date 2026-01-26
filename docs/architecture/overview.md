@@ -157,7 +157,7 @@ server/src/
 ├── mcp-tools/                  # MCP tool layer
 │   ├── index.ts                # Registers 3 MCP tools
 │   ├── prompt-engine/          # → PromptExecutionPipeline
-│   ├── prompt-manager/         # Prompt CRUD operations
+│   ├── resource-manager/prompt/ # Prompt CRUD operations
 │   ├── gate-manager/           # Gate CRUD operations
 │   ├── framework-manager/      # Framework CRUD operations
 │   ├── resource-manager/       # Unified router to above managers
@@ -339,8 +339,8 @@ The server exposes **3 MCP tools** to clients but internally uses **5 specialize
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │           resource_manager routes to:                 │   │
 │  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐     │   │
-│  │  │PromptManager│ │ GateManager │ │FrameworkMgr │     │   │
-│  │  │(prompt CRUD)│ │ (gate CRUD) │ │(method CRUD)│     │   │
+│  │  │PromptResource│ │ GateManager │ │FrameworkMgr │     │   │
+│  │  │  Service    │ │ (gate CRUD) │ │(method CRUD)│     │   │
 │  │  └─────────────┘ └─────────────┘ └─────────────┘     │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
@@ -356,7 +356,7 @@ The server exposes **3 MCP tools** to clients but internally uses **5 specialize
 | Tool | Purpose | Internal Target |
 |------|---------|-----------------|
 | `prompt_engine` | Execute prompts and chains | PromptExecutionPipeline |
-| `resource_manager` | CRUD for prompts, gates, methodologies | Routes to PromptManager, GateManager, or FrameworkManager based on `resource_type` |
+| `resource_manager` | CRUD for prompts, gates, methodologies | Routes to PromptResourceService, GateManager, or FrameworkManager based on `resource_type` |
 | `system_control` | System status, framework switching, analytics | SystemControl service |
 
 ### Why This Design?

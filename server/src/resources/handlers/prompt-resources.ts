@@ -41,7 +41,7 @@ export function registerPromptResources(
   const { logger, promptManager } = dependencies;
 
   if (promptManager === undefined) {
-    logger.warn('[PromptResources] PromptManager not available, skipping registration');
+    logger.warn('[PromptResources] Prompt assets not available, skipping registration');
     return;
   }
 

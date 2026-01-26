@@ -73,7 +73,7 @@ export class MetricsCollector extends EventEmitter {
       },
       executionsByTool: {
         prompt_engine: 0,
-        prompt_manager: 0,
+        resource_manager: 0,
         system_control: 0,
       },
       lastUpdated: Date.now(),
@@ -553,7 +553,7 @@ export class MetricsCollector extends EventEmitter {
       },
       executionsByTool: {
         prompt_engine: 0,
-        prompt_manager: 0,
+        resource_manager: 0,
         system_control: 0,
       },
       lastUpdated: Date.now(),

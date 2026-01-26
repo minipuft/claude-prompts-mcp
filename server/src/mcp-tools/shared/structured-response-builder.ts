@@ -16,7 +16,7 @@ import type { ErrorContext } from '../types/shared-types.js';
  * Metadata for creating structured responses
  */
 export interface ResponseMetadata {
-  /** Tool name (prompt_manager, prompt_engine, system_control) */
+  /** Tool name (resource_manager, prompt_engine, system_control) */
   tool: string;
   /** Operation being performed (create, update, delete, execute, etc.) */
   operation: string;
@@ -200,7 +200,7 @@ export class StructuredResponseBuilder {
     }
 
     return this.createToolResponse(content, {
-      tool: 'prompt_manager',
+      tool: 'resource_manager',
       operation,
       executionType: 'single',
       frameworkEnabled: false,

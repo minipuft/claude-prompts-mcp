@@ -3,12 +3,12 @@
  * Field validation and error handling utilities
  */
 
-import { promptManagerMetadata } from '../../../tooling/action-metadata/definitions/prompt-manager.js';
-import { ValidationError } from '../../../utils/index.js';
+import { promptResourceMetadata } from '../../../../tooling/action-metadata/definitions/prompt-resource.js';
+import { ValidationError } from '../../../../utils/index.js';
 import { ValidationContext } from '../core/types.js';
 
-import type { PromptManagerActionId } from '../../../tooling/action-metadata/definitions/prompt-manager.js';
-import type { ToolDefinitionInput } from '../../resource-manager/core/types.js';
+import type { PromptResourceActionId } from '../../../../tooling/action-metadata/definitions/prompt-resource.js';
+import type { ToolDefinitionInput } from '../../core/types.js';
 
 /**
  * Action-specific parameter requirements and examples
@@ -37,9 +37,11 @@ const ACTION_REQUIREMENTS: Record<string, { required: string[]; example: string 
 };
 
 const ACTION_METADATA_MAP = new Map<
-  PromptManagerActionId,
-  (typeof promptManagerMetadata.data.actions)[number]
->(promptManagerMetadata.data.actions.map((action) => [action.id as PromptManagerActionId, action]));
+  PromptResourceActionId,
+  (typeof promptResourceMetadata.data.actions)[number]
+>(
+  promptResourceMetadata.data.actions.map((action) => [action.id as PromptResourceActionId, action])
+);
 
 /**
  * Validate required fields in operation arguments with contextual error messages
@@ -64,7 +66,7 @@ export function validateRequiredFields(args: any, required: string[]): void {
       errorMessage += `📚 Example: ${actionInfo.example}\n\n`;
     }
 
-    const descriptor = ACTION_METADATA_MAP.get(action as PromptManagerActionId);
+    const descriptor = ACTION_METADATA_MAP.get(action as PromptResourceActionId);
     if (descriptor) {
       errorMessage += `⚙️ Action: ${descriptor.displayName} (${descriptor.status})\n`;
       if (descriptor.issues && descriptor.issues.length > 0) {

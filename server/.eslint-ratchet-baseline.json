@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-01-25T05:36:15.293Z",
+  "generatedAt": "2026-01-26T08:14:41.822Z",
   "eslintTarget": "src",
   "totals": {
-    "errors": 3678,
-    "warnings": 1064
+    "errors": 3682,
+    "warnings": 1078
   },
   "byRule": {
     "@typescript-eslint/no-unused-vars": {
-      "errors": 105,
+      "errors": 101,
       "warnings": 0
     },
     "@typescript-eslint/no-explicit-any": {
@@ -20,23 +20,23 @@
       "warnings": 0
     },
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 2332,
+      "errors": 2324,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 517
+      "warnings": 527
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "errors": 0,
-      "warnings": 298
+      "warnings": 295
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
       "errors": 292,
       "warnings": 0
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 444,
+      "errors": 443,
       "warnings": 0
     },
     "@typescript-eslint/no-floating-promises": {
@@ -48,11 +48,11 @@
       "warnings": 99
     },
     "@typescript-eslint/explicit-function-return-type": {
-      "errors": 37,
+      "errors": 40,
       "warnings": 0
     },
     "import/order": {
-      "errors": 7,
+      "errors": 12,
       "warnings": 0
     },
     "no-console": {
@@ -60,7 +60,7 @@
       "warnings": 79
     },
     "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 53,
+      "errors": 62,
       "warnings": 0
     },
     "claude/require-file-lifecycle": {
@@ -69,11 +69,7 @@
     },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
-      "warnings": 55
-    },
-    "prettier/prettier": {
-      "errors": 1,
-      "warnings": 0
+      "warnings": 62
     },
     "@typescript-eslint/prefer-optional-chain": {
       "errors": 1,
@@ -93,6 +89,10 @@
     },
     "@typescript-eslint/await-thenable": {
       "errors": 2,
+      "warnings": 0
+    },
+    "prettier/prettier": {
+      "errors": 1,
       "warnings": 0
     }
   }

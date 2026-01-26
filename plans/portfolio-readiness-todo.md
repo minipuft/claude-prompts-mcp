@@ -169,5 +169,3 @@
 5. **Meta-Prompts** - `>>create_prompt` for self-improvement
 6. **Version Control** - Prompts as code in git
 7. **Hooks** (Claude Code only) - Catches syntax errors, reminds about chain state
-/
-1

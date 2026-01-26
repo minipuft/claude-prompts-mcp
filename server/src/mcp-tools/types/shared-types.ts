@@ -319,9 +319,9 @@ export interface ChainStepDefinition {
 }
 
 /**
- * Prompt Manager action argument types
+ * Prompt resource action argument types
  */
-export interface BasePromptManagerArgs {
+export interface BasePromptResourceArgs {
   id?: string;
   name?: string;
   category?: string;
@@ -335,14 +335,14 @@ export interface BasePromptManagerArgs {
   format?: 'compact' | 'detailed' | 'json';
 }
 
-export type PromptManagerAction =
+export type PromptResourceAction =
   | ({
       action: 'create';
       id: string;
       name: string;
       user_message_template: string;
-    } & BasePromptManagerArgs)
-  | ({ action: 'update'; id: string } & BasePromptManagerArgs & {
+    } & BasePromptResourceArgs)
+  | ({ action: 'update'; id: string } & BasePromptResourceArgs & {
         section?:
           | 'name'
           | 'description'
@@ -354,8 +354,8 @@ export type PromptManagerAction =
       })
   | { action: 'delete'; id: string }
   | { action: 'reload' }
-  | ({ action: 'list' } & Pick<BasePromptManagerArgs, 'filter' | 'format'>)
-  | ({ action: 'inspect'; id: string } & Pick<BasePromptManagerArgs, 'detail' | 'format'>);
+  | ({ action: 'list' } & Pick<BasePromptResourceArgs, 'filter' | 'format'>)
+  | ({ action: 'inspect'; id: string } & Pick<BasePromptResourceArgs, 'detail' | 'format'>);
 
 /**
  * Prompt Engine argument types

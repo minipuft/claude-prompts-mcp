@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
-import { TextDiffService } from '../../../../../src/mcp-tools/prompt-manager/analysis/text-diff-service.js';
-import type { ConvertedPrompt } from '../../../../../src/execution/types.js';
+import { TextDiffService } from '../../../../../../src/mcp-tools/resource-manager/prompt/analysis/text-diff-service.js';
+import type { ConvertedPrompt } from '../../../../../../src/types/index.js';
 
 describe('TextDiffService', () => {
   const service = new TextDiffService();

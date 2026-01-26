@@ -455,11 +455,13 @@ export class PromptExecutionService {
 
     try {
       switch (targetTool) {
-        case 'prompt_manager':
-          if (this.mcpToolsManager.promptManagerTool) {
-            return this.mcpToolsManager.promptManagerTool.handleAction(params, {});
+        case 'resource_manager': {
+          const resourceHandler = this.mcpToolsManager.getResourceManagerHandler?.();
+          if (resourceHandler) {
+            return resourceHandler(params, {});
           }
           return this.buildPromptListFallback(params?.['search_query']);
+        }
         case 'system_control':
           if (this.mcpToolsManager.systemControl) {
             return this.mcpToolsManager.systemControl.handleAction(params, {});

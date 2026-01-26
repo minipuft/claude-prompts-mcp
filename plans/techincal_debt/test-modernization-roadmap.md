@@ -132,7 +132,7 @@ Analyze `tests/unit/execution/` directory.
 Analyze `tests/unit/mcp-tools/` directory.
 
 - [ ] 2.2.1 Audit `mcp-tools/consolidated-tools.test.ts`
-  - **Current**: Tests PromptExecutionService + PromptManager + SystemControl factories
+- **Current**: Tests PromptExecutionService + PromptResourceService + SystemControl factories
   - **Classification**: ❌ Integration (tests multiple MCP tool factories together)
   - **Action**: Move to `tests/integration/mcp-tools/tool-factories.test.ts`
 
@@ -143,7 +143,7 @@ Analyze `tests/unit/mcp-tools/` directory.
   - `engine-validator.test.ts` - Verify isolation
   - `response-formatter.test.ts` - Verify isolation
 
-- [ ] 2.2.3 Audit `mcp-tools/prompt-manager/*.test.ts`
+- [ ] 2.2.3 Audit `mcp-tools/resource-manager/prompt/*.test.ts`
   - `guide-action.test.ts` - Verify isolation
 
 - [ ] 2.2.4 Audit `mcp-tools/system-control/*.test.ts`

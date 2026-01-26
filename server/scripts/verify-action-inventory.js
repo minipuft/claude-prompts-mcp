@@ -30,21 +30,29 @@ function extractSwitchCases(source, anchor) {
   return matches.map((match) => match.replace(/case\s+["']([^"']+)["'].*/, '$1'));
 }
 
-async function verifyPromptManager() {
+async function verifyPromptResource() {
   // Import metadata from compiled TypeScript
-  const { promptManagerMetadata } = await import(
-    path.join(DIST_DIR, 'tooling', 'action-metadata', 'definitions', 'prompt-manager.js')
+  const { promptResourceMetadata } = await import(
+    path.join(DIST_DIR, 'tooling', 'action-metadata', 'definitions', 'prompt-resource.js')
   );
 
-  const filePath = path.join(SRC_DIR, 'mcp-tools', 'prompt-manager', 'core', 'manager.ts');
+  const filePath = path.join(
+    SRC_DIR,
+    'mcp-tools',
+    'resource-manager',
+    'prompt',
+    'prompt-resource-service.ts'
+  );
   const source = await readFile(filePath, 'utf8');
   const actionsInCode = new Set(extractSwitchCases(source, 'switch (action)'));
 
-  const actionsInMetadata = new Set(promptManagerMetadata.data.actions.map((action) => action.id));
+  const actionsInMetadata = new Set(
+    promptResourceMetadata.data.actions.map((action) => action.id)
+  );
 
   const missing = [...actionsInCode].filter((id) => !actionsInMetadata.has(id));
   if (missing.length > 0) {
-    throw new Error(`prompt_manager metadata is missing actions: ${missing.join(', ')}`);
+    throw new Error(`prompt resource metadata is missing actions: ${missing.join(', ')}`);
   }
 }
 
@@ -117,7 +125,7 @@ async function main() {
     'tooling',
     'action-metadata',
     'definitions',
-    'prompt-manager.js'
+    'prompt-resource.js'
   );
   try {
     await readFile(testFile, 'utf8');
@@ -127,7 +135,7 @@ async function main() {
     return;
   }
 
-  await Promise.all([verifyPromptManager(), verifySystemControl(), verifyPromptEngine()]);
+  await Promise.all([verifyPromptResource(), verifySystemControl(), verifyPromptEngine()]);
   console.log('✅ Action inventory verified');
 }
 

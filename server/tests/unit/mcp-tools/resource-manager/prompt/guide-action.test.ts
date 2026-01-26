@@ -1,19 +1,18 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { createConsolidatedPromptManager } from '../../../../src/mcp-tools/prompt-manager/index.js';
+import { createPromptResourceService } from '../../../../../src/mcp-tools/resource-manager/prompt/index.js';
 
-import type { Logger } from '../../../../src/logging/index.js';
+import type { Logger } from '../../../../../src/logging/index.js';
 
-const createLogger = (): Logger => ({
+const createMockLogger = (): Logger => ({
   info: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
   debug: jest.fn(),
 });
 
-const createPromptManager = () => {
-  const logger = createLogger();
-  const mockMcpServer = { sendNotification: jest.fn() };
+function createTestService() {
+  const logger = createMockLogger();
   const configManager = {
     getPromptsFilePath: () => '/tmp/prompts.json',
     getServerRoot: () => process.cwd(),
@@ -34,9 +33,8 @@ const createPromptManager = () => {
     isLLMEnabled: jest.fn().mockReturnValue(false),
   } as any;
 
-  const manager = createConsolidatedPromptManager(
+  const service = createPromptResourceService(
     logger as any,
-    mockMcpServer as any,
     configManager,
     semanticAnalyzer,
     undefined,
@@ -45,23 +43,23 @@ const createPromptManager = () => {
     () => Promise.resolve()
   );
 
-  manager.updateData([], [], []);
-  return manager;
-};
+  service.updateData([], [], []);
+  return service;
+}
 
-describe('Prompt Manager guide action', () => {
+describe('Prompt resource guide action', () => {
   test('returns metadata-driven summary', async () => {
-    const manager = createPromptManager();
-    const response = await manager.handleAction({ action: 'guide' } as any, {});
+    const service = createTestService();
+    const response = await service.handleAction({ action: 'guide' } as any, {});
     const text = response.content?.[0]?.text ?? '';
-    expect(text).toContain('Prompt Manager Guide');
+    expect(text).toContain('Prompt Resource Guide');
     expect(text).toContain('`create`');
     expect(text).toContain('Recommended Actions');
   });
 
   test('highlights gate workflows when goal references gates', async () => {
-    const manager = createPromptManager();
-    const response = await manager.handleAction(
+    const service = createTestService();
+    const response = await service.handleAction(
       { action: 'guide', goal: 'gate config' } as any,
       {}
     );

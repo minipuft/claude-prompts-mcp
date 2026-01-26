@@ -86,8 +86,8 @@ Only bypass hooks to unblock CI or for emergency hotfixes. Use `HUSKY=0 git comm
 - **TypeScript**: Strict mode, descriptive interfaces, prefer dependency injection over global state.
 - **Runtime lifecycle**: Register new modules through the `Application` orchestrator (`server/src/runtime/`).
 - **Transports**: Keep STDIO and SSE behavior in parity; mention both when updating docs.
-- **Prompts**: Only modify via `prompt_manager`. See `docs/tutorials/build-first-prompt.md` for schema expectations.
-- **Chains**: Define/edit steps via `prompt_manager`. Reference `docs/concepts/chains-lifecycle.md` for schema details.
+- **Prompts**: Only modify via `resource_manager` (`resource_type:"prompt"`). See `docs/tutorials/build-first-prompt.md` for schema expectations.
+- **Chains**: Define/edit steps via `resource_manager` (`resource_type:"prompt"`). Reference `docs/concepts/chains-lifecycle.md` for schema details.
 - **Gates**: Add definitions under `server/gates/{id}/gate.yaml` and update `docs/concepts/quality-gates.md` when behavior changes.
 
 ### Pipeline State Management Patterns
@@ -136,7 +136,7 @@ See `docs/architecture.md#pipeline-state-management` for detailed documentation.
 
 - **Server code**: `npm run typecheck && npm test && npm run validate:all`.
 - **Transport/runtime changes**: Add targeted smoke tests (`npm run start:stdio` or `npm run start:sse`) and note results in PRs.
-- **Prompt/tool changes**: Execute via MCP tools (`prompt_engine`, `prompt_manager`, `system_control`). Link output or describe validation steps.
+- **Prompt/tool changes**: Execute via MCP tools (`prompt_engine`, `resource_manager`, `system_control`). Link output or describe validation steps.
 - **Documentation-only changes**: Verify references against `server/dist/**`. If commands/scripts are mentioned, ensure they exist.
 
 ## 8. Documentation & Plans
@@ -147,7 +147,7 @@ See `docs/architecture.md#pipeline-state-management` for detailed documentation.
 
 ## 9. Prompt & Template Contributions
 
-- Use `prompt_manager` (`create`, `update`, `delete`, `reload`) for every change.
+- Use `resource_manager` (`resource_type:"prompt"`, action `create`, `update`, `delete`, `reload`) for every change.
 - Document complex prompts/chains inside Markdown files and cross-reference the relevant doc (authoring guide or chain workflows).
 - Provide argument metadata (types + validation) so the runtime schema remains accurate.
 

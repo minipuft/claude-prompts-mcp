@@ -11,11 +11,13 @@ import express, { Request, Response } from 'express';
 
 import { ConfigManager } from '../config/index.js';
 import { Logger } from '../logging/index.js';
-import { McpToolsManager, PromptManagerActionArgs } from '../mcp-tools/index.js';
+import { McpToolsManager } from '../mcp-tools/index.js';
 import { PromptAssetManager } from '../prompts/index.js';
 import { reloadPromptData as reloadPromptDataFromDisk } from '../prompts/prompt-refresh-service.js';
 import { modifyPromptSection, safeWriteFile } from '../prompts/promptUtils.js';
 import { Category, PromptData, PromptsFile, ToolResponse } from '../types/index.js';
+
+import type { ResourceManagerInput } from '../mcp-tools/resource-manager/core/types.js';
 
 /**
  * API Manager class
@@ -261,7 +263,8 @@ export class ApiManager {
       const promptArgs = req.body['arguments'];
       const gateConfiguration = req.body['gateConfiguration'] ?? req.body['gate_configuration'];
 
-      const actionArgs: PromptManagerActionArgs = {
+      const actionArgs: ResourceManagerInput = {
+        resource_type: 'prompt',
         action: 'update',
         id,
         name,
@@ -276,7 +279,7 @@ export class ApiManager {
         full_restart: req.body['restartServer'] === true,
       };
 
-      const toolResponse = await this.runPromptManagerAction(actionArgs);
+      const toolResponse = await this.runResourceManagerAction(actionArgs);
       const message = this.extractToolResponseMessage(toolResponse);
 
       await this.reloadPromptData();
@@ -312,13 +315,14 @@ export class ApiManager {
         return;
       }
 
-      const actionArgs: PromptManagerActionArgs = {
+      const actionArgs: ResourceManagerInput = {
+        resource_type: 'prompt',
         action: 'delete',
         id,
         full_restart: req.body?.['restartServer'] === true,
       };
 
-      const toolResponse = await this.runPromptManagerAction(actionArgs);
+      const toolResponse = await this.runResourceManagerAction(actionArgs);
       const message = this.extractToolResponseMessage(toolResponse);
 
       if (!toolResponse.isError) {
@@ -402,7 +406,7 @@ export class ApiManager {
   private async reloadPromptData(): Promise<void> {
     const promptManager = this.promptManager;
     if (!promptManager) {
-      throw new Error('PromptManager not available');
+      throw new Error('Prompt assets not available');
     }
 
     const reloadOptions: Parameters<typeof reloadPromptDataFromDisk>[0] = {
@@ -418,16 +422,20 @@ export class ApiManager {
     this.updateData(result.promptsData, result.categories, result.convertedPrompts);
   }
 
-  private async runPromptManagerAction(args: PromptManagerActionArgs): Promise<ToolResponse> {
+  private async runResourceManagerAction(args: ResourceManagerInput): Promise<ToolResponse> {
     if (!this.mcpToolsManager) {
       throw new Error('MCP Tools Manager not available');
     }
-    return this.mcpToolsManager.runPromptManagerAction(args);
+    const handler = this.mcpToolsManager.getResourceManagerHandler?.();
+    if (!handler) {
+      throw new Error('Resource manager handler not available');
+    }
+    return handler(args as unknown as Record<string, unknown>, {});
   }
 
   private extractToolResponseMessage(response: ToolResponse): string {
     if (response.content.length === 0) {
-      return response.isError ? 'Prompt manager reported an error' : 'Operation completed';
+      return response.isError ? 'Resource manager reported an error' : 'Operation completed';
     }
 
     return response.content

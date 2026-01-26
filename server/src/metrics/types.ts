@@ -21,7 +21,7 @@ export interface ExecutionData {
   frameworkEnabled: boolean;
   stepsExecuted?: number;
   sessionId?: string;
-  toolName: string; // prompt_engine, prompt_manager, system_control
+  toolName: string; // prompt_engine, resource_manager, system_control
   error?: string;
   memoryUsage?: {
     heapUsed: number;
@@ -91,7 +91,7 @@ export interface ExecutionStats {
   };
   executionsByTool: {
     prompt_engine: number;
-    prompt_manager: number;
+    resource_manager: number;
     system_control: number;
   };
   lastUpdated: number;

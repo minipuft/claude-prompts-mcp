@@ -74,9 +74,9 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 **Cause**: Prompt not listed in registry or file path mismatch.
 
 **Fix**:
-1. Check registry: `prompt_manager(action: "list")`
+1. Check registry: `resource_manager(resource_type: "prompt", action: "list")`
 2. Verify path in `prompts/promptsConfig.json`
-3. Manual reload: `prompt_manager(action: "reload")`
+3. Manual reload: `resource_manager(resource_type: "prompt", action: "reload")`
 
 ### Hot Reload Not Working
 
@@ -84,7 +84,7 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 
 **Fix**:
 1. Confirm file is listed in `prompts/promptsConfig.json`
-2. Trigger manual reload: `prompt_manager(action: "reload")`
+2. Trigger manual reload: `resource_manager(resource_type: "prompt", action: "reload")`
 3. Check `server/logs/` for watcher errors
 4. Use supervisor mode if STDIO sessions must persist during reload
 

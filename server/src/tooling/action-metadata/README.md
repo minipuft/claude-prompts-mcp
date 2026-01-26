@@ -19,7 +19,7 @@ Runtime (guides, validators, telemetry)
 | File | Purpose |
 |------|---------|
 | `definitions/prompt-engine.ts` | Prompt engine metadata (parameters from contracts + usage patterns) |
-| `definitions/prompt-manager.ts` | Prompt manager metadata (parameters from contracts + actions) |
+| `definitions/prompt-resource.ts` | Prompt resource metadata (parameters from contracts + actions) |
 | `definitions/system-control.ts` | System control metadata (parameters from contracts + operations) |
 | `definitions/types.ts` | TypeScript interfaces for metadata structures |
 | `usage-tracker.ts` | Runtime telemetry for action invocations and parameter issues |
@@ -30,7 +30,7 @@ Each tool's metadata includes:
 
 | Field | Description |
 |-------|-------------|
-| `tool` | Tool identifier (`prompt_manager`, `prompt_engine`, `system_control`) |
+| `tool` | Tool identifier (`resource_manager`, `prompt_engine`, `system_control`) |
 | `version` | Matches contract version for consistency |
 | `notes` | Free-form annotations about the metadata |
 | `data.parameters` | Parameter descriptors (sourced from contracts) |
