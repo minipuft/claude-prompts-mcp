@@ -20,19 +20,40 @@ if [ -n "$CONTRACTS_CHANGED" ] || [ -n "$GENERATOR_CHANGED" ]; then
 fi
 
 # Prevent direct edits to generated files (without contract/generator changes)
+# Exception: Deletions are allowed if the source contract doesn't exist (feature removal)
 MANUAL_GEN_EDITS=$(git diff --cached --name-only | grep "src/.*_generated/.*\.ts$" || true)
 if [ -n "$MANUAL_GEN_EDITS" ] && [ -z "$CONTRACTS_CHANGED" ] && [ -z "$GENERATOR_CHANGED" ]; then
-  echo ""
-  echo "❌ Direct edits to generated files detected!"
-  echo ""
-  echo "Modified: $MANUAL_GEN_EDITS"
-  echo ""
-  echo "Edit source files instead:"
-  echo "  - tooling/contracts/*.json (contract definitions)"
-  echo "  - scripts/generate-contracts.ts (generator logic)"
-  echo ""
-  echo "Then run: npm run generate:contracts"
-  exit 1
+  # Check if these are deletions vs modifications
+  MODIFIED_GEN_FILES=$(git diff --cached --name-only --diff-filter=M | grep "src/.*_generated/.*\.ts$" || true)
+  ADDED_GEN_FILES=$(git diff --cached --name-only --diff-filter=A | grep "src/.*_generated/.*\.ts$" || true)
+  DELETED_GEN_FILES=$(git diff --cached --name-only --diff-filter=D | grep "src/.*_generated/.*\.ts$" || true)
+
+  # Block modifications and additions (must go through regeneration)
+  if [ -n "$MODIFIED_GEN_FILES" ] || [ -n "$ADDED_GEN_FILES" ]; then
+    echo ""
+    echo "❌ Direct edits to generated files detected!"
+    echo ""
+    if [ -n "$MODIFIED_GEN_FILES" ]; then
+      echo "Modified: $MODIFIED_GEN_FILES"
+    fi
+    if [ -n "$ADDED_GEN_FILES" ]; then
+      echo "Added: $ADDED_GEN_FILES"
+    fi
+    echo ""
+    echo "Edit source files instead:"
+    echo "  - tooling/contracts/*.json (contract definitions)"
+    echo "  - scripts/generate-contracts.ts (generator logic)"
+    echo ""
+    echo "Then run: npm run generate:contracts"
+    exit 1
+  fi
+
+  # Allow deletions - these are valid when removing features/contracts
+  if [ -n "$DELETED_GEN_FILES" ]; then
+    echo "📝 Generated file deletions detected (feature removal):"
+    echo "   $DELETED_GEN_FILES"
+    echo "   ✅ Allowed - ensure source contracts were also removed"
+  fi
 fi
 
 # Run lint-staged for formatting (prettier)
