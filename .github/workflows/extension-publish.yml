@@ -203,7 +203,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Download dist artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: dist-runtime-${{ needs.plugin-dist.outputs.version }}
           path: ${{ runner.temp }}/dist-artifact
