@@ -30,7 +30,7 @@ import type { DatabasePort } from '../../shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
 
 /** Bump this when changing the embedded schema. Triggers drop-and-recreate. */
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 
 /**
  * Database configuration options
@@ -285,6 +285,8 @@ export class SqliteEngine implements DatabasePort {
         chain_id TEXT NOT NULL,
         run_number INTEGER NOT NULL,
         state TEXT NOT NULL,
+        run_status TEXT NOT NULL DEFAULT 'working',
+        run_completed_at INTEGER,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now')),
         UNIQUE (tenant_id, chain_id, run_number)
@@ -391,6 +393,30 @@ export class SqliteEngine implements DatabasePort {
         updated_at TEXT DEFAULT (datetime('now'))
       );
 
+      -- Durable per-step (or per-chain when step_number IS NULL) execution records.
+      -- Append-only series forms the queryable execution log.
+      -- session_id is the application-level ChainSession.sessionId (TEXT), not chain_sessions.id.
+      -- No FK constraint by design — matches existing schema convention; lookup is by index.
+      CREATE TABLE IF NOT EXISTS execution_records (
+        execution_id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL DEFAULT 'default',
+        organization_id TEXT,
+        workspace_id TEXT,
+        session_id TEXT NOT NULL,
+        chain_id TEXT,
+        step_number INTEGER,
+        prompt_id TEXT,
+        status TEXT NOT NULL,
+        substate_json TEXT,
+        input_required_json TEXT,
+        evidence_json TEXT,
+        gate_verdicts_json TEXT NOT NULL DEFAULT '[]',
+        error_message TEXT,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_tenant ON chain_sessions(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_workspace ON chain_sessions(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_organization ON chain_sessions(organization_id);
@@ -411,6 +437,40 @@ export class SqliteEngine implements DatabasePort {
       CREATE INDEX IF NOT EXISTS idx_resource_changes_organization ON resource_changes(organization_id);
       CREATE INDEX IF NOT EXISTS idx_chain_run_registry_workspace ON chain_run_registry(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_argument_history_workspace ON argument_history(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_execution_records_session ON execution_records(session_id);
+      CREATE INDEX IF NOT EXISTS idx_execution_records_chain ON execution_records(chain_id);
+      CREATE INDEX IF NOT EXISTS idx_execution_records_started ON execution_records(started_at);
+      CREATE INDEX IF NOT EXISTS idx_execution_records_tenant ON execution_records(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_chain_sessions_run_status ON chain_sessions(run_status);
+
+      -- Cross-language SSOT view consumed by both TS server and Python hooks (db_reader.py).
+      -- Single query answers "where is this chain run right now and what's the next action?".
+      -- ChainSession is serialized as JSON in chain_sessions.state; nested ChainState is at $.state.
+      CREATE VIEW IF NOT EXISTS v_execution_status AS
+      SELECT
+        cs.id AS row_id,
+        json_extract(cs.state, '$.sessionId') AS session_id,
+        cs.chain_id,
+        cs.run_number,
+        cs.run_status,
+        cs.run_completed_at,
+        json_extract(cs.state, '$.state.currentStep') AS current_step,
+        json_extract(cs.state, '$.state.totalSteps') AS total_steps,
+        json_extract(cs.state, '$.lastActivity') AS last_activity,
+        json_extract(cs.state, '$.lifecycle') AS lifecycle,
+        json_extract(cs.state, '$.pendingGateReview') AS pending_gate_review,
+        json_extract(cs.state, '$.pendingShellVerification') AS pending_shell_verification,
+        cs.tenant_id,
+        cs.organization_id,
+        cs.workspace_id,
+        (SELECT MAX(started_at) FROM execution_records er
+          WHERE er.session_id = json_extract(cs.state, '$.sessionId')) AS last_execution_at,
+        (SELECT er.error_message FROM execution_records er
+          WHERE er.session_id = json_extract(cs.state, '$.sessionId')
+            AND er.error_message IS NOT NULL
+          ORDER BY er.started_at DESC LIMIT 1) AS last_error,
+        cs.updated_at
+      FROM chain_sessions cs;
 
       INSERT OR IGNORE INTO schema_version (version) VALUES (${SCHEMA_VERSION});
     `);

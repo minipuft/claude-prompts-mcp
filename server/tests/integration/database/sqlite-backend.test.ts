@@ -53,7 +53,7 @@ describe('SQLite State Backend', () => {
 
     it('should have correct schema version', async () => {
       const version = dbManager.getSchemaVersion();
-      expect(version).toBe(12);
+      expect(version).toBe(15);
     });
 
     it('should execute queries', async () => {
