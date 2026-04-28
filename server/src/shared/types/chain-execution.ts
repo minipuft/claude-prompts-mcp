@@ -190,9 +190,7 @@ export type ChainLifecycleEvent =
  * + {@link StepSubstate} (sticky lifecycle + non-sticky timestamp flags). Retained
  * during the migration window for legacy step-state consumers.
  */
-// eslint-disable-next-line @typescript-eslint/no-deprecated
 export interface StepMetadata {
-  // eslint-disable-next-line @typescript-eslint/no-deprecated
   state: StepState;
   isPlaceholder: boolean;
   renderedAt?: number;
