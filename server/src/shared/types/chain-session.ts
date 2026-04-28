@@ -25,6 +25,21 @@ import type { StateStoreOptions } from './persistence.js';
 // Re-export StepState for consumers that previously imported it via modules/chains/types.ts
 export { StepState };
 
+// Re-export SEP-1686-aligned execution-lifecycle types so consumers can continue importing
+// from chain-session.ts without reaching into chain-execution.ts directly.
+export type {
+  ChainLifecycleEvent,
+  ChainRunStatus,
+  EvidenceContract,
+  EvidencePayload,
+  ExecutionRecord,
+  ExecutionStatusBlock,
+  GateVerdictSummary,
+  InputRequiredReason,
+  StepLifecycle,
+  StepSubstate,
+} from './chain-execution.js';
+
 /**
  * Minimal structural contract for parsed commands stored in session blueprints.
  * Covers the fields accessed through blueprint consumers across layers.

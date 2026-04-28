@@ -9,6 +9,11 @@
 
 /**
  * Step lifecycle state values used when tracking chain execution progress.
+ *
+ * @deprecated Use {@link StepLifecycle} (sticky terminal states, SEP-1686-aligned vocabulary)
+ * with {@link StepSubstate} flags for non-sticky transient progress (renderedAt, responseAt,
+ * validatingSince). Retained during migration window; will be removed once all consumers
+ * have migrated to the two-tier model.
  */
 export enum StepState {
   PENDING = 'pending',
@@ -18,9 +23,176 @@ export enum StepState {
 }
 
 /**
- * Metadata tracked for each chain step as it transitions through lifecycle states.
+ * SEP-1686-aligned chain run lifecycle. Terminal states (`completed`, `failed`, `cancelled`)
+ * are sticky — once reached, transitions out are forbidden.
+ *
+ * Vocabulary matches the MCP Tasks spec (SEP-1686) but is not exposed over the wire;
+ * this is internal data-model alignment only. Protocol surface (tasks/get, tasks/result,
+ * etc.) is deferred until the spec stabilizes.
  */
+export type ChainRunStatus = 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * Per-step lifecycle. Subset of {@link ChainRunStatus} plus `pending` (pre-execution).
+ * Sticky terminal states. Non-sticky progress within `working` is captured by
+ * {@link StepSubstate} flags.
+ */
+export type StepLifecycle =
+  | 'pending'
+  | 'working'
+  | 'input_required'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/**
+ * Non-sticky progress flags meaningful only when the enclosing step is in `working`.
+ * Each timestamp records when the corresponding milestone was reached (epoch ms).
+ *
+ * Replaces the substate-as-enum granularity of the deprecated {@link StepState}
+ * (RENDERED / RESPONSE_CAPTURED) — multiple substates can be true simultaneously,
+ * which is naturally expressed as flags rather than as a single enum value.
+ */
+export interface StepSubstate {
+  renderedAt?: number;
+  responseAt?: number;
+  validatingSince?: number;
+}
+
+/**
+ * Discriminated reason for a step or chain in {@link ChainRunStatus} `input_required`
+ * or {@link StepLifecycle} `input_required`. Hooks switch on `kind` to render the
+ * correct prompt or enforcement message.
+ */
+export type InputRequiredReason =
+  | { kind: 'awaiting_response' }
+  | { kind: 'gate_review'; gateId: string; attempt: number }
+  | { kind: 'shell_verification'; commands: string[] }
+  | { kind: 'evidence_missing'; missing: string[] };
+
+/**
+ * Minimal structural contract for a gate verdict captured on an {@link ExecutionRecord}.
+ * Engine code should map its richer `ParsedGateVerdict` (engine/gates/core/gate-verdict-contract)
+ * to this shared shape when emitting records — same pattern as
+ * {@link import('./chain-session.js').ParsedCommandSnapshot}.
+ */
+export interface GateVerdictSummary {
+  gateId: string;
+  verdict: 'PASS' | 'FAIL';
+  rationale?: string;
+  timestamp: number;
+  attempt?: number;
+}
+
+/**
+ * Declarative evidence contract attached to a prompt or chain step via frontmatter
+ * `completion.requires`. The pipeline blocks step advancement when required fields are
+ * missing from the captured response (subject to {@link blockOnMissing}).
+ *
+ * Defaults: `blockOnMissing` SHOULD be treated as `true` when the field is omitted
+ * (consumers are responsible for applying the default; interfaces cannot encode defaults).
+ */
+export interface EvidenceContract {
+  requires: string[];
+  optional?: string[];
+  blockOnMissing: boolean;
+}
+
+/**
+ * Runtime evidence payload extracted from a step response and validated against
+ * the step's {@link EvidenceContract}. Index signature allows extension fields
+ * authored on a per-prompt basis without changing this shape.
+ */
+export interface EvidencePayload {
+  summary?: string;
+  changedFiles?: string[];
+  validations?: Array<{
+    command: string;
+    status: 'passed' | 'failed' | 'skipped';
+    outputSummary?: string;
+    reason?: string;
+  }>;
+  risks?: string[];
+  followups?: string[];
+  [key: string]: unknown;
+}
+
+/**
+ * Durable per-step (or per-chain when `stepNumber` is null) execution record.
+ * One record is appended for each significant lifecycle transition; the resulting
+ * series forms the queryable execution log.
+ *
+ * Persisted to the `execution_records` table. The `executionId` is a ULID so records
+ * sort lexicographically by creation order without requiring a separate timestamp index.
+ */
+export interface ExecutionRecord {
+  executionId: string;
+  sessionId: string;
+  chainId?: string;
+  stepNumber?: number;
+  promptId?: string;
+  status: StepLifecycle;
+  substate?: StepSubstate;
+  inputRequired?: InputRequiredReason;
+  startedAt: number;
+  completedAt?: number;
+  evidence?: EvidencePayload;
+  gateVerdicts: GateVerdictSummary[];
+  errorMessage?: string;
+  organizationId?: string;
+  workspaceId?: string;
+}
+
+/**
+ * Embedded in `prompt_engine` tool responses so the agent currently driving the chain
+ * has zero-extra-call access to its own execution status. Companion to the
+ * `v_execution_status` SQL view used by out-of-process consumers (Python hooks).
+ */
+export interface ExecutionStatusBlock {
+  runStatus: ChainRunStatus;
+  chainId?: string;
+  currentStep: number;
+  totalSteps: number;
+  inputRequired?: InputRequiredReason;
+  evidenceRequired?: string[];
+  lastActivity: number;
+}
+
+/**
+ * HookRegistry-bound chain lifecycle event surface. Subscribers switch on `type`.
+ * `step.*` events carry stepNumber; `chain.*` events apply to the run as a whole.
+ */
+export type ChainLifecycleEvent =
+  | { type: 'step.rendered'; sessionId: string; stepNumber: number }
+  | {
+      type: 'step.input_required';
+      sessionId: string;
+      stepNumber: number;
+      reason: InputRequiredReason;
+    }
+  | { type: 'step.response_captured'; sessionId: string; stepNumber: number }
+  | {
+      type: 'step.evidence_validated';
+      sessionId: string;
+      stepNumber: number;
+      payload: EvidencePayload;
+    }
+  | { type: 'step.blocked'; sessionId: string; stepNumber: number; reason: string }
+  | { type: 'step.completed'; sessionId: string; stepNumber: number }
+  | { type: 'step.failed'; sessionId: string; stepNumber: number; error: string }
+  | { type: 'chain.cancelled'; sessionId: string }
+  | { type: 'chain.completed'; sessionId: string };
+
+/**
+ * Metadata tracked for each chain step as it transitions through lifecycle states.
+ *
+ * @deprecated Companion type to {@link StepState}. Migrate to {@link StepLifecycle}
+ * + {@link StepSubstate} (sticky lifecycle + non-sticky timestamp flags). Retained
+ * during the migration window for legacy step-state consumers.
+ */
+// eslint-disable-next-line @typescript-eslint/no-deprecated
 export interface StepMetadata {
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   state: StepState;
   isPlaceholder: boolean;
   renderedAt?: number;
