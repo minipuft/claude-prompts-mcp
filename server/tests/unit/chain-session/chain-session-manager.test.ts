@@ -208,3 +208,160 @@ describe('ChainSessionManager', () => {
     expect(stored?.gateInstructions).toBe('Persisted gate instructions');
   });
 });
+
+describe('ChainSessionManager — run-status lifecycle (Tier 2)', () => {
+  let manager: ChainSessionManager;
+  let saveSpy: jest.SpyInstance;
+  let loadSpy: jest.SpyInstance;
+  let schedulerSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    saveSpy = jest
+      .spyOn(ChainSessionManager.prototype as any, 'saveSessions')
+      .mockResolvedValue(undefined);
+    loadSpy = jest
+      .spyOn(ChainSessionManager.prototype as any, 'loadSessions')
+      .mockResolvedValue(undefined);
+    schedulerSpy = jest
+      .spyOn(ChainSessionManager.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    if (manager) {
+      await manager.cleanup();
+    }
+    saveSpy.mockRestore();
+    loadSpy.mockRestore();
+    schedulerSpy.mockRestore();
+  });
+
+  const newManager = (suffix: string): ChainSessionManager =>
+    new ChainSessionManager(createLogger(), new StubTextReferenceStore() as any, {
+      serverRoot: `/tmp/test-runstatus-${suffix}`,
+      cleanupIntervalMs: 1000,
+    });
+
+  test('createSession defaults runStatus to "working"', async () => {
+    manager = newManager('default');
+    const session = await manager.createSession('s1', 'chain-a', 2);
+    expect(session.runStatus).toBe('working');
+    expect(session.runCompletedAt).toBeUndefined();
+  });
+
+  test('transitionRunStatus accepts non-terminal transitions and stamps runCompletedAt on terminal', async () => {
+    manager = newManager('transition');
+    await manager.createSession('s1', 'chain-a', 2);
+
+    const okWorking = await manager.transitionRunStatus('s1', 'input_required');
+    expect(okWorking).toBe(true);
+
+    const okComplete = await manager.transitionRunStatus('s1', 'completed');
+    expect(okComplete).toBe(true);
+
+    const session = (manager as any).activeSessions.get('s1');
+    expect(session.runStatus).toBe('completed');
+    expect(typeof session.runCompletedAt).toBe('number');
+  });
+
+  test('transitionRunStatus refuses transitions out of terminal states (stickiness)', async () => {
+    manager = newManager('stickiness');
+    for (const terminal of ['completed', 'failed', 'cancelled'] as const) {
+      const sessionId = `s-${terminal}`;
+      await manager.createSession(sessionId, `chain-${terminal}`, 1);
+      const session = (manager as any).activeSessions.get(sessionId);
+      session.runStatus = terminal;
+
+      const result = await manager.transitionRunStatus(sessionId, 'working');
+      expect(result).toBe(false);
+      expect(session.runStatus).toBe(terminal);
+    }
+  });
+
+  test('transitionRunStatus is idempotent on same status', async () => {
+    manager = newManager('idempotent');
+    await manager.createSession('s1', 'chain-a', 1);
+    const result = await manager.transitionRunStatus('s1', 'working');
+    expect(result).toBe(true);
+  });
+
+  test('transitionRunStatus returns false for unknown session', async () => {
+    manager = newManager('missing');
+    const result = await manager.transitionRunStatus('does-not-exist', 'completed');
+    expect(result).toBe(false);
+  });
+
+  test('cancelChain transitions a working session to cancelled and stamps runCompletedAt', async () => {
+    manager = newManager('cancel-working');
+    await manager.createSession('s1', 'chain-a', 3);
+
+    const result = await manager.cancelChain('s1');
+    expect(result).toBe(true);
+
+    const session = (manager as any).activeSessions.get('s1');
+    expect(session.runStatus).toBe('cancelled');
+    expect(typeof session.runCompletedAt).toBe('number');
+  });
+
+  test('cancelChain is idempotent on already-cancelled sessions', async () => {
+    manager = newManager('cancel-idempotent');
+    await manager.createSession('s1', 'chain-a', 1);
+    const session = (manager as any).activeSessions.get('s1');
+    session.runStatus = 'cancelled';
+    session.runCompletedAt = 1234;
+
+    const result = await manager.cancelChain('s1');
+    expect(result).toBe(true);
+    expect(session.runStatus).toBe('cancelled');
+    // Idempotent path does not re-stamp the timestamp
+    expect(session.runCompletedAt).toBe(1234);
+  });
+
+  test('cancelChain refuses sessions in completed or failed terminal states', async () => {
+    manager = newManager('cancel-refuse');
+    for (const terminal of ['completed', 'failed'] as const) {
+      const sessionId = `s-${terminal}`;
+      await manager.createSession(sessionId, `chain-${terminal}`, 1);
+      const session = (manager as any).activeSessions.get(sessionId);
+      session.runStatus = terminal;
+
+      const result = await manager.cancelChain(sessionId);
+      expect(result).toBe(false);
+      expect(session.runStatus).toBe(terminal);
+    }
+  });
+
+  test('transitionStepState refuses to overwrite a COMPLETED step', async () => {
+    manager = newManager('step-stickiness');
+    await manager.createSession('s1', 'chain-a', 2);
+    manager.setStepState('s1', 1, StepState.COMPLETED, false);
+
+    const result = await manager.transitionStepState('s1', 1, StepState.RENDERED);
+    expect(result).toBe(false);
+
+    const metadata = manager.getStepState('s1', 1);
+    expect(metadata?.state).toBe(StepState.COMPLETED);
+  });
+
+  test('transitionStepState allows re-asserting the same terminal state (idempotent no-op)', async () => {
+    manager = newManager('step-idempotent');
+    await manager.createSession('s1', 'chain-a', 2);
+    manager.setStepState('s1', 1, StepState.COMPLETED, false);
+
+    const result = await manager.transitionStepState('s1', 1, StepState.COMPLETED);
+    expect(result).toBe(true);
+  });
+
+  test('promoteSessionLifecycle refuses promotion of terminal sessions', async () => {
+    manager = newManager('promote-refuse');
+    await manager.createSession('s1', 'chain-a', 1);
+    const session = (manager as any).activeSessions.get('s1');
+    session.lifecycle = 'dormant';
+    session.runStatus = 'cancelled';
+
+    // getSession() invokes promoteSessionLifecycle internally with reason 'session-id lookup'.
+    manager.getSession('s1');
+
+    expect(session.lifecycle).toBe('dormant');
+  });
+});
