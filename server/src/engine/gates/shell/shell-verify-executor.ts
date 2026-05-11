@@ -62,7 +62,7 @@ export class ShellVerifyExecutor {
    * @returns Verification result with pass/fail status and output
    */
   async execute(gate: ShellVerifyGate): Promise<ShellVerifyResult> {
-    const { command, workingDir, timeout, env } = gate;
+    const { command, workingDir, timeout, env, stdin } = gate;
 
     if (!command || command.trim() === '') {
       return {
@@ -79,6 +79,7 @@ export class ShellVerifyExecutor {
       command,
       cwd: workingDir ?? this.defaultWorkingDir,
       env,
+      stdin,
       timeout: timeout ?? this.defaultTimeout,
       minTimeout: 1000,
       maxTimeout: this.maxTimeout,

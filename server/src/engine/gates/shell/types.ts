@@ -36,6 +36,13 @@ export interface ShellVerifyGate {
   timeout?: number;
   /** Additional environment variables for the command */
   env?: Record<string, string>;
+  /**
+   * Content piped to the command's stdin. When the gate.yaml criterion sets
+   * `shell_stdin_source: 'agent_response'`, the runner populates this with the
+   * (possibly truncated) agent response from the current execution context.
+   * Scripts can then parse claims from stdin and verify against ground truth.
+   */
+  stdin?: string;
 
   // === Ralph Loop Options ===
 

@@ -65,6 +65,19 @@ export const SHELL_VERIFY_DEFAULT_TIMEOUT = 300000; // 5 minutes
 export const SHELL_VERIFY_MAX_TIMEOUT = 600000; // 10 minutes
 
 /**
+ * Maximum bytes of agent response text passed to shell_verify via stdin or env var.
+ *
+ * Larger responses are truncated with a head/tail marker. Caps:
+ * - Memory pressure on stdin pipe buffer
+ * - Process-arg-list size limits (when env-var injection is used)
+ * - Time-to-pipe latency for very large payloads
+ */
+export const SHELL_VERIFY_MAX_RESPONSE_BYTES = 262144; // 256 KB
+
+/** Identifier used in gate.yaml to opt a shell_verify criterion into stdin injection. */
+export const SHELL_STDIN_SOURCE_AGENT_RESPONSE = 'agent_response' as const;
+
+/**
  * Shell verification system defaults
  */
 export const SHELL_VERIFY_DEFAULTS = {

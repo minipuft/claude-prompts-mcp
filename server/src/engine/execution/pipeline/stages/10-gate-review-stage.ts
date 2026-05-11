@@ -62,12 +62,17 @@ export class GateReviewStage extends BasePipelineStage {
       : context.sessionContext;
 
     try {
-      // Run shell_verify criteria from gates to enrich review with real command output
+      // Run shell_verify criteria from gates to enrich review with real command output.
+      // The agent's response is forwarded so gates that opt in via
+      // `shell_stdin_source: 'agent_response'` can verify response-content claims
+      // (file paths, line numbers, symbols) against ground truth.
       let shellSection = '';
       if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {
+        const agentResponse = context.mcpRequest?.user_response;
         const shellResults = await runGateShellVerifications(
           pendingReview.gateIds,
-          this.gateDefinitionProvider
+          this.gateDefinitionProvider,
+          agentResponse !== undefined ? { agentResponse } : undefined
         );
         shellSection = formatGateShellVerifySection(shellResults);
 

@@ -75,6 +75,19 @@ export const GatePassCriteriaSchema = z
     shell_max_attempts: z.number().int().positive().optional(),
     /** Preset for shell verification (:fast, :full, :extended) */
     shell_preset: z.enum(['fast', 'full', 'extended']).optional(),
+    /**
+     * Inject agent response into the shell command. When set to 'agent_response',
+     * the current execution context's user_response is piped to stdin (truncated
+     * to SHELL_VERIFY_MAX_RESPONSE_BYTES). Scripts parse claims from stdin and
+     * verify against ground truth (e.g., file existence, line counts, symbols).
+     */
+    shell_stdin_source: z.enum(['agent_response']).optional(),
+    /**
+     * Optional env var name to receive the agent response (alternative to stdin).
+     * When set together with `shell_stdin_source: 'agent_response'`, the response
+     * is also exported as this env var so scripts can re-read it without buffering.
+     */
+    shell_response_env_var: z.string().optional(),
 
     // Script tool verification options (structured JSON pass/fail)
     /** Script or command to execute for verification */

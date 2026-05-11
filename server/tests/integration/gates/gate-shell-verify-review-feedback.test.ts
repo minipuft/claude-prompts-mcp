@@ -476,4 +476,157 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
       expect(combined).toBe(reviewContent);
     });
   });
+
+  describe('response injection (stdin / env)', () => {
+    test('pipes agent response to stdin when shell_stdin_source is agent_response', async () => {
+      const provider = createProvider({
+        'stdin-echo': {
+          id: 'stdin-echo',
+          name: 'Stdin Echo Gate',
+          type: 'validation',
+          description: 'Echo the piped agent response and pass',
+          pass_criteria: [
+            {
+              type: 'shell_verify',
+              shell_command: 'cat',
+              shell_stdin_source: 'agent_response',
+              shell_timeout: 5000,
+            },
+          ],
+        },
+      });
+
+      const agentResponse = 'verified_paths:\n  - file: foo.ts\n    line_count: 42';
+
+      const results = await runGateShellVerifications(['stdin-echo'], provider, {
+        agentResponse,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.passed).toBe(true);
+      expect(results[0]?.exitCode).toBe(0);
+      expect(results[0]?.stdout).toBe(agentResponse);
+    });
+
+    test('does NOT pipe stdin when shell_stdin_source is omitted', async () => {
+      const provider = createProvider({
+        'no-stdin': {
+          id: 'no-stdin',
+          name: 'No Stdin',
+          type: 'validation',
+          description: 'cat with no stdin (immediate EOF)',
+          pass_criteria: [
+            {
+              type: 'shell_verify',
+              shell_command: 'cat',
+              shell_timeout: 5000,
+            },
+          ],
+        },
+      });
+
+      const results = await runGateShellVerifications(['no-stdin'], provider, {
+        agentResponse: 'should-not-appear',
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.stdout).toBe('');
+      expect(results[0]?.stdout).not.toContain('should-not-appear');
+    });
+
+    test('exposes response via env var when shell_response_env_var is set', async () => {
+      const provider = createProvider({
+        'env-echo': {
+          id: 'env-echo',
+          name: 'Env Echo Gate',
+          type: 'validation',
+          description: 'Echo response from env var',
+          pass_criteria: [
+            {
+              type: 'shell_verify',
+              shell_command: 'printf "%s" "$AGENT_RESPONSE"',
+              shell_stdin_source: 'agent_response',
+              shell_response_env_var: 'AGENT_RESPONSE',
+              shell_timeout: 5000,
+            },
+          ],
+        },
+      });
+
+      const agentResponse = 'AGENT_RESPONSE_VIA_ENV';
+
+      const results = await runGateShellVerifications(['env-echo'], provider, {
+        agentResponse,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.passed).toBe(true);
+      expect(results[0]?.stdout).toBe(agentResponse);
+    });
+
+    test('script can parse stdin claims and verify against ground truth', async () => {
+      const provider = createProvider({
+        'claim-verifier': {
+          id: 'claim-verifier',
+          name: 'Claim Verifier',
+          type: 'validation',
+          description: 'Verify line_count claim against actual file',
+          pass_criteria: [
+            {
+              type: 'shell_verify',
+              shell_command:
+                'claim=$(grep "claimed_lines:" | awk \'{print $2}\'); actual=$(wc -l < package.json | tr -d " "); test "$claim" = "$actual"',
+              shell_stdin_source: 'agent_response',
+              shell_timeout: 5000,
+            },
+          ],
+        },
+      });
+
+      const { execSync } = await import('node:child_process');
+      const actualLines = execSync('wc -l < package.json', { encoding: 'utf8' }).trim();
+
+      const truthful = `verified_paths:\n  - file: package.json\n    claimed_lines: ${actualLines}`;
+      const truthfulResults = await runGateShellVerifications(['claim-verifier'], provider, {
+        agentResponse: truthful,
+      });
+      expect(truthfulResults[0]?.passed).toBe(true);
+
+      const fabricated = `verified_paths:\n  - file: package.json\n    claimed_lines: 99999`;
+      const fabricatedResults = await runGateShellVerifications(['claim-verifier'], provider, {
+        agentResponse: fabricated,
+      });
+      expect(fabricatedResults[0]?.passed).toBe(false);
+    });
+
+    test('truncates very large responses', async () => {
+      const provider = createProvider({
+        'size-check': {
+          id: 'size-check',
+          name: 'Size Check',
+          type: 'validation',
+          description: 'Verify stdin is truncated',
+          pass_criteria: [
+            {
+              type: 'shell_verify',
+              shell_command: 'wc -c',
+              shell_stdin_source: 'agent_response',
+              shell_timeout: 5000,
+            },
+          ],
+        },
+      });
+
+      const largeResponse = 'x'.repeat(1024 * 1024); // 1 MB
+
+      const results = await runGateShellVerifications(['size-check'], provider, {
+        agentResponse: largeResponse,
+      });
+
+      const pipedBytes = parseInt((results[0]?.stdout ?? '0').trim(), 10);
+      expect(pipedBytes).toBeGreaterThan(0);
+      expect(pipedBytes).toBeLessThan(300 * 1024);
+      expect(pipedBytes).toBeLessThan(largeResponse.length);
+    });
+  });
 });

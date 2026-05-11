@@ -86,6 +86,19 @@ export interface GatePassCriteria {
   shell_max_attempts?: number;
   /** Preset for shell verification (:fast, :full, :extended) */
   shell_preset?: 'fast' | 'full' | 'extended';
+  /**
+   * Inject the current execution's agent response into the shell command.
+   * When set to 'agent_response', the response is piped to stdin (truncated
+   * to SHELL_VERIFY_MAX_RESPONSE_BYTES). Scripts parse claims from stdin and
+   * verify against ground truth (file existence, line counts, symbols).
+   */
+  shell_stdin_source?: 'agent_response';
+  /**
+   * Optional env var name to receive the agent response (mirror of stdin).
+   * Only meaningful when `shell_stdin_source: 'agent_response'` is set.
+   * Useful for scripts that need to re-read the response without buffering stdin.
+   */
+  shell_response_env_var?: string;
 
   // Script tool verification options (structured JSON pass/fail)
   /** Script or command to execute for verification */
