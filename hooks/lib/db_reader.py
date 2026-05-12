@@ -190,31 +190,136 @@ def _is_pid_alive(pid: int) -> bool:
 
 
 def load_active_chain_state() -> dict | None:
-    """Load active chain session state from server's chain_sessions table (SSOT).
+    """Load active chain session state from server's execution SSOT.
 
-    Queries per-row chain_sessions table where tenant_id = server PID.
-    Only returns sessions belonging to a live server process, preventing
-    cross-client contamination when multiple Claude Code instances share
-    the same MCP server's state.db.
+    Read order (highest-fidelity first):
+      1. v_execution_status view (Tier 1 — SEP-1686 cross-language SSOT;
+         joins chain_sessions JSON state with execution_records aggregates).
+         Boundary detection uses the canonical run_status column (Tier 2)
+         instead of inferring from current_step vs total_steps.
+      2. chain_sessions per-row table — fallback for environments where the
+         view query fails (e.g., column-shape divergence during rollout).
+      3. chain_run_registry blob — legacy fallback retained for one release;
+         Tier 10 removes both this method and the blob table.
 
-    Falls back to chain_run_registry blob if chain_sessions has no rows
-    (backward compatibility during rollout).
+    All paths perform a PID liveness check on tenant_id so the hook only
+    returns sessions belonging to a live server process.
     """
     conn = _connect_readonly()
     if not conn:
         return None
     try:
-        # Primary: query per-row chain_sessions table with PID liveness check
+        result = _load_from_execution_view(conn)
+        if result is not None:
+            return result
+
         result = _load_from_session_table(conn)
         if result is not None:
             return result
 
-        # Fallback: legacy chain_run_registry blob (pre-PID isolation)
         return _load_from_run_registry(conn)
     except (sqlite3.Error, json.JSONDecodeError, KeyError, TypeError):
         return None
     finally:
         conn.close()
+
+
+def _load_from_execution_view(conn: sqlite3.Connection) -> dict | None:
+    """Query v_execution_status — Tier 1 cross-language SSOT view.
+
+    Boundary check uses run_status (Tier 2): rows with run_status in
+    {completed, failed, cancelled} are excluded so the hook never reports a
+    terminal chain as active. Rows with NULL run_status are retained (legacy
+    rows from before Tier 2 landed) and reach the same in-progress check as
+    the session-table fallback.
+    """
+    try:
+        cursor = conn.execute(
+            "SELECT tenant_id, chain_id, run_status, current_step, total_steps, "
+            "last_activity, pending_gate_review, pending_shell_verification "
+            "FROM v_execution_status "
+            "WHERE run_status IS NULL "
+            "OR run_status NOT IN ('completed', 'failed', 'cancelled') "
+            "ORDER BY last_activity DESC, updated_at DESC"
+        )
+        rows = cursor.fetchall()
+    except sqlite3.OperationalError:
+        return None
+
+    if not rows:
+        return None
+
+    for row in rows:
+        pid_str = row["tenant_id"]
+        try:
+            pid = int(pid_str)
+        except (ValueError, TypeError):
+            continue
+        if not _is_pid_alive(pid):
+            continue
+
+        hook_state = _view_row_to_hook_state(row)
+        if hook_state is not None:
+            return hook_state
+
+    return None
+
+
+def _view_row_to_hook_state(row: sqlite3.Row) -> dict | None:
+    """Convert a v_execution_status row to the hook ChainState shape."""
+    current = row["current_step"] or 0
+    total = row["total_steps"] or 0
+
+    pending_gate_review = _parse_json_field(row["pending_gate_review"])
+    pending_shell_verification = _parse_json_field(row["pending_shell_verification"])
+
+    has_pending_review = bool(pending_gate_review)
+    has_pending_verify = bool(pending_shell_verification)
+    in_progress = current > 0 and current < total
+    pending_at_final = current > 0 and current == total and (has_pending_review or has_pending_verify)
+
+    if not in_progress and not pending_at_final:
+        return None
+
+    result = {
+        "chain_id": row["chain_id"] or "",
+        "current_step": current,
+        "total_steps": total,
+        "pending_gate": None,
+        "gate_criteria": [],
+        "last_prompt_id": "",
+        "pending_shell_verify": None,
+        "shell_verify_attempts": 0,
+    }
+
+    if isinstance(pending_gate_review, dict):
+        gate_ids = pending_gate_review.get("gateIds", [])
+        if gate_ids:
+            result["pending_gate"] = ", ".join(gate_ids)
+        result["shell_verify_attempts"] = pending_gate_review.get("attemptCount", 0)
+
+    if isinstance(pending_shell_verification, dict):
+        cmd_info = pending_shell_verification.get("shellVerify", {})
+        result["pending_shell_verify"] = cmd_info.get("command")
+        result["shell_verify_attempts"] = pending_shell_verification.get("attemptCount", 0)
+
+    return result
+
+
+def _parse_json_field(raw: object) -> object:
+    """Parse a JSON column value. SQLite json_extract may return either a
+    Python object (when SQLite parsed JSON natively) or a string (when the
+    underlying column held raw JSON text)."""
+    if raw is None:
+        return None
+    if isinstance(raw, (dict, list)):
+        return raw
+    if not isinstance(raw, str) or raw.strip() == "":
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
 
 
 def _load_from_session_table(conn: sqlite3.Connection) -> dict | None:
