@@ -2,13 +2,20 @@
 
 Gates are quality validation mechanisms that ensure Claude's outputs meet specific criteria before proceeding.
 
-## Gate Types
+## Enforcement Modes
 
-| Type | Validation Method | Best For |
-|------|-------------------|----------|
-| **Criteria Gates** | LLM self-evaluation | Subjective quality checks |
-| **Shell Verification** | Exit code (ground truth) | Test suites, linting, builds |
-| **Canonical Gates** | Pre-defined standards | Reusable quality patterns |
+Every gate in a `gate.yaml` declares one or more `pass_criteria` entries; the `type:` field selects the enforcement mode. Five modes exist, and they differ in **what the runtime actually does** when the gate fires — not all are equally enforced.
+
+| `type:`                  | What runs at execution time                                                                                                                                                                 | Enforcement strength          | Use for                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------- |
+| `inline_guidance`        | Renders a checklist into the chain response for agent self-assessment. No runtime check.                                                                                                    | Display only                  | Conventions, style hints, self-evaluation prompts                             |
+| `llm_self_check`         | _Reserved._ No runner wired yet. Treat as `inline_guidance` until implemented.                                                                                                              | Not enforced                  | (none — use `inline_guidance` today)                                          |
+| `methodology_compliance` | Pipeline stage 09b inspects the response against the active methodology's `phases.yaml` (section headers, `min_length`, `forbidden_terms`). Failure injects "Improvements Needed" feedback. | Hard structural enforcement   | Required methodology sections (e.g., "## Context must exist with ≥100 chars") |
+| `shell_verify`           | Spawns the configured shell command and checks its exit code (0 = pass). Optional response injection pipes the agent response to stdin.                                                     | Hard ground-truth enforcement | Tests, linting, builds, response-content verification                         |
+| `script_tool`            | Invokes a registered script tool with JSON stdin; expects a structured pass/fail result.                                                                                                    | Hard structured enforcement   | Programmatic checks against external systems                                  |
+
+> [!NOTE]
+> The former `content_check` and `pattern_check` types have been renamed to `inline_guidance` (commit `380655e4`). Neither had a runtime enforcement path wired — both rendered guidance text and relied on the agent's `GATE_REVIEW` self-report. The rename makes the actual behavior honest. See [Phase Guards Guide](./phase-guards.md) for `methodology_compliance` and the schema header in `server/src/engine/gates/core/gate-schema.ts` for the canonical taxonomy.
 
 ## Criteria Gates (LLM Self-Evaluation)
 
@@ -67,11 +74,11 @@ Shell verification uses actual command execution for validation—exit code 0 = 
 
 ### Presets
 
-| Preset | Max Attempts | Timeout | Use Case |
-|--------|-------------|---------|----------|
-| `:fast` | 1 | 30s | Quick feedback |
-| `:full` | 5 | 300s | CI validation |
-| `:extended` | 10 | 600s | Long tests |
+| Preset      | Max Attempts | Timeout | Use Case       |
+| ----------- | ------------ | ------- | -------------- |
+| `:fast`     | 1            | 30s     | Quick feedback |
+| `:full`     | 5            | 300s    | CI validation  |
+| `:extended` | 10           | 600s    | Long tests     |
 
 ### Examples
 
@@ -91,13 +98,67 @@ Shell verification uses actual command execution for validation—exit code 0 = 
 
 ### Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `max:N` | 5 | Maximum attempts |
-| `timeout:N` | 300 | Timeout in seconds |
-| `loop:true` | false | Stop hook integration |
+| Option      | Default | Description           |
+| ----------- | ------- | --------------------- |
+| `max:N`     | 5       | Maximum attempts      |
+| `timeout:N` | 300     | Timeout in seconds    |
+| `loop:true` | false   | Stop hook integration |
 
 See [Ralph Loops Guide](./ralph-loops.md) for comprehensive shell verification documentation.
+
+### Response Injection (Agent-Output Verification)
+
+A `shell_verify` gate can pipe the agent's response into the shell command's stdin, enabling ground-truth checks against what the agent actually claimed.
+
+```yaml
+pass_criteria:
+  - type: shell_verify
+    shell_command: "node scripts/verify-path-claims.mjs"
+    shell_stdin_source: agent_response # pipe response to stdin
+    shell_response_env_var: AGENT_RESPONSE # optional mirror via env var
+    shell_timeout: 10000
+```
+
+| Field                                | Description                                                                                                                             |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `shell_stdin_source: agent_response` | Pipes the agent response to the script's stdin. Truncated to `SHELL_VERIFY_MAX_RESPONSE_BYTES` (default 256 KB) with head/tail markers. |
+| `shell_response_env_var`             | Optional env var that mirrors stdin. Useful for scripts that re-read the response without buffering stdin.                              |
+
+#### Worked Example: `path-verification`
+
+The shipped `path-verification` gate (`resources/gates/path-verification/`) is the canonical consumer of response injection. It catches plan-author drift — fabricated file paths, wrong line counts, missing symbols — by inspecting a structured block emitted by the agent.
+
+**Agent emits a verification block** inside its response:
+
+```yaml
+verified_paths:
+  - file: server/src/engine/gates/core/gate-schema.ts
+    exists: yes
+    line_count: 142
+    target_symbols:
+      - symbol: GatePassCriteriaSchema
+        actual_line: 23
+```
+
+**Gate config** pipes the response into the verification script:
+
+```yaml
+# resources/gates/path-verification/gate.yaml
+pass_criteria:
+  - type: shell_verify
+    shell_command: "node scripts/verify-path-claims.mjs"
+    shell_stdin_source: agent_response
+    shell_timeout: 10000
+activation:
+  prompt_categories: [planning]
+  explicit_request: true
+```
+
+**The script** (`server/scripts/verify-path-claims.mjs`) parses the YAML block, walks up to the repo root if needed, then runs `statSync` / `wc -l` / `rg` against the filesystem. Exit 0 = all claims verified clean; exit 1 = at least one mismatch (with the diagnostic on stderr); exit 2 = malformed input.
+
+**Integration tests** (`server/tests/integration/gates/path-verification.test.ts`) cover ten scenarios: truthful claims pass, fabricated line counts fail with `line_count=99999 actual=…`, missing files fail with `exists=yes/false`, symbol verification catches both wrong-line and absent-symbol claims.
+
+The end-to-end shape is: **agent response → injected stdin → script verification → exit code → gate verdict**. The gate is the only mechanism in this codebase that can verify the _content_ of an agent's response against external ground truth.
 
 ## Canonical Gates
 
@@ -106,16 +167,16 @@ Pre-defined gates stored in `resources/gates/` for reusable quality patterns.
 <details>
 <summary><strong>Available Gates</strong></summary>
 
-| Gate ID | Severity | Purpose |
-|---------|----------|---------|
-| `code-quality` | medium | Error handling, naming, edge cases |
-| `security-awareness` | medium | No secrets, input validation |
-| `test-coverage` | medium | Tests included |
-| `content-structure` | low | Headers, lists, examples |
-| `api-documentation` | medium | Endpoints, params, examples |
-| `pr-security` | critical | No eval, parameterized queries |
-| `pr-performance` | medium | Memoization, no console.log |
-| `plan-quality` | high | Files, risks, assumptions |
+| Gate ID              | Severity | Purpose                            |
+| -------------------- | -------- | ---------------------------------- |
+| `code-quality`       | medium   | Error handling, naming, edge cases |
+| `security-awareness` | medium   | No secrets, input validation       |
+| `test-coverage`      | medium   | Tests included                     |
+| `content-structure`  | low      | Headers, lists, examples           |
+| `api-documentation`  | medium   | Endpoints, params, examples        |
+| `pr-security`        | critical | No eval, parameterized queries     |
+| `pr-performance`     | medium   | Memoization, no console.log        |
+| `plan-quality`       | high     | Files, risks, assumptions          |
 
 </details>
 
@@ -234,11 +295,11 @@ Gates can be combined with other operators:
 
 Gates validate **content quality** (subjective, LLM-evaluated). Assertions validate **structure** (deterministic, zero-cost). They compose orthogonally:
 
-| Layer | Validates | Cost | Method |
-|-------|-----------|------|--------|
-| Assertions | Structure (sections, length, terms) | Zero | Deterministic checks |
-| Gates (self) | Content quality | LLM cost | Self-review |
-| Gates (judge) | Content quality | LLM cost | Context-isolated review |
+| Layer         | Validates                           | Cost     | Method                  |
+| ------------- | ----------------------------------- | -------- | ----------------------- |
+| Assertions    | Structure (sections, length, terms) | Zero     | Deterministic checks    |
+| Gates (self)  | Content quality                     | LLM cost | Self-review             |
+| Gates (judge) | Content quality                     | LLM cost | Context-isolated review |
 
 When assertions pass, the gate reviewer is told: "Structure is verified — focus on content quality." When assertions fail, the LLM must fix structural issues before content quality is evaluated.
 
@@ -251,11 +312,30 @@ By default, the same LLM evaluates its own gate criteria (self mode). Judge mode
 ```yaml
 # In gate.yaml
 evaluation:
-  mode: judge          # Context-isolated evaluation
-  strict: true         # Evidence-based: list failures first
+  mode: judge # Context-isolated evaluation
+  strict: true # Evidence-based: list failures first
 ```
 
 See [Judge Mode Guide](./judge-mode.md) for configuration and usage.
+
+## Choosing an Enforcement Mode
+
+A decision table for picking the right `pass_criteria.type` for the check you actually want:
+
+| If you want to...                                                            | Use                                                      | Why                                                                                                                                                                               |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Display a self-assessment checklist to the agent                             | `inline_guidance`                                        | No runtime check exists; the checklist is rendered into context and the agent self-reports via `GATE_REVIEW`. Accept that a fabricated `PASS` slips through.                      |
+| Enforce required methodology sections (e.g., CAGEERF Context/Analysis/Goals) | `methodology_compliance` (via phase guards)              | Stage 09b inspects section headers + length + forbidden terms deterministically. Zero LLM cost; clear "Improvements Needed" feedback on failure.                                  |
+| Verify the agent's claims against the filesystem or other ground truth       | `shell_verify` with `shell_stdin_source: agent_response` | Pipes the response into a script that can run `statSync`, `rg`, `wc -l`, etc. Exit code is ground truth — the agent cannot fake it. See `path-verification` worked example above. |
+| Run tests, lint, or build against the codebase (no response inspection)      | `shell_verify` (no `shell_stdin_source`)                 | Plain exit-code check. The response is irrelevant; the command operates on files on disk.                                                                                         |
+| Invoke a registered script tool with typed JSON input                        | `script_tool`                                            | When the check needs structured arguments instead of free-form response, and you want a typed pass/fail result back.                                                              |
+
+### Anti-patterns
+
+- **Using `inline_guidance` for a check the runtime could verify cheaply** — the checklist is display-only, and `GATE_REVIEW: PASS` from a fabricated self-assessment is indistinguishable from a real one. If a 3-line shell script can confirm the claim, prefer `shell_verify`.
+- **Using `shell_verify` for section-structure enforcement** — `methodology_compliance` is faster (no subprocess), produces clearer per-section feedback, and integrates with the phase-guards UI. Reserve `shell_verify` for checks that genuinely need to run a command.
+- **Mixing `shell_stdin_source: agent_response` with commands that don't read stdin** — the response is discarded silently and the gate becomes a plain exit-code check with extra overhead. The receiving script must `readFileSync(0)` (or equivalent) to consume the response.
+- **Trusting `llm_self_check`** — the runner is reserved but not implemented. A gate that declares `type: llm_self_check` today behaves like `inline_guidance`. Use one of the four other types.
 
 ## Best Practices
 

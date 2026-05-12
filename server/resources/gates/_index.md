@@ -2,62 +2,67 @@
 
 # Gate Index
 
-19 gates across 7 groups.
+20 gates across 7 groups.
+
+For the full enforcement-mode taxonomy (`inline_guidance` / `llm_self_check` / `methodology_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).
+
+> **Note:** Gate types `content_check` and `pattern_check` were renamed to `inline_guidance` — neither had a runtime enforcement path; both rendered guidance text only. Gates using the old names should migrate.
 
 ## Development
 
-| Gate | Severity | Activation | Description |
-|------|----------|------------|-------------|
-| `workflow-diagnosis` | high | workflow, refactoring | Validates that the Diagnosis Card synthesizes collected signals into a named pattern before implementation. Required when pre-flight has 2+ failures, multiple skills flag the same area, or multi-file changes are planned. |
-| `workflow-integration` | high | workflow, implementation | Validates that replaced systems are fully removed, integration points are tested, and no orphaned references remain. Ensures clean state before marking work complete. |
-| `workflow-preflight` | high | workflow, refactoring | Validates that the mandatory pre-flight checklist from refactoring.md was completed before implementation begins. Checks domain ownership, complexity, layer identification, naming, and dependency analysis. |
-| `workflow-changelog` | medium | workflow, implementation | Validates that CHANGELOG.md [Unreleased] section was updated during implementation. Changes should be documented as they happen, not at release. |
-| `workflow-growth` | medium | workflow, implementation | Validates that the task explicitly declares its learning outcome. Every task must state whether it produced novel patterns, confirmed existing ones, or found nothing new. Silence is not acceptable. |
-| `api-documentation` | — | documentation, api, development | Ensures API documentation includes all required sections and follows best practices |
-| `code-quality` | — | development, code_generation, debugging | Ensures generated code follows best practices and quality standards |
-| `educational-clarity` | — | education, documentation, content_processing | Ensures educational content is clear, well-structured, and pedagogically sound |
-| `intent-quality` | — | always | Validates that Intent Declaration is complete, properly formatted for workflow routing, and extracts acceptance criteria when a source spec exists |
-| `technical-accuracy` | — | development, analysis, research · explicit only | Ensures technical correctness, fact-checking, and precision in technical content |
+| Gate                   | Severity | Activation                                      | Description                                                                                                                                                                                                                  |
+| ---------------------- | -------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workflow-diagnosis`   | high     | workflow, refactoring                           | Validates that the Diagnosis Card synthesizes collected signals into a named pattern before implementation. Required when pre-flight has 2+ failures, multiple skills flag the same area, or multi-file changes are planned. |
+| `workflow-integration` | high     | workflow, implementation                        | Validates that replaced systems are fully removed, integration points are tested, and no orphaned references remain. Ensures clean state before marking work complete.                                                       |
+| `workflow-preflight`   | high     | workflow, refactoring                           | Validates that the mandatory pre-flight checklist from refactoring.md was completed before implementation begins. Checks domain ownership, complexity, layer identification, naming, and dependency analysis.                |
+| `workflow-changelog`   | medium   | workflow, implementation                        | Validates that CHANGELOG.md [Unreleased] section was updated during implementation. Changes should be documented as they happen, not at release.                                                                             |
+| `workflow-growth`      | medium   | workflow, implementation                        | Validates that the task explicitly declares its learning outcome. Every task must state whether it produced novel patterns, confirmed existing ones, or found nothing new. Silence is not acceptable.                        |
+| `api-documentation`    | —        | documentation, api, development                 | Ensures API documentation includes all required sections and follows best practices                                                                                                                                          |
+| `code-quality`         | —        | development, code_generation, debugging         | Ensures generated code follows best practices and quality standards                                                                                                                                                          |
+| `educational-clarity`  | —        | education, documentation, content_processing    | Ensures educational content is clear, well-structured, and pedagogically sound                                                                                                                                               |
+| `intent-quality`       | —        | always                                          | Validates that Intent Declaration is complete, properly formatted for workflow routing, and extracts acceptance criteria when a source spec exists                                                                           |
+| `technical-accuracy`   | —        | development, analysis, research · explicit only | Ensures technical correctness, fact-checking, and precision in technical content                                                                                                                                             |
 
 ## Security
 
-| Gate | Severity | Activation | Description |
-|------|----------|------------|-------------|
-| `security-awareness` | — | code, development | Ensures security-conscious development practices and prevents common vulnerabilities |
+| Gate                 | Severity | Activation        | Description                                                                          |
+| -------------------- | -------- | ----------------- | ------------------------------------------------------------------------------------ |
+| `security-awareness` | —        | code, development | Ensures security-conscious development practices and prevents common vulnerabilities |
 
 ## Testing
 
-| Gate | Severity | Activation | Description |
-|------|----------|------------|-------------|
-| `test-suite` | high | code, development, implementation · explicit only | Validates implementation by running the test suite. Uses shell verification for ground-truth validation via exit codes. |
-| `test-coverage` | — | code, development | Ensures code changes include appropriate test coverage |
+| Gate            | Severity | Activation                                        | Description                                                                                                             |
+| --------------- | -------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `test-suite`    | high     | code, development, implementation · explicit only | Validates implementation by running the test suite. Uses shell verification for ground-truth validation via exit codes. |
+| `test-coverage` | —        | code, development                                 | Ensures code changes include appropriate test coverage                                                                  |
 
 ## Planning
 
-| Gate | Severity | Activation | Description |
-|------|----------|------------|-------------|
-| `plan-quality` | high | planning, development | Ensures implementation plans are complete, actionable, and risk-aware |
+| Gate                | Severity | Activation               | Description                                                                                                                                                                                                                                                                                                                                       |
+| ------------------- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path-verification` | high     | planning · explicit only | Verifies plan-author claims about file paths, line counts, and symbol locations by parsing the agent's `verified_paths:` block from stdin (via response injection) and checking each claim against the filesystem. Provides ground-truth enforcement that the verification step's structural pattern (Phase 2.5 of >>implementation_plan) cannot. |
+| `plan-quality`      | high     | planning, development    | Ensures implementation plans are complete, actionable, and risk-aware                                                                                                                                                                                                                                                                             |
 
 ## Research
 
-| Gate | Severity | Activation | Description |
-|------|----------|------------|-------------|
-| `content-structure` | — | documentation, content_processing, education, analysis, research, general | Ensures well-organized, readable content with clear structure |
-| `research-quality` | — | research, analysis · explicit only | Ensures thorough research with proper citations and credible sources |
+| Gate                | Severity | Activation                                                                | Description                                                          |
+| ------------------- | -------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `content-structure` | —        | documentation, content_processing, education, analysis, research, general | Ensures well-organized, readable content with clear structure        |
+| `research-quality`  | —        | research, analysis · explicit only                                        | Ensures thorough research with proper citations and credible sources |
 
 ## PR Review
 
-| Gate | Severity | Activation | Description |
-|------|----------|------------|-------------|
-| `pr-security` | critical (blocking) | pr-review · explicit only | Blocks PR approval if security vulnerabilities are detected. Must pass before merge. |
-| `pr-performance` | medium (advisory) | pr-review · explicit only | Flags performance concerns without blocking. Warns but allows merge. |
+| Gate             | Severity            | Activation                | Description                                                                          |
+| ---------------- | ------------------- | ------------------------- | ------------------------------------------------------------------------------------ |
+| `pr-security`    | critical (blocking) | pr-review · explicit only | Blocks PR approval if security vulnerabilities are detected. Must pass before merge. |
+| `pr-performance` | medium (advisory)   | pr-review · explicit only | Flags performance concerns without blocking. Warns but allows merge.                 |
 
 ## Framework
 
-| Gate | Severity | Activation | Description |
-|------|----------|------------|-------------|
-| `framework-compliance` | — | development, analysis, research, architecture, debugging, documentation, planning · frameworks: CAGEERF, ReACT, 5W1H, SCAMPER | Ensures responses follow the active framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER). Requires BOTH a matching framework context AND a relevant prompt category to activate. This prevents methodology gates from applying to simple prompts like greetings. |
+| Gate                   | Severity | Activation                                                                                                                    | Description                                                                                                                                                                                                                                                       |
+| ---------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `framework-compliance` | —        | development, analysis, research, architecture, debugging, documentation, planning · frameworks: CAGEERF, ReACT, 5W1H, SCAMPER | Ensures responses follow the active framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER). Requires BOTH a matching framework context AND a relevant prompt category to activate. This prevents methodology gates from applying to simple prompts like greetings. |
 
 ---
 
-*Generated: 2026-03-17*
+_Generated: 2026-05-12_
