@@ -6,6 +6,7 @@ import {
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../../infra/logging/index.js';
+import type { ExecutionRecordStore } from '../../../../modules/chains/execution-record-store.js';
 import type { FormatterExecutionContext } from '../../../../shared/types/chain-execution.js';
 import type { ResponseFormatterPort } from '../../../../shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
@@ -31,9 +32,25 @@ export class ResponseFormattingStage extends BasePipelineStage {
   constructor(
     private readonly responseFormatter: ResponseFormatterPort,
     private readonly responseAssembler: ResponseAssembler,
-    logger: Logger
+    logger: Logger,
+    private readonly executionRecordStore: ExecutionRecordStore | null = null
   ) {
     super(logger);
+  }
+
+  private emitChainTerminalRecord(context: ExecutionContext): void {
+    if (this.executionRecordStore === null) return;
+    const session = context.sessionContext;
+    if (session === undefined || !context.state.session.chainComplete) return;
+    const completedAt = Date.now();
+    this.executionRecordStore.append({
+      sessionId: session.sessionId,
+      chainId: session.chainId,
+      status: 'completed',
+      startedAt: completedAt,
+      completedAt,
+      scope: context.getScopeOptions(),
+    });
   }
 
   async execute(context: ExecutionContext): Promise<void> {
@@ -89,6 +106,8 @@ export class ResponseFormattingStage extends BasePipelineStage {
       );
 
       context.setResponse(response);
+
+      this.emitChainTerminalRecord(context);
 
       context.diagnostics.info(this.name, 'Response formatted', {
         executionType: formatterContext.executionType,

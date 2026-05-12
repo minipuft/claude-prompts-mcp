@@ -21,6 +21,7 @@ import type { LightweightGateSystem } from '../../../../engine/gates/core/index.
 import type { GateManager } from '../../../../engine/gates/gate-manager.js';
 import type { GateGuidanceRenderer } from '../../../../engine/gates/guidance/GateGuidanceRenderer.js';
 import type { GateReferenceResolver } from '../../../../engine/gates/services/gate-reference-resolver.js';
+import type { ExecutionRecordStore } from '../../../../modules/chains/execution-record-store.js';
 import type { StyleManager } from '../../../../modules/formatting/index.js';
 import type {
   Logger,
@@ -53,6 +54,9 @@ export interface PipelineDependencies {
   // ── Session Management ──
   chainSessionManager: ChainSessionService;
   chainSessionRouter: ChainSessionRouter | null;
+
+  // ── Execution log (Tier 5) — null when DB not yet wired ──
+  executionRecordStore: ExecutionRecordStore | null;
 
   // ── Gate System ──
   lightweightGateSystem: LightweightGateSystem;

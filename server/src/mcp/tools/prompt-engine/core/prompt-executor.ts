@@ -46,6 +46,10 @@ import { GateManagerProvider } from '../../../../engine/gates/registry/gate-prov
 import { GateReferenceResolver } from '../../../../engine/gates/services/gate-reference-resolver.js';
 import { WorkspaceScriptLoader } from '../../../../modules/automation/core/index.js';
 import { createScriptExecutor } from '../../../../modules/automation/execution/script-executor.js';
+import {
+  ExecutionRecordStore,
+  createExecutionRecordStore,
+} from '../../../../modules/chains/execution-record-store.js';
 import { createChainSessionManager } from '../../../../modules/chains/manager.js';
 import { StyleManager, createStyleManager } from '../../../../modules/formatting/index.js';
 import { PromptAssetManager } from '../../../../modules/prompts/index.js';
@@ -92,6 +96,9 @@ export class PromptExecutor {
   private readonly gateGuidanceRenderer: GateGuidanceRenderer;
   private readonly chainSessionManager: ChainSessionService;
   private readonly argumentHistoryTracker: ArgumentHistoryTracker;
+
+  /** Execution log writer (Tier 5). Created when setDatabasePort wires the DB. */
+  private executionRecordStore: ExecutionRecordStore | null = null;
 
   private frameworkStateStore?: FrameworkStateStore;
   private frameworkManager?: FrameworkManager;
@@ -291,6 +298,8 @@ export class PromptExecutor {
     if ('setDatabasePort' in this.chainSessionManager) {
       (this.chainSessionManager as { setDatabasePort(db: unknown): void }).setDatabasePort(db);
     }
+    this.executionRecordStore = createExecutionRecordStore(db, this.logger);
+    this.promptPipeline = undefined;
   }
 
   setHookRegistry(hookRegistry: HookRegistryPort): void {
@@ -682,6 +691,7 @@ export class PromptExecutor {
         executionPlanner: this.executionPlanner,
         chainSessionManager: this.chainSessionManager,
         chainSessionRouter: this.chainSessionRouter,
+        executionRecordStore: this.executionRecordStore,
         lightweightGateSystem: this.lightweightGateSystem,
         gateManager: this.gateManager,
         gateReferenceResolver: this.gateReferenceResolver,

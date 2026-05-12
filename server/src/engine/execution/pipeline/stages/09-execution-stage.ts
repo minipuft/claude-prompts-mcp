@@ -4,6 +4,7 @@ import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detect
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../../infra/logging/index.js';
+import type { ExecutionRecordStore } from '../../../../modules/chains/execution-record-store.js';
 import type { ChainSessionService } from '../../../../shared/types/index.js';
 import type { ScriptReferenceResolverPort } from '../../../../shared/utils/jsonUtils.js';
 import type { ExecutionContext } from '../../context/index.js';
@@ -29,7 +30,8 @@ export class StepExecutionStage extends BasePipelineStage {
     private readonly chainSessionManager: ChainSessionService,
     logger: Logger,
     private readonly referenceResolver?: PromptReferenceResolver,
-    private readonly scriptReferenceResolver?: ScriptReferenceResolverPort
+    private readonly scriptReferenceResolver?: ScriptReferenceResolverPort,
+    private readonly executionRecordStore: ExecutionRecordStore | null = null
   ) {
     super(logger);
   }
@@ -164,6 +166,20 @@ export class StepExecutionStage extends BasePipelineStage {
     });
 
     context.executionResults = this.createExecutionResults(renderResult);
+
+    if (this.executionRecordStore !== null) {
+      const renderedAt = Date.now();
+      this.executionRecordStore.append({
+        sessionId: session.sessionId,
+        chainId: session.chainId,
+        stepNumber: renderResult.stepNumber,
+        promptId: renderResult.promptId,
+        status: 'working',
+        substate: { renderedAt },
+        startedAt: renderedAt,
+        scope: context.getScopeOptions(),
+      });
+    }
 
     // Record diagnostic for chain step execution
     context.diagnostics.info(this.name, 'Chain step executed', {

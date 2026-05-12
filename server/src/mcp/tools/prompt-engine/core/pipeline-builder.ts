@@ -318,7 +318,8 @@ export class PipelineBuilder {
       deps.chainSessionManager,
       deps.logger,
       deps.referenceResolver,
-      deps.scriptReferenceResolver
+      deps.scriptReferenceResolver,
+      deps.executionRecordStore
     );
 
     // Phase guard verification stage (09b)
@@ -341,7 +342,8 @@ export class PipelineBuilder {
     const formattingStage = new ResponseFormattingStage(
       deps.responseFormatter,
       responseAssembler,
-      deps.logger
+      deps.logger,
+      deps.executionRecordStore
     );
     const postFormattingStage = new PostFormattingCleanupStage(
       deps.chainSessionManager,
