@@ -7,9 +7,34 @@
  * - GateDefinitionLoader (runtime validation)
  * - (Future) CI validation scripts
  *
- * This ensures SSOT - any schema change is enforced everywhere.
+ * This ensures SSOT — any schema change is enforced everywhere.
  *
  * @see methodology-schema.ts for the pattern this follows
+ *
+ * ## Gate Enforcement Modes (taxonomy)
+ *
+ * Five pass-criteria types exist. They differ in WHEN and HOW enforcement
+ * happens — picking the right type for a use case is critical.
+ *
+ * | Type                       | Enforcement                                   | When to use                                                           |
+ * |----------------------------|-----------------------------------------------|-----------------------------------------------------------------------|
+ * | `inline_guidance`          | **None** — rendered as agent-facing checklist | Soft criteria the agent self-assesses (style, completeness reminders) |
+ * | `llm_self_check`           | **Reserved** — runner not yet implemented     | (Not usable today)                                                    |
+ * | `methodology_compliance`   | **Hard** — phase guards (stage 09b) check     | Required output sections per active methodology phases.yaml           |
+ * |                            | section presence + min_length + forbidden_terms |                                                                     |
+ * | `shell_verify`             | **Hard** — runs shell command, exit 0 = pass  | Ground-truth checks: tests passing, files existing, content claims    |
+ * |                            | (supports `shell_stdin_source: agent_response`) | matching reality (file paths, line counts, symbol locations)        |
+ * | `script_tool`              | **Hard** — registered script with JSON stdin, | Structured validation requiring rich input/output contracts           |
+ * |                            | parses pass/fail return                       |                                                                       |
+ *
+ * Common mistakes the taxonomy prevents:
+ * - Using `inline_guidance` and expecting auto-enforcement (it's display only)
+ * - Using `shell_verify` to validate codebase state when the agent's CLAIM
+ *   is what needs checking — set `shell_stdin_source: agent_response` for that
+ * - Treating `llm_self_check` as available (it isn't yet — schema accepts it,
+ *   no runner exists)
+ *
+ * For deeper documentation: docs/guides/gates.md (Enforcement Modes section).
  */
 
 import { z } from 'zod';
@@ -20,8 +45,10 @@ import { z } from 'zod';
 
 /**
  * Schema for gate pass criteria definitions.
- * Supports content checks, pattern checks, LLM self-checks, methodology compliance,
- * and shell verification (ground-truth validation via exit code).
+ *
+ * See the file-header taxonomy table for the 5 supported types and their
+ * enforcement modes. The `type` field's JSDoc below repeats the table at the
+ * point of use (LLMs picking a type at YAML-authoring time read it there).
  */
 export const GatePassCriteriaSchema = z
   .object({
