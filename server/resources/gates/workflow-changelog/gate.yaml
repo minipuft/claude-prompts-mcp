@@ -7,10 +7,10 @@ description: >-
   implementation. Changes should be documented as they happen, not at release.
 guidanceFile: guidance.md
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - Unreleased
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - 'Added|Fixed|Changed|Removed|Deprecated'
       - 'CHANGELOG|changelog'

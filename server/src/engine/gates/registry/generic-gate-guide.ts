@@ -155,9 +155,12 @@ export class GenericGateGuide implements GateGuide {
   // NOTE: validate() method intentionally not implemented here.
   // The canonical validation system is GateValidator which:
   // - Handles shell_verify (ground-truth via exit codes)
-  // - Handles llm_self_check (semantic validation)
-  // - Intentionally skips string-based checks (content_check, pattern_check)
-  //   as they don't provide meaningful signal for LLM-generated content
+  // - Handles llm_self_check (semantic validation; runner pending)
+  // - Intentionally skips `inline_guidance` criteria as they are descriptive
+  //   agent-facing checklists, not auto-enforced patterns. The criteria text
+  //   is rendered to the agent for self-assessment; no string matching runs
+  //   against output (string-based checks don't provide meaningful signal
+  //   for LLM-generated content).
   //
   // See: src/gates/core/gate-validator.ts
   // -------------------------------------------------------------------------

@@ -200,13 +200,17 @@ export class GateValidator {
   /**
    * Run a single validation check
    *
-   * NOTE: String-based checks (content_check, pattern_check, methodology_compliance)
-   * have been intentionally removed. These naive checks (length validation, substring
-   * matching, regex patterns) don't provide meaningful signal for LLM-generated content.
+   * NOTE: `inline_guidance` criteria are intentionally not validated here.
+   * They render as agent-facing guidance text (self-assessment checklists)
+   * rather than enforcing patterns against output — naive string-based checks
+   * (length validation, substring matching, regex patterns) don't provide
+   * meaningful signal for LLM-generated content.
    *
-   * The only valuable validations for LLM output are:
-   * - LLM-based evaluation (llm_self_check) - semantic understanding
+   * The only valuable runtime validations for LLM output are:
+   * - LLM-based evaluation (llm_self_check) - semantic understanding (runner pending)
    * - Shell verification (shell_verify) - ground truth via exit codes
+   * - Methodology phase guards (stage 09b) - section presence + min_length
+   *   + forbidden_terms per active methodology's phases.yaml
    */
   private async runValidationCheck(
     criteria: GatePassCriteria,

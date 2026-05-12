@@ -5,12 +5,12 @@ description: Ensures generated code follows best practices and quality standards
 guidanceFile: guidance.md
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     min_length: 100
     required_patterns:
       - function
       - return
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - 'const|let|var'
       - '\(.*\)'

@@ -5,7 +5,7 @@ description: Ensures thorough research with proper citations and credible source
 guidanceFile: guidance.md
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     min_length: 300
     required_patterns:
       - according to
@@ -13,7 +13,7 @@ pass_criteria:
       - published
       - research
       - study
-  - type: pattern_check
+  - type: inline_guidance
     keyword_count:
       according to: 1
       source: 2

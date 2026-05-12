@@ -386,7 +386,7 @@ describe('Clone Command Integration', () => {
         name: 'Test Quality Gate',
         description: 'Ensures test quality',
         type: 'validation',
-        pass_criteria: [{ type: 'content_check', items: ['Tests pass'] }],
+        pass_criteria: [{ type: 'inline_guidance', items: ['Tests pass'] }],
       })
     );
     await writeFile(path.join(gateDir, 'guidance.md'), 'Ensure all tests pass before merging.');

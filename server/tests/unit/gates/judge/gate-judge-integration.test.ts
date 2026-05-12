@@ -48,7 +48,7 @@ const baseGate: LightweightGateDefinition = {
   guidance: 'Check for proper error handling and clean code.',
   pass_criteria: [
     {
-      type: 'content_check',
+      type: 'inline_guidance',
       min_length: 100,
       required_patterns: ['function', 'return'],
     },

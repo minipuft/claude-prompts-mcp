@@ -257,7 +257,7 @@ export class GateAnalyzer {
           'Ensure all numerical data includes proper citations and verification of accuracy',
         pass_criteria: [
           {
-            type: 'content_check',
+            type: 'inline_guidance',
             message: 'Data sources must be cited',
             passed: false,
           },
@@ -277,7 +277,7 @@ export class GateAnalyzer {
           'Apply rigorous code review standards including performance, security, and maintainability',
         pass_criteria: [
           {
-            type: 'pattern_check',
+            type: 'inline_guidance',
             message: 'Code must include error handling',
             passed: false,
           },

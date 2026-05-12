@@ -38,11 +38,20 @@ export const SEVERITY_TO_ENFORCEMENT: Record<GateSeverity, GateEnforcementMode> 
  * Pass/fail criteria for validation (lightweight gate format)
  */
 export interface GatePassCriteria {
-  /** Type of check to perform */
+  /**
+   * Type of check to perform.
+   *
+   * Enforcement modes (see gate-schema.ts header for full taxonomy):
+   * - `inline_guidance`: agent-facing self-assessment text (replaces former
+   *   `content_check` and `pattern_check`; both were inert at runtime)
+   * - `llm_self_check`: reserved, runner not yet implemented
+   * - `methodology_compliance`: enforced by phase guards (stage 09b)
+   * - `shell_verify`: exit-code ground truth (supports response injection)
+   * - `script_tool`: registered script with JSON stdin
+   */
   type:
-    | 'content_check'
+    | 'inline_guidance'
     | 'llm_self_check'
-    | 'pattern_check'
     | 'methodology_compliance'
     | 'shell_verify'
     | 'script_tool';

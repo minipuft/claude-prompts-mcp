@@ -238,7 +238,7 @@ describe('Shell Verify Gate Criteria Integration', () => {
             shell_timeout: 5000,
           },
           {
-            type: 'content_check',
+            type: 'inline_guidance',
             min_length: 5,
           },
         ],
@@ -262,7 +262,7 @@ describe('Shell Verify Gate Criteria Integration', () => {
       expect(shellCheck?.passed).toBe(true);
 
       // Content check auto-passes (string-based validation removed)
-      const contentCheck = result?.checks?.find((c) => c.type === 'content_check');
+      const contentCheck = result?.checks?.find((c) => c.type === 'inline_guidance');
       expect(contentCheck?.passed).toBe(true);
     });
 
@@ -279,7 +279,7 @@ describe('Shell Verify Gate Criteria Integration', () => {
             shell_timeout: 5000,
           },
           {
-            type: 'content_check',
+            type: 'inline_guidance',
             min_length: 5,
           },
         ],

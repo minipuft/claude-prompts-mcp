@@ -8,11 +8,11 @@ guidanceFile: guidance.md
 gate_type: category
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     forbidden_patterns:
       - 'console.log'
       - 'debugger'
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - memo|useMemo|useCallback
       - async|await|Promise

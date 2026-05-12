@@ -5,13 +5,13 @@ description: Ensures well-organized, readable content with clear structure
 guidanceFile: guidance.md
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     min_length: 200
     required_patterns:
       - '##'
       - '-'
       - example
-  - type: pattern_check
+  - type: inline_guidance
     keyword_count:
       '##': 2
     regex_patterns:

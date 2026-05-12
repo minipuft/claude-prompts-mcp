@@ -21,7 +21,7 @@ function gateYaml(id: string, name: string, opts?: { guidanceFile?: string }): s
     `severity: medium`,
     `description: Test gate ${id}`,
     `pass_criteria:`,
-    `  - type: content_check`,
+    `  - type: inline_guidance`,
     `    required_patterns:`,
     `      - test`,
   ];

@@ -8,11 +8,11 @@ description: >-
   marking work complete.
 guidanceFile: guidance.md
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - orphan
       - integration
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - 'replaced|removed|cleaned|verified'
       - 'consumer|import|reference'

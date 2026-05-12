@@ -8,13 +8,13 @@ description: >-
   layer identification, naming, and dependency analysis.
 guidanceFile: guidance.md
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - domain
       - complexity
       - orchestration
       - service
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - 'step [0-9]|pre-flight|checklist'
       - 'cognitive|cyclomatic'

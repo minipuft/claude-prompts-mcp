@@ -73,10 +73,16 @@ def validate_pass_criteria(data: dict[str, Any]) -> tuple[list[str], list[str]]:
     if gate_type == "validation" and not criteria:
         warnings.append(
             "Validation gate has no pass_criteria defined. "
-            "Consider adding content_check or pattern_check criteria."
+            "Consider adding inline_guidance, shell_verify, or script_tool criteria."
         )
 
-    valid_types = ["content_check", "pattern_check", "llm_self_check", "methodology_compliance"]
+    valid_types = [
+        "inline_guidance",
+        "llm_self_check",
+        "methodology_compliance",
+        "shell_verify",
+        "script_tool",
+    ]
 
     for i, criterion in enumerate(criteria):
         if not isinstance(criterion, dict):

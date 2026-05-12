@@ -6,39 +6,39 @@ description: >-
   workflow routing, and extracts acceptance criteria when a source spec exists
 guidanceFile: guidance.md
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - 'Work Type is one of: bug_fix, feature, refactor, explore, optimize'
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - 'Secondary Type is declared: none or a valid work type'
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - 'Confidence level is specified: high, medium, or low'
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - Scope includes at least one specific file path or system name
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - 'Risk level is assessed: low, medium, or high'
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - 'External Dependencies declared: none or lib@version'
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - 'Source Spec declared: none or reference to spec/ticket/plan'
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - >-
         Acceptance Criteria extracted when Source Spec exists, each with
         observable behavior and verification method
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - Problem Statement follows 'Current state → Desired state' format
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - Recommended Approach provides actionable next steps (2-3 sentences)
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - >-
         Next Phase matches Work Type routing: bug_fix→/testing,

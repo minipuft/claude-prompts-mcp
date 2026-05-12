@@ -25,11 +25,27 @@ import { z } from 'zod';
  */
 export const GatePassCriteriaSchema = z
   .object({
-    /** Type of check to perform */
+    /**
+     * Type of check to perform.
+     *
+     * Enforcement modes (what each type actually does at runtime):
+     * - `inline_guidance`: rendered as agent-facing guidance text for
+     *   self-assessment. NOT auto-enforced against output. Replaces the
+     *   previously-named `content_check` and `pattern_check` (which were
+     *   intentionally skipped by GateValidator — see gate-validator.ts).
+     * - `llm_self_check`: type declared, runner not yet implemented. Reserved.
+     * - `methodology_compliance`: enforced by methodology phase guards
+     *   (stage 09b) — checks section presence + min_length + forbidden_terms
+     *   per active framework's `phases.yaml`.
+     * - `shell_verify`: runs `shell_command`, exit 0 = pass. Hard enforcement.
+     *   Supports `shell_stdin_source: 'agent_response'` for response-content
+     *   verification against ground truth.
+     * - `script_tool`: runs a registered script tool with JSON input via stdin,
+     *   parses structured pass/fail return.
+     */
     type: z.enum([
-      'content_check',
+      'inline_guidance',
       'llm_self_check',
-      'pattern_check',
       'methodology_compliance',
       'shell_verify',
       'script_tool',
@@ -161,7 +177,7 @@ export type GateRetryConfigYaml = z.infer<typeof GateRetryConfigSchema>;
  * guidanceFile: guidance.md
  *
  * pass_criteria:
- *   - type: content_check
+ *   - type: inline_guidance
  *     min_length: 100
  *
  * activation:

@@ -52,10 +52,11 @@
           "type": {
             "type": "string",
             "enum": [
-              "content_check",
-              "pattern_check",
+              "inline_guidance",
               "llm_self_check",
-              "methodology_compliance"
+              "methodology_compliance",
+              "shell_verify",
+              "script_tool"
             ],
             "description": "Type of validation check"
           },

@@ -6,12 +6,12 @@ description: Ensures implementation plans are complete, actionable, and risk-awa
 guidanceFile: guidance.md
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     min_length: 150
     required_patterns:
       - file
       - step
-  - type: pattern_check
+  - type: inline_guidance
     keyword_count:
       risk: 1
 

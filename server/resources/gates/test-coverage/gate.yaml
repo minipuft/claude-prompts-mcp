@@ -4,7 +4,7 @@ type: validation
 description: Ensures code changes include appropriate test coverage
 guidanceFile: guidance.md
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - test
       - expect

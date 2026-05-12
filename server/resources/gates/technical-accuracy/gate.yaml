@@ -5,14 +5,14 @@ description: Ensures technical correctness, fact-checking, and precision in tech
 guidanceFile: guidance.md
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     min_length: 200
     required_patterns:
       - version
       - according to
       - documentation
       - specification
-  - type: pattern_check
+  - type: inline_guidance
     keyword_count:
       accurate: 1
       precise: 1

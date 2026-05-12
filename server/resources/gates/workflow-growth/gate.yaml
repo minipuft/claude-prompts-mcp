@@ -8,10 +8,10 @@ description: >-
   found nothing new. Silence is not acceptable.
 guidanceFile: guidance.md
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - Growth
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - 'novel|confirmed|nothing new'
       - 'pattern|learning|captured'

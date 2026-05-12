@@ -8,12 +8,12 @@ description: >-
   multiple skills flag the same area, or multi-file changes are planned.
 guidanceFile: guidance.md
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     required_patterns:
       - Signals
       - Pattern
       - Justification
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - 'diagnosis|compound|pattern'
       - 'signal|observed|skill'

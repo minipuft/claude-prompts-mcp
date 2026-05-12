@@ -8,7 +8,7 @@ guidanceFile: guidance.md
 gate_type: category
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     forbidden_patterns:
       - 'eval('
       - 'innerHTML ='
@@ -20,7 +20,7 @@ pass_criteria:
       - 'secret='
       - 'api_key='
       - '--no-verify'
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - parameterized|prepared|sanitize|escape
       - validation|validator

@@ -5,14 +5,14 @@ description: Ensures educational content is clear, well-structured, and pedagogi
 guidanceFile: guidance.md
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     min_length: 400
     required_patterns:
       - example
       - step
       - understand
       - learn
-  - type: pattern_check
+  - type: inline_guidance
     keyword_count:
       example: 2
       for example: 1

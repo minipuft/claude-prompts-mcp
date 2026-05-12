@@ -5,7 +5,7 @@ description: Ensures security-conscious development practices and prevents commo
 guidanceFile: guidance.md
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     forbidden_patterns:
       - 'password="'
       - 'api_key="'
@@ -15,7 +15,7 @@ pass_criteria:
       - admin123
       - 'root:root'
       - SELECT * FROM
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - validate|sanitize|escape
       - parameterized|prepared

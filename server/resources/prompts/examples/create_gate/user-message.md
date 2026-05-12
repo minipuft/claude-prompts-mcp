@@ -113,7 +113,7 @@ description: Ensures generated code follows best practices and quality standards
 guidanceFile: guidance.md
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     min_length: 100
     required_patterns:
       - try
@@ -126,7 +126,7 @@ pass_criteria:
       - FIXME
       - hack
       - password123
-  - type: pattern_check
+  - type: inline_guidance
     regex_patterns:
       - 'function\s+\w+\s*\('
       - '\/\/.*\w+'
@@ -170,14 +170,14 @@ description: Ensures educational content is clear, well-structured, and pedagogi
 guidanceFile: guidance.md
 
 pass_criteria:
-  - type: content_check
+  - type: inline_guidance
     min_length: 400
     required_patterns:
       - example
       - step
       - understand
       - learn
-  - type: pattern_check
+  - type: inline_guidance
     keyword_count:
       example: 2
       for example: 1
@@ -220,12 +220,13 @@ activation:
 
 ### Pass Criteria Types
 
-| Type                     | Fields                                                        | Description                          |
-| ------------------------ | ------------------------------------------------------------- | ------------------------------------ |
-| `content_check`          | min_length, max_length, required_patterns, forbidden_patterns | Check content length and patterns    |
-| `pattern_check`          | regex_patterns, keyword_count                                 | Regex matching and keyword frequency |
-| `llm_self_check`         | prompt_template, pass_threshold                               | LLM-based validation                 |
-| `methodology_compliance` | methodology, min_compliance_score, quality_indicators         | Framework compliance                 |
+| Type                     | Fields                                                                                       | Enforcement                                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `inline_guidance`        | min_length, max_length, required_patterns, forbidden_patterns, regex_patterns, keyword_count | **Display only** — rendered to agent as self-assessment checklist. NOT auto-enforced against output.    |
+| `llm_self_check`         | prompt_template, pass_threshold                                                              | **Reserved** — runner not yet implemented                                                               |
+| `methodology_compliance` | methodology, min_compliance_score, quality_indicators                                        | **Enforced** by methodology phase guards (stage 09b) — section presence + min_length + forbidden_terms  |
+| `shell_verify`           | shell_command, shell_timeout, shell_stdin_source, shell_response_env_var                     | **Enforced** — runs shell command, exit 0 = pass. Supports response injection for content verification. |
+| `script_tool`            | script_tool_id, script_tool_input, script_tool_timeout                                       | **Enforced** — runs registered script with JSON via stdin, parses structured pass/fail                  |
 
 ### Retry Configuration
 
@@ -321,13 +322,13 @@ prompt_engine(
   "guidance": "**Standards:**\n- Criterion 1\n- Criterion 2\n- Criterion 3",
   "pass_criteria": [
     {
-      "type": "content_check",
+      "type": "inline_guidance",
       "min_length": 100,
       "required_patterns": ["pattern1", "pattern2"],
       "forbidden_patterns": ["bad_pattern"]
     },
     {
-      "type": "pattern_check",
+      "type": "inline_guidance",
       "regex_patterns": ["regex1", "regex2"],
       "keyword_count": {
         "keyword": 2

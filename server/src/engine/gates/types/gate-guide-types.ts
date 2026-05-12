@@ -79,7 +79,7 @@ export interface GateRetryConfig {
  * guidanceFile: guidance.md
  *
  * pass_criteria:
- *   - type: content_check
+ *   - type: inline_guidance
  *     min_length: 100
  *
  * activation:
