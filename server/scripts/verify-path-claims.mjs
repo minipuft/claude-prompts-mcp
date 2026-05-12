@@ -39,11 +39,62 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
 import yaml from 'js-yaml';
 
 const EXIT_PASS = 0;
 const EXIT_MISMATCH = 1;
 const EXIT_MALFORMED = 2;
+
+/**
+ * Walk up from cwd to find a directory containing `.git`.
+ * Returns the repo root or null if not found. Cached per process.
+ */
+let _cachedRepoRoot;
+function findRepoRoot() {
+  if (_cachedRepoRoot !== undefined) return _cachedRepoRoot;
+  let dir = process.cwd();
+  while (true) {
+    try {
+      statSync(path.join(dir, '.git'));
+      _cachedRepoRoot = dir;
+      return dir;
+    } catch {
+      const parent = path.dirname(dir);
+      if (parent === dir) {
+        _cachedRepoRoot = null;
+        return null;
+      }
+      dir = parent;
+    }
+  }
+}
+
+/**
+ * Resolve a claimed path against the filesystem.
+ * Tries: (1) literal path relative to cwd, (2) relative to repo root.
+ * Returns the resolved path that exists, or null if neither resolves.
+ *
+ * This unblocks agents using repo-root paths (e.g., `server/src/...`)
+ * while the gate's shell_command runs from `server/` cwd.
+ */
+function resolveFilePath(filePath) {
+  try {
+    statSync(filePath);
+    return filePath;
+  } catch {
+    // fall through to repo-root fallback
+  }
+  const repoRoot = findRepoRoot();
+  if (repoRoot === null) return null;
+  const repoRelative = path.join(repoRoot, filePath);
+  try {
+    statSync(repoRelative);
+    return repoRelative;
+  } catch {
+    return null;
+  }
+}
 
 function readStdin() {
   try {
@@ -84,23 +135,32 @@ function verifyEntry(entry) {
     return mismatches;
   }
 
+  // FP-1 fix: try literal path first, then walk up to repo root.
+  // This handles agents using repo-root paths (e.g., 'server/src/...')
+  // when the gate's cwd is a subdirectory.
+  const resolvedPath = resolveFilePath(filePath);
+  const fileExists = resolvedPath !== null;
   let actualLineCount;
-  let fileExists = false;
-  try {
-    statSync(filePath);
-    fileExists = true;
-    const wcOutput = execFileSync('wc', ['-l', filePath], { encoding: 'utf8' });
-    actualLineCount = parseInt(wcOutput.trim().split(/\s+/)[0], 10);
-  } catch {
-    fileExists = false;
+  if (fileExists) {
+    try {
+      const wcOutput = execFileSync('wc', ['-l', resolvedPath], { encoding: 'utf8' });
+      actualLineCount = parseInt(wcOutput.trim().split(/\s+/)[0], 10);
+    } catch {
+      // wc failed unexpectedly even though stat succeeded; treat as non-existent for safety
+    }
   }
 
-  const claimsExists =
-    typeof entry.exists === 'string' ? entry.exists.startsWith('yes') : entry.exists === true;
-  if (claimsExists !== fileExists) {
-    mismatches.push(
-      `file=${filePath}: claims exists=${entry.exists}, filesystem says exists=${fileExists}`
-    );
+  // FP-2 fix: only compare `exists` when the agent actually made a claim.
+  // A missing `exists` field is not a negative claim — it's absence of claim,
+  // and the script should not penalize agents for terse entries.
+  if (entry.exists !== undefined) {
+    const claimsExists =
+      typeof entry.exists === 'string' ? entry.exists.startsWith('yes') : entry.exists === true;
+    if (claimsExists !== fileExists) {
+      mismatches.push(
+        `file=${filePath}: claims exists=${entry.exists}, filesystem says exists=${fileExists}`
+      );
+    }
   }
 
   if (fileExists && typeof entry.line_count === 'number') {
@@ -113,9 +173,27 @@ function verifyEntry(entry) {
 
   if (fileExists && Array.isArray(entry.target_symbols)) {
     for (const sym of entry.target_symbols) {
-      if (typeof sym?.symbol !== 'string' || typeof sym.actual_line !== 'number') continue;
+      if (typeof sym?.symbol !== 'string') continue;
+
+      // FN-1 fix: when actual_line is not claimed, still verify the symbol exists.
+      // Previously this case was silently skipped — a fabricated symbol name would
+      // pass through without any check. Now we run rg and require ≥1 match.
+      if (typeof sym.actual_line !== 'number') {
+        try {
+          execFileSync('rg', ['--quiet', '--fixed-strings', sym.symbol, resolvedPath], {
+            encoding: 'utf8',
+          });
+        } catch {
+          mismatches.push(
+            `file=${filePath} symbol="${sym.symbol}": claimed without actual_line, but rg found no matches in file`
+          );
+        }
+        continue;
+      }
+
+      // actual_line claimed → verify line number matches
       try {
-        const rgOutput = execFileSync('rg', ['-n', '--fixed-strings', sym.symbol, filePath], {
+        const rgOutput = execFileSync('rg', ['-n', '--fixed-strings', sym.symbol, resolvedPath], {
           encoding: 'utf8',
         });
         const matchLines = rgOutput

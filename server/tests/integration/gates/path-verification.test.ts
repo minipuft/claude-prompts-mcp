@@ -182,4 +182,91 @@ No verified_paths key anywhere here.`;
     expect(results[0]?.exitCode).toBe(1);
     expect(results[0]?.stderr).toContain('symbol="claude-prompts"');
   });
+
+  // ==========================================================================
+  // Tier 4a fixes — repo-root resolution, optional exists, symbol existence
+  // ==========================================================================
+
+  test('repo-root path (server/...) resolves from server/ cwd → exit 0 (FP-1)', async () => {
+    const provider = createPathVerificationProvider();
+
+    // Agents naturally use repo-root paths from conversation context.
+    // Pre-fix: this would fail because the script's cwd is server/ and
+    //          statSync("server/package.json") doesn't resolve.
+    // Post-fix: script walks up to .git and retries — should resolve.
+    const agentResponse = `verified_paths:
+  - file: server/package.json
+    exists: yes
+`;
+
+    const results = await runGateShellVerifications(['path-verification'], provider, {
+      agentResponse,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.passed).toBe(true);
+    expect(results[0]?.exitCode).toBe(0);
+  });
+
+  test('entry with only `file` field (no exists claim) → exit 0 (FP-2)', async () => {
+    const provider = createPathVerificationProvider();
+
+    // A minimal claim ("file is in scope") should not fail just because
+    // the agent didn't explicitly state `exists: yes`. The check is skipped
+    // when the field is undefined.
+    const agentResponse = `verified_paths:
+  - file: package.json
+`;
+
+    const results = await runGateShellVerifications(['path-verification'], provider, {
+      agentResponse,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.passed).toBe(true);
+    expect(results[0]?.exitCode).toBe(0);
+  });
+
+  test('symbol cited without actual_line — exists check still runs (FN-1)', async () => {
+    const provider = createPathVerificationProvider();
+
+    // Without the fix: this scenario would silently pass (symbol entry
+    // without actual_line was skipped entirely).
+    // With the fix: rg --quiet verifies symbol exists; fabricated symbols
+    // without line claims are now caught.
+    const agentResponse = `verified_paths:
+  - file: package.json
+    exists: yes
+    target_symbols:
+      - symbol: "ThisSymbolDoesNotExistAnywhere_${Date.now()}"
+`;
+
+    const results = await runGateShellVerifications(['path-verification'], provider, {
+      agentResponse,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.passed).toBe(false);
+    expect(results[0]?.exitCode).toBe(1);
+    expect(results[0]?.stderr).toContain('claimed without actual_line');
+  });
+
+  test('symbol cited without actual_line — passes when symbol exists (FN-1 positive case)', async () => {
+    const provider = createPathVerificationProvider();
+
+    const agentResponse = `verified_paths:
+  - file: package.json
+    exists: yes
+    target_symbols:
+      - symbol: "claude-prompts"
+`;
+
+    const results = await runGateShellVerifications(['path-verification'], provider, {
+      agentResponse,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.passed).toBe(true);
+    expect(results[0]?.exitCode).toBe(0);
+  });
 });
