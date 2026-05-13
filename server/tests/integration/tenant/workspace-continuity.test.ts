@@ -77,8 +77,7 @@ describe('Shared Workspace Continuity', () => {
   });
 
   beforeEach(() => {
-    dbManager.run('DELETE FROM framework_state');
-    dbManager.run('DELETE FROM gate_system_state');
+    dbManager.run(`DELETE FROM kv_state WHERE key IN ('framework', 'gates')`);
     dbManager.run('DELETE FROM chain_sessions');
   });
 
@@ -86,7 +85,8 @@ describe('Shared Workspace Continuity', () => {
     const frameworkStore = new SqliteStateStore<PersistedFrameworkState>(
       dbManager,
       {
-        tableName: 'framework_state',
+        tableName: 'kv_state',
+        key: 'framework',
         defaultState: () => ({
           version: '1.0.0',
           frameworkSystemEnabled: false,
@@ -134,7 +134,8 @@ describe('Shared Workspace Continuity', () => {
     const gateStore = new SqliteStateStore<PersistedGateSystemState>(
       dbManager,
       {
-        tableName: 'gate_system_state',
+        tableName: 'kv_state',
+        key: 'gates',
         defaultState: () => ({
           enabled: true,
           enabledAt: new Date().toISOString(),

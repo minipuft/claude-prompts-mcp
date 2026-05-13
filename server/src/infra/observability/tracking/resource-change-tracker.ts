@@ -22,7 +22,7 @@
  *     ┌──────────────┴──────────────┐
  *     │                             │
  *     ↓                             ↓
- * resource_changes (SQLite)  resource_hash_cache (SQLite)
+ * resource_changes (SQLite)  kv_state[key='resource_hashes']
  * (structured log)           (hash cache blob)
  */
 
@@ -138,7 +138,8 @@ export class ResourceChangeTracker {
     this.hashStore = new SqliteStateStore<Record<string, string>>(
       this.dbManager,
       {
-        tableName: 'resource_hash_cache',
+        tableName: 'kv_state',
+        key: 'resource_hashes',
         stateColumn: 'state',
         defaultState: () => ({}),
       },

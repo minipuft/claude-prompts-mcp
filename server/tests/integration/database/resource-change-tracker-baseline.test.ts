@@ -38,7 +38,7 @@ describe('ResourceChangeTracker baseline comparison', () => {
     logger.warn.mockClear();
     logger.error.mockClear();
     logger.debug.mockClear();
-    dbManager.run(`DELETE FROM resource_hash_cache WHERE tenant_id = 'default'`);
+    dbManager.run(`DELETE FROM kv_state WHERE tenant_id = 'default' AND key = 'resource_hashes'`);
     dbManager.run(`DELETE FROM resource_changes WHERE tenant_id = 'default'`);
   });
 

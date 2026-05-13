@@ -358,8 +358,9 @@ export class ArgumentHistoryTracker {
         sessionToChain,
       };
 
-      this.db.run('INSERT OR REPLACE INTO argument_history (tenant_id, state) VALUES (?, ?)', [
+      this.db.run('INSERT OR REPLACE INTO kv_state (tenant_id, key, state) VALUES (?, ?, ?)', [
         'default',
+        'arg_history',
         JSON.stringify(persistedData),
       ]);
       this.logger.debug('Saved argument history to SQLite');
@@ -378,8 +379,8 @@ export class ArgumentHistoryTracker {
 
     try {
       const row = this.db.queryOne<{ state: string }>(
-        'SELECT state FROM argument_history WHERE tenant_id = ?',
-        ['default']
+        'SELECT state FROM kv_state WHERE tenant_id = ? AND key = ?',
+        ['default', 'arg_history']
       );
       const persistedData: PersistedArgumentHistory = row
         ? (JSON.parse(row.state) as PersistedArgumentHistory)

@@ -40,10 +40,12 @@ const createLogger = (): Logger =>
 
 /**
  * Creates a mock DatabasePort that stores data in-memory, simulating SQLite.
- * Supports both argument_history and chain_run_registry tables.
+ * Supports the chain_run_registry table and the kv_state shared table
+ * (used by argument history via key='arg_history').
  */
 const createMockDb = (): DatabasePort => {
   const tables = new Map<string, Map<string, string>>();
+  const argHistoryKey = (tenantId: string): string => `${tenantId}::arg_history`;
 
   return {
     isInitialized: () => true,
@@ -52,8 +54,9 @@ const createMockDb = (): DatabasePort => {
       const sql = args[0] as string;
       const params = args[1] as unknown[] | undefined;
       const tenantId = (params?.[0] as string) ?? 'default';
-      if (sql.includes('argument_history')) {
-        const state = tables.get('argument_history')?.get(tenantId);
+      if (sql.includes('kv_state')) {
+        // arg history uses kv_state with key='arg_history'
+        const state = tables.get('kv_state')?.get(argHistoryKey(tenantId));
         return state ? { state } : null;
       }
       if (sql.includes('chain_run_registry')) {
@@ -66,11 +69,12 @@ const createMockDb = (): DatabasePort => {
     run: jest.fn().mockImplementation((...args: unknown[]) => {
       const sql = args[0] as string;
       const params = args[1] as unknown[] | undefined;
-      if (sql.includes('INSERT OR REPLACE INTO argument_history')) {
-        if (!tables.has('argument_history')) tables.set('argument_history', new Map());
-        tables
-          .get('argument_history')!
-          .set((params?.[0] as string) ?? 'default', (params?.[1] as string) ?? '{}');
+      if (sql.includes('INSERT OR REPLACE INTO kv_state')) {
+        if (!tables.has('kv_state')) tables.set('kv_state', new Map());
+        const tenantId = (params?.[0] as string) ?? 'default';
+        // params: [tenant_id, key, state]
+        const state = (params?.[2] as string) ?? '{}';
+        tables.get('kv_state')!.set(argHistoryKey(tenantId), state);
       }
       if (sql.includes('INSERT OR REPLACE INTO chain_run_registry')) {
         if (!tables.has('chain_run_registry')) tables.set('chain_run_registry', new Map());

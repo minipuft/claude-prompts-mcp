@@ -45,6 +45,7 @@ type ResolvedStateScope = {
 export class SqliteStateStore<T> implements StateStore<T> {
   private readonly tableName: string;
   private readonly stateColumn: string;
+  private readonly discriminatorKey?: string;
   private readonly defaultState: () => T;
   private readonly logger?: Logger;
   private readonly db: DatabasePort;
@@ -54,6 +55,7 @@ export class SqliteStateStore<T> implements StateStore<T> {
     this.db = db;
     this.tableName = config.tableName;
     this.stateColumn = config.stateColumn ?? 'state';
+    this.discriminatorKey = config.key;
     this.defaultState = config.defaultState as () => T;
     this.logger = logger;
   }
@@ -122,6 +124,10 @@ export class SqliteStateStore<T> implements StateStore<T> {
         columns.splice(workspaceIndex, 0, 'workspace_id');
         values.splice(workspaceIndex, 0, scope.workspaceId ?? scope.continuityScopeId);
       }
+      if (this.discriminatorKey != null) {
+        columns.push('key');
+        values.push(this.discriminatorKey);
+      }
 
       const placeholders = columns.map(() => '?').join(', ');
       this.db.run(
@@ -158,13 +164,19 @@ export class SqliteStateStore<T> implements StateStore<T> {
 
     try {
       const scopeColumns = this.getScopeColumns();
+      const keyClause = this.discriminatorKey != null ? ' AND key = ?' : '';
+      const keyParam: string[] = this.discriminatorKey != null ? [this.discriminatorKey] : [];
       if (scopeColumns.hasWorkspaceId) {
-        this.db.run(`DELETE FROM ${this.tableName} WHERE workspace_id = ?`, [
+        this.db.run(`DELETE FROM ${this.tableName} WHERE workspace_id = ?${keyClause}`, [
           scope.continuityScopeId,
+          ...keyParam,
         ]);
       }
       if (scopeColumns.hasTenantId) {
-        this.db.run(`DELETE FROM ${this.tableName} WHERE tenant_id = ?`, [scope.storageScopeId]);
+        this.db.run(`DELETE FROM ${this.tableName} WHERE tenant_id = ?${keyClause}`, [
+          scope.storageScopeId,
+          ...keyParam,
+        ]);
       }
       if (!scopeColumns.hasWorkspaceId && !scopeColumns.hasTenantId) {
         throw new Error(
@@ -255,17 +267,19 @@ export class SqliteStateStore<T> implements StateStore<T> {
     const scopeColumns = this.getScopeColumns();
     const seen = new Set<string>();
     const candidates: Array<{ sql: string; value: string }> = [];
+    const keyClause = this.discriminatorKey != null ? ' AND key = ?' : '';
 
     const addCandidate = (sql: string, value?: string): void => {
       if (value == null || value.length === 0) {
         return;
       }
-      const key = `${sql}::${value}`;
-      if (seen.has(key)) {
+      const finalSql = sql + keyClause;
+      const cacheKey = `${finalSql}::${value}`;
+      if (seen.has(cacheKey)) {
         return;
       }
-      seen.add(key);
-      candidates.push({ sql, value });
+      seen.add(cacheKey);
+      candidates.push({ sql: finalSql, value });
     };
 
     if (scopeColumns.hasWorkspaceId) {
@@ -291,8 +305,12 @@ export class SqliteStateStore<T> implements StateStore<T> {
       );
     }
 
+    const keyParam: string[] = this.discriminatorKey != null ? [this.discriminatorKey] : [];
     for (const candidate of candidates) {
-      const row = this.db.queryOne<Record<string, unknown>>(candidate.sql, [candidate.value]);
+      const row = this.db.queryOne<Record<string, unknown>>(candidate.sql, [
+        candidate.value,
+        ...keyParam,
+      ]);
       if (row != null) {
         return row;
       }

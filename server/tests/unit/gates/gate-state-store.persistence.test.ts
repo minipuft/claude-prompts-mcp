@@ -27,7 +27,8 @@ function createStateStore(
   return new SqliteStateStore<PersistedGateSystemState>(
     dbManager,
     {
-      tableName: 'gate_system_state',
+      tableName: 'kv_state',
+      key: 'gates',
       defaultState: () => ({
         enabled: true,
         enabledAt: new Date().toISOString(),
@@ -144,7 +145,7 @@ describe('GateStateStore (persistence)', () => {
     expect(persistedWorkspaceB.enabled).toBe(true);
 
     const rowA = dbManager.queryOne<{ tenant_id: string; workspace_id: string | null }>(
-      `SELECT tenant_id, workspace_id FROM gate_system_state WHERE workspace_id = ?`,
+      `SELECT tenant_id, workspace_id FROM kv_state WHERE workspace_id = ? AND key = 'gates'`,
       ['workspace-a']
     );
     expect(rowA?.tenant_id).toBe('workspace-a');

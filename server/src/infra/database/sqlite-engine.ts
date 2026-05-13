@@ -30,7 +30,7 @@ import type { DatabasePort } from '../../shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
 
 /** Bump this when changing the embedded schema. Triggers drop-and-recreate. */
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 
 /**
  * Database configuration options
@@ -277,6 +277,11 @@ export class SqliteEngine implements DatabasePort {
 
       INSERT OR IGNORE INTO tenants (id, name) VALUES ('default', 'Default Tenant');
 
+      -- Derived hook-read view of chain_run_registry (the SSOT blob).
+      -- Holds only the active subset of sessions for indexed PID-scoped queries
+      -- by Python hooks. Writers MUST go through ChainSessionStore.projectToHookView,
+      -- not direct INSERT/UPDATE — primary writes land on chain_run_registry and
+      -- this table is rebuilt atomically inside the same transaction.
       CREATE TABLE IF NOT EXISTS chain_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id TEXT NOT NULL DEFAULT 'default',
@@ -292,20 +297,20 @@ export class SqliteEngine implements DatabasePort {
         UNIQUE (tenant_id, chain_id, run_number)
       );
 
-      CREATE TABLE IF NOT EXISTS framework_state (
-        tenant_id TEXT PRIMARY KEY DEFAULT 'default',
+      -- Shared key-value blob store for scoped state with a discriminator.
+      -- Replaces what used to be 4 identical-shape tables (framework_state,
+      -- gate_system_state, argument_history, resource_hash_cache) plus their
+      -- per-table workspace/organization indexes. Consumers pass key to
+      -- SqliteStateStoreConfig to claim a slot. chain_run_registry intentionally
+      -- excluded -- retired separately by chain ledger Tier 10.
+      CREATE TABLE IF NOT EXISTS kv_state (
+        tenant_id TEXT NOT NULL DEFAULT 'default',
         organization_id TEXT,
         workspace_id TEXT,
+        key TEXT NOT NULL,
         state TEXT NOT NULL DEFAULT '{}',
-        updated_at TEXT DEFAULT (datetime('now'))
-      );
-
-      CREATE TABLE IF NOT EXISTS gate_system_state (
-        tenant_id TEXT PRIMARY KEY DEFAULT 'default',
-        organization_id TEXT,
-        workspace_id TEXT,
-        state TEXT NOT NULL DEFAULT '{}',
-        updated_at TEXT DEFAULT (datetime('now'))
+        updated_at TEXT DEFAULT (datetime('now')),
+        PRIMARY KEY (tenant_id, key)
       );
 
       CREATE TABLE IF NOT EXISTS resource_index (
@@ -353,15 +358,6 @@ export class SqliteEngine implements DatabasePort {
         created_at TEXT NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS resource_hash_cache (
-        tenant_id TEXT NOT NULL DEFAULT 'default',
-        organization_id TEXT,
-        workspace_id TEXT,
-        state TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (tenant_id)
-      );
-
       CREATE TABLE IF NOT EXISTS resource_changes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tenant_id TEXT NOT NULL DEFAULT 'default',
@@ -378,14 +374,6 @@ export class SqliteEngine implements DatabasePort {
       );
 
       CREATE TABLE IF NOT EXISTS chain_run_registry (
-        tenant_id TEXT PRIMARY KEY DEFAULT 'default',
-        organization_id TEXT,
-        workspace_id TEXT,
-        state TEXT NOT NULL DEFAULT '{}',
-        updated_at TEXT DEFAULT (datetime('now'))
-      );
-
-      CREATE TABLE IF NOT EXISTS argument_history (
         tenant_id TEXT PRIMARY KEY DEFAULT 'default',
         organization_id TEXT,
         workspace_id TEXT,
@@ -422,21 +410,16 @@ export class SqliteEngine implements DatabasePort {
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_organization ON chain_sessions(organization_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_chain ON chain_sessions(chain_id);
       CREATE INDEX IF NOT EXISTS idx_resource_index_type ON resource_index(type);
-      CREATE INDEX IF NOT EXISTS idx_framework_state_workspace ON framework_state(workspace_id);
-      CREATE INDEX IF NOT EXISTS idx_framework_state_organization ON framework_state(organization_id);
-      CREATE INDEX IF NOT EXISTS idx_gate_system_state_workspace ON gate_system_state(workspace_id);
-      CREATE INDEX IF NOT EXISTS idx_gate_system_state_organization ON gate_system_state(organization_id);
+      CREATE INDEX IF NOT EXISTS idx_kv_state_workspace ON kv_state(workspace_id);
+      CREATE INDEX IF NOT EXISTS idx_kv_state_organization ON kv_state(organization_id);
       CREATE INDEX IF NOT EXISTS idx_resource_changes_tenant ON resource_changes(tenant_id, timestamp);
       CREATE INDEX IF NOT EXISTS idx_ssm_client_scope ON skills_sync_manifests(client, scope);
       CREATE INDEX IF NOT EXISTS idx_version_history_resource ON version_history(tenant_id, resource_type, resource_id);
       CREATE INDEX IF NOT EXISTS idx_version_history_workspace ON version_history(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_version_history_organization ON version_history(organization_id);
-      CREATE INDEX IF NOT EXISTS idx_resource_hash_cache_workspace ON resource_hash_cache(workspace_id);
-      CREATE INDEX IF NOT EXISTS idx_resource_hash_cache_organization ON resource_hash_cache(organization_id);
       CREATE INDEX IF NOT EXISTS idx_resource_changes_workspace ON resource_changes(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_resource_changes_organization ON resource_changes(organization_id);
       CREATE INDEX IF NOT EXISTS idx_chain_run_registry_workspace ON chain_run_registry(workspace_id);
-      CREATE INDEX IF NOT EXISTS idx_argument_history_workspace ON argument_history(workspace_id);
       CREATE INDEX IF NOT EXISTS idx_execution_records_session ON execution_records(session_id);
       CREATE INDEX IF NOT EXISTS idx_execution_records_chain ON execution_records(chain_id);
       CREATE INDEX IF NOT EXISTS idx_execution_records_started ON execution_records(started_at);
@@ -488,12 +471,9 @@ export class SqliteEngine implements DatabasePort {
   private applyIdentityScopeMigration(): void {
     const scopeTables = [
       'chain_sessions',
-      'framework_state',
-      'gate_system_state',
+      'kv_state',
       'chain_run_registry',
-      'argument_history',
       'version_history',
-      'resource_hash_cache',
       'resource_changes',
     ];
     let didMutateSchema = false;
@@ -540,29 +520,13 @@ export class SqliteEngine implements DatabasePort {
     this.run(
       `CREATE INDEX IF NOT EXISTS idx_chain_sessions_organization ON chain_sessions(organization_id)`
     );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_framework_state_workspace ON framework_state(workspace_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_framework_state_organization ON framework_state(organization_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_gate_system_state_workspace ON gate_system_state(workspace_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_gate_system_state_organization ON gate_system_state(organization_id)`
-    );
+    this.run(`CREATE INDEX IF NOT EXISTS idx_kv_state_workspace ON kv_state(workspace_id)`);
+    this.run(`CREATE INDEX IF NOT EXISTS idx_kv_state_organization ON kv_state(organization_id)`);
     this.run(
       `CREATE INDEX IF NOT EXISTS idx_version_history_workspace ON version_history(workspace_id)`
     );
     this.run(
       `CREATE INDEX IF NOT EXISTS idx_version_history_organization ON version_history(organization_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_resource_hash_cache_workspace ON resource_hash_cache(workspace_id)`
-    );
-    this.run(
-      `CREATE INDEX IF NOT EXISTS idx_resource_hash_cache_organization ON resource_hash_cache(organization_id)`
     );
     this.run(
       `CREATE INDEX IF NOT EXISTS idx_resource_changes_workspace ON resource_changes(workspace_id)`

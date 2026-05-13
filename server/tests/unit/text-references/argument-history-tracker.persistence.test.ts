@@ -34,9 +34,10 @@ const createPersistentMockDb = (): DatabasePort & { _storage: Map<string, string
     run: jest.fn().mockImplementation((...args: unknown[]) => {
       const sql = args[0] as string;
       const params = args[1] as unknown[] | undefined;
-      if (sql.includes('INSERT OR REPLACE INTO argument_history')) {
+      if (sql.includes('INSERT OR REPLACE INTO kv_state')) {
         const tenantId = (params?.[0] as string) ?? 'default';
-        const state = (params?.[1] as string) ?? '{}';
+        // params: [tenant_id, key, state]
+        const state = (params?.[2] as string) ?? '{}';
         storage.set(tenantId, state);
       }
     }),
@@ -52,7 +53,7 @@ describe('ArgumentHistoryTracker (persistence)', () => {
     jest.restoreAllMocks();
   });
 
-  test('writes to and restores from SQLite argument_history table', async () => {
+  test('writes to and restores from SQLite kv_state table (arg_history key)', async () => {
     const logger = createLogger();
     const mockDb = createPersistentMockDb();
 

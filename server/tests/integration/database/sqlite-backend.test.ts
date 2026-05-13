@@ -53,7 +53,7 @@ describe('SQLite State Backend', () => {
 
     it('should have correct schema version', async () => {
       const version = dbManager.getSchemaVersion();
-      expect(version).toBe(15);
+      expect(version).toBe(16);
     });
 
     it('should execute queries', async () => {
@@ -96,7 +96,8 @@ describe('SQLite State Backend', () => {
       const store = new SqliteStateStore<TestState>(
         dbManager,
         {
-          tableName: 'framework_state',
+          tableName: 'kv_state',
+          key: 'framework',
           defaultState: () => ({ version: 1, data: 'default' }),
         },
         mockLogger as any
@@ -128,17 +129,18 @@ describe('SQLite State Backend', () => {
       const store = new SqliteStateStore<TestState>(
         dbManager,
         {
-          tableName: 'framework_state',
+          tableName: 'kv_state',
+          key: 'framework',
           defaultState: () => ({ version: 1, data: 'default' }),
         },
         mockLogger as any
       );
 
-      dbManager.run(`DELETE FROM framework_state`);
+      dbManager.run(`DELETE FROM kv_state WHERE key = 'framework'`);
       dbManager.run(
-        `INSERT INTO framework_state (tenant_id, state, updated_at)
-         VALUES (?, ?, datetime('now'))`,
-        ['legacy-workspace', JSON.stringify({ version: 9, data: 'legacy-only' })]
+        `INSERT INTO kv_state (tenant_id, key, state, updated_at)
+         VALUES (?, ?, ?, datetime('now'))`,
+        ['legacy-workspace', 'framework', JSON.stringify({ version: 9, data: 'legacy-only' })]
       );
 
       const loaded = await store.load({ workspaceId: 'legacy-workspace' });
@@ -149,13 +151,14 @@ describe('SQLite State Backend', () => {
       const store = new SqliteStateStore<TestState>(
         dbManager,
         {
-          tableName: 'framework_state',
+          tableName: 'kv_state',
+          key: 'framework',
           defaultState: () => ({ version: 1, data: 'default' }),
         },
         mockLogger as any
       );
 
-      dbManager.run(`DELETE FROM framework_state`);
+      dbManager.run(`DELETE FROM kv_state WHERE key = 'framework'`);
       await store.save(
         { version: 5, data: 'canonical' },
         {
@@ -169,7 +172,7 @@ describe('SQLite State Backend', () => {
         organization_id: string | null;
         workspace_id: string | null;
       }>(
-        `SELECT tenant_id, organization_id, workspace_id FROM framework_state WHERE workspace_id = ?`,
+        `SELECT tenant_id, organization_id, workspace_id FROM kv_state WHERE workspace_id = ? AND key = 'framework'`,
         ['workspace-canonical']
       );
 

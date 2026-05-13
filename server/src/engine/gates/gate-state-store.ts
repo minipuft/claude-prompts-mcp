@@ -167,7 +167,8 @@ export class GateStateStore extends EventEmitter {
       this.stateStore = new SqliteStateStore<PersistedGateSystemState>(
         dbManager,
         {
-          tableName: 'gate_system_state',
+          tableName: 'kv_state',
+          key: 'gates',
           stateColumn: 'state',
           defaultState: () => ({
             enabled: true,

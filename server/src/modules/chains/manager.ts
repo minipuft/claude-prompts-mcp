@@ -141,7 +141,7 @@ export class ChainSessionStore implements ChainSessionService {
         }
         await dbManager.initialize();
         this.resolvedDbEngine = dbManager;
-        this.runRegistry = new DirectChainRunRegistry(dbManager, this.logger);
+        this.runRegistry = new DirectChainRunRegistry(dbManager);
       }
       await this.runRegistry.ensureInitialized();
       this.cleanupStalePidRows();
@@ -284,11 +284,33 @@ export class ChainSessionStore implements ChainSessionService {
     };
   }
 
+  /**
+   * Persist chain sessions to durable storage. Wraps the SSOT blob save and the
+   * derived per-row hook view in a single SQLite transaction so the two stay in
+   * lockstep — either both committed or both rolled back.
+   *
+   * `chain_run_registry` (blob) is the SSOT; `chain_sessions` (per-row) is a
+   * projection of the active hook-relevant subset. See `projectToHookView` for
+   * the projection contract.
+   */
   private async persistSessions(): Promise<void> {
+    const db = this.resolvedDbEngine;
     try {
       const data = this.serializeSessions();
-      await this.runRegistry.save(data, this.pidScope);
-      this.syncToSessionTable();
+      if (!db) {
+        // No DB engine wired — fall back to non-transactional save (test contexts).
+        await this.runRegistry.save(data, this.pidScope);
+        return;
+      }
+      db.beginTransaction();
+      try {
+        await this.runRegistry.save(data, this.pidScope);
+        this.projectToHookView(db);
+        db.commit();
+      } catch (txError) {
+        db.rollback();
+        throw txError;
+      }
     } catch (error) {
       this.logger.error(
         `Failed to save sessions: ${error instanceof Error ? error.message : String(error)}`
@@ -297,36 +319,30 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Dual-write active canonical sessions to the per-row `chain_sessions` table
-   * with `process.pid` as `tenant_id` for cross-client isolation.
+   * Project active canonical sessions into the per-row `chain_sessions` table.
    *
-   * Hooks query this table with PID liveness checks to avoid blocking
-   * unrelated Claude Code instances sharing the same MCP server.
+   * `chain_sessions` is a derived hook-read view of the `chain_run_registry`
+   * blob (the SSOT). The blob carries the full data model (sessions + run
+   * mappings + base mappings); this projection writes the active hook-relevant
+   * subset in per-row form so Python hooks can do indexed PID-scoped queries
+   * without parsing the JSON blob.
+   *
+   * Filter rule: a session is "active for hooks" if it has steps remaining or
+   * a pending gate review / shell verification (see `isSessionActiveForHooks`).
+   * `tenant_id` is the server PID for cross-client isolation.
+   *
+   * Must be called inside an active transaction. The caller (`persistSessions`)
+   * owns the transaction boundary so blob save and projection succeed or fail
+   * atomically.
    */
-  private syncToSessionTable(): void {
-    const db = this.resolvedDbEngine;
-    if (!db) return;
-
-    try {
-      const activeRows = this.collectActiveSessionRows();
-      db.beginTransaction();
-      try {
-        db.run('DELETE FROM chain_sessions WHERE tenant_id = ?', [this.serverPid]);
-        for (const row of activeRows) {
-          db.run(
-            `INSERT INTO chain_sessions (tenant_id, chain_id, run_number, state, run_status, run_completed_at)
-             VALUES (?, ?, 1, ?, ?, ?)`,
-            [this.serverPid, row.chainId, row.state, row.runStatus, row.runCompletedAt]
-          );
-        }
-        db.commit();
-      } catch (txError) {
-        db.rollback();
-        throw txError;
-      }
-    } catch (error) {
-      this.logger.debug(
-        `syncToSessionTable failed: ${error instanceof Error ? error.message : String(error)}`
+  private projectToHookView(db: DatabasePort): void {
+    const activeRows = this.collectActiveSessionRows();
+    db.run('DELETE FROM chain_sessions WHERE tenant_id = ?', [this.serverPid]);
+    for (const row of activeRows) {
+      db.run(
+        `INSERT INTO chain_sessions (tenant_id, chain_id, run_number, state, run_status, run_completed_at)
+         VALUES (?, ?, 1, ?, ?, ?)`,
+        [this.serverPid, row.chainId, row.state, row.runStatus, row.runCompletedAt]
       );
     }
   }

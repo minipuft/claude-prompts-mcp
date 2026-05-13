@@ -240,7 +240,8 @@ export class FrameworkStateStore extends EventEmitter {
       this.stateStore = new SqliteStateStore<PersistedFrameworkState>(
         dbManager,
         {
-          tableName: 'framework_state',
+          tableName: 'kv_state',
+          key: 'framework',
           stateColumn: 'state',
           defaultState: () => ({
             version: '1.0.0',

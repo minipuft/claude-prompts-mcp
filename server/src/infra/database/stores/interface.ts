@@ -16,6 +16,16 @@ export interface SqliteStateStoreConfig {
   tableName: string;
   /** Column name for the state data (default: 'state') */
   stateColumn?: string;
+  /**
+   * Optional discriminator key for shared tables (e.g., `kv_state`).
+   *
+   * When set, all reads/writes/deletes scope additionally by `WHERE key = ?`,
+   * allowing multiple logically distinct state slots (framework, gates,
+   * argument history, resource hashes) to share one physical table.
+   *
+   * When unset, the store uses the legacy single-table-per-purpose pattern.
+   */
+  key?: string;
   /** Default state to return when no record exists */
   defaultState: () => unknown;
 }

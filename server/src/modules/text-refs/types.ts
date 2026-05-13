@@ -63,7 +63,8 @@ export interface ReviewContext {
 /**
  * Persisted Argument History Format
  *
- * Stored in SQLite `argument_history` table via SqliteStateStore.
+ * Stored in the shared SQLite `kv_state` table under `key='arg_history'`
+ * via direct SQL on DatabasePort (does not use SqliteStateStore directly).
  */
 export interface PersistedArgumentHistory {
   /** Version for future compatibility */
