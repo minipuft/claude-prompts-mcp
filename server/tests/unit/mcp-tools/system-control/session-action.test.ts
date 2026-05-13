@@ -19,6 +19,7 @@ const createSessionStore = () => {
   const clearSessionsForChain = jest.fn().mockResolvedValue(undefined);
   const getSession = jest.fn();
   const getChainContext = jest.fn().mockReturnValue({});
+  const cancelChain = jest.fn().mockResolvedValue(true);
 
   return {
     store: {
@@ -27,12 +28,14 @@ const createSessionStore = () => {
       clearSessionsForChain,
       getSession,
       getChainContext,
+      cancelChain,
     } as unknown as ChainSessionService,
     listActiveSessions,
     clearSession,
     clearSessionsForChain,
     getSession,
     getChainContext,
+    cancelChain,
   };
 };
 
@@ -148,6 +151,64 @@ describe('System Control session action scope propagation', () => {
     expect(sessions.getSession).toHaveBeenCalledWith('sess-1');
     expect(sessions.getChainContext).toHaveBeenCalledWith('sess-1');
     expect(getText(response)).toContain('Session Inspection');
+  });
+
+  test('cancel operation routes to ChainSessionService.cancelChain', async () => {
+    const sessions = createSessionStore();
+    sessions.cancelChain.mockResolvedValue(true);
+    const systemControl = createSystemControl(sessions.store);
+
+    const response = await systemControl.handleAction(
+      { action: 'session', operation: 'cancel', session_id: 'sess-active' },
+      { organizationId: 'org-acme' }
+    );
+
+    expect(sessions.cancelChain).toHaveBeenCalledWith('sess-active');
+    expect(getText(response)).toContain('Session Cancelled');
+    expect(getText(response)).toContain('sess-active');
+  });
+
+  test('cancel returns idempotent success when service reports already-cancelled', async () => {
+    const sessions = createSessionStore();
+    sessions.cancelChain.mockResolvedValue(true);
+    const systemControl = createSystemControl(sessions.store);
+
+    const response = await systemControl.handleAction(
+      { action: 'session', operation: 'cancel', session_id: 'sess-already-cancelled' },
+      { organizationId: 'org-acme' }
+    );
+
+    expect(sessions.cancelChain).toHaveBeenCalledWith('sess-already-cancelled');
+    expect(getText(response)).toContain('Session Cancelled');
+  });
+
+  test('cancel surfaces non-applicable message when service refuses terminal state', async () => {
+    const sessions = createSessionStore();
+    sessions.cancelChain.mockResolvedValue(false);
+    const systemControl = createSystemControl(sessions.store);
+
+    const response = await systemControl.handleAction(
+      { action: 'session', operation: 'cancel', session_id: 'sess-completed' },
+      { organizationId: 'org-acme' }
+    );
+
+    expect(sessions.cancelChain).toHaveBeenCalledWith('sess-completed');
+    expect(getText(response)).toContain('Cancel Not Applied');
+    expect(getText(response)).toContain('terminal state');
+  });
+
+  test('cancel throws when session_id is missing', async () => {
+    const sessions = createSessionStore();
+    const systemControl = createSystemControl(sessions.store);
+
+    await expect(
+      systemControl.handleAction(
+        { action: 'session', operation: 'cancel' },
+        { organizationId: 'org-acme' }
+      )
+    ).rejects.toThrow(/session_id/i);
+
+    expect(sessions.cancelChain).not.toHaveBeenCalled();
   });
 
   test('keeps scope context isolated across concurrent session operations', async () => {

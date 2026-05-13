@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-03-18T22:17:28.139Z",
+  "lastUpdated": "2026-05-13T05:01:00.013Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -76,8 +76,8 @@
       "shortDescription": "System administration",
       "category": "system",
       "parameters": {
-        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions).",
-        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect).",
+        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect/cancel).",
+        "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect/cancel).",
         "session_id": "Target session ID or chain ID for session operations.",
         "framework": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
         "reason": "Audit reason for framework/gate toggles or admin actions.",

@@ -20,9 +20,11 @@ export class SessionActionHandler extends ActionHandler {
         return await this.clearSession(args);
       case 'inspect':
         return await this.inspectSession(args);
+      case 'cancel':
+        return await this.cancelSession(args);
       default:
         throw new Error(
-          `Unknown session operation: ${operation}. Valid operations: list, clear, inspect`
+          `Unknown session operation: ${operation}. Valid operations: list, clear, inspect, cancel`
         );
     }
   }
@@ -140,5 +142,30 @@ export class SessionActionHandler extends ActionHandler {
     }
 
     return this.createMinimalSystemResponse(response, 'session_inspect');
+  }
+
+  private async cancelSession(args: { session_id?: string }): Promise<ToolResponse> {
+    const manager = this.context.chainSessionManager;
+    if (manager === undefined) {
+      throw new Error('Chain session manager not initialized');
+    }
+
+    const sessionId = args.session_id;
+    if (sessionId === undefined || sessionId.length === 0) {
+      throw new Error('session_id parameter is required for cancel operation');
+    }
+
+    const cancelled = await manager.cancelChain(sessionId);
+    if (!cancelled) {
+      return this.createMinimalSystemResponse(
+        `⚠️ **Cancel Not Applied**: \`${sessionId}\`\n\nSession is in a terminal state (completed/failed) or does not exist. Use \`operation: "inspect"\` to view current status.`,
+        'session_cancel'
+      );
+    }
+
+    return this.createMinimalSystemResponse(
+      `🛑 **Session Cancelled**: \`${sessionId}\`\n\nThe session has been transitioned to \`cancelled\` runStatus. Subsequent progression is blocked. Use \`operation: "clear"\` to remove session state entirely.`,
+      'session_cancel'
+    );
   }
 }

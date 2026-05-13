@@ -1,6 +1,5 @@
 # MCP Tooling Guide
 
-
 Execute prompts, build workflows, and manage your resource library — all through MCP tool calls. The server hot-reloads everything automatically, so you never touch files directly.
 
 ---
@@ -33,11 +32,11 @@ resource_manager(resource_type:"methodology", action:"switch", id:"cageerf")
 
 ## The Three Tools
 
-| I want to...                                     | Tool               | Example                                              |
-| ------------------------------------------------ | ------------------ | ---------------------------------------------------- |
-| **Run a prompt** or chain                        | `prompt_engine`    | `prompt_engine(command:">>review file:'api.ts'")`    |
-| **Create, edit, or delete** a resource           | `resource_manager` | `resource_manager(resource_type:"prompt", action:"create", ...)` |
-| **Check status**, switch frameworks, view metrics | `system_control`   | `system_control(action:"status")`                    |
+| I want to...                                      | Tool               | Example                                                          |
+| ------------------------------------------------- | ------------------ | ---------------------------------------------------------------- |
+| **Run a prompt** or chain                         | `prompt_engine`    | `prompt_engine(command:">>review file:'api.ts'")`                |
+| **Create, edit, or delete** a resource            | `resource_manager` | `resource_manager(resource_type:"prompt", action:"create", ...)` |
+| **Check status**, switch frameworks, view metrics | `system_control`   | `system_control(action:"status")`                                |
 
 ---
 
@@ -660,6 +659,27 @@ system_control(action:"gates", operation:"list")
 | `analytics` | —                                     | Execution metrics         |
 | `config`    | —                                     | View config overlays      |
 | `changes`   | `list`                                | Resource change audit log |
+| `session`   | `list`, `inspect`, `clear`, `cancel`  | Chain session lifecycle   |
+
+### Session Operations
+
+```bash
+# List active chain sessions
+system_control(action:"session", operation:"list", show_details:true)
+
+# Inspect a specific session (state, step, pending gates, context variables)
+system_control(action:"session", operation:"inspect", session_id:"chain-research#1")
+
+# Cancel an active session — transitions runStatus to 'cancelled' (idempotent on
+# already-cancelled; refuses sessions already in terminal completed/failed state).
+# Subsequent step progression is blocked; session state is retained for inspection.
+system_control(action:"session", operation:"cancel", session_id:"chain-research#1")
+
+# Clear a session entirely — removes state and artifacts (irreversible).
+system_control(action:"session", operation:"clear", session_id:"chain-research#1")
+```
+
+**Cancel vs Clear**: `cancel` is the soft-stop — runStatus becomes `cancelled`, session row stays for inspection/audit. `clear` is the hard removal — session and chain history are deleted. Use cancel during active runs to halt progression while preserving evidence; use clear during cleanup.
 
 ### Resource Change Tracking
 
@@ -1013,15 +1033,15 @@ Path resolution follows this priority (first match wins):
 
 ## Reference
 
-| Component          | Location                                               |
-| ------------------ | ------------------------------------------------------ |
-| Prompt definitions | `server/resources/prompts/{category}/{id}/prompt.yaml` |
-| Gate definitions   | `server/resources/gates/{id}/gate.yaml`                |
-| Style definitions  | `server/resources/styles/{id}/style.yaml`              |
-| Methodologies      | `server/resources/methodologies/{id}/methodology.yaml` |
+| Component          | Location                                                  |
+| ------------------ | --------------------------------------------------------- |
+| Prompt definitions | `server/resources/prompts/{category}/{id}/prompt.yaml`    |
+| Gate definitions   | `server/resources/gates/{id}/gate.yaml`                   |
+| Style definitions  | `server/resources/styles/{id}/style.yaml`                 |
+| Methodologies      | `server/resources/methodologies/{id}/methodology.yaml`    |
 | Chain sessions     | SQLite (`runtime-state/state.db`, table `chain_sessions`) |
-| Resource changes   | `runtime-state/resource-changes.jsonl`                 |
-| Server config      | `server/config.json`                                   |
+| Resource changes   | `runtime-state/resource-changes.jsonl`                    |
+| Server config      | `server/config.json`                                      |
 
 **Related docs:**
 
