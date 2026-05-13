@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`session:cancel` action on `system_control`** (Tier 3): MCP clients can now cancel an active chain session via `system_control(action:"session", operation:"cancel", session_id:"chain-X#1")`. Transitions `runStatus` to `cancelled`; idempotent on already-cancelled sessions; refuses sessions in terminal `completed`/`failed` state. Use `operation:"cancel"` for soft-stop (preserves session for audit), `operation:"clear"` for hard removal (deletes session and chain history).
+- **`ExecutionRecord` persistence** (Tier 5): Pipeline stages 9 and 10 now emit append-only ledger rows to the `execution_records` table on every chain-step transition. Stage 9 emits a `working` record per render (with `substate.renderedAt`); stage 10 emits a `completed` record on chain terminal. Records carry SEP-1686-aligned `StepLifecycle` + `StepSubstate` + `GateVerdictSummary` shape. ULIDs (monotonic) preserve insertion order across rapid emissions. Emission is best-effort — failures log a warning and never break pipeline execution.
+
 ### Changed
+
+- **`db_reader.py` migrated to `v_execution_status` SSOT view** (Tier 4): Python hook now reads chain state from the cross-language SSOT view introduced in Tier 1, using the canonical `run_status` column (Tier 2) for boundary detection. Falls back to `chain_sessions` per-row table, then `chain_run_registry` blob, for backward compatibility during rollout (Tier 10 will retire the blob fallback). Hook output shape unchanged — existing chain-stop integration is preserved.
+- **Consolidated four KV-blob tables into shared `kv_state`** (`SCHEMA_VERSION` 15 → 16): `framework_state`, `gate_system_state`, `argument_history`, and `resource_hash_cache` are now rows in a single `kv_state` table keyed on `(tenant_id, key)`. `SqliteStateStoreConfig` gains an optional discriminator `key` for shared tables. `state.db` is ephemeral, so the schema bump auto-recreates on next server start with no migration burden. Drops 4 tables and 5 indexes.
+- **Atomic dual-write to chain registry + hook view**: `persistSessions()` now wraps the `chain_run_registry` blob write and the derived `chain_sessions` projection inside a single transaction so the two can never diverge. Renamed `syncToSessionTable` → `projectToHookView` to reflect that `chain_sessions` is a read-only projection of the registry blob.
+- **`SqliteChainRunRegistry` class removed**: dead code with zero consumers. Single `DirectChainRunRegistry` implementation remains.
 
 - **Command tokenizer refactor**: Replaced duplicated operator detection across 3 parsing strategies with a single-pass, quote-aware `tokenizeCommand()` function
   - `command-parser.ts`: 771→710 lines; symbolic `canHandle` reduced from 20 lines to 1; gate/framework/style stripping regex (~25 lines) replaced by `tokens.promptId`/`tokens.rawArgs`

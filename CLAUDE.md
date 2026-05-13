@@ -88,11 +88,13 @@ system_control → SystemControl Router → 10 action handlers
 
 | Table | Purpose |
 |-------|---------|
-| `framework_state` | Active framework + switch history |
-| `chain_sessions` | Active chain sessions |
-| `gate_system_state` | Gate enable/disable state |
-| `argument_history` | Argument tracking |
+| `kv_state` | Consolidated key-value store (`key='framework'` active framework + switch history, `key='gates'` enable/disable, `key='arg_history'` argument tracking, `key='resource_hashes'` content hash cache) |
+| `chain_run_registry` | Blob-encoded chain run state (primary SSOT for active runs; will be retired post-Tier-10 in favor of per-row tables) |
+| `chain_sessions` | Derived read-projection of `chain_run_registry` for Python hook + cross-language consumers |
+| `execution_records` | SEP-1686 append-only per-step execution log (ULID-sorted); source for `v_execution_status` view |
 | `resource_index` | Resource discovery cache |
+
+State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. `SCHEMA_VERSION` bump triggers drop-and-recreate; no migration code since `state.db` is ephemeral.
 
 ## Key Constraints
 
