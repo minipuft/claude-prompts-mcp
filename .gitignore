@@ -160,3 +160,11 @@ assets/moodboard.png
 # CLI config files (user-specific)
 opencode.json
 state.db
+
+# User-local gates and scripts (not bundled with releases)
+# path-verification: experimental gate paired with private implementation_plan prompt.
+# Pattern preserved for future reference — if a bundled workflow emerges that
+# uses this gate, move the files back out of the ignore list.
+server/resources/gates/path-verification/
+server/scripts/verify-path-claims.mjs
+server/tests/integration/gates/path-verification.test.ts

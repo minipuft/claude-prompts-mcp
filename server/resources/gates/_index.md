@@ -38,10 +38,9 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `llm_self_check` / `
 
 ## Planning
 
-| Gate                | Severity | Activation               | Description                                                                                                                                                                                                                                                                                                                                       |
-| ------------------- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path-verification` | high     | planning · explicit only | Verifies plan-author claims about file paths, line counts, and symbol locations by parsing the agent's `verified_paths:` block from stdin (via response injection) and checking each claim against the filesystem. Provides ground-truth enforcement that the verification step's structural pattern (Phase 2.5 of >>implementation_plan) cannot. |
-| `plan-quality`      | high     | planning, development    | Ensures implementation plans are complete, actionable, and risk-aware                                                                                                                                                                                                                                                                             |
+| Gate           | Severity | Activation            | Description                                                           |
+| -------------- | -------- | --------------------- | --------------------------------------------------------------------- |
+| `plan-quality` | high     | planning, development | Ensures implementation plans are complete, actionable, and risk-aware |
 
 ## Research
 
