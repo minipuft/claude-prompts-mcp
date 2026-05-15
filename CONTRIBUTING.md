@@ -74,6 +74,12 @@ repo/
 
 </details>
 
+## Documentation Standards
+
+Root-level `README.md` is governed by the [README Charter](docs/portfolio/readme-charter.md) — audience, voice rules, line budgets, Diátaxis section markers, and forbidden-word list. README PRs run `npm run validate:readme` and answer the charter block in the PR template.
+
+Docs under `docs/` follow the Diátaxis split documented in [docs/README.md](docs/README.md): tutorials (learning), how-to (problem-solving), reference (lookup), concepts (understanding).
+
 ## How to Contribute
 
 ### Contribution Types

@@ -25,6 +25,7 @@
 | Telemetry & observability | `docs/guides/telemetry-observability.md` |
 | Troubleshooting | `docs/guides/troubleshooting.md` |
 | Contributing & PR process | `CONTRIBUTING.md` |
+| README charter (root README authoring rules) | `docs/portfolio/readme-charter.md` |
 | Release highlights | `CHANGELOG.md` |
 
 Read the relevant doc before editing. Update docs when behavior changes.
