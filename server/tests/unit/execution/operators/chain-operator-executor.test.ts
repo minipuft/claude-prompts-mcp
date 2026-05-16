@@ -425,7 +425,7 @@ describe('ChainOperatorExecutor', () => {
     );
   });
 
-  describe('output_contract pre-emission', () => {
+  describe('unified output-shape block', () => {
     const frameworkContext = async () => ({
       selectedFramework: { methodology: 'CAGEERF', name: 'CAGEERF' },
       category: 'code',
@@ -453,7 +453,7 @@ describe('ChainOperatorExecutor', () => {
       ],
     });
 
-    test('injects required-structure skeleton between framework guidance and task content', async () => {
+    test('emits unified block with contract + delivery markers after task content', async () => {
       const contractedExecutor = new ChainOperatorExecutor(
         mockLogger,
         mockConvertedPrompts,
@@ -470,18 +470,26 @@ describe('ChainOperatorExecutor', () => {
         currentStepIndex: 0,
       });
 
+      // Contract content present
       expect(result.content).toContain('## Required Output Structure');
       expect(result.content).toContain('## Context');
       expect(result.content).toContain('min 100 chars');
       expect(result.content).toContain('do not use:');
 
+      // Delivery markers present in the same block
+      expect(result.content).toContain('### Required Response Format');
+      expect(result.content).toContain('**Summary**');
+
+      // Unified block lives POST-task
       const skeletonIdx = result.content.indexOf('Required Output Structure');
+      const deliveryIdx = result.content.indexOf('Required Response Format');
       const taskIdx = result.content.indexOf('Analyze this code: snippet');
-      expect(skeletonIdx).toBeGreaterThan(-1);
-      expect(taskIdx).toBeGreaterThan(skeletonIdx);
+      expect(taskIdx).toBeGreaterThan(-1);
+      expect(skeletonIdx).toBeGreaterThan(taskIdx);
+      expect(deliveryIdx).toBeGreaterThan(skeletonIdx);
     });
 
-    test('omits skeleton when no framework is active', async () => {
+    test('emits only delivery markers when no framework contract resolves', async () => {
       const contractedExecutor = new ChainOperatorExecutor(
         mockLogger,
         mockConvertedPrompts,
@@ -499,9 +507,11 @@ describe('ChainOperatorExecutor', () => {
       });
 
       expect(result.content).not.toContain('Required Output Structure');
+      expect(result.content).toContain('### Required Response Format');
+      expect(result.content).toContain('**Summary**');
     });
 
-    test('omits skeleton when resolver returns null', async () => {
+    test('emits only delivery markers when resolver returns null', async () => {
       const contractedExecutor = new ChainOperatorExecutor(
         mockLogger,
         mockConvertedPrompts,
@@ -519,9 +529,10 @@ describe('ChainOperatorExecutor', () => {
       });
 
       expect(result.content).not.toContain('Required Output Structure');
+      expect(result.content).toContain('### Required Response Format');
     });
 
-    test('omits skeleton when resolver is unwired (back-compat)', async () => {
+    test('emits only delivery markers when resolver is unwired (back-compat)', async () => {
       const result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts: [{ stepNumber: 1, promptId: 'analyze', args: { code: 'x' } }],
@@ -529,6 +540,27 @@ describe('ChainOperatorExecutor', () => {
       });
 
       expect(result.content).not.toContain('Required Output Structure');
+      expect(result.content).toContain('### Required Response Format');
+    });
+
+    test('includes GATE_REVIEW marker on final step', async () => {
+      const contractedExecutor = new ChainOperatorExecutor(
+        mockLogger,
+        mockConvertedPrompts,
+        undefined,
+        frameworkContext,
+        undefined,
+        undefined,
+        () => cageerfContract()
+      );
+
+      const result = await contractedExecutor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [{ stepNumber: 1, promptId: 'analyze', args: { code: 'x' } }],
+        currentStepIndex: 0,
+      });
+
+      expect(result.content).toContain('GATE_REVIEW: PASS|FAIL');
     });
   });
 });

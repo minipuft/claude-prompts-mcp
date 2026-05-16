@@ -260,17 +260,23 @@ export class ChainOperatorExecutor {
 
     // Build framework guidance for gate reviews if enabled (skip on retry — already seen)
     let frameworkGuidance = '';
-    let outputContractBlock = '';
+    let outputShape = '';
     if (!isRetry && frameworkInjectionEnabled && targetStep) {
       const guidance = await this.buildFrameworkGuidance(targetStep);
       if (guidance) {
         frameworkGuidance = guidance;
         this.logger.debug('[SymbolicChain] Added framework guidance to gate review step');
       }
-      const contractBlock = await this.buildOutputContractBlock(targetStep);
-      if (contractBlock) {
-        outputContractBlock = contractBlock;
-        this.logger.debug('[SymbolicChain] Added output contract skeleton to gate review step');
+      // Gate review surfaces the methodology contract but uses its own delivery
+      // convention (GATE_REVIEW: PASS|FAIL via the CTA), so delivery markers
+      // are suppressed here.
+      const shape = await this.buildOutputShapeBlock({
+        step: targetStep,
+        includeDeliveryMarkers: false,
+      });
+      if (shape) {
+        outputShape = shape;
+        this.logger.debug('[SymbolicChain] Added output contract to gate review step');
       }
     } else if (!frameworkInjectionEnabled) {
       this.logger.debug(
@@ -278,16 +284,16 @@ export class ChainOperatorExecutor {
       );
     }
 
-    // Assemble in proper order: Framework → Contract → Content → Gates → Metadata
+    // Assemble: Framework → Content → Gates → Output Shape → Metadata.
     // Use original task template as the review body. Gate guidance comes from
     // GateGuidanceRenderer (gateGuidance variable) as the single source of truth.
     const reviewPrompt = originalContent;
 
     const contentParts = [
       frameworkGuidance,
-      outputContractBlock,
       reviewPrompt,
       gateGuidance,
+      outputShape,
       supplementalSections.join('\n\n'),
     ].filter((part) => part && part.trim().length > 0);
 
@@ -422,11 +428,6 @@ export class ChainOperatorExecutor {
       if (frameworkGuidance) {
         lines.push(frameworkGuidance);
       }
-
-      const outputContractBlock = await this.buildOutputContractBlock(step);
-      if (outputContractBlock) {
-        lines.push(outputContractBlock);
-      }
     }
 
     if (convertedPrompt?.systemMessage) {
@@ -451,8 +452,19 @@ export class ChainOperatorExecutor {
       );
     }
 
-    // Required Response Format — guides structured output for delivery verification
-    lines.push(this.buildResponseFormatSection(isFinalStep, gateGuidanceEnabled));
+    // Output shape — methodology contract (required sections, length/forbidden hints)
+    // composed with delivery markers (Summary, Gate Coverage, GATE_REVIEW). Single
+    // block consumed post-task so the model sees the contract right where it begins
+    // writing the response.
+    const outputShape = await this.buildOutputShapeBlock({
+      step: suppressFrameworkInjection ? undefined : step,
+      includeDeliveryMarkers: true,
+      isFinalStep,
+      gateGuidanceEnabled,
+    });
+    if (outputShape) {
+      lines.push(outputShape);
+    }
 
     // Check if the NEXT step is delegated — if so, render a delegation CTA instead
     const nextStep = !isFinalStep ? stepPrompts[currentStepIndex + 1] : undefined;
@@ -591,33 +603,100 @@ export class ChainOperatorExecutor {
   }
 
   /**
-   * Resolve the structural output contract for the active framework on this
-   * step and render it as a pre-emission skeleton. Returns null when the
-   * resolver is unwired, no framework is active, or the methodology has no
-   * guarded phases (no enforceable contract to surface).
+   * Build the unified output-shape block — the model's contract for what the
+   * response must contain. Combines two concerns:
+   *
+   *  1. Methodology contract (when a framework is active and the methodology
+   *     declares guarded phases in `phases.yaml`): required section headers,
+   *     length/forbidden-term hints. Sourced from `getOutputContract()`.
+   *  2. Delivery markers (Summary, Gate Coverage, GATE_REVIEW) — the wrapping
+   *     conventions the chain pipeline relies on for step capture and
+   *     final-step delivery.
+   *
+   * Returns an empty string when neither concern produces content. The block
+   * is consumed post-task by `renderNormalStep` so the model reads the task
+   * and then the required output shape. Gate-review path opts out of delivery
+   * markers since it uses `GATE_REVIEW: PASS|FAIL` via the CTA instead.
    */
-  private async buildOutputContractBlock(step: ChainStepPrompt): Promise<string | null> {
+  private async buildOutputShapeBlock(options: {
+    step?: ChainStepPrompt;
+    includeDeliveryMarkers: boolean;
+    isFinalStep?: boolean;
+    gateGuidanceEnabled?: boolean;
+  }): Promise<string> {
+    const sections: string[] = [];
+
+    if (options.step !== undefined) {
+      const contractSkeleton = await this.renderContractSkeletonForStep(options.step);
+      if (contractSkeleton) {
+        sections.push(contractSkeleton);
+      }
+    }
+
+    if (options.includeDeliveryMarkers) {
+      sections.push(
+        this.renderDeliveryMarkers(
+          options.isFinalStep ?? false,
+          options.gateGuidanceEnabled ?? false
+        )
+      );
+    }
+
+    if (sections.length === 0) {
+      return '';
+    }
+
+    return ['---', '', sections.join('\n\n'), '', '---', ''].join('\n');
+  }
+
+  /**
+   * Render the methodology contract skeleton for a step, or null if no
+   * resolver is wired / no framework active / no guarded phases.
+   */
+  private async renderContractSkeletonForStep(step: ChainStepPrompt): Promise<string | null> {
     if (!this.getOutputContract) {
       return null;
     }
-
     const context = await this.resolveFrameworkContext(step);
     const frameworkId = context?.selectedFramework?.methodology;
-    if (!frameworkId) {
+    if (frameworkId === undefined || frameworkId === '') {
       return null;
     }
-
     const contract = this.getOutputContract(frameworkId);
     if (!contract) {
       return null;
     }
-
     const skeleton = renderOutputContractSkeleton(contract);
-    if (!skeleton) {
-      return null;
+    return skeleton.length > 0 ? skeleton : null;
+  }
+
+  /**
+   * Render the chain pipeline's delivery markers: Summary, Gate Coverage,
+   * GATE_REVIEW. These are the wrapping conventions every chain step uses
+   * regardless of methodology.
+   */
+  private renderDeliveryMarkers(isFinalStep: boolean, gateGuidanceEnabled: boolean): string {
+    const lines: string[] = [
+      '### Required Response Format',
+      '',
+      '**Summary**: What was implemented (2-3 sentences)',
+      '',
+    ];
+
+    if (gateGuidanceEnabled) {
+      lines.push(
+        '**Gate Coverage**:',
+        '- [1] PASS|FAIL: rationale',
+        '- [2] PASS|FAIL: rationale',
+        ''
+      );
     }
 
-    return ['---', '', skeleton, '', '---', ''].join('\n');
+    if (isFinalStep) {
+      lines.push('**GATE_REVIEW: PASS|FAIL - overall assessment**');
+    }
+
+    return lines.join('\n');
   }
 
   private async resolveFrameworkContext(step?: ChainStepPrompt): Promise<{
@@ -752,35 +831,6 @@ export class ChainOperatorExecutor {
       const truncated =
         String(value).length > 200 ? String(value).substring(0, 200) + '...' : String(value);
       lines.push(`- **${key}**: ${truncated}`);
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Build Required Response Format section for structured delivery verification.
-   */
-  private buildResponseFormatSection(isFinalStep: boolean, gateGuidanceEnabled: boolean): string {
-    const lines: string[] = [
-      '---',
-      '',
-      '### Required Response Format',
-      '',
-      '**Summary**: What was implemented (2-3 sentences)',
-      '',
-    ];
-
-    if (gateGuidanceEnabled) {
-      lines.push(
-        '**Gate Coverage**:',
-        '- [1] PASS|FAIL: rationale',
-        '- [2] PASS|FAIL: rationale',
-        ''
-      );
-    }
-
-    if (isFinalStep) {
-      lines.push('**GATE_REVIEW: PASS|FAIL - overall assessment**');
     }
 
     return lines.join('\n');
