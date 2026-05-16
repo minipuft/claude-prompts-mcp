@@ -424,4 +424,111 @@ describe('ChainOperatorExecutor', () => {
       })
     );
   });
+
+  describe('output_contract pre-emission', () => {
+    const frameworkContext = async () => ({
+      selectedFramework: { methodology: 'CAGEERF', name: 'CAGEERF' },
+      category: 'code',
+      systemPrompt: 'Apply CAGEERF systematically',
+    });
+
+    const cageerfContract = () => ({
+      headers: [
+        {
+          header: '## Context',
+          required: true,
+          minLength: 100,
+          forbiddenTerms: ['TODO', 'TBD'],
+        },
+        {
+          header: '## Analysis',
+          required: true,
+          minLength: 100,
+        },
+        {
+          header: '## Refinement',
+          required: false,
+          minLength: 50,
+        },
+      ],
+    });
+
+    test('injects required-structure skeleton between framework guidance and task content', async () => {
+      const contractedExecutor = new ChainOperatorExecutor(
+        mockLogger,
+        mockConvertedPrompts,
+        undefined,
+        frameworkContext,
+        undefined,
+        undefined,
+        () => cageerfContract()
+      );
+
+      const result = await contractedExecutor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [{ stepNumber: 1, promptId: 'analyze', args: { code: 'snippet' } }],
+        currentStepIndex: 0,
+      });
+
+      expect(result.content).toContain('## Required Output Structure');
+      expect(result.content).toContain('## Context');
+      expect(result.content).toContain('min 100 chars');
+      expect(result.content).toContain('do not use:');
+
+      const skeletonIdx = result.content.indexOf('Required Output Structure');
+      const taskIdx = result.content.indexOf('Analyze this code: snippet');
+      expect(skeletonIdx).toBeGreaterThan(-1);
+      expect(taskIdx).toBeGreaterThan(skeletonIdx);
+    });
+
+    test('omits skeleton when no framework is active', async () => {
+      const contractedExecutor = new ChainOperatorExecutor(
+        mockLogger,
+        mockConvertedPrompts,
+        undefined,
+        async () => null,
+        undefined,
+        undefined,
+        () => cageerfContract()
+      );
+
+      const result = await contractedExecutor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [{ stepNumber: 1, promptId: 'analyze', args: { code: 'x' } }],
+        currentStepIndex: 0,
+      });
+
+      expect(result.content).not.toContain('Required Output Structure');
+    });
+
+    test('omits skeleton when resolver returns null', async () => {
+      const contractedExecutor = new ChainOperatorExecutor(
+        mockLogger,
+        mockConvertedPrompts,
+        undefined,
+        frameworkContext,
+        undefined,
+        undefined,
+        () => null
+      );
+
+      const result = await contractedExecutor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [{ stepNumber: 1, promptId: 'analyze', args: { code: 'x' } }],
+        currentStepIndex: 0,
+      });
+
+      expect(result.content).not.toContain('Required Output Structure');
+    });
+
+    test('omits skeleton when resolver is unwired (back-compat)', async () => {
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts: [{ stepNumber: 1, promptId: 'analyze', args: { code: 'x' } }],
+        currentStepIndex: 0,
+      });
+
+      expect(result.content).not.toContain('Required Output Structure');
+    });
+  });
 });

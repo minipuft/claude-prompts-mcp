@@ -8,7 +8,9 @@
 
 export { evaluatePhaseGuards, buildPhaseGuardPassSummary } from './phase-guard-evaluator.js';
 export { splitBySectionHeaders } from './section-splitter.js';
+export { getOutputContract, renderOutputContractSkeleton } from './output-contract.js';
 export type { OutputSection } from './section-splitter.js';
+export type { OutputContract, ContractHeader } from './output-contract.js';
 export type {
   PhaseGuardCheckResult,
   PhaseGuardEvaluationResult,

@@ -28,6 +28,7 @@ import {
 import { FrameworkManager } from '../../../../engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '../../../../engine/frameworks/framework-state-store.js';
 import { FrameworkValidator } from '../../../../engine/frameworks/framework-validator.js';
+import { getOutputContract } from '../../../../engine/frameworks/phase-guards/index.js';
 import {
   PromptGuidanceService,
   createPromptGuidanceService,
@@ -628,8 +629,37 @@ export class PromptExecutor {
       this.gateGuidanceRenderer,
       this.resolveFrameworkContextForPrompt.bind(this),
       this.referenceResolver,
-      this.scriptReferenceResolver
+      this.scriptReferenceResolver,
+      this.resolveOutputContractForFramework.bind(this)
     );
+  }
+
+  /**
+   * Resolve the structural OutputContract for an active framework so the chain
+   * renderer can pre-emit a required-structure skeleton in step prompts. Returns
+   * null when no framework manager is wired, the framework has no methodology
+   * guide, or the methodology declares no guarded phases.
+   */
+  private resolveOutputContractForFramework(
+    frameworkId: string
+  ): ReturnType<typeof getOutputContract> {
+    if (!this.frameworkManager) {
+      return null;
+    }
+    try {
+      const guide = this.frameworkManager.getMethodologyGuide(frameworkId);
+      if (!guide) {
+        return null;
+      }
+      const processing = guide.guideTemplateProcessing('', 'single');
+      return getOutputContract(processing.processingSteps);
+    } catch (error) {
+      this.logger.debug('[PromptExecutor] Output contract resolution failed', {
+        frameworkId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
   }
 
   private async resolveFrameworkContextForPrompt(promptId: string) {

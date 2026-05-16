@@ -1,6 +1,7 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
 import { Logger } from '../../../infra/logging/index.js';
 import { processTemplate, processTemplateWithRefs } from '../../../shared/utils/jsonUtils.js';
+import { renderOutputContractSkeleton } from '../../frameworks/phase-guards/index.js';
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
 import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
@@ -15,10 +16,18 @@ import type {
 import type { PendingGateReview } from '../../../shared/types/chain-execution.js';
 import type { RequestClientProfile } from '../../../shared/types/request-identity.js';
 import type { ScriptReferenceResolverPort } from '../../../shared/utils/jsonUtils.js';
+import type { OutputContract } from '../../frameworks/phase-guards/index.js';
 import type { DelegationPayload, RenderingHints } from '../delegation/types.js';
 import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 import type { PromptReferenceResolver } from '../reference/index.js';
 import type { ConvertedPrompt } from '../types.js';
+
+/**
+ * Callback that returns the structural OutputContract for an active framework,
+ * or null when none exists. Wired by the prompt executor against the
+ * methodology registry.
+ */
+export type OutputContractResolver = (frameworkId: string) => OutputContract | null;
 
 /**
  * Type guard for gate review input
@@ -39,7 +48,8 @@ export class ChainOperatorExecutor {
       systemPrompt?: string;
     } | null>,
     private readonly referenceResolver?: PromptReferenceResolver,
-    private readonly scriptReferenceResolver?: ScriptReferenceResolverPort
+    private readonly scriptReferenceResolver?: ScriptReferenceResolverPort,
+    private readonly getOutputContract?: OutputContractResolver
   ) {}
 
   async renderStep(input: ChainStepExecutionInput): Promise<ChainStepRenderResult> {
@@ -250,11 +260,17 @@ export class ChainOperatorExecutor {
 
     // Build framework guidance for gate reviews if enabled (skip on retry — already seen)
     let frameworkGuidance = '';
+    let outputContractBlock = '';
     if (!isRetry && frameworkInjectionEnabled && targetStep) {
       const guidance = await this.buildFrameworkGuidance(targetStep);
       if (guidance) {
         frameworkGuidance = guidance;
         this.logger.debug('[SymbolicChain] Added framework guidance to gate review step');
+      }
+      const contractBlock = await this.buildOutputContractBlock(targetStep);
+      if (contractBlock) {
+        outputContractBlock = contractBlock;
+        this.logger.debug('[SymbolicChain] Added output contract skeleton to gate review step');
       }
     } else if (!frameworkInjectionEnabled) {
       this.logger.debug(
@@ -262,13 +278,14 @@ export class ChainOperatorExecutor {
       );
     }
 
-    // Assemble in proper order: Framework → Warning → Content → Gates → Metadata
+    // Assemble in proper order: Framework → Contract → Content → Gates → Metadata
     // Use original task template as the review body. Gate guidance comes from
     // GateGuidanceRenderer (gateGuidance variable) as the single source of truth.
     const reviewPrompt = originalContent;
 
     const contentParts = [
       frameworkGuidance,
+      outputContractBlock,
       reviewPrompt,
       gateGuidance,
       supplementalSections.join('\n\n'),
@@ -404,6 +421,11 @@ export class ChainOperatorExecutor {
       const frameworkGuidance = await this.buildFrameworkGuidance(step);
       if (frameworkGuidance) {
         lines.push(frameworkGuidance);
+      }
+
+      const outputContractBlock = await this.buildOutputContractBlock(step);
+      if (outputContractBlock) {
+        lines.push(outputContractBlock);
       }
     }
 
@@ -566,6 +588,36 @@ export class ChainOperatorExecutor {
       '---',
       '',
     ].join('\n');
+  }
+
+  /**
+   * Resolve the structural output contract for the active framework on this
+   * step and render it as a pre-emission skeleton. Returns null when the
+   * resolver is unwired, no framework is active, or the methodology has no
+   * guarded phases (no enforceable contract to surface).
+   */
+  private async buildOutputContractBlock(step: ChainStepPrompt): Promise<string | null> {
+    if (!this.getOutputContract) {
+      return null;
+    }
+
+    const context = await this.resolveFrameworkContext(step);
+    const frameworkId = context?.selectedFramework?.methodology;
+    if (!frameworkId) {
+      return null;
+    }
+
+    const contract = this.getOutputContract(frameworkId);
+    if (!contract) {
+      return null;
+    }
+
+    const skeleton = renderOutputContractSkeleton(contract);
+    if (!skeleton) {
+      return null;
+    }
+
+    return ['---', '', skeleton, '', '---', ''].join('\n');
   }
 
   private async resolveFrameworkContext(step?: ChainStepPrompt): Promise<{
