@@ -15,7 +15,7 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@react-three/postprocessing": "^3.0.4",
-    "@remotion/cli": "^4.0.0",
+    "@remotion/cli": "^4.0.468",
     "@remotion/google-fonts": "^4.0.0",
     "@remotion/player": "^4.0.0",
     "@remotion/three": "^4.0.409",
