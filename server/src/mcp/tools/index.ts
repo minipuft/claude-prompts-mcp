@@ -70,7 +70,7 @@ import type { FrameworkManagerDependencies } from './framework-manager/core/type
 import type { ResourceManagerInput } from './resource-manager/core/types.js';
 import type { ConvertedPrompt } from '../../engine/execution/types.js';
 import type { GateManager } from '../../engine/gates/gate-manager.js';
-import type { ChainSessionManager } from '../../modules/chains/manager.js';
+import type { ChainSessionStore } from '../../modules/chains/manager.js';
 import type { Category, PromptData } from '../../modules/prompts/types.js';
 import type { GateSpecification } from '../../shared/types/execution.js';
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
@@ -112,7 +112,7 @@ export class McpToolRouter {
   private semanticAnalyzer!: ReturnType<typeof createContentAnalyzer>;
   private frameworkStateStore?: FrameworkStateStore;
   private frameworkManager?: FrameworkManager;
-  // ChainSessionManager is owned by PromptExecutor, accessed via getter
+  // ChainSessionStore is owned by PromptExecutor, accessed via getter
   // REMOVED: chainOrchestrator - modular chain system removed
   private conversationStore: ConversationStore;
   private textReferenceStore: TextReferenceStore;
@@ -177,7 +177,7 @@ export class McpToolRouter {
     this.logger.info(`Semantic analyzer initialized (mode: ${analyzerMode})`);
 
     // Initialize consolidated tools
-    // Note: ChainSessionManager is created inside PromptExecutor and exposed via getter
+    // Note: ChainSessionStore is created inside PromptExecutor and exposed via getter
     this.promptExecutor = createPromptExecutor(
       this.logger,
       this.mcpServer,
@@ -495,8 +495,8 @@ export class McpToolRouter {
    * Get chain session manager for MCP resource access.
    * Delegates to PromptExecutor which owns the canonical instance.
    */
-  getChainSessionManager(): ChainSessionManager | undefined {
-    return this.promptExecutor.getChainSessionManager() as ChainSessionManager | undefined;
+  getChainSessionManager(): ChainSessionStore | undefined {
+    return this.promptExecutor.getChainSessionManager() as ChainSessionStore | undefined;
   }
 
   /**

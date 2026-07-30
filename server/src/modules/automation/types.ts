@@ -10,7 +10,6 @@ export {
   DEFAULT_EXECUTION_CONFIG,
   type ConfirmationRequired,
   type ExecutionConfig,
-  type ExecutionMode,
   type ExecutionModeFilterResult,
   type JSONSchemaDefinition,
   type LoadedScriptTool,

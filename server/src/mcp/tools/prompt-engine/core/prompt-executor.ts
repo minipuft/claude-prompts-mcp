@@ -50,7 +50,7 @@ import {
   ExecutionRecordStore,
   createExecutionRecordStore,
 } from '../../../../modules/chains/execution-record-store.js';
-import { createChainSessionManager } from '../../../../modules/chains/manager.js';
+import { createChainSessionStore } from '../../../../modules/chains/manager.js';
 import { StyleManager, createStyleManager } from '../../../../modules/formatting/index.js';
 import { PromptAssetManager } from '../../../../modules/prompts/index.js';
 import { ContentAnalyzer } from '../../../../modules/semantic/configurable-semantic-analyzer.js';
@@ -176,7 +176,7 @@ export class PromptExecutor {
       logger.warn('Failed to initialize ArgumentHistoryTracker:', error);
     });
 
-    this.chainSessionManager = createChainSessionManager(
+    this.chainSessionManager = createChainSessionStore(
       logger,
       textReferenceStore,
       this.serverRoot,

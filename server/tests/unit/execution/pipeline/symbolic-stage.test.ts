@@ -7,7 +7,7 @@ import { SessionManagementStage } from '../../../../src/engine/execution/pipelin
 import { FrameworkValidator } from '../../../../src/engine/frameworks/framework-validator.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
 
-import type { ChainSessionManager } from '../../../../src/modules/chains/manager.js';
+import type { ChainSessionStore } from '../../../../src/modules/chains/manager.js';
 import type {
   ExecutionPlan,
   ParsedCommand,
@@ -191,7 +191,7 @@ const createTemporaryGateRegistry = () => ({
   getTemporaryGate: jest.fn().mockReturnValue(undefined),
 });
 
-const createSessionManager = (): jest.Mocked<ChainSessionManager> =>
+const createSessionManager = (): jest.Mocked<ChainSessionStore> =>
   ({
     hasActiveSession: jest.fn().mockReturnValue(false),
     getSession: jest.fn(),
@@ -202,7 +202,7 @@ const createSessionManager = (): jest.Mocked<ChainSessionManager> =>
     getPendingGateReview: jest.fn().mockReturnValue(undefined),
     clearSession: jest.fn(),
     cleanup: jest.fn(),
-  }) as unknown as jest.Mocked<ChainSessionManager>;
+  }) as unknown as jest.Mocked<ChainSessionStore>;
 
 describe('Symbolic pipeline coverage', () => {
   test('inline gate and operator validation stages normalize symbolic metadata', async () => {

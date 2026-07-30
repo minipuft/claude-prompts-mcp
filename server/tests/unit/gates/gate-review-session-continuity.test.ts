@@ -3,7 +3,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/07-session-stage.js';
 
-import type { ChainSession, ChainSessionManager } from '../../../src/modules/chains/manager.js';
+import type { ChainSession, ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 
 const createLogger = (): Logger =>
@@ -21,7 +21,7 @@ const sampleExecutionPlan = {
   requiresSession: true,
 };
 
-class StubChainSessionManager implements ChainSessionManager {
+class StubChainSessionManager implements ChainSessionStore {
   private sessions = new Map<string, ChainSession>();
 
   constructor(private readonly logger: Logger) {}

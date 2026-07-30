@@ -6,7 +6,7 @@ import * as os from 'node:os';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { SqliteStateStore } from '../../../src/infra/database/stores/sqlite-store.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
-import { ChainSessionStore } from '../../../src/modules/chains/chain-session-store.js';
+import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 

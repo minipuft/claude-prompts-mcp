@@ -103,7 +103,7 @@ State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `ke
 - **Framework validity**: Always `frameworkManager.getFramework(id)` -- never hardcode framework lists.
 - **Consolidation over addition**: Enhance existing systems vs creating new ones.
 - **Pipeline state**: Use `context.gates`, `context.frameworkAuthority`, `context.diagnostics` -- never mutate arrays directly.
-- **Module organization**: <=7 files flat + barrel, >7 files use `internal/` subfolder.
+- **Module organization**: import the defining module directly -- no barrel/`index.ts` re-export files. Layer + cycle boundaries live in `validate:arch`, which a barrel cannot express. Detection is `npx knip`; `validate:arch` cannot see this (`no-orphans` requires no incoming AND no outgoing edges, and a re-export always has outgoing). Use `internal/` for a genuinely private region.
 - **Commit convention**: Conventional Commits enforced. Scopes: `server`, `runtime`, `pipeline`, `gates`, `frameworks`, `prompts`, `chains`, `styles`, `scripts`, `hooks`, `resources`, `mcp-tools`, `contracts`, `parsers`, `ci`, `deps`, `config`, `docs`, `tests`, `execution`.
 - **Environment**: `MCP_WORKSPACE` (primary — SSOT for all paths), `MCP_RESOURCES_PATH` (resources base override), `MCP_CONFIG_PATH` (config file override). Workspace resources overlay bundled ones.
 

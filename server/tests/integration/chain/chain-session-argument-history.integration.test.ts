@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { ChainSessionManager } from '../../../src/modules/chains/manager.js';
+import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -92,7 +92,7 @@ const createMockDb = (): DatabasePort => {
   } as unknown as DatabasePort;
 };
 
-describe('ChainSessionManager + ArgumentHistoryTracker (integration)', () => {
+describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
   let tmpRoot: string;
 
   beforeAll(() => {
@@ -114,7 +114,7 @@ describe('ChainSessionManager + ArgumentHistoryTracker (integration)', () => {
     const tracker = new ArgumentHistoryTracker(logger, 10, mockDb);
     await tracker.initialize();
 
-    const manager = new ChainSessionManager(
+    const manager = new ChainSessionStore(
       logger,
       textReference as any,
       { serverRoot: tmpRoot, cleanupIntervalMs: 1000 },

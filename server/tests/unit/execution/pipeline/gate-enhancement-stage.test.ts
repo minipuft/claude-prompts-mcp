@@ -40,7 +40,8 @@ const createMockGateLoader = (
 
 /**
  * Creates a mock GateManager that returns gates based on category.
- * Mirrors the old hardcoded getCategoryGates() behavior for test compatibility.
+ * The mapping below is fixed test data, not a mirror of any production table — real activation
+ * is YAML-declared and covered by tests/integration/gates/gate-category-selection.test.ts.
  */
 const createMockGateManager = (): GateManager => {
   const categoryGateMapping: Record<string, string[]> = {

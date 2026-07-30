@@ -46,13 +46,6 @@ export interface JSONSchemaDefinition {
 export type ScriptRuntime = 'python' | 'node' | 'shell' | 'auto';
 
 /**
- * @deprecated ExecutionMode is deprecated. Use `trigger: explicit` instead of
- * `mode: manual`, and `confirm: true` instead of `mode: confirm`.
- * This type alias is preserved only for backwards compatibility during migration.
- */
-export type ExecutionMode = 'auto' | 'manual' | 'confirm';
-
-/**
  * Trigger type for tool execution (deterministic, not probabilistic).
  *
  * Modern automation systems use deterministic triggers, not confidence scores.

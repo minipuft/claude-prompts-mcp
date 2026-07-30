@@ -12,7 +12,7 @@ import {
   type PersistedGateSystemState,
 } from '../../../src/engine/gates/gate-state-store.js';
 import { SqliteEngine, SqliteStateStore } from '../../../src/infra/database/index.js';
-import { ChainSessionStore } from '../../../src/modules/chains/chain-session-store.js';
+import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { resolveContinuityScopeId } from '../../../src/shared/utils/request-identity-scope.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';

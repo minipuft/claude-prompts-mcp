@@ -17,6 +17,14 @@ import { resolveContinuityScopeId } from '../../shared/utils/request-identity-sc
 import { ArgumentHistoryTracker, TextReferenceStore } from '../text-refs/index.js';
 
 import type {
+  ChainRunStatus,
+  GateReviewHistoryEntry,
+  PendingGateReview,
+  PendingShellVerificationSnapshot,
+  StepMetadata,
+  GateReviewPrompt,
+} from '../../shared/types/chain-execution.js';
+import type {
   ChainSession,
   ChainSessionLookupOptions,
   ChainSessionService,
@@ -25,15 +33,7 @@ import type {
   ParsedCommandSnapshot,
   PersistedChainRunRegistry,
   SessionBlueprint,
-} from './types.js';
-import type {
-  ChainRunStatus,
-  GateReviewHistoryEntry,
-  PendingGateReview,
-  PendingShellVerificationSnapshot,
-  StepMetadata,
-  GateReviewPrompt,
-} from '../../shared/types/chain-execution.js';
+} from '../../shared/types/chain-session.js';
 import type { Logger } from '../../shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '../../shared/types/persistence.js';
 
@@ -49,9 +49,6 @@ export interface ChainSessionStoreOptions {
   reviewSessionTimeoutMs?: number;
   cleanupIntervalMs?: number;
 }
-
-/** @deprecated Use ChainSessionStoreOptions */
-export type ChainSessionManagerOptions = ChainSessionStoreOptions;
 
 const DEFAULT_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_REVIEW_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
@@ -2058,18 +2055,12 @@ export class ChainSessionStore implements ChainSessionService {
   }
 }
 
-/** @deprecated Use ChainSessionStore */
-export const ChainSessionManager = ChainSessionStore;
-/** @deprecated Use ChainSessionStore */
-// eslint-disable-next-line no-redeclare
-export type ChainSessionManager = ChainSessionStore;
-
 export type {
   ChainSession,
   ChainSessionService,
   ChainSessionSummary,
   SessionBlueprint,
-} from './types.js';
+} from '../../shared/types/chain-session.js';
 
 /**
  * Create and configure a chain session store
@@ -2091,6 +2082,3 @@ export function createChainSessionStore(
     argumentHistoryTracker
   );
 }
-
-/** @deprecated Use createChainSessionStore */
-export const createChainSessionManager = createChainSessionStore;

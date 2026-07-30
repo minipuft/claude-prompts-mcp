@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { ChainSessionManager, type SessionBlueprint } from '../../../src/modules/chains/manager.js';
+import { ChainSessionStore, type SessionBlueprint } from '../../../src/modules/chains/manager.js';
 import { StepState } from '../../../src/shared/types/chain-execution.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -21,21 +21,21 @@ const createLogger = (): Logger =>
     error: jest.fn(),
   }) as unknown as Logger;
 
-describe('ChainSessionManager', () => {
-  let manager: ChainSessionManager;
+describe('ChainSessionStore', () => {
+  let manager: ChainSessionStore;
   let saveSpy: jest.SpyInstance;
   let loadSpy: jest.SpyInstance;
   let schedulerSpy: jest.SpyInstance;
 
   beforeEach(() => {
     saveSpy = jest
-      .spyOn(ChainSessionManager.prototype as any, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
       .mockResolvedValue(undefined);
     loadSpy = jest
-      .spyOn(ChainSessionManager.prototype as any, 'loadSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
       .mockResolvedValue(undefined);
     schedulerSpy = jest
-      .spyOn(ChainSessionManager.prototype as any, 'startCleanupScheduler')
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
       .mockImplementation(() => {});
   });
 
@@ -49,7 +49,7 @@ describe('ChainSessionManager', () => {
   });
 
   test('cleans review sessions faster than chain sessions', async () => {
-    manager = new ChainSessionManager(createLogger(), new StubTextReferenceStore() as any, {
+    manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
       serverRoot: '/tmp/test-chain-sessions',
       reviewSessionTimeoutMs: 5 * 60 * 1000,
       defaultSessionTimeoutMs: 60 * 60 * 1000,
@@ -71,7 +71,7 @@ describe('ChainSessionManager', () => {
   });
 
   test('does not advance currentStep when completing placeholders', async () => {
-    manager = new ChainSessionManager(createLogger(), new StubTextReferenceStore() as any, {
+    manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
       serverRoot: '/tmp/test-chain-sessions-placeholder',
       cleanupIntervalMs: 1000,
     });
@@ -93,7 +93,7 @@ describe('ChainSessionManager', () => {
       step_results: { '1': 'Stored result' },
     });
 
-    manager = new ChainSessionManager(createLogger(), textReferenceStore as any, {
+    manager = new ChainSessionStore(createLogger(), textReferenceStore as any, {
       serverRoot: '/tmp/test-chain-sessions-context',
       cleanupIntervalMs: 1000,
     });
@@ -169,7 +169,7 @@ describe('ChainSessionManager', () => {
   });
 
   test('updateSessionBlueprint stores snapshot independently', async () => {
-    manager = new ChainSessionManager(createLogger(), new StubTextReferenceStore() as any, {
+    manager = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
       serverRoot: '/tmp/test-chain-sessions-blueprint',
       cleanupIntervalMs: 1000,
     });
@@ -209,21 +209,21 @@ describe('ChainSessionManager', () => {
   });
 });
 
-describe('ChainSessionManager — run-status lifecycle (Tier 2)', () => {
-  let manager: ChainSessionManager;
+describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
+  let manager: ChainSessionStore;
   let saveSpy: jest.SpyInstance;
   let loadSpy: jest.SpyInstance;
   let schedulerSpy: jest.SpyInstance;
 
   beforeEach(() => {
     saveSpy = jest
-      .spyOn(ChainSessionManager.prototype as any, 'saveSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
       .mockResolvedValue(undefined);
     loadSpy = jest
-      .spyOn(ChainSessionManager.prototype as any, 'loadSessions')
+      .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
       .mockResolvedValue(undefined);
     schedulerSpy = jest
-      .spyOn(ChainSessionManager.prototype as any, 'startCleanupScheduler')
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
       .mockImplementation(() => {});
   });
 
@@ -236,8 +236,8 @@ describe('ChainSessionManager — run-status lifecycle (Tier 2)', () => {
     schedulerSpy.mockRestore();
   });
 
-  const newManager = (suffix: string): ChainSessionManager =>
-    new ChainSessionManager(createLogger(), new StubTextReferenceStore() as any, {
+  const newManager = (suffix: string): ChainSessionStore =>
+    new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {
       serverRoot: `/tmp/test-runstatus-${suffix}`,
       cleanupIntervalMs: 1000,
     });
