@@ -37,7 +37,7 @@ interface FrameworkSwitchRequest {
  */
 interface FrameworkStateAccessor {
   isFrameworkSystemEnabled(): boolean;
-  getActiveFramework(): { id: string; type: string; methodology: string } | null | undefined;
+  getActiveFramework(): { id: string; type: string } | null | undefined;
   switchFramework(request: FrameworkSwitchRequest): Promise<boolean>;
 }
 
@@ -583,7 +583,6 @@ export class FrameworkManager extends BaseResourceHandler<
         name: guide.frameworkName,
         description: this.getFrameworkDescription(guide),
         type: guide.type,
-        methodology: guide.type, // Backward compat: methodology mirrors type
         systemPromptTemplate,
         executionGuidelines: this.getExecutionGuidelines(guide),
         applicableTypes: this.getApplicableTypes(guide),

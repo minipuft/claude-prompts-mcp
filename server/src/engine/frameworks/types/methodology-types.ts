@@ -55,11 +55,6 @@ export interface FrameworkDefinition {
   description: string;
   /** The framework type discriminator (e.g., 'CAGEERF', 'ReACT') */
   type: FrameworkType;
-  /**
-   * @deprecated Use `type` instead. Kept for backward compatibility.
-   * Returns the same value as `type`.
-   */
-  methodology: FrameworkMethodology;
   systemPromptTemplate: string;
   executionGuidelines: string[];
   applicableTypes: string[];

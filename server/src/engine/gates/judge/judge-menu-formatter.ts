@@ -244,7 +244,7 @@ export class JudgeMenuFormatter {
   }
 
   private getActiveMethodologyJudgePrompt(context: ExecutionContext): JudgePromptData | undefined {
-    const frameworkId = context.frameworkContext?.selectedFramework?.methodology;
+    const frameworkId = context.frameworkContext?.selectedFramework?.type;
     if (!frameworkId || !this.judgePromptProvider) {
       return undefined;
     }

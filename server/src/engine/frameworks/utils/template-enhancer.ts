@@ -31,10 +31,8 @@ export type { ProcessingStepDefinition } from './step-generator.js';
  */
 export interface FrameworkDefinitionForEnhancement {
   id: string;
-  /** Framework type discriminator (preferred) */
-  type?: string;
-  /** @deprecated Use `type` instead */
-  methodology: string;
+  /** Framework type discriminator (e.g. 'CAGEERF', 'ReACT') */
+  type: string;
   systemPromptGuidance: string;
   templateSuggestions?: TemplateSuggestion[];
   frameworkGates?: FrameworkGateDefinition[];
@@ -117,9 +115,9 @@ export function createMethodologyEnhancement(
     methodologyGates: convertMethodologyGates(frameworkGates),
     templateSuggestions: convertTemplateSuggestions(templateSuggestions),
     enhancementMetadata: {
-      methodology: definition.type || definition.methodology,
+      methodology: definition.type,
       confidence,
-      applicabilityReason: `${definition.type || definition.methodology} methodology provides systematic approach`,
+      applicabilityReason: `${definition.type} framework provides systematic approach`,
       appliedAt: new Date(),
     },
   };
