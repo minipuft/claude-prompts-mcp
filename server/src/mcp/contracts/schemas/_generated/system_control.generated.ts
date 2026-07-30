@@ -37,13 +37,13 @@ export const system_controlParameters: ToolParameter[] = [
     name: 'action',
     type: 'enum[status|framework|gates|analytics|config|maintenance|guide|injection|session]',
     description:
-      'The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect/cancel).',
+      'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect/cancel).',
     required: true,
     status: 'working',
     compatibility: 'canonical',
     examples: [
       'system_control({"action":"status","show_details":true})',
-      'system_control({"action":"framework","operation":"switch","framework":"CAGEERF","reason":"enable methodology"})',
+      'system_control({"action":"framework","operation":"switch","framework":"CAGEERF","reason":"enable framework"})',
       'system_control({"action":"gates","operation":"disable","reason":"maintenance","persist":true})',
       'system_control({"action":"session","operation":"clear","session_id":"chain-123"})',
     ],
@@ -154,8 +154,8 @@ export const system_controlCommands: ToolCommand[] = [
     status: 'working',
   },
   {
-    id: 'framework:list_methodologies',
-    summary: 'List methodology guides.',
+    id: 'framework:list_frameworks',
+    summary: 'List framework guides.',
     parameters: ['action', 'operation', 'show_details'],
     status: 'working',
   },

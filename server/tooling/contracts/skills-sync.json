@@ -7,8 +7,8 @@
     "shortDescription": "Sync client skills",
     "category": "management",
     "frameworkAware": {
-      "enabled": "\ud83e\udde9 SKILLS SYNC [FRAMEWORK]: Skill sync actions with active methodology context available in surrounding workflow.",
-      "disabled": "\ud83e\udde9 SKILLS SYNC: Skill sync actions without methodology context."
+      "enabled": "\ud83e\udde9 SKILLS SYNC [FRAMEWORK]: Skill sync actions with active framework context available in surrounding workflow.",
+      "disabled": "\ud83e\udde9 SKILLS SYNC: Skill sync actions without framework context."
     }
   },
   "parameters": [
@@ -42,7 +42,7 @@
     },
     {
       "name": "resource_type",
-      "type": "enum[prompt|gate|methodology|style]",
+      "type": "enum[prompt|gate|framework|style]",
       "description": "Optional resource type filter.",
       "status": "working"
     },

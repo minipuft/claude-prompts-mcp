@@ -3,16 +3,16 @@
   "version": 1,
   "summary": "Execute prompts/chains with ground-truth validation. >>prompt_id | * N | -->chain | :: verify:\"cmd\" :full loop:true | @Framework | %modifiers",
   "toolDescription": {
-    "description": "\ud83d\ude80 PROMPT ENGINE: Execute prompts with methodology guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply methodology (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
-    "shortDescription": "Execute prompts with validation and methodology",
+    "description": "\ud83d\ude80 PROMPT ENGINE: Execute prompts with framework guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply framework (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
+    "shortDescription": "Execute prompts with validation and framework",
     "category": "execution",
     "triggerExamples": [
       "User: '>>analyze this code' \u2192 prompt_engine(command: '>>analyze this code')",
       "User: 'fix tests' \u2192 prompt_engine(command: '>>fix-bug :: verify:\"npm test\" :full')"
     ],
     "frameworkAware": {
-      "enabled": "\ud83d\ude80 PROMPT ENGINE [FRAMEWORK]: Returns prompts with methodology guidance injected. You apply the methodology yourself.",
-      "disabled": "\ud83d\ude80 PROMPT ENGINE: Returns prompts without methodology injection. Raw template expansion only."
+      "enabled": "\ud83d\ude80 PROMPT ENGINE [FRAMEWORK]: Returns prompts with framework guidance injected. You apply the framework yourself.",
+      "disabled": "\ud83d\ude80 PROMPT ENGINE: Returns prompts without framework injection. Raw template expansion only."
     }
   },
   "parameters": [

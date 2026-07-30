@@ -264,7 +264,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'framework',
     type: 'string',
     description:
-      "[Methodology] Methodology type identifier. Use action:'list' to see registered methodologies.",
+      "[Framework] Framework type identifier. Use action:'list' to see registered frameworks.",
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -272,7 +272,7 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'system_prompt_guidance',
     type: 'string',
-    description: '[Methodology] System prompt guidance injected when active.',
+    description: '[Framework] System prompt guidance injected when active.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -289,7 +289,7 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'gates',
     type: 'object',
-    description: '[Methodology] Gate configuration: include, exclude arrays.',
+    description: '[Framework] Gate configuration: include, exclude arrays.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -297,7 +297,7 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'tool_descriptions',
     type: 'object',
-    description: '[Methodology] Tool description overlays when active.',
+    description: '[Framework] Tool description overlays when active.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -305,7 +305,7 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'enabled',
     type: 'boolean',
-    description: '[Methodology] Whether the methodology is enabled.',
+    description: '[Framework] Whether the framework is enabled.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -313,7 +313,7 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'persist',
     type: 'boolean',
-    description: '[Methodology] For switch: persist the change to config. Default: false.',
+    description: '[Framework] For switch: persist the change to config. Default: false.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -465,14 +465,14 @@ export const resource_managerCommands: ToolCommand[] = [
     status: 'working',
   },
   {
-    id: 'methodology:create',
-    summary: 'Create a new methodology with YAML configuration.',
+    id: 'framework:create',
+    summary: 'Create a new framework with YAML configuration.',
     parameters: [
       'resource_type',
       'action',
       'id',
       'name',
-      'methodology',
+      'framework',
       'description',
       'system_prompt_guidance',
       'phases',
@@ -482,14 +482,14 @@ export const resource_managerCommands: ToolCommand[] = [
     status: 'working',
   },
   {
-    id: 'methodology:update',
-    summary: 'Update existing methodology configuration.',
+    id: 'framework:update',
+    summary: 'Update existing framework configuration.',
     parameters: [
       'resource_type',
       'action',
       'id',
       'name',
-      'methodology',
+      'framework',
       'description',
       'system_prompt_guidance',
       'phases',
@@ -500,14 +500,14 @@ export const resource_managerCommands: ToolCommand[] = [
     status: 'working',
   },
   {
-    id: 'methodology:list',
-    summary: 'List all available methodologies.',
+    id: 'framework:list',
+    summary: 'List all available frameworks.',
     parameters: ['resource_type', 'action', 'enabled_only'],
     status: 'working',
   },
   {
-    id: 'methodology:switch',
-    summary: 'Switch the active framework/methodology.',
+    id: 'framework:switch',
+    summary: 'Switch the active framework.',
     parameters: ['resource_type', 'action', 'id', 'persist', 'reason'],
     status: 'working',
   },

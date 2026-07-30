@@ -69,7 +69,7 @@ export const skills_syncParameters: ToolParameter[] = [
   },
   {
     name: 'resource_type',
-    type: 'enum[prompt|gate|methodology|style]',
+    type: 'enum[prompt|gate|framework|style]',
     description: 'Optional resource type filter.',
     status: 'working',
     compatibility: 'canonical',
