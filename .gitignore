@@ -96,8 +96,11 @@ heapdump-*
 # Claude-Code setup
 plans/archive/
 CLAUDE.md
-.codex/
-.clinerules/
+# No trailing slash: matches both a stray `.codex` file and a `.codex/` directory.
+# A trailing slash matches directories ONLY, which let a zero-byte `.codex` file
+# through into `git status` (observed 2026-07-29).
+.codex
+.clinerules
 
 # Claude Code project config - track rules, ignore personal settings
 .claude/settings.local.json

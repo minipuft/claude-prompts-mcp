@@ -223,3 +223,36 @@ _Discovery surfaces_ (charter only enforces if found)
 - Should social-proof badges be conditional on a minimum threshold (e.g., ≥ 50 stars) to avoid signalling "small project"?
 - Charter home: `docs/portfolio/readme-charter.md` (current) or repo-root `README-CHARTER.md` for visibility?
 - Should `validate:all` block CI on charter violations, or only warn until the charter has been stable for one release cycle?
+
+---
+
+## Phase B3.5 — UX-test refinements (2026-05-17)
+
+Triggered by a roleplay UX test of the post-B3 README using a `general-purpose` Agent configured as **Maya Okafor** — skeptical senior dev, 5-minute window, evaluating MCP servers. She made it to the bottom and chose "Deeper eval" (forward-leaning), but flagged 5 friction points. All addressed in one wave on `relicense/readme-rework`.
+
+| #   | Maya finding                                  | Fix shipped                                                                                                                                                                                                                                                  |
+| --- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Chain example buried behind reference content | New `### Five seconds of syntax` block hoisted between "Is this for me?" filter and hero GIF — 3-line annotated chain + one paragraph                                                                                                                        |
+| 2   | "What You Get" repeats top pitch table        | Compressed 50 lines (4 subsections) → 12-line 4-row reference card (Primitive · Symbol · What it is · Example)                                                                                                                                               |
+| 3   | No explicit "vs. rolling your own" framing    | Added 5th bullet to "Is this for me?" naming markdown-prompts-in-a-repo decay path                                                                                                                                                                           |
+| 4   | TIP callouts read as SEO-padding              | Stripped all 4 remaining TIPs; folded links into prose. Net: 9 → 0 across B2 + B3.5. Plus fixed the duplicate `---` typo at the old TIP location                                                                                                             |
+| 5   | `@CAGEERF` lands as invented jargon           | Methodology section pivots to integration-first framing inside the reference card; `@ReACT` (paper-citable) replaces `@CAGEERF` in the headline chain example and the "What happened" annotation; CAGEERF remains discoverable as one of the bundled options |
+
+### Metrics
+
+| Metric                                                | Pre-B3.5           | Post-B3.5                                  |
+| ----------------------------------------------------- | ------------------ | ------------------------------------------ |
+| Line count                                            | 404                | **375**                                    |
+| `> [!TIP]` callouts                                   | 4                  | **0**                                      |
+| Forbidden-word violations                             | 0                  | 0 (one self-induced during editing, fixed) |
+| `validate:readme --mode=block`                        | pass               | **pass**                                   |
+| Maya's question (d) "different from rolling our own?" | PARTIAL (inferred) | YES (explicit bullet)                      |
+
+### Deferred
+
+- Tagline → `## What You Get` ≤ 80 lines (charter §4 strict target). Current ≈ 110 lines. Quick Start install commands still occupy the gap; further trim sacrifices install utility.
+- Maya's question (b) "less-technical teammates can use it?" — still PARTIAL. The `skills:export` consumer story isn't called out loudly enough. Out of B3.5 scope; revisit if adoption signal in A7 shows operator-syntax friction.
+
+### Recommended follow-up (optional)
+
+Spawn a fresh Maya agent against the post-B3.5 README, compare verdict against the original roleplay transcript. If Maya now reaches "Install" instead of "Deeper eval", the iteration is empirically validated.

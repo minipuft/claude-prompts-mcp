@@ -192,6 +192,25 @@ prompt_engine(command:"research topic:'LLMs' :: 'cite sources, note confidence'"
 prompt_engine(command:"@ReACT analysis --> synthesis --> report :: 'include data'")
 ```
 
+#### Quoting and escapes in argument values
+
+Quoted values are unescaped when parsed, so **a backslash inside a quoted value is an escape
+character, not a literal backslash**:
+
+| You write               | The prompt receives | Note                                               |
+| ----------------------- | ------------------- | -------------------------------------------------- |
+| `path:'C:\Users\dev'`   | `C:Usersdev`        | ⚠️ each `\` is consumed                            |
+| `path:'C:\\Users\\dev'` | `C:\Users\dev`      | escape it to keep it                               |
+| `sep:'a\nb'`            | `a`, newline, `b`   | `\n` `\t` `\r` `\b` `\f` and `\uXXXX` are honoured |
+| `note:'it\'s fine'`     | `it's fine`         | escaping a quote works                             |
+| `note:"it's fine"`      | `it's fine`         | or just use the other quote                        |
+
+**Double any backslash you mean literally** — Windows paths and regexes are the common cases.
+
+This applies only to values you type by hand. Values passed through the `options` parameter are
+serialized and unescaped automatically, so they round-trip losslessly with no escaping on your
+part — a Windows path or a regex in `options` arrives exactly as sent.
+
 ### Operators Quick Reference
 
 | Operator     | Syntax         | Example                    | Purpose                                 |
@@ -937,19 +956,22 @@ resource_manager(
 
 ### Version Storage
 
-Version history is stored in `.history.json` sidecar files alongside each resource:
+Version history lives in SQLite (`state.db`), not on disk beside the resource. Resource
+directories hold only the definition itself:
 
 ```
 resources/prompts/
 ├── development/
 │   └── my_prompt/
-│       ├── prompt.yaml
-│       └── .history.json    # Version history
+│       └── prompt.yaml
 resources/gates/
 ├── code-quality/
-│   ├── gate.yaml
-│   └── .history.json
+│   └── gate.yaml
 ```
+
+`state.db` is ephemeral and never committed. The per-resource JSON version sidecars this section
+previously described were removed when versioning moved to SQLite, and `.gitignore` still carries
+a rule for them so stragglers cannot be committed.
 
 </details>
 
