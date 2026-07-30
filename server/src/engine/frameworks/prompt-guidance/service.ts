@@ -28,7 +28,6 @@ export interface PromptGuidanceServiceConfig {
   templateEnhancement: {
     enabled: boolean;
     enhancementLevel: 'minimal' | 'moderate' | 'comprehensive';
-    enableArgumentSuggestions: boolean;
     enableStructureOptimization: boolean;
   };
 }
@@ -80,7 +79,6 @@ export class PromptGuidanceService {
       templateEnhancement: {
         enabled: true,
         enhancementLevel: 'moderate',
-        enableArgumentSuggestions: true,
         enableStructureOptimization: true,
       },
       ...config,

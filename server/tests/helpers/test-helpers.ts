@@ -386,7 +386,6 @@ export class MockPromptGuidanceService {
       templateEnhancement: {
         enabled: true,
         enhancementLevel: 'moderate',
-        enableArgumentSuggestions: true,
         enableStructureOptimization: true,
       },
     }));

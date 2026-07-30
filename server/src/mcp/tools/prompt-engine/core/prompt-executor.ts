@@ -572,7 +572,6 @@ export class PromptExecutor {
           templateEnhancement: {
             enabled: true,
             enhancementLevel: 'moderate',
-            enableArgumentSuggestions: true,
             enableStructureOptimization: true,
           },
         },
