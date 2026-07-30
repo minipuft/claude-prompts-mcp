@@ -150,7 +150,38 @@ unrepresentable, but that is an improvement, not a compat retirement. **No 4.3 a
 
 ---
 
-# 4.3 — execution layout (approved 2026-07-30, not yet executed)
+# 4.3 — execution layout (✓ EXECUTED 2026-07-30)
+
+**Outcome**: 4.3a.1 ✓ (`47387639`), 4.3a.2 ✓ (`0ad5769e`), 4.3b ✓ but **not as written** —
+see the correction below. 4.3c remains deliberately out of scope. Gate green after each commit:
+typecheck 0 · 1696/1696 · `validate:all` 0 · `validate:arch` 0 · `build` 0 · ratchet 3478 → 3477.
+
+Both 4.3a re-probes **held** under the widened search path, so the two surviving SPECULATIVE
+verdicts were correct. 4.3b's did not — a **third** authored claim in this file turned out to be
+wrong, from the same root cause as the first three:
+
+> **4.3b correction.** The claim "`prompt-schema.ts:33` and `shared/types/index.ts:143` —
+> 'Removed in v3.0.0'; the enum they describe is already gone" is **false**. `allowedValues` was
+> never removed. It is declared in **three** places (`prompt-schema.ts:36`,
+> `shared/types/index.ts:145`, `mcp/tools/types/shared-types.ts:303` — the third carried no notice
+> at all), still accepted in prompt YAML, and still copied into the runtime validation object at
+> `yaml-prompt-loader.ts:350-351`. What v3.0.0 dropped is **enforcement**:
+> `argument-schema.ts:157,196` deliberately skip the constraint and
+> `argument-schema-validator.test.ts:388` asserts it. So these were not deletable stale comments —
+> they were **inaccurate comments on live fields**, the same defect class as the misattached
+> `@deprecated` blocks fixed in `9d8cbe2f`. Reworded rather than deleted (`ae6da7fd`).
+>
+> The `script-schema.ts:57,59` `ExecutionModeSchema` notice was likewise **left alone**: `:122`
+> consumes the schema in a working migration transform that emits a deprecation warning. That
+> notice is accurate and load-bearing.
+
+**Running tally: 4 of the 5 SPECULATIVE-or-stale verdicts in this file that were checked have been
+falsified.** Every one rested on authored prose or a `src`+`tests` consumer count. The method note
+at the bottom is not optional advice — it is the finding.
+
+---
+
+## Original layout (approved 2026-07-30)
 
 **Read this before touching anything.** Laying 4.3 out precisely re-probed the five SPECULATIVE
 rows above and **falsified three of them**. The corrections are below and supersede the earlier
@@ -168,7 +199,7 @@ that path, and one was a value that _is_ read, on a line the consumer-count did 
 
 **Surviving SPECULATIVE: 2, not 5.**
 
-## Step 4.3a — remove the two confirmed SPECULATIVE sites
+## Step 4.3a — remove the two confirmed SPECULATIVE sites ✓
 
 One commit each. Both are additive-free deletions with no behaviour change.
 
@@ -193,7 +224,7 @@ Verify: `rg -nw enableArgumentSuggestions src tests` returns 0; `typecheck`; `te
 Verify: `rg -nw setToolDescriptionLoader src` shows only the two real implementations plus
 `module-initializer.ts:237`; `typecheck`; `test:ci`.
 
-## Step 4.3b — stale comment cleanup (zero risk, no approval needed)
+## Step 4.3b — stale comment cleanup (zero risk, no approval needed) ✓ — see correction above
 
 **Two were already fixed during this layout** and are NOT pending:
 `methodology-types.ts:296` and `:378` carried `@deprecated Use type instead` blocks that were
