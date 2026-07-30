@@ -27,7 +27,7 @@ export class StepExecutionStage extends BasePipelineStage {
 
   constructor(
     private readonly chainOperatorExecutor: ChainOperatorExecutor,
-    private readonly chainSessionManager: ChainSessionService,
+    private readonly chainSessionStore: ChainSessionService,
     logger: Logger,
     private readonly referenceResolver?: PromptReferenceResolver,
     private readonly scriptReferenceResolver?: ScriptReferenceResolverPort,
@@ -133,7 +133,7 @@ export class StepExecutionStage extends BasePipelineStage {
       this.handleError(new Error('Current step not found during execution'));
       return;
     }
-    const chainContextSnapshot = this.chainSessionManager.getChainContext(
+    const chainContextSnapshot = this.chainSessionStore.getChainContext(
       session.sessionId,
       context.getScopeOptions()
     );

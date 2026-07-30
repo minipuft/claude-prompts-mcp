@@ -7,7 +7,7 @@ import type { ToolResponse } from '../../../../shared/types/index.js';
 export class SessionActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
     const operation = args.operation || 'list';
-    const manager = this.context.chainSessionManager;
+    const manager = this.context.chainSessionStore;
 
     if (!manager) {
       throw new Error('Chain session manager not initialized');
@@ -30,7 +30,7 @@ export class SessionActionHandler extends ActionHandler {
   }
 
   private async listSessions(args: any): Promise<ToolResponse> {
-    const manager = this.context.chainSessionManager!;
+    const manager = this.context.chainSessionStore!;
     const sessions = manager.listActiveSessions();
 
     if (sessions.length === 0) {
@@ -69,7 +69,7 @@ export class SessionActionHandler extends ActionHandler {
   }
 
   private async clearSession(args: any): Promise<ToolResponse> {
-    const manager = this.context.chainSessionManager!;
+    const manager = this.context.chainSessionStore!;
     const sessionId = args.session_id;
 
     if (!sessionId) {
@@ -94,7 +94,7 @@ export class SessionActionHandler extends ActionHandler {
   }
 
   private async inspectSession(args: any): Promise<ToolResponse> {
-    const manager = this.context.chainSessionManager!;
+    const manager = this.context.chainSessionStore!;
     const sessionId = args.session_id;
 
     if (!sessionId) {
@@ -145,7 +145,7 @@ export class SessionActionHandler extends ActionHandler {
   }
 
   private async cancelSession(args: { session_id?: string }): Promise<ToolResponse> {
-    const manager = this.context.chainSessionManager;
+    const manager = this.context.chainSessionStore;
     if (manager === undefined) {
       throw new Error('Chain session manager not initialized');
     }

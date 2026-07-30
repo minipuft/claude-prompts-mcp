@@ -94,7 +94,7 @@ export class PromptExecutor {
   private readonly lightweightGateSystem: LightweightGateSystem;
   private readonly gateReferenceResolver: GateReferenceResolver;
   private readonly gateGuidanceRenderer: GateGuidanceRenderer;
-  private readonly chainSessionManager: ChainSessionService;
+  private readonly chainSessionStore: ChainSessionService;
   private readonly argumentHistoryTracker: ArgumentHistoryTracker;
 
   /** Execution log writer (Tier 5). Created when setDatabasePort wires the DB. */
@@ -176,7 +176,7 @@ export class PromptExecutor {
       logger.warn('Failed to initialize ArgumentHistoryTracker:', error);
     });
 
-    this.chainSessionManager = createChainSessionStore(
+    this.chainSessionStore = createChainSessionStore(
       logger,
       textReferenceStore,
       this.serverRoot,
@@ -228,7 +228,7 @@ export class PromptExecutor {
 
     this.chainSessionRouter = new ChainSessionRouter(
       [],
-      this.chainSessionManager,
+      this.chainSessionStore,
       this.responseFormatter,
       this.lightweightGateSystem
     );
@@ -295,8 +295,8 @@ export class PromptExecutor {
 
   setDatabasePort(db: import('../../../../shared/types/persistence.js').DatabasePort): void {
     this.argumentHistoryTracker.setDatabasePort(db);
-    if ('setDatabasePort' in this.chainSessionManager) {
-      (this.chainSessionManager as { setDatabasePort(db: unknown): void }).setDatabasePort(db);
+    if ('setDatabasePort' in this.chainSessionStore) {
+      (this.chainSessionStore as { setDatabasePort(db: unknown): void }).setDatabasePort(db);
     }
     this.executionRecordStore = createExecutionRecordStore(db, this.logger);
     this.promptPipeline = undefined;
@@ -326,8 +326,8 @@ export class PromptExecutor {
    * Get chain session manager for external access (MCP resources).
    * This is the canonical instance that tracks all chain sessions.
    */
-  getChainSessionManager(): ChainSessionService {
-    return this.chainSessionManager;
+  getChainSessionStore(): ChainSessionService {
+    return this.chainSessionStore;
   }
 
   async cleanup(): Promise<void> {
@@ -355,10 +355,10 @@ export class PromptExecutor {
     }
 
     if (
-      'cleanup' in this.chainSessionManager &&
-      typeof this.chainSessionManager.cleanup === 'function'
+      'cleanup' in this.chainSessionStore &&
+      typeof this.chainSessionStore.cleanup === 'function'
     ) {
-      await this.chainSessionManager.cleanup();
+      await this.chainSessionStore.cleanup();
     }
 
     await this.argumentHistoryTracker.shutdown();
@@ -689,7 +689,7 @@ export class PromptExecutor {
         configManager: this.configManager,
         parsingSystem: this.parsingSystem,
         executionPlanner: this.executionPlanner,
-        chainSessionManager: this.chainSessionManager,
+        chainSessionStore: this.chainSessionStore,
         chainSessionRouter: this.chainSessionRouter,
         executionRecordStore: this.executionRecordStore,
         lightweightGateSystem: this.lightweightGateSystem,

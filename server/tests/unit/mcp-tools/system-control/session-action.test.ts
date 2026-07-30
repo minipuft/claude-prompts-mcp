@@ -45,7 +45,7 @@ const createSystemControl = (chainSessionStore: ChainSessionService) => {
     { sendNotification: jest.fn() } as any,
     () => Promise.resolve()
   );
-  systemControl.setChainSessionManager(chainSessionStore);
+  systemControl.setChainSessionStore(chainSessionStore);
   return systemControl;
 };
 

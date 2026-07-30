@@ -27,7 +27,7 @@ export class SessionManagementStage extends BasePipelineStage {
   readonly name = 'SessionManagement';
 
   constructor(
-    private readonly chainSessionManager: ChainSessionService,
+    private readonly chainSessionStore: ChainSessionService,
     logger: Logger
   ) {
     super(logger);
@@ -52,18 +52,15 @@ export class SessionManagementStage extends BasePipelineStage {
       let existingSession: ChainSession | undefined =
         !forceRestart &&
         resolvedSessionId &&
-        this.chainSessionManager.hasActiveSession(resolvedSessionId)
-          ? this.chainSessionManager.getSession(resolvedSessionId, scopeOptions)
+        this.chainSessionStore.hasActiveSession(resolvedSessionId)
+          ? this.chainSessionStore.getSession(resolvedSessionId, scopeOptions)
           : undefined;
 
       if (!existingSession && !forceRestart && requestedChainId) {
-        const chainSession = this.chainSessionManager.getSessionByChainIdentifier(
-          requestedChainId,
-          {
-            includeDormant: explicitChainResume,
-            ...scopeOptions,
-          }
-        );
+        const chainSession = this.chainSessionStore.getSessionByChainIdentifier(requestedChainId, {
+          includeDormant: explicitChainResume,
+          ...scopeOptions,
+        });
         if (chainSession) {
           existingSession = chainSession;
           resolvedSessionId = chainSession.sessionId;
@@ -94,7 +91,7 @@ export class SessionManagementStage extends BasePipelineStage {
           currentStep: existingSession.state.currentStep,
           totalSteps: existingSession.state.totalSteps,
         };
-        const pendingReview = this.chainSessionManager.getPendingGateReview(resolvedSessionId);
+        const pendingReview = this.chainSessionStore.getPendingGateReview(resolvedSessionId);
         if (pendingReview) {
           sessionContext.pendingReview = pendingReview;
         }
@@ -112,7 +109,7 @@ export class SessionManagementStage extends BasePipelineStage {
         const blueprint = this.buildSessionBlueprint(context);
         const options = { ...scopeOptions, ...(blueprint ? { blueprint } : {}) };
 
-        await this.chainSessionManager.createSession(
+        await this.chainSessionStore.createSession(
           resolvedSessionId,
           chainId,
           totalSteps,
@@ -265,7 +262,7 @@ export class SessionManagementStage extends BasePipelineStage {
 
   private getNextRunNumber(baseChainId: string): number {
     const normalized = this.stripRunCounter(baseChainId);
-    const runHistory = this.chainSessionManager.getRunHistory(normalized);
+    const runHistory = this.chainSessionStore.getRunHistory(normalized);
     if (runHistory.length === 0) {
       return 1;
     }

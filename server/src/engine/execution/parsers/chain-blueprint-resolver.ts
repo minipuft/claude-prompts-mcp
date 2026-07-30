@@ -15,7 +15,7 @@ import type { ExecutionPlan } from '../types.js';
  */
 export class ChainBlueprintResolver {
   constructor(
-    private readonly chainSessionManager: ChainSessionService,
+    private readonly chainSessionStore: ChainSessionService,
     _logger: Logger
   ) {}
 
@@ -29,13 +29,13 @@ export class ChainBlueprintResolver {
     let sessionId = context.getSessionId();
     const scopeOptions = context.getScopeOptions();
     let blueprint = sessionId
-      ? this.chainSessionManager.getSessionBlueprint(sessionId, scopeOptions)
+      ? this.chainSessionStore.getSessionBlueprint(sessionId, scopeOptions)
       : undefined;
 
     if (!blueprint) {
       const requestedChainId = context.mcpRequest.chain_id;
       if (requestedChainId) {
-        const session = this.chainSessionManager.getSessionByChainIdentifier(requestedChainId, {
+        const session = this.chainSessionStore.getSessionByChainIdentifier(requestedChainId, {
           includeDormant: true,
           ...scopeOptions,
         });
@@ -45,7 +45,7 @@ export class ChainBlueprintResolver {
           context.state.session.resumeChainId = session.chainId;
           blueprint = session.blueprint
             ? this.cloneBlueprint(session.blueprint)
-            : this.chainSessionManager.getSessionBlueprint(session.sessionId, scopeOptions);
+            : this.chainSessionStore.getSessionBlueprint(session.sessionId, scopeOptions);
         }
       }
     }

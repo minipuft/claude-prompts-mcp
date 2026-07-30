@@ -18,7 +18,7 @@ describe('GateReviewStage', () => {
       renderStep: jest.fn().mockResolvedValue(createExecutionResult()),
     } as any;
 
-    const chainSessionManager = {
+    const chainSessionStore = {
       getPendingGateReview: jest.fn().mockReturnValue({
         combinedPrompt: 'Review prompt',
         gateIds: ['inline_gate_focus'],
@@ -30,7 +30,7 @@ describe('GateReviewStage', () => {
       getChainContext: jest.fn().mockReturnValue({ step_results: {} }),
     } as any;
 
-    const stage = new GateReviewStage(chainOperatorExecutor, chainSessionManager, null, {
+    const stage = new GateReviewStage(chainOperatorExecutor, chainSessionStore, null, {
       debug: jest.fn(),
       info: jest.fn(),
       warn: jest.fn(),

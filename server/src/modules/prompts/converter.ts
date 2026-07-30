@@ -369,7 +369,7 @@ export class PromptConverter {
   private isSpecialPlaceholder(placeholder: string): boolean {
     const specialPlaceholders = [
       'previous_message', // Last non-template user message (ConversationStore)
-      // Chain step variables (ChainSessionManager.getChainContext)
+      // Chain step variables (ChainSessionStore.getChainContext)
       'chain_id',
       'input', // Current step's arguments object
       'previous_step_result',

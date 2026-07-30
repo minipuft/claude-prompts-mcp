@@ -59,7 +59,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   frameworkManager?: FrameworkManager;
   gateStateStore?: GateStateStore;
   gateGuidanceRenderer?: GateGuidanceRenderer;
-  chainSessionManager?: ChainSessionService;
+  chainSessionStore?: ChainSessionService;
   configManager?: ConfigManager;
   safeConfigWriter?: SafeConfigWriter;
   onRestart?: (reason: string) => Promise<void>;
@@ -136,8 +136,8 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     this.logger.debug('Gate system manager configured for runtime gate control');
   }
 
-  setChainSessionManager(chainSessionManager: ChainSessionService): void {
-    this.chainSessionManager = chainSessionManager;
+  setChainSessionStore(chainSessionStore: ChainSessionService): void {
+    this.chainSessionStore = chainSessionStore;
     this.logger.debug('Chain session manager configured for session control');
   }
 

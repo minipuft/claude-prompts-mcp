@@ -74,14 +74,14 @@ function createRenderResult(content = 'Generated output') {
 function createStageWithGates(
   gates: Record<string, LightweightGateDefinition>,
   configEvaluation?: { defaultMode?: 'self' | 'judge'; strict?: boolean },
-  overrides?: { chainSessionManager?: any }
+  overrides?: { chainSessionStore?: any }
 ) {
   const loader = createMockLoader(gates);
   const chainOperatorExecutor = {
     renderStep: jest.fn().mockResolvedValue(createRenderResult()),
   } as any;
-  const chainSessionManager =
-    overrides?.chainSessionManager ??
+  const chainSessionStore =
+    overrides?.chainSessionStore ??
     ({
       getPendingGateReview: jest.fn().mockReturnValue({
         combinedPrompt: 'Review prompt',
@@ -97,7 +97,7 @@ function createStageWithGates(
 
   const stage = new GateReviewStage(
     chainOperatorExecutor,
-    chainSessionManager,
+    chainSessionStore,
     loader,
     mockLogger,
     () => ({ evaluation: configEvaluation })
@@ -116,7 +116,7 @@ function createStageWithGates(
     pendingReview: true,
   };
 
-  return { stage, context, chainOperatorExecutor, chainSessionManager };
+  return { stage, context, chainOperatorExecutor, chainSessionStore };
 }
 
 describe('Judge Gate Pipeline Wiring', () => {
@@ -211,7 +211,7 @@ describe('Shell Verify Auto-Pass', () => {
       pass_criteria: [{ type: 'shell_verify', shell_command: 'echo ok' }],
     };
 
-    const { stage, context, chainOperatorExecutor, chainSessionManager } = createStageWithGates({
+    const { stage, context, chainOperatorExecutor, chainSessionStore } = createStageWithGates({
       'test-suite': shellGate,
     });
     await stage.execute(context);
@@ -223,7 +223,7 @@ describe('Shell Verify Auto-Pass', () => {
     // renderStep should NOT be called — no LLM review needed
     expect(chainOperatorExecutor.renderStep).not.toHaveBeenCalled();
     // Pending review should be cleared from session
-    expect(chainSessionManager.clearPendingGateReview).toHaveBeenCalledWith('session-1');
+    expect(chainSessionStore.clearPendingGateReview).toHaveBeenCalledWith('session-1');
   });
 
   test('falls through to normal review when gate has no shell_verify criteria', async () => {

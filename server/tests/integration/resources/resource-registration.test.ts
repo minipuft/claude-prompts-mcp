@@ -422,7 +422,7 @@ describe('MCP Resources Registration Integration', () => {
       expect(handler).toBeDefined();
 
       const result = (await handler!(
-        new URL(`resource://${RESOURCE_URI_PATTERNS.METHODOLOGY_LIST}`),
+        new URL(`resource://${RESOURCE_URI_PATTERNS.FRAMEWORK_LIST}`),
         {}
       )) as { contents: Array<{ text: string; mimeType: string }> };
 
@@ -441,7 +441,7 @@ describe('MCP Resources Registration Integration', () => {
       expect(handler).toBeDefined();
 
       const result = (await handler!(
-        new URL(`resource://${RESOURCE_URI_PATTERNS.METHODOLOGY_ITEM.replace('{id}', 'CAGEERF')}`),
+        new URL(`resource://${RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM.replace('{id}', 'CAGEERF')}`),
         { id: 'CAGEERF' }
       )) as { contents: Array<{ text: string; mimeType: string }> };
 
@@ -465,7 +465,7 @@ describe('MCP Resources Registration Integration', () => {
 
       const result = (await handler!(
         new URL(
-          `resource://${RESOURCE_URI_PATTERNS.METHODOLOGY_SYSTEM_PROMPT.replace('{id}', 'CAGEERF')}`
+          `resource://${RESOURCE_URI_PATTERNS.FRAMEWORK_SYSTEM_PROMPT.replace('{id}', 'CAGEERF')}`
         ),
         { id: 'CAGEERF' }
       )) as { contents: Array<{ text: string }> };
@@ -480,7 +480,7 @@ describe('MCP Resources Registration Integration', () => {
       await expect(
         handler!(
           new URL(
-            `resource://${RESOURCE_URI_PATTERNS.METHODOLOGY_ITEM.replace('{id}', 'non-existent')}`
+            `resource://${RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM.replace('{id}', 'non-existent')}`
           ),
           { id: 'non-existent' }
         )
@@ -552,7 +552,7 @@ describe('MCP Resources Registration Integration', () => {
     beforeEach(() => {
       const dependencies: ResourceDependencies = {
         logger: mockLogger,
-        chainSessionManager: {
+        chainSessionStore: {
           listActiveSessions: (limit?: number) => testSessions.slice(0, limit),
           getSession: (sessionId: string) =>
             sessionId === 'session-123' ? testSessionDetails : undefined,
@@ -566,7 +566,7 @@ describe('MCP Resources Registration Integration', () => {
       registerResources(mockMcpServer as never, dependencies);
     });
 
-    test('registers session resources when chainSessionManager is provided', () => {
+    test('registers session resources when chainSessionStore is provided', () => {
       expect(registeredResources.has('sessions')).toBe(true);
       expect(registeredResources.has('session')).toBe(true);
     });
@@ -669,9 +669,9 @@ describe('MCP Resources Registration Integration', () => {
     });
 
     test('methodology patterns include full URI scheme', () => {
-      expect(RESOURCE_URI_PATTERNS.METHODOLOGY_LIST).toBe('resource://methodology/');
-      expect(RESOURCE_URI_PATTERNS.METHODOLOGY_ITEM).toBe('resource://methodology/{id}');
-      expect(RESOURCE_URI_PATTERNS.METHODOLOGY_SYSTEM_PROMPT).toBe(
+      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_LIST).toBe('resource://methodology/');
+      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM).toBe('resource://methodology/{id}');
+      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_SYSTEM_PROMPT).toBe(
         'resource://methodology/{id}/system-prompt'
       );
     });

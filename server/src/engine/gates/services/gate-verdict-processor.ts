@@ -29,7 +29,7 @@ export interface VerdictProcessingResult {
  */
 export class GateVerdictProcessor {
   constructor(
-    private readonly chainSessionManager: ChainSessionService,
+    private readonly chainSessionStore: ChainSessionService,
     private readonly logger: Logger
   ) {}
 
@@ -84,7 +84,7 @@ export class GateVerdictProcessor {
     // Fallback: Direct session manager interaction (legacy path)
     switch (gateAction) {
       case 'retry': {
-        await this.chainSessionManager.resetRetryCount(sessionId);
+        await this.chainSessionStore.resetRetryCount(sessionId);
         context.state.gates.retryLimitExceeded = false;
         context.state.gates.awaitingUserChoice = false;
         context.diagnostics.info('GateVerdictProcessor', 'User chose to retry after exhaustion', {
@@ -94,7 +94,7 @@ export class GateVerdictProcessor {
       }
 
       case 'skip': {
-        await this.chainSessionManager.clearPendingGateReview(sessionId);
+        await this.chainSessionStore.clearPendingGateReview(sessionId);
         context.state.gates.retryLimitExceeded = false;
         context.state.gates.awaitingUserChoice = false;
         const clearedContext = { ...sessionContext };
@@ -165,7 +165,7 @@ export class GateVerdictProcessor {
 
     let passClearedThisCall = false;
     if (outcome.status === 'cleared') {
-      const newStep = await this.chainSessionManager.advanceStep(sessionId, currentStepAtStart);
+      const newStep = await this.chainSessionStore.advanceStep(sessionId, currentStepAtStart);
       if (newStep !== false) {
         sessionContext.currentStep = newStep;
       }
@@ -182,7 +182,7 @@ export class GateVerdictProcessor {
     }
 
     // Sync newly created pending review (on FAIL) into session context
-    const pending = this.chainSessionManager.getPendingGateReview(sessionId);
+    const pending = this.chainSessionStore.getPendingGateReview(sessionId);
     if (pending !== undefined) {
       sessionContext.pendingReview = pending;
       context.sessionContext = { ...sessionContext };
@@ -226,7 +226,7 @@ export class GateVerdictProcessor {
       context.state.gates.perGateVerdicts = perGateVerdicts;
     }
 
-    const outcome = await this.chainSessionManager.recordGateReviewOutcome(sessionId, {
+    const outcome = await this.chainSessionStore.recordGateReviewOutcome(sessionId, {
       verdict: verdictPayload.verdict,
       rationale: verdictPayload.rationale,
       rawVerdict: verdictPayload.raw,
@@ -238,7 +238,7 @@ export class GateVerdictProcessor {
     let passClearedThisCall = false;
 
     if (outcome === 'cleared') {
-      const newStep = await this.chainSessionManager.advanceStep(sessionId, currentStepAtStart);
+      const newStep = await this.chainSessionStore.advanceStep(sessionId, currentStepAtStart);
       if (newStep !== false) {
         sessionContext.currentStep = newStep;
       }
@@ -286,7 +286,7 @@ export class GateVerdictProcessor {
     capturedGateIds: string[],
     verdictPayload: ParsedGateVerdict
   ): void {
-    const pending = this.chainSessionManager.getPendingGateReview(sessionId);
+    const pending = this.chainSessionStore.getPendingGateReview(sessionId);
     if (pending !== undefined) {
       sessionContext.pendingReview = pending;
     } else {
@@ -332,9 +332,9 @@ export class GateVerdictProcessor {
     capturedGateIds: string[],
     verdictPayload: { rationale: string }
   ): void {
-    const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+    const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
     const isRetryExhausted =
-      pendingReview !== undefined && this.chainSessionManager.isRetryLimitExceeded(sessionId);
+      pendingReview !== undefined && this.chainSessionStore.isRetryLimitExceeded(sessionId);
 
     if (isRetryExhausted && pendingReview !== undefined) {
       context.state.gates.retryLimitExceeded = true;
@@ -383,9 +383,9 @@ export class GateVerdictProcessor {
     });
 
     await this.emitGateEvents(context, 'failed', capturedGateIds, verdictPayload.rationale);
-    await this.chainSessionManager.clearPendingGateReview(sessionId);
+    await this.chainSessionStore.clearPendingGateReview(sessionId);
     const currentStep = context.sessionContext?.currentStep ?? 0;
-    const newStep = await this.chainSessionManager.advanceStep(sessionId, currentStep);
+    const newStep = await this.chainSessionStore.advanceStep(sessionId, currentStep);
     if (newStep !== false) {
       sessionContext.currentStep = newStep;
     }
@@ -408,9 +408,9 @@ export class GateVerdictProcessor {
     );
 
     await this.emitGateEvents(context, 'failed', infoGateIds, verdictPayload.rationale);
-    await this.chainSessionManager.clearPendingGateReview(sessionId);
+    await this.chainSessionStore.clearPendingGateReview(sessionId);
     const currentStep = context.sessionContext?.currentStep ?? 0;
-    const newStep = await this.chainSessionManager.advanceStep(sessionId, currentStep);
+    const newStep = await this.chainSessionStore.advanceStep(sessionId, currentStep);
     if (newStep !== false) {
       sessionContext.currentStep = newStep;
     }
@@ -512,7 +512,7 @@ export class GateVerdictProcessor {
         case 'retryExhausted': {
           const sessionId = context.sessionContext?.sessionId;
           const pendingReview = sessionId
-            ? this.chainSessionManager.getPendingGateReview(sessionId)
+            ? this.chainSessionStore.getPendingGateReview(sessionId)
             : undefined;
           const maxAttempts = pendingReview?.maxAttempts ?? 2;
 

@@ -35,7 +35,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 export { RESOURCE_URI_PATTERNS, ResourceNotFoundError } from './types.js';
 export type {
   GateResourceMetadata,
-  MethodologyResourceMetadata,
+  FrameworkResourceMetadata,
   PromptResourceMetadata,
   ResourceContent,
   ResourceDependencies,
@@ -90,11 +90,11 @@ export function registerResources(server: McpServer, dependencies: ResourceDepen
   }
 
   // Methodologies
-  const methodologiesEnabled = cfg.methodologies?.enabled !== false;
-  if (methodologiesEnabled && dependencies.frameworkManager !== undefined) {
+  const frameworksEnabled = cfg.methodologies?.enabled !== false;
+  if (frameworksEnabled && dependencies.frameworkManager !== undefined) {
     registerMethodologyResources(server, dependencies);
     logger.debug('[Resources] Methodology resources registered');
-  } else if (!methodologiesEnabled) {
+  } else if (!frameworksEnabled) {
     logger.debug('[Resources] Methodology resources disabled by config');
   } else {
     logger.warn('[Resources] FrameworkManager not available, skipping methodology resources');
@@ -103,7 +103,7 @@ export function registerResources(server: McpServer, dependencies: ResourceDepen
   // Observability (sessions + metrics)
   const observabilityEnabled = cfg.observability?.enabled !== false;
   const hasObservabilityDeps =
-    dependencies.chainSessionManager !== undefined || dependencies.metricsCollector !== undefined;
+    dependencies.chainSessionStore !== undefined || dependencies.metricsCollector !== undefined;
 
   if (observabilityEnabled && hasObservabilityDeps) {
     registerObservabilityResources(server, dependencies);

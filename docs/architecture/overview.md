@@ -497,7 +497,7 @@ Assertions (structural, deterministic) and LLM quality gates (subjective) check 
 
 **Double-injection guard**: `metadata.assertionContext` is checked before injecting. If already present (e.g., retry cycle), the summary is not prepended again.
 
-**Authority model**: `sessionContext.pendingReview` is a fast-path signal (present = render review screen). Stage 10 always re-fetches from `chainSessionManager.getPendingGateReview()` before rendering, making the manager the authoritative source.
+**Authority model**: `sessionContext.pendingReview` is a fast-path signal (present = render review screen). Stage 10 always re-fetches from `chainSessionStore.getPendingGateReview()` before rendering, making the manager the authoritative source.
 
 **Escalation source tracking**: When retry limits are exceeded, `context.state.gates.escalationSource` indicates whether the escalation originated from `'gate-review'` (Stage 08) or `'shell-verify'` (Stage 08b). Both stages write to the shared `retryLimitExceeded` / `awaitingUserChoice` flags sequentially.
 
@@ -544,11 +544,11 @@ Understanding which state survives across MCP requests is critical for cross-req
 
 ### State Lifecycle
 
-| Category               | Lifecycle                        | Storage                | Access                       |
-| ---------------------- | -------------------------------- | ---------------------- | ---------------------------- |
-| **Ephemeral**          | Dies after each request          | `ExecutionContext`     | `context.state.*`            |
-| **Session-Persistent** | Survives across session requests | `ChainSessionManager`  | `chainSessionManager.get*()` |
-| **Global-Persistent**  | Survives server restarts         | `runtime-state/*.json` | State managers               |
+| Category               | Lifecycle                        | Storage                | Access                     |
+| ---------------------- | -------------------------------- | ---------------------- | -------------------------- |
+| **Ephemeral**          | Dies after each request          | `ExecutionContext`     | `context.state.*`          |
+| **Session-Persistent** | Survives across session requests | `ChainSessionStore`    | `chainSessionStore.get*()` |
+| **Global-Persistent**  | Survives server restarts         | `runtime-state/*.json` | State managers             |
 
 ### Ephemeral State (Per-Request)
 
@@ -570,10 +570,10 @@ Survives across requests for the same session:
 
 ```typescript
 // CORRECT: Persists to SQLite chain_sessions table
-await chainSessionManager.setPendingGateReview(sessionId, review);
+await chainSessionStore.setPendingGateReview(sessionId, review);
 
 // Next request: Works!
-const review = chainSessionManager.getPendingGateReview(sessionId);
+const review = chainSessionStore.getPendingGateReview(sessionId);
 ```
 
 ### Global-Persistent State
@@ -603,8 +603,8 @@ Set ephemeral flag                 Ephemeral flag is undefined
 context.state.X = true                 │
     │                                  ▼
     ▼                              Read from session manager
-Save to session manager            chainSessionManager.get*(sessionId)
-chainSessionManager.set*(...)          │
+Save to session manager            chainSessionStore.get*(sessionId)
+chainSessionStore.set*(...)          │
     │                                  ▼
     ▼                              State available!
 Response sent
@@ -619,11 +619,11 @@ context.state.gates.retryLimitExceeded = true; // Lost!
 
 // WRONG: Mixing ephemeral and persistent reads
 const fromContext = context.state.gates.enforcementMode; // Ephemeral
-const fromSession = chainSessionManager.getPendingGateReview(sessionId); // Persistent
+const fromSession = chainSessionStore.getPendingGateReview(sessionId); // Persistent
 // These may be out of sync!
 
 // CORRECT: Single source of truth
-const isExceeded = chainSessionManager.isRetryLimitExceeded(sessionId); // Always persistent
+const isExceeded = chainSessionStore.isRetryLimitExceeded(sessionId); // Always persistent
 ```
 
 ---

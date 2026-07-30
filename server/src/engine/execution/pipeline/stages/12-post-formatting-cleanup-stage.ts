@@ -25,7 +25,7 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
   readonly name = 'PostFormattingCleanup';
 
   constructor(
-    private readonly chainSessionManager: ChainSessionService | null,
+    private readonly chainSessionStore: ChainSessionService | null,
     private readonly temporaryGateRegistry: TemporaryGateRegistry | null,
     logger: Logger
   ) {
@@ -36,7 +36,7 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
     this.logEntry(context);
 
     const sessionId = context.sessionContext?.sessionId;
-    if (sessionId && this.chainSessionManager && context.executionPlan && context.parsedCommand) {
+    if (sessionId && this.chainSessionStore && context.executionPlan && context.parsedCommand) {
       this.persistBlueprint(sessionId, context);
     }
 
@@ -45,7 +45,7 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
     }
 
     this.logExit({
-      blueprintPersisted: Boolean(sessionId && this.chainSessionManager),
+      blueprintPersisted: Boolean(sessionId && this.chainSessionStore),
       gatesCleaned: Boolean(this.temporaryGateRegistry),
     });
   }
@@ -61,7 +61,7 @@ export class PostFormattingCleanupStage extends BasePipelineStage {
     }
 
     try {
-      this.chainSessionManager!.updateSessionBlueprint(sessionId, blueprint);
+      this.chainSessionStore!.updateSessionBlueprint(sessionId, blueprint);
     } catch (error) {
       this.logger.warn('[PostFormattingCleanupStage] Failed to update session blueprint', {
         sessionId,

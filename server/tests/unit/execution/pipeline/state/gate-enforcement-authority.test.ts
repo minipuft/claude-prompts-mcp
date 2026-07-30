@@ -15,7 +15,7 @@ const createMockLogger = () => ({
   error: jest.fn(),
 });
 
-const createMockChainSessionManager = () => ({
+const createMockChainSessionStore = () => ({
   getSession: jest.fn(),
   hasActiveSession: jest.fn(),
   getPendingGateReview: jest.fn(),
@@ -29,12 +29,12 @@ const createMockChainSessionManager = () => ({
 describe('GateEnforcementAuthority', () => {
   let authority: GateEnforcementAuthority;
   let mockLogger: ReturnType<typeof createMockLogger>;
-  let mockSessionManager: ReturnType<typeof createMockChainSessionManager>;
+  let mockSessionManager: ReturnType<typeof createMockChainSessionStore>;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockLogger = createMockLogger();
-    mockSessionManager = createMockChainSessionManager();
+    mockSessionManager = createMockChainSessionStore();
     authority = new GateEnforcementAuthority(mockSessionManager as any, mockLogger as any);
   });
 

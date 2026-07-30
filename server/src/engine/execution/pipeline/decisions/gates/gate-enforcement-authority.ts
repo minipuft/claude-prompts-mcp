@@ -52,7 +52,7 @@ import type { LightweightGateDefinition } from '../../../../gates/types.js';
  */
 export class GateEnforcementAuthority {
   private readonly logger: Logger;
-  private readonly chainSessionManager: ChainSessionService;
+  private readonly chainSessionStore: ChainSessionService;
   private readonly gateLoader: GateDefinitionProvider | undefined;
 
   private enforcementDecision: GateEnforcementDecision | null = null;
@@ -61,11 +61,11 @@ export class GateEnforcementAuthority {
   private verdictPatterns: VerdictPattern[] | null = null;
 
   constructor(
-    chainSessionManager: ChainSessionService,
+    chainSessionStore: ChainSessionService,
     logger: Logger,
     gateLoader?: GateDefinitionProvider
   ) {
-    this.chainSessionManager = chainSessionManager;
+    this.chainSessionStore = chainSessionStore;
     this.logger = logger;
     this.gateLoader = gateLoader;
   }
@@ -196,7 +196,7 @@ export class GateEnforcementAuthority {
    * @returns Retry config with current state
    */
   getRetryConfig(sessionId: string): RetryConfig {
-    const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+    const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
     const currentAttempt = pendingReview?.attemptCount ?? 0;
     const maxAttempts = pendingReview?.maxAttempts ?? DEFAULT_RETRY_LIMIT;
 
@@ -215,7 +215,7 @@ export class GateEnforcementAuthority {
    * @returns True if retry limit exceeded
    */
   isRetryLimitExceeded(sessionId: string): boolean {
-    return this.chainSessionManager.isRetryLimitExceeded(sessionId);
+    return this.chainSessionStore.isRetryLimitExceeded(sessionId);
   }
 
   /**
@@ -225,7 +225,7 @@ export class GateEnforcementAuthority {
    * @returns Pending review or undefined
    */
   getPendingReview(sessionId: string): PendingGateReview | undefined {
-    return this.chainSessionManager.getPendingGateReview(sessionId);
+    return this.chainSessionStore.getPendingGateReview(sessionId);
   }
 
   /**
@@ -316,7 +316,7 @@ export class GateEnforcementAuthority {
     // - FAIL without a pending review: create review and await remediation.
     // - With a pending review: record as before.
 
-    const pending = this.chainSessionManager.getPendingGateReview(sessionId);
+    const pending = this.chainSessionStore.getPendingGateReview(sessionId);
     if (!pending) {
       if (verdict.verdict === 'PASS') {
         return {
@@ -333,7 +333,7 @@ export class GateEnforcementAuthority {
       await this.setPendingReview(sessionId, created);
     }
 
-    const result = await this.chainSessionManager.recordGateReviewOutcome(sessionId, {
+    const result = await this.chainSessionStore.recordGateReviewOutcome(sessionId, {
       verdict: verdict.verdict,
       rationale: verdict.rationale,
       rawVerdict: verdict.raw,
@@ -373,7 +373,7 @@ export class GateEnforcementAuthority {
           this.logger.warn(
             `[GateEnforcementAuthority] Gate FAIL in advisory mode - continuing: ${verdict.rationale}`
           );
-          await this.chainSessionManager.clearPendingGateReview(sessionId);
+          await this.chainSessionStore.clearPendingGateReview(sessionId);
           return {
             status: 'cleared',
             nextAction: 'continue',
@@ -384,7 +384,7 @@ export class GateEnforcementAuthority {
           this.logger.debug(
             `[GateEnforcementAuthority] Gate FAIL in informational mode - logged only: ${verdict.rationale}`
           );
-          await this.chainSessionManager.clearPendingGateReview(sessionId);
+          await this.chainSessionStore.clearPendingGateReview(sessionId);
           return {
             status: 'cleared',
             nextAction: 'continue',
@@ -409,7 +409,7 @@ export class GateEnforcementAuthority {
   async resolveAction(sessionId: string, action: GateAction): Promise<ActionResult> {
     switch (action) {
       case 'retry':
-        await this.chainSessionManager.resetRetryCount(sessionId);
+        await this.chainSessionStore.resetRetryCount(sessionId);
         this.logger.debug(`[GateEnforcementAuthority] User chose to retry after exhaustion`, {
           sessionId,
         });
@@ -419,7 +419,7 @@ export class GateEnforcementAuthority {
         };
 
       case 'skip':
-        await this.chainSessionManager.clearPendingGateReview(sessionId);
+        await this.chainSessionStore.clearPendingGateReview(sessionId);
         this.logger.warn(`[GateEnforcementAuthority] User chose to skip failed gate`, {
           sessionId,
         });
@@ -455,7 +455,7 @@ export class GateEnforcementAuthority {
    * @param review - Pending review to set
    */
   async setPendingReview(sessionId: string, review: PendingGateReview): Promise<void> {
-    await this.chainSessionManager.setPendingGateReview(sessionId, review);
+    await this.chainSessionStore.setPendingGateReview(sessionId, review);
   }
 
   /**
@@ -464,7 +464,7 @@ export class GateEnforcementAuthority {
    * @param sessionId - Session to update
    */
   async clearPendingReview(sessionId: string): Promise<void> {
-    await this.chainSessionManager.clearPendingGateReview(sessionId);
+    await this.chainSessionStore.clearPendingGateReview(sessionId);
   }
 
   /**

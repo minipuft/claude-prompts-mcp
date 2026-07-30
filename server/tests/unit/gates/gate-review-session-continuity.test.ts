@@ -21,7 +21,7 @@ const sampleExecutionPlan = {
   requiresSession: true,
 };
 
-class StubChainSessionManager implements ChainSessionStore {
+class StubChainSessionStore implements ChainSessionStore {
   private sessions = new Map<string, ChainSession>();
 
   constructor(private readonly logger: Logger) {}
@@ -84,7 +84,7 @@ class StubChainSessionManager implements ChainSessionStore {
 describe('SessionManagementStage continuity', () => {
   test('creates a new session when none exists', async () => {
     const logger = createLogger();
-    const stubManager = new StubChainSessionManager(logger);
+    const stubManager = new StubChainSessionStore(logger);
     const stage = new SessionManagementStage(stubManager as any, logger);
 
     const context = new ExecutionContext({ command: '>>demo' });
@@ -113,7 +113,7 @@ describe('SessionManagementStage continuity', () => {
 
   test('resumes an existing session when resume metadata is provided', async () => {
     const logger = createLogger();
-    const stubManager = new StubChainSessionManager(logger);
+    const stubManager = new StubChainSessionStore(logger);
     const existingSession = await stubManager.createSession('session-123', 'chain-abc', 3, {});
 
     const stage = new SessionManagementStage(stubManager as any, logger);

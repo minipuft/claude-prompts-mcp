@@ -379,7 +379,7 @@ export class Application {
 
     // Get optional dependencies from managers (members are definite-assigned at this point)
     const fm = this.frameworkStateStore.getFrameworkManager();
-    const csm = this.mcpToolsManager.getChainSessionManager();
+    const csm = this.mcpToolsManager.getChainSessionStore();
     const mc = this.mcpToolsManager.getMetricsCollector();
 
     registerResources(this.mcpServer, {
@@ -404,7 +404,7 @@ export class Application {
             }
           : undefined,
       // Phase 2: Observability resources
-      chainSessionManager:
+      chainSessionStore:
         csm != null
           ? {
               listActiveSessions: (limit?: number) => csm.listActiveSessions(limit),
@@ -795,7 +795,7 @@ export class Application {
           name: serviceName,
           start: async () => {
             // Build auxiliary reload configs for methodology, gates, and script tools
-            const methodologyAux = buildMethodologyAuxiliaryReloadConfig(
+            const frameworkAux = buildMethodologyAuxiliaryReloadConfig(
               this.logger,
               this.mcpToolsManager
             );
@@ -816,7 +816,7 @@ export class Application {
 
             // Collect all auxiliary reloads
             const auxiliaryReloads = [
-              methodologyAux,
+              frameworkAux,
               gateAux,
               scriptAux,
               resourceChangeTrackerAux,

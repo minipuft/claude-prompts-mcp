@@ -211,7 +211,7 @@ export class McpToolRouter {
     // Set managers in system control
     this.systemControl.setGateStateStore(this.gateStateStore);
     // ChainSessionStore is owned by promptExecutor (definite at this point)
-    this.systemControl.setChainSessionManager(this.promptExecutor.getChainSessionManager());
+    this.systemControl.setChainSessionStore(this.promptExecutor.getChainSessionStore());
     this.systemControl.setGateGuidanceRenderer(this.promptExecutor.getGateGuidanceRenderer());
 
     // Initialize gate manager tool
@@ -495,8 +495,8 @@ export class McpToolRouter {
    * Get chain session manager for MCP resource access.
    * Delegates to PromptExecutor which owns the canonical instance.
    */
-  getChainSessionManager(): ChainSessionStore | undefined {
-    return this.promptExecutor.getChainSessionManager() as ChainSessionStore | undefined;
+  getChainSessionStore(): ChainSessionStore | undefined {
+    return this.promptExecutor.getChainSessionStore() as ChainSessionStore | undefined;
   }
 
   /**

@@ -52,7 +52,7 @@ export interface PipelineDependencies {
   executionPlanner: ExecutionPlanner;
 
   // ── Session Management ──
-  chainSessionManager: ChainSessionService;
+  chainSessionStore: ChainSessionService;
   chainSessionRouter: ChainSessionRouter | null;
 
   // ── Execution log (Tier 5) — null when DB not yet wired ──

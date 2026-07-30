@@ -93,7 +93,7 @@ export interface PipelineInternalState {
     aborted?: boolean;
     /** Whether the chain has already advanced past the final step */
     chainComplete?: boolean;
-    /** Chain variables for template rendering (from ChainSessionManager) */
+    /** Chain variables for template rendering (from ChainSessionStore) */
     chainContext?: Record<string, unknown>;
   };
 
