@@ -43,7 +43,7 @@ describe('GateAccumulator', () => {
 
     test('getAll returns all gate IDs', () => {
       accumulator.add('gate-1', 'registry-auto');
-      accumulator.add('gate-2', 'methodology');
+      accumulator.add('gate-2', 'framework-guide');
       accumulator.add('gate-3', 'inline-operator');
 
       const allGates = accumulator.getAll();
@@ -54,14 +54,14 @@ describe('GateAccumulator', () => {
     });
 
     test('addAll adds multiple gates from same source', () => {
-      const count = accumulator.addAll(['gate-1', 'gate-2', 'gate-3'], 'methodology');
+      const count = accumulator.addAll(['gate-1', 'gate-2', 'gate-3'], 'framework-guide');
       expect(count).toBe(3);
       expect(accumulator.size).toBe(3);
     });
 
     test('addAll handles undefined and non-array inputs', () => {
-      expect(accumulator.addAll(undefined, 'methodology')).toBe(0);
-      expect(accumulator.addAll(null as any, 'methodology')).toBe(0);
+      expect(accumulator.addAll(undefined, 'framework-guide')).toBe(0);
+      expect(accumulator.addAll(null as any, 'framework-guide')).toBe(0);
       expect(accumulator.size).toBe(0);
     });
   });
@@ -74,17 +74,17 @@ describe('GateAccumulator', () => {
     });
 
     test('deduplicates gates from different sources with same/lower priority', () => {
-      accumulator.add('code-quality', 'methodology'); // priority 40
+      accumulator.add('code-quality', 'framework-guide'); // priority 40
       const added = accumulator.add('code-quality', 'registry-auto'); // priority 20
       expect(added).toBe(false);
       expect(accumulator.size).toBe(1);
 
       const entry = accumulator.getEntries().find((e) => e.id === 'code-quality');
-      expect(entry?.source).toBe('methodology');
+      expect(entry?.source).toBe('framework-guide');
     });
 
     test('logs when skipping duplicate gate', () => {
-      accumulator.add('code-quality', 'methodology');
+      accumulator.add('code-quality', 'framework-guide');
       accumulator.add('code-quality', 'registry-auto');
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
@@ -92,7 +92,7 @@ describe('GateAccumulator', () => {
         expect.objectContaining({
           gateId: 'code-quality',
           attemptedSource: 'registry-auto',
-          existingSource: 'methodology',
+          existingSource: 'framework-guide',
         })
       );
     });
@@ -125,7 +125,7 @@ describe('GateAccumulator', () => {
     test('priority order matches GATE_SOURCE_PRIORITY', () => {
       const sources: GateSource[] = [
         'registry-auto', // 20
-        'methodology', // 40
+        'framework-guide', // 40
         'chain-level', // 50
         'prompt-config', // 60
         'temporary-request', // 80
@@ -174,7 +174,7 @@ describe('GateAccumulator', () => {
 
     test('freeze logs summary', () => {
       accumulator.add('gate-1', 'registry-auto');
-      accumulator.add('gate-2', 'methodology');
+      accumulator.add('gate-2', 'framework-guide');
       accumulator.freeze();
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
@@ -214,7 +214,7 @@ describe('GateAccumulator', () => {
     beforeEach(() => {
       accumulator.add('gate-1', 'registry-auto');
       accumulator.add('gate-2', 'registry-auto');
-      accumulator.add('gate-3', 'methodology');
+      accumulator.add('gate-3', 'framework-guide');
       accumulator.add('gate-4', 'inline-operator');
     });
 
@@ -224,7 +224,7 @@ describe('GateAccumulator', () => {
       expect(categoryGates).toContain('gate-1');
       expect(categoryGates).toContain('gate-2');
 
-      const methodologyGates = accumulator.getBySource('methodology');
+      const methodologyGates = accumulator.getBySource('framework-guide');
       expect(methodologyGates).toHaveLength(1);
       expect(methodologyGates).toContain('gate-3');
     });
@@ -237,7 +237,7 @@ describe('GateAccumulator', () => {
     test('getSourceCounts returns correct counts', () => {
       const counts = accumulator.getSourceCounts();
       expect(counts['registry-auto']).toBe(2);
-      expect(counts['methodology']).toBe(1);
+      expect(counts['framework-guide']).toBe(1);
       expect(counts['inline-operator']).toBe(1);
     });
 
@@ -277,7 +277,7 @@ describe('GateAccumulator', () => {
   describe('clear operation', () => {
     test('clear removes all gates when not frozen', () => {
       accumulator.add('gate-1', 'registry-auto');
-      accumulator.add('gate-2', 'methodology');
+      accumulator.add('gate-2', 'framework-guide');
       expect(accumulator.size).toBe(2);
 
       accumulator.clear();

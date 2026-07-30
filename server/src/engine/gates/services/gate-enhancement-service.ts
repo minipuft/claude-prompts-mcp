@@ -290,7 +290,7 @@ export class GateEnhancementService {
     const clientSelectedGates = context.state.framework.clientSelectedGates ?? [];
     this.addGatesToAccumulator(context, clientSelectedGates, 'client-selection');
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
-    this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'methodology');
+    this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'framework-guide');
 
     for (const step of steps) {
       const prompt = step.convertedPrompt;

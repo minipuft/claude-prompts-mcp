@@ -162,7 +162,7 @@ export class GateSetResolver {
       'prompt-config'
     );
     this.addAll(accumulated, input.chainGateIds, 'chain-level');
-    this.addAll(accumulated, input.methodologyGateIds, 'methodology');
+    this.addAll(accumulated, input.methodologyGateIds, 'framework-guide');
 
     if (input.autoAssignCategoryGates !== false) {
       this.addAll(accumulated, this.registryGateIds(input), 'registry-auto');

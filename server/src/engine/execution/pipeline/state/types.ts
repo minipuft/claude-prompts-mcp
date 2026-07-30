@@ -7,7 +7,7 @@
 export type GateSource =
   | 'inline-operator' // From :: operator in command
   | 'client-selection' // From judge phase selection
-  | 'methodology' // From framework methodology guide
+  | 'framework-guide' // From framework methodology guide
   | 'prompt-config' // From prompt/folder configuration
   | 'temporary-request' // User-provided temporary gate
   | 'chain-level' // From chain's finalValidation
@@ -32,7 +32,7 @@ export const GATE_SOURCE_PRIORITY: Record<GateSource, number> = {
   'temporary-request': 80, // User-provided gate spec
   'prompt-config': 60, // Prompt author's intent
   'chain-level': 50, // Chain configuration
-  methodology: 40, // Framework-derived
+  'framework-guide': 40, // Framework-derived
   'registry-auto': 20, // GateManager.selectGates() activation rules - lowest
 } as const;
 

@@ -15,7 +15,7 @@ import type { GateEntry, GateSource, GateSourceCounts } from '../types.js';
  * ```typescript
  * // In a pipeline stage
  * context.gates.add('research-quality', 'registry-auto');
- * context.gates.addAll(methodologyGates, 'methodology');
+ * context.gates.addAll(methodologyGates, 'framework-guide');
  *
  * // Get final deduplicated list
  * const finalGates = context.gates.getAll();
