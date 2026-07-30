@@ -198,8 +198,8 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
     context: Record<string, unknown>
   ): FrameworkEnhancement {
     // Convert methodology gates from definition
-    const methodologyGates: QualityGate[] = this.definition.methodologyGates
-      ? convertMethodologyGates(this.definition.methodologyGates)
+    const methodologyGates: QualityGate[] = this.definition.frameworkGates
+      ? convertMethodologyGates(this.definition.frameworkGates)
       : [];
 
     // Convert template suggestions

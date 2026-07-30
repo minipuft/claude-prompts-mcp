@@ -100,8 +100,8 @@ export class FrameworkActionHandler extends ActionHandler {
         response += `   🎯 Type: ${framework.type}\n`;
 
         if (frameworkDef) {
-          if (frameworkDef.methodologyGates?.length) {
-            response += `   🚧 Methodology Gates: ${frameworkDef.methodologyGates.length}\n`;
+          if (frameworkDef.frameworkGates?.length) {
+            response += `   🚧 Framework Gates: ${frameworkDef.frameworkGates.length}\n`;
           }
           if (frameworkDef.phases?.processingSteps?.length) {
             response += `   📊 Processing Steps: ${frameworkDef.phases.processingSteps.length}\n`;
@@ -175,13 +175,13 @@ export class FrameworkActionHandler extends ActionHandler {
     if (definition.gates?.include?.length) {
       response += `**Included Gates**: ${definition.gates.include.join(', ')}\n`;
     }
-    if (definition.methodologyGates?.length) {
-      response += `**Methodology Gates** (${definition.methodologyGates.length}):\n`;
-      definition.methodologyGates.slice(0, 3).forEach((gate: any) => {
+    if (definition.frameworkGates?.length) {
+      response += `**Framework Gates** (${definition.frameworkGates.length}):\n`;
+      definition.frameworkGates.slice(0, 3).forEach((gate: any) => {
         response += `  • ${gate.name} (${gate.priority || 'medium'})\n`;
       });
-      if (definition.methodologyGates.length > 3) {
-        response += `  ... and ${definition.methodologyGates.length - 3} more\n`;
+      if (definition.frameworkGates.length > 3) {
+        response += `  ... and ${definition.frameworkGates.length - 3} more\n`;
       }
       response += '\n';
     }
@@ -239,8 +239,8 @@ export class FrameworkActionHandler extends ActionHandler {
 
       if (args.show_details) {
         response += `   Type: ${definition.type}\n`;
-        if (definition.methodologyGates?.length) {
-          response += `   Gates: ${definition.methodologyGates.length} methodology-specific\n`;
+        if (definition.frameworkGates?.length) {
+          response += `   Gates: ${definition.frameworkGates.length} framework-specific\n`;
         }
         if (definition.phases?.processingSteps?.length) {
           response += `   Processing Steps: ${definition.phases.processingSteps.length}\n`;

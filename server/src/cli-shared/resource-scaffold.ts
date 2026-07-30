@@ -144,7 +144,7 @@ function frameworkYaml(id: string, opts: CreateResourceOptions): string {
     '#     - framework-compliance',
     '',
     '# --- Methodology-Specific Gates (uncomment to define) ---',
-    '# methodologyGates:',
+    '# frameworkGates:',
     '#   - id: phase_completeness',
     '#     name: Phase Completeness',
     '#     description: Verify all methodology phases are addressed',

@@ -45,8 +45,8 @@ export interface FrameworkResourceDefinition {
     include?: string[];
     exclude?: string[];
   };
-  /** Methodology-specific quality gates */
-  methodologyGates?: FrameworkGateDefinition[];
+  /** Framework-specific quality gates (YAML key: `frameworkGates`) */
+  frameworkGates?: FrameworkGateDefinition[];
   /** Suggestions for template improvements */
   templateSuggestions?: TemplateSuggestionDefinition[];
   /** Required/optional sections for methodology */

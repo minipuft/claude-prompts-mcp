@@ -273,7 +273,7 @@ interface FrameworkYaml {
   systemPromptFile?: string;
   systemPromptGuidance?: string;
   gates?: unknown;
-  methodologyGates?: unknown;
+  frameworkGates?: unknown;
 }
 
 interface StyleYaml {
@@ -1077,7 +1077,7 @@ async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
     styleData: null,
     extensions: {
       gates: data.gates,
-      methodologyGates: data.methodologyGates,
+      frameworkGates: data.frameworkGates,
     },
     sourcePaths: [yamlPath],
     sourceHash: computeContentHash([raw, phasesRaw ?? '', guidance]),

@@ -227,11 +227,14 @@ export class FrameworkFileWriter {
     }
 
     // Map phases-related fields (may come from phases.yaml or framework.yaml)
-    // Note: YAML uses camelCase (methodologyGates), but also check snake_case for legacy support
+    // YAML uses camelCase (frameworkGates); methodologyGates is the pre-rename spelling and
+    // methodology_gates the snake_case authoring-payload key. Accept all three on read.
     const phasesSource = phases ?? methodology;
     const rawPhases = phasesSource['phases'];
     const rawMethodologyGates =
-      methodology['methodologyGates'] ?? phasesSource['methodology_gates'];
+      methodology['frameworkGates'] ??
+      methodology['methodologyGates'] ??
+      phasesSource['methodology_gates'];
     const rawProcessingSteps = phasesSource['processingSteps'] ?? phasesSource['processing_steps'];
     const rawExecutionSteps = phasesSource['executionSteps'] ?? phasesSource['execution_steps'];
     const rawQualityIndicators =
@@ -434,7 +437,7 @@ export class FrameworkFileWriter {
 
     // Advanced methodology fields (only if defined and non-empty)
     if (data.methodology_gates !== undefined && data.methodology_gates.length > 0) {
-      yamlData['methodologyGates'] = data.methodology_gates;
+      yamlData['frameworkGates'] = data.methodology_gates;
     }
     if (data.template_suggestions !== undefined && data.template_suggestions.length > 0) {
       yamlData['templateSuggestions'] = data.template_suggestions;

@@ -37,7 +37,7 @@ export interface FrameworkDefinitionForEnhancement {
   methodology: string;
   systemPromptGuidance: string;
   templateSuggestions?: TemplateSuggestion[];
-  methodologyGates?: FrameworkGateDefinition[];
+  frameworkGates?: FrameworkGateDefinition[];
   phases?: {
     processingSteps?: ProcessingStepDefinition[];
   };
@@ -109,12 +109,12 @@ export function createMethodologyEnhancement(
 ): FrameworkEnhancement {
   const processingSteps = definition.phases?.processingSteps ?? [];
   const templateSuggestions = definition.templateSuggestions ?? [];
-  const methodologyGates = definition.methodologyGates ?? [];
+  const frameworkGates = definition.frameworkGates ?? [];
 
   return {
     systemPromptGuidance: definition.systemPromptGuidance,
     processingEnhancements: convertProcessingSteps(processingSteps),
-    methodologyGates: convertMethodologyGates(methodologyGates),
+    methodologyGates: convertMethodologyGates(frameworkGates),
     templateSuggestions: convertTemplateSuggestions(templateSuggestions),
     enhancementMetadata: {
       methodology: definition.type || definition.methodology,
