@@ -162,7 +162,7 @@ export class FrameworkLifecycleProcessor {
       const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
 
       const versionResult = await this.ctx.versionHistoryService.saveVersion(
-        'methodology',
+        'framework',
         id,
         beforeState,
         {

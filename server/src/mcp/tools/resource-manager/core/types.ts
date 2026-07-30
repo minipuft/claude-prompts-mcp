@@ -54,7 +54,7 @@ export interface ToolDefinitionInput {
 /**
  * Resource types supported by the unified manager
  */
-export type ResourceType = 'prompt' | 'gate' | 'methodology' | 'checkpoint';
+export type ResourceType = 'prompt' | 'gate' | 'framework' | 'checkpoint';
 
 /**
  * All possible actions across resource types

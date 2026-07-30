@@ -24,7 +24,7 @@ export interface VersionEntry {
  */
 export interface HistoryFile {
   /** Type of resource (prompt, gate, methodology) */
-  resource_type: 'prompt' | 'gate' | 'methodology';
+  resource_type: 'prompt' | 'gate' | 'framework';
   /** ID of the resource */
   resource_id: string;
   /** Current/latest version number */

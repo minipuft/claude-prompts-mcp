@@ -19,7 +19,7 @@ export class FrameworkVersioningProcessor {
       return this.error(`Methodology '${id}' not found`);
     }
 
-    const history = await this.ctx.versionHistoryService.loadHistory('methodology', id);
+    const history = await this.ctx.versionHistoryService.loadHistory('framework', id);
 
     if (!history || history.versions.length === 0) {
       return this.success(
@@ -70,7 +70,7 @@ export class FrameworkVersioningProcessor {
 
     // Perform rollback
     const result = await this.ctx.versionHistoryService.rollback(
-      'methodology',
+      'framework',
       id,
       version,
       currentState
@@ -131,7 +131,7 @@ export class FrameworkVersioningProcessor {
     }
 
     const result = await this.ctx.versionHistoryService.compareVersions(
-      'methodology',
+      'framework',
       id,
       from_version,
       to_version

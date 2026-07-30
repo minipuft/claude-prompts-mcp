@@ -95,7 +95,7 @@ export function registerMethodologyResources(
 
   // Resource: Individual methodology with full definition and guidelines
   server.registerResource(
-    'methodology',
+    'framework',
     new ResourceTemplate(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM, {
       list: undefined, // Individual items discovered via list resource
     }),

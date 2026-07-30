@@ -86,7 +86,7 @@ export class ResourceManagerRouter {
           return await this.routeToPromptResource(args, enrichedContext);
         case 'gate':
           return await this.routeToGateManager(args, enrichedContext);
-        case 'methodology':
+        case 'framework':
           return await this.routeToFrameworkManager(args, enrichedContext);
         case 'checkpoint':
           return await this.routeToCheckpointManager(args, enrichedContext);
@@ -121,7 +121,7 @@ export class ResourceManagerRouter {
     }
 
     // Check methodology-only actions
-    if (FRAMEWORK_ONLY_ACTIONS.includes(action) && resourceType !== 'methodology') {
+    if (FRAMEWORK_ONLY_ACTIONS.includes(action) && resourceType !== 'framework') {
       return {
         valid: false,
         error: `Action "${action}" is only valid for resource_type: "methodology"`,

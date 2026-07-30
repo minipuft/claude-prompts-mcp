@@ -23,7 +23,7 @@ export type FileChangeType = 'added' | 'modified' | 'removed' | 'renamed';
 /**
  * File content types for classification
  */
-export type FileContentType = 'prompt' | 'config' | 'methodology' | 'unknown';
+export type FileContentType = 'prompt' | 'config' | 'framework' | 'unknown';
 
 /**
  * Framework analysis data for file changes

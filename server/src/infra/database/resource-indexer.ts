@@ -42,7 +42,7 @@ import type { Logger } from '../logging/index.js';
 /**
  * Resource types supported by the indexer
  */
-export type IndexedResourceType = 'prompt' | 'gate' | 'methodology' | 'style' | 'tool';
+export type IndexedResourceType = 'prompt' | 'gate' | 'framework' | 'style' | 'tool';
 
 /**
  * Indexed resource entry from SQLite
@@ -309,7 +309,7 @@ function buildMetadata(
         triggers: extractKeywords(`${name} ${description}`, 10),
       };
     }
-    case 'methodology':
+    case 'framework':
     case 'style': {
       return {
         enabled: (data['enabled'] as boolean) ?? true,
@@ -384,7 +384,7 @@ export class ResourceIndexer {
     const types: Array<{ type: IndexedResourceType; enabled: boolean; subdir: string }> = [
       { type: 'prompt', enabled: this.config.trackPrompts, subdir: 'prompts' },
       { type: 'gate', enabled: this.config.trackGates, subdir: 'gates' },
-      { type: 'methodology', enabled: this.config.trackMethodologies, subdir: 'frameworks' },
+      { type: 'framework', enabled: this.config.trackMethodologies, subdir: 'frameworks' },
       { type: 'style', enabled: this.config.trackStyles, subdir: 'styles' },
     ];
 
@@ -580,7 +580,7 @@ export class ResourceIndexer {
         return 'prompt.yaml';
       case 'gate':
         return 'gate.yaml';
-      case 'methodology':
+      case 'framework':
         return 'framework.yaml';
       case 'style':
         return 'style.yaml';
@@ -748,7 +748,7 @@ export class ResourceIndexer {
     const stats: Record<IndexedResourceType, number> = {
       prompt: 0,
       gate: 0,
-      methodology: 0,
+      framework: 0,
       style: 0,
       tool: 0,
     };
@@ -783,7 +783,7 @@ export class ResourceIndexer {
    */
   getValidFrameworks(): string[] {
     const rows = this.db.query<{ id: string }>(
-      "SELECT id FROM resource_index WHERE type = 'methodology' ORDER BY id"
+      "SELECT id FROM resource_index WHERE type = 'framework' ORDER BY id"
     );
     return rows.map((r) => r.id.toLowerCase());
   }

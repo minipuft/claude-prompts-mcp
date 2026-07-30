@@ -37,7 +37,7 @@ export function buildMethodologyAuxiliaryReloadConfig(
     }
 
     return {
-      id: 'methodology',
+      id: 'framework',
       directories: registration.directories,
       handler: registration.handler,
     };

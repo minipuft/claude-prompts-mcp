@@ -25,7 +25,7 @@ export const resourceManagerInputSchema = z
   .object({
     // ── Core parameters ──────────────────────────────────────────────────
     /** Type of resource to manage. Routes to appropriate handler. */
-    resource_type: z.enum(['prompt', 'gate', 'methodology', 'checkpoint']),
+    resource_type: z.enum(['prompt', 'gate', 'framework', 'checkpoint']),
     /** Operation to perform. */
     action: z.enum([
       'create',

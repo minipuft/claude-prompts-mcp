@@ -100,7 +100,7 @@ function getConfigPath(): string {
 
 // ─── Section 1: Types ──────────────────────────────────────────────────────
 
-export type ResourceType = 'prompt' | 'gate' | 'methodology' | 'style';
+export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 
 interface IRArgument {
   name: string;
@@ -416,7 +416,7 @@ const DEFAULT_OUTPUT: SkillsSyncOutput = {
 
 const VALID_COMMANDS = new Set(['export', 'sync', 'diff', 'patch', 'pull', 'clone', 'help']);
 const VALID_SCOPES = new Set(['user', 'project']);
-const VALID_RESOURCE_TYPES = new Set(['prompt', 'gate', 'methodology', 'style']);
+const VALID_RESOURCE_TYPES = new Set(['prompt', 'gate', 'framework', 'style']);
 
 export class SkillsSyncCommandError extends Error {
   constructor(
@@ -1055,7 +1055,7 @@ async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
     id: data.id,
     name: data.name,
     description: `${data.name} methodology (${data.type})`,
-    resourceType: 'methodology',
+    resourceType: 'framework',
     category: null,
     enabled: data.enabled ?? true,
     systemMessage: null,
@@ -1187,7 +1187,7 @@ async function loadAllResources(
   }
 
   // Frameworks: resources/frameworks/{id}/framework.yaml
-  if (!filters?.resourceType || filters.resourceType === 'methodology') {
+  if (!filters?.resourceType || filters.resourceType === 'framework') {
     const methBase = path.join(getResourcesDir(), 'frameworks');
     try {
       const methDirs = await readdir(methBase, { withFileTypes: true });
@@ -1314,7 +1314,7 @@ function outputSubDir(ir: SkillIR, duplicateIds?: Set<string>): string {
     }
     return ir.id;
   }
-  const plural = ir.resourceType === 'methodology' ? 'frameworks' : ir.resourceType + 's';
+  const plural = ir.resourceType === 'framework' ? 'frameworks' : ir.resourceType + 's';
   return `${plural}-${ir.id}`;
 }
 
@@ -2991,7 +2991,7 @@ async function cloneCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): 
       ? 'prompts'
       : resourceType === 'gate'
         ? 'gates'
-        : resourceType === 'methodology'
+        : resourceType === 'framework'
           ? 'frameworks'
           : 'styles';
   const targetDir =
@@ -3065,7 +3065,7 @@ async function cloneCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): 
       ? 'prompts'
       : resourceType === 'gate'
         ? 'gates'
-        : resourceType === 'methodology'
+        : resourceType === 'framework'
           ? 'frameworks'
           : 'styles';
   const yamlFileName =
@@ -3073,7 +3073,7 @@ async function cloneCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): 
       ? 'prompt.yaml'
       : resourceType === 'gate'
         ? 'gate.yaml'
-        : resourceType === 'methodology'
+        : resourceType === 'framework'
           ? 'framework.yaml'
           : 'style.yaml';
 

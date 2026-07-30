@@ -47,7 +47,7 @@ export type resource_managerParamName =
   | 'pass_criteria'
   | 'activation'
   | 'retry_config'
-  | 'methodology'
+  | 'framework'
   | 'system_prompt_guidance'
   | 'phases'
   | 'gates'
@@ -62,7 +62,7 @@ export type resource_managerParamName =
 export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'resource_type',
-    type: 'enum[prompt|gate|methodology|checkpoint]',
+    type: 'enum[prompt|gate|framework|checkpoint]',
     description: 'Type of resource to manage. Routes to appropriate handler.',
     required: true,
     status: 'working',
@@ -72,7 +72,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'action',
     type: 'enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare|clear]',
     description:
-      'Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/methodology). Checkpoint: create/rollback/list/delete/clear.',
+      'Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/framework). Checkpoint: create/rollback/list/delete/clear.',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -261,7 +261,7 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
-    name: 'methodology',
+    name: 'framework',
     type: 'string',
     description:
       "[Methodology] Methodology type identifier. Use action:'list' to see registered methodologies.",
@@ -281,7 +281,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'phases',
     type: 'array<object>',
     description:
-      '[Methodology] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (methodology_gates, processing_steps, execution_steps, etc.) are also accepted.',
+      '[Framework] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (methodology_gates, processing_steps, execution_steps, etc.) are also accepted.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

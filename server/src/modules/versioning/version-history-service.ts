@@ -10,7 +10,7 @@ import type {
 import type { VersioningConfig, Logger } from '../../shared/types/index.js';
 import type { DatabasePort } from '../../shared/types/persistence.js';
 
-type ResourceType = 'prompt' | 'gate' | 'methodology';
+type ResourceType = 'prompt' | 'gate' | 'framework';
 
 interface VersionRow {
   id: number;

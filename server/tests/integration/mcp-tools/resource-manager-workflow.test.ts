@@ -435,7 +435,7 @@ describe('Resource Manager Workflow Integration', () => {
       // List available frameworks
       const listResult = await router.handleAction(
         {
-          resource_type: 'methodology',
+          resource_type: 'framework',
           action: 'list',
         },
         {}
@@ -447,7 +447,7 @@ describe('Resource Manager Workflow Integration', () => {
       // Switch to ReACT
       const switchResult = await router.handleAction(
         {
-          resource_type: 'methodology',
+          resource_type: 'framework',
           action: 'switch',
           id: 'react',
         },
@@ -491,7 +491,7 @@ describe('Resource Manager Workflow Integration', () => {
       // Switch on methodology should succeed
       const frameworkSwitch = await router.handleAction(
         {
-          resource_type: 'methodology',
+          resource_type: 'framework',
           action: 'switch',
           id: 'cageerf',
         },
@@ -557,7 +557,7 @@ describe('Resource Manager Workflow Integration', () => {
     test('methodology parameters pass through correctly', async () => {
       await router.handleAction(
         {
-          resource_type: 'methodology',
+          resource_type: 'framework',
           action: 'create',
           id: 'new-method',
           name: 'New Methodology',
@@ -599,7 +599,7 @@ describe('Resource Manager Workflow Integration', () => {
       expect(gateManager.handleAction).toHaveBeenCalledWith(expect.any(Object), context);
 
       // Methodology
-      await router.handleAction({ resource_type: 'methodology', action: 'list' }, context);
+      await router.handleAction({ resource_type: 'framework', action: 'list' }, context);
       expect(frameworkManager.handleAction).toHaveBeenCalledWith(expect.any(Object), context);
     });
   });
@@ -655,7 +655,7 @@ describe('Resource Manager Workflow Integration', () => {
       // Switch methodology
       await router.handleAction(
         {
-          resource_type: 'methodology',
+          resource_type: 'framework',
           action: 'switch',
           id: 'react',
         },
@@ -671,7 +671,7 @@ describe('Resource Manager Workflow Integration', () => {
       const promptList = await router.handleAction({ resource_type: 'prompt', action: 'list' }, {});
       const gateList = await router.handleAction({ resource_type: 'gate', action: 'list' }, {});
       const methodList = await router.handleAction(
-        { resource_type: 'methodology', action: 'list' },
+        { resource_type: 'framework', action: 'list' },
         {}
       );
 
