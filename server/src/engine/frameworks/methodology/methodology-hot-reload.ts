@@ -9,14 +9,14 @@
 import { createGenericGuide } from './generic-methodology-guide.js';
 import { RuntimeMethodologyLoader } from './runtime-methodology-loader.js';
 
-import type { MethodologyRegistry } from './registry.js';
+import type { FrameworkRegistry } from './registry.js';
 import type { Logger } from '../../../infra/logging/index.js';
 import type { HotReloadEvent } from '../../../shared/types/index.js';
 
 /**
- * Configuration for MethodologyHotReloadCoordinator
+ * Configuration for FrameworkHotReloadCoordinator
  */
-export interface MethodologyHotReloadConfig {
+export interface FrameworkHotReloadConfig {
   /** Enable debug logging */
   debug?: boolean;
   /** Reload timeout in ms */
@@ -36,7 +36,7 @@ export interface MethodologyHotReloadConfig {
 /**
  * Statistics for hot reload operations
  */
-export interface MethodologyHotReloadStats {
+export interface FrameworkHotReloadStats {
   reloadsAttempted: number;
   reloadsSucceeded: number;
   reloadsFailed: number;
@@ -47,13 +47,13 @@ export interface MethodologyHotReloadStats {
 /**
  * Result returned when creating a methodology hot reload registration
  */
-export interface MethodologyHotReloadRegistration {
+export interface FrameworkHotReloadRegistration {
   /** Directories that should be watched for methodology changes */
   directories: string[];
   /** Bound handler for use with HotReloadObserver.setMethodologyReloadCallback */
   handler: (event: HotReloadEvent) => Promise<void>;
   /** Coordinator instance handling cache clear + re-register */
-  coordinator: MethodologyHotReloadCoordinator;
+  coordinator: FrameworkHotReloadCoordinator;
 }
 
 /**
@@ -64,7 +64,7 @@ export interface MethodologyHotReloadRegistration {
  *
  * @example
  * ```typescript
- * const coordinator = new MethodologyHotReloadCoordinator(logger, registry, loader);
+ * const coordinator = new FrameworkHotReloadCoordinator(logger, registry, loader);
  *
  * // Register with hot reload manager
  * hotReloadObserver.setMethodologyReloadCallback(
@@ -82,18 +82,18 @@ interface StoredHotReloadConfig {
   onMethodologyReloaded?: (methodologyId: string) => Promise<void> | void;
 }
 
-export class MethodologyHotReloadCoordinator {
+export class FrameworkHotReloadCoordinator {
   private logger: Logger;
-  private registry: MethodologyRegistry;
+  private registry: FrameworkRegistry;
   private loader: RuntimeMethodologyLoader;
   private config: StoredHotReloadConfig;
-  private stats: MethodologyHotReloadStats;
+  private stats: FrameworkHotReloadStats;
 
   constructor(
     logger: Logger,
-    registry: MethodologyRegistry,
+    registry: FrameworkRegistry,
     loader?: RuntimeMethodologyLoader,
-    config: MethodologyHotReloadConfig = {}
+    config: FrameworkHotReloadConfig = {}
   ) {
     this.logger = logger;
     this.registry = registry;
@@ -230,7 +230,7 @@ export class MethodologyHotReloadCoordinator {
   /**
    * Get hot reload statistics
    */
-  getStats(): MethodologyHotReloadStats {
+  getStats(): FrameworkHotReloadStats {
     return { ...this.stats };
   }
 
@@ -259,12 +259,12 @@ export class MethodologyHotReloadCoordinator {
  */
 export function createMethodologyHotReloadRegistration(
   logger: Logger,
-  registry: MethodologyRegistry,
+  registry: FrameworkRegistry,
   loader?: RuntimeMethodologyLoader,
-  config?: MethodologyHotReloadConfig
-): MethodologyHotReloadRegistration {
+  config?: FrameworkHotReloadConfig
+): FrameworkHotReloadRegistration {
   const runtimeLoader = loader ?? registry.getRuntimeLoader();
-  const coordinator = new MethodologyHotReloadCoordinator(logger, registry, runtimeLoader, config);
+  const coordinator = new FrameworkHotReloadCoordinator(logger, registry, runtimeLoader, config);
 
   return {
     directories: [runtimeLoader.getMethodologiesDir()],
@@ -274,13 +274,13 @@ export function createMethodologyHotReloadRegistration(
 }
 
 /**
- * Factory function to create a MethodologyHotReloadCoordinator
+ * Factory function to create a FrameworkHotReloadCoordinator
  */
 export function createMethodologyHotReloadCoordinator(
   logger: Logger,
-  registry: MethodologyRegistry,
+  registry: FrameworkRegistry,
   loader?: RuntimeMethodologyLoader,
-  config?: MethodologyHotReloadConfig
-): MethodologyHotReloadCoordinator {
-  return new MethodologyHotReloadCoordinator(logger, registry, loader, config);
+  config?: FrameworkHotReloadConfig
+): FrameworkHotReloadCoordinator {
+  return new FrameworkHotReloadCoordinator(logger, registry, loader, config);
 }

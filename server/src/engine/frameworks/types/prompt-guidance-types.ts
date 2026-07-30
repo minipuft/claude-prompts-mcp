@@ -9,7 +9,7 @@
 
 import type {
   FrameworkDefinition,
-  MethodologyEnhancement,
+  FrameworkEnhancement,
   ProcessingGuidance,
 } from './methodology-types.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
@@ -66,7 +66,7 @@ export interface PromptGuidanceConfig {
   /** System prompt injection configuration */
   systemPromptInjection: SystemPromptInjectionConfig;
   /** Methodology tracking configuration */
-  methodologyTracking: {
+  frameworkTracking: {
     enabled: boolean;
     persistState: boolean;
     trackSwitches: boolean;
@@ -85,7 +85,7 @@ export interface PromptGuidanceResult {
   /** System prompt injection result */
   systemPromptInjection: SystemPromptInjectionResult | null;
   /** Applied methodology enhancement */
-  methodologyEnhancement: MethodologyEnhancement | null;
+  frameworkEnhancement: FrameworkEnhancement | null;
   /** Guidance metadata */
   metadata: {
     guidanceTime: Date;
@@ -144,45 +144,9 @@ export interface FrameworkStateInfo {
 }
 
 /**
- * Methodology state information
- */
-export interface MethodologyState {
-  /** Currently active methodology */
-  activeMethodology: string;
-  /** Previous methodology (for switch tracking) */
-  previousMethodology: string | null;
-  /** When the current methodology was activated */
-  switchedAt: Date;
-  /** Reason for the current methodology selection */
-  switchReason: string;
-  /** Whether methodology system is healthy */
-  isHealthy: boolean;
-  /** Whether methodology system is enabled */
-  methodologySystemEnabled: boolean;
-  /** Methodology switching metrics */
-  switchingMetrics: {
-    switchCount: number;
-    averageResponseTime: number;
-    errorCount: number;
-  };
-}
-
-/**
- * Methodology switch request ()
- */
-export interface MethodologySwitchRequest {
-  /** Target methodology to switch to */
-  targetMethodology: string;
-  /** Reason for the switch */
-  reason?: string;
-  /** Additional criteria for the switch */
-  criteria?: Record<string, any>;
-}
-
-/**
  * Methodology system health information ()
  */
-export interface MethodologyHealth {
+export interface FrameworkHealth {
   /** System health status */
   status: 'healthy' | 'degraded' | 'error';
   /** Currently active methodology */

@@ -7,8 +7,8 @@
  * - FrameworkLifecycleProcessor: create, update, delete, reload, switch
  * - FrameworkDiscoveryProcessor: list, inspect
  * - FrameworkVersioningProcessor: history, rollback, compare
- * - MethodologyValidator: scoring, error/success formatting
- * - MethodologyFileWriter: file I/O with merge support
+ * - FrameworkDraftValidator: scoring, error/success formatting
+ * - FrameworkFileWriter: file I/O with merge support
  */
 
 export { FrameworkToolHandler, createFrameworkToolHandler } from './core/manager.js';
@@ -19,12 +19,12 @@ export type {
   FrameworkManagerDependencies,
 } from './core/types.js';
 export {
-  MethodologyFileWriter,
-  MethodologyValidator,
+  FrameworkFileWriter,
+  FrameworkDraftValidator,
   FrameworkLifecycleProcessor,
   FrameworkDiscoveryProcessor,
   FrameworkVersioningProcessor,
-  type MethodologyFileWriterDependencies,
+  type FrameworkFileWriterDependencies,
   type ExistingMethodologyData,
-  type MethodologyFileResult,
+  type FrameworkFileResult,
 } from './services/index.js';

@@ -16,7 +16,7 @@ import {
 } from '../../engine/frameworks/methodology/index.js';
 import { getDefaultStyleDefinitionLoader } from '../../modules/formatting/core/style-definition-loader.js';
 
-import type { MethodologyToolDescriptions } from '../../engine/frameworks/types/index.js';
+import type { FrameworkToolDescriptions } from '../../engine/frameworks/types/index.js';
 import type { StyleToolDescriptionYaml } from '../../modules/formatting/core/style-schema.js';
 import type { Logger, ToolDescription, ToolDescriptionsConfig } from '../../shared/types/index.js';
 
@@ -50,9 +50,9 @@ export function cloneToolDescription(description: ToolDescription): ToolDescript
     if (description.frameworkAware.parametersDisabled) {
       frameworkAware.parametersDisabled = { ...description.frameworkAware.parametersDisabled };
     }
-    if (description.frameworkAware.methodologyParameters) {
-      frameworkAware.methodologyParameters = {
-        ...description.frameworkAware.methodologyParameters,
+    if (description.frameworkAware.frameworkParameters) {
+      frameworkAware.frameworkParameters = {
+        ...description.frameworkAware.frameworkParameters,
       };
     }
 
@@ -68,8 +68,8 @@ export function cloneToolDescription(description: ToolDescription): ToolDescript
  */
 export function preloadMethodologyDescriptions(
   logger: Logger
-): Map<string, MethodologyToolDescriptions> {
-  const result = new Map<string, MethodologyToolDescriptions>();
+): Map<string, FrameworkToolDescriptions> {
+  const result = new Map<string, FrameworkToolDescriptions>();
 
   try {
     const loader = getDefaultRuntimeLoader();
@@ -154,7 +154,7 @@ export function buildActiveConfig(
     activeMethodology?: string;
     frameworkSystemEnabled?: boolean;
   },
-  methodologyDescriptions: Map<string, MethodologyToolDescriptions>,
+  frameworkDescriptions: Map<string, FrameworkToolDescriptions>,
   dynamicDescriptionsEnabled: boolean
 ): ToolDescriptionsConfig {
   const methodologyKey = normalizeMethodologyKey(
@@ -166,25 +166,24 @@ export function buildActiveConfig(
     const baseDescription = cloneToolDescription(description);
 
     if (dynamicDescriptionsEnabled && methodologyKey) {
-      const methodologyDescs = methodologyDescriptions.get(methodologyKey);
-      const methodologyTool =
-        methodologyDescs?.[name as keyof MethodologyToolDescriptions] || undefined;
+      const frameworkDescs = frameworkDescriptions.get(methodologyKey);
+      const frameworkTool = frameworkDescs?.[name as keyof FrameworkToolDescriptions] || undefined;
 
-      if (methodologyTool?.description) {
-        baseDescription.description = methodologyTool.description;
+      if (frameworkTool?.description) {
+        baseDescription.description = frameworkTool.description;
       }
 
-      if (methodologyTool?.parameters) {
+      if (frameworkTool?.parameters) {
         baseDescription.parameters = {
           ...baseDescription.parameters,
-          ...methodologyTool.parameters,
+          ...frameworkTool.parameters,
         };
       }
 
-      if (methodologyTool?.responseFormat) {
+      if (frameworkTool?.responseFormat) {
         baseDescription.description = weaveResponseFormat(
           baseDescription.description,
-          methodologyTool.responseFormat
+          frameworkTool.responseFormat
         );
       }
     }

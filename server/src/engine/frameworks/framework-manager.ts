@@ -6,18 +6,18 @@
  * Extends BaseResourceHandler to provide unified resource management patterns.
  *
  * Coordinates between:
- * - MethodologyRegistry: Manages methodology guides (source of truth)
+ * - FrameworkRegistry: Manages methodology guides (source of truth)
  * - FrameworkDefinitions: Generated from methodology guides
  * - FrameworkStateStore: Runtime enable/disable state
  */
 
-import { MethodologyRegistry, createMethodologyRegistry } from './methodology/index.js';
+import { FrameworkRegistry, createMethodologyRegistry } from './methodology/index.js';
 import {
   FrameworkDefinition,
   FrameworkExecutionContext,
   FrameworkMethodology,
   FrameworkSelectionCriteria,
-  MethodologyGuide,
+  FrameworkGuide,
 } from './types/index.js';
 import { Logger } from '../../infra/logging/index.js';
 import { BaseResourceHandler } from '../../shared/core/resource-manager/index.js';
@@ -79,7 +79,7 @@ export interface FrameworkEntry {
  * Framework Manager
  *
  * Provides methodology selection and system prompt generation.
- * Generates FrameworkDefinitions from MethodologyGuides.
+ * Generates FrameworkDefinitions from FrameworkGuides.
  *
  * @example
  * ```typescript
@@ -99,7 +99,7 @@ export class FrameworkManager extends BaseResourceHandler<
   FrameworkManagerStats
 > {
   private frameworks: Map<string, FrameworkDefinition> = new Map();
-  private methodologyRegistry: MethodologyRegistry | null = null;
+  private frameworkRegistry: FrameworkRegistry | null = null;
   private defaultFramework: string = 'CAGEERF';
   private frameworkStateStore?: FrameworkStateAccessor;
 
@@ -120,8 +120,8 @@ export class FrameworkManager extends BaseResourceHandler<
 
   protected async initializeRegistry(): Promise<void> {
     // Initialize methodology registry
-    this.methodologyRegistry = await createMethodologyRegistry(this.logger);
-    this.logger.debug('MethodologyRegistry initialized');
+    this.frameworkRegistry = await createMethodologyRegistry(this.logger);
+    this.logger.debug('FrameworkRegistry initialized');
   }
 
   protected override async postRegistryInit(): Promise<void> {
@@ -180,7 +180,7 @@ export class FrameworkManager extends BaseResourceHandler<
 
   protected async reloadResource(id: string): Promise<boolean> {
     // For frameworks, reloading means regenerating from methodology guide
-    const guide = this.methodologyRegistry?.getGuide(id.toLowerCase());
+    const guide = this.frameworkRegistry?.getGuide(id.toLowerCase());
     if (!guide) return false;
 
     const definition = this.generateSingleFrameworkDefinition(guide);
@@ -203,8 +203,8 @@ export class FrameworkManager extends BaseResourceHandler<
       removed = true;
     }
 
-    if (this.methodologyRegistry) {
-      const guideRemoved = this.methodologyRegistry.unregisterGuide(lowerId);
+    if (this.frameworkRegistry) {
+      const guideRemoved = this.frameworkRegistry.unregisterGuide(lowerId);
       if (guideRemoved) removed = true;
     }
 
@@ -215,7 +215,7 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   protected clearResourceCache(_id?: string): void {
-    // MethodologyRegistry manages its own cache internally
+    // FrameworkRegistry manages its own cache internally
     // Cache is cleared automatically on loadAndRegisterById()
   }
 
@@ -232,7 +232,7 @@ export class FrameworkManager extends BaseResourceHandler<
     return {
       totalFrameworks: frameworks.length,
       enabledFrameworks: enabled.length,
-      totalMethodologies: this.methodologyRegistry?.getAllGuides(false).length ?? 0,
+      totalMethodologies: this.frameworkRegistry?.getAllGuides(false).length ?? 0,
       activeFramework,
     };
   }
@@ -458,28 +458,28 @@ export class FrameworkManager extends BaseResourceHandler<
   /**
    * Get methodology guide by framework ID
    */
-  getMethodologyGuide(frameworkId: string): MethodologyGuide | undefined {
+  getMethodologyGuide(frameworkId: string): FrameworkGuide | undefined {
     this.ensureInitialized();
-    return this.methodologyRegistry!.getGuide(frameworkId.toLowerCase());
+    return this.frameworkRegistry!.getGuide(frameworkId.toLowerCase());
   }
 
   /**
    * List available methodology guides
    */
-  listMethodologyGuides(): MethodologyGuide[] {
+  listMethodologyGuides(): FrameworkGuide[] {
     this.ensureInitialized();
-    return this.methodologyRegistry!.getAllGuides(true);
+    return this.frameworkRegistry!.getAllGuides(true);
   }
 
   /**
    * Expose the methodology registry for integrations
    */
-  getMethodologyRegistry(): MethodologyRegistry {
+  getMethodologyRegistry(): FrameworkRegistry {
     this.ensureInitialized();
-    if (!this.methodologyRegistry) {
+    if (!this.frameworkRegistry) {
       throw new Error('Methodology registry not initialized');
     }
-    return this.methodologyRegistry;
+    return this.frameworkRegistry;
   }
 
   /**
@@ -503,18 +503,18 @@ export class FrameworkManager extends BaseResourceHandler<
     const normalizedId = frameworkId.toLowerCase();
 
     try {
-      if (!this.methodologyRegistry) {
-        this.logger.error('MethodologyRegistry not available');
+      if (!this.frameworkRegistry) {
+        this.logger.error('FrameworkRegistry not available');
         return false;
       }
 
-      const guideLoaded = await this.methodologyRegistry.loadAndRegisterById(normalizedId);
+      const guideLoaded = await this.frameworkRegistry.loadAndRegisterById(normalizedId);
       if (!guideLoaded) {
         this.logger.warn(`Failed to load methodology guide for '${frameworkId}'`);
         return false;
       }
 
-      const guide = this.methodologyRegistry.getGuide(normalizedId);
+      const guide = this.frameworkRegistry.getGuide(normalizedId);
       if (!guide) {
         this.logger.error(`Guide loaded but cannot be retrieved: ${frameworkId}`);
         return false;
@@ -551,7 +551,7 @@ export class FrameworkManager extends BaseResourceHandler<
    */
   private async generateFrameworkDefinitions(): Promise<void> {
     try {
-      const guides = this.methodologyRegistry!.getAllGuides(true);
+      const guides = this.frameworkRegistry!.getAllGuides(true);
 
       for (const guide of guides) {
         const definition = this.generateSingleFrameworkDefinition(guide);
@@ -574,7 +574,7 @@ export class FrameworkManager extends BaseResourceHandler<
   /**
    * Generate a single framework definition from a methodology guide
    */
-  private generateSingleFrameworkDefinition(guide: MethodologyGuide): FrameworkDefinition | null {
+  private generateSingleFrameworkDefinition(guide: FrameworkGuide): FrameworkDefinition | null {
     try {
       const systemPromptTemplate = this.generateSystemPromptTemplate(guide);
 
@@ -599,10 +599,10 @@ export class FrameworkManager extends BaseResourceHandler<
   /**
    * Generate system prompt template wrapper
    */
-  private generateSystemPromptTemplate(guide: MethodologyGuide): string {
+  private generateSystemPromptTemplate(guide: FrameworkGuide): string {
     return `You are operating under the ${guide.frameworkName} methodology for {PROMPT_NAME}.
 
-{METHODOLOGY_GUIDANCE}
+{FRAMEWORK_GUIDANCE}
 
 Apply this methodology systematically to ensure comprehensive and structured responses.`;
   }
@@ -610,7 +610,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
   /**
    * Get framework description
    */
-  private getFrameworkDescription(guide: MethodologyGuide): string {
+  private getFrameworkDescription(guide: FrameworkGuide): string {
     switch (guide.type) {
       case 'CAGEERF':
         return 'Comprehensive structured approach: Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework';
@@ -628,7 +628,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
   /**
    * Get execution guidelines from methodology guide
    */
-  private getExecutionGuidelines(guide: MethodologyGuide): string[] {
+  private getExecutionGuidelines(guide: FrameworkGuide): string[] {
     const processingGuidance = guide.guideTemplateProcessing('', 'single');
     return processingGuidance.templateEnhancements.systemPromptAdditions;
   }
@@ -636,7 +636,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
   /**
    * Get applicable types for framework
    */
-  private getApplicableTypes(guide: MethodologyGuide): string[] {
+  private getApplicableTypes(guide: FrameworkGuide): string[] {
     switch (guide.type) {
       case 'CAGEERF':
         return ['chain', 'template'];
@@ -654,7 +654,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
   /**
    * Get framework priority
    */
-  private getFrameworkPriority(guide: MethodologyGuide): number {
+  private getFrameworkPriority(guide: FrameworkGuide): number {
     switch (guide.type) {
       case 'CAGEERF':
         return 10;
@@ -685,7 +685,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
         promptName: prompt.name,
         promptCategory: prompt.category,
       });
-      systemPrompt = systemPrompt.replace(/\{METHODOLOGY_GUIDANCE\}/g, guidance);
+      systemPrompt = systemPrompt.replace(/\{FRAMEWORK_GUIDANCE\}/g, guidance);
     }
 
     return systemPrompt;

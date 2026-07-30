@@ -22,7 +22,7 @@ import {
 } from './tool-description-overlays.js';
 import { FrameworkStateStore } from '../../engine/frameworks/framework-state-store.js';
 
-import type { MethodologyToolDescriptions } from '../../engine/frameworks/types/index.js';
+import type { FrameworkToolDescriptions } from '../../engine/frameworks/types/index.js';
 import type { StyleToolDescriptionYaml } from '../../modules/formatting/core/style-schema.js';
 import type {
   ConfigManager,
@@ -92,7 +92,7 @@ export class ToolDescriptionLoader extends EventEmitter {
   private configPath: string;
   private descriptions: Map<string, ToolDescription>;
   private defaults: Map<string, ToolDescription>;
-  private methodologyDescriptions: Map<string, MethodologyToolDescriptions>;
+  private frameworkDescriptions: Map<string, FrameworkToolDescriptions>;
   private styleDescriptions: Map<string, Record<string, StyleToolDescriptionYaml>>;
   private isInitialized: boolean = false;
   private configManager: ConfigManager;
@@ -125,7 +125,7 @@ export class ToolDescriptionLoader extends EventEmitter {
     );
     this.descriptions = new Map();
     this.defaults = createDefaultToolDescriptionMap();
-    this.methodologyDescriptions = new Map();
+    this.frameworkDescriptions = new Map();
     this.styleDescriptions = new Map();
     this.frameworksConfig = this.configManager.getFrameworksConfig();
 
@@ -146,7 +146,7 @@ export class ToolDescriptionLoader extends EventEmitter {
 
   private warnOnMethodologyConfigLeak(toolName: string, description: ToolDescription): void {
     const hasMethodologyDesc = Boolean(description.frameworkAware?.methodologies);
-    const hasMethodologyParams = Boolean(description.frameworkAware?.methodologyParameters);
+    const hasMethodologyParams = Boolean(description.frameworkAware?.frameworkParameters);
     if (hasMethodologyDesc || hasMethodologyParams) {
       this.logger.warn(
         `[ToolDescriptionLoader] Config contains methodology-specific entries for ${toolName}; YAML overlays are the sole source of truth. Config methodology entries are ignored.`
@@ -255,8 +255,8 @@ export class ToolDescriptionLoader extends EventEmitter {
     );
     if (!methodologyKey) return false;
 
-    const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
-    const tool = methodologyDescs?.[toolName as keyof MethodologyToolDescriptions];
+    const frameworkDescs = this.frameworkDescriptions.get(methodologyKey);
+    const tool = frameworkDescs?.[toolName as keyof FrameworkToolDescriptions];
     return Boolean(tool?.responseFormat);
   }
 
@@ -264,7 +264,7 @@ export class ToolDescriptionLoader extends EventEmitter {
     try {
       const base = await this.loadBaseConfig();
       this.lastLoadSource = base.source;
-      this.methodologyDescriptions = preloadMethodologyDescriptions(this.logger);
+      this.frameworkDescriptions = preloadMethodologyDescriptions(this.logger);
       this.styleDescriptions = preloadStyleDescriptions(this.logger);
       const activeContext = this.getActiveFrameworkContext();
       const dynamicEnabled =
@@ -273,7 +273,7 @@ export class ToolDescriptionLoader extends EventEmitter {
       const activeConfig = buildActiveConfig(
         base.config,
         activeContext,
-        this.methodologyDescriptions,
+        this.frameworkDescriptions,
         dynamicEnabled
       );
       activeConfig.generatedFrom = base.source;
@@ -359,14 +359,14 @@ export class ToolDescriptionLoader extends EventEmitter {
 
     // PRIORITY 1: Methodology-specific descriptions from YAML guides (SOT)
     if (applyMethodologyOverride && methodologyKey) {
-      const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
-      if (methodologyDescs?.[toolName as keyof MethodologyToolDescriptions]?.description) {
-        const methodologyDesc =
-          methodologyDescs[toolName as keyof MethodologyToolDescriptions]!.description!;
+      const frameworkDescs = this.frameworkDescriptions.get(methodologyKey);
+      if (frameworkDescs?.[toolName as keyof FrameworkToolDescriptions]?.description) {
+        const frameworkDesc =
+          frameworkDescs[toolName as keyof FrameworkToolDescriptions]!.description!;
         this.logger.debug(
           `Using methodology-specific description from ${activeMethodology ?? methodologyKey} guide for ${toolName}`
         );
-        return methodologyDesc;
+        return frameworkDesc;
       }
     }
 
@@ -405,10 +405,10 @@ export class ToolDescriptionLoader extends EventEmitter {
     const methodologyKey = normalizeMethodologyKey(activeMethodology);
 
     if (applyMethodologyOverride && methodologyKey) {
-      const methodologyDescs = this.methodologyDescriptions.get(methodologyKey);
-      const methodologyTool = methodologyDescs?.[toolName as keyof MethodologyToolDescriptions];
-      if (methodologyTool?.parameters?.[paramName]) {
-        const param = methodologyTool.parameters[paramName];
+      const frameworkDescs = this.frameworkDescriptions.get(methodologyKey);
+      const frameworkTool = frameworkDescs?.[toolName as keyof FrameworkToolDescriptions];
+      if (frameworkTool?.parameters?.[paramName]) {
+        const param = frameworkTool.parameters[paramName];
         return typeof param === 'string' ? param : param?.description;
       }
     }

@@ -1,9 +1,9 @@
 // @lifecycle canonical - Methodology validation operations: scoring, error formatting, success formatting.
 
 import type { ToolResponse } from '../../../../shared/types/index.js';
-import type { MethodologyCreationData, MethodologyValidationResult } from '../core/types.js';
+import type { FrameworkCreationData, FrameworkDraftValidationResult } from '../core/types.js';
 
-export class MethodologyValidator {
+export class FrameworkDraftValidator {
   /**
    * Validate methodology with strict requirements.
    *
@@ -14,7 +14,7 @@ export class MethodologyValidator {
    *
    * Returns structured errors for focused user guidance.
    */
-  validate(data: MethodologyCreationData): MethodologyValidationResult {
+  validate(data: FrameworkCreationData): FrameworkDraftValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
 
@@ -72,7 +72,7 @@ export class MethodologyValidator {
    * Create structured error response for validation failures.
    * Shows one focused error with helpful example.
    */
-  createErrorResponse(id: string, validation: MethodologyValidationResult): ToolResponse {
+  createErrorResponse(id: string, validation: FrameworkDraftValidationResult): ToolResponse {
     let message = `❌ Methodology '${id}' validation failed (${validation.score}% complete)\n\n`;
     message += `**Issue:** ${validation.errors[0]}\n\n`;
 
@@ -94,7 +94,7 @@ export class MethodologyValidator {
             id: 'analysis-complete',
             name: 'Analysis Gate',
             description: 'Validates analysis phase',
-            methodologyArea: 'analysis',
+            frameworkArea: 'analysis',
             priority: 'high',
             validationCriteria: ['Problem clearly defined', 'Constraints identified'],
           },
@@ -110,7 +110,7 @@ export class MethodologyValidator {
   /**
    * Format validation result into human-readable success message.
    */
-  formatSuccess(id: string, validation: MethodologyValidationResult, paths: string[]): string {
+  formatSuccess(id: string, validation: FrameworkDraftValidationResult, paths: string[]): string {
     let message = `✅ Methodology '${id}' created (${validation.score}% - ${validation.level})\n\n`;
     message += `**Files:**\n${paths.map((p) => `  • ${p}`).join('\n')}\n\n`;
 

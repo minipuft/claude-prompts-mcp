@@ -316,7 +316,7 @@ export interface RegistryEntry<T> {
  * Provides a common pattern for:
  * - PromptRegistry (prompts)
  * - GateRegistry (gates)
- * - MethodologyRegistry (frameworks)
+ * - FrameworkRegistry (frameworks)
  *
  * @template T - The type of item being managed
  * @template TStats - The statistics type

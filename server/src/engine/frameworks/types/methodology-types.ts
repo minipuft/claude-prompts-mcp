@@ -104,7 +104,7 @@ export interface PromptCreationGuidance {
   };
 
   // Methodology-specific prompt elements
-  methodologyElements: {
+  frameworkElements: {
     requiredSections: string[];
     optionalSections: string[];
     sectionDescriptions: Record<string, string>;
@@ -157,7 +157,7 @@ export interface StepGuidance {
 /**
  * Overall methodology enhancement for execution
  */
-export interface MethodologyEnhancement {
+export interface FrameworkEnhancement {
   // System prompt enhancements
   systemPromptGuidance: string;
 
@@ -186,7 +186,7 @@ export interface ArgumentGuidance {
   name: string;
   type: string;
   description: string;
-  methodologyReason: string;
+  frameworkReason: string;
   examples: string[];
 }
 
@@ -194,7 +194,7 @@ export interface ProcessingStep {
   id: string;
   name: string;
   description: string;
-  methodologyBasis: string;
+  frameworkBasis: string;
   order: number;
   required: boolean;
   /** Section header for detection (e.g., "## Context") */
@@ -215,7 +215,7 @@ export interface ExecutionStep {
   id: string;
   name: string;
   action: string;
-  methodologyPhase: string;
+  frameworkPhase: string;
   dependencies: string[];
   expected_output: string;
 }
@@ -224,7 +224,7 @@ export interface QualityGate {
   id: string;
   name: string;
   description: string;
-  methodologyArea: string;
+  frameworkArea: string;
   validationCriteria: string[];
   priority: 'high' | 'medium' | 'low';
 }
@@ -234,14 +234,14 @@ export interface TemplateEnhancement {
   type: 'addition' | 'modification' | 'structure';
   description: string;
   content: string;
-  methodologyJustification: string;
+  frameworkJustification: string;
   impact: 'high' | 'medium' | 'low';
 }
 
 /**
  * Tool-specific descriptions for a methodology
  */
-export interface MethodologyToolDescription {
+export interface FrameworkToolDescription {
   description?: string;
   parameters?: Record<string, ToolParameter | string>;
   /** Response format guidance woven into tool description (replaces system prompt append) */
@@ -251,10 +251,10 @@ export interface MethodologyToolDescription {
 /**
  * Complete tool descriptions provided by a methodology guide
  */
-export interface MethodologyToolDescriptions {
-  prompt_engine?: MethodologyToolDescription;
-  resource_manager?: MethodologyToolDescription;
-  system_control?: MethodologyToolDescription;
+export interface FrameworkToolDescriptions {
+  prompt_engine?: FrameworkToolDescription;
+  resource_manager?: FrameworkToolDescription;
+  system_control?: FrameworkToolDescription;
 }
 
 /**
@@ -273,20 +273,20 @@ export interface JudgePromptDefinition {
 /**
  * Methodology validation results
  */
-export interface MethodologyValidation {
+export interface FrameworkValidation {
   compliant: boolean;
   complianceScore: number; // 0.0 to 1.0
   strengths: string[];
   improvementAreas: string[];
   specificSuggestions: TemplateEnhancement[];
-  methodologyGaps: string[];
+  frameworkGaps: string[];
 }
 
 /**
  * Main interface for methodology guides
  * Framework adapters implement this to provide guidance rather than analysis
  */
-export interface MethodologyGuide {
+export interface FrameworkGuide {
   // Framework identification
   readonly frameworkId: string;
   readonly frameworkName: string;
@@ -334,14 +334,14 @@ export interface MethodologyGuide {
   enhanceWithMethodology(
     prompt: ConvertedPrompt,
     context: Record<string, any>
-  ): MethodologyEnhancement;
+  ): FrameworkEnhancement;
 
   /**
    * Validate that a prompt follows methodology principles
    * @param prompt The prompt to validate
    * @returns Validation results and improvement suggestions
    */
-  validateMethodologyCompliance(prompt: ConvertedPrompt): MethodologyValidation;
+  validateMethodologyCompliance(prompt: ConvertedPrompt): FrameworkValidation;
 
   /**
    * Get methodology-specific system prompt guidance
@@ -355,7 +355,7 @@ export interface MethodologyGuide {
    * Provides custom descriptions for MCP tools when this methodology is active
    * @returns Tool descriptions customized for this methodology
    */
-  getToolDescriptions?(): MethodologyToolDescriptions;
+  getToolDescriptions?(): FrameworkToolDescriptions;
 
   /**
    * Get methodology-specific judge prompt for resource selection (optional)
@@ -370,7 +370,7 @@ export interface MethodologyGuide {
  * Base class for methodology guides
  * Provides common functionality for all methodology implementations
  */
-export abstract class BaseMethodologyGuide implements MethodologyGuide {
+export abstract class BaseMethodologyGuide implements FrameworkGuide {
   abstract readonly frameworkId: string;
   abstract readonly frameworkName: string;
   /** The framework type discriminator */
@@ -399,9 +399,9 @@ export abstract class BaseMethodologyGuide implements MethodologyGuide {
   abstract enhanceWithMethodology(
     prompt: ConvertedPrompt,
     context: Record<string, any>
-  ): MethodologyEnhancement;
+  ): FrameworkEnhancement;
 
-  abstract validateMethodologyCompliance(prompt: ConvertedPrompt): MethodologyValidation;
+  abstract validateMethodologyCompliance(prompt: ConvertedPrompt): FrameworkValidation;
 
   abstract getSystemPromptGuidance(context: Record<string, any>): string;
 

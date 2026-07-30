@@ -13,7 +13,7 @@ import {
   type RuntimeMethodologyLoaderConfig,
 } from './runtime-methodology-loader.js';
 import { Logger } from '../../../infra/logging/index.js';
-import { MethodologyGuide } from '../types/index.js';
+import { FrameworkGuide } from '../types/index.js';
 
 // Data-driven methodology system (YAML-only)
 
@@ -21,16 +21,16 @@ import { MethodologyGuide } from '../types/index.js';
  * Methodology source type for tracking how a guide was loaded
  * YAML-runtime is the only production source; 'custom' for user-provided guides
  */
-export type MethodologySource = 'yaml-runtime' | 'custom';
+export type FrameworkSource = 'yaml-runtime' | 'custom';
 
 /**
  * Methodology registry configuration
  */
-export interface MethodologyRegistryConfig {
+export interface FrameworkRegistryConfig {
   /** Whether to auto-load built-in methodology guides */
   autoLoadBuiltIn: boolean;
   /** Custom methodology guides to load */
-  customGuides?: MethodologyGuide[];
+  customGuides?: FrameworkGuide[];
   /** Whether to validate guides on registration */
   validateOnRegistration: boolean;
   /** Configuration for the runtime YAML loader */
@@ -40,13 +40,13 @@ export interface MethodologyRegistryConfig {
 /**
  * Methodology guide registry entry
  */
-export interface MethodologyGuideEntry {
-  guide: MethodologyGuide;
+export interface FrameworkGuideEntry {
+  guide: FrameworkGuide;
   registeredAt: Date;
   isBuiltIn: boolean;
   enabled: boolean;
   /** How this guide was loaded */
-  source: MethodologySource;
+  source: FrameworkSource;
   metadata: {
     loadTime: number;
     validationStatus: 'passed' | 'failed' | 'not_validated';
@@ -60,14 +60,14 @@ export interface MethodologyGuideEntry {
  * Manages the loading, registration, and lifecycle of methodology guides.
  * Provides a clean separation between guide management and framework orchestration.
  */
-export class MethodologyRegistry {
-  private guides = new Map<string, MethodologyGuideEntry>();
+export class FrameworkRegistry {
+  private guides = new Map<string, FrameworkGuideEntry>();
   private logger: Logger;
-  private config: MethodologyRegistryConfig;
+  private config: FrameworkRegistryConfig;
   private initialized = false;
   private runtimeLoader: RuntimeMethodologyLoader | null = null;
 
-  constructor(logger: Logger, config: Partial<MethodologyRegistryConfig> = {}) {
+  constructor(logger: Logger, config: Partial<FrameworkRegistryConfig> = {}) {
     this.logger = logger;
     this.config = {
       autoLoadBuiltIn: config.autoLoadBuiltIn ?? true,
@@ -85,11 +85,11 @@ export class MethodologyRegistry {
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
-      this.logger.debug('MethodologyRegistry already initialized');
+      this.logger.debug('FrameworkRegistry already initialized');
       return;
     }
 
-    this.logger.info('Initializing MethodologyRegistry...');
+    this.logger.info('Initializing FrameworkRegistry...');
     const startTime = performance.now();
 
     try {
@@ -107,10 +107,10 @@ export class MethodologyRegistry {
       this.initialized = true;
 
       this.logger.info(
-        `MethodologyRegistry initialized with ${this.guides.size} guides in ${loadTime.toFixed(1)}ms`
+        `FrameworkRegistry initialized with ${this.guides.size} guides in ${loadTime.toFixed(1)}ms`
       );
     } catch (error) {
-      this.logger.error('Failed to initialize MethodologyRegistry:', error);
+      this.logger.error('Failed to initialize FrameworkRegistry:', error);
       throw error;
     }
   }
@@ -119,9 +119,9 @@ export class MethodologyRegistry {
    * Register a methodology guide
    */
   async registerGuide(
-    guide: MethodologyGuide,
+    guide: FrameworkGuide,
     isBuiltIn: boolean = false,
-    source: MethodologySource = 'custom'
+    source: FrameworkSource = 'custom'
   ): Promise<boolean> {
     const startTime = performance.now();
 
@@ -146,7 +146,7 @@ export class MethodologyRegistry {
       }
 
       // Create registry entry
-      const entry: MethodologyGuideEntry = {
+      const entry: FrameworkGuideEntry = {
         guide,
         registeredAt: new Date(),
         isBuiltIn,
@@ -174,7 +174,7 @@ export class MethodologyRegistry {
   /**
    * Get a methodology guide by ID
    */
-  getGuide(guideId: string): MethodologyGuide | undefined {
+  getGuide(guideId: string): FrameworkGuide | undefined {
     this.ensureInitialized();
 
     const entry = this.guides.get(guideId.toLowerCase());
@@ -190,10 +190,10 @@ export class MethodologyRegistry {
   /**
    * Get all registered methodology guides
    */
-  getAllGuides(enabledOnly: boolean = true): MethodologyGuide[] {
+  getAllGuides(enabledOnly: boolean = true): FrameworkGuide[] {
     this.ensureInitialized();
 
-    const guides: MethodologyGuide[] = [];
+    const guides: FrameworkGuide[] = [];
     for (const [_, entry] of this.guides) {
       if (!enabledOnly || entry.enabled) {
         guides.push(entry.guide);
@@ -206,10 +206,10 @@ export class MethodologyRegistry {
   /**
    * Get guide entries with metadata
    */
-  getGuideEntries(enabledOnly: boolean = true): MethodologyGuideEntry[] {
+  getGuideEntries(enabledOnly: boolean = true): FrameworkGuideEntry[] {
     this.ensureInitialized();
 
-    const entries: MethodologyGuideEntry[] = [];
+    const entries: FrameworkGuideEntry[] = [];
     for (const [_, entry] of this.guides) {
       if (!enabledOnly || entry.enabled) {
         entries.push(entry);
@@ -275,7 +275,7 @@ export class MethodologyRegistry {
     const builtInCount = entries.filter((e) => e.isBuiltIn).length;
 
     // Count by source
-    const sourceDistribution: Record<MethodologySource, number> = {
+    const sourceDistribution: Record<FrameworkSource, number> = {
       'yaml-runtime': 0,
       custom: 0,
     };
@@ -410,7 +410,7 @@ export class MethodologyRegistry {
   /**
    * Load custom methodology guides
    */
-  private async loadCustomGuides(customGuides: MethodologyGuide[]): Promise<void> {
+  private async loadCustomGuides(customGuides: FrameworkGuide[]): Promise<void> {
     this.logger.debug(`Loading ${customGuides.length} custom methodology guides...`);
 
     for (const guide of customGuides) {
@@ -426,7 +426,7 @@ export class MethodologyRegistry {
   /**
    * Validate a methodology guide
    */
-  private validateGuide(guide: MethodologyGuide): { valid: boolean; errors: string[] } {
+  private validateGuide(guide: FrameworkGuide): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
     // Check required properties
@@ -478,7 +478,7 @@ export class MethodologyRegistry {
    */
   private ensureInitialized(): void {
     if (!this.initialized) {
-      throw new Error('MethodologyRegistry not initialized. Call initialize() first.');
+      throw new Error('FrameworkRegistry not initialized. Call initialize() first.');
     }
   }
 
@@ -502,13 +502,13 @@ export class MethodologyRegistry {
 }
 
 /**
- * Create and initialize a MethodologyRegistry instance
+ * Create and initialize a FrameworkRegistry instance
  */
 export async function createMethodologyRegistry(
   logger: Logger,
-  config?: Partial<MethodologyRegistryConfig>
-): Promise<MethodologyRegistry> {
-  const registry = new MethodologyRegistry(logger, config);
+  config?: Partial<FrameworkRegistryConfig>
+): Promise<FrameworkRegistry> {
+  const registry = new FrameworkRegistry(logger, config);
   await registry.initialize();
   return registry;
 }

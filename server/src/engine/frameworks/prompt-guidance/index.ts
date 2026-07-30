@@ -30,8 +30,6 @@ export type { PromptGuidanceResult as ServicePromptGuidanceResult } from './serv
 
 // Re-export relevant types from the types system
 export type {
-  MethodologyState,
-  MethodologySwitchRequest,
   PromptGuidanceConfig,
   PromptGuidanceResult,
   SystemPromptInjectionResult,

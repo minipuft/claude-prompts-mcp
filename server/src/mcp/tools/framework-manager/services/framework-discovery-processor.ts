@@ -1,6 +1,6 @@
 // @lifecycle canonical - Framework discovery operations: list, inspect.
 
-import type { MethodologyValidator } from './methodology-validator.js';
+import type { FrameworkDraftValidator } from './methodology-validator.js';
 import type { ToolResponse } from '../../../../shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput } from '../core/types.js';
@@ -8,7 +8,7 @@ import type { FrameworkManagerInput } from '../core/types.js';
 export class FrameworkDiscoveryProcessor {
   constructor(
     private readonly ctx: FrameworkResourceContext,
-    private readonly validationService: MethodologyValidator
+    private readonly validationService: FrameworkDraftValidator
   ) {}
 
   async handleList(args: FrameworkManagerInput): Promise<ToolResponse> {

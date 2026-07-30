@@ -15,7 +15,7 @@ import type {
   FrameworkMethodology,
   FrameworkType,
   JudgePromptDefinition,
-  MethodologyToolDescriptions,
+  FrameworkToolDescriptions,
 } from '../types/methodology-types.js';
 import type { PhaseQualityIndicators } from '../utils/compliance-validator.js';
 import type { PhasesDefinition } from '../utils/step-generator.js';
@@ -27,7 +27,7 @@ import type { PhasesDefinition } from '../utils/step-generator.js';
  * (built-in or custom) provides a definition file that conforms to this interface.
  * Use FrameworkManager.listFrameworks() to see registered methodologies.
  */
-export interface MethodologyDefinition {
+export interface FrameworkResourceDefinition {
   /** Unique identifier (e.g., 'cageerf', 'react', '5w1h', 'scamper') */
   id: string;
   /** Human-readable name */
@@ -50,15 +50,15 @@ export interface MethodologyDefinition {
     exclude?: string[];
   };
   /** Methodology-specific quality gates */
-  methodologyGates?: MethodologyGateDefinition[];
+  methodologyGates?: FrameworkGateDefinition[];
   /** Suggestions for template improvements */
   templateSuggestions?: TemplateSuggestionDefinition[];
   /** Required/optional sections for methodology */
-  methodologyElements?: MethodologyElementsDefinition;
+  frameworkElements?: FrameworkElementsDefinition;
   /** Suggested arguments for prompts using this methodology */
   argumentSuggestions?: ArgumentSuggestionDefinition[];
   /** Custom tool descriptions when methodology is active */
-  toolDescriptions?: MethodologyToolDescriptions;
+  toolDescriptions?: FrameworkToolDescriptions;
   /** Execution phases and quality indicators */
   phases?: PhasesDefinition & {
     qualityIndicators?: PhaseQualityIndicators;
@@ -73,7 +73,7 @@ export interface MethodologyDefinition {
  * Defines a quality gate specific to a methodology. These gates are
  * automatically applied when the methodology is active.
  */
-export interface MethodologyGateDefinition {
+export interface FrameworkGateDefinition {
   /** Unique gate identifier */
   id: string;
   /** Human-readable gate name */
@@ -81,7 +81,7 @@ export interface MethodologyGateDefinition {
   /** Description of what this gate validates */
   description: string;
   /** Which methodology area this gate applies to */
-  methodologyArea: string;
+  frameworkArea: string;
   /** Gate priority level */
   priority: 'high' | 'medium' | 'low';
   /** Criteria for passing this gate */
@@ -104,7 +104,7 @@ export interface TemplateSuggestionDefinition {
   /** Suggested content */
   content: string;
   /** Why this change aligns with methodology */
-  methodologyJustification: string;
+  frameworkJustification: string;
   /** Impact level of implementing this suggestion */
   impact: 'high' | 'medium' | 'low';
 }
@@ -114,7 +114,7 @@ export interface TemplateSuggestionDefinition {
  *
  * Defines the structural requirements for prompts using this methodology.
  */
-export interface MethodologyElementsDefinition {
+export interface FrameworkElementsDefinition {
   /** Sections that must be present */
   requiredSections: string[];
   /** Sections that are optional but recommended */
@@ -136,7 +136,7 @@ export interface ArgumentSuggestionDefinition {
   /** Description of the argument */
   description: string;
   /** Why this argument is important for the methodology */
-  methodologyReason: string;
+  frameworkReason: string;
   /** Example values */
   examples: string[];
 }

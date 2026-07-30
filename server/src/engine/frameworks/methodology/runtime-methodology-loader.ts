@@ -19,7 +19,7 @@ import { fileURLToPath } from 'url';
 
 import {
   validateMethodologySchema,
-  type MethodologySchemaValidationResult,
+  type FrameworkSchemaValidationResult,
 } from './methodology-schema.js';
 import {
   loadYamlFileSync,
@@ -27,7 +27,7 @@ import {
   discoverNestedYamlDirectories,
 } from '../../../shared/utils/yaml/index.js';
 
-import type { MethodologyDefinition } from './methodology-definition-types.js';
+import type { FrameworkResourceDefinition } from './methodology-definition-types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -37,7 +37,7 @@ const __dirname = dirname(__filename);
  */
 export interface RuntimeMethodologyLoaderConfig {
   /** Override default methodologies directory */
-  methodologiesDir?: string;
+  frameworksDir?: string;
   /** Additional directories to scan for methodology overlays (workspace resources) */
   additionalMethodologiesDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
@@ -61,13 +61,13 @@ export interface LoaderStats {
   /** Number of load errors encountered */
   loadErrors: number;
   /** Methodologies directory being used */
-  methodologiesDir: string;
+  frameworksDir: string;
   /** Additional overlay directories */
   additionalMethodologiesDirs: string[];
 }
 
-// MethodologySchemaValidationResult is imported from methodology-schema.ts
-export type { MethodologySchemaValidationResult } from './methodology-schema.js';
+// FrameworkSchemaValidationResult is imported from methodology-schema.ts
+export type { FrameworkSchemaValidationResult } from './methodology-schema.js';
 
 /**
  * Runtime Methodology Loader
@@ -88,18 +88,18 @@ export type { MethodologySchemaValidationResult } from './methodology-schema.js'
  * ```
  */
 export class RuntimeMethodologyLoader {
-  private cache = new Map<string, MethodologyDefinition>();
+  private cache = new Map<string, FrameworkResourceDefinition>();
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
-  private methodologiesDir: string;
+  private frameworksDir: string;
   private additionalMethodologiesDirs: string[];
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
 
   constructor(config: RuntimeMethodologyLoaderConfig = {}) {
-    this.methodologiesDir = config.methodologiesDir ?? this.resolveMethodologiesDir();
+    this.frameworksDir = config.frameworksDir ?? this.resolveMethodologiesDir();
     this.additionalMethodologiesDirs = (config.additionalMethodologiesDirs ?? []).filter(
-      (dir) => existsSync(dir) && dir !== this.methodologiesDir
+      (dir) => existsSync(dir) && dir !== this.frameworksDir
     );
     this.enableCache = config.enableCache ?? true;
     this.validateOnLoad = config.validateOnLoad ?? true;
@@ -107,7 +107,7 @@ export class RuntimeMethodologyLoader {
 
     if (this.debug) {
       // Use stderr to avoid corrupting STDIO protocol
-      console.error(`[RuntimeMethodologyLoader] Using directory: ${this.methodologiesDir}`);
+      console.error(`[RuntimeMethodologyLoader] Using directory: ${this.frameworksDir}`);
       if (this.additionalMethodologiesDirs.length > 0) {
         console.error(
           `[RuntimeMethodologyLoader] Additional directories: ${this.additionalMethodologiesDirs.join(', ')}`
@@ -122,7 +122,7 @@ export class RuntimeMethodologyLoader {
    * @param id - Methodology ID (e.g., 'cageerf', 'react')
    * @returns Loaded definition or undefined if not found
    */
-  loadMethodology(id: string): MethodologyDefinition | undefined {
+  loadMethodology(id: string): FrameworkResourceDefinition | undefined {
     const normalizedId = id.toLowerCase();
 
     // Check cache first
@@ -135,7 +135,7 @@ export class RuntimeMethodologyLoader {
 
     // Load from primary directory, then fall through to additional dirs
     const definition =
-      this.loadFromDir(normalizedId, this.methodologiesDir) ??
+      this.loadFromDir(normalizedId, this.frameworksDir) ??
       this.loadFromAdditionalDirs(normalizedId);
 
     if (!definition) {
@@ -157,7 +157,7 @@ export class RuntimeMethodologyLoader {
    */
   discoverMethodologies(): string[] {
     // Primary: flat scan
-    const primaryIds = discoverYamlDirectories(this.methodologiesDir, 'methodology.yaml');
+    const primaryIds = discoverYamlDirectories(this.frameworksDir, 'methodology.yaml');
     const idSet = new Set(primaryIds.map((id) => id.toLowerCase()));
 
     // Additional: nested scan (flat + grouped). Primary wins on conflict via Set.
@@ -176,8 +176,8 @@ export class RuntimeMethodologyLoader {
    *
    * @returns Map of ID to definition for all successfully loaded methodologies
    */
-  loadAllMethodologies(): Map<string, MethodologyDefinition> {
-    const results = new Map<string, MethodologyDefinition>();
+  loadAllMethodologies(): Map<string, FrameworkResourceDefinition> {
+    const results = new Map<string, FrameworkResourceDefinition>();
     const ids = this.discoverMethodologies();
 
     for (const id of ids) {
@@ -200,7 +200,7 @@ export class RuntimeMethodologyLoader {
     const normalizedId = id.toLowerCase();
 
     // Check primary
-    if (existsSync(join(this.methodologiesDir, normalizedId, 'methodology.yaml'))) {
+    if (existsSync(join(this.frameworksDir, normalizedId, 'methodology.yaml'))) {
       return true;
     }
 
@@ -230,7 +230,7 @@ export class RuntimeMethodologyLoader {
       cacheHits: this.stats.cacheHits,
       cacheMisses: this.stats.cacheMisses,
       loadErrors: this.stats.loadErrors,
-      methodologiesDir: this.methodologiesDir,
+      frameworksDir: this.frameworksDir,
       additionalMethodologiesDirs: this.additionalMethodologiesDirs,
     };
   }
@@ -239,14 +239,14 @@ export class RuntimeMethodologyLoader {
    * Get the methodologies directory being used
    */
   getMethodologiesDir(): string {
-    return this.methodologiesDir;
+    return this.frameworksDir;
   }
 
   /**
    * Get all directories that should be watched for changes (primary + additional)
    */
   getWatchDirectories(): string[] {
-    return [this.methodologiesDir, ...this.additionalMethodologiesDirs];
+    return [this.frameworksDir, ...this.additionalMethodologiesDirs];
   }
 
   // ============================================================================
@@ -256,10 +256,10 @@ export class RuntimeMethodologyLoader {
   /**
    * Load a methodology from a specific base directory
    */
-  private loadFromDir(id: string, baseDir: string): MethodologyDefinition | undefined {
+  private loadFromDir(id: string, baseDir: string): FrameworkResourceDefinition | undefined {
     try {
-      const methodologyDir = join(baseDir, id);
-      const entryPath = join(methodologyDir, 'methodology.yaml');
+      const frameworkDir = join(baseDir, id);
+      const entryPath = join(frameworkDir, 'methodology.yaml');
 
       if (!existsSync(entryPath)) {
         if (this.debug) {
@@ -269,7 +269,7 @@ export class RuntimeMethodologyLoader {
       }
 
       // Load main methodology.yaml
-      const definition = loadYamlFileSync<MethodologyDefinition>(entryPath, {
+      const definition = loadYamlFileSync<FrameworkResourceDefinition>(entryPath, {
         required: true,
       });
 
@@ -278,7 +278,7 @@ export class RuntimeMethodologyLoader {
       }
 
       // Inline referenced files
-      this.inlineReferencedFiles(definition, methodologyDir);
+      this.inlineReferencedFiles(definition, frameworkDir);
 
       // Validate if enabled
       if (this.validateOnLoad) {
@@ -315,7 +315,7 @@ export class RuntimeMethodologyLoader {
    * Attempt to load a methodology from additional directories.
    * Tries flat path first, then scans for grouped nesting.
    */
-  private loadFromAdditionalDirs(id: string): MethodologyDefinition | undefined {
+  private loadFromAdditionalDirs(id: string): FrameworkResourceDefinition | undefined {
     const resolvedDir = this.findInAdditionalDirs(id);
     if (resolvedDir === undefined) return undefined;
     return this.loadFromDir(id, resolvedDir);
@@ -408,9 +408,9 @@ export class RuntimeMethodologyLoader {
               return resourcesMethodologiesPath;
             }
             // Then check legacy location
-            const methodologiesPath = join(dir, 'methodologies');
-            if (existsSync(methodologiesPath) && this.hasYamlFiles(methodologiesPath)) {
-              return methodologiesPath;
+            const frameworksPath = join(dir, 'methodologies');
+            if (existsSync(frameworksPath) && this.hasYamlFiles(frameworksPath)) {
+              return frameworksPath;
             }
           }
         }
@@ -444,10 +444,10 @@ export class RuntimeMethodologyLoader {
   /**
    * Inline referenced files into the definition
    */
-  private inlineReferencedFiles(definition: any, methodologyDir: string): void {
+  private inlineReferencedFiles(definition: any, frameworkDir: string): void {
     // Inline phases.yaml if referenced
     if (definition.phasesFile) {
-      const phasesPath = join(methodologyDir, definition.phasesFile);
+      const phasesPath = join(frameworkDir, definition.phasesFile);
       if (existsSync(phasesPath)) {
         try {
           const phases = loadYamlFileSync(phasesPath);
@@ -466,7 +466,7 @@ export class RuntimeMethodologyLoader {
 
     // Inline judge-prompt.md if referenced
     if (definition.judgePromptFile) {
-      const judgePath = join(methodologyDir, definition.judgePromptFile);
+      const judgePath = join(frameworkDir, definition.judgePromptFile);
       if (existsSync(judgePath)) {
         try {
           const content = readFileSync(judgePath, 'utf-8');
@@ -506,9 +506,9 @@ export class RuntimeMethodologyLoader {
    * Validate a methodology definition using shared Zod schema
    */
   private validateDefinition(
-    definition: MethodologyDefinition,
+    definition: FrameworkResourceDefinition,
     expectedId: string
-  ): MethodologySchemaValidationResult {
+  ): FrameworkSchemaValidationResult {
     // Use shared schema validation (SSOT with validate-methodologies.ts)
     return validateMethodologySchema(definition, expectedId);
   }

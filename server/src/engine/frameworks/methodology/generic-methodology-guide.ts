@@ -2,7 +2,7 @@
 /**
  * Generic Methodology Guide
  *
- * A data-driven implementation of MethodologyGuide that works with JSON
+ * A data-driven implementation of FrameworkGuide that works with JSON
  * methodology definitions. This eliminates the need for TypeScript classes
  * per methodology - the same class works for any registered framework (built-in or custom).
  *
@@ -17,9 +17,9 @@ import {
   type PromptCreationGuidance,
   type ProcessingGuidance,
   type StepGuidance,
-  type MethodologyEnhancement,
-  type MethodologyValidation,
-  type MethodologyToolDescriptions,
+  type FrameworkEnhancement,
+  type FrameworkValidation,
+  type FrameworkToolDescriptions,
   type JudgePromptDefinition,
   type QualityGate,
   type TemplateEnhancement,
@@ -41,12 +41,12 @@ import {
   convertProcessingSteps,
 } from '../utils/template-enhancer.js';
 
-import type { MethodologyDefinition } from './methodology-definition-types.js';
+import type { FrameworkResourceDefinition } from './methodology-definition-types.js';
 import type { ContentAnalysisResult } from '../../../shared/types/index.js';
 import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
 
 /**
- * GenericMethodologyGuide - Data-driven implementation of MethodologyGuide
+ * GenericMethodologyGuide - Data-driven implementation of FrameworkGuide
  *
  * This class can represent any methodology by loading its definition from JSON.
  * All methodology-specific behavior is derived from the JSON data.
@@ -60,13 +60,13 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
   readonly methodology: FrameworkMethodology;
   readonly version: string;
 
-  private readonly definition: MethodologyDefinition;
+  private readonly definition: FrameworkResourceDefinition;
 
   /**
    * Creates a GenericMethodologyGuide from a methodology definition
    * @param definition - The loaded methodology definition from JSON
    */
-  constructor(definition: MethodologyDefinition) {
+  constructor(definition: FrameworkResourceDefinition) {
     super();
     this.definition = definition;
     this.frameworkId = definition.id;
@@ -81,7 +81,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
    * Guide prompt creation using the methodology's structure
    */
   guidePromptCreation(intent: string, context?: Record<string, unknown>): PromptCreationGuidance {
-    const elements = this.definition.methodologyElements;
+    const elements = this.definition.frameworkElements;
     const argumentSuggestions = this.definition.argumentSuggestions || [];
 
     // Build structure guidance from methodology elements
@@ -117,11 +117,11 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
           name: arg.name,
           type: arg.type,
           description: arg.description,
-          methodologyReason: arg.methodologyReason,
+          frameworkReason: arg.frameworkReason,
           examples: arg.examples,
         })),
       },
-      methodologyElements: elements || {
+      frameworkElements: elements || {
         requiredSections: [],
         optionalSections: [],
         sectionDescriptions: {},
@@ -200,7 +200,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
   enhanceWithMethodology(
     prompt: ConvertedPrompt,
     context: Record<string, unknown>
-  ): MethodologyEnhancement {
+  ): FrameworkEnhancement {
     // Convert methodology gates from definition
     const methodologyGates: QualityGate[] = this.definition.methodologyGates
       ? convertMethodologyGates(this.definition.methodologyGates)
@@ -231,7 +231,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
   /**
    * Validate methodology compliance using quality indicators from JSON
    */
-  validateMethodologyCompliance(prompt: ConvertedPrompt): MethodologyValidation {
+  validateMethodologyCompliance(prompt: ConvertedPrompt): FrameworkValidation {
     const qualityIndicators = this.definition.phases?.qualityIndicators;
 
     if (!qualityIndicators || Object.keys(qualityIndicators).length === 0) {
@@ -249,7 +249,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
           ? []
           : [`Consider applying ${this.methodology} methodology`],
         specificSuggestions: [],
-        methodologyGaps: [],
+        frameworkGaps: [],
       };
     }
 
@@ -268,7 +268,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
   /**
    * Get methodology-specific tool descriptions
    */
-  getToolDescriptions(): MethodologyToolDescriptions {
+  getToolDescriptions(): FrameworkToolDescriptions {
     // Return tool descriptions from definition or empty defaults
     return (
       this.definition.toolDescriptions ?? {
@@ -297,7 +297,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
    * Get the raw methodology definition
    * Useful for introspection and debugging
    */
-  getDefinition(): MethodologyDefinition {
+  getDefinition(): FrameworkResourceDefinition {
     return this.definition;
   }
 
@@ -314,6 +314,8 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
  * @param definition - The methodology definition from JSON
  * @returns A new GenericMethodologyGuide instance
  */
-export function createGenericGuide(definition: MethodologyDefinition): GenericMethodologyGuide {
+export function createGenericGuide(
+  definition: FrameworkResourceDefinition
+): GenericMethodologyGuide {
   return new GenericMethodologyGuide(definition);
 }

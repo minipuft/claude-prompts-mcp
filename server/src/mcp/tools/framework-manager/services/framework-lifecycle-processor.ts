@@ -4,10 +4,10 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { MethodologyValidator } from './methodology-validator.js';
+import type { FrameworkDraftValidator } from './methodology-validator.js';
 import type { ToolResponse } from '../../../../shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
-import type { FrameworkManagerInput, MethodologyCreationData } from '../core/types.js';
+import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
 /**
  * Optional methodology fields that can be copied directly from input to methodology data.
@@ -37,7 +37,7 @@ const OPTIONAL_METHODOLOGY_FIELDS = [
 export class FrameworkLifecycleProcessor {
   constructor(
     private readonly ctx: FrameworkResourceContext,
-    private readonly validationService: MethodologyValidator
+    private readonly validationService: FrameworkDraftValidator
   ) {}
 
   async handleCreate(args: FrameworkManagerInput): Promise<ToolResponse> {
@@ -65,7 +65,7 @@ export class FrameworkLifecycleProcessor {
     }
 
     // Create methodology data with available fields
-    const methodologyData: MethodologyCreationData = {
+    const frameworkData: FrameworkCreationData = {
       id,
       name,
       type: derivedType,
@@ -75,16 +75,16 @@ export class FrameworkLifecycleProcessor {
     };
 
     // Assign all optional fields (basic + advanced)
-    this.assignOptionalFields(methodologyData, args);
+    this.assignOptionalFields(frameworkData, args);
 
     // Smart validation - block if required fields missing
-    const validation = this.validationService.validate(methodologyData);
+    const validation = this.validationService.validate(frameworkData);
     if (!validation.valid) {
       return this.validationService.createErrorResponse(id, validation);
     }
 
     // Atomic create with rollback on failure
-    const result = await this.createMethodologyAtomic(id, methodologyData);
+    const result = await this.createMethodologyAtomic(id, frameworkData);
     if (!result.success) {
       return this.error(`Failed to create methodology: ${result.error}`);
     }
@@ -123,32 +123,31 @@ export class FrameworkLifecycleProcessor {
     };
 
     // Build update data with ONLY the fields provided in the request
-    const methodologyData: Partial<MethodologyCreationData> & { id: string; methodology: string } =
-      {
-        id,
-        methodology: args.methodology ?? '',
-      };
+    const frameworkData: Partial<FrameworkCreationData> & { id: string; methodology: string } = {
+      id,
+      methodology: args.methodology ?? '',
+    };
 
-    if (args.name !== undefined) methodologyData.name = args.name;
+    if (args.name !== undefined) frameworkData.name = args.name;
     if (args.methodology !== undefined) {
-      methodologyData.type = args.methodology;
-      methodologyData.methodology = args.methodology;
+      frameworkData.type = args.methodology;
+      frameworkData.methodology = args.methodology;
     }
     if (args.system_prompt_guidance !== undefined) {
-      methodologyData.system_prompt_guidance = args.system_prompt_guidance;
+      frameworkData.system_prompt_guidance = args.system_prompt_guidance;
     }
-    if (args.enabled !== undefined) methodologyData.enabled = args.enabled;
+    if (args.enabled !== undefined) frameworkData.enabled = args.enabled;
 
     // Assign all optional fields from input (only defined fields)
-    this.assignOptionalFields(methodologyData as MethodologyCreationData, args);
+    this.assignOptionalFields(frameworkData as FrameworkCreationData, args);
 
     // Build after state for diff generation
     const afterState: Record<string, unknown> = {
       id,
-      name: methodologyData.name ?? existingData.methodology['name'],
-      type: methodologyData.type ?? existingData.methodology['type'],
-      description: methodologyData.description ?? existingData.methodology['description'],
-      enabled: methodologyData.enabled ?? existingData.methodology['enabled'],
+      name: frameworkData.name ?? existingData.methodology['name'],
+      type: frameworkData.type ?? existingData.methodology['type'],
+      description: frameworkData.description ?? existingData.methodology['description'],
+      enabled: frameworkData.enabled ?? existingData.methodology['enabled'],
     };
 
     // Save version before update (auto-versioning)
@@ -183,7 +182,7 @@ export class FrameworkLifecycleProcessor {
     }
 
     // Write methodology files with merge from existing data
-    const result = await this.ctx.fileService.writeMethodologyFiles(methodologyData, existingData);
+    const result = await this.ctx.fileService.writeMethodologyFiles(frameworkData, existingData);
 
     if (!result.success) {
       return this.error(`Failed to update methodology: ${result.error}`);
@@ -244,15 +243,15 @@ export class FrameworkLifecycleProcessor {
 
     // Get methodology directory path
     const serverRoot = this.ctx.configManager.getServerRoot();
-    const methodologyDir = path.join(serverRoot, 'resources', 'methodologies', id.toLowerCase());
+    const frameworkDir = path.join(serverRoot, 'resources', 'methodologies', id.toLowerCase());
 
-    if (!existsSync(methodologyDir)) {
-      return this.error(`Methodology directory not found: ${methodologyDir}`);
+    if (!existsSync(frameworkDir)) {
+      return this.error(`Methodology directory not found: ${frameworkDir}`);
     }
 
     // Remove methodology directory
     try {
-      await fs.rm(methodologyDir, { recursive: true });
+      await fs.rm(frameworkDir, { recursive: true });
     } catch (error) {
       return this.error(
         `Failed to delete methodology directory: ${
@@ -272,7 +271,7 @@ export class FrameworkLifecycleProcessor {
 
     return this.success(
       `✅ Methodology '${id}' deleted successfully\n\n` +
-        `📁 Directory removed: ${methodologyDir}\n\n` +
+        `📁 Directory removed: ${frameworkDir}\n\n` +
         `🔄 Framework registry updated`
     );
   }
@@ -392,13 +391,13 @@ export class FrameworkLifecycleProcessor {
    */
   private async createMethodologyAtomic(
     id: string,
-    methodologyData: MethodologyCreationData
+    frameworkData: FrameworkCreationData
   ): Promise<{ success: boolean; error?: string; paths?: string[] }> {
     const normalizedId = id.toLowerCase();
     const registry = this.ctx.frameworkManager.getMethodologyRegistry();
 
     // Step 1: Write files to disk
-    const writeResult = await this.ctx.fileService.writeMethodologyFiles(methodologyData, null);
+    const writeResult = await this.ctx.fileService.writeMethodologyFiles(frameworkData, null);
     if (!writeResult.success) {
       return { success: false, error: `File write failed: ${writeResult.error}` };
     }
@@ -431,10 +430,7 @@ export class FrameworkLifecycleProcessor {
   /**
    * Copy defined optional fields from input to methodology data.
    */
-  private assignOptionalFields(
-    target: MethodologyCreationData,
-    source: FrameworkManagerInput
-  ): void {
+  private assignOptionalFields(target: FrameworkCreationData, source: FrameworkManagerInput): void {
     for (const field of OPTIONAL_METHODOLOGY_FIELDS) {
       const value = source[field];
       if (value !== undefined) {

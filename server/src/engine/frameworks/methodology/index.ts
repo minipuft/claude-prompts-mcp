@@ -7,22 +7,18 @@
  */
 
 // Export methodology registry
-export { MethodologyRegistry, createMethodologyRegistry } from './registry.js';
-export type {
-  MethodologyRegistryConfig,
-  MethodologyGuideEntry,
-  MethodologySource,
-} from './registry.js';
+export { FrameworkRegistry, createMethodologyRegistry } from './registry.js';
+export type { FrameworkRegistryConfig, FrameworkGuideEntry, FrameworkSource } from './registry.js';
 
 // Export methodology interfaces
 export * from './interfaces.js';
 
 // Export methodology definition types (canonical source)
 export type {
-  MethodologyDefinition,
-  MethodologyGateDefinition,
+  FrameworkResourceDefinition,
+  FrameworkGateDefinition,
   TemplateSuggestionDefinition,
-  MethodologyElementsDefinition,
+  FrameworkElementsDefinition,
   ArgumentSuggestionDefinition,
 } from './methodology-definition-types.js';
 
@@ -39,31 +35,31 @@ export {
 export type {
   RuntimeMethodologyLoaderConfig,
   LoaderStats,
-  MethodologySchemaValidationResult as MethodologyValidationResult,
+  FrameworkSchemaValidationResult as FrameworkDraftValidationResult,
 } from './runtime-methodology-loader.js';
 
 // Export hot reload coordinator
 export {
-  MethodologyHotReloadCoordinator,
+  FrameworkHotReloadCoordinator,
   createMethodologyHotReloadCoordinator,
   createMethodologyHotReloadRegistration,
 } from './methodology-hot-reload.js';
 export type {
-  MethodologyHotReloadConfig,
-  MethodologyHotReloadStats,
-  MethodologyHotReloadRegistration,
+  FrameworkHotReloadConfig,
+  FrameworkHotReloadStats,
+  FrameworkHotReloadRegistration,
 } from './methodology-hot-reload.js';
 
 // Export shared Zod schema (SSOT for methodology validation)
 export {
-  MethodologySchema,
-  MethodologyGateSchema,
+  FrameworkSchema,
+  FrameworkGateSchema,
   TemplateSuggestionSchema,
   validateMethodologySchema,
 } from './methodology-schema.js';
 export type {
-  MethodologyYaml,
-  MethodologyGate,
+  FrameworkYaml,
+  FrameworkGate,
   TemplateSuggestion,
-  MethodologySchemaValidationResult,
+  FrameworkSchemaValidationResult,
 } from './methodology-schema.js';
