@@ -247,6 +247,32 @@ The remaining live deprecated `methodology` fields are:
 Retiring these is a **follow-on to `bb1f590a`, not a comment cleanup** — each needs its consumers
 repointed to `type` first. Do not delete the comments while the fields they describe still exist.
 
+> **✓ DONE 2026-07-30** — `a5ef4043` (internal) + `e2b632c2` (contract-crossing). Gate green on
+> both: typecheck 0 · 1703/1703 · `validate:all` 0 · `validate:contracts` 0 · `validate:arch` 0 ·
+> `build` 0.
+>
+> **The table above says three fields. Probing found FIVE declarations spanning THREE concepts** —
+> and only three of the five were the deprecated mirror. Splitting them was the whole job:
+>
+> | Concept                                                                                                                                                                                                         | Sites                                                                                                                                                                                                                                                                                                                   | Verdict             |
+> | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+> | Deprecated mirror of `type`                                                                                                                                                                                     | `methodology-types.ts:62` (`FrameworkDefinition`), `fm/core/types.ts:246` (`FrameworkCreationData`), `template-enhancer.ts:37` (enhancement subset) — plus two structural subset types the table missed entirely: `FrameworkStateAccessor.getActiveFramework` and `chain-operator-executor`'s `selectedFramework` shape | **Retired**         |
+> | `enhancementMetadata.methodology` (`methodology-types.ts:170`)                                                                                                                                                  | a metadata label written from `this.type`                                                                                                                                                                                                                                                                               | **Homonym — kept**  |
+> | Gate criteria `methodology` (`gate-schema.ts:88`, `gate-definition-schema.ts:115`, `gate-hot-reload.ts:250`) and `MethodologyFileData.methodology` (the parsed-YAML container, `methodology-file-writer.ts:36`) | unrelated domains that merely share the word                                                                                                                                                                                                                                                                            | **Homonyms — kept** |
+>
+> `FrameworkMethodology` (`FrameworkType \| 'AUTO'`) also survives. It is deprecated too, but it
+> still carries the `'AUTO'` selection value across eight live consumers, so retiring it means
+> handling AUTO first — a separate job, not this one.
+>
+> **A defect of mine surfaced here**: `436e2d57`'s contract sweep also caught the parameter's
+> `name` field, so `resource-manager.json` advertised `framework` while the Zod schema still said
+> `methodology`. An LLM following the tool description would have sent a key the schema rejects.
+> Resolved in the direction the contract already pointed — every layer now names `framework`, and
+> the wire-name → service-field (`type`) derivation is explicit and commented at the
+> `FrameworkManagerInput` → `FrameworkCreationData` boundary rather than hidden in the router.
+> `router.ts:127` was also still telling users an action was `only valid for resource_type:
+"methodology"`, with a test pinning the wrong string.
+
 Genuinely stale prose, safe to delete:
 
 - `modules/prompts/prompt-schema.ts:33` and `shared/types/index.ts:143` — "Removed in v3.0.0"; the
