@@ -786,12 +786,12 @@ sides of every pair have live consumers, with **mixed dominance**, so no bulk pi
 This is deduplication work, not renaming. Each pair needs a structural diff, a canonical winner,
 consumers repointed, and the loser deleted — one commit per pair.
 
-| Stage | Scope                                                                                                                                                                                                               | Status                                                                                                           |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| 1     | 72 non-colliding tokens (`src/`, `tests/`) + resource YAML field names                                                                                                                                              | **✓ DONE** — 602 + 189 replacements, full gate green                                                             |
-| 2     | 7 colliding pairs adjudicated — **only 2 were duplicates**; see ruling below                                                                                                                                        | **✓ DONE** — 81 replacements / 27 files, typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0, `build` 0 |
-| 3     | On-disk: `resources/methodologies/` → `resources/frameworks/`, `methodology.yaml` → `framework.yaml` (8 dirs), loader path constants, `resource_type` enum value `'methodology'` → `'framework'`, contracts, router | ☐                                                                                                                |
-| 4     | `docs/`, `CLAUDE.md`, `>>create_methodology` prompt id, then `scripts/validate-no-methodology-vocab.js` + registration                                                                                              | ☐                                                                                                                |
+| Stage | Scope                                                                                                                                                                        | Status                                                                                                           |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 1     | 72 non-colliding tokens (`src/`, `tests/`) + resource YAML field names                                                                                                       | **✓ DONE** — 602 + 189 replacements, full gate green                                                             |
+| 2     | 7 colliding pairs adjudicated — **only 2 were duplicates**; see ruling below                                                                                                 | **✓ DONE** — 81 replacements / 27 files, typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0, `build` 0 |
+| 3     | On-disk resource dir + filenames + path constants (**3a**), then `resource_type` enum value, contracts, router, indexer, skills-sync, version-history discriminator (**3b**) | **✓ DONE** — 2 commits; all 8 frameworks verified loading from the new path; full gate green                     |
+| 4     | `docs/`, `CLAUDE.md`, `>>create_methodology` prompt id, then `scripts/validate-no-methodology-vocab.js` + registration                                                       | ☐                                                                                                                |
 
 #### Stage 2 ruling: the "7 duplicate pairs" framing was wrong
 
@@ -827,8 +827,20 @@ drift, so it needs a wiring audit against `config.json` before either is touched
 > files). Typecheck could not see it — the schema and the data are only bound at runtime. Any future
 > stage that renames a schema field must re-run `validate:methodologies`, not just `tsc`.
 >
-> **Stage 3 warning**: renaming `resources/methodologies/` will silently orphan any same-named
-> directory in the maintainer's `MCP_WORKSPACE` overlay. Migrate that by hand in the same session.
+> **Stage 3 outcome**: no `MCP_WORKSPACE` overlay existed at rename time (checked before moving), so
+> nothing was orphaned. Verified behaviourally — `validate:methodologies` resolves all 8 definitions
+> from `resources/frameworks/`. A missed path constant would have produced an empty registry at
+> runtime while still passing `tsc`.
+>
+> **Stale version history needs no cleanup code.** `version_history` lives in `state.db`, and
+> `dropAllTables()` on the `SCHEMA_VERSION` 15 → 16 bump already recreates the whole database on
+> next start. A second clearing mechanism would duplicate one that already fires.
+>
+> **Three things still carry the old word on purpose**, deferred to Stage 4 or beyond: the
+> deprecated `methodology:` YAML field inside a framework definition (file format, not resource
+> type); the gate-source tag `'methodology'` in the gate accumulator (provenance, not resource
+> type); and `Config.methodologies` / `MethodologiesConfig`, which duplicates `FrameworksConfig` and
+> needs a wiring audit against `config.json` first.
 
 > **3.7 trap**: `811` is a whole-repo count of a common English word. Scope strictly to the
 > automation domain that owns the rename, or the sweep corrupts unrelated code.
