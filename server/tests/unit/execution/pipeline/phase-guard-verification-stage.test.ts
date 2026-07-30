@@ -588,8 +588,10 @@ describe('PhaseGuardVerificationStage', () => {
 
     const review = (sessionStore.setPendingGateReview as jest.Mock).mock.calls[0][1] as any;
     expect(review.retryHints).toHaveLength(2);
-    expect(review.retryHints[0]).toContain('## context');
-    expect(review.retryHints[1]).toContain('## analysis');
+    // Hints must name the configured SECTION_HEADER ("## Context"), NOT the phase id ("context").
+    // The old code did `## ${id}` → "## context", a header the splitter never matched → loop.
+    expect(review.retryHints[0]).toContain('## Context');
+    expect(review.retryHints[1]).toContain('## Analysis');
     expect(review.metadata.failedPhases).toEqual(expect.arrayContaining(['context', 'analysis']));
   });
 });

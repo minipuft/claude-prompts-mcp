@@ -93,6 +93,9 @@ export class CategoryManager {
       if (category.registerWithMcp !== undefined) {
         normalizedCategory.registerWithMcp = category.registerWithMcp;
       }
+      if (category.mcpPromptMode !== undefined) {
+        normalizedCategory.mcpPromptMode = category.mcpPromptMode;
+      }
 
       validatedCategories.push(normalizedCategory);
     }

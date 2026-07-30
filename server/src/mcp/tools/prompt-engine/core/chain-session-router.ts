@@ -264,33 +264,33 @@ export class ChainSessionRouter implements ChainSessionRouterPort {
   }
 
   private buildPromptGateSummary(prompt: ConvertedPrompt): string | null {
-    const enhanced = prompt.enhancedGateConfiguration;
-    const legacy = prompt.gateConfiguration;
+    // `gateConfiguration` is the single source for a prompt's gate config — see ADR 0001.
+    const gateConfig = prompt.gateConfiguration;
 
-    if (!enhanced && !legacy) {
+    if (!gateConfig) {
       return null;
     }
 
     const lines: string[] = [];
 
-    const include = enhanced?.include ?? legacy?.include;
+    const include = gateConfig.include;
     if (include && include.length > 0) {
       lines.push(`- Included Gates: ${include.join(', ')}`);
     }
 
-    const exclude = enhanced?.exclude ?? legacy?.exclude;
+    const exclude = gateConfig.exclude;
     if (exclude && exclude.length > 0) {
       lines.push(`- Excluded Gates: ${exclude.join(', ')}`);
     }
 
-    // Show inline gate definitions from enhanced prompt
-    if (enhanced?.inline_gate_definitions && enhanced.inline_gate_definitions.length > 0) {
+    const inlineDefinitions = gateConfig.inline_gate_definitions;
+    if (inlineDefinitions && inlineDefinitions.length > 0) {
       lines.push(
-        `- Inline Gate Definitions: ${enhanced.inline_gate_definitions.map((gate) => gate.name).join(', ')}`
+        `- Inline Gate Definitions: ${inlineDefinitions.map((gate) => gate.name).join(', ')}`
       );
     }
 
-    const frameworkGates = enhanced?.framework_gates ?? legacy?.framework_gates ?? true;
+    const frameworkGates = gateConfig.framework_gates ?? true;
     if (frameworkGates === false) {
       lines.push('- Framework Gates: disabled');
     }

@@ -177,9 +177,12 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       createdAt: Date.now(),
       attemptCount: 0,
       maxAttempts,
-      retryHints: result.failedPhases.map(
-        (phase) => `Ensure your response includes the required "## ${phase}" section`
-      ),
+      // Hint with the phase's actual section_header (e.g. "## Dissolve"), NOT the phase id
+      // (e.g. "dissolve_processing"). Prefixing "## " onto the id produced a header the
+      // section-splitter could never match → the model kept adding the wrong header → loop.
+      retryHints: result.results
+        .filter((r) => !r.passed)
+        .map((r) => `Ensure your response includes the required "${r.section_header}" section`),
       previousResponse: outputText,
       metadata: {
         source: 'phase-guard-verification',

@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 
+import { buildLauncherMessages } from './launcher-envelope.js';
 import { type ConfigManager, type Logger } from '../../shared/types/index.js';
 import { isChainPrompt } from '../../shared/utils/chainUtils.js';
 import { ConversationStore } from '../text-refs/conversation.js';
@@ -157,6 +158,15 @@ export class PromptRegistry {
   private async executePromptLogic(promptData: ConvertedPrompt, args: any): Promise<any> {
     try {
       this.logger.info(`Executing prompt '${promptData.name}'...`);
+
+      // Launch mode: route the native MCP prompt invocation through the prompt_engine
+      // pipeline (framework/gates/chains/telemetry) instead of plain template expansion.
+      // A prompts/get response cannot itself enforce gates or drive chains, so we return
+      // a directive that invokes the tool surface (with argument + gate hints inline).
+      if (promptData.mcpPromptMode === 'launch') {
+        this.logger.info(`Prompt '${promptData.name}' → launcher (routing to prompt_engine)`);
+        return { messages: buildLauncherMessages(promptData, args || {}) };
+      }
 
       // Check if this is a chain prompt
       if (isChainPrompt(promptData) && promptData.chainSteps && promptData.chainSteps.length > 0) {

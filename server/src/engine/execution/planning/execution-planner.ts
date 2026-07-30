@@ -1,12 +1,13 @@
 // @lifecycle canonical - Plans operator execution order and dependencies.
-import { CategoryExtractor, type CategoryExtractionResult } from './category-extractor.js';
+import { CategoryExtractor } from './category-extractor.js';
+import { GateSetResolver } from '../../gates/services/gate-set-resolver.js';
+import { isMethodologyInjected } from '../pipeline/decisions/injection/index.js';
 
 import type { Logger } from '../../../infra/logging/index.js';
 import type { ContentAnalysisResult, ContentAnalyzerPort } from '../../../shared/types/index.js';
 import type { FrameworkManager } from '../../frameworks/framework-manager.js';
 import type { GateDefinitionProvider } from '../../gates/core/gate-loader.js';
 import type { GateManager } from '../../gates/gate-manager.js';
-import type { GateDefinition } from '../../gates/types.js';
 import type { ParsedCommand } from '../context/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 import type {
@@ -80,24 +81,12 @@ export class ExecutionPlanner {
   }
 
   /**
-   * Load methodology gate IDs from GateLoader.
-   * Returns fresh data each call - GateLoader handles hot-reload internally.
+   * Build the gate-set resolver for this call. Stateless and cheap to construct, so it is
+   * built per call rather than cached — that removes any need to invalidate it when
+   * `setGateManager` / `setGateLoader` arrive in either order.
    */
-  private async loadMethodologyGateIds(): Promise<Set<string>> {
-    if (!this.gateLoader) {
-      this.logger.debug(
-        '[ExecutionPlanner] No GateLoader available for methodology gate detection'
-      );
-      return new Set();
-    }
-
-    try {
-      const ids = await this.gateLoader.getMethodologyGateIds();
-      return new Set(ids);
-    } catch (error) {
-      this.logger.warn('[ExecutionPlanner] Failed to load methodology gate IDs', { error });
-      return new Set();
-    }
+  private buildGateSetResolver(): GateSetResolver {
+    return new GateSetResolver(this.logger, this.gateManager, this.gateLoader);
   }
 
   async createPlan(options: ExecutionPlannerOptions): Promise<ExecutionPlan> {
@@ -132,60 +121,54 @@ export class ExecutionPlanner {
     // Apply script-tools default: clean mode if prompt has script tools and no explicit overrides
     this.applyScriptToolDefaults(modifierResolution, convertedPrompt, parsedCommand, gateOverrides);
 
-    const explicitGates = this.collectExplicitGateIds(convertedPrompt, categoryInfo);
-    const autoGates = this.shouldAutoAssignGates()
-      ? this.autoAssignGates(categoryInfo.category)
-      : [];
-    const mergedGates = this.mergeGates(explicitGates, autoGates, [
-      ...(categoryInfo.gateConfiguration?.exclude ?? []),
-      ...this.getPromptLevelExcludes(convertedPrompt),
-    ]);
-
-    // Add string gate IDs from unified gates parameter
-    if (gateOverrides?.gates?.length) {
-      gateOverrides.gates.forEach((gate) => {
-        if (typeof gate === 'string') {
-          mergedGates.add(gate);
-        }
-      });
-    }
-
-    // Filter methodology gates if framework_gates is explicitly disabled
-    if (convertedPrompt.enhancedGateConfiguration?.framework_gates === false) {
-      const methodologyGateIds = await this.loadMethodologyGateIds();
-      methodologyGateIds.forEach((gateId: string) => mergedGates.delete(gateId));
-    }
+    // Gate resolution is owned by GateSetResolver (ADR 0001) — this stage only supplies inputs
+    // and reads the result. Do not reintroduce gate logic here.
+    const resolution = await this.buildGateSetResolver().resolve({
+      prompt: convertedPrompt,
+      category: categoryInfo.category,
+      categoryGateConfig: categoryInfo.gateConfiguration,
+      modifiers: modifierResolution.modifiers,
+      methodologyInjected: isMethodologyInjected({
+        modifiers: modifierResolution.modifiers,
+        promptInjection: convertedPrompt.injection,
+      }),
+      callerGateIds: collectStringGateIds(gateOverrides),
+    });
 
     // Check for framework override from symbolic operators
     const hasFrameworkOverride = Boolean(
       parsedCommand?.executionPlan?.frameworkOverride ?? parsedCommand?.executionPlan
     );
 
-    let requiresFramework = this.requiresFramework(
+    const baseRequiresFramework = this.requiresFramework(
       strategyInfo.strategy,
       convertedPrompt,
       analysis,
-      mergedGates,
+      new Set(resolution.gateIds),
       frameworkEnabled,
       hasFrameworkOverride
     );
-
-    const adjusted = this.applyModifierOverrides(
+    const requiresFramework = resolveFrameworkRequirement(
       modifierResolution.modifiers,
-      mergedGates,
-      requiresFramework
+      baseRequiresFramework
     );
-    requiresFramework = adjusted.requiresFramework;
+
+    if (resolution.vetoed.size > 0) {
+      this.logger.debug('[ExecutionPlanner] Gates removed by veto', {
+        promptId: convertedPrompt.id,
+        vetoed: Object.fromEntries(resolution.vetoed),
+      });
+    }
 
     const plan: ExecutionPlan = {
       strategy: strategyInfo.strategy,
-      gates: Array.from(adjusted.gates),
+      gates: [...resolution.gateIds],
       requiresFramework,
       requiresSession: this.requiresSession(
         parsedCommand,
         convertedPrompt,
         strategyInfo.strategy,
-        adjusted.gates
+        new Set(resolution.gateIds)
       ),
     };
     if (categoryInfo.category !== undefined) {
@@ -440,144 +423,6 @@ export class ExecutionPlanner {
     });
   }
 
-  private applyModifierOverrides(
-    modifiers: ExecutionModifiers | undefined,
-    gates: Set<string>,
-    requiresFramework: boolean
-  ): { gates: Set<string>; requiresFramework: boolean } {
-    if (!modifiers) {
-      return { gates, requiresFramework };
-    }
-
-    const normalized = this.stripModifierFlags(modifiers);
-
-    if (normalized.clean) {
-      gates.clear();
-      return { gates, requiresFramework: false };
-    }
-
-    if (normalized.framework) {
-      gates.clear();
-      return { gates, requiresFramework: true };
-    }
-
-    if (normalized.lean) {
-      return { gates, requiresFramework: false };
-    }
-
-    if (normalized.judge) {
-      return { gates, requiresFramework: true };
-    }
-
-    return { gates, requiresFramework };
-  }
-
-  /**
-   * Determines whether gates should be auto-assigned based on category.
-   * Gates are always auto-assigned when appropriate for the prompt category.
-   *
-   * Note: The semantic layer (LLM integration) controls whether the SERVER validates gates,
-   * not whether gates are assigned. Gate instructions are always rendered so the LLM client
-   * can self-validate when server-side validation is disabled.
-   *
-   * Explicit gates from user/prompt configuration are always honored.
-   */
-  private shouldAutoAssignGates(): boolean {
-    // Gates should always be auto-assigned based on category
-    // Server-side validation is controlled separately by semantic layer config
-    return true;
-  }
-
-  /**
-   * Auto-assign gates based on prompt category using YAML activation rules.
-   *
-   * Uses GateManager.getCategoryGates() to dynamically select gates that have
-   * activation.prompt_categories matching the current prompt's category.
-   * Falls back to empty array if GateManager is not available.
-   *
-   * Note: Framework gates (gate_type: 'framework') are handled separately via
-   * the framework_gates configuration flag, not by this method.
-   */
-  private autoAssignGates(category: string): string[] {
-    // Use GateManager for data-driven gate selection based on YAML activation rules
-    if (this.gateManager !== undefined) {
-      const normalizedCategory = category.length > 0 ? category.toLowerCase() : 'general';
-      const categoryGates = this.gateManager.getCategoryGates(normalizedCategory);
-
-      this.logger.debug('[ExecutionPlanner] Auto-assigned gates from activation rules', {
-        category: normalizedCategory,
-        gates: categoryGates,
-      });
-
-      return categoryGates;
-    }
-
-    // Fallback: No GateManager available - return empty (gates will come from explicit config)
-    this.logger.debug(
-      '[ExecutionPlanner] No GateManager available for category-based gate selection'
-    );
-    return [];
-  }
-
-  private collectExplicitGateIds(
-    prompt: ConvertedPrompt,
-    categoryInfo: CategoryExtractionResult
-  ): Set<string> {
-    const gateIds = new Set<string>();
-
-    const addGate = (gateId?: string | null) => {
-      if (gateId && gateId.trim().length > 0) {
-        gateIds.add(gateId.trim());
-      }
-    };
-
-    (prompt.gates || []).forEach((gate: GateDefinition) => addGate(gate.id || gate.name));
-    (prompt as any).autoAssignedGates?.forEach?.((gate: { id?: string }) => addGate(gate?.id));
-    this.getPromptLevelIncludes(prompt).forEach(addGate);
-    (categoryInfo.gateConfiguration?.include || []).forEach(addGate);
-
-    return gateIds;
-  }
-
-  private getPromptLevelIncludes(prompt: ConvertedPrompt): string[] {
-    const includes: string[] = [];
-    const gateConfig = (prompt as any).gateConfiguration;
-    if (gateConfig?.include) {
-      includes.push(...gateConfig.include);
-    }
-    if (prompt.enhancedGateConfiguration?.include) {
-      includes.push(...prompt.enhancedGateConfiguration.include);
-    }
-    return includes;
-  }
-
-  private getPromptLevelExcludes(prompt: ConvertedPrompt): string[] {
-    const excludes: string[] = [];
-    const gateConfig = (prompt as any).gateConfiguration;
-    if (gateConfig?.exclude) {
-      excludes.push(...gateConfig.exclude);
-    }
-    if (prompt.enhancedGateConfiguration?.exclude) {
-      excludes.push(...prompt.enhancedGateConfiguration.exclude);
-    }
-    return excludes;
-  }
-
-  private mergeGates(
-    explicitGates: Set<string>,
-    autoAssigned: string[],
-    exclude: string[]
-  ): Set<string> {
-    const merged = new Set<string>(explicitGates);
-    autoAssigned.forEach((gate) => {
-      if (gate) merged.add(gate);
-    });
-
-    exclude.forEach((gateId) => merged.delete(gateId));
-
-    return merged;
-  }
-
   private requiresFramework(
     strategy: ExecutionStrategyType,
     prompt: ConvertedPrompt,
@@ -625,4 +470,46 @@ export class ExecutionPlanner {
 
     return false;
   }
+}
+
+// ============================================================================
+// Pure helpers
+// ============================================================================
+
+/**
+ * Resolve whether a methodology system prompt is required, from the execution modifiers.
+ *
+ * This is the half of the former `applyModifierOverrides` that belongs to planning. The other
+ * half — what those modifiers do to the gate set — moved to `GateSetResolver`, because gates
+ * are owned by `engine/gates`. Splitting the method was deliberate: leaving it whole would have
+ * put a framework decision inside the gates domain, which `no-frameworks-in-gates` exists to
+ * prevent.
+ *
+ * `%clean` and `%lean` both suppress the methodology; `%framework` and `%judge` both force it.
+ */
+function resolveFrameworkRequirement(
+  modifiers: ExecutionModifiers | undefined,
+  requiresFramework: boolean
+): boolean {
+  if (!modifiers) {
+    return requiresFramework;
+  }
+
+  if (modifiers.clean === true || modifiers.lean === true) {
+    return false;
+  }
+
+  if (modifiers.framework === true || modifiers.judge === true) {
+    return true;
+  }
+
+  return requiresFramework;
+}
+
+/**
+ * Extract plain gate ids from the unified `gates` parameter, discarding inline definition
+ * objects — those are registered separately by the temporary-gate registrar.
+ */
+function collectStringGateIds(gateOverrides: GateOverrideOptions | undefined): string[] {
+  return (gateOverrides?.gates ?? []).filter((gate): gate is string => typeof gate === 'string');
 }

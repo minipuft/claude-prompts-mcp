@@ -383,3 +383,51 @@ export async function processTemplateWithRefs(
     inlineScriptResults: inlineScriptResults.size > 0 ? inlineScriptResults : undefined,
   };
 }
+
+/**
+ * Serialize an MCP option value into a `key:value` command-string token.
+ *
+ * Strings are JSON-encoded so embedded quote characters survive the round trip
+ * through the command string. `parseQuotedValue` is the matching decoder and the
+ * two MUST stay in step.
+ *
+ * They are co-located deliberately: the encoder previously lived in the request
+ * normalization stage and wrapped values in unescaped single quotes, while the
+ * decoder in the argument parser used two mutually inconsistent regexes. Any
+ * value containing an apostrophe was silently truncated at that apostrophe, and
+ * the remaining prose was re-parsed into arguments the prompt never declared.
+ */
+export function serializeOptionValue(value: unknown): string {
+  return typeof value === 'string' ? JSON.stringify(value) : String(value);
+}
+
+/**
+ * Decode the inner contents of a quoted command-string token — i.e. the regex
+ * capture group WITHOUT its surrounding quote characters.
+ *
+ * Resolves the backslash escapes `serializeOptionValue` may emit, including the
+ * `\uXXXX` form JSON.stringify uses for control characters. Unrecognized escapes
+ * yield the escaped character itself, which keeps hand-written commands such as
+ * `key:'it\'s'` working.
+ */
+export function parseQuotedValue(raw: string): string {
+  return raw.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_match: string, escape: string): string => {
+    if (escape.startsWith('u')) {
+      return String.fromCharCode(parseInt(escape.slice(1), 16));
+    }
+    switch (escape) {
+      case 'n':
+        return '\n';
+      case 't':
+        return '\t';
+      case 'r':
+        return '\r';
+      case 'b':
+        return '\b';
+      case 'f':
+        return '\f';
+      default:
+        return escape;
+    }
+  });
+}

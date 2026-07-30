@@ -45,6 +45,24 @@ function resolveRegisterWithMcp(
 }
 
 /**
+ * Resolve the native MCP prompt behavior using the priority chain:
+ * 1. Prompt-level override (highest priority)
+ * 2. Category-level default (from _categoryMcpPromptMode)
+ * 3. Hard-coded default: 'expand' (plain template expansion)
+ */
+function resolveMcpPromptMode(
+  promptData: PromptData & { _categoryMcpPromptMode?: 'expand' | 'launch' }
+): 'expand' | 'launch' {
+  if (promptData.mcpPromptMode !== undefined) {
+    return promptData.mcpPromptMode;
+  }
+  if (promptData._categoryMcpPromptMode !== undefined) {
+    return promptData._categoryMcpPromptMode;
+  }
+  return 'expand';
+}
+
+/**
  * Prompt Converter class
  */
 export class PromptConverter {
@@ -139,6 +157,8 @@ export class PromptConverter {
           chainSteps: chainSteps,
           // Resolve MCP registration from prompt/category/global defaults
           registerWithMcp: resolveRegisterWithMcp(promptData, this.globalRegisterWithMcp),
+          // Resolve native MCP prompt behavior (expand vs launch) from prompt/category defaults
+          mcpPromptMode: resolveMcpPromptMode(promptData),
         };
 
         if (promptData.subagentModel != null) {
@@ -147,6 +167,10 @@ export class PromptConverter {
 
         if (promptFile.gateConfiguration) {
           convertedPrompt.gateConfiguration = promptFile.gateConfiguration;
+        }
+
+        if (promptFile.injection !== undefined) {
+          convertedPrompt.injection = promptFile.injection;
         }
 
         // Load script tools if prompt declares any (Phase 2 integration)

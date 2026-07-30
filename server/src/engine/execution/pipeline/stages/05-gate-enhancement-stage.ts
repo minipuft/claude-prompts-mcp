@@ -1,4 +1,5 @@
 // @lifecycle canonical - Enriches prompts with gate instructions prior to execution.
+import { inlineDefinitionCarriers } from '../../../gates/services/gate-enhancement-service.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../../infra/logging/index.js';
@@ -64,13 +65,23 @@ export class GateEnhancementStage extends BasePipelineStage {
       return;
     }
 
+    // ADR 0001 (d) ships inline gate execution in two releases. Both the enablement check and
+    // the single-vs-chain prompt walk live in services, so this stage adds no branches of its
+    // own — it stays a thin orchestrator.
+    const inlineDefinitionGateIds = this.registrar.registerInlineGateDefinitions(
+      context,
+      inlineDefinitionCarriers(gateContext),
+      gatesConfig?.executeInlineGateDefinitions === true
+    );
+
     if (gateContext.type === 'chain') {
       await this.enhancementService.enhanceChainSteps(
         gateContext,
         context,
         registeredGates,
         gatesConfig,
-        methodologyGates
+        methodologyGates,
+        inlineDefinitionGateIds
       );
       return;
     }
@@ -80,7 +91,8 @@ export class GateEnhancementStage extends BasePipelineStage {
       context,
       registeredGates,
       gatesConfig,
-      methodologyGates
+      methodologyGates,
+      inlineDefinitionGateIds
     );
   }
 }

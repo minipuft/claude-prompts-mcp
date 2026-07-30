@@ -1,0 +1,33 @@
+id: creed-fidelity
+name: Materials Creed Fidelity
+type: validation
+gate_type: category
+severity: high
+description: >-
+  CloudySky visual work must hold itself against the Materials Creed at the top of
+  docs/DESIGN_BIBLE.md. The output states three things: the numbered creed line the
+  work SERVES, the numbered line it most RISKS violating, and the observable check
+  (tools/cdp probe, screenshot, or measured delta) that would catch the violation.
+  If no CloudySky visual/aesthetic surface is in play, state "creed: n/a — no visual
+  surface" and pass.
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance
+    required_patterns:
+      - creed
+  - type: inline_guidance
+    regex_patterns:
+      - 'serves|n/a'
+      - 'risk|n/a'
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - development
+  explicit_request: false
+  framework_context:
+    - RADIANT

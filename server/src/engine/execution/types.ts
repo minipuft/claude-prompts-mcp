@@ -6,12 +6,7 @@
  * This includes execution strategies, converted prompts, contexts, and chain execution.
  */
 
-import type {
-  CustomCheck,
-  GateScope,
-  GateSpecification,
-  TemporaryGateInput,
-} from '../../shared/types/execution.js';
+import type { TemporaryGateInput } from '../../shared/types/execution.js';
 import type {
   ChainStep,
   ExecutionModifier,
@@ -21,22 +16,19 @@ import type {
   GateDefinition,
   LoadedScriptTool,
   PromptArgument,
+  PromptInjectionConfig,
 } from '../../shared/types/index.js';
 
-// Re-export gate-related types for convenience
-export type { CustomCheck, GateScope, GateSpecification, TemporaryGateInput };
-
-// Execution plan types canonical definitions live in shared/types/index.ts.
-// Re-exported here for backward compatibility within engine/.
+// Re-exported for engine/ consumers. `CustomCheck`, `GateScope`, `GateSpecification` and
+// `ChainStep` were re-exported here too and had ZERO consumers via this path — dropped
+// 2026-07-29. Import them from shared/types/ directly.
+export type { TemporaryGateInput };
 export type { ExecutionModifier, ExecutionModifiers, ExecutionPlan, ExecutionStrategyType };
 
 /**
  * Execution types for semantic analysis
  */
 export type ExecutionType = 'single' | 'chain' | 'auto';
-
-// ChainStep canonical definition lives in shared/types/index.ts (cross-layer contract type).
-export type { ChainStep };
 
 /**
  * Comprehensive converted prompt for execution context
@@ -56,6 +48,12 @@ export interface ConvertedPrompt {
   gates?: GateDefinition[];
   /** Whether to register this prompt with MCP. Resolved from prompt/category/global defaults. */
   registerWithMcp?: boolean;
+  /**
+   * Native MCP prompt behavior, resolved from prompt/category defaults:
+   * 'expand' (plain template text) or 'launch' (route invocation through the
+   * prompt_engine pipeline). Default: 'expand'.
+   */
+  mcpPromptMode?: 'expand' | 'launch';
   // Template-level gate configuration
   gateConfiguration?: {
     include?: string[];
@@ -63,8 +61,12 @@ export interface ConvertedPrompt {
     framework_gates?: boolean;
     inline_gate_definitions?: TemporaryGateDefinition[];
   };
-  // Enhanced gate configuration with temporary gates
-  enhancedGateConfiguration?: EnhancedGateConfiguration;
+  /**
+   * Prompt-level injection control, carried from the prompt's own YAML. Read by the injection
+   * hierarchy as the tier between step and chain config, and by gate resolution to decide
+   * whether methodology-scoring gates are coherent for this execution.
+   */
+  injection?: PromptInjectionConfig;
   executionModifiers?: ExecutionModifiers; // Optional default modifiers applied when executing this prompt
   requiresExecution?: boolean; // Whether this prompt should be executed rather than returned
   // Script tools
@@ -314,21 +316,6 @@ export interface ValidationCheck {
 }
 
 /**
- * Enhanced gate configuration supporting inline gate definitions
- * Extends basic gate configuration with inline gate support
- */
-export interface EnhancedGateConfiguration {
-  /** Gates to explicitly include */
-  include?: string[];
-  /** Gates to explicitly exclude */
-  exclude?: string[];
-  /** Whether to include framework-based gates (default: true) */
-  framework_gates?: boolean;
-  /** Inline gate definitions for this execution */
-  inline_gate_definitions?: TemporaryGateDefinition[];
-}
-
-/**
  * Temporary gate definition for enhanced configuration
  */
 export interface TemporaryGateDefinition {
@@ -354,9 +341,7 @@ export interface TemporaryGateDefinition {
   context?: Record<string, any>;
 }
 
-// GateReviewExecutionContext and GateReviewPrompt moved to shared/types/chain-execution.ts
-// Re-exported here so engine/ consumers can continue importing from this module.
-export type {
-  GateReviewExecutionContext,
-  GateReviewPrompt,
-} from '../../shared/types/chain-execution.js';
+// `GateReviewPrompt` is defined in shared/types/chain-execution.ts and re-exported for the three
+// engine/ consumers that import it from here. `GateReviewExecutionContext` was re-exported
+// alongside it with ZERO consumers via this path — dropped 2026-07-29.
+export type { GateReviewPrompt } from '../../shared/types/chain-execution.js';

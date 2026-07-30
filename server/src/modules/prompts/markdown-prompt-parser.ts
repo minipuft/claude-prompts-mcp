@@ -8,7 +8,11 @@
  * Extracted from PromptLoader.loadPromptFile() to reduce loader.ts file size.
  */
 
-import { type LoadedPromptFile, normalizeInlineGateDefinitions } from './yaml-prompt-loader.js';
+import {
+  type InlineGateSource,
+  type LoadedPromptFile,
+  normalizeInlineGateDefinitions,
+} from './yaml-prompt-loader.js';
 
 // Re-export for consumer convenience
 export type { LoadedPromptFile };
@@ -47,7 +51,10 @@ export function extractMarkdownSections(content: string): {
  * Returns undefined if the match is null or parsing fails.
  */
 export function parseGateConfiguration(
-  gateConfigMatch: RegExpMatchArray | null
+  gateConfigMatch: RegExpMatchArray | null,
+  // No default value: a defaulted parameter counts as a branch, and this function already
+  // measures cyclomatic 12 against a limit of 10. The callee defaults it instead.
+  origin?: InlineGateSource
 ): GateConfiguration | undefined {
   if (!gateConfigMatch) return undefined;
 
@@ -77,7 +84,8 @@ export function parseGateConfiguration(
     }
 
     const inlineGateDefinitions = normalizeInlineGateDefinitions(
-      parsedConfig.inline_gate_definitions
+      parsedConfig.inline_gate_definitions,
+      origin
     );
     if (inlineGateDefinitions) {
       normalized.inline_gate_definitions = inlineGateDefinitions;
@@ -174,11 +182,22 @@ function parseYamlStyleMapping(mappingStr: string): Record<string, string> | und
  *
  * @throws Error if content has no system message, user template, or chain steps
  */
-export function parseMarkdownPromptContent(content: string, filePath: string): LoadedPromptFile {
+export function parseMarkdownPromptContent(
+  content: string,
+  filePath: string,
+  // Undefined rather than defaulted — see parseGateConfiguration. `{...undefined}` spreads to
+  // nothing, so the call below needs no branch either.
+  origin?: InlineGateSource
+): LoadedPromptFile {
   const sections = extractMarkdownSections(content);
 
-  // Parse gate configuration
-  const gateConfiguration = parseGateConfiguration(sections.gateConfigMatch);
+  // Parse gate configuration. The origin carries a logger so a dropped inline gate definition
+  // in a markdown prompt is as visible as one in a YAML prompt — ADR 0001's warn-then-arm
+  // release is about operator visibility across a whole workspace, and markdown is still loadable.
+  const gateConfiguration = parseGateConfiguration(sections.gateConfigMatch, {
+    promptId: filePath,
+    ...origin,
+  });
 
   // Strip gate config section from user template if present
   let userMessageTemplate = sections.userMessageTemplate;

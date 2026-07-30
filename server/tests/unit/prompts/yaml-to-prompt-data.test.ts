@@ -163,4 +163,53 @@ describe('yamlToPromptData', () => {
       'should-pass-through'
     );
   });
+
+  describe('injection block normalization', () => {
+    it('normalizes a declared injection block onto PromptData', () => {
+      const yaml = makeMinimalYaml({
+        injection: {
+          'system-prompt': { enabled: false },
+          'style-guidance': { frequency: { mode: 'first-only' }, target: 'steps' },
+        },
+      });
+
+      const result = yamlToPromptData(yaml);
+
+      expect(result.injection).toEqual({
+        'system-prompt': { enabled: false },
+        'style-guidance': { frequency: { mode: 'first-only' }, target: 'steps' },
+      });
+    });
+
+    it('preserves enabled: true rather than dropping it as falsy-adjacent', () => {
+      const yaml = makeMinimalYaml({ injection: { 'gate-guidance': { enabled: true } } });
+
+      const result = yamlToPromptData(yaml);
+
+      expect(result.injection?.['gate-guidance']?.enabled).toBe(true);
+    });
+
+    it('normalizes an empty block to undefined so it cannot shadow the chain tier', () => {
+      // A present-but-empty rule would register as a hierarchy match while contributing no
+      // fields, silently suppressing the chain and category tiers below it.
+      expect(yamlToPromptData(makeMinimalYaml({ injection: {} })).injection).toBeUndefined();
+      expect(
+        yamlToPromptData(makeMinimalYaml({ injection: { 'system-prompt': {} } })).injection
+      ).toBeUndefined();
+    });
+
+    it('leaves injection undefined when the prompt declares none', () => {
+      expect(yamlToPromptData(makeMinimalYaml()).injection).toBeUndefined();
+    });
+
+    it('does not let the raw YAML block bypass normalization via the passthrough spread', () => {
+      // `injection` must be destructured out of the spread. If it were not, an all-empty block
+      // would arrive as `{}` instead of undefined — normalized on one path, raw on the other.
+      const yaml = makeMinimalYaml({ injection: { 'system-prompt': {} } });
+
+      const result = yamlToPromptData(yaml);
+
+      expect(result.injection).not.toEqual({ 'system-prompt': {} });
+    });
+  });
 });

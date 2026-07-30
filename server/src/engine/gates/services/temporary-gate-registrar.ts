@@ -1,6 +1,8 @@
 // @lifecycle canonical - Registers temporary gates from normalized specifications.
+import { mergeGateBody } from './gate-body-merge.js';
 import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guidance.js';
 
+import type { GateBody } from './gate-body-merge.js';
 import type { GateReferenceResolver } from './gate-reference-resolver.js';
 import type { Logger } from '../../../infra/logging/index.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
@@ -9,6 +11,15 @@ import type {
   TemporaryGateDefinition,
   TemporaryGateRegistry,
 } from '../core/temporary-gate-registry.js';
+
+/**
+ * Anything that may carry inline gate definitions — structurally a `ConvertedPrompt`, declared
+ * narrowly so the registrar depends on the two fields it reads rather than the whole prompt type.
+ */
+export interface InlineDefinitionCarrier {
+  readonly id?: string | undefined;
+  readonly gateConfiguration?: { readonly inline_gate_definitions?: unknown } | undefined;
+}
 
 /**
  * Result of temporary gate registration.
@@ -442,6 +453,128 @@ export class TemporaryGateRegistrar {
     return '';
   }
 
+  /**
+   * Register a prompt's `inline_gate_definitions` and return their canonical ids.
+   *
+   * Reuses the `TemporaryGateRegistry` seam rather than adding a second registration path into
+   * gate selection (ADR 0001 (b), finding F5). The returned ids are contributed to resolution at
+   * rank 60 `prompt-config` — the prompt author's tier — not rank 80, which belongs to the caller
+   * who invoked the prompt.
+   *
+   * When a definition declares an id that is already registered, the body is resolved per ADR
+   * 0001 (b) via `mergeGateBody`: the inline definition's declared fields replace, its omitted
+   * fields inherit, and arrays and objects replace wholesale rather than appending or merging.
+   * The id stays a single entry either way.
+   *
+   * Failures are contained per definition: one malformed or unregisterable definition is warned
+   * about and skipped, leaving the rest of the prompt's gates intact. A registration failure must
+   * not take a prompt out of service.
+   */
+  registerInlineGateDefinitions(
+    context: ExecutionContext,
+    prompts: ReadonlyArray<InlineDefinitionCarrier | undefined>,
+    /**
+     * Whether inline definitions execute this release. The check lives here rather than at the
+     * call site so the calling stage stays branch-free — see ADR 0001 (d) and
+     * `GatesConfig.executeInlineGateDefinitions`.
+     */
+    enabled: boolean
+  ): string[] {
+    if (!enabled) {
+      return [];
+    }
+
+    const registeredIds: string[] = [];
+
+    for (const prompt of prompts) {
+      registeredIds.push(...this.registerPromptInlineDefinitions(context, prompt));
+    }
+
+    if (registeredIds.length > 0) {
+      const existing = context.state.gates.temporaryGateIds ?? [];
+      context.state.gates.temporaryGateIds = [...existing, ...registeredIds];
+
+      this.logger.info('[TemporaryGateRegistrar] Registered inline gate definitions', {
+        gateIds: registeredIds,
+      });
+    }
+
+    return registeredIds;
+  }
+
+  /** Register one prompt's definitions. Returns the canonical ids that were created. */
+  private registerPromptInlineDefinitions(
+    context: ExecutionContext,
+    prompt: InlineDefinitionCarrier | undefined
+  ): string[] {
+    const definitions = prompt?.gateConfiguration?.inline_gate_definitions;
+    const registry = this.temporaryGateRegistry;
+
+    if (!Array.isArray(definitions) || definitions.length === 0) {
+      return [];
+    }
+    if (registry === undefined) {
+      this.logger.warn(
+        '[TemporaryGateRegistrar] Inline gate definitions present but no registry available',
+        { promptId: prompt?.id, count: definitions.length }
+      );
+      return [];
+    }
+
+    const registeredIds: string[] = [];
+    for (const definition of definitions as GateBody[]) {
+      const gateId = this.registerOneInlineDefinition(context, registry, definition, prompt?.id);
+      if (gateId !== undefined) {
+        registeredIds.push(gateId);
+      }
+    }
+
+    return registeredIds;
+  }
+
+  /** Register one inline definition, merging over any existing body. Returns its canonical id. */
+  private registerOneInlineDefinition(
+    context: ExecutionContext,
+    registry: TemporaryGateRegistry,
+    definition: GateBody,
+    promptId: string | undefined
+  ): string | undefined {
+    const name = typeof definition['name'] === 'string' ? definition['name'] : undefined;
+    if (name === undefined) {
+      // The loader already warns and drops these; reaching here means a caller bypassed it.
+      this.logger.warn('[TemporaryGateRegistrar] Skipping inline definition with no name', {
+        promptId,
+      });
+      return undefined;
+    }
+
+    const declaredId = typeof definition['id'] === 'string' ? definition['id'] : undefined;
+    const scope = readInlineScope(definition);
+
+    try {
+      const existing = declaredId === undefined ? undefined : registry.getTemporaryGate(declaredId);
+      const body =
+        existing === undefined
+          ? definition
+          : mergeGateBody(existing as unknown as GateBody, definition);
+
+      const gateId = registry.createTemporaryGate(
+        buildInlineTemporaryGate(body, name, scope, declaredId),
+        inlineScopeId(context, scope)
+      );
+
+      this.trackTemporaryGateScope(context, scope, inlineScopeId(context, scope));
+      return gateId;
+    } catch (error) {
+      this.logger.warn('[TemporaryGateRegistrar] Failed to register inline gate definition', {
+        promptId,
+        gate: name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+
   private trackTemporaryGateScope(
     context: ExecutionContext,
     scope: string,
@@ -519,4 +652,110 @@ export class TemporaryGateRegistrar {
       typeof gate['description'] === 'string' && gate['description'].trim().length > 0;
     return hasCriteria || hasPassCriteria || hasGuidance || hasDescription;
   }
+}
+
+// ============================================================================
+// Pure helpers for inline gate definitions
+// ============================================================================
+
+const INLINE_SCOPES = ['execution', 'session', 'chain', 'step'] as const;
+type InlineScope = (typeof INLINE_SCOPES)[number];
+
+/** The definition's declared scope, defaulting to `execution` per ADR 0001 (b). */
+function readInlineScope(definition: GateBody): InlineScope {
+  const scope = definition['scope'];
+  return (INLINE_SCOPES as readonly string[]).includes(scope as string)
+    ? (scope as InlineScope)
+    : 'execution';
+}
+
+/**
+ * Scope id for an inline definition.
+ *
+ * A `chain`-scoped definition binds to the chain so it survives across steps; everything else
+ * binds to the session or the command, matching what `registerTemporaryGates` already does for
+ * caller-supplied specs.
+ */
+function inlineScopeId(context: ExecutionContext, scope: InlineScope): string {
+  // `getSessionId` is a plain method on ExecutionContext, so no optional call — the older
+  // `getSessionId?.()` spelling elsewhere in this file predates the rule that flags it.
+  if (scope === 'chain') {
+    return context.mcpRequest.chain_id ?? context.getSessionId() ?? 'execution';
+  }
+  return context.getSessionId() ?? context.mcpRequest.chain_id ?? 'execution';
+}
+
+/**
+ * Shape a merged body into the registry's creation input.
+ *
+ * `description` falls back to a guidance excerpt rather than being left empty, mirroring
+ * `registerTemporaryGates`, so a gate always has something to display.
+ */
+function buildInlineTemporaryGate(
+  body: GateBody,
+  name: string,
+  scope: InlineScope,
+  declaredId: string | undefined
+): Omit<TemporaryGateDefinition, 'id' | 'created_at'> & { id?: string } {
+  const guidance = typeof body['guidance'] === 'string' ? body['guidance'] : '';
+  const description =
+    typeof body['description'] === 'string' && body['description'].length > 0
+      ? body['description']
+      : guidance.substring(0, 100);
+
+  const definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> & { id?: string } = {
+    name,
+    type: body['type'] === 'guidance' ? 'guidance' : 'validation',
+    scope,
+    description,
+    guidance,
+    // Inline definitions are authored by hand in a prompt file, so the provenance is 'manual'
+    // unless the definition says otherwise.
+    source: readInlineGateSource(body),
+  };
+
+  if (declaredId !== undefined) {
+    definition.id = declaredId;
+  }
+
+  return applyOptionalInlineFields(definition, body);
+}
+
+/**
+ * Copy the optional fields a definition may carry.
+ *
+ * Separated from `buildInlineTemporaryGate` so neither exceeds the cyclomatic limit; each optional
+ * field is one more branch, and the two together measured 11.
+ */
+function applyOptionalInlineFields(
+  definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> & { id?: string },
+  body: GateBody
+): Omit<TemporaryGateDefinition, 'id' | 'created_at'> & { id?: string } {
+  if (Array.isArray(body['pass_criteria'])) {
+    definition.pass_criteria = body['pass_criteria'];
+  }
+  if (isRecord(body['context'])) {
+    definition.context = body['context'];
+  }
+  if (typeof body['expires_at'] === 'number') {
+    definition.expires_at = body['expires_at'];
+  }
+  if (Array.isArray(body['apply_to_steps'])) {
+    definition.apply_to_steps = body['apply_to_steps'] as number[];
+  }
+  if (typeof body['target_step_number'] === 'number') {
+    definition.target_step_number = body['target_step_number'];
+  }
+
+  return definition;
+}
+
+/** Provenance of an inline definition, defaulting to `manual`. */
+function readInlineGateSource(body: GateBody): TemporaryGateDefinition['source'] {
+  const source = body['source'];
+  return source === 'automatic' || source === 'analysis' || source === 'manual' ? source : 'manual';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

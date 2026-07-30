@@ -24,6 +24,7 @@ export type InjectionDecisionSource =
   | 'modifier' // %clean, %lean, %judge modifiers
   | 'runtime-override' // session_overrides via system_control
   | 'step-config' // step-specific rules in chain
+  | 'prompt-config' // the prompt's own injection block in prompt.yaml
   | 'chain-config' // chain-level rules
   | 'category-config' // category-level rules
   | 'global-config' // config.json defaults
@@ -151,6 +152,14 @@ export interface InjectionDecisionInput {
   chainId?: string;
   /** Prompt ID for hierarchical lookup. */
   promptId?: string;
+  /**
+   * The prompt's own injection block, read off the converted prompt by the caller.
+   *
+   * Arrives as data rather than being looked up by `promptId`, because this config is
+   * declared in the prompt file itself and travels with the prompt — there is no
+   * `config.json` array to search.
+   */
+  promptInjection?: PromptInjectionConfig;
   /** Current execution context type for target filtering. */
   executionContext?: ExecutionContextType;
 }
@@ -218,6 +227,43 @@ export interface InjectionTypeRuleConfig {
   target?: InjectionTarget;
   /** Conditional rules. First match wins. */
   conditions?: InjectionCondition[];
+}
+
+/**
+ * Injection rule declared by a prompt about itself.
+ *
+ * Narrower than `InjectionTypeRuleConfig` on purpose: it omits `conditions`, whose cases
+ * (`chain-position`, `step-number`, `previous-step-result`) describe a position in a chain
+ * rather than a property of a prompt. A prompt declaring them would be declaring a field
+ * nothing could act on.
+ */
+export interface PromptInjectionRule {
+  /** Whether this injection type is enabled for this prompt. */
+  enabled?: boolean;
+  /** Frequency configuration for chain execution. */
+  frequency?: InjectionFrequency;
+  /** Target execution contexts for injection. */
+  target?: InjectionTarget;
+}
+
+/**
+ * Prompt-level injection configuration, declared in the prompt's own `prompt.yaml`.
+ *
+ * Sits between step and chain in the resolution hierarchy: what a prompt declares about
+ * itself outranks the chain and category it happens to run inside, but a chain author's
+ * step-targeted rule still wins — the step rule is the more specific statement about this
+ * particular execution.
+ *
+ * Carries no identifier, unlike the category/chain/step configs: the prompt this block is
+ * declared in IS the scope, so there is nothing to match against.
+ */
+export interface PromptInjectionConfig {
+  /** System prompt injection rules for this prompt. */
+  'system-prompt'?: PromptInjectionRule;
+  /** Gate guidance injection rules for this prompt. */
+  'gate-guidance'?: PromptInjectionRule;
+  /** Style guidance injection rules for this prompt. */
+  'style-guidance'?: PromptInjectionRule;
 }
 
 /**
@@ -365,6 +411,7 @@ export const RESOLUTION_PRIORITY: readonly InjectionDecisionSource[] = [
   'modifier',
   'runtime-override',
   'step-config',
+  'prompt-config',
   'chain-config',
   'category-config',
   'global-config',
@@ -491,6 +538,7 @@ export const DECISION_SOURCE_DESCRIPTIONS: Readonly<Record<InjectionDecisionSour
   modifier: 'Command modifier (%clean, %lean, %judge)',
   'runtime-override': 'Runtime session override via system_control',
   'step-config': 'Step-specific configuration',
+  'prompt-config': "The prompt's own injection block in prompt.yaml",
   'chain-config': 'Chain-level configuration',
   'category-config': 'Category-level configuration',
   'global-config': 'Global config.json settings',

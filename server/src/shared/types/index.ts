@@ -792,10 +792,25 @@ export interface PromptData {
   gates?: GateDefinition[];
   /** Gate configuration (YAML format) */
   gateConfiguration?: PromptGateConfiguration;
+  /**
+   * Prompt-level injection control, resolved between step and chain config.
+   *
+   * Referenced inline rather than through a top-level import: `./injection.js` is already
+   * re-exported wholesale below, and adding a type import here would reorder an import group
+   * this type has no stake in.
+   */
+  injection?: import('./injection.js').PromptInjectionConfig;
   /** Chain steps for multi-step execution (YAML format) */
   chainSteps?: ChainStep[];
   /** Whether to register this prompt with MCP. Overrides category default. */
   registerWithMcp?: boolean;
+  /**
+   * Behavior of the native MCP prompt surface when invoked as a slash command:
+   * 'expand' returns plain template text; 'launch' returns a directive routing
+   * the invocation through the prompt_engine pipeline (framework/gates/chains/
+   * telemetry). Default: 'expand'. Overrides category default.
+   */
+  mcpPromptMode?: 'expand' | 'launch';
   /** Script tool IDs declared by this prompt (references tools/{id}/ directories) */
   tools?: string[];
   /** Client-agnostic capability hint for delegation model selection */

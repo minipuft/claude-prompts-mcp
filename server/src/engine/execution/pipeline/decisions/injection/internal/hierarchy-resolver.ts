@@ -12,6 +12,7 @@ import type {
   InjectionRuntimeOverride,
   InjectionType,
   InjectionTypeConfig,
+  PromptInjectionRule,
   ResolvedInjectionConfig,
   StepInjectionConfig,
 } from '../types.js';
@@ -22,10 +23,15 @@ import type {
  * Resolution priority (highest to lowest):
  * 1. Runtime overrides (from system_control)
  * 2. Step config (step-specific rules)
- * 3. Chain config (chain-level rules)
- * 4. Category config (category-level rules)
- * 5. Global config (config.json defaults)
- * 6. System defaults (hardcoded fallbacks)
+ * 3. Prompt config (the prompt's own `injection` block)
+ * 4. Chain config (chain-level rules)
+ * 5. Category config (category-level rules)
+ * 6. Global config (config.json defaults)
+ * 7. System defaults (hardcoded fallbacks)
+ *
+ * Prompt sits above chain and below step: a prompt's declaration about itself outranks the
+ * chain or category it happens to run inside, while a chain author's step-targeted rule is
+ * the more specific statement about this particular execution and still wins.
  *
  * Note: Modifiers (%clean, %lean) are NOT handled here.
  * They are checked first by InjectionDecisionService before
@@ -106,7 +112,24 @@ export class HierarchyResolver {
       };
     }
 
-    // Priority 3: Chain config
+    // Priority 3: Prompt config (the prompt's own declaration about itself)
+    const promptConfig = this.findPromptConfig(injectionType, input);
+    if (promptConfig !== undefined) {
+      resolutionPath.push('prompt-config');
+
+      this.logger.debug('[HierarchyResolver] Using prompt config', {
+        type: injectionType,
+        promptId: input.promptId,
+      });
+
+      return {
+        config: this.mergeWithDefaults(injectionType, promptConfig),
+        source: 'prompt-config',
+        resolutionPath,
+      };
+    }
+
+    // Priority 4: Chain config
     const chainConfig = this.findChainConfig(injectionType, input);
     if (chainConfig) {
       resolutionPath.push('chain-config');
@@ -126,7 +149,7 @@ export class HierarchyResolver {
       };
     }
 
-    // Priority 4: Category config
+    // Priority 5: Category config
     const categoryConfig = this.findCategoryConfig(injectionType, input);
     if (categoryConfig) {
       resolutionPath.push('category-config');
@@ -146,7 +169,7 @@ export class HierarchyResolver {
       };
     }
 
-    // Priority 5: Global config
+    // Priority 6: Global config
     const globalConfig = this.config[injectionType];
     if (globalConfig) {
       resolutionPath.push('global-config');
@@ -162,7 +185,7 @@ export class HierarchyResolver {
       };
     }
 
-    // Priority 6: System defaults
+    // Priority 7: System defaults
     resolutionPath.push('system-default');
 
     this.logger.debug('[HierarchyResolver] Using system defaults', {
@@ -314,6 +337,27 @@ export class HierarchyResolver {
   }
 
   /**
+   * Find the prompt's own rule for this injection type.
+   *
+   * Unlike the step/chain/category finders this searches nothing: the config travels with the
+   * prompt on the decision input rather than living in a `config.json` array, so there is no
+   * identifier to match. `promptId` remains on the input for diagnostics.
+   *
+   * Returns the rule only when it declares at least one field. A present-but-empty rule would
+   * otherwise register as a hierarchy match and shadow the chain tier while contributing nothing.
+   */
+  private findPromptConfig(
+    injectionType: InjectionType,
+    input: InjectionDecisionInput
+  ): PromptInjectionRule | undefined {
+    const rule = input.promptInjection?.[injectionType];
+    if (rule === undefined || Object.keys(rule).length === 0) {
+      return undefined;
+    }
+    return rule;
+  }
+
+  /**
    * Find category-level configuration.
    */
   private findCategoryConfig(
@@ -338,10 +382,14 @@ export class HierarchyResolver {
 
   /**
    * Merge a partial config with system defaults.
+   *
+   * Takes `Partial<InjectionTypeConfig>` because every tier's rule shape declares `enabled` as
+   * optional — that is the point of a tier that overrides one field and inherits the rest. The
+   * method only ever reads fields behind `??`, so the partial is what it actually consumes.
    */
   private mergeWithDefaults(
     injectionType: InjectionType,
-    partialConfig: InjectionTypeConfig | undefined
+    partialConfig: Partial<InjectionTypeConfig> | undefined
   ): InjectionTypeConfig {
     const defaults = DEFAULT_CONFIG_BY_TYPE[injectionType];
 
@@ -372,6 +420,66 @@ export class HierarchyResolver {
   }
 
   /**
+   * The config tiers between step and global, in precedence order, each as a thunk.
+   *
+   * Thunks rather than resolved values so a tier is only searched if every higher tier declined,
+   * preserving the short-circuit the per-field walks had when they were written out longhand.
+   *
+   * One list, consumed by every field walk. Written out per field instead, adding the prompt
+   * tier meant editing each walk separately — the partial-threading failure mode, where a
+   * prompt could disable injection yet still inherit a category's frequency.
+   */
+  private buildTierChain(
+    injectionType: InjectionType,
+    input: InjectionDecisionInput
+  ): ReadonlyArray<{
+    source: InjectionDecisionSource;
+    read: () => Partial<InjectionTypeConfig> | undefined;
+  }> {
+    return [
+      {
+        source: 'step-config',
+        read: () => this.findStepConfig(injectionType, input)?.[injectionType],
+      },
+      { source: 'prompt-config', read: () => this.findPromptConfig(injectionType, input) },
+      {
+        source: 'chain-config',
+        read: () => this.findChainConfig(injectionType, input)?.[injectionType],
+      },
+      {
+        source: 'category-config',
+        read: () => this.findCategoryConfig(injectionType, input)?.[injectionType],
+      },
+      { source: 'global-config', read: () => this.config[injectionType] },
+    ];
+  }
+
+  /**
+   * First value declared for `field` walking the hierarchy from most to least specific,
+   * falling back to the system default.
+   *
+   * `resolutionPath` is optional because the target walk records no path — only the frequency
+   * walk does, which is the pre-existing behavior.
+   */
+  private findInHierarchy<K extends 'frequency' | 'target'>(
+    injectionType: InjectionType,
+    input: InjectionDecisionInput,
+    field: K,
+    resolutionPath?: InjectionDecisionSource[]
+  ): InjectionTypeConfig[K] {
+    for (const tier of this.buildTierChain(injectionType, input)) {
+      const value = tier.read()?.[field];
+      if (value !== undefined) {
+        resolutionPath?.push(tier.source);
+        return value;
+      }
+    }
+
+    resolutionPath?.push('system-default');
+    return DEFAULT_CONFIG_BY_TYPE[injectionType][field];
+  }
+
+  /**
    * Get frequency configuration from hierarchy (for runtime overrides).
    * Runtime overrides don't specify frequency, so we need to find it.
    */
@@ -380,33 +488,7 @@ export class HierarchyResolver {
     input: InjectionDecisionInput,
     resolutionPath: InjectionDecisionSource[]
   ): InjectionTypeConfig['frequency'] {
-    // Check step, chain, category, global in order
-    const stepConfig = this.findStepConfig(injectionType, input);
-    if (stepConfig?.[injectionType]?.frequency) {
-      resolutionPath.push('step-config');
-      return (stepConfig[injectionType] as InjectionTypeConfig).frequency;
-    }
-
-    const chainConfig = this.findChainConfig(injectionType, input);
-    if (chainConfig?.[injectionType]?.frequency) {
-      resolutionPath.push('chain-config');
-      return (chainConfig[injectionType] as InjectionTypeConfig).frequency;
-    }
-
-    const categoryConfig = this.findCategoryConfig(injectionType, input);
-    if (categoryConfig?.[injectionType]?.frequency) {
-      resolutionPath.push('category-config');
-      return (categoryConfig[injectionType] as InjectionTypeConfig).frequency;
-    }
-
-    const globalConfig = this.config[injectionType];
-    if (globalConfig?.frequency) {
-      resolutionPath.push('global-config');
-      return globalConfig.frequency;
-    }
-
-    resolutionPath.push('system-default');
-    return DEFAULT_CONFIG_BY_TYPE[injectionType].frequency;
+    return this.findInHierarchy(injectionType, input, 'frequency', resolutionPath);
   }
 
   /**
@@ -417,28 +499,7 @@ export class HierarchyResolver {
     injectionType: InjectionType,
     input: InjectionDecisionInput
   ): InjectionTypeConfig['target'] {
-    // Check step, chain, category, global in order
-    const stepConfig = this.findStepConfig(injectionType, input);
-    if (stepConfig?.[injectionType]?.target) {
-      return (stepConfig[injectionType] as InjectionTypeConfig).target;
-    }
-
-    const chainConfig = this.findChainConfig(injectionType, input);
-    if (chainConfig?.[injectionType]?.target) {
-      return (chainConfig[injectionType] as InjectionTypeConfig).target;
-    }
-
-    const categoryConfig = this.findCategoryConfig(injectionType, input);
-    if (categoryConfig?.[injectionType]?.target) {
-      return (categoryConfig[injectionType] as InjectionTypeConfig).target;
-    }
-
-    const globalConfig = this.config[injectionType];
-    if (globalConfig?.target) {
-      return globalConfig.target;
-    }
-
-    return DEFAULT_CONFIG_BY_TYPE[injectionType].target ?? 'both';
+    return this.findInHierarchy(injectionType, input, 'target') ?? 'both';
   }
 
   /**

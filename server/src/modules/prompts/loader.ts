@@ -172,6 +172,9 @@ export class PromptLoader {
       if (categoryMeta.registerWithMcp !== undefined) {
         category.registerWithMcp = categoryMeta.registerWithMcp;
       }
+      if (categoryMeta.mcpPromptMode !== undefined) {
+        category.mcpPromptMode = categoryMeta.mcpPromptMode;
+      }
 
       categories.push(category);
 
@@ -188,6 +191,12 @@ export class PromptLoader {
         if (category.registerWithMcp !== undefined) {
           (prompt as PromptData & { _categoryRegisterWithMcp?: boolean })._categoryRegisterWithMcp =
             category.registerWithMcp;
+        }
+        // Attach category's mcpPromptMode if set
+        if (category.mcpPromptMode !== undefined) {
+          (
+            prompt as PromptData & { _categoryMcpPromptMode?: 'expand' | 'launch' }
+          )._categoryMcpPromptMode = category.mcpPromptMode;
         }
 
         allPrompts.push(prompt);
@@ -264,7 +273,7 @@ export class PromptLoader {
 
     try {
       const content = await readFile(fullPath, 'utf8');
-      const result = parseMarkdownPromptContent(content, filePath);
+      const result = parseMarkdownPromptContent(content, filePath, { logger: this.logger });
 
       // Cache the result
       if (this.enableCache) {
