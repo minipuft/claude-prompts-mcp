@@ -263,8 +263,7 @@ export class McpToolRouter {
 
     this.promptExecutor.setToolDescriptionLoader(manager);
     this.promptExecutor.setAnalyticsService(this.analyticsService);
-    // prompt resource service does not require tool description manager
-    this.systemControl.setToolDescriptionLoader?.(manager);
+    // prompt resource service and system_control do not consume tool descriptions
     this.systemControl.setAnalyticsService(this.analyticsService);
     // Core tools integrated with framework-aware descriptions
 

@@ -1,14 +1,11 @@
 // @lifecycle canonical - Thin router for system_control MCP tool actions.
 
-import { resolveRequestIdentity } from '../../../shared/utils/request-identity-resolver.js';
 import {
   SYSTEM_CONTROL_ACTION_IDS,
   type SystemControlActionId,
 } from '../../metadata/definitions/system-control.js';
 import { recordActionInvocation } from '../../metadata/usage-tracker.js';
 import { SafeConfigWriter, createSafeConfigWriter } from '../config-utils.js';
-import { ResponseFormatter } from '../prompt-engine/processors/response-formatter.js';
-import { ToolDescriptionLoader } from '../tool-description-loader.js';
 import { createStructuredResponse } from './core/response-utils.js';
 import { AnalyticsActionHandler } from './handlers/analytics-action-handler.js';
 import { ChangesActionHandler } from './handlers/changes-action-handler.js';
@@ -31,7 +28,9 @@ import {
   type ChainSessionService,
   StateStoreOptions,
 } from '../../../shared/types/index.js';
+import { resolveRequestIdentity } from '../../../shared/utils/request-identity-resolver.js';
 import { resolveContinuityScopeId } from '../../../shared/utils/request-identity-scope.js';
+import { ResponseFormatter } from '../prompt-engine/processors/response-formatter.js';
 
 import type { ActionHandler } from './core/action-handler-base.js';
 import type { SystemAnalytics, SystemControlContext } from './core/types.js';
@@ -98,10 +97,6 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   setFrameworkManager(frameworkManager: FrameworkManager): void {
     this.frameworkManager = frameworkManager;
-  }
-
-  setToolDescriptionLoader(_manager: ToolDescriptionLoader): void {
-    // Stored for backwards compat; no handler uses it.
   }
 
   setAnalyticsService(analyticsService: MetricsCollector): void {
