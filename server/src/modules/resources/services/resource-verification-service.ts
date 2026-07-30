@@ -6,7 +6,7 @@ import { validateStyleSchema } from '../../../modules/formatting/core/style-sche
 import { validatePromptYaml } from '../../../modules/prompts/prompt-schema.js';
 import { loadYamlFileSync } from '../../../shared/utils/yaml/index.js';
 
-export type ResourceVerificationType = 'prompts' | 'gates' | 'methodologies' | 'styles' | 'tools';
+export type ResourceVerificationType = 'prompts' | 'gates' | 'frameworks' | 'styles' | 'tools';
 
 export interface ResourceVerificationIssue {
   code: string;
@@ -180,7 +180,7 @@ export class ResourceVerificationService {
         return validatePromptYaml(data, expectedId);
       case 'gates':
         return validateGateSchema(data, expectedId);
-      case 'methodologies':
+      case 'frameworks':
         return validateMethodologySchema(data, expectedId);
       case 'styles':
         return validateStyleSchema(data, expectedId);

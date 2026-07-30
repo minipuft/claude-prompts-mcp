@@ -76,11 +76,11 @@ export class FrameworkFileWriter {
    * Check if a methodology exists on the filesystem
    *
    * @param id - Methodology identifier
-   * @returns true if methodology.yaml exists for this ID
+   * @returns true if framework.yaml exists for this ID
    */
   methodologyExists(id: string): boolean {
     const frameworkDir = this.getMethodologyDir(id);
-    const frameworkPath = join(frameworkDir, 'methodology.yaml');
+    const frameworkPath = join(frameworkDir, 'framework.yaml');
     return existsSync(frameworkPath);
   }
 
@@ -113,7 +113,7 @@ export class FrameworkFileWriter {
    */
   async loadExistingMethodology(id: string): Promise<ExistingMethodologyData | null> {
     const frameworkDir = this.getMethodologyDir(id);
-    const frameworkPath = join(frameworkDir, 'methodology.yaml');
+    const frameworkPath = join(frameworkDir, 'framework.yaml');
 
     if (!existsSync(frameworkPath)) {
       return null;
@@ -122,7 +122,7 @@ export class FrameworkFileWriter {
     try {
       const methodology = await loadYamlFile<Record<string, unknown>>(frameworkPath);
       if (methodology === undefined) {
-        this.logger.error(`Failed to parse methodology.yaml for ${id}`);
+        this.logger.error(`Failed to parse framework.yaml for ${id}`);
         return null;
       }
 
@@ -207,7 +207,7 @@ export class FrameworkFileWriter {
       system_prompt_guidance: systemGuidance,
     };
 
-    // Map optional fields from methodology.yaml (use bracket notation)
+    // Map optional fields from framework.yaml (use bracket notation)
     const rawDescription = methodology['description'];
     const rawType = methodology['type'];
     const rawEnabled = methodology['enabled'];
@@ -226,7 +226,7 @@ export class FrameworkFileWriter {
       >;
     }
 
-    // Map phases-related fields (may come from phases.yaml or methodology.yaml)
+    // Map phases-related fields (may come from phases.yaml or framework.yaml)
     // Note: YAML uses camelCase (methodologyGates), but also check snake_case for legacy support
     const phasesSource = phases ?? methodology;
     const rawPhases = phasesSource['phases'];
@@ -308,7 +308,7 @@ export class FrameworkFileWriter {
     existingData?: ExistingMethodologyData | null
   ): Promise<FrameworkFileResult> {
     const frameworkDir = this.getMethodologyDir(data.id);
-    const frameworkYamlPath = join(frameworkDir, 'methodology.yaml');
+    const frameworkYamlPath = join(frameworkDir, 'framework.yaml');
 
     const txResult = await this.mutationTransaction.run({
       targets: [{ path: frameworkDir, kind: 'directory' }],
@@ -318,7 +318,7 @@ export class FrameworkFileWriter {
         await mkdir(frameworkDir, { recursive: true });
         paths.push(frameworkDir);
 
-        // Build and merge methodology.yaml
+        // Build and merge framework.yaml
         const newMethodologyData = this.buildMethodologyYamlData(data);
         const finalMethodologyData =
           existingData !== undefined && existingData !== null
@@ -371,7 +371,7 @@ export class FrameworkFileWriter {
         return { paths };
       },
       validate: () =>
-        this.verificationService.validateFile('methodologies', data.id, frameworkYamlPath),
+        this.verificationService.validateFile('frameworks', data.id, frameworkYamlPath),
     });
 
     if (!txResult.success) {
@@ -391,7 +391,7 @@ export class FrameworkFileWriter {
   // ==========================================================================
 
   /**
-   * Build methodology.yaml data from input (only sets defined fields)
+   * Build framework.yaml data from input (only sets defined fields)
    */
   buildMethodologyYamlData(
     data: Partial<FrameworkCreationData> & { id: string }
@@ -451,7 +451,7 @@ export class FrameworkFileWriter {
       yamlData['judgePromptFile'] = 'judge-prompt.md';
     }
 
-    // Always set version for new methodologies
+    // Always set version for new frameworks
     yamlData['version'] ??= '1.0.0';
 
     return yamlData;
@@ -498,7 +498,7 @@ export class FrameworkFileWriter {
    */
   public getMethodologyDir(id: string): string {
     const serverRoot = this.configManager.getServerRoot();
-    return join(serverRoot, 'resources', 'methodologies', id.toLowerCase());
+    return join(serverRoot, 'resources', 'frameworks', id.toLowerCase());
   }
 
   private needsPhasesFile(data: Partial<FrameworkCreationData>): boolean {

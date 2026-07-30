@@ -4,7 +4,7 @@
  *
  * Centralized registry for loading and managing methodology guides.
  * Uses YAML-based loading exclusively with fail-fast behavior.
- * All methodologies must be defined in resources/methodologies/<id>/methodology.yaml.
+ * All frameworks must be defined in resources/frameworks/<id>/framework.yaml.
  */
 
 import { createGenericGuide } from './generic-methodology-guide.js';
@@ -350,7 +350,7 @@ export class FrameworkRegistry {
    * Load built-in methodology guides
    *
    * YAML loading is mandatory with fail-fast behavior.
-   * All methodologies must be defined in resources/methodologies/<id>/methodology.yaml.
+   * All frameworks must be defined in resources/frameworks/<id>/framework.yaml.
    */
   private async loadBuiltInGuides(): Promise<void> {
     this.logger.debug('Loading built-in methodology guides from YAML...');
@@ -370,7 +370,7 @@ export class FrameworkRegistry {
 
       if (!definition) {
         throw new Error(
-          `FATAL: Methodology '${id}' not found. Expected: resources/methodologies/${id}/methodology.yaml`
+          `FATAL: Methodology '${id}' not found. Expected: resources/frameworks/${id}/framework.yaml`
         );
       }
 
@@ -387,7 +387,7 @@ export class FrameworkRegistry {
 
     this.logger.info(`Loaded ${loadedCount} built-in methodology guides from YAML`);
 
-    // Discover and load additional methodologies from YAML
+    // Discover and load additional frameworks from YAML
     const discoveredIds = this.runtimeLoader.discoverMethodologies();
     const additionalIds = discoveredIds.filter((id) => !builtInIds.includes(id));
 

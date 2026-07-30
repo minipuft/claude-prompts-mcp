@@ -170,7 +170,7 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
       categories: ['single', 'prompt', 'template', 'chain'],
       // Use built-in frameworks for LLM classification guidance
       // Note: Custom frameworks are handled by FrameworkManager at runtime
-      methodologies: [...BUILTIN_FRAMEWORK_TYPES, 'none'],
+      frameworks: [...BUILTIN_FRAMEWORK_TYPES, 'none'],
     });
 
     const normalizedExecution = this.normalizeExecutionType(llmResult.executionType);

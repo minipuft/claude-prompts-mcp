@@ -200,26 +200,26 @@ export function discoverYamlFiles(
  * represents a distinct entity.
  *
  * @param rootDir - Root directory to scan
- * @param entryPointName - Name of entry point file (default: 'methodology.yaml')
+ * @param entryPointName - Name of entry point file (default: 'framework.yaml')
  * @returns Array of subdirectory names that contain the entry point
  *
  * @example
  * ```typescript
  * // Directory structure:
- * // methodologies/
+ * // frameworks/
  * //   cageerf/
- * //     methodology.yaml  <-- entry point
+ * //     framework.yaml  <-- entry point
  * //   react/
- * //     methodology.yaml  <-- entry point
+ * //     framework.yaml  <-- entry point
  * //   empty/              <-- no entry point
  *
- * const dirs = discoverYamlDirectories('./methodologies', 'methodology.yaml');
+ * const dirs = discoverYamlDirectories('./frameworks', 'framework.yaml');
  * // Returns: ['cageerf', 'react']
  * ```
  */
 export function discoverYamlDirectories(
   rootDir: string,
-  entryPointName: string = 'methodology.yaml'
+  entryPointName: string = 'framework.yaml'
 ): string[] {
   if (!existsSync(rootDir)) {
     return [];
@@ -248,7 +248,7 @@ export function discoverYamlDirectories(
  *   - Flat:    `rootDir/{id}/{entryPoint}`         → returns `[id]`
  *   - Grouped: `rootDir/{group}/{id}/{entryPoint}` → returns `[id]`
  *
- * Useful for workspace overlay directories where gates/methodologies
+ * Useful for workspace overlay directories where gates/frameworks
  * may be organized into category groups.
  *
  * @param rootDir - Root directory to scan

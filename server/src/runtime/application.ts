@@ -366,7 +366,7 @@ export class Application {
   }
 
   /**
-   * Register MCP resources for prompts, gates, methodologies, and observability.
+   * Register MCP resources for prompts, gates, frameworks, and observability.
    * Resources provide 5-16x more token-efficient discovery than tool-based list operations.
    */
   private registerMcpResources(): void {
@@ -430,7 +430,7 @@ export class Application {
       resourcesConfig: {
         prompts: resourcesConfig.prompts,
         gates: resourcesConfig.gates,
-        methodologies: resourcesConfig.methodologies,
+        frameworks: resourcesConfig.frameworks,
         observability: resourcesConfig.observability,
         logs: resourcesConfig.logs,
       },

@@ -31,13 +31,13 @@ export class FrameworkActionHandler extends ActionHandler {
         return await this.inspectMethodology({
           methodology_id: args.methodology_id || args.framework,
         });
-      case 'list_methodologies':
+      case 'list_frameworks':
         return await this.listMethodologiesAction({
           show_details: args.show_details,
         });
       default:
         throw new Error(
-          `Unknown framework operation: ${operation}. Valid operations: switch, list, enable, disable, inspect, list_methodologies`
+          `Unknown framework operation: ${operation}. Valid operations: switch, list, enable, disable, inspect, list_frameworks`
         );
     }
   }
@@ -126,8 +126,8 @@ export class FrameworkActionHandler extends ActionHandler {
     }
 
     if (methodologyIds.length > 0) {
-      response += `\n📦 Data-driven methodologies: ${methodologyIds.length} available`;
-      response += `\n🔍 Use \`operation:"list_methodologies"\` for methodology-specific details`;
+      response += `\n📦 Data-driven frameworks: ${methodologyIds.length} available`;
+      response += `\n🔍 Use \`operation:"list_frameworks"\` for methodology-specific details`;
     }
 
     response += `\n🔄 Switch frameworks using: action="framework", operation="switch", framework="<name>"`;
@@ -142,7 +142,7 @@ export class FrameworkActionHandler extends ActionHandler {
     if (!methodologyId) {
       const available = runtimeLoader.discoverMethodologies();
       return this.createMinimalSystemResponse(
-        `📋 **Available Methodologies**\n\n` +
+        `📋 **Available Frameworks**\n\n` +
           `Use \`operation:"inspect" methodology_id:"<id>"\` to inspect a specific methodology.\n\n` +
           `Available: ${available.join(', ')}`,
         'inspect_methodology'
@@ -155,7 +155,7 @@ export class FrameworkActionHandler extends ActionHandler {
       const available = runtimeLoader.discoverMethodologies();
       return this.createMinimalSystemResponse(
         `❌ **Methodology Not Found**: \`${methodologyId}\`\n\n` +
-          `Available methodologies: ${available.join(', ')}`,
+          `Available frameworks: ${available.join(', ')}`,
         'inspect_methodology'
       );
     }
@@ -222,13 +222,13 @@ export class FrameworkActionHandler extends ActionHandler {
 
     if (methodologyIds.length === 0) {
       return this.createMinimalSystemResponse(
-        `📋 **No Methodologies Found**\n\n` +
-          `Ensure YAML files exist in \`resources/methodologies/<id>/methodology.yaml\`.`,
-        'list_methodologies'
+        `📋 **No Frameworks Found**\n\n` +
+          `Ensure YAML files exist in \`resources/frameworks/<id>/framework.yaml\`.`,
+        'list_frameworks'
       );
     }
 
-    let response = `📋 **Available Methodologies** (${methodologyIds.length})\n\n`;
+    let response = `📋 **Available Frameworks** (${methodologyIds.length})\n\n`;
 
     for (const id of methodologyIds) {
       const definition = runtimeLoader.loadMethodology(id);
@@ -255,7 +255,7 @@ export class FrameworkActionHandler extends ActionHandler {
 
     response += `\n🔍 Use \`operation:"inspect" methodology_id:"<id>"\` for full details.`;
 
-    return this.createMinimalSystemResponse(response, 'list_methodologies');
+    return this.createMinimalSystemResponse(response, 'list_frameworks');
   }
 
   private async enableFrameworkSystem(args: {

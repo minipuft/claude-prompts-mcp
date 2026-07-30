@@ -159,7 +159,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // This ensures PathResolver is the SSOT for directory resolution and enables overlays.
   // Must happen before any pipeline/tool code calls getDefaultRuntimeLoader().
   const frameworksDir = pathResolver?.getMethodologiesPath();
-  const additionalMethodologiesDirs = pathResolver?.getOverlayResourceDirs('methodologies') ?? [];
+  const additionalMethodologiesDirs = pathResolver?.getOverlayResourceDirs('frameworks') ?? [];
   getDefaultRuntimeLoader({
     ...(frameworksDir !== undefined ? { frameworksDir } : {}),
     ...(additionalMethodologiesDirs.length > 0 ? { additionalMethodologiesDirs } : {}),

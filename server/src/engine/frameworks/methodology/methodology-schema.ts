@@ -5,7 +5,7 @@
  * Defines the canonical schema for methodology YAML files.
  * Used by both:
  * - RuntimeMethodologyLoader (runtime validation)
- * - validate-methodologies.ts (CI validation)
+ * - validate-frameworks.ts (CI validation)
  *
  * This ensures SSOT - any schema change is enforced everywhere.
  */

@@ -25,7 +25,7 @@ import type { PhasesDefinition } from '../utils/step-generator.js';
  *
  * This is the main interface for methodology configurations. Each methodology
  * (built-in or custom) provides a definition file that conforms to this interface.
- * Use FrameworkManager.listFrameworks() to see registered methodologies.
+ * Use FrameworkManager.listFrameworks() to see registered frameworks.
  */
 export interface FrameworkResourceDefinition {
   /** Unique identifier (e.g., 'cageerf', 'react', '5w1h', 'scamper') */

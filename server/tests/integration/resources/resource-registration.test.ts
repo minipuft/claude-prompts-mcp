@@ -412,13 +412,13 @@ describe('MCP Resources Registration Integration', () => {
     });
 
     test('registers methodology resources when frameworkManager is provided', () => {
-      expect(registeredResources.has('methodologies')).toBe(true);
+      expect(registeredResources.has('frameworks')).toBe(true);
       expect(registeredResources.has('methodology')).toBe(true);
       expect(registeredResources.has('methodology-system-prompt')).toBe(true);
     });
 
-    test('methodologies list handler returns all methodologies with metadata', async () => {
-      const handler = registeredResources.get('methodologies')?.readHandler;
+    test('frameworks list handler returns all frameworks with metadata', async () => {
+      const handler = registeredResources.get('frameworks')?.readHandler;
       expect(handler).toBeDefined();
 
       const result = (await handler!(
@@ -429,9 +429,9 @@ describe('MCP Resources Registration Integration', () => {
       expect(result.contents).toHaveLength(1);
       expect(result.contents[0].mimeType).toBe('text/plain');
 
-      // New compact format: "Methodologies (N):\nid: name [disabled]"
+      // New compact format: "Frameworks (N):\nid: name [disabled]"
       const text = result.contents[0].text;
-      expect(text).toContain('Methodologies (2):');
+      expect(text).toContain('Frameworks (2):');
       expect(text).toContain('CAGEERF: CAGEERF Framework');
       expect(text).toContain('ReACT: ReACT Framework [disabled]');
     });

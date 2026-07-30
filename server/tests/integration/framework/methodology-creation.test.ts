@@ -13,7 +13,7 @@
  * Classification: Integration (multiple real modules, mock I/O only)
  *
  * Note: The manager now requires methodology_gates for validation to pass.
- * Methodologies without all required fields will fail validation.
+ * Frameworks without all required fields will fail validation.
  */
 
 import { describe, expect, test, jest, beforeEach } from '@jest/globals';
@@ -104,15 +104,15 @@ const createMockFileService = () => {
       return true;
     }),
     getMethodologyDir: jest.fn(
-      (id: string) => `/test/server/resources/methodologies/${id.toLowerCase()}`
+      (id: string) => `/test/server/resources/frameworks/${id.toLowerCase()}`
     ),
     writeMethodologyFiles: jest.fn(async (data: FrameworkCreationData) => {
       writtenFiles.set(data.id.toLowerCase(), data);
       return {
         success: true,
         paths: [
-          `/test/server/resources/methodologies/${data.id}/methodology.yaml`,
-          `/test/server/resources/methodologies/${data.id}/phases.yaml`,
+          `/test/server/resources/frameworks/${data.id}/framework.yaml`,
+          `/test/server/resources/frameworks/${data.id}/phases.yaml`,
         ],
       };
     }),
@@ -125,9 +125,9 @@ const createMockFileService = () => {
         phases: null,
         systemPrompt: data.system_prompt_guidance,
         judgePrompt: null,
-        frameworkPath: `/test/server/resources/methodologies/${id}/methodology.yaml`,
+        frameworkPath: `/test/server/resources/frameworks/${id}/framework.yaml`,
         phasesPath: null,
-        systemPromptPath: `/test/server/resources/methodologies/${id}/system-prompt.md`,
+        systemPromptPath: `/test/server/resources/frameworks/${id}/system-prompt.md`,
         judgePromptPath: null,
       };
     }),

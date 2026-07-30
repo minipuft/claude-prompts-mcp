@@ -293,7 +293,7 @@ describe('Version History Workflow Integration', () => {
 
   describe('Rollback Workflow', () => {
     it('should rollback to previous version and restore state', async () => {
-      const resourceDir = path.join(tempDir, 'methodologies', 'custom');
+      const resourceDir = path.join(tempDir, 'frameworks', 'custom');
       await fs.mkdir(resourceDir, { recursive: true });
 
       const manager = new SimulatedResourceManager({

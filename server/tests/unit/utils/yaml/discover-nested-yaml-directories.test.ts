@@ -122,9 +122,9 @@ describe('discoverNestedYamlDirectories', () => {
   it('works with different entry point names', () => {
     const dir = join(tempDir, 'my-methodology');
     mkdirSync(dir);
-    writeFileSync(join(dir, 'methodology.yaml'), 'id: my-methodology');
+    writeFileSync(join(dir, 'framework.yaml'), 'id: my-methodology');
 
-    const result = discoverNestedYamlDirectories(tempDir, 'methodology.yaml');
+    const result = discoverNestedYamlDirectories(tempDir, 'framework.yaml');
     expect(result).toEqual(['my-methodology']);
   });
 });

@@ -91,7 +91,7 @@ const DEFAULT_RESOURCES_CONFIG: ResourcesConfig = {
   registerWithMcp: false, // Disabled by default - tools provide more efficient discovery
   prompts: { enabled: true },
   gates: { enabled: true },
-  methodologies: { enabled: true },
+  frameworks: { enabled: true },
   observability: {
     enabled: true,
     sessions: true,
@@ -360,8 +360,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       gates: {
         enabled: cfg.gates?.enabled ?? def.gates?.enabled ?? true,
       },
-      methodologies: {
-        enabled: cfg.methodologies?.enabled ?? def.methodologies?.enabled ?? true,
+      frameworks: {
+        enabled: cfg.frameworks?.enabled ?? def.frameworks?.enabled ?? true,
       },
       observability: {
         enabled: cfg.observability?.enabled ?? def.observability?.enabled ?? true,

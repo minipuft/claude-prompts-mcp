@@ -73,7 +73,7 @@ export interface TestResourceIndexerContext extends TestDatabaseContext {
   resourcesDir: string;
   /** Create a minimal YAML resource file on disk for indexing */
   createResource: (
-    type: 'prompts' | 'gates' | 'methodologies' | 'styles',
+    type: 'prompts' | 'gates' | 'frameworks' | 'styles',
     id: string,
     fields: Record<string, string>
   ) => Promise<void>;
@@ -93,7 +93,7 @@ export async function createTestResourceIndexer(
   const indexer = createResourceIndexer(ctx.dbManager, ctx.logger, { resourcesDir });
 
   const createResource = async (
-    type: 'prompts' | 'gates' | 'methodologies' | 'styles',
+    type: 'prompts' | 'gates' | 'frameworks' | 'styles',
     id: string,
     fields: Record<string, string>
   ): Promise<void> => {
@@ -102,8 +102,8 @@ export async function createTestResourceIndexer(
         ? 'prompt.yaml'
         : type === 'gates'
           ? 'gate.yaml'
-          : type === 'methodologies'
-            ? 'methodology.yaml'
+          : type === 'frameworks'
+            ? 'framework.yaml'
             : 'style.yaml';
 
     const dir = path.join(resourcesDir, type, id);

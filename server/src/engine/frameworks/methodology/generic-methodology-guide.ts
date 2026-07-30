@@ -7,7 +7,7 @@
  * per methodology - the same class works for any registered framework (built-in or custom).
  *
  * All methodology-specific behavior is driven by the JSON definition loaded
- * at runtime from resources/methodologies/.
+ * at runtime from resources/frameworks/.
  */
 
 import {

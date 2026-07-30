@@ -53,7 +53,7 @@ describe('FrameworkFileWriter canonical writes', () => {
 
     expect(result.success).toBe(true);
     const frameworkDir = service.getMethodologyDir('complete-method');
-    const frameworkPath = join(frameworkDir, 'methodology.yaml');
+    const frameworkPath = join(frameworkDir, 'framework.yaml');
     expect(existsSync(frameworkPath)).toBe(true);
 
     const content = readFileSync(frameworkPath, 'utf8');
@@ -76,7 +76,7 @@ describe('FrameworkFileWriter canonical writes', () => {
 
     expect(result.success).toBe(true);
     const frameworkDir = service.getMethodologyDir('e2e-test');
-    expect(existsSync(join(frameworkDir, 'methodology.yaml'))).toBe(true);
+    expect(existsSync(join(frameworkDir, 'framework.yaml'))).toBe(true);
     expect(existsSync(join(frameworkDir, 'system-prompt.md'))).toBe(true);
     expect(existsSync(join(frameworkDir, 'judge-prompt.md'))).toBe(true);
     expect(existsSync(join(frameworkDir, 'phases.yaml'))).toBe(true);
@@ -104,7 +104,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     expect(result.success).toBe(true);
 
     const frameworkDir = service.getMethodologyDir('merge-test');
-    const yamlContent = readFileSync(join(frameworkDir, 'methodology.yaml'), 'utf8');
+    const yamlContent = readFileSync(join(frameworkDir, 'framework.yaml'), 'utf8');
     const promptContent = readFileSync(join(frameworkDir, 'system-prompt.md'), 'utf8');
     expect(yamlContent).toContain('name: Merge Test Updated');
     expect(yamlContent).toContain('methodology: MERGE_BASE');

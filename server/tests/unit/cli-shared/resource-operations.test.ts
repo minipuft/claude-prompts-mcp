@@ -301,32 +301,32 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'method');
       writeResource(
         dir,
-        'methodology.yaml',
+        'framework.yaml',
         ['id: method', 'enabled: true', '# Keep this comment'].join('\n')
       );
 
-      const result = toggleEnabled(dir, 'methodology.yaml');
+      const result = toggleEnabled(dir, 'framework.yaml');
 
       expect(result.success).toBe(true);
       expect(result.previousValue).toBe(true);
       expect(result.newValue).toBe(false);
 
-      const content = readYaml(dir, 'methodology.yaml');
+      const content = readYaml(dir, 'framework.yaml');
       expect(content).toContain('enabled: false');
       expect(content).toContain('# Keep this comment');
     });
 
     it('toggles false to true', () => {
       const dir = join(tempDir, 'method');
-      writeResource(dir, 'methodology.yaml', 'id: method\nenabled: false');
+      writeResource(dir, 'framework.yaml', 'id: method\nenabled: false');
 
-      const result = toggleEnabled(dir, 'methodology.yaml');
+      const result = toggleEnabled(dir, 'framework.yaml');
 
       expect(result.success).toBe(true);
       expect(result.previousValue).toBe(false);
       expect(result.newValue).toBe(true);
 
-      const content = readYaml(dir, 'methodology.yaml');
+      const content = readYaml(dir, 'framework.yaml');
       expect(content).toContain('enabled: true');
     });
 
@@ -343,9 +343,9 @@ describe('resource-operations', () => {
 
     it('handles enabled field with trailing whitespace', () => {
       const dir = join(tempDir, 'whitespace');
-      writeResource(dir, 'methodology.yaml', 'id: whitespace\nenabled: true   \nname: Test');
+      writeResource(dir, 'framework.yaml', 'id: whitespace\nenabled: true   \nname: Test');
 
-      const result = toggleEnabled(dir, 'methodology.yaml');
+      const result = toggleEnabled(dir, 'framework.yaml');
       expect(result.success).toBe(true);
       expect(result.newValue).toBe(false);
     });
@@ -354,7 +354,7 @@ describe('resource-operations', () => {
       const dir = join(tempDir, 'tricky-enabled');
       writeResource(
         dir,
-        'methodology.yaml',
+        'framework.yaml',
         [
           'id: tricky-enabled',
           'enabled: true',
@@ -362,10 +362,10 @@ describe('resource-operations', () => {
         ].join('\n')
       );
 
-      const result = toggleEnabled(dir, 'methodology.yaml');
+      const result = toggleEnabled(dir, 'framework.yaml');
       expect(result.success).toBe(true);
 
-      const content = readYaml(dir, 'methodology.yaml');
+      const content = readYaml(dir, 'framework.yaml');
       expect(content).toContain('enabled: false');
       expect(content).toContain('This methodology enabled new features'); // Unchanged
     });

@@ -20,15 +20,15 @@ describe('YAML Methodology Loading', () => {
   });
 
   describe('RuntimeMethodologyLoader', () => {
-    it('discovers all built-in methodologies from YAML', () => {
+    it('discovers all built-in frameworks from YAML', () => {
       const loader = getDefaultRuntimeLoader();
-      const methodologies = loader.discoverMethodologies();
+      const frameworks = loader.discoverMethodologies();
 
-      expect(methodologies).toContain('cageerf');
-      expect(methodologies).toContain('react');
-      expect(methodologies).toContain('5w1h');
-      expect(methodologies).toContain('scamper');
-      expect(methodologies.length).toBeGreaterThanOrEqual(4);
+      expect(frameworks).toContain('cageerf');
+      expect(frameworks).toContain('react');
+      expect(frameworks).toContain('5w1h');
+      expect(frameworks).toContain('scamper');
+      expect(frameworks.length).toBeGreaterThanOrEqual(4);
     });
 
     it('loads each built-in methodology definition', () => {
@@ -75,7 +75,7 @@ describe('YAML Methodology Loading', () => {
       expect(typeof guide.getSystemPromptGuidance).toBe('function');
     });
 
-    it('all built-in methodologies provide tool descriptions', () => {
+    it('all built-in frameworks provide tool descriptions', () => {
       const loader = getDefaultRuntimeLoader();
       const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
 

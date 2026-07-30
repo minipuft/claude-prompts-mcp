@@ -222,7 +222,7 @@ export function generateDefaultConfig(): Record<string, unknown> {
       transport: 'stdio',
       port: 9090,
     },
-    methodologies: {
+    frameworks: {
       mode: 'on',
       dynamicToolDescriptions: true,
       systemPromptFrequency: 3,
@@ -385,8 +385,7 @@ function getKeyTypeInfo(key: string): {
 
   // Ports and numbers
   if (key === 'server.port') return { type: 'number', description: '1024-65535' };
-  if (key === 'methodologies.systemPromptFrequency')
-    return { type: 'number', description: '1-100' };
+  if (key === 'frameworks.systemPromptFrequency') return { type: 'number', description: '1-100' };
   if (key === 'verification.inContextAttempts') return { type: 'number', description: '1-10' };
   if (key === 'verification.isolation.timeout')
     return { type: 'number', description: '30-3600 seconds' };
@@ -436,15 +435,15 @@ function getKeyTypeInfo(key: string): {
     'gates.methodologyGates',
     'gates.enforcePendingVerdict',
     'execution.judge',
-    'methodologies.enabled',
-    'methodologies.dynamicToolDescriptions',
-    'methodologies.styleGuidance',
+    'frameworks.enabled',
+    'frameworks.dynamicToolDescriptions',
+    'frameworks.styleGuidance',
     'prompts.registerWithMcp',
     'resources.registerWithMcp',
     'resources.prompts.defaultRegistration',
     'resources.prompts.enabled',
     'resources.gates.enabled',
-    'resources.methodologies.enabled',
+    'resources.frameworks.enabled',
     'resources.observability.enabled',
     'resources.observability.sessions',
     'resources.observability.metrics',

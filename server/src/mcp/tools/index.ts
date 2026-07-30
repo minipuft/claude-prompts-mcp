@@ -7,7 +7,7 @@
  * CORE TOOLS:
  * - prompt_engine: Universal execution engine with framework integration
  * - system_control: Framework and system management with analytics
- * - resource_manager: Unified CRUD for prompts, gates, and methodologies
+ * - resource_manager: Unified CRUD for prompts, gates, and frameworks
  *
  * ARCHITECTURE:
  * - Framework-aware tool descriptions that change based on active methodology
@@ -802,7 +802,7 @@ export class McpToolRouter {
       throw error;
     }
 
-    // Register resource_manager tool (unified router for prompts, gates, methodologies)
+    // Register resource_manager tool (unified router for prompts, gates, frameworks)
     try {
       // Description loaded from tool-descriptions.contracts.json via ToolDescriptionLoader
       const resourceManagerDescription =
@@ -875,7 +875,7 @@ export class McpToolRouter {
       'Available MCP Tools:',
       '🎯 prompt_engine - Execute prompts with frameworks and gates',
       '⚙️ system_control - System administration and status',
-      '📦 resource_manager - Unified CRUD for prompts, gates, and methodologies',
+      '📦 resource_manager - Unified CRUD for prompts, gates, and frameworks',
     ].join('\n   ');
 
     this.logger.info(toolSummary);

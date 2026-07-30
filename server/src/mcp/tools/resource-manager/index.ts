@@ -2,7 +2,7 @@
 /**
  * Resource Manager MCP Tool
  *
- * Unified CRUD operations for prompts, gates, and methodologies.
+ * Unified CRUD operations for prompts, gates, and frameworks.
  * Routes requests based on resource_type parameter.
  */
 export { ResourceManagerRouter, createResourceManagerRouter } from './core/router.js';

@@ -2,7 +2,7 @@
  * Methodology Validation Unit Tests
  *
  * Tests the validateMethodology logic which blocks creation of
- * incomplete methodologies and provides focused error guidance.
+ * incomplete frameworks and provides focused error guidance.
  *
  * Validation tiers (80% threshold):
  * - REQUIRED: system_prompt_guidance (30%), phases (30%), methodology_gates (20%)

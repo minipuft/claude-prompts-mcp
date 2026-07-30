@@ -674,7 +674,7 @@ export class FileObserver extends EventEmitter {
 
   /**
    * Check if file is a methodology YAML file
-   * Methodology files live in resources/methodologies/{id}/ directories and are YAML files
+   * Methodology files live in resources/frameworks/{id}/ directories and are YAML files
    *
    * @returns Object with isMethodology flag and extracted methodologyId
    */
@@ -689,19 +689,19 @@ export class FileObserver extends EventEmitter {
       return { isMethodology: false };
     }
 
-    // Check if path contains /methodologies/ directory (matches both resources/methodologies/ and legacy methodologies/)
+    // Check if path contains /frameworks/ directory (matches both resources/frameworks/ and legacy frameworks/)
     if (!fullPath) {
       return { isMethodology: false };
     }
 
     const normalizedPath = fullPath.replace(/\\/g, '/');
-    const methodologyMatch = normalizedPath.match(/\/methodologies\/([^/]+)\//);
+    const methodologyMatch = normalizedPath.match(/\/frameworks\/([^/]+)\//);
 
     if (!methodologyMatch) {
       return { isMethodology: false };
     }
 
-    // Extract methodology ID from path (e.g., resources/methodologies/cageerf/methodology.yaml -> cageerf)
+    // Extract methodology ID from path (e.g., resources/frameworks/cageerf/framework.yaml -> cageerf)
     const methodologyId = methodologyMatch[1]?.toLowerCase();
 
     if (!methodologyId) {

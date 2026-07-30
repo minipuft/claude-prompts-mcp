@@ -23,7 +23,7 @@ const SCHEMAS_DIR = join(__dirname, '..', 'resources', 'schemas');
 
 mkdirSync(SCHEMAS_DIR, { recursive: true });
 
-// Generate methodology.yaml schema
+// Generate framework.yaml schema
 const methodologyJsonSchema = zodToJsonSchema(MethodologySchema, {
   name: 'MethodologyDefinition',
   $refStrategy: 'none',
@@ -31,7 +31,7 @@ const methodologyJsonSchema = zodToJsonSchema(MethodologySchema, {
 methodologyJsonSchema['$schema'] = 'http://json-schema.org/draft-07/schema#';
 methodologyJsonSchema['title'] = 'Methodology Definition';
 methodologyJsonSchema['description'] =
-  'Schema for methodology.yaml — defines a methodology framework with gates, guidance, and tool overlays.';
+  'Schema for framework.yaml — defines a methodology framework with gates, guidance, and tool overlays.';
 
 writeFileSync(
   join(SCHEMAS_DIR, 'methodology.schema.json'),

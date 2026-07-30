@@ -274,7 +274,7 @@ export interface ResourcesConfig {
   registerWithMcp?: boolean;
   prompts?: { enabled?: boolean };
   gates?: { enabled?: boolean };
-  methodologies?: { enabled?: boolean };
+  frameworks?: { enabled?: boolean };
   observability?: {
     enabled?: boolean;
     sessions?: boolean;

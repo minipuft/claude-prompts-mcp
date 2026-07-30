@@ -1,4 +1,4 @@
-// @lifecycle canonical - Runtime YAML loading for methodologies (replaces build-time compilation)
+// @lifecycle canonical - Runtime YAML loading for frameworks (replaces build-time compilation)
 /**
  * Runtime Methodology Loader
  *
@@ -36,7 +36,7 @@ const __dirname = dirname(__filename);
  * Configuration for RuntimeMethodologyLoader
  */
 export interface RuntimeMethodologyLoaderConfig {
-  /** Override default methodologies directory */
+  /** Override default frameworks directory */
   frameworksDir?: string;
   /** Additional directories to scan for methodology overlays (workspace resources) */
   additionalMethodologiesDirs?: string[];
@@ -60,7 +60,7 @@ export interface LoaderStats {
   cacheMisses: number;
   /** Number of load errors encountered */
   loadErrors: number;
-  /** Methodologies directory being used */
+  /** Frameworks directory being used */
   frameworksDir: string;
   /** Additional overlay directories */
   additionalMethodologiesDirs: string[];
@@ -79,7 +79,7 @@ export type { FrameworkSchemaValidationResult } from './methodology-schema.js';
  * ```typescript
  * const loader = new RuntimeMethodologyLoader();
  *
- * // Discover available methodologies
+ * // Discover available frameworks
  * const ids = loader.discoverMethodologies();
  * // ['cageerf', 'react', '5w1h', 'scamper']
  *
@@ -157,12 +157,12 @@ export class RuntimeMethodologyLoader {
    */
   discoverMethodologies(): string[] {
     // Primary: flat scan
-    const primaryIds = discoverYamlDirectories(this.frameworksDir, 'methodology.yaml');
+    const primaryIds = discoverYamlDirectories(this.frameworksDir, 'framework.yaml');
     const idSet = new Set(primaryIds.map((id) => id.toLowerCase()));
 
     // Additional: nested scan (flat + grouped). Primary wins on conflict via Set.
     for (const dir of this.additionalMethodologiesDirs) {
-      const additionalIds = discoverNestedYamlDirectories(dir, 'methodology.yaml');
+      const additionalIds = discoverNestedYamlDirectories(dir, 'framework.yaml');
       for (const id of additionalIds) {
         idSet.add(id.toLowerCase());
       }
@@ -172,9 +172,9 @@ export class RuntimeMethodologyLoader {
   }
 
   /**
-   * Load all available methodologies
+   * Load all available frameworks
    *
-   * @returns Map of ID to definition for all successfully loaded methodologies
+   * @returns Map of ID to definition for all successfully loaded frameworks
    */
   loadAllMethodologies(): Map<string, FrameworkResourceDefinition> {
     const results = new Map<string, FrameworkResourceDefinition>();
@@ -200,7 +200,7 @@ export class RuntimeMethodologyLoader {
     const normalizedId = id.toLowerCase();
 
     // Check primary
-    if (existsSync(join(this.frameworksDir, normalizedId, 'methodology.yaml'))) {
+    if (existsSync(join(this.frameworksDir, normalizedId, 'framework.yaml'))) {
       return true;
     }
 
@@ -236,7 +236,7 @@ export class RuntimeMethodologyLoader {
   }
 
   /**
-   * Get the methodologies directory being used
+   * Get the frameworks directory being used
    */
   getMethodologiesDir(): string {
     return this.frameworksDir;
@@ -259,7 +259,7 @@ export class RuntimeMethodologyLoader {
   private loadFromDir(id: string, baseDir: string): FrameworkResourceDefinition | undefined {
     try {
       const frameworkDir = join(baseDir, id);
-      const entryPath = join(frameworkDir, 'methodology.yaml');
+      const entryPath = join(frameworkDir, 'framework.yaml');
 
       if (!existsSync(entryPath)) {
         if (this.debug) {
@@ -268,7 +268,7 @@ export class RuntimeMethodologyLoader {
         return undefined;
       }
 
-      // Load main methodology.yaml
+      // Load main framework.yaml
       const definition = loadYamlFileSync<FrameworkResourceDefinition>(entryPath, {
         required: true,
       });
@@ -323,23 +323,23 @@ export class RuntimeMethodologyLoader {
 
   /**
    * Find which additional directory contains a methodology ID.
-   * Checks flat ({dir}/{id}/methodology.yaml) and grouped ({dir}/{group}/{id}/methodology.yaml).
+   * Checks flat ({dir}/{id}/framework.yaml) and grouped ({dir}/{group}/{id}/framework.yaml).
    *
    * @returns The base directory to pass to loadFromDir, or undefined
    */
   private findInAdditionalDirs(id: string): string | undefined {
     for (const dir of this.additionalMethodologiesDirs) {
-      // Flat: {dir}/{id}/methodology.yaml
-      if (existsSync(join(dir, id, 'methodology.yaml'))) {
+      // Flat: {dir}/{id}/framework.yaml
+      if (existsSync(join(dir, id, 'framework.yaml'))) {
         return dir;
       }
 
-      // Grouped: {dir}/{group}/{id}/methodology.yaml
+      // Grouped: {dir}/{group}/{id}/framework.yaml
       try {
         const groups = readdirSync(dir, { withFileTypes: true });
         for (const group of groups) {
           if (!group.isDirectory()) continue;
-          if (existsSync(join(dir, group.name, id, 'methodology.yaml'))) {
+          if (existsSync(join(dir, group.name, id, 'framework.yaml'))) {
             return join(dir, group.name);
           }
         }
@@ -355,12 +355,12 @@ export class RuntimeMethodologyLoader {
   // ============================================================================
 
   /**
-   * Resolve the methodologies directory from multiple possible locations
+   * Resolve the frameworks directory from multiple possible locations
    *
    * Priority:
    *   1. Package.json resolution (npm/npx installs)
    *   3. Walk up from module location (development)
-   *   4. Common relative paths (resources/methodologies first, then legacy)
+   *   4. Common relative paths (resources/frameworks first, then legacy)
    *   5. Fallback
    */
   private resolveMethodologiesDir(): string {
@@ -376,7 +376,7 @@ export class RuntimeMethodologyLoader {
     // 2. Walk up from current module location (fallback for development)
     let current = __dirname;
     for (let i = 0; i < 10; i++) {
-      const resourcesCandidate = join(current, 'resources', 'methodologies');
+      const resourcesCandidate = join(current, 'resources', 'frameworks');
       if (existsSync(resourcesCandidate) && this.hasYamlFiles(resourcesCandidate)) {
         return resourcesCandidate;
       }
@@ -384,11 +384,11 @@ export class RuntimeMethodologyLoader {
     }
 
     // Fallback
-    return join(__dirname, '..', '..', '..', 'resources', 'methodologies');
+    return join(__dirname, '..', '..', '..', 'resources', 'frameworks');
   }
 
   /**
-   * Resolve methodologies directory by finding our package.json
+   * Resolve frameworks directory by finding our package.json
    * This handles npx installations where the package is deep in the cache
    */
   private resolveFromPackageJson(): string | null {
@@ -399,8 +399,8 @@ export class RuntimeMethodologyLoader {
         if (existsSync(pkgPath)) {
           const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
           if (pkg.name === 'claude-prompts') {
-            // Check resources/methodologies first (new structure)
-            const resourcesMethodologiesPath = join(dir, 'resources', 'methodologies');
+            // Check resources/frameworks first (new structure)
+            const resourcesMethodologiesPath = join(dir, 'resources', 'frameworks');
             if (
               existsSync(resourcesMethodologiesPath) &&
               this.hasYamlFiles(resourcesMethodologiesPath)
@@ -408,7 +408,7 @@ export class RuntimeMethodologyLoader {
               return resourcesMethodologiesPath;
             }
             // Then check legacy location
-            const frameworksPath = join(dir, 'methodologies');
+            const frameworksPath = join(dir, 'frameworks');
             if (existsSync(frameworksPath) && this.hasYamlFiles(frameworksPath)) {
               return frameworksPath;
             }
@@ -430,10 +430,10 @@ export class RuntimeMethodologyLoader {
   private hasYamlFiles(dirPath: string): boolean {
     try {
       const entries = readdirSync(dirPath, { withFileTypes: true });
-      // Check for at least one subdirectory with methodology.yaml
+      // Check for at least one subdirectory with framework.yaml
       return entries.some((entry) => {
         if (!entry.isDirectory()) return false;
-        const entryPath = join(dirPath, entry.name, 'methodology.yaml');
+        const entryPath = join(dirPath, entry.name, 'framework.yaml');
         return existsSync(entryPath);
       });
     } catch {
@@ -509,7 +509,7 @@ export class RuntimeMethodologyLoader {
     definition: FrameworkResourceDefinition,
     expectedId: string
   ): FrameworkSchemaValidationResult {
-    // Use shared schema validation (SSOT with validate-methodologies.ts)
+    // Use shared schema validation (SSOT with validate-frameworks.ts)
     return validateMethodologySchema(definition, expectedId);
   }
 }

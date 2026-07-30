@@ -144,7 +144,7 @@ export class FrameworkVersioningProcessor {
     const diffResult = this.ctx.textDiffService.generateObjectDiff(
       result.from!.snapshot,
       result.to!.snapshot,
-      `${id}/methodology.yaml`
+      `${id}/framework.yaml`
     );
 
     let response =

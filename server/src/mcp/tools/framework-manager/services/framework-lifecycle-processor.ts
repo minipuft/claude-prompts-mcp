@@ -157,7 +157,7 @@ export class FrameworkLifecycleProcessor {
       const diffForVersion = this.ctx.textDiffService.generateObjectDiff(
         beforeState,
         afterState,
-        `${id}/methodology.yaml`
+        `${id}/framework.yaml`
       );
       const diffSummary = `+${diffForVersion.stats.additions}/-${diffForVersion.stats.deletions}`;
 
@@ -188,14 +188,14 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Failed to update methodology: ${result.error}`);
     }
 
-    // Trigger refresh to reload methodologies
+    // Trigger refresh to reload frameworks
     await this.ctx.onRefresh?.();
 
     // Generate diff view
     const diffResult = this.ctx.textDiffService.generateObjectDiff(
       beforeState,
       afterState,
-      `${id}/methodology.yaml`
+      `${id}/framework.yaml`
     );
 
     let response =
@@ -233,17 +233,17 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Methodology '${id}' not found`);
     }
 
-    // Prevent deleting built-in methodologies
+    // Prevent deleting built-in frameworks
     const builtInMethodologies = ['cageerf', 'react', '5w1h', 'scamper'];
     if (builtInMethodologies.includes(id.toLowerCase())) {
       return this.error(
-        `Cannot delete built-in methodology '${id}'. Only custom methodologies can be deleted.`
+        `Cannot delete built-in methodology '${id}'. Only custom frameworks can be deleted.`
       );
     }
 
     // Get methodology directory path
     const serverRoot = this.ctx.configManager.getServerRoot();
-    const frameworkDir = path.join(serverRoot, 'resources', 'methodologies', id.toLowerCase());
+    const frameworkDir = path.join(serverRoot, 'resources', 'frameworks', id.toLowerCase());
 
     if (!existsSync(frameworkDir)) {
       return this.error(`Methodology directory not found: ${frameworkDir}`);

@@ -19,7 +19,7 @@ export class FrameworkDiscoveryProcessor {
 
     if (frameworks.length === 0) {
       return this.success(
-        `📋 No methodologies found${enabled_only ? ' (enabled only)' : ''}\n\n` +
+        `📋 No frameworks found${enabled_only ? ' (enabled only)' : ''}\n\n` +
           `Use resource_manager(resource_type:"methodology", action:"create", ...) to add a new methodology.`
       );
     }
@@ -38,7 +38,7 @@ export class FrameworkDiscoveryProcessor {
         : '\n📍 No active framework';
 
     return this.success(
-      `📋 Methodologies (${frameworks.length} total)\n\n` + `${frameworkList}\n` + `${activeInfo}`
+      `📋 Frameworks (${frameworks.length} total)\n\n` + `${frameworkList}\n` + `${activeInfo}`
     );
   }
 

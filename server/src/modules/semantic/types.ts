@@ -11,7 +11,7 @@ export interface LLMClient {
     text: string;
     task: string;
     categories: string[];
-    methodologies: string[];
+    frameworks: string[];
   }): Promise<{
     executionType: string;
     confidence: number;

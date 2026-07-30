@@ -54,7 +54,7 @@ const frameworkBuilderTool: LoadedScriptTool = {
   absoluteScriptPath:
     '/prompts/framework-authoring/create_methodology/tools/methodology_builder/script.py',
   promptId: 'create_methodology',
-  descriptionContent: 'Builds methodologies',
+  descriptionContent: 'Builds frameworks',
   enabled: true,
   execution: {
     mode: 'confirm',

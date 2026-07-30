@@ -31,7 +31,7 @@ const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
  * Create a minimal YAML resource file on disk for indexing
  */
 async function createResourceFile(
-  type: 'prompts' | 'gates' | 'methodologies' | 'styles',
+  type: 'prompts' | 'gates' | 'frameworks' | 'styles',
   id: string,
   fields: Record<string, string>
 ): Promise<void> {
@@ -40,8 +40,8 @@ async function createResourceFile(
       ? 'prompt.yaml'
       : type === 'gates'
         ? 'gate.yaml'
-        : type === 'methodologies'
-          ? 'methodology.yaml'
+        : type === 'frameworks'
+          ? 'framework.yaml'
           : 'style.yaml';
 
   const dir = path.join(RESOURCES_DIR, type, id);

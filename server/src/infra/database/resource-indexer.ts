@@ -2,7 +2,7 @@
 /**
  * Resource Indexer
  *
- * Synchronizes file-based resources (prompts, gates, methodologies, styles, tools)
+ * Synchronizes file-based resources (prompts, gates, frameworks, styles, tools)
  * to the SQLite resource_index table for queryable lookups.
  *
  * Architecture:
@@ -11,7 +11,7 @@
  * ┌──────────────┐    sync    ┌───────────────────────┐
  * │ prompts/     │ ────────▶  │ id, type, name,       │
  * │ gates/       │            │ category, description,│
- * │ methodologies│            │ content_hash,         │
+ * │ frameworks│            │ content_hash,         │
  * │ styles/      │            │ file_path,            │
  * │ tools (nested)│           │ metadata_json,        │
  * └──────────────┘            │ keywords, indexed_at  │
@@ -334,7 +334,7 @@ export interface ResourceIndexerConfig {
   trackPrompts?: boolean;
   /** Whether to track gates */
   trackGates?: boolean;
-  /** Whether to track methodologies */
+  /** Whether to track frameworks */
   trackMethodologies?: boolean;
   /** Whether to track styles */
   trackStyles?: boolean;
@@ -384,7 +384,7 @@ export class ResourceIndexer {
     const types: Array<{ type: IndexedResourceType; enabled: boolean; subdir: string }> = [
       { type: 'prompt', enabled: this.config.trackPrompts, subdir: 'prompts' },
       { type: 'gate', enabled: this.config.trackGates, subdir: 'gates' },
-      { type: 'methodology', enabled: this.config.trackMethodologies, subdir: 'methodologies' },
+      { type: 'methodology', enabled: this.config.trackMethodologies, subdir: 'frameworks' },
       { type: 'style', enabled: this.config.trackStyles, subdir: 'styles' },
     ];
 
@@ -581,7 +581,7 @@ export class ResourceIndexer {
       case 'gate':
         return 'gate.yaml';
       case 'methodology':
-        return 'methodology.yaml';
+        return 'framework.yaml';
       case 'style':
         return 'style.yaml';
       default:

@@ -382,7 +382,7 @@ export class HotReloadObserver {
    */
   private extractMethodologyId(filePath: string): string | undefined {
     const normalizedPath = filePath.replace(/\\/g, '/');
-    const match = normalizedPath.match(/\/methodologies\/([^/]+)\//);
+    const match = normalizedPath.match(/\/frameworks\/([^/]+)\//);
     return match?.[1]?.toLowerCase();
   }
 

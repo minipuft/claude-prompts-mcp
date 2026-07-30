@@ -265,7 +265,7 @@ export type PromptDataYaml = z.infer<typeof PromptDataSchema>;
 /**
  * Schema for prompt.yaml files in directory-based format.
  *
- * This format mirrors the gates/methodologies pattern:
+ * This format mirrors the gates/frameworks pattern:
  * - Each prompt gets its own directory: `prompts/{category}/{id}/`
  * - Main definition in `prompt.yaml`
  * - Optional referenced files for system message and user template

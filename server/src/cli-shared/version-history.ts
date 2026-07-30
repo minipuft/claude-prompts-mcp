@@ -341,7 +341,7 @@ function resolveResourceRef(resourceDir: string): ResourceRef | null {
   if (segments.includes('gates')) {
     return { resourceType: 'gate', resourceId: id };
   }
-  if (segments.includes('methodologies')) {
+  if (segments.includes('frameworks')) {
     return { resourceType: 'methodology', resourceId: id };
   }
   if (segments.includes('styles')) {

@@ -3,7 +3,7 @@
  * Schema Validator Utilities
  *
  * Provides a thin wrapper over zod to standardize validation results and
- * error formatting across loaders (gates, methodologies, prompts).
+ * error formatting across loaders (gates, frameworks, prompts).
  */
 
 import type { ZodError, ZodIssue, ZodSchema } from 'zod';

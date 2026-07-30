@@ -2,7 +2,7 @@
 /**
  * MCP Resources Module
  *
- * Provides token-efficient read-only access to prompts, gates, methodologies,
+ * Provides token-efficient read-only access to prompts, gates, frameworks,
  * and observability data via MCP Resources protocol (resources/list, resources/read).
  *
  * Architecture:
@@ -54,7 +54,7 @@ export type {
  * Respects granular config flags in dependencies.resourcesConfig:
  * - prompts.enabled: Enable prompt resources
  * - gates.enabled: Enable gate resources
- * - methodologies.enabled: Enable methodology resources
+ * - frameworks.enabled: Enable methodology resources
  * - observability.enabled: Enable observability resources (sessions + metrics)
  * - logs.enabled: Enable logs resources
  *
@@ -89,8 +89,8 @@ export function registerResources(server: McpServer, dependencies: ResourceDepen
     logger.warn('[Resources] GateManager not available, skipping gate resources');
   }
 
-  // Methodologies
-  const frameworksEnabled = cfg.methodologies?.enabled !== false;
+  // Frameworks
+  const frameworksEnabled = cfg.frameworks?.enabled !== false;
   if (frameworksEnabled && dependencies.frameworkManager !== undefined) {
     registerMethodologyResources(server, dependencies);
     logger.debug('[Resources] Methodology resources registered');

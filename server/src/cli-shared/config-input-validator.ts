@@ -14,15 +14,15 @@ export const CONFIG_VALID_KEYS = [
   'gates.mode',
   'gates.methodologyGates',
   'execution.judge',
-  'methodologies.mode',
-  'methodologies.dynamicToolDescriptions',
-  'methodologies.systemPromptFrequency',
-  'methodologies.styleGuidance',
+  'frameworks.mode',
+  'frameworks.dynamicToolDescriptions',
+  'frameworks.systemPromptFrequency',
+  'frameworks.styleGuidance',
   'resources.mode',
   'resources.prompts.mode',
   'resources.prompts.defaultRegistration',
   'resources.gates.mode',
-  'resources.methodologies.mode',
+  'resources.frameworks.mode',
   'resources.observability.mode',
   'resources.observability.sessions',
   'resources.observability.metrics',
@@ -57,12 +57,12 @@ export const CONFIG_VALID_KEYS = [
   'advanced.sessions.reviewTimeoutMinutes',
   'advanced.sessions.cleanupIntervalMinutes',
   'gates.enabled',
-  'methodologies.enabled',
+  'frameworks.enabled',
   'prompts.registerWithMcp',
   'resources.registerWithMcp',
   'resources.prompts.enabled',
   'resources.gates.enabled',
-  'resources.methodologies.enabled',
+  'resources.frameworks.enabled',
   'resources.observability.enabled',
   'resources.logs.enabled',
   'verification.isolation.enabled',
@@ -134,11 +134,11 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
     }
 
     case 'gates.mode':
-    case 'methodologies.mode':
+    case 'frameworks.mode':
     case 'resources.mode':
     case 'resources.prompts.mode':
     case 'resources.gates.mode':
-    case 'resources.methodologies.mode':
+    case 'resources.frameworks.mode':
     case 'resources.observability.mode':
     case 'resources.logs.mode':
     case 'verification.isolation.mode':
@@ -172,15 +172,15 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
     case 'gates.enabled':
     case 'gates.enforcePendingVerdict':
     case 'execution.judge':
-    case 'methodologies.enabled':
-    case 'methodologies.dynamicToolDescriptions':
-    case 'methodologies.styleGuidance':
+    case 'frameworks.enabled':
+    case 'frameworks.dynamicToolDescriptions':
+    case 'frameworks.styleGuidance':
     case 'prompts.registerWithMcp':
     case 'resources.registerWithMcp':
     case 'resources.prompts.defaultRegistration':
     case 'resources.prompts.enabled':
     case 'resources.gates.enabled':
-    case 'resources.methodologies.enabled':
+    case 'resources.frameworks.enabled':
     case 'resources.observability.enabled':
     case 'resources.observability.sessions':
     case 'resources.observability.metrics':
@@ -253,7 +253,7 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
       return { valid: true, convertedValue: normalized, valueType: 'string' };
     }
 
-    case 'methodologies.systemPromptFrequency': {
+    case 'frameworks.systemPromptFrequency': {
       const freq = parseInt(value, 10);
       if (isNaN(freq) || freq < 1 || freq > 100) {
         return {

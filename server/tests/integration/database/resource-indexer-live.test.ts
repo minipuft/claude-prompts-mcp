@@ -3,7 +3,7 @@
  * ResourceIndexer Live Data Test
  *
  * Verifies the indexer works with real resource files from server/resources/.
- * Tests the actual production data path — prompts, gates, methodologies, styles.
+ * Tests the actual production data path — prompts, gates, frameworks, styles.
  */
 
 import * as fs from 'node:fs/promises';
@@ -74,11 +74,11 @@ describe('ResourceIndexer — live server resources', () => {
     }
   });
 
-  it('should index methodologies from server/resources/methodologies/', async () => {
-    const methodologies = indexer.queryByType('methodology');
-    expect(methodologies.length).toBeGreaterThan(0);
+  it('should index frameworks from server/resources/frameworks/', async () => {
+    const frameworks = indexer.queryByType('methodology');
+    expect(frameworks.length).toBeGreaterThan(0);
 
-    for (const m of methodologies) {
+    for (const m of frameworks) {
       expect(m.id).toBeTruthy();
       expect(m.type).toBe('methodology');
     }

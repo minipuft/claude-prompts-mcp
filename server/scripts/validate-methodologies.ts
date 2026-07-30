@@ -6,8 +6,8 @@
  * No build step required.
  *
  * Usage:
- *   tsx scripts/validate-methodologies.ts [--strict] [--verbose]
- *   npm run validate:methodologies
+ *   tsx scripts/validate-frameworks.ts [--strict] [--verbose]
+ *   npm run validate:frameworks
  */
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
@@ -20,7 +20,7 @@ import {
 } from '../src/engine/frameworks/methodology/methodology-schema.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const METHODOLOGIES_DIR = join(__dirname, '..', 'resources', 'methodologies');
+const METHODOLOGIES_DIR = join(__dirname, '..', 'resources', 'frameworks');
 const args = process.argv.slice(2);
 const STRICT = args.includes('--strict');
 const VERBOSE = args.includes('--verbose');
@@ -37,13 +37,13 @@ interface ValidationResult {
 // ============================================
 function validateMethodology(dir: string): ValidationResult {
   const id = basename(dir);
-  const yamlPath = join(dir, 'methodology.yaml');
+  const yamlPath = join(dir, 'framework.yaml');
   const errors: string[] = [];
   const warnings: string[] = [];
 
   // Check file exists
   if (!existsSync(yamlPath)) {
-    return { id, valid: false, errors: ['Missing methodology.yaml'], warnings: [] };
+    return { id, valid: false, errors: ['Missing framework.yaml'], warnings: [] };
   }
 
   // Parse YAML
@@ -94,7 +94,7 @@ function main(): void {
   console.log('Validating methodology YAML files...\n');
 
   if (!existsSync(METHODOLOGIES_DIR)) {
-    console.log('No methodologies directory found. Skipping.');
+    console.log('No frameworks directory found. Skipping.');
     process.exit(0);
   }
 
@@ -138,7 +138,7 @@ function main(): void {
     process.exit(1);
   }
 
-  console.log('\n✓ All methodologies valid');
+  console.log('\n✓ All frameworks valid');
 }
 
 main();

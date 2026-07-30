@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { type ResourceValidationResult, validateResourceFile } from './resource-validation.js';
 import { deleteHistoryFile } from './version-history.js';
 
-type ResourceType = 'prompts' | 'gates' | 'methodologies' | 'styles';
+type ResourceType = 'prompts' | 'gates' | 'frameworks' | 'styles';
 
 export interface CreateResourceOptions {
   name?: string;
@@ -187,14 +187,14 @@ function styleYaml(id: string, opts: CreateResourceOptions): string {
 const YAML_GENERATORS: Record<ResourceType, (id: string, opts: CreateResourceOptions) => string> = {
   prompts: promptYaml,
   gates: gateYaml,
-  methodologies: frameworkYaml,
+  frameworks: frameworkYaml,
   styles: styleYaml,
 };
 
 const ENTRY_FILES: Record<ResourceType, string> = {
   prompts: 'prompt.yaml',
   gates: 'gate.yaml',
-  methodologies: 'methodology.yaml',
+  frameworks: 'framework.yaml',
   styles: 'style.yaml',
 };
 
@@ -208,7 +208,7 @@ const COMPANION_FILES: Record<ResourceType, { name: string; content: string }> =
     content:
       '## Validation Criteria\n\n- Criterion one\n- Criterion two\n\n## Common Failures\n\n- Failure pattern\n',
   },
-  methodologies: {
+  frameworks: {
     name: 'system-prompt.md',
     content: 'Apply the methodology systematically, ensuring thorough coverage of each phase.\n',
   },

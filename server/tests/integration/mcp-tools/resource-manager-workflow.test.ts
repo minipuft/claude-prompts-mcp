@@ -230,7 +230,7 @@ const createMockFrameworkManager = () => {
             content: [
               {
                 type: 'text',
-                text: `Found ${frameworks.size} methodologies:\n${Array.from(frameworks.values())
+                text: `Found ${frameworks.size} frameworks:\n${Array.from(frameworks.values())
                   .map((f) => `- ${f.id}: ${f.name} (${f.enabled ? 'enabled' : 'disabled'})`)
                   .join('\n')}`,
               },
@@ -432,7 +432,7 @@ describe('Resource Manager Workflow Integration', () => {
     });
 
     test('methodology switch workflow', async () => {
-      // List available methodologies
+      // List available frameworks
       const listResult = await router.handleAction(
         {
           resource_type: 'methodology',

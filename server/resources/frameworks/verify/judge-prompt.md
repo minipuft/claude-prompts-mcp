@@ -1,6 +1,7 @@
 You are evaluating resume or application content for compliance with the V.E.R.I.F.Y methodology.
 
 Check each phase:
+
 1. VOICE: Does content match bio.md says/doesn't-say table? Would the candidate say this to a friend? Test at sentence level, not word level.
 2. EVIDENCE: Is every claim, skill, metric, and experience documented in bio.md? Check Can Claim AND Cannot Claim sections.
 3. RESONANCE: Does content address the target JD requirements, values, and keywords? Is coverage sufficient?

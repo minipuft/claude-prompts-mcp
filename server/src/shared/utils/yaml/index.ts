@@ -16,7 +16,7 @@
  * const config = loadYamlFileSync<Config>('config.yaml');
  *
  * // Discover methodology directories
- * const methodologies = discoverYamlDirectories('./methodologies');
+ * const frameworks = discoverYamlDirectories('./frameworks');
  * ```
  */
 

@@ -1032,7 +1032,7 @@ async function loadGateIR(gateDir: string): Promise<SkillIR> {
 }
 
 async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
-  const yamlPath = path.join(methDir, 'methodology.yaml');
+  const yamlPath = path.join(methDir, 'framework.yaml');
   const raw = await readFile(yamlPath, 'utf-8');
   const data = yaml.load(raw) as FrameworkYaml;
 
@@ -1047,7 +1047,7 @@ async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
 
   const guidance = data.systemPromptGuidance ?? sysPromptContent ?? '';
 
-  const sourceContentsMap: Record<string, string> = { 'methodology.yaml': raw };
+  const sourceContentsMap: Record<string, string> = { 'framework.yaml': raw };
   if (phasesRaw) sourceContentsMap[phasesFile] = phasesRaw;
   if (sysPromptFile && sysPromptContent) sourceContentsMap[sysPromptFile] = sysPromptContent;
 
@@ -1186,9 +1186,9 @@ async function loadAllResources(
     }
   }
 
-  // Methodologies: resources/methodologies/{id}/methodology.yaml
+  // Frameworks: resources/frameworks/{id}/framework.yaml
   if (!filters?.resourceType || filters.resourceType === 'methodology') {
-    const methBase = path.join(getResourcesDir(), 'methodologies');
+    const methBase = path.join(getResourcesDir(), 'frameworks');
     try {
       const methDirs = await readdir(methBase, { withFileTypes: true });
       for (const md of methDirs) {
@@ -1201,7 +1201,7 @@ async function loadAllResources(
         }
       }
     } catch {
-      /* no methodologies dir */
+      /* no frameworks dir */
     }
   }
 
@@ -1314,7 +1314,7 @@ function outputSubDir(ir: SkillIR, duplicateIds?: Set<string>): string {
     }
     return ir.id;
   }
-  const plural = ir.resourceType === 'methodology' ? 'methodologies' : ir.resourceType + 's';
+  const plural = ir.resourceType === 'methodology' ? 'frameworks' : ir.resourceType + 's';
   return `${plural}-${ir.id}`;
 }
 
@@ -2992,7 +2992,7 @@ async function cloneCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): 
       : resourceType === 'gate'
         ? 'gates'
         : resourceType === 'methodology'
-          ? 'methodologies'
+          ? 'frameworks'
           : 'styles';
   const targetDir =
     resourceType === 'prompt'
@@ -3066,7 +3066,7 @@ async function cloneCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): 
       : resourceType === 'gate'
         ? 'gates'
         : resourceType === 'methodology'
-          ? 'methodologies'
+          ? 'frameworks'
           : 'styles';
   const yamlFileName =
     resourceType === 'prompt'
@@ -3074,7 +3074,7 @@ async function cloneCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): 
       : resourceType === 'gate'
         ? 'gate.yaml'
         : resourceType === 'methodology'
-          ? 'methodology.yaml'
+          ? 'framework.yaml'
           : 'style.yaml';
 
   const mutationTargets = new Map<string, { path: string; kind: 'directory' }>();

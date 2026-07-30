@@ -5,7 +5,7 @@
  * Registers MCP resources for token-efficient methodology/framework discovery and content retrieval.
  *
  * URI Patterns:
- * - resource://methodology/              → List all methodologies (minimal metadata)
+ * - resource://methodology/              → List all frameworks (minimal metadata)
  * - resource://methodology/{id}          → Methodology definition + guidelines
  * - resource://methodology/{id}/system-prompt → Raw system prompt template only
  */
@@ -46,13 +46,13 @@ export function registerMethodologyResources(
     return;
   }
 
-  // Resource: List all methodologies (minimal metadata for token efficiency)
+  // Resource: List all frameworks (minimal metadata for token efficiency)
   server.registerResource(
-    'methodologies',
+    'frameworks',
     new ResourceTemplate(RESOURCE_URI_PATTERNS.FRAMEWORK_LIST, {
       list: async () => {
         const frameworks = frameworkManager.listFrameworks(false); // Include disabled
-        logger.debug(`[FrameworkResources] Listing ${frameworks.length} methodologies`);
+        logger.debug(`[FrameworkResources] Listing ${frameworks.length} frameworks`);
 
         const resources: FrameworkResourceMetadata[] = frameworks.map((f) => ({
           uri: buildUri(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM, f.id),
@@ -69,7 +69,7 @@ export function registerMethodologyResources(
       },
     }),
     {
-      description: 'List of all available methodologies/frameworks with minimal metadata',
+      description: 'List of all available frameworks/frameworks with minimal metadata',
       mimeType: 'text/plain',
     },
     async (): Promise<ReadResourceResult> => {
@@ -86,7 +86,7 @@ export function registerMethodologyResources(
           {
             uri: buildUri(RESOURCE_URI_PATTERNS.FRAMEWORK_LIST),
             mimeType: 'text/plain',
-            text: `Methodologies (${frameworks.length}):\n${lines.join('\n')}`,
+            text: `Frameworks (${frameworks.length}):\n${lines.join('\n')}`,
           },
         ],
       };
