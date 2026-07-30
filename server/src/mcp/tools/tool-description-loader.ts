@@ -29,7 +29,7 @@ import type {
   Logger,
   ToolDescription,
   ToolDescriptionsConfig,
-  FrameworksConfig,
+  ResolvedFrameworkConfig,
 } from '../../shared/types/index.js';
 
 /**
@@ -96,10 +96,10 @@ export class ToolDescriptionLoader extends EventEmitter {
   private styleDescriptions: Map<string, Record<string, StyleToolDescriptionYaml>>;
   private isInitialized: boolean = false;
   private configManager: ConfigManager;
-  private frameworksConfig: FrameworksConfig;
+  private frameworksConfig: ResolvedFrameworkConfig;
   private frameworksConfigListener: (
-    newConfig: FrameworksConfig,
-    previousConfig: FrameworksConfig
+    newConfig: ResolvedFrameworkConfig,
+    previousConfig: ResolvedFrameworkConfig
   ) => void;
   private frameworkStateStore?: FrameworkStateStore;
   private lastLoadSource: 'contracts' | 'defaults' = 'defaults';
@@ -129,7 +129,7 @@ export class ToolDescriptionLoader extends EventEmitter {
     this.styleDescriptions = new Map();
     this.frameworksConfig = this.configManager.getFrameworksConfig();
 
-    this.frameworksConfigListener = (newConfig: FrameworksConfig) => {
+    this.frameworksConfigListener = (newConfig: ResolvedFrameworkConfig) => {
       this.frameworksConfig = { ...newConfig };
       this.logger.info(
         `Tool description manager feature toggle updated (dynamicDescriptions: ${this.frameworksConfig.dynamicToolDescriptions})`

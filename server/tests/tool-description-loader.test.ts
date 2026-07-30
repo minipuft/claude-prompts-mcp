@@ -11,13 +11,13 @@ import { resetDefaultRuntimeLoader } from '../src/engine/frameworks/methodology/
 import type { ConfigManager } from '../src/infra/config/index.js';
 import type { FrameworkStateStore } from '../src/engine/frameworks/framework-state-store.js';
 import type { Logger } from '../src/infra/logging/index.js';
-import type { FrameworksConfig, ToolDescriptionsConfig } from '../src/shared/types/index.js';
+import type { ResolvedFrameworkConfig, ToolDescriptionsConfig } from '../src/shared/types/index.js';
 
 class FakeConfigManager extends EventEmitter {
   private root: string;
-  private frameworks: FrameworksConfig;
+  private frameworks: ResolvedFrameworkConfig;
 
-  constructor(root: string, frameworks: FrameworksConfig) {
+  constructor(root: string, frameworks: ResolvedFrameworkConfig) {
     super();
     this.root = root;
     this.frameworks = frameworks;
@@ -27,7 +27,7 @@ class FakeConfigManager extends EventEmitter {
     return this.root;
   }
 
-  getFrameworksConfig(): FrameworksConfig {
+  getFrameworksConfig(): ResolvedFrameworkConfig {
     return this.frameworks;
   }
 
@@ -76,7 +76,7 @@ const makeLogger = (): Logger =>
     debug: jest.fn(),
   }) as unknown as Logger;
 
-const baseFrameworksConfig: FrameworksConfig = {
+const baseFrameworksConfig: ResolvedFrameworkConfig = {
   dynamicToolDescriptions: true,
 };
 

@@ -36,7 +36,7 @@ import type { Category, PromptData } from '../modules/prompts/types.js';
 import type { ConversationStore } from '../modules/text-refs/conversation.js';
 import type { TextReferenceStore } from '../modules/text-refs/index.js';
 import type {
-  FrameworksConfig,
+  ResolvedFrameworkConfig,
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '../shared/types/index.js';
@@ -45,7 +45,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 export interface ModuleInitCallbacks {
   fullServerRefresh: () => Promise<void>;
   restartServer: (reason: string) => Promise<void>;
-  handleFrameworkConfigChange: (config: FrameworksConfig, previous?: FrameworksConfig) => void;
+  handleFrameworkConfigChange: (
+    config: ResolvedFrameworkConfig,
+    previous?: ResolvedFrameworkConfig
+  ) => void;
 }
 
 export interface ModuleInitParams {

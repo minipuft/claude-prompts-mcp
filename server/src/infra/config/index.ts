@@ -26,12 +26,12 @@ import {
   SemanticAnalysisConfig,
   LLMIntegrationConfig,
   LoggingConfig,
-  FrameworksConfig,
+  ResolvedFrameworkConfig,
   ExecutionConfig,
   ChainSessionConfig,
   TransportMode,
   VersioningConfig,
-  MethodologiesConfig,
+  FrameworkSettings,
   VerificationConfig,
   AdvancedConfig,
   ResourcesConfig,
@@ -62,7 +62,7 @@ const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   },
 };
 
-const DEFAULT_FRAMEWORKS_CONFIG: FrameworksConfig = {
+const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
   dynamicToolDescriptions: true,
   injection: {
     systemPrompt: { enabled: true, frequency: 2, target: 'steps' },
@@ -136,7 +136,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   private fileWatcher: FSWatcher | undefined;
   private watching: boolean = false;
   private reloadDebounceTimer: NodeJS.Timeout | undefined;
-  private frameworksConfigCache: FrameworksConfig;
+  private frameworksConfigCache: ResolvedFrameworkConfig;
 
   constructor(configPath: string) {
     super();
@@ -261,8 +261,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * Get frameworks configuration (includes injection settings)
    * Reads from methodologies config section
    */
-  getFrameworksConfig(): FrameworksConfig {
-    const m = this.config.methodologies;
+  getFrameworksConfig(): ResolvedFrameworkConfig {
+    const m = this.config.frameworks;
     const def = DEFAULT_FRAMEWORKS_CONFIG.injection!;
     return {
       dynamicToolDescriptions:
@@ -552,9 +552,17 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       this.config.transport = DEFAULT_TRANSPORT_MODE;
     }
 
-    // Ensure methodologies config exists (new-style)
-    if (!this.config.methodologies) {
-      this.config.methodologies = {
+    // Adopt the legacy `methodologies:` section if a pre-rename config.json still carries it,
+    // then drop it so only one key remains. Values are identical — this was a rename, not a
+    // schema change — so adoption is lossless and no user edit is required.
+    const legacySection = (this.config as { methodologies?: FrameworkSettings }).methodologies;
+    if (legacySection && !this.config.frameworks) {
+      this.config.frameworks = legacySection;
+    }
+    delete (this.config as { methodologies?: unknown }).methodologies;
+
+    if (!this.config.frameworks) {
+      this.config.frameworks = {
         enabled: true,
         dynamicToolDescriptions: DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
         systemPromptFrequency: DEFAULT_FRAMEWORKS_CONFIG.injection?.systemPrompt?.frequency ?? 2,
@@ -714,7 +722,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     this.emit('configChanged', this.getConfig());
   }
 
-  private emitConfigChange(previousFrameworks: FrameworksConfig): void {
+  private emitConfigChange(previousFrameworks: ResolvedFrameworkConfig): void {
     const currentFrameworks = this.getFrameworksConfig();
     const frameworksChanged = this.haveFrameworkConfigsChanged(
       previousFrameworks,
@@ -726,7 +734,10 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     }
   }
 
-  private haveFrameworkConfigsChanged(a: FrameworksConfig, b: FrameworksConfig): boolean {
+  private haveFrameworkConfigsChanged(
+    a: ResolvedFrameworkConfig,
+    b: ResolvedFrameworkConfig
+  ): boolean {
     return (
       a.dynamicToolDescriptions !== b.dynamicToolDescriptions ||
       a.injection?.systemPrompt?.enabled !== b.injection?.systemPrompt?.enabled ||

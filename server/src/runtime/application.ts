@@ -34,7 +34,7 @@ import { reloadPromptData } from '../modules/prompts/prompt-refresh-service.js';
 import { registerResources, notifyResourcesChanged } from '../modules/resources/index.js';
 import { ConversationStore, createConversationStore } from '../modules/text-refs/conversation.js';
 import { TextReferenceStore } from '../modules/text-refs/index.js';
-import { FrameworksConfig, TransportMode } from '../shared/types/index.js';
+import { ResolvedFrameworkConfig, TransportMode } from '../shared/types/index.js';
 import { ServiceOrchestrator } from '../shared/utils/service-orchestrator.js';
 
 import type { PathResolver } from './paths.js';
@@ -88,7 +88,7 @@ export class Application {
   private transportType?: TransportMode;
 
   private frameworksConfigListener:
-    | ((newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void)
+    | ((newConfig: ResolvedFrameworkConfig, previousConfig: ResolvedFrameworkConfig) => void)
     | undefined;
   /**
    * Conditional debug logging to prevent output flood during tests
@@ -1105,8 +1105,8 @@ export class Application {
     }
 
     this.frameworksConfigListener = (
-      newConfig: FrameworksConfig,
-      previousConfig: FrameworksConfig
+      newConfig: ResolvedFrameworkConfig,
+      previousConfig: ResolvedFrameworkConfig
     ) => {
       this.handleFrameworkConfigChange(newConfig, previousConfig);
     };
@@ -1116,8 +1116,8 @@ export class Application {
   }
 
   private handleFrameworkConfigChange(
-    newConfig: FrameworksConfig,
-    previousConfig?: FrameworksConfig
+    newConfig: ResolvedFrameworkConfig,
+    previousConfig?: ResolvedFrameworkConfig
   ): void {
     if (!this.logger) {
       return;
@@ -1138,7 +1138,10 @@ export class Application {
     }
   }
 
-  private syncFrameworkSystemStateFromConfig(config: FrameworksConfig, reason?: string): void {
+  private syncFrameworkSystemStateFromConfig(
+    config: ResolvedFrameworkConfig,
+    reason?: string
+  ): void {
     const gatesConfig = this.configManager.getGatesConfig();
     const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
     const shouldEnable =
@@ -1156,7 +1159,7 @@ export class Application {
     this.frameworkStateStore.setFrameworkSystemEnabled(shouldEnable, resolvedReason);
   }
 
-  private describeDisabledFrameworkFeatures(config: FrameworksConfig): string[] {
+  private describeDisabledFrameworkFeatures(config: ResolvedFrameworkConfig): string[] {
     const gatesConfig = this.configManager.getGatesConfig();
     const disabled: string[] = [];
     const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;

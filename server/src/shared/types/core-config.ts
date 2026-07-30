@@ -143,7 +143,7 @@ export interface FrameworkInjectionConfig {
 /**
  * Configuration toggles for framework-driven features
  */
-export interface FrameworksConfig {
+export interface ResolvedFrameworkConfig {
   /** Enable dynamic tool descriptions per methodology */
   dynamicToolDescriptions: boolean;
   /** Injection control for framework content */
@@ -219,7 +219,7 @@ export interface PhaseGuardsConfig {
 /**
  * New-style methodologies configuration (replaces frameworks)
  */
-export interface MethodologiesConfig {
+export interface FrameworkSettings {
   /** Enable methodology system */
   enabled?: boolean;
   /** Adapt MCP tool descriptions based on active methodology */
@@ -422,9 +422,8 @@ export interface Config {
   /** Execution strategy configuration (judge mode, etc.) */
   execution?: ExecutionConfig;
   /** Framework feature configuration (injection, tool descriptions) - LEGACY */
-  frameworks?: FrameworksConfig;
   /** New-style: Methodology configuration */
-  methodologies?: MethodologiesConfig;
+  frameworks?: FrameworkSettings;
   /** Chain session lifecycle configuration - LEGACY */
   chainSessions?: ChainSessionConfig;
   /**
