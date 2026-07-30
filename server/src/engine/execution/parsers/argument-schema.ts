@@ -154,8 +154,8 @@ export class ArgumentSchemaValidator {
 
   /**
    * Apply common constraints to any schema type.
-   * Note: allowedValues was removed in v3.0.0 - LLM handles semantic variation better
-   * than strict enum enforcement.
+   * Note: allowedValues *enforcement* was removed in v3.0.0 - LLM handles semantic variation
+   * better than strict enum enforcement. The field is still accepted upstream, just not applied.
    */
   private applyCommonConstraints<T extends ZodTypeAny>(
     _arg: PromptArgument,

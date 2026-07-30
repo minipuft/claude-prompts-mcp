@@ -300,6 +300,10 @@ export interface PromptArgumentDefinition {
     pattern?: string;
     minLength?: number;
     maxLength?: number;
+    /**
+     * @deprecated Enforcement was dropped in v3.0.0 — see argument-schema.ts, which accepts
+     * this field and deliberately never applies it.
+     */
     allowedValues?: ConfigValue[];
   };
 }

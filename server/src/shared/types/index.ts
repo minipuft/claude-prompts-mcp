@@ -140,7 +140,9 @@ export interface PromptArgument {
     /** Maximum length for strings */
     maxLength?: number;
     /**
-     * @deprecated Removed in v3.0.0 - LLM handles semantic variation better than strict enums.
+     * @deprecated Enforcement was dropped in v3.0.0 — the LLM handles semantic variation
+     * better than a strict enum. The field is still accepted and parsed; argument-schema.ts
+     * deliberately never applies it.
      */
     allowedValues?: Array<string | number | boolean>;
   };

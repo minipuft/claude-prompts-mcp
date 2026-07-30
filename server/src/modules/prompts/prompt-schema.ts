@@ -30,8 +30,10 @@ export const ArgumentValidationSchema = z
     /** Maximum length for strings */
     maxLength: z.number().int().positive().optional(),
     /**
-     * @deprecated Removed in v3.0.0 - LLM handles semantic variation better than strict enums.
-     * This field is parsed but ignored by the validation system.
+     * @deprecated Enforcement was dropped in v3.0.0 — the LLM handles semantic variation
+     * (e.g. "urgent" vs "high") better than a strict enum. The field itself was not removed:
+     * it is still accepted here and carried through yaml-prompt-loader.ts, but
+     * argument-schema.ts deliberately never applies it.
      */
     allowedValues: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
   })
