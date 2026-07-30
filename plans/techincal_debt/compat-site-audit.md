@@ -147,3 +147,99 @@ unrepresentable, but that is an improvement, not a compat retirement. **No 4.3 a
    deprecation notice. Two of them fail _closed_ and _silently_
    (`injection-decision-service.ts:366`, `gates/core/index.ts:139`), which is the worst shape for a
    regression: no error, just less behaviour.
+
+---
+
+# 4.3 — execution layout (approved 2026-07-30, not yet executed)
+
+**Read this before touching anything.** Laying 4.3 out precisely re-probed the five SPECULATIVE
+rows above and **falsified three of them**. The corrections are below and supersede the earlier
+table. The original probes searched `src` and `tests` only; two of the three misses were outside
+that path, and one was a value that _is_ read, on a line the consumer-count did not distinguish.
+
+## Corrections to the 4.1 verdicts
+
+| Site                                                                                        | Was                     | Now                        | Why                                                                                                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------- | ----------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mcp/contracts/schemas/types.ts:79` — `toolDescription`                                     | SPECULATIVE             | **LOAD-BEARING**           | Declared in **all four** contract JSONs (`prompt-engine`, `resource-manager`, `system-control`, `skills-sync`). The probe searched `src`/`tests` and missed `tooling/contracts/`. Removing the schema field would silently drop authored data. |
+| `engine/gates/registry/gate-provider-adapter.ts:117` — `clearCache()`                       | SPECULATIVE             | **STRUCTURAL**             | `GateDefinitionProvider` **declares** `clearCache(gateId?: string): void` at `engine/gates/core/gate-loader.ts:32`. The empty body is an interface obligation, not dead code. Retiring it means changing the interface.                        |
+| `engine/frameworks/prompt-guidance/template-enhancer.ts:21` — `enableStructureOptimization` | SPECULATIVE             | **LOAD-BEARING**           | Read at `template-enhancer.ts:62`: `if (this.config.enableStructureOptimization && !template.startsWith('##'))`. It gates behaviour.                                                                                                           |
+| `mcp/tools/system-control/system-control-router.ts:103` — `setToolDescriptionLoader`        | SPECULATIVE (6 callers) | **SPECULATIVE (narrower)** | Only the _system-control override_ is an empty sink. `prompt-executor.ts:288` and `mcp/tools/index.ts:261` are real implementations. Scope is 2 sites, not 6.                                                                                  |
+
+**Surviving SPECULATIVE: 2, not 5.**
+
+## Step 4.3a — remove the two confirmed SPECULATIVE sites
+
+One commit each. Both are additive-free deletions with no behaviour change.
+
+**4.3a.1 — `enableArgumentSuggestions` (dead flag).** Set in four places, read in none. Contrast
+with its sibling `enableStructureOptimization`, which IS read at `template-enhancer.ts:62` — do not
+remove that one.
+
+Delete the field and every assignment:
+
+- `engine/frameworks/prompt-guidance/template-enhancer.ts:20` (declaration), `:36` (default)
+- `engine/frameworks/prompt-guidance/service.ts:31` (declaration), `:83` (default)
+- `mcp/tools/prompt-engine/core/prompt-executor.ts:575`
+- `tests/helpers/test-helpers.ts:389`
+
+Verify: `rg -nw enableArgumentSuggestions src tests` returns 0; `typecheck`; `test:ci`.
+
+**4.3a.2 — the `setToolDescriptionLoader` sink.** Delete the empty override at
+`system-control-router.ts:103-105` and the optional call at `mcp/tools/index.ts:267`
+(`this.systemControl.setToolDescriptionLoader?.(manager);`). Leave `:261` and
+`prompt-executor.ts:288` alone — those do real work.
+
+Verify: `rg -nw setToolDescriptionLoader src` shows only the two real implementations plus
+`module-initializer.ts:237`; `typecheck`; `test:ci`.
+
+## Step 4.3b — stale comment cleanup (zero risk, no approval needed)
+
+**Two were already fixed during this layout** and are NOT pending:
+`methodology-types.ts:296` and `:378` carried `@deprecated Use type instead` blocks that were
+orphaned when the `methodology` member was removed. They had re-attached to `readonly version:
+string` and `abstract readonly version: string`, marking **`version` itself as deprecated** — false,
+and an IDE renders it struck through. Removed.
+
+**Correction to commit `bb1f590a`:** its message says the field was removed from
+`FrameworkDefinition`. It was not. `FrameworkDefinition.methodology` still exists at
+`methodology-types.ts:62`. What that commit removed was `FrameworkResourceDefinition.methodology`
+(`methodology-definition-types.ts`), the `FrameworkGuide` interface member, and the abstract member.
+The remaining live deprecated `methodology` fields are:
+
+| Site                                              | Type                                   | Still live?              |
+| ------------------------------------------------- | -------------------------------------- | ------------------------ |
+| `engine/frameworks/types/methodology-types.ts:62` | `FrameworkDefinition.methodology`      | **yes** — mirrors `type` |
+| `mcp/tools/framework-manager/core/types.ts:246`   | creation-payload `methodology: string` | **yes**                  |
+| `engine/frameworks/utils/template-enhancer.ts:37` | local alias type                       | **yes**                  |
+
+Retiring these is a **follow-on to `bb1f590a`, not a comment cleanup** — each needs its consumers
+repointed to `type` first. Do not delete the comments while the fields they describe still exist.
+
+Genuinely stale prose, safe to delete:
+
+- `modules/prompts/prompt-schema.ts:33` and `shared/types/index.ts:143` — "Removed in v3.0.0"; the
+  enum they describe is already gone
+- `modules/automation/core/script-schema.ts:57,59` — `ExecutionModeSchema` deprecation notice, kept
+  accurate only if the schema survives; check `script-schema.ts:64/:122` first, which are live
+  consumers
+
+## Step 4.3c — STRUCTURAL rows (explicitly NOT 4.3 work)
+
+The 18 STRUCTURAL rows are Tier-2-style consumer repointing. Doing them under a "compat cleanup"
+label is how a shim sweep breaks a build. Largest first, each its own tier-sized job:
+`PromptData` (84 consumers), `GatesConfig` (21), `ChainStep` (24), `LightweightGateDefinition`
+(106 — arguably not a shim at all at that usage level).
+
+## Do not touch
+
+The 14 behavioural fallbacks. Two fail **closed and silently**:
+`injection-decision-service.ts:366` (injection denied) and `gates/core/index.ts:139` (gates
+disabled). A regression in either emits no error and simply produces less behaviour.
+
+## Method note for whoever picks this up
+
+Every verdict in 4.1 that rested on a consumer count of `src` + `tests` alone proved unreliable:
+`tooling/contracts/`, interface declarations, and read-sites on conditional lines were all missed.
+Before deleting anything here, re-probe with the search path widened to the whole repo and confirm
+the symbol is neither declared by an interface nor read inside a conditional.

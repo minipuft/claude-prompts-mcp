@@ -292,9 +292,6 @@ export interface FrameworkGuide {
   readonly frameworkName: string;
   /** The framework type discriminator */
   readonly type: FrameworkType;
-  /**
-   * @deprecated Use `type` instead. Kept for backward compatibility.
-   */
   readonly version: string;
 
   /**
@@ -374,9 +371,6 @@ export abstract class BaseMethodologyGuide implements FrameworkGuide {
   abstract readonly frameworkName: string;
   /** The framework type discriminator */
   abstract readonly type: FrameworkType;
-  /**
-   * @deprecated Use `type` instead. Kept for backward compatibility.
-   */
   abstract readonly version: string;
 
   abstract guidePromptCreation(
