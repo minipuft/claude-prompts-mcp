@@ -451,6 +451,66 @@ produced the bogus barrel counts in 2.1. Re-probed for the relative form before 
 - Confirmed `CLAUDE.md` IS tracked despite its `.gitignore` entry (already-tracked files override
   ignore rules), so step 3.9's same-commit handbook update is viable.
 
+**Deviation 12 — every count in Tier 3 was wrong, and 4 of its 10 steps are not executable as
+written. Measured 2026-07-30 against a clean tree.**
+
+| Step                      | Plan count    | Measured      | Verdict                                 |
+| ------------------------- | ------------- | ------------- | --------------------------------------- |
+| 3.1 `StepState`           | 63            | **37**        | **MISCLASSIFIED — not a rename**        |
+| 3.3 `ChainSessionManager` | 143           | **177**       | valid, executed                         |
+| 3.5 `delegat*`            | 336           | **807**       | contract-crossing, needs scope decision |
+| 3.7 `mode` (automation)   | 811 repo-wide | **45** scoped | verification target unachievable        |
+| 3.9 `framework*`          | 3162          | **4360**      | contract-crossing, needs scope decision |
+
+The tier's premise **does** hold: all five target vocabularies already coexist with their
+replacements (`StepLifecycle` 22, `ChainSessionStore` 78, `handoff` 94, `trigger` 68,
+`methodology` 2465), so dual vocabulary is real in every case. What fails is the assumption that
+each is a _mechanical rename_.
+
+**3.1 is a data-model migration, not a rename.** `StepState` is a 4-value enum
+(`PENDING|RENDERED|RESPONSE_CAPTURED|COMPLETED`); `StepLifecycle` is a 6-value union
+(`pending|working|input_required|completed|failed|cancelled`). `RENDERED` and
+`RESPONSE_CAPTURED` have **no counterpart** — they become `StepSubstate` _flags_
+(`renderedAt`, `responseAt`). 7 of the 37 sites use exactly those two members. A textual rename
+produces `StepLifecycle.RENDERED`, which does not exist. Worse, the affected files include
+`shared/types/chain-session.ts` and `modules/chains/manager.ts` — the blob-encoded
+`chain_run_registry` persistence path — so this changes **persisted state shape** and needs a
+`SCHEMA_VERSION` bump. This belongs to the SEP-1686 execution-ledger initiative, whose
+`@deprecated` tags already describe the intended two-tier target. **Removed from this sweep.**
+
+**3.7's verification is unachievable by construction.** `rg -c "\bmode\b" src/modules/automation`
+= 0 cannot be reached, because the survivors are two things that must stay: (a) the deliberate
+user-YAML back-compat migration at `core/script-definition-loader.ts:433-444` that maps
+`mode: manual → trigger: explicit` and `mode: confirm → confirm: true` for script.yaml files
+users have already written, and (b) `ExecutionModeService` / `CommandExecutionMode`, which is a
+genuinely _different_ concept (auto/manual/confirm execution filtering), not the retired field.
+Retiring (a) is a compat-site classification question — **moved to Tier 4**, which is where
+load-bearing-vs-speculative gets decided with evidence.
+
+**3.5 and 3.9 cross the public contract surface.** Probed, not assumed:
+
+- `framework` is a **live MCP parameter name** — `system_control(framework: z.string())` at
+  `schemas/system-control.schema.ts:52` and the action literal `case 'framework'` at
+  `system-control-router.ts:356`. Clients pass both strings.
+- `framework_gates` is a **prompt-YAML authoring field** (`resource-manager.json:110`);
+  `framework_context:`, `gate_type: framework`, and `frameworks:` activation rules appear across
+  **15 gate/methodology resource files**; the gate id `framework-compliance` is referenced _by id_
+  from `methodologies/*/methodology.yaml`.
+- `@Framework` is a symbolic-command operator id (`registries/operators.json:64`), as is
+  `delegation` (`:24`).
+- **Workspace resources overlay bundled ones.** A user's own `gate.yaml` carrying
+  `framework_context:` would silently stop activating after the rename, with no migration path
+  and no error.
+
+For 3.5 specifically, `handoff` is currently the **display** vocabulary (footer text, `HANDOFF
+INSTRUCTIONS`) while `delegat*` is the **identifier** vocabulary — arguably intentional layering
+rather than drift.
+
+So both steps are breaking API changes wearing a cleanup costume. The internal portion is real
+debt worth fixing; the contract portion is a versioned migration with deprecation, not a sweep.
+**Held for an explicit scope decision** — internal-only, or internal + a contract migration with
+alias support. Not started either way.
+
 ### Naming ruling (step 0.5 — resolved 2026-07-29)
 
 **Approved.** The `Manager → Registry` renames in `scripts/rename-symbols.ts:35-36`
@@ -685,20 +745,90 @@ session holds uncommitted edits to `execution-planner.ts` (-265 lines), `categor
 
 ### Tier 3: Vocabulary unification. ONE vocabulary per commit. Gated on 0.5.
 
-| ID   | Status | Step                                                                                                                        | Files                                                         | Depends  | Verification                                                                                                       |
-| ---- | ------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| 3.1  | ☐      | `StepState` → `StepLifecycle` (63→0)                                                                                        | `src/`, `tests/`, `hooks/`, `docs/`                           | 0.5, 2.5 | `rg -c "\bStepState\b" src tests hooks docs` = 0; `test:ci` green                                                  |
-| 3.2  | ☐      | **NEW** guard + registration                                                                                                | `scripts/validate-no-stepstate.js`, `package.json`            | 3.1      | `npm run validate:all` 16 members, exits 0                                                                         |
-| 3.3  | ☐      | `ChainSessionManager` → `ChainSessionStore` (143→0) incl. lowercase `chainSessionManager`                                   | `src/`, `tests/`, `hooks/`, `docs/`                           | 3.2      | `rg -ci "chainsessionmanager" src tests hooks docs` = 0                                                            |
-| 3.4  | ☐      | **NEW** guard + registration                                                                                                | `scripts/validate-no-chainsessionmanager.js`, `package.json`  | 3.3      | `npm run validate:all` exits 0                                                                                     |
-| 3.5  | ☐      | `delegat*` → `handoff*` (336→0)                                                                                             | `src/`, `tests/`, `hooks/`, `docs/`                           | 3.4      | `rg -ci "delegat" src tests hooks docs` = 0 or survivors justified inline                                          |
-| 3.6  | ☐      | **NEW** guard + registration                                                                                                | `scripts/validate-no-delegation-vocab.js`, `package.json`     | 3.5      | `npm run validate:all` exits 0                                                                                     |
-| 3.7  | ☐      | `mode` → `trigger`, **automation scope ONLY**                                                                               | `src/modules/automation/**`, `src/shared/types/automation.ts` | 3.6      | `rg -c "\bmode\b" src/modules/automation` = 0                                                                      |
-| 3.8  | ☐      | **NEW** guard + registration                                                                                                | `scripts/validate-no-execution-mode.js`, `package.json`       | 3.7      | `npm run validate:all` exits 0                                                                                     |
-| 3.9  | ☐      | `framework*` → `methodology*` (3162→0). **Split into per-module commits**. Includes `Manager → Registry` per the 0.5 ruling | `src/`, `tests/`, `hooks/`, `docs/`, `CLAUDE.md`              | 3.8, 0.5 | Per-module `rg -c`; `test:ci` + `validate:arch` after EACH module; `CLAUDE.md:57/65/66` updated in the SAME commit |
-| 3.10 | ☐      | **NEW** guard + registration                                                                                                | `scripts/validate-no-framework-vocab.js`, `package.json`      | 3.9      | `npm run validate:all` exits 0                                                                                     |
+| ID   | Status | Step                                                                                                                                                                                                                                                                                                                                                | Files                                                                                        | Depends  | Verification                                                                                                        |
+| ---- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| 3.1  | ✓      | `StepState` → `StepLifecycle` — **DONE 2026-07-30** (deferred, then executed same day on operator request). Not a rename — enum→union+substate-flags data-model migration touching persisted `chain_run_registry` shape. Full context, site inventory and execution order: [`stepstate-lifecycle-migration.md`](./stepstate-lifecycle-migration.md) | `shared/types/`, `modules/chains/manager.ts`, `engine/execution/capture/`, `infra/database/` | 0.5      | **DONE** — typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0, `build` 0                                  |
+| 3.2  | ✓      | **DONE** — `scripts/validate-no-stepstate.js` added + registered; `validate:all` now **17** members; negative-tested both directions                                                                                                                                                                                                                | `scripts/validate-no-stepstate.js`, `package.json`                                           | 3.1      | **DONE** — `validate:all` 17 members, exits 0                                                                       |
+| 3.3  | ✓      | `ChainSessionManager` → `ChainSessionStore` (**177**→0, not 143) incl. lowercase `chainSessionManager`. 33 files + test file renamed `chain-session-manager.test.ts` → `chain-session-store.test.ts`                                                                                                                                                | `src/`, `tests/`, `docs/` (no `hooks/` hits)                                                 | 3.2      | **DONE** — residual 0; typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0                                 |
+| 3.4  | ✓      | **NEW** guard + registration                                                                                                                                                                                                                                                                                                                        | `scripts/validate-no-chainsessionmanager.js`, `package.json`                                 | 3.3      | **DONE** — `validate:all` **16 members**, exits 0; guard negative-tested (reintroduce → exit 1)                     |
+| 3.5  | ☐      | `delegat*` → `handoff*` (336→0)                                                                                                                                                                                                                                                                                                                     | `src/`, `tests/`, `hooks/`, `docs/`                                                          | 3.4      | `rg -ci "delegat" src tests hooks docs` = 0 or survivors justified inline                                           |
+| 3.6  | ☐      | **NEW** guard + registration                                                                                                                                                                                                                                                                                                                        | `scripts/validate-no-delegation-vocab.js`, `package.json`                                    | 3.5      | `npm run validate:all` exits 0                                                                                      |
+| 3.7  | ☐      | `mode` → `trigger`, **automation scope ONLY**                                                                                                                                                                                                                                                                                                       | `src/modules/automation/**`, `src/shared/types/automation.ts`                                | 3.6      | `rg -c "\bmode\b" src/modules/automation` = 0                                                                       |
+| 3.8  | ☐      | **NEW** guard + registration                                                                                                                                                                                                                                                                                                                        | `scripts/validate-no-execution-mode.js`, `package.json`                                      | 3.7      | `npm run validate:all` exits 0                                                                                      |
+| 3.9  | ◐      | **DIRECTION REVERSED** by operator 2026-07-30: unify on **`framework`**, not `methodology`. Stage 1 of 4 DONE — 602 replacements / 68 files across the **72 non-colliding** tokens, plus 189 YAML field renames (`methodologyBasis`→`frameworkBasis` etc.) in 19 resource files                                                                     | `src/`, `tests/`, `resources/**/*.yaml`                                                      | 3.8, 0.5 | **STAGE 1 DONE** — typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0, `lint:ratchet` 0. Stages 2-4 below |
+| 3.10 | ☐      | **NEW** guard + registration                                                                                                                                                                                                                                                                                                                        | `scripts/validate-no-framework-vocab.js`, `package.json`                                     | 3.9      | `npm run validate:all` exits 0                                                                                      |
 
 **Gate (after EVERY sub-step)**: `npm run typecheck && npm run test:ci && npm run validate:all && npm run validate:arch && rg -c "<retired-term>" src tests hooks docs && npm run lint:ratchet:baseline`
+
+#### 3.9 direction ruling + staging (operator decision 2026-07-30)
+
+**Unify on `framework`.** The premise the original step rested on was wrong: `methodology` is not
+an internal-only term — it is a **public `resource_type` enum value**, a `methodology:` param, and
+the on-disk `resources/methodologies/` directory. Both vocabularies were already public, so no
+direction avoided touching the contract. Operator chose `framework` (2,317 internal sites vs 4,147
+the other way) accepting the directory rename, on the basis that the project has no user base and
+the only overlay exposure is the maintainer's own workspace.
+
+**The bigger find: 7 pairs are DUPLICATE TYPES, not naming collisions.** `MethodologyState` and
+`FrameworkState` are structurally identical — same 7 fields, same nested `switchingMetrics`. Both
+sides of every pair have live consumers, with **mixed dominance**, so no bulk pick is correct:
+
+| Retiring                                                                                                | uses   | Existing target             | uses   |
+| ------------------------------------------------------------------------------------------------------- | ------ | --------------------------- | ------ |
+| `MethodologyDefinition`                                                                                 | 16     | `FrameworkDefinition`       | **48** |
+| `MethodologyRegistry`                                                                                   | **26** | `FrameworkRegistry`         | 1      |
+| `MethodologyValidator`                                                                                  | 14     | `FrameworkValidator`        | **29** |
+| `MethodologyValidationResult`                                                                           | **6**  | `FrameworkValidationResult` | 2      |
+| `MethodologyState`                                                                                      | 3      | `FrameworkState`            | **6**  |
+| `MethodologySwitchRequest`                                                                              | 3      | `FrameworkSwitchRequest`    | **4**  |
+| `Methodology` / `Methodologies` / `MethodologiesConfig` / `MethodologyToolDescriptions` / `METHODOLOGY` | —      | counterparts exist          | —      |
+
+This is deduplication work, not renaming. Each pair needs a structural diff, a canonical winner,
+consumers repointed, and the loser deleted — one commit per pair.
+
+| Stage | Scope                                                                                                                                                                                                               | Status                                                                                                           |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 1     | 72 non-colliding tokens (`src/`, `tests/`) + resource YAML field names                                                                                                                                              | **✓ DONE** — 602 + 189 replacements, full gate green                                                             |
+| 2     | 7 colliding pairs adjudicated — **only 2 were duplicates**; see ruling below                                                                                                                                        | **✓ DONE** — 81 replacements / 27 files, typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0, `build` 0 |
+| 3     | On-disk: `resources/methodologies/` → `resources/frameworks/`, `methodology.yaml` → `framework.yaml` (8 dirs), loader path constants, `resource_type` enum value `'methodology'` → `'framework'`, contracts, router | ☐                                                                                                                |
+| 4     | `docs/`, `CLAUDE.md`, `>>create_methodology` prompt id, then `scripts/validate-no-methodology-vocab.js` + registration                                                                                              | ☐                                                                                                                |
+
+#### Stage 2 ruling: the "7 duplicate pairs" framing was wrong
+
+Adjudicated by structural diff, not by name. The collision set splits three ways, and treating it
+as one bucket would have merged unrelated concepts:
+
+**Dead — deleted, not merged (2).** `MethodologyState` and `MethodologySwitchRequest` had **zero
+real consumers**: a definition plus two re-export lines each. `MethodologyState` was field-for-field
+identical to `FrameworkState`, which is the one actually wired to the state store.
+
+**Homonyms — given DISTINCT names, must NOT be merged (3).** Same name shape, different concept:
+
+| Retired name                  | Renamed to                       | Why not merged into the `Framework*` counterpart                                                                                                                                                                                                              |
+| ----------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MethodologyValidationResult` | `FrameworkDraftValidationResult` | It is a **quality score** (`valid`, `level`, `score`, `errors`, `warnings`, `nextStep`). `FrameworkValidationResult` is an **id resolution** (`normalizedId`, `definition`). Unrelated.                                                                       |
+| `MethodologyValidator`        | `FrameworkDraftValidator`        | Scores an authoring draft against an 80% field threshold. `FrameworkValidator` normalizes and resolves framework ids. Different jobs.                                                                                                                         |
+| `MethodologyDefinition`       | `FrameworkResourceDefinition`    | The **on-disk YAML resource** (`systemPromptGuidance`, `gates`, `version`, `enabled`). `FrameworkDefinition` is the **runtime model** (`systemPromptTemplate`, `executionGuidelines`, `applicableTypes`, `priority`). Different shapes, different lifecycles. |
+
+**Not a collision at all (2).** `MethodologyRegistry` -> `FrameworkRegistry` was safe: the target
+appeared **only inside a doc comment**, never as a symbol. This also satisfies the 0.5 naming
+ruling. `MethodologyToolDescriptions` -> `FrameworkToolDescriptions` was safe: the apparent target
+was a _file-local, non-exported_ alias in `resource-manager/core/types.ts`, which does not import
+the exported type.
+
+**Still open — deferred with reason.** `MethodologiesConfig` vs `FrameworksConfig`: both are live
+and both are config surfaces (`methodologies?: MethodologiesConfig` at `core-config.ts:427`;
+`FrameworksConfig` drives the hot-reload callbacks in `application.ts`). They overlap on
+`dynamicToolDescriptions`. That looks like a genuine duplicated config surface rather than a naming
+drift, so it needs a wiring audit against `config.json` before either is touched. Not guessed at.
+
+> **Stage 1 finding worth keeping**: `validate:methodologies` caught the rename desynchronising the
+> Zod field names from the on-disk YAML (`methodologyBasis` vs `frameworkBasis`, 9 fields across 19
+> files). Typecheck could not see it — the schema and the data are only bound at runtime. Any future
+> stage that renames a schema field must re-run `validate:methodologies`, not just `tsc`.
+>
+> **Stage 3 warning**: renaming `resources/methodologies/` will silently orphan any same-named
+> directory in the maintainer's `MCP_WORKSPACE` overlay. Migrate that by hand in the same session.
 
 > **3.7 trap**: `811` is a whole-repo count of a common English word. Scope strictly to the
 > automation domain that owns the rename, or the sweep corrupts unrelated code.
