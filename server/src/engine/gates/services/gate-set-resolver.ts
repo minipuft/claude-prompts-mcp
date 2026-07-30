@@ -12,7 +12,7 @@ import type { GateManager } from '../gate-manager.js';
 /**
  * Inputs to one gate-set resolution. Stateless: every field arrives per request.
  *
- * `frameworkId` and `methodologyInjected` are INPUTS, deliberately. This module lives in
+ * `frameworkId` and `frameworkInjected` are INPUTS, deliberately. This module lives in
  * `engine/gates`, and `no-frameworks-in-gates` (dependency-cruiser, error severity) forbids
  * reaching into `engine/frameworks` to compute them. The caller resolves them and passes them
  * down — the same shape `GateEnhancementService` already uses when it reads the framework id
@@ -31,7 +31,7 @@ export interface GateResolutionInput {
    * the injection hierarchy. Drives the nesting veto: scoring adherence to a methodology that
    * was not injected is incoherent, so those gates are withheld.
    */
-  readonly methodologyInjected: boolean;
+  readonly frameworkInjected: boolean;
   /** Rank 100 — `::` operator typed in the command. */
   readonly inlineOperatorGateIds?: readonly string[] | undefined;
   /** Rank 90 — gate chosen during a judge phase. */
@@ -64,7 +64,7 @@ export interface GateResolutionInput {
    * gates server-wide and binds every rank — it is operator configuration, not a preference.
    * Defaults to enabled.
    */
-  readonly methodologyGatesEnabled?: boolean | undefined;
+  readonly frameworkGatesEnabled?: boolean | undefined;
   /**
    * Methodology gate ids the caller has already loaded. Supplying them avoids a second registry
    * read; omitting them makes the resolver load its own.
@@ -282,10 +282,10 @@ export class GateSetResolver {
   private async buildMethodologyVetoes(input: GateResolutionInput): Promise<GateVeto[]> {
     const applicable: Array<{ name: string; bindsUpToRank: number }> = [];
 
-    if (!input.methodologyInjected) {
+    if (!input.frameworkInjected) {
       applicable.push({ name: 'methodology-nesting', bindsUpToRank: RANK['inline-operator'] });
     }
-    if (input.methodologyGatesEnabled === false) {
+    if (input.frameworkGatesEnabled === false) {
       applicable.push({
         name: 'methodology-gates-disabled',
         bindsUpToRank: RANK['inline-operator'],

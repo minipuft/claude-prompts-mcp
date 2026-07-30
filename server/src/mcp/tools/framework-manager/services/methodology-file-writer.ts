@@ -19,13 +19,13 @@ import { loadYamlFile } from '../../../../shared/utils/yaml/yaml-file-loader.js'
 import { serializeYaml } from '../../../../shared/utils/yaml/yaml-parser.js';
 
 import type { ConfigManager, Logger } from '../../../../shared/types/index.js';
-import type { MethodologyCreationData } from '../core/types.js';
+import type { FrameworkCreationData } from '../core/types.js';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export interface MethodologyFileWriterDependencies {
+export interface FrameworkFileWriterDependencies {
   logger: Logger;
   configManager: ConfigManager;
   resourceVerificationService?: ResourceVerificationService;
@@ -37,13 +37,13 @@ export interface ExistingMethodologyData {
   phases: Record<string, unknown> | null;
   systemPrompt: string | null;
   judgePrompt: string | null;
-  methodologyPath: string;
+  frameworkPath: string;
   phasesPath: string | null;
   systemPromptPath: string;
   judgePromptPath: string | null;
 }
 
-export interface MethodologyFileResult {
+export interface FrameworkFileResult {
   success: boolean;
   paths?: string[];
   error?: string;
@@ -53,13 +53,13 @@ export interface MethodologyFileResult {
 // Service Implementation
 // ============================================================================
 
-export class MethodologyFileWriter {
+export class FrameworkFileWriter {
   private logger: Logger;
   private configManager: ConfigManager;
   private readonly verificationService: ResourceVerificationService;
   private readonly mutationTransaction: ResourceMutationTransaction;
 
-  constructor(deps: MethodologyFileWriterDependencies) {
+  constructor(deps: FrameworkFileWriterDependencies) {
     this.logger = deps.logger;
     this.configManager = deps.configManager;
     this.verificationService =
@@ -79,9 +79,9 @@ export class MethodologyFileWriter {
    * @returns true if methodology.yaml exists for this ID
    */
   methodologyExists(id: string): boolean {
-    const methodologyDir = this.getMethodologyDir(id);
-    const methodologyPath = join(methodologyDir, 'methodology.yaml');
-    return existsSync(methodologyPath);
+    const frameworkDir = this.getMethodologyDir(id);
+    const frameworkPath = join(frameworkDir, 'methodology.yaml');
+    return existsSync(frameworkPath);
   }
 
   /**
@@ -91,16 +91,16 @@ export class MethodologyFileWriter {
    * @returns true if deletion succeeded
    */
   async deleteMethodology(id: string): Promise<boolean> {
-    const methodologyDir = this.getMethodologyDir(id);
+    const frameworkDir = this.getMethodologyDir(id);
 
-    if (!existsSync(methodologyDir)) {
+    if (!existsSync(frameworkDir)) {
       return false;
     }
 
     try {
       const { rm } = await import('fs/promises');
-      await rm(methodologyDir, { recursive: true });
-      this.logger.debug(`Deleted methodology directory: ${methodologyDir}`);
+      await rm(frameworkDir, { recursive: true });
+      this.logger.debug(`Deleted methodology directory: ${frameworkDir}`);
       return true;
     } catch (error) {
       this.logger.error(`Failed to delete methodology '${id}':`, error);
@@ -112,15 +112,15 @@ export class MethodologyFileWriter {
    * Load existing methodology files from disk
    */
   async loadExistingMethodology(id: string): Promise<ExistingMethodologyData | null> {
-    const methodologyDir = this.getMethodologyDir(id);
-    const methodologyPath = join(methodologyDir, 'methodology.yaml');
+    const frameworkDir = this.getMethodologyDir(id);
+    const frameworkPath = join(frameworkDir, 'methodology.yaml');
 
-    if (!existsSync(methodologyPath)) {
+    if (!existsSync(frameworkPath)) {
       return null;
     }
 
     try {
-      const methodology = await loadYamlFile<Record<string, unknown>>(methodologyPath);
+      const methodology = await loadYamlFile<Record<string, unknown>>(frameworkPath);
       if (methodology === undefined) {
         this.logger.error(`Failed to parse methodology.yaml for ${id}`);
         return null;
@@ -131,7 +131,7 @@ export class MethodologyFileWriter {
       let phasesPath: string | null = null;
       const phasesFileRef = methodology['phasesFile'];
       if (phasesFileRef !== undefined && phasesFileRef !== null) {
-        phasesPath = join(methodologyDir, String(phasesFileRef));
+        phasesPath = join(frameworkDir, String(phasesFileRef));
         if (existsSync(phasesPath)) {
           const loadedPhases = await loadYamlFile<Record<string, unknown>>(phasesPath);
           phases = loadedPhases ?? null;
@@ -139,7 +139,7 @@ export class MethodologyFileWriter {
       }
 
       // Load system-prompt.md
-      const systemPromptPath = join(methodologyDir, 'system-prompt.md');
+      const systemPromptPath = join(frameworkDir, 'system-prompt.md');
       let systemPrompt: string | null = null;
       if (existsSync(systemPromptPath)) {
         systemPrompt = await readFile(systemPromptPath, 'utf8');
@@ -150,7 +150,7 @@ export class MethodologyFileWriter {
       let judgePromptPath: string | null = null;
       const judgePromptFileRef = methodology['judgePromptFile'];
       if (judgePromptFileRef !== undefined && judgePromptFileRef !== null) {
-        judgePromptPath = join(methodologyDir, String(judgePromptFileRef));
+        judgePromptPath = join(frameworkDir, String(judgePromptFileRef));
         if (existsSync(judgePromptPath)) {
           judgePrompt = await readFile(judgePromptPath, 'utf8');
         }
@@ -161,7 +161,7 @@ export class MethodologyFileWriter {
         phases,
         systemPrompt,
         judgePrompt,
-        methodologyPath,
+        frameworkPath,
         phasesPath,
         systemPromptPath,
         judgePromptPath,
@@ -173,17 +173,17 @@ export class MethodologyFileWriter {
   }
 
   /**
-   * Convert raw ExistingMethodologyData to typed MethodologyCreationData.
+   * Convert raw ExistingMethodologyData to typed FrameworkCreationData.
    * Extracts and maps fields from YAML structure to the typed interface.
    *
    * @param id - Methodology identifier
    * @param existing - Raw methodology data loaded from disk
-   * @returns Typed MethodologyCreationData or null if essential fields missing
+   * @returns Typed FrameworkCreationData or null if essential fields missing
    */
   toMethodologyCreationData(
     id: string,
     existing: ExistingMethodologyData
-  ): MethodologyCreationData | null {
+  ): FrameworkCreationData | null {
     const { methodology, phases, systemPrompt } = existing;
 
     // Extract required fields from raw YAML (use bracket notation for Record<string, unknown>)
@@ -200,7 +200,7 @@ export class MethodologyFileWriter {
 
     // Build typed creation data from raw YAML fields
     const rawMethodology = methodology['methodology'];
-    const data: MethodologyCreationData = {
+    const data: FrameworkCreationData = {
       id,
       name,
       methodology: typeof rawMethodology === 'string' ? rawMethodology : id.toUpperCase(),
@@ -218,11 +218,11 @@ export class MethodologyFileWriter {
     if (typeof rawType === 'string') data.type = rawType;
     if (typeof rawEnabled === 'boolean') data.enabled = rawEnabled;
     if (rawGates !== undefined && rawGates !== null) {
-      data.gates = rawGates as NonNullable<MethodologyCreationData['gates']>;
+      data.gates = rawGates as NonNullable<FrameworkCreationData['gates']>;
     }
     if (rawToolDescriptions !== undefined && rawToolDescriptions !== null) {
       data.tool_descriptions = rawToolDescriptions as NonNullable<
-        MethodologyCreationData['tool_descriptions']
+        FrameworkCreationData['tool_descriptions']
       >;
     }
 
@@ -240,58 +240,58 @@ export class MethodologyFileWriter {
       phasesSource['templateEnhancements'] ?? phasesSource['template_enhancements'];
     const rawExecutionFlow = phasesSource['executionFlow'] ?? phasesSource['execution_flow'];
     const rawMethodologyElements =
-      methodology['methodologyElements'] ?? phasesSource['methodology_elements'];
+      methodology['frameworkElements'] ?? phasesSource['methodology_elements'];
     const rawArgumentSuggestions =
       methodology['argumentSuggestions'] ?? phasesSource['argument_suggestions'];
     const rawTemplateSuggestions =
       methodology['templateSuggestions'] ?? phasesSource['template_suggestions'];
 
     if (Array.isArray(rawPhases)) {
-      data.phases = rawPhases as NonNullable<MethodologyCreationData['phases']>;
+      data.phases = rawPhases as NonNullable<FrameworkCreationData['phases']>;
     }
     if (Array.isArray(rawMethodologyGates)) {
       data.methodology_gates = rawMethodologyGates as NonNullable<
-        MethodologyCreationData['methodology_gates']
+        FrameworkCreationData['methodology_gates']
       >;
     }
     if (Array.isArray(rawProcessingSteps)) {
       data.processing_steps = rawProcessingSteps as NonNullable<
-        MethodologyCreationData['processing_steps']
+        FrameworkCreationData['processing_steps']
       >;
     }
     if (Array.isArray(rawExecutionSteps)) {
       data.execution_steps = rawExecutionSteps as NonNullable<
-        MethodologyCreationData['execution_steps']
+        FrameworkCreationData['execution_steps']
       >;
     }
     if (rawQualityIndicators !== undefined && rawQualityIndicators !== null) {
       data.quality_indicators = rawQualityIndicators as NonNullable<
-        MethodologyCreationData['quality_indicators']
+        FrameworkCreationData['quality_indicators']
       >;
     }
     if (rawTemplateEnhancements !== undefined && rawTemplateEnhancements !== null) {
       data.template_enhancements = rawTemplateEnhancements as NonNullable<
-        MethodologyCreationData['template_enhancements']
+        FrameworkCreationData['template_enhancements']
       >;
     }
     if (rawExecutionFlow !== undefined && rawExecutionFlow !== null) {
       data.execution_flow = rawExecutionFlow as NonNullable<
-        MethodologyCreationData['execution_flow']
+        FrameworkCreationData['execution_flow']
       >;
     }
     if (rawMethodologyElements !== undefined && rawMethodologyElements !== null) {
       data.methodology_elements = rawMethodologyElements as NonNullable<
-        MethodologyCreationData['methodology_elements']
+        FrameworkCreationData['methodology_elements']
       >;
     }
     if (Array.isArray(rawArgumentSuggestions)) {
       data.argument_suggestions = rawArgumentSuggestions as NonNullable<
-        MethodologyCreationData['argument_suggestions']
+        FrameworkCreationData['argument_suggestions']
       >;
     }
     if (Array.isArray(rawTemplateSuggestions)) {
       data.template_suggestions = rawTemplateSuggestions as NonNullable<
-        MethodologyCreationData['template_suggestions']
+        FrameworkCreationData['template_suggestions']
       >;
     }
 
@@ -304,19 +304,19 @@ export class MethodologyFileWriter {
    * @param existingData - Existing methodology data to merge with (null for create)
    */
   async writeMethodologyFiles(
-    data: Partial<MethodologyCreationData> & { id: string },
+    data: Partial<FrameworkCreationData> & { id: string },
     existingData?: ExistingMethodologyData | null
-  ): Promise<MethodologyFileResult> {
-    const methodologyDir = this.getMethodologyDir(data.id);
-    const methodologyYamlPath = join(methodologyDir, 'methodology.yaml');
+  ): Promise<FrameworkFileResult> {
+    const frameworkDir = this.getMethodologyDir(data.id);
+    const frameworkYamlPath = join(frameworkDir, 'methodology.yaml');
 
     const txResult = await this.mutationTransaction.run({
-      targets: [{ path: methodologyDir, kind: 'directory' }],
+      targets: [{ path: frameworkDir, kind: 'directory' }],
       mutate: async () => {
         const paths: string[] = [];
 
-        await mkdir(methodologyDir, { recursive: true });
-        paths.push(methodologyDir);
+        await mkdir(frameworkDir, { recursive: true });
+        paths.push(frameworkDir);
 
         // Build and merge methodology.yaml
         const newMethodologyData = this.buildMethodologyYamlData(data);
@@ -325,9 +325,9 @@ export class MethodologyFileWriter {
             ? this.deepMerge(existingData.methodology, newMethodologyData)
             : newMethodologyData;
 
-        const methodologyContent = serializeYaml(finalMethodologyData, { sortKeys: false });
-        await safeWriteFile(methodologyYamlPath, methodologyContent);
-        paths.push(methodologyYamlPath);
+        const frameworkContent = serializeYaml(finalMethodologyData, { sortKeys: false });
+        await safeWriteFile(frameworkYamlPath, frameworkContent);
+        paths.push(frameworkYamlPath);
 
         // Handle phases.yaml
         const existingPhases = existingData?.phases ?? null;
@@ -341,7 +341,7 @@ export class MethodologyFileWriter {
               : (existingPhases ?? newPhasesData);
 
           if (Object.keys(finalPhasesData).length > 0) {
-            const phasesPath = join(methodologyDir, 'phases.yaml');
+            const phasesPath = join(frameworkDir, 'phases.yaml');
             const phasesContent = serializeYaml(finalPhasesData, { sortKeys: false });
             await safeWriteFile(phasesPath, phasesContent);
             paths.push(phasesPath);
@@ -349,7 +349,7 @@ export class MethodologyFileWriter {
         }
 
         // Handle system-prompt.md
-        const systemPromptPath = join(methodologyDir, 'system-prompt.md');
+        const systemPromptPath = join(frameworkDir, 'system-prompt.md');
         const systemPromptContent = data.system_prompt_guidance ?? existingData?.systemPrompt ?? '';
         if (systemPromptContent !== '') {
           await safeWriteFile(systemPromptPath, systemPromptContent);
@@ -360,7 +360,7 @@ export class MethodologyFileWriter {
         const existingJudgePrompt = existingData?.judgePrompt ?? null;
         const hasJudgePrompt = data.judge_prompt !== undefined || existingJudgePrompt !== null;
         if (hasJudgePrompt) {
-          const judgePromptPath = join(methodologyDir, 'judge-prompt.md');
+          const judgePromptPath = join(frameworkDir, 'judge-prompt.md');
           const judgePromptContent = data.judge_prompt ?? existingJudgePrompt ?? '';
           if (judgePromptContent !== '') {
             await safeWriteFile(judgePromptPath, judgePromptContent);
@@ -371,7 +371,7 @@ export class MethodologyFileWriter {
         return { paths };
       },
       validate: () =>
-        this.verificationService.validateFile('methodologies', data.id, methodologyYamlPath),
+        this.verificationService.validateFile('methodologies', data.id, frameworkYamlPath),
     });
 
     if (!txResult.success) {
@@ -394,7 +394,7 @@ export class MethodologyFileWriter {
    * Build methodology.yaml data from input (only sets defined fields)
    */
   buildMethodologyYamlData(
-    data: Partial<MethodologyCreationData> & { id: string }
+    data: Partial<FrameworkCreationData> & { id: string }
   ): Record<string, unknown> {
     const yamlData: Record<string, unknown> = {};
     const typeValue = data.type ?? data.methodology;
@@ -442,7 +442,7 @@ export class MethodologyFileWriter {
       yamlData['templateSuggestions'] = data.template_suggestions;
     }
     if (data.methodology_elements !== undefined) {
-      yamlData['methodologyElements'] = data.methodology_elements;
+      yamlData['frameworkElements'] = data.methodology_elements;
     }
     if (data.argument_suggestions !== undefined && data.argument_suggestions.length > 0) {
       yamlData['argumentSuggestions'] = data.argument_suggestions;
@@ -460,7 +460,7 @@ export class MethodologyFileWriter {
   /**
    * Build phases.yaml data from input (only sets defined fields)
    */
-  buildPhasesYamlData(data: Partial<MethodologyCreationData>): Record<string, unknown> {
+  buildPhasesYamlData(data: Partial<FrameworkCreationData>): Record<string, unknown> {
     const phasesData: Record<string, unknown> = {};
 
     if (data.phases !== undefined && data.phases.length > 0) {
@@ -501,7 +501,7 @@ export class MethodologyFileWriter {
     return join(serverRoot, 'resources', 'methodologies', id.toLowerCase());
   }
 
-  private needsPhasesFile(data: Partial<MethodologyCreationData>): boolean {
+  private needsPhasesFile(data: Partial<FrameworkCreationData>): boolean {
     return (
       (data.phases !== undefined && data.phases.length > 0) ||
       data.processing_steps !== undefined ||

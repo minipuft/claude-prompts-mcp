@@ -36,7 +36,7 @@ const wordCountTool: LoadedScriptTool = {
   },
 };
 
-const methodologyBuilderTool: LoadedScriptTool = {
+const frameworkBuilderTool: LoadedScriptTool = {
   id: 'methodology_builder',
   name: 'Methodology Builder',
   description: 'Validates methodology definitions',
@@ -123,7 +123,7 @@ function runTests() {
   const test3Matches = detectionService.detectTools(
     '',
     { name: 'TestMethod', methodology: 'TEST' },
-    [methodologyBuilderTool]
+    [frameworkBuilderTool]
   );
   console.log('Args: { name: "TestMethod", methodology: "TEST" }');
   console.log('Matches:', test3Matches.length);
@@ -134,7 +134,7 @@ function runTests() {
 
     const filterResult = modeService.filterByExecutionMode(
       test3Matches,
-      [methodologyBuilderTool],
+      [frameworkBuilderTool],
       'create_methodology'
     );
     console.log('Filter result:');
@@ -163,7 +163,7 @@ function runTests() {
       methodology: 'TEST',
       'tool:methodology_builder': true, // Explicit request
     },
-    [methodologyBuilderTool]
+    [frameworkBuilderTool]
   );
   console.log(
     'Args: { name: "TestMethod", methodology: "TEST", "tool:methodology_builder": true }'
@@ -174,7 +174,7 @@ function runTests() {
 
     const filterResult = modeService.filterByExecutionMode(
       test4Matches,
-      [methodologyBuilderTool],
+      [frameworkBuilderTool],
       'create_methodology'
     );
     console.log('Filter result:');

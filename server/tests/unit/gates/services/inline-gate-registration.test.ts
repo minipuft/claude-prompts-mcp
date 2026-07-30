@@ -239,7 +239,7 @@ describe('inline definitions reach the resolved gate set at rank 60', () => {
     ({
       prompt: promptWith(undefined),
       category: 'development',
-      methodologyInjected: true,
+      frameworkInjected: true,
       autoAssignCategoryGates: false,
       ...overrides,
     }) as never;

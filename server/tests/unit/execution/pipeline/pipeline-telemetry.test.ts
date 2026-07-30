@@ -8,7 +8,11 @@ import { PromptExecutionPipeline } from '../../../../src/engine/execution/pipeli
 
 import type { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import type { PipelineStage } from '../../../../src/engine/execution/pipeline/stage.js';
-import type { Logger, HookRegistryPort, PipelineHookContext } from '../../../../src/shared/types/index.js';
+import type {
+  Logger,
+  HookRegistryPort,
+  PipelineHookContext,
+} from '../../../../src/shared/types/index.js';
 
 // ===== Test Helpers =====
 
@@ -46,11 +50,9 @@ const createMockHookRegistry = (): HookRegistryPort & {
     emitAfterStage: jest.fn(async (stage: string, context: PipelineHookContext) => {
       registry.afterCalls.push({ stage, context });
     }),
-    emitStageError: jest.fn(
-      async (stage: string, error: Error, context: PipelineHookContext) => {
-        registry.errorCalls.push({ stage, error, context });
-      }
-    ),
+    emitStageError: jest.fn(async (stage: string, error: Error, context: PipelineHookContext) => {
+      registry.errorCalls.push({ stage, error, context });
+    }),
   };
   return registry;
 };
@@ -96,29 +98,29 @@ function createPipeline(options: {
   });
 
   return new PromptExecutionPipeline(
-    stages[0]!,   // requestStage
-    stages[1]!,   // dependencyStage
-    stages[2]!,   // lifecycleStage
-    stages[3]!,   // identityResolutionStage
-    stages[4]!,   // parsingStage
-    stages[5]!,   // inlineGateStage
-    stages[6]!,   // operatorValidationStage
-    stages[7]!,   // planningStage
-    null,          // scriptExecutionStage
-    null,          // scriptAutoExecuteStage
-    stages[10]!,  // frameworkStage
-    stages[8]!,   // judgeSelectionStage
-    stages[13]!,  // promptGuidanceStage
-    stages[9]!,   // gateStage
-    stages[11]!,  // sessionStage
-    stages[12]!,  // frameworkInjectionControlStage
-    stages[14]!,  // responseCaptureStage
-    null,          // shellVerificationStage
-    stages[15]!,  // executionStage
-    null,          // phaseGuardVerificationStage
-    stages[16]!,  // gateReviewStage
-    stages[17]!,  // formattingStage
-    stages[18]!,  // postFormattingStage
+    stages[0]!, // requestStage
+    stages[1]!, // dependencyStage
+    stages[2]!, // lifecycleStage
+    stages[3]!, // identityResolutionStage
+    stages[4]!, // parsingStage
+    stages[5]!, // inlineGateStage
+    stages[6]!, // operatorValidationStage
+    stages[7]!, // planningStage
+    null, // scriptExecutionStage
+    null, // scriptAutoExecuteStage
+    stages[10]!, // frameworkStage
+    stages[8]!, // judgeSelectionStage
+    stages[13]!, // promptGuidanceStage
+    stages[9]!, // gateStage
+    stages[11]!, // sessionStage
+    stages[12]!, // frameworkInjectionControlStage
+    stages[14]!, // responseCaptureStage
+    null, // shellVerificationStage
+    stages[15]!, // executionStage
+    null, // phaseGuardVerificationStage
+    stages[16]!, // gateReviewStage
+    stages[17]!, // formattingStage
+    stages[18]!, // postFormattingStage
     createLogger(),
     () => undefined,
     options.hookRegistry
@@ -243,17 +245,14 @@ describe('Pipeline OTel Span Instrumentation (Phase 1.4)', () => {
     expect(stageSpans.length).toBe(stageNames.length);
 
     // Stage spans should have name and index attributes
-    const firstStageSpan = stageSpans.find(
-      (s) => s.name === 'pipeline.stage.RequestNormalization'
-    );
+    const firstStageSpan = stageSpans.find((s) => s.name === 'pipeline.stage.RequestNormalization');
     expect(firstStageSpan).toBeDefined();
     expect(firstStageSpan!.attributes['cpm.stage.name']).toBe('RequestNormalization');
     expect(firstStageSpan!.attributes['cpm.stage.index']).toBe(0);
   });
 
   test('root span has execution attributes', async () => {
-    const pipeline = createPipeline({
-    });
+    const pipeline = createPipeline({});
 
     await pipeline.execute({ command: 'test-cmd' });
 

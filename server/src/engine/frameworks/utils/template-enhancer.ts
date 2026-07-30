@@ -9,18 +9,18 @@
 
 import type { ProcessingStepDefinition } from './step-generator.js';
 import type {
-  MethodologyGateDefinition as CanonicalGateDefinition,
+  FrameworkGateDefinition as CanonicalGateDefinition,
   TemplateSuggestionDefinition,
 } from '../methodology/methodology-definition-types.js';
 import type {
-  MethodologyEnhancement,
+  FrameworkEnhancement,
   TemplateEnhancement,
   QualityGate,
   ProcessingStep,
 } from '../types/methodology-types.js';
 
 // Re-export canonical types with local aliases for backwards compatibility
-export type MethodologyGateDefinition = CanonicalGateDefinition;
+export type FrameworkGateDefinition = CanonicalGateDefinition;
 export type TemplateSuggestion = TemplateSuggestionDefinition;
 
 // Re-export for consumers that import from this module
@@ -29,7 +29,7 @@ export type { ProcessingStepDefinition } from './step-generator.js';
 /**
  * Methodology definition subset for enhancement
  */
-export interface MethodologyDefinitionForEnhancement {
+export interface FrameworkDefinitionForEnhancement {
   id: string;
   /** Framework type discriminator (preferred) */
   type?: string;
@@ -37,7 +37,7 @@ export interface MethodologyDefinitionForEnhancement {
   methodology: string;
   systemPromptGuidance: string;
   templateSuggestions?: TemplateSuggestion[];
-  methodologyGates?: MethodologyGateDefinition[];
+  methodologyGates?: FrameworkGateDefinition[];
   phases?: {
     processingSteps?: ProcessingStepDefinition[];
   };
@@ -56,7 +56,7 @@ export function convertTemplateSuggestions(
     type: suggestion.type,
     description: suggestion.description,
     content: suggestion.content,
-    methodologyJustification: suggestion.methodologyJustification,
+    frameworkJustification: suggestion.frameworkJustification,
     impact: suggestion.impact,
   }));
 }
@@ -66,12 +66,12 @@ export function convertTemplateSuggestions(
  * @param gates - Gate definitions from methodology YAML
  * @returns Array of QualityGate objects
  */
-export function convertMethodologyGates(gates: MethodologyGateDefinition[]): QualityGate[] {
+export function convertMethodologyGates(gates: FrameworkGateDefinition[]): QualityGate[] {
   return gates.map((gate) => ({
     id: gate.id,
     name: gate.name,
     description: gate.description,
-    methodologyArea: gate.methodologyArea,
+    frameworkArea: gate.frameworkArea,
     validationCriteria: gate.validationCriteria,
     priority: gate.priority,
   }));
@@ -87,7 +87,7 @@ export function convertProcessingSteps(steps: ProcessingStepDefinition[]): Proce
     id: step.id,
     name: step.name,
     description: step.description,
-    methodologyBasis: step.methodologyBasis,
+    frameworkBasis: step.frameworkBasis,
     order: step.order,
     required: step.required,
     ...(step.section_header && { section_header: step.section_header }),
@@ -96,17 +96,17 @@ export function convertProcessingSteps(steps: ProcessingStepDefinition[]): Proce
 }
 
 /**
- * Creates a MethodologyEnhancement from a methodology definition
+ * Creates a FrameworkEnhancement from a methodology definition
  * @param definition - Methodology definition from YAML/JSON
  * @param _context - Execution context (currently unused, for future extensions)
  * @param confidence - Confidence score for the enhancement (default: 0.9)
- * @returns MethodologyEnhancement object
+ * @returns FrameworkEnhancement object
  */
 export function createMethodologyEnhancement(
-  definition: MethodologyDefinitionForEnhancement,
+  definition: FrameworkDefinitionForEnhancement,
   _context: Record<string, unknown> = {},
   confidence = 0.9
-): MethodologyEnhancement {
+): FrameworkEnhancement {
   const processingSteps = definition.phases?.processingSteps ?? [];
   const templateSuggestions = definition.templateSuggestions ?? [];
   const methodologyGates = definition.methodologyGates ?? [];

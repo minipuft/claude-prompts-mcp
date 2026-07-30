@@ -303,7 +303,7 @@ export class HotReloadObserver {
       this.handleFileChange(event);
     });
 
-    this.fileObserver.on('methodologyFileChange', (event: FileChangeEvent) => {
+    this.fileObserver.on('frameworkFileChange', (event: FileChangeEvent) => {
       this.handleMethodologyFileChange(event);
     });
 

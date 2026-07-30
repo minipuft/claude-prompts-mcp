@@ -14,7 +14,7 @@ import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { ResourceNotFoundError, RESOURCE_URI_PATTERNS } from '../types.js';
 
-import type { MethodologyResourceMetadata, ResourceDependencies } from '../types.js';
+import type { FrameworkResourceMetadata, ResourceDependencies } from '../types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 
@@ -42,20 +42,20 @@ export function registerMethodologyResources(
   const { logger, frameworkManager } = dependencies;
 
   if (frameworkManager === undefined) {
-    logger.warn('[MethodologyResources] FrameworkManager not available, skipping registration');
+    logger.warn('[FrameworkResources] FrameworkManager not available, skipping registration');
     return;
   }
 
   // Resource: List all methodologies (minimal metadata for token efficiency)
   server.registerResource(
     'methodologies',
-    new ResourceTemplate(RESOURCE_URI_PATTERNS.METHODOLOGY_LIST, {
+    new ResourceTemplate(RESOURCE_URI_PATTERNS.FRAMEWORK_LIST, {
       list: async () => {
         const frameworks = frameworkManager.listFrameworks(false); // Include disabled
-        logger.debug(`[MethodologyResources] Listing ${frameworks.length} methodologies`);
+        logger.debug(`[FrameworkResources] Listing ${frameworks.length} methodologies`);
 
-        const resources: MethodologyResourceMetadata[] = frameworks.map((f) => ({
-          uri: buildUri(RESOURCE_URI_PATTERNS.METHODOLOGY_ITEM, f.id),
+        const resources: FrameworkResourceMetadata[] = frameworks.map((f) => ({
+          uri: buildUri(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM, f.id),
           name: f.id,
           title: f.name,
           description: f.description.slice(0, 80),
@@ -84,7 +84,7 @@ export function registerMethodologyResources(
       return {
         contents: [
           {
-            uri: buildUri(RESOURCE_URI_PATTERNS.METHODOLOGY_LIST),
+            uri: buildUri(RESOURCE_URI_PATTERNS.FRAMEWORK_LIST),
             mimeType: 'text/plain',
             text: `Methodologies (${frameworks.length}):\n${lines.join('\n')}`,
           },
@@ -96,7 +96,7 @@ export function registerMethodologyResources(
   // Resource: Individual methodology with full definition and guidelines
   server.registerResource(
     'methodology',
-    new ResourceTemplate(RESOURCE_URI_PATTERNS.METHODOLOGY_ITEM, {
+    new ResourceTemplate(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM, {
       list: undefined, // Individual items discovered via list resource
     }),
     {
@@ -112,7 +112,7 @@ export function registerMethodologyResources(
         throw new ResourceNotFoundError('Methodology', id);
       }
 
-      logger.debug(`[MethodologyResources] Reading methodology: ${id}`);
+      logger.debug(`[FrameworkResources] Reading methodology: ${id}`);
 
       // Build full methodology content with metadata header
       const content = buildMethodologyContent(framework);
@@ -132,7 +132,7 @@ export function registerMethodologyResources(
   // Resource: Raw system prompt template only (for minimal token usage)
   server.registerResource(
     'methodology-system-prompt',
-    new ResourceTemplate(RESOURCE_URI_PATTERNS.METHODOLOGY_SYSTEM_PROMPT, {
+    new ResourceTemplate(RESOURCE_URI_PATTERNS.FRAMEWORK_SYSTEM_PROMPT, {
       list: undefined, // Discovered via methodology/{id} resource
     }),
     {
@@ -148,7 +148,7 @@ export function registerMethodologyResources(
         throw new ResourceNotFoundError('Methodology', id);
       }
 
-      logger.debug(`[MethodologyResources] Reading system prompt for: ${id}`);
+      logger.debug(`[FrameworkResources] Reading system prompt for: ${id}`);
 
       return {
         contents: [
@@ -165,7 +165,7 @@ export function registerMethodologyResources(
     }
   );
 
-  logger.info('[MethodologyResources] Registered methodology resources');
+  logger.info('[FrameworkResources] Registered methodology resources');
 }
 
 /**

@@ -55,14 +55,14 @@ export {
 // ── Methodology schemas (pure Zod) ──────────────────────────────────────────
 
 export {
-  MethodologyGateSchema,
+  FrameworkGateSchema,
   TemplateSuggestionSchema,
-  MethodologySchema,
+  FrameworkSchema,
   validateMethodologySchema,
-  type MethodologyGate,
+  type FrameworkGate,
   type TemplateSuggestion,
-  type MethodologyYaml,
-  type MethodologySchemaValidationResult,
+  type FrameworkYaml,
+  type FrameworkSchemaValidationResult,
 } from '../engine/frameworks/methodology/methodology-schema.js';
 
 // ── Style schemas (pure Zod) ────────────────────────────────────────────────

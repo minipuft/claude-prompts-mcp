@@ -9,9 +9,9 @@
 import type { Logger, ToolResponse } from '../../../../shared/types/index.js';
 import type {
   FrameworkManagerInput,
-  MethodologyGate,
+  FrameworkGate,
   TemplateSuggestion,
-  MethodologyElements,
+  FrameworkElements,
   ArgumentSuggestion,
   ProcessingStep,
   ExecutionStep,
@@ -79,7 +79,7 @@ export type ResourceAction =
  * Actions specific to certain resource types
  */
 export const PROMPT_ONLY_ACTIONS: ResourceAction[] = ['analyze_type', 'analyze_gates', 'guide'];
-export const METHODOLOGY_ONLY_ACTIONS: ResourceAction[] = ['switch'];
+export const FRAMEWORK_ONLY_ACTIONS: ResourceAction[] = ['switch'];
 export const CHECKPOINT_ONLY_ACTIONS: ResourceAction[] = ['clear'];
 export const VERSIONING_ACTIONS: ResourceAction[] = ['history', 'rollback', 'compare'];
 export const COMMON_ACTIONS: ResourceAction[] = [
@@ -178,9 +178,9 @@ export interface ResourceManagerInput {
   persist?: boolean;
 
   // Advanced methodology parameters (not advertised for token efficiency)
-  methodology_gates?: MethodologyGate[];
+  methodology_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
-  methodology_elements?: MethodologyElements;
+  methodology_elements?: FrameworkElements;
   argument_suggestions?: ArgumentSuggestion[];
   judge_prompt?: string;
 

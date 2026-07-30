@@ -30,7 +30,7 @@ import type { ChainSessionService } from '../../../../shared/types/chain-session
 import type { PhaseGuardsConfig } from '../../../../shared/types/core-config.js';
 import type {
   ProcessingStep,
-  MethodologyGuide,
+  FrameworkGuide,
 } from '../../../frameworks/types/methodology-types.js';
 import type { ExecutionContext } from '../../context/index.js';
 
@@ -38,7 +38,7 @@ import type { ExecutionContext } from '../../context/index.js';
 export const PHASE_GUARD_GATE_ID = '__phase_guard__';
 
 type FrameworkRegistryProvider = () =>
-  | { getMethodologyGuide(id: string): MethodologyGuide | undefined }
+  | { getMethodologyGuide(id: string): FrameworkGuide | undefined }
   | undefined;
 
 type PhaseGuardsConfigProvider = () => PhaseGuardsConfig | undefined;

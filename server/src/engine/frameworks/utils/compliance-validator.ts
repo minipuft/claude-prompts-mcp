@@ -7,7 +7,7 @@
  * TypeScript methodology guides to work with any methodology definition.
  */
 
-import type { MethodologyValidation, TemplateEnhancement } from '../types/methodology-types.js';
+import type { FrameworkValidation, TemplateEnhancement } from '../types/methodology-types.js';
 
 /**
  * Quality indicator definition from methodology YAML
@@ -106,7 +106,7 @@ export function validateCompliance(
   text: string,
   qualityIndicators: PhaseQualityIndicators,
   options: ComplianceValidatorOptions = {}
-): MethodologyValidation {
+): FrameworkValidation {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const phaseNames = Object.keys(qualityIndicators);
 
@@ -162,7 +162,7 @@ export function validateCompliance(
         type: 'addition',
         description: `Add ${capitalizedPhase.toLowerCase()} framework`,
         content: `Include comprehensive ${capitalizedPhase.toLowerCase()} considerations in your approach.`,
-        methodologyJustification: `Methodology requires ${capitalizedPhase.toLowerCase()} phase coverage`,
+        frameworkJustification: `Methodology requires ${capitalizedPhase.toLowerCase()} phase coverage`,
         impact: 'high',
       });
     }
@@ -174,7 +174,7 @@ export function validateCompliance(
     strengths,
     improvementAreas,
     specificSuggestions,
-    methodologyGaps: improvementAreas.filter((area) => {
+    frameworkGaps: improvementAreas.filter((area) => {
       const areaToken = area.split(' ')[1];
       if (!areaToken) {
         return !strengths.some((s) => s.toLowerCase().includes(area.toLowerCase()));

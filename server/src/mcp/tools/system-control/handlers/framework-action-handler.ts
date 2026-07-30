@@ -91,7 +91,7 @@ export class FrameworkActionHandler extends ActionHandler {
     frameworks.forEach((framework: any) => {
       const isActive = framework.id.toUpperCase() === activeFramework.toUpperCase();
       const status = isActive ? '🟢 ACTIVE' : '⚪ Available';
-      const methodologyDef = runtimeLoader.loadMethodology(framework.id.toLowerCase());
+      const frameworkDef = runtimeLoader.loadMethodology(framework.id.toLowerCase());
 
       response += `**${framework.name}** ${status}\n`;
 
@@ -99,15 +99,15 @@ export class FrameworkActionHandler extends ActionHandler {
         response += `   📝 ${framework.description}\n`;
         response += `   🎯 Type: ${framework.type}\n`;
 
-        if (methodologyDef) {
-          if (methodologyDef.methodologyGates?.length) {
-            response += `   🚧 Methodology Gates: ${methodologyDef.methodologyGates.length}\n`;
+        if (frameworkDef) {
+          if (frameworkDef.methodologyGates?.length) {
+            response += `   🚧 Methodology Gates: ${frameworkDef.methodologyGates.length}\n`;
           }
-          if (methodologyDef.phases?.processingSteps?.length) {
-            response += `   📊 Processing Steps: ${methodologyDef.phases.processingSteps.length}\n`;
+          if (frameworkDef.phases?.processingSteps?.length) {
+            response += `   📊 Processing Steps: ${frameworkDef.phases.processingSteps.length}\n`;
           }
-          if (methodologyDef.phases?.qualityIndicators) {
-            const indicatorCount = Object.keys(methodologyDef.phases.qualityIndicators).length;
+          if (frameworkDef.phases?.qualityIndicators) {
+            const indicatorCount = Object.keys(frameworkDef.phases.qualityIndicators).length;
             response += `   ✅ Quality Indicators: ${indicatorCount} categories\n`;
           }
         }
@@ -186,8 +186,8 @@ export class FrameworkActionHandler extends ActionHandler {
       response += '\n';
     }
 
-    if (definition.methodologyElements?.requiredSections?.length) {
-      response += `**Required Sections**: ${definition.methodologyElements.requiredSections.join(
+    if (definition.frameworkElements?.requiredSections?.length) {
+      response += `**Required Sections**: ${definition.frameworkElements.requiredSections.join(
         ', '
       )}\n\n`;
     }

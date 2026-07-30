@@ -2,7 +2,7 @@
 
 import type { ToolResponse } from '../../../../shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
-import type { FrameworkManagerInput, MethodologyCreationData } from '../core/types.js';
+import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
 export class FrameworkVersioningProcessor {
   constructor(private readonly ctx: FrameworkResourceContext) {}
@@ -86,20 +86,19 @@ export class FrameworkVersioningProcessor {
     }
 
     // Rebuild methodology data from snapshot
-    const methodologyData: Partial<MethodologyCreationData> & { id: string; methodology: string } =
-      {
-        id,
-        name: String(snapshot['name'] ?? existingFramework.name),
-        methodology: String(snapshot['type'] ?? existingData.methodology['type'] ?? ''),
-        type: String(snapshot['type'] ?? existingData.methodology['type']),
-        description: String(snapshot['description'] ?? existingData.methodology['description']),
-        enabled: (snapshot['enabled'] as boolean) ?? existingData.methodology['enabled'],
-        system_prompt_guidance: existingData.systemPrompt ?? '',
-      };
+    const frameworkData: Partial<FrameworkCreationData> & { id: string; methodology: string } = {
+      id,
+      name: String(snapshot['name'] ?? existingFramework.name),
+      methodology: String(snapshot['type'] ?? existingData.methodology['type'] ?? ''),
+      type: String(snapshot['type'] ?? existingData.methodology['type']),
+      description: String(snapshot['description'] ?? existingData.methodology['description']),
+      enabled: (snapshot['enabled'] as boolean) ?? existingData.methodology['enabled'],
+      system_prompt_guidance: existingData.systemPrompt ?? '',
+    };
 
     // Write restored methodology files
     const writeResult = await this.ctx.fileService.writeMethodologyFiles(
-      methodologyData,
+      frameworkData,
       existingData
     );
     if (!writeResult.success) {

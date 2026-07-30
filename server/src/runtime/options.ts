@@ -24,7 +24,7 @@ export interface PathOptions {
   /** Direct path to prompts configuration file */
   promptsPath?: string;
   /** Custom methodologies directory */
-  methodologiesPath?: string;
+  frameworksPath?: string;
   /** Custom gates directory */
   gatesPath?: string;
 }

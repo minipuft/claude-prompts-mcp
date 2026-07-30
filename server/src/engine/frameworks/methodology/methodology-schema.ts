@@ -15,18 +15,18 @@ import { z } from 'zod';
 // ============================================
 // Gate Schema
 // ============================================
-export const MethodologyGateSchema = z.object({
+export const FrameworkGateSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
-  methodologyArea: z.string().optional(),
+  frameworkArea: z.string().optional(),
   priority: z.enum(['critical', 'high', 'medium', 'low']).optional(),
   validationCriteria: z.array(z.string()).optional(),
   criteria: z.array(z.string()).optional(),
   severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
 });
 
-export type MethodologyGate = z.infer<typeof MethodologyGateSchema>;
+export type FrameworkGate = z.infer<typeof FrameworkGateSchema>;
 
 // ============================================
 // Template Suggestion Schema
@@ -36,7 +36,7 @@ export const TemplateSuggestionSchema = z.object({
   type: z.enum(['addition', 'structure', 'modification']),
   description: z.string().optional(), // Description of the suggestion
   content: z.string().optional(), // Suggested content to add
-  methodologyJustification: z.string().optional(), // Why this aligns with methodology
+  frameworkJustification: z.string().optional(), // Why this aligns with methodology
   impact: z.enum(['high', 'medium', 'low']).optional(),
 });
 
@@ -64,7 +64,7 @@ export const ProcessingStepSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().min(1),
-  methodologyBasis: z.string().min(1),
+  frameworkBasis: z.string().min(1),
   order: z.number().int().positive(),
   required: z.boolean(),
   section_header: z.string().optional(),
@@ -80,7 +80,7 @@ export const ExecutionStepSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   action: z.string().min(1),
-  methodologyPhase: z.string().min(1),
+  frameworkPhase: z.string().min(1),
   dependencies: z.array(z.string()).default([]),
   expected_output: z.string().min(1),
 });
@@ -118,7 +118,7 @@ export type PhasesFileYaml = z.infer<typeof PhasesFileSchema>;
 // ============================================
 // Main Methodology Schema
 // ============================================
-export const MethodologySchema = z
+export const FrameworkSchema = z
   .object({
     // Required core fields
     id: z.string().min(1),
@@ -137,7 +137,7 @@ export const MethodologySchema = z
         exclude: z.array(z.string()).optional(),
       })
       .optional(),
-    methodologyGates: z.array(MethodologyGateSchema).optional(),
+    methodologyGates: z.array(FrameworkGateSchema).optional(),
 
     // File references (validated separately for existence)
     phasesFile: z.string().optional(),
@@ -150,13 +150,13 @@ export const MethodologySchema = z
   })
   .passthrough(); // Allow additional fields not in schema
 
-export type MethodologyYaml = z.infer<typeof MethodologySchema>;
+export type FrameworkYaml = z.infer<typeof FrameworkSchema>;
 
 // ============================================
 // Validation Utilities
 // ============================================
 
-export interface MethodologySchemaValidationResult {
+export interface FrameworkSchemaValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
@@ -172,12 +172,12 @@ export interface MethodologySchemaValidationResult {
 export function validateMethodologySchema(
   data: unknown,
   expectedId?: string
-): MethodologySchemaValidationResult {
+): FrameworkSchemaValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
   // Schema validation
-  const result = MethodologySchema.safeParse(data);
+  const result = FrameworkSchema.safeParse(data);
   if (!result.success) {
     for (const issue of result.error.issues) {
       errors.push(`${issue.path.join('.')}: ${issue.message}`);
@@ -216,7 +216,7 @@ export function validateMethodologySchema(
  * @param data - Raw YAML data from phases.yaml
  * @returns Validation result with errors and warnings
  */
-export function validatePhasesSchema(data: unknown): MethodologySchemaValidationResult {
+export function validatePhasesSchema(data: unknown): FrameworkSchemaValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 

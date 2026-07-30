@@ -43,9 +43,7 @@ describe('TelemetryRuntimeImpl', () => {
       const runtime = new TelemetryRuntimeImpl(disabledConfig, logger, 'test', '1.0.0');
       await runtime.start();
       expect(runtime.isEnabled()).toBe(false);
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('disabled by config')
-      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('disabled by config'));
     });
 
     test('start() is a no-op when mode is off', async () => {
@@ -87,9 +85,7 @@ describe('TelemetryRuntimeImpl', () => {
       const runtime = new TelemetryRuntimeImpl(enabledConfig, logger, 'test', '1.0.0');
       await runtime.start();
       await runtime.start(); // Second call
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Already started')
-      );
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Already started'));
       await runtime.shutdown();
     });
 
@@ -99,9 +95,7 @@ describe('TelemetryRuntimeImpl', () => {
       expect(runtime.isEnabled()).toBe(true);
       await runtime.shutdown();
       expect(runtime.isEnabled()).toBe(false);
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Shutdown complete')
-      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Shutdown complete'));
     });
 
     test('shutdown() is safe to call multiple times', async () => {

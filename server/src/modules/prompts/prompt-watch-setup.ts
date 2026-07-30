@@ -61,7 +61,7 @@ export function buildWatchTargets(
   promptsDir: string,
   categoryDirs: WatchTarget[],
   options?: {
-    methodologyDirectories?: string[];
+    frameworkDirectories?: string[];
     auxiliaryDirectories?: string[][];
   }
 ): WatchTarget[] {
@@ -80,8 +80,8 @@ export function buildWatchTargets(
   }
 
   // Methodology directories
-  if (options?.methodologyDirectories) {
-    for (const dir of options.methodologyDirectories) {
+  if (options?.frameworkDirectories) {
+    for (const dir of options.frameworkDirectories) {
       if (dir) {
         targets.set(dir, { path: dir });
       }

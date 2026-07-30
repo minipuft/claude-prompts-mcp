@@ -11,7 +11,7 @@ function makePhase(
   return {
     name: overrides.id,
     description: `Test phase ${overrides.id}`,
-    methodologyBasis: 'test',
+    frameworkBasis: 'test',
     order: 1,
     required: true,
     ...overrides,
@@ -34,7 +34,7 @@ describe('evaluatePhaseGuards', () => {
         id: 'no-marker',
         name: 'No Marker',
         description: 'Phase without section_header',
-        methodologyBasis: 'test',
+        frameworkBasis: 'test',
         order: 1,
         required: true,
         guards: { required: true },

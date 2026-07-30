@@ -29,7 +29,7 @@ processingSteps:
   - id: dissolve_processing
     name: Dissolve Processing
     description: Enter the liminal creative space by releasing constraints
-    methodologyBasis: LIQUESCENT Dissolve phase
+    frameworkBasis: LIQUESCENT Dissolve phase
     order: 1
     required: true
     section_header: '## Dissolve'
@@ -40,7 +40,7 @@ processingSteps:
   - id: flow_processing
     name: Flow Processing
     description: Follow loose conceptual connections without forcing structure
-    methodologyBasis: LIQUESCENT Flow phase
+    frameworkBasis: LIQUESCENT Flow phase
     order: 2
     required: true
     section_header: '## Flow'
@@ -51,7 +51,7 @@ processingSteps:
   - id: crystallize_processing
     name: Crystallize Processing
     description: Capture and name emerging patterns
-    methodologyBasis: LIQUESCENT Crystallize phase
+    frameworkBasis: LIQUESCENT Crystallize phase
     order: 3
     required: true
     section_header: '## Crystallize'
@@ -62,7 +62,7 @@ processingSteps:
   - id: scout_processing
     name: Scout Processing
     description: Research modern tools and boundary-pushing patterns
-    methodologyBasis: LIQUESCENT Scout phase
+    frameworkBasis: LIQUESCENT Scout phase
     order: 4
     required: true
     section_header: '## Scout'
@@ -73,7 +73,7 @@ processingSteps:
   - id: iterate_processing
     name: Iterate Processing
     description: Refine through rapid cycles while preserving energy
-    methodologyBasis: LIQUESCENT Iterate phase
+    frameworkBasis: LIQUESCENT Iterate phase
     order: 5
     required: true
     section_header: '## Iterate'
@@ -84,7 +84,7 @@ processingSteps:
   - id: manifest_processing
     name: Manifest Processing
     description: Implement with boundary-pushing techniques
-    methodologyBasis: LIQUESCENT Manifest phase
+    frameworkBasis: LIQUESCENT Manifest phase
     order: 6
     required: true
     section_header: '## Manifest'
@@ -96,41 +96,41 @@ executionSteps:
   - id: dissolve_execution
     name: Dissolve Execution
     action: Question assumptions, loosen constraints, enter creative flow state
-    methodologyPhase: Dissolve
+    frameworkPhase: Dissolve
     dependencies: []
     expected_output: Open creative space with fluid constraints
   - id: flow_execution
     name: Flow Execution
     action: Explore loose connections, follow tangents, make unexpected leaps
-    methodologyPhase: Flow
+    frameworkPhase: Flow
     dependencies:
       - dissolve_execution
     expected_output: Network of conceptual connections and 'weird' associations
   - id: crystallize_execution
     name: Crystallize Execution
     action: Capture patterns, name the vision, articulate philosophy
-    methodologyPhase: Crystallize
+    frameworkPhase: Crystallize
     dependencies:
       - flow_execution
     expected_output: Named concept with resonant philosophy
   - id: scout_execution
     name: Scout Execution
     action: Research bleeding-edge tools, modern patterns, underused techniques
-    methodologyPhase: Scout
+    frameworkPhase: Scout
     dependencies:
       - crystallize_execution
     expected_output: Curated list of boundary-pushing tools and patterns
   - id: iterate_execution
     name: Iterate Execution
     action: Rapid refinement cycles preserving original spark
-    methodologyPhase: Iterate
+    frameworkPhase: Iterate
     dependencies:
       - scout_execution
     expected_output: Refined vision with added depth
   - id: manifest_execution
     name: Manifest Execution
     action: Implement with modern techniques that embody the philosophy
-    methodologyPhase: Manifest
+    frameworkPhase: Manifest
     dependencies:
       - iterate_execution
     expected_output: Working implementation that pushes boundaries

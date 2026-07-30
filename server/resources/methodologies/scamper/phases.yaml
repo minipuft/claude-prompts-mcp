@@ -5,7 +5,7 @@ processingSteps:
   - id: substitution_exploration
     name: Substitution Exploration
     description: Explore what can be substituted, replaced, or swapped with alternatives
-    methodologyBasis: SCAMPER Substitute technique
+    frameworkBasis: SCAMPER Substitute technique
     order: 1
     required: true
     section_header: '## Substitute'
@@ -17,7 +17,7 @@ processingSteps:
   - id: combination_analysis
     name: Combination Analysis
     description: Analyze what can be combined, merged, or integrated together
-    methodologyBasis: SCAMPER Combine technique
+    frameworkBasis: SCAMPER Combine technique
     order: 2
     required: true
     section_header: '## Combine'
@@ -29,7 +29,7 @@ processingSteps:
   - id: adaptation_research
     name: Adaptation Research
     description: Research what can be adapted from other domains and contexts
-    methodologyBasis: SCAMPER Adapt technique
+    frameworkBasis: SCAMPER Adapt technique
     order: 3
     required: true
     section_header: '## Adapt'
@@ -41,7 +41,7 @@ processingSteps:
   - id: modification_planning
     name: Modification Planning
     description: Plan modifications, enhancements, and emphasis changes
-    methodologyBasis: SCAMPER Modify technique
+    frameworkBasis: SCAMPER Modify technique
     order: 4
     required: true
     section_header: '## Modify'
@@ -53,7 +53,7 @@ processingSteps:
   - id: alternative_use_exploration
     name: Alternative Use Exploration
     description: Explore alternative applications and different use cases
-    methodologyBasis: SCAMPER Put to other uses technique
+    frameworkBasis: SCAMPER Put to other uses technique
     order: 5
     required: true
     section_header: '## Put to Other Uses'
@@ -65,7 +65,7 @@ processingSteps:
   - id: elimination_simplification
     name: Elimination & Simplification
     description: Identify what can be eliminated, removed, or simplified
-    methodologyBasis: SCAMPER Eliminate technique
+    frameworkBasis: SCAMPER Eliminate technique
     order: 6
     required: true
     section_header: '## Eliminate'
@@ -77,7 +77,7 @@ processingSteps:
   - id: reversal_rearrangement
     name: Reversal & Rearrangement
     description: Consider reversal, rearrangement, and opposite approaches
-    methodologyBasis: SCAMPER Reverse technique
+    frameworkBasis: SCAMPER Reverse technique
     order: 7
     required: true
     section_header: '## Reverse'
@@ -90,14 +90,14 @@ executionSteps:
   - id: substitute_analysis
     name: Substitute Analysis
     action: Systematically explore substitution opportunities and alternative replacements
-    methodologyPhase: Substitute
+    frameworkPhase: Substitute
     dependencies: []
     expected_output: List of viable substitution alternatives with rationale
 
   - id: combine_exploration
     name: Combine Exploration
     action: Explore combination and integration possibilities between elements
-    methodologyPhase: Combine
+    frameworkPhase: Combine
     dependencies:
       - substitute_analysis
     expected_output: Creative combination possibilities with potential benefits
@@ -105,7 +105,7 @@ executionSteps:
   - id: adapt_research
     name: Adapt Research
     action: Research adaptations from other domains, industries, and contexts
-    methodologyPhase: Adapt
+    frameworkPhase: Adapt
     dependencies:
       - combine_exploration
     expected_output: Adaptable solutions from other contexts with implementation approaches
@@ -113,7 +113,7 @@ executionSteps:
   - id: modify_enhancement
     name: Modify Enhancement
     action: Develop modification and enhancement possibilities for existing elements
-    methodologyPhase: Modify
+    frameworkPhase: Modify
     dependencies:
       - adapt_research
     expected_output: Specific modifications with enhanced capabilities and benefits
@@ -121,7 +121,7 @@ executionSteps:
   - id: alternative_use_generation
     name: Alternative Use Generation
     action: Generate alternative applications and different use case possibilities
-    methodologyPhase: Put to other uses
+    frameworkPhase: Put to other uses
     dependencies:
       - modify_enhancement
     expected_output: Creative alternative uses with potential markets or applications
@@ -129,7 +129,7 @@ executionSteps:
   - id: elimination_simplification
     name: Elimination Simplification
     action: Identify elimination opportunities and simplification possibilities
-    methodologyPhase: Eliminate
+    frameworkPhase: Eliminate
     dependencies:
       - alternative_use_generation
     expected_output: Simplification opportunities with complexity reduction benefits
@@ -137,7 +137,7 @@ executionSteps:
   - id: reverse_rearrangement
     name: Reverse Rearrangement
     action: Explore reversal and rearrangement possibilities for new perspectives
-    methodologyPhase: Reverse
+    frameworkPhase: Reverse
     dependencies:
       - elimination_simplification
     expected_output: Innovative arrangements and reversed approaches with unique advantages

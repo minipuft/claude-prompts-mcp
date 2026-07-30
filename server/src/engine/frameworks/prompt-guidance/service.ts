@@ -12,7 +12,7 @@ import { FrameworkManager } from '../framework-manager.js';
 import { TemplateEnhancer, createTemplateEnhancer } from './template-enhancer.js';
 import {
   FrameworkDefinition,
-  MethodologyGuide,
+  FrameworkGuide,
   ProcessingGuidance,
   StepGuidance,
   SystemPromptInjectionResult,
@@ -130,14 +130,14 @@ export class PromptGuidanceService {
 
     try {
       const activeFramework = await this.getActiveFramework(options.frameworkOverride);
-      const methodologyGuide = await this.getMethodologyGuide(activeFramework.type);
+      const frameworkGuide = await this.getMethodologyGuide(activeFramework.type);
 
       // Surface methodology guidance (read-only hints)
-      const processingGuidance = methodologyGuide.guideTemplateProcessing(
+      const processingGuidance = frameworkGuide.guideTemplateProcessing(
         prompt.userMessageTemplate ?? '',
         'single'
       );
-      const stepGuidance = methodologyGuide.guideExecutionSteps(
+      const stepGuidance = frameworkGuide.guideExecutionSteps(
         prompt,
         options.semanticAnalysis ?? ({} as ContentAnalysisResult)
       );
@@ -176,7 +176,7 @@ export class PromptGuidanceService {
           const injectionResult = this.injectMethodologyGuidance(
             prompt,
             activeFramework,
-            methodologyGuide
+            frameworkGuide
           );
 
           result.systemPromptInjection = injectionResult;
@@ -261,7 +261,7 @@ export class PromptGuidanceService {
   private injectMethodologyGuidance(
     prompt: ConvertedPrompt,
     framework: FrameworkDefinition,
-    guide: MethodologyGuide
+    guide: FrameworkGuide
   ): SystemPromptInjectionResult {
     const startTime = Date.now();
 
@@ -276,8 +276,8 @@ export class PromptGuidanceService {
     const template = framework.systemPromptTemplate;
     let enhancedPromptText: string;
 
-    if (template.includes('{METHODOLOGY_GUIDANCE}')) {
-      enhancedPromptText = template.replace('{METHODOLOGY_GUIDANCE}', guidance);
+    if (template.includes('{FRAMEWORK_GUIDANCE}')) {
+      enhancedPromptText = template.replace('{FRAMEWORK_GUIDANCE}', guidance);
     } else {
       enhancedPromptText = `${template}\n\n## ${framework.type} Methodology\n\n${guidance}`;
     }
@@ -390,7 +390,7 @@ export class PromptGuidanceService {
   /**
    * Get methodology guide for framework
    */
-  private async getMethodologyGuide(methodology: string): Promise<MethodologyGuide> {
+  private async getMethodologyGuide(methodology: string): Promise<FrameworkGuide> {
     if (!this.frameworkManager) {
       throw new Error('FrameworkManager not set');
     }

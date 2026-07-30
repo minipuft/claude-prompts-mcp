@@ -2,7 +2,7 @@ processingSteps:
   - id: stakeholder_identification
     name: Stakeholder Identification (Who)
     description: Identify all relevant stakeholders, actors, and people involved
-    methodologyBasis: 5W1H Who question
+    frameworkBasis: 5W1H Who question
     order: 1
     required: true
     section_header: '## Who'
@@ -13,7 +13,7 @@ processingSteps:
   - id: objective_definition
     name: Objective Definition (What)
     description: Define exactly what needs to be accomplished and deliverables
-    methodologyBasis: 5W1H What question
+    frameworkBasis: 5W1H What question
     order: 2
     required: true
     section_header: '## What'
@@ -24,7 +24,7 @@ processingSteps:
   - id: timing_establishment
     name: Timing Establishment (When)
     description: Establish timing, deadlines, and sequence requirements
-    methodologyBasis: 5W1H When question
+    frameworkBasis: 5W1H When question
     order: 3
     required: true
     section_header: '## When'
@@ -35,7 +35,7 @@ processingSteps:
   - id: context_determination
     name: Context Determination (Where)
     description: Determine location, context, and environmental constraints
-    methodologyBasis: 5W1H Where question
+    frameworkBasis: 5W1H Where question
     order: 4
     required: true
     section_header: '## Where'
@@ -46,7 +46,7 @@ processingSteps:
   - id: purpose_understanding
     name: Purpose Understanding (Why)
     description: Understand underlying purposes, motivations, and importance
-    methodologyBasis: 5W1H Why question
+    frameworkBasis: 5W1H Why question
     order: 5
     required: true
     section_header: '## Why'
@@ -57,7 +57,7 @@ processingSteps:
   - id: method_planning
     name: Method Planning (How)
     description: Plan specific methods, approaches, and implementation strategies
-    methodologyBasis: 5W1H How question
+    frameworkBasis: 5W1H How question
     order: 6
     required: true
     section_header: '## How'
@@ -69,41 +69,41 @@ executionSteps:
   - id: comprehensive_who_analysis
     name: Comprehensive Who Analysis
     action: Identify and analyze all stakeholders, actors, and affected parties
-    methodologyPhase: Who
+    frameworkPhase: Who
     dependencies: []
     expected_output: Complete stakeholder map with roles and responsibilities
   - id: specific_what_definition
     name: Specific What Definition
     action: Define exactly what needs to be accomplished with measurable deliverables
-    methodologyPhase: What
+    frameworkPhase: What
     dependencies:
       - comprehensive_who_analysis
     expected_output: Clear, specific, measurable objectives and deliverables
   - id: detailed_when_planning
     name: Detailed When Planning
     action: Establish comprehensive timing, deadlines, and sequence requirements
-    methodologyPhase: When
+    frameworkPhase: When
     dependencies:
       - specific_what_definition
     expected_output: Detailed timeline with milestones and dependencies
   - id: contextual_where_assessment
     name: Contextual Where Assessment
     action: Determine location, context, environment, and situational constraints
-    methodologyPhase: Where
+    frameworkPhase: Where
     dependencies:
       - detailed_when_planning
     expected_output: Comprehensive context analysis with constraints identified
   - id: fundamental_why_exploration
     name: Fundamental Why Exploration
     action: Uncover underlying purposes, motivations, and fundamental importance
-    methodologyPhase: Why
+    frameworkPhase: Why
     dependencies:
       - contextual_where_assessment
     expected_output: Deep understanding of motivations and fundamental purposes
   - id: specific_how_planning
     name: Specific How Planning
     action: Develop detailed methods, approaches, and implementation strategies
-    methodologyPhase: How
+    frameworkPhase: How
     dependencies:
       - fundamental_why_exploration
     expected_output: Comprehensive implementation plan with specific methods

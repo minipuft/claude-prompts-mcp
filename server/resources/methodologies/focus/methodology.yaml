@@ -43,11 +43,11 @@ toolDescriptions:
       MODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)
     parameters:
       command: 'Prompt ID to expand. Resulting prompt will include FOCUS phase guidance for you to apply.'
-methodologyGates:
+frameworkGates:
   - id: problem_framing
     name: Problem Framing Quality
     description: Verify problem is clearly framed
-    methodologyArea: Frame
+    frameworkArea: Frame
     priority: high
     validationCriteria:
       - Problem scope is defined
@@ -55,7 +55,7 @@ methodologyGates:
   - id: solution_quality
     name: Solution Quality
     description: Verify solution approach is sound
-    methodologyArea: Conceptualize
+    frameworkArea: Conceptualize
     priority: high
     validationCriteria:
       - Multiple approaches considered
@@ -65,9 +65,9 @@ templateSuggestions:
     type: addition
     description: Add FOCUS methodology guidance
     content: Apply FOCUS methodology systematically
-    methodologyJustification: Ensures focused problem-solving
+    frameworkJustification: Ensures focused problem-solving
     impact: high
-methodologyElements:
+frameworkElements:
   requiredSections:
     - Frame
     - Observe
@@ -85,14 +85,14 @@ argumentSuggestions:
   - name: problem
     type: string
     description: The problem to solve
-    methodologyReason: Frame phase requires clear problem statement
+    frameworkReason: Frame phase requires clear problem statement
     examples:
       - performance issue
       - user experience gap
   - name: constraints
     type: string
     description: Known constraints
-    methodologyReason: Frame phase needs boundaries
+    frameworkReason: Frame phase needs boundaries
     examples:
       - time limit
       - budget

@@ -119,7 +119,7 @@ function gateYaml(id: string, opts: CreateResourceOptions): string {
   ].join('\n');
 }
 
-function methodologyYaml(id: string, opts: CreateResourceOptions): string {
+function frameworkYaml(id: string, opts: CreateResourceOptions): string {
   const name = opts.name ?? id;
   const desc = opts.description ?? `${name} methodology`;
   return [
@@ -148,7 +148,7 @@ function methodologyYaml(id: string, opts: CreateResourceOptions): string {
     '#   - id: phase_completeness',
     '#     name: Phase Completeness',
     '#     description: Verify all methodology phases are addressed',
-    '#     methodologyArea: Core',
+    '#     frameworkArea: Core',
     '#     priority: high',
     '#     validationCriteria:',
     '#       - All required phases present',
@@ -187,7 +187,7 @@ function styleYaml(id: string, opts: CreateResourceOptions): string {
 const YAML_GENERATORS: Record<ResourceType, (id: string, opts: CreateResourceOptions) => string> = {
   prompts: promptYaml,
   gates: gateYaml,
-  methodologies: methodologyYaml,
+  methodologies: frameworkYaml,
   styles: styleYaml,
 };
 

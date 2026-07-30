@@ -3,7 +3,7 @@
  *
  * Tests the complete methodology creation workflow with real modules:
  * - FrameworkToolHandler (real validation logic)
- * - MethodologyFileWriter (mocked filesystem)
+ * - FrameworkFileWriter (mocked filesystem)
  * - FrameworkManager (real registration)
  *
  * Mocks:
@@ -24,7 +24,7 @@ import type { FrameworkManager } from '../../../src/engine/frameworks/framework-
 import type { ToolResponse } from '../../../src/shared/types/index.js';
 import type {
   FrameworkManagerInput,
-  MethodologyCreationData,
+  FrameworkCreationData,
 } from '../../../src/mcp/tools/framework-manager/core/types.js';
 
 // Import the real manager for integration testing
@@ -95,7 +95,7 @@ const createMockFrameworkManager = (): FrameworkManager => {
 };
 
 const createMockFileService = () => {
-  const writtenFiles: Map<string, MethodologyCreationData> = new Map();
+  const writtenFiles: Map<string, FrameworkCreationData> = new Map();
 
   return {
     methodologyExists: jest.fn((id: string) => writtenFiles.has(id.toLowerCase())),
@@ -106,7 +106,7 @@ const createMockFileService = () => {
     getMethodologyDir: jest.fn(
       (id: string) => `/test/server/resources/methodologies/${id.toLowerCase()}`
     ),
-    writeMethodologyFiles: jest.fn(async (data: MethodologyCreationData) => {
+    writeMethodologyFiles: jest.fn(async (data: FrameworkCreationData) => {
       writtenFiles.set(data.id.toLowerCase(), data);
       return {
         success: true,
@@ -125,7 +125,7 @@ const createMockFileService = () => {
         phases: null,
         systemPrompt: data.system_prompt_guidance,
         judgePrompt: null,
-        methodologyPath: `/test/server/resources/methodologies/${id}/methodology.yaml`,
+        frameworkPath: `/test/server/resources/methodologies/${id}/methodology.yaml`,
         phasesPath: null,
         systemPromptPath: `/test/server/resources/methodologies/${id}/system-prompt.md`,
         judgePromptPath: null,
@@ -136,7 +136,7 @@ const createMockFileService = () => {
         id: string,
         existing: { methodology: Record<string, unknown>; systemPrompt: string | null }
       ) => {
-        // Convert ExistingMethodologyData back to MethodologyCreationData
+        // Convert ExistingMethodologyData back to FrameworkCreationData
         const raw = existing.methodology;
         const name = typeof raw['name'] === 'string' ? raw['name'] : undefined;
         const systemGuidance =
@@ -152,7 +152,7 @@ const createMockFileService = () => {
             typeof raw['methodology'] === 'string' ? raw['methodology'] : id.toUpperCase(),
           system_prompt_guidance: systemGuidance,
           ...raw, // Include all other fields
-        } as MethodologyCreationData;
+        } as FrameworkCreationData;
       }
     ),
     getWrittenData: (id: string) => writtenFiles.get(id.toLowerCase()),
@@ -245,7 +245,7 @@ describe('Methodology Creation Integration', () => {
             id: 'phase1_gate',
             name: 'Phase 1 Gate',
             description: 'Validates phase 1',
-            methodologyArea: 'Phase 1',
+            frameworkArea: 'Phase 1',
             priority: 'high',
             validationCriteria: ['Criteria 1', 'Criteria 2'],
           },
@@ -280,7 +280,7 @@ describe('Methodology Creation Integration', () => {
             id: 'gate1',
             name: 'Gate 1',
             description: 'Test gate',
-            methodologyArea: 'Phase 1',
+            frameworkArea: 'Phase 1',
             priority: 'high',
             validationCriteria: ['Check 1'],
           },
@@ -313,7 +313,7 @@ describe('Methodology Creation Integration', () => {
             id: 'gate1',
             name: 'Gate 1',
             description: 'Test gate',
-            methodologyArea: 'Phase 1',
+            frameworkArea: 'Phase 1',
             priority: 'high',
             validationCriteria: ['Check 1'],
           },
@@ -329,7 +329,7 @@ describe('Methodology Creation Integration', () => {
             type: 'addition',
             description: 'Add guidance',
             content: 'Test',
-            methodologyJustification: 'Consistency',
+            frameworkJustification: 'Consistency',
             impact: 'high',
           },
         ],
@@ -362,7 +362,7 @@ describe('Methodology Creation Integration', () => {
             id: 'g1',
             name: 'Gate 1',
             description: 'Test gate',
-            methodologyArea: 'Phase 1',
+            frameworkArea: 'Phase 1',
             priority: 'high',
             validationCriteria: ['criteria'],
           },
@@ -372,7 +372,7 @@ describe('Methodology Creation Integration', () => {
             id: 's1',
             name: 'Step 1',
             description: 'First step',
-            methodologyBasis: 'Phase 1',
+            frameworkBasis: 'Phase 1',
             order: 1,
             required: true,
           },
@@ -382,7 +382,7 @@ describe('Methodology Creation Integration', () => {
             id: 'e1',
             name: 'Exec 1',
             action: 'Do',
-            methodologyPhase: 'Phase 1',
+            frameworkPhase: 'Phase 1',
             dependencies: [],
             expected_output: 'Output',
           },
@@ -440,7 +440,7 @@ describe('Methodology Creation Integration', () => {
             id: 'gate1',
             name: 'Gate 1',
             description: 'Test',
-            methodologyArea: 'Phase 1',
+            frameworkArea: 'Phase 1',
             priority: 'high',
             validationCriteria: ['Check'],
           },
@@ -463,7 +463,7 @@ describe('Methodology Creation Integration', () => {
             id: 'gate1',
             name: 'Gate 1',
             description: 'Test',
-            methodologyArea: 'Phase 1',
+            frameworkArea: 'Phase 1',
             priority: 'high',
             validationCriteria: ['Check'],
           },
@@ -495,7 +495,7 @@ describe('Methodology Creation Integration', () => {
             id: 'gate1',
             name: 'Gate 1',
             description: 'Test',
-            methodologyArea: 'Phase 1',
+            frameworkArea: 'Phase 1',
             priority: 'high',
             validationCriteria: ['Check'],
           },

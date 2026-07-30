@@ -428,7 +428,11 @@ function parseJsonOrSse(body: string, expectedId?: number): { result?: unknown; 
         } catch {
           // Not valid JSON, continue
         }
-      } else if (lineTrimmed && !lineTrimmed.startsWith('event:') && !lineTrimmed.startsWith('id:')) {
+      } else if (
+        lineTrimmed &&
+        !lineTrimmed.startsWith('event:') &&
+        !lineTrimmed.startsWith('id:')
+      ) {
         try {
           const parsed = JSON.parse(lineTrimmed);
           if (!expectedId || parsed.id === expectedId) {

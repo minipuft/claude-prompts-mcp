@@ -8,7 +8,7 @@ import type { PromptInjectionConfig } from './types.js';
  * The signals this projection reads. Both are available to every caller that resolves a gate
  * set, which is what lets one definition serve all of them.
  */
-export interface MethodologyInjectionSignals {
+export interface FrameworkInjectionSignals {
   /** Command modifiers for this execution. */
   readonly modifiers?:
     | { clean?: boolean | undefined; lean?: boolean | undefined; judge?: boolean | undefined }
@@ -44,7 +44,7 @@ export interface MethodologyInjectionSignals {
  * tier, methodology gates are still scheduled. That is the same behavior as before this
  * function existed, so it is a remaining gap rather than a regression.
  */
-export function isMethodologyInjected(signals: MethodologyInjectionSignals): boolean {
+export function isMethodologyInjected(signals: FrameworkInjectionSignals): boolean {
   const forced = hasForcingModifier(signals.modifiers);
   if (forced) {
     return true;
@@ -65,7 +65,7 @@ export function isMethodologyInjected(signals: MethodologyInjectionSignals): boo
  * Mirrors `InjectionDecisionService.checkModifiers`, which special-cases `%judge` for
  * `system-prompt` so the judge selection phase always sees the methodology.
  */
-function hasForcingModifier(modifiers: MethodologyInjectionSignals['modifiers']): boolean {
+function hasForcingModifier(modifiers: FrameworkInjectionSignals['modifiers']): boolean {
   if (modifiers === undefined) {
     return false;
   }
@@ -82,7 +82,7 @@ function hasForcingModifier(modifiers: MethodologyInjectionSignals['modifiers'])
  * single statement of which modifier suppresses which injection type, so changing it changes
  * gate nesting in step, instead of leaving a second list to remember.
  */
-function hasSuppressingModifier(modifiers: MethodologyInjectionSignals['modifiers']): boolean {
+function hasSuppressingModifier(modifiers: FrameworkInjectionSignals['modifiers']): boolean {
   if (modifiers === undefined) {
     return false;
   }

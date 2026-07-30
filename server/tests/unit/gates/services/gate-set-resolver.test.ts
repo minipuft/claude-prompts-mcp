@@ -58,7 +58,7 @@ function buildResolver(
 const baseInput = (overrides: Partial<GateResolutionInput> = {}): GateResolutionInput => ({
   prompt: makePrompt(),
   category: 'development',
-  methodologyInjected: true,
+  frameworkInjected: true,
   ...overrides,
 });
 
@@ -193,7 +193,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
 
     const result = await resolver.resolve(
       baseInput({
-        methodologyInjected: false,
+        frameworkInjected: false,
         inlineOperatorGateIds: ['framework-compliance'],
         callerGateIds: ['code-quality'],
       })
@@ -217,7 +217,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
     });
 
     const authorOwn = await resolver.resolve(
-      baseInput({ prompt: optedOut, methodologyInjected: true })
+      baseInput({ prompt: optedOut, frameworkInjected: true })
     );
     expect(authorOwn.gateIds).toEqual([]);
     expect(authorOwn.vetoed.get('framework-compliance')).toBe('framework-gates-opt-out');
@@ -225,7 +225,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
     const callerAsked = await resolver.resolve(
       baseInput({
         prompt: optedOut,
-        methodologyInjected: true,
+        frameworkInjected: true,
         callerGateIds: ['framework-compliance'],
       })
     );
@@ -239,7 +239,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
       createGateLoader([])
     );
 
-    const result = await resolver.resolve(baseInput({ methodologyInjected: false }));
+    const result = await resolver.resolve(baseInput({ frameworkInjected: false }));
 
     expect(result.gateIds).toEqual(['content-structure']);
   });
@@ -253,7 +253,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
     };
     const resolver = buildResolver(logger, createGateManager(['content-structure']), failingLoader);
 
-    const result = await resolver.resolve(baseInput({ methodologyInjected: false }));
+    const result = await resolver.resolve(baseInput({ frameworkInjected: false }));
 
     expect(result.gateIds).toEqual(['content-structure']);
     expect(logger.warn).toHaveBeenCalled();
@@ -295,7 +295,7 @@ describe('GateSetResolver — fixes delivered by routing enhancement through one
     expect(result.vetoed.get('framework-compliance')).toBe('framework-gates-opt-out');
   });
 
-  test('methodologyGatesEnabled:false binds every rank, including the caller', async () => {
+  test('frameworkGatesEnabled:false binds every rank, including the caller', async () => {
     const resolver = buildResolver(
       createLogger(),
       createGateManager(['content-structure']),
@@ -304,7 +304,7 @@ describe('GateSetResolver — fixes delivered by routing enhancement through one
 
     const result = await resolver.resolve(
       baseInput({
-        methodologyGatesEnabled: false,
+        frameworkGatesEnabled: false,
         inlineOperatorGateIds: ['framework-compliance'],
       })
     );
@@ -334,7 +334,7 @@ describe('GateSetResolver — fixes delivered by routing enhancement through one
 
     const result = await resolver.resolve(
       baseInput({
-        methodologyInjected: false,
+        frameworkInjected: false,
         knownMethodologyGateIds: ['framework-compliance'],
         plannedGateIds: ['framework-compliance', 'code-quality'],
       })
@@ -378,7 +378,7 @@ describe('GateSetResolver — order independence (ADR 0001 Stage 2)', () => {
           prompt: makePrompt({
             gateConfiguration: { include: [...permutation], exclude: ['test-coverage'] },
           }),
-          methodologyInjected: false,
+          frameworkInjected: false,
         })
       );
       results.push(sorted(result.gateIds));
@@ -408,7 +408,7 @@ describe('GateSetResolver — order independence (ADR 0001 Stage 2)', () => {
             framework_gates: false,
           },
         }),
-        methodologyInjected: false,
+        frameworkInjected: false,
       })
     );
 
@@ -460,7 +460,7 @@ describe('GateSetResolver — refactor baseline', () => {
     );
 
     const result = await resolver.resolve(
-      baseInput({ frameworkId: 'CAGEERF', methodologyInjected: false })
+      baseInput({ frameworkId: 'CAGEERF', frameworkInjected: false })
     );
 
     expect(result.gateIds).toEqual(['content-structure']);
@@ -496,7 +496,7 @@ describe('GateSetResolver — refactor baseline', () => {
 });
 
 describe('GateSetResolver — methodology nesting driven by the real signal (plan item 2.4)', () => {
-  // These compose the projection with the resolver rather than passing `methodologyInjected`
+  // These compose the projection with the resolver rather than passing `frameworkInjected`
   // by hand. The hand-written cases above prove the veto works; these prove the signal that
   // reaches it in production is derived, not the literal `true` T1.5 shipped.
 
@@ -515,7 +515,7 @@ describe('GateSetResolver — methodology nesting driven by the real signal (pla
         prompt,
         frameworkId: 'CAGEERF',
         modifiers: modifiers as GateResolutionInput['modifiers'],
-        methodologyInjected: isMethodologyInjected({
+        frameworkInjected: isMethodologyInjected({
           modifiers,
           promptInjection: prompt.injection,
         }),

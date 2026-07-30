@@ -170,11 +170,11 @@ export class GateEnhancementService {
       category: prompt.category ?? '',
       modifiers: executionPlan.modifiers,
       frameworkId: activeFrameworkId,
-      methodologyInjected: isMethodologyInjected({
+      frameworkInjected: isMethodologyInjected({
         modifiers: executionPlan.modifiers,
         promptInjection: prompt.injection,
       }),
-      methodologyGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
+      frameworkGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
       knownMethodologyGateIds: [...methodologyGates],
       inlineOperatorGateIds: inlineGateIds,
       clientSelectedGateIds: clientSelectedGates,
@@ -321,11 +321,11 @@ export class GateEnhancementService {
         frameworkId: stepFrameworkId,
         // Read from the step's own prompt, not the chain entry prompt: each step is a distinct
         // prompt and may carry its own injection block.
-        methodologyInjected: isMethodologyInjected({
+        frameworkInjected: isMethodologyInjected({
           modifiers: step.executionPlan?.modifiers,
           promptInjection: prompt.injection,
         }),
-        methodologyGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
+        frameworkGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
         knownMethodologyGateIds: [...methodologyGates],
         inlineOperatorGateIds: stepInlineGates,
         plannedGateIds: plannedGates,

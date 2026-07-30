@@ -185,7 +185,7 @@ interface SkillIR {
   delegationAgent?: string;
 
   gateData: { type: string; passCriteria: unknown[]; activation?: unknown } | null;
-  methodologyData: {
+  frameworkData: {
     type: string;
     version: string;
     systemPromptGuidance: string;
@@ -263,7 +263,7 @@ interface GateYaml {
   retry_config?: unknown;
 }
 
-interface MethodologyYaml {
+interface FrameworkYaml {
   id: string;
   name: string;
   type?: string;
@@ -981,7 +981,7 @@ async function loadPromptIR(
     delegation: data.delegation === true ? true : undefined,
     delegationAgent: data.delegationAgent ? data.delegationAgent : undefined,
     gateData: null,
-    methodologyData: null,
+    frameworkData: null,
     styleData: null,
     extensions: {},
     sourcePaths: [yamlPath],
@@ -1022,7 +1022,7 @@ async function loadGateIR(gateDir: string): Promise<SkillIR> {
       passCriteria: data.pass_criteria ?? [],
       activation: data.activation,
     },
-    methodologyData: null,
+    frameworkData: null,
     styleData: null,
     extensions: { retryConfig: data.retry_config },
     sourcePaths: [yamlPath],
@@ -1034,7 +1034,7 @@ async function loadGateIR(gateDir: string): Promise<SkillIR> {
 async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
   const yamlPath = path.join(methDir, 'methodology.yaml');
   const raw = await readFile(yamlPath, 'utf-8');
-  const data = yaml.load(raw) as MethodologyYaml;
+  const data = yaml.load(raw) as FrameworkYaml;
 
   const phasesFile = data.phasesFile ?? 'phases.yaml';
   const phasesRaw = await readOptionalFile(path.join(methDir, phasesFile));
@@ -1068,7 +1068,7 @@ async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
     chainStepContents: [],
     docFiles: [],
     gateData: null,
-    methodologyData: {
+    frameworkData: {
       type: data.type ?? '',
       version: data.version ?? '1.0.0',
       systemPromptGuidance: guidance,
@@ -1113,7 +1113,7 @@ async function loadStyleIR(styleDir: string): Promise<SkillIR> {
     chainStepContents: [],
     docFiles: [],
     gateData: null,
-    methodologyData: null,
+    frameworkData: null,
     styleData: {
       priority: data.priority ?? 0,
       enhancementMode: data.enhancementMode ?? 'prepend',
@@ -1763,9 +1763,9 @@ function buildClaudeCodeSkill(ir: SkillIR, duplicateIds?: Set<string>): OutputFi
   }
 
   // Methodology-specific: phase summary
-  if (ir.methodologyData && Array.isArray(ir.methodologyData.phases)) {
+  if (ir.frameworkData && Array.isArray(ir.frameworkData.phases)) {
     body += `## Phases\n\n`;
-    const phases = ir.methodologyData.phases as Array<Record<string, unknown>>;
+    const phases = ir.frameworkData.phases as Array<Record<string, unknown>>;
     for (const phase of phases) {
       const pName = (phase['name'] as string) ?? (phase['id'] as string) ?? 'Phase';
       body += `### ${pName}\n\n${(phase['description'] as string) ?? ''}\n\n`;
@@ -1918,9 +1918,9 @@ function buildAgentSkillsSkill(
   }
 
   // Methodology phases
-  if (ir.methodologyData && Array.isArray(ir.methodologyData.phases)) {
+  if (ir.frameworkData && Array.isArray(ir.frameworkData.phases)) {
     body += `## Phases\n\n`;
-    const phases = ir.methodologyData.phases as Array<Record<string, unknown>>;
+    const phases = ir.frameworkData.phases as Array<Record<string, unknown>>;
     for (const phase of phases) {
       const pName = (phase['name'] as string) ?? (phase['id'] as string) ?? 'Phase';
       body += `### ${pName}\n\n${(phase['description'] as string) ?? ''}\n\n`;
@@ -1983,16 +1983,16 @@ function buildAgentSkillsSkill(
 
   // References (if client supports)
   if (config.capabilities.references) {
-    if (ir.methodologyData?.systemPromptGuidance) {
+    if (ir.frameworkData?.systemPromptGuidance) {
       files.push({
         relativePath: `${subDir}/references/system-prompt.md`,
-        content: ir.methodologyData.systemPromptGuidance,
+        content: ir.frameworkData.systemPromptGuidance,
       });
     }
-    if (ir.methodologyData?.phases && ir.methodologyData.phases.length > 0) {
+    if (ir.frameworkData?.phases && ir.frameworkData.phases.length > 0) {
       files.push({
         relativePath: `${subDir}/references/phases.md`,
-        content: `# Phases\n\n${yaml.dump(ir.methodologyData.phases, { lineWidth: 120 })}`,
+        content: `# Phases\n\n${yaml.dump(ir.frameworkData.phases, { lineWidth: 120 })}`,
       });
     }
   }

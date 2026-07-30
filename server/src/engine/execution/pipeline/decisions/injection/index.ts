@@ -44,7 +44,7 @@ export type {
 
 // Pre-injection projection consumed by gate resolution (ADR 0001 nesting veto)
 export { isMethodologyInjected } from './methodology-injection.js';
-export type { MethodologyInjectionSignals } from './methodology-injection.js';
+export type { FrameworkInjectionSignals } from './methodology-injection.js';
 
 // Constants
 export {

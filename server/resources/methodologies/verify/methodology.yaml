@@ -21,11 +21,11 @@ toolDescriptions:
       Inspect patterns, Field isolation, Yield presentation.
     parameters:
       command: Resume or application content audit prompt
-methodologyGates:
+frameworkGates:
   - id: voice_authenticity
     name: Voice Authenticity
     description: Content sounds like the candidate wrote it, not AI
-    methodologyArea: Voice Load
+    frameworkArea: Voice Load
     priority: high
     validationCriteria:
       - bio.md says/doesn't-say table consulted
@@ -35,7 +35,7 @@ methodologyGates:
   - id: evidence_backing
     name: Evidence Backing
     description: Every claim verified against bio.md documented facts
-    methodologyArea: Evidence Check
+    frameworkArea: Evidence Check
     priority: high
     validationCriteria:
       - Every skill claimed exists in bio.md Can Claim section
@@ -45,7 +45,7 @@ methodologyGates:
   - id: jd_resonance
     name: JD Resonance
     description: Content aligns with target job description requirements and values
-    methodologyArea: Resonance Map
+    frameworkArea: Resonance Map
     priority: high
     validationCriteria:
       - Major JD requirements addressed in content
@@ -55,7 +55,7 @@ methodologyGates:
   - id: ai_detection_clean
     name: AI Detection Clean
     description: No AI-flaggable patterns in content
-    methodologyArea: Inspect Patterns
+    frameworkArea: Inspect Patterns
     priority: high
     validationCriteria:
       - Zero em-dashes in prose
@@ -67,7 +67,7 @@ methodologyGates:
   - id: field_isolation_check
     name: Field Isolation Check
     description: Each section covers distinct ground without overlap
-    methodologyArea: Field Isolation
+    frameworkArea: Field Isolation
     priority: medium
     validationCriteria:
       - Summary and bullets cover different achievements
@@ -83,11 +83,11 @@ templateSuggestions:
       (claimability gate) then Resonance (JD alignment) then Inspect (AI
       detection) then Field Isolation (overlap prevention) then Yield (present
       with gate tables)
-    methodologyJustification: >-
+    frameworkJustification: >-
       Ensures every piece of resume content passes all quality gates before
       presentation to the user
     impact: high
-methodologyElements:
+frameworkElements:
   requiredSections:
     - Voice
     - Evidence
@@ -117,7 +117,7 @@ argumentSuggestions:
   - name: content_type
     type: string
     description: Type of content being audited
-    methodologyReason: >-
+    frameworkReason: >-
       Resonance phase adjusts checks based on content type: keyword match rate
       for resumes, coverage mapping for application answers
     examples:
@@ -127,14 +127,14 @@ argumentSuggestions:
   - name: jd_source
     type: string
     description: Company and role for JD alignment
-    methodologyReason: Resonance phase requires JD context to map content against requirements
+    frameworkReason: Resonance phase requires JD context to map content against requirements
     examples:
       - ChowNow Customer Support
       - Cursor Technical Support
   - name: sections
     type: string
     description: Which sections to audit
-    methodologyReason: Field Isolation needs scope of overlap checking
+    frameworkReason: Field Isolation needs scope of overlap checking
     examples:
       - summary,bullets,skills
       - q1,q2,q3,additional

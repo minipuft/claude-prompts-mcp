@@ -6,7 +6,7 @@ processingSteps:
   - id: context_establishment
     name: Context Establishment
     description: Establish clear situational context and environmental awareness
-    methodologyBasis: CAGEERF Context phase
+    frameworkBasis: CAGEERF Context phase
     order: 1
     required: true
     section_header: '## Context'
@@ -18,7 +18,7 @@ processingSteps:
   - id: systematic_analysis
     name: Systematic Analysis
     description: Apply structured analytical approach to the problem
-    methodologyBasis: CAGEERF Analysis phase
+    frameworkBasis: CAGEERF Analysis phase
     order: 2
     required: true
     section_header: '## Analysis'
@@ -30,7 +30,7 @@ processingSteps:
   - id: goal_definition
     name: Goal Definition
     description: Establish specific, measurable objectives
-    methodologyBasis: CAGEERF Goals phase
+    frameworkBasis: CAGEERF Goals phase
     order: 3
     required: true
     section_header: '## Goals'
@@ -42,7 +42,7 @@ processingSteps:
   - id: execution_planning
     name: Execution Planning
     description: Develop actionable implementation approach
-    methodologyBasis: CAGEERF Execution phase
+    frameworkBasis: CAGEERF Execution phase
     order: 4
     required: true
     section_header: '## Execution'
@@ -54,7 +54,7 @@ processingSteps:
   - id: evaluation_setup
     name: Evaluation Setup
     description: Define success criteria and measurement methods
-    methodologyBasis: CAGEERF Evaluation phase
+    frameworkBasis: CAGEERF Evaluation phase
     order: 5
     required: false
     section_header: '## Evaluation'
@@ -65,7 +65,7 @@ processingSteps:
   - id: refinement_preparation
     name: Refinement Preparation
     description: Establish iteration and improvement processes
-    methodologyBasis: CAGEERF Refinement phase
+    frameworkBasis: CAGEERF Refinement phase
     order: 6
     required: false
     section_header: '## Refinement'
@@ -78,14 +78,14 @@ executionSteps:
   - id: context_analysis
     name: Context Analysis
     action: Analyze situational context and environmental factors
-    methodologyPhase: Context
+    frameworkPhase: Context
     dependencies: []
     expected_output: Comprehensive situational understanding
 
   - id: systematic_examination
     name: Systematic Examination
     action: Apply structured analytical approach
-    methodologyPhase: Analysis
+    frameworkPhase: Analysis
     dependencies:
       - context_analysis
     expected_output: Detailed problem or opportunity analysis
@@ -93,7 +93,7 @@ executionSteps:
   - id: goal_establishment
     name: Goal Establishment
     action: Define specific, measurable objectives
-    methodologyPhase: Goals
+    frameworkPhase: Goals
     dependencies:
       - systematic_examination
     expected_output: Clear, actionable goal statements
@@ -101,7 +101,7 @@ executionSteps:
   - id: execution_design
     name: Execution Design
     action: Develop implementation approach and action plan
-    methodologyPhase: Execution
+    frameworkPhase: Execution
     dependencies:
       - goal_establishment
     expected_output: Detailed execution strategy
@@ -109,7 +109,7 @@ executionSteps:
   - id: evaluation_framework
     name: Evaluation Framework
     action: Establish success criteria and measurement approach
-    methodologyPhase: Evaluation
+    frameworkPhase: Evaluation
     dependencies:
       - execution_design
     expected_output: Success metrics and evaluation plan
@@ -117,7 +117,7 @@ executionSteps:
   - id: refinement_process
     name: Refinement Process
     action: Define iteration and improvement mechanisms
-    methodologyPhase: Refinement
+    frameworkPhase: Refinement
     dependencies:
       - evaluation_framework
     expected_output: Continuous improvement framework

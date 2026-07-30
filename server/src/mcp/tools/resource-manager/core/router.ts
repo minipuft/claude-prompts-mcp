@@ -6,7 +6,7 @@
  * based on the resource_type parameter.
  */
 
-import { PROMPT_ONLY_ACTIONS, METHODOLOGY_ONLY_ACTIONS, CHECKPOINT_ONLY_ACTIONS } from './types.js';
+import { PROMPT_ONLY_ACTIONS, FRAMEWORK_ONLY_ACTIONS, CHECKPOINT_ONLY_ACTIONS } from './types.js';
 import { resolveRequestIdentity } from '../../../../shared/utils/request-identity-resolver.js';
 import { resolveContinuityScopeId } from '../../../../shared/utils/request-identity-scope.js';
 
@@ -121,7 +121,7 @@ export class ResourceManagerRouter {
     }
 
     // Check methodology-only actions
-    if (METHODOLOGY_ONLY_ACTIONS.includes(action) && resourceType !== 'methodology') {
+    if (FRAMEWORK_ONLY_ACTIONS.includes(action) && resourceType !== 'methodology') {
       return {
         valid: false,
         error: `Action "${action}" is only valid for resource_type: "methodology"`,

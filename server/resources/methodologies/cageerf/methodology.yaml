@@ -33,11 +33,11 @@ gates:
     - framework-compliance
 
 # Methodology-specific quality gates
-methodologyGates:
+frameworkGates:
   - id: context_completeness
     name: Context Completeness
     description: Verify comprehensive situational context is established
-    methodologyArea: Context
+    frameworkArea: Context
     priority: high
     validationCriteria:
       - Environmental factors identified
@@ -47,7 +47,7 @@ methodologyGates:
   - id: analysis_depth
     name: Analysis Depth
     description: Ensure systematic and thorough analytical approach
-    methodologyArea: Analysis
+    frameworkArea: Analysis
     priority: high
     validationCriteria:
       - Multiple perspectives considered
@@ -57,7 +57,7 @@ methodologyGates:
   - id: goal_specificity
     name: Goal Specificity
     description: Validate goals are specific, measurable, and actionable
-    methodologyArea: Goals
+    frameworkArea: Goals
     priority: high
     validationCriteria:
       - Goals are quantifiable
@@ -67,7 +67,7 @@ methodologyGates:
   - id: execution_feasibility
     name: Execution Feasibility
     description: Assess practical implementability of proposed approach
-    methodologyArea: Execution
+    frameworkArea: Execution
     priority: medium
     validationCriteria:
       - Resources and capabilities considered
@@ -81,7 +81,7 @@ templateSuggestions:
     description: Add CAGEERF methodology guidance
     content: |
       Apply the C.A.G.E.E.R.F methodology: establish Context, perform systematic Analysis, define clear Goals, plan Execution, create Evaluation criteria, and enable Refinement.
-    methodologyJustification: Ensures systematic application of CAGEERF principles
+    frameworkJustification: Ensures systematic application of CAGEERF principles
     impact: high
 
   - section: user
@@ -89,11 +89,11 @@ templateSuggestions:
     description: Structure response using CAGEERF phases
     content: |
       Please structure your response addressing: 1) Context establishment, 2) Systematic analysis, 3) Specific goals, 4) Execution approach, 5) Success evaluation, 6) Refinement opportunities.
-    methodologyJustification: Guides comprehensive thinking through all CAGEERF phases
+    frameworkJustification: Guides comprehensive thinking through all CAGEERF phases
     impact: medium
 
 # Methodology elements for prompt creation guidance
-methodologyElements:
+frameworkElements:
   requiredSections:
     - Context
     - Analysis
@@ -117,7 +117,7 @@ argumentSuggestions:
   - name: context
     type: string
     description: Situational context and background information
-    methodologyReason: CAGEERF Context phase requires clear situational awareness
+    frameworkReason: CAGEERF Context phase requires clear situational awareness
     examples:
       - business context
       - technical environment
@@ -126,7 +126,7 @@ argumentSuggestions:
   - name: analysis_focus
     type: string
     description: Specific analytical focus areas
-    methodologyReason: CAGEERF Analysis phase needs defined scope
+    frameworkReason: CAGEERF Analysis phase needs defined scope
     examples:
       - performance analysis
       - risk assessment
@@ -135,7 +135,7 @@ argumentSuggestions:
   - name: goals
     type: array
     description: Specific, measurable objectives
-    methodologyReason: CAGEERF Goals phase requires clear, actionable targets
+    frameworkReason: CAGEERF Goals phase requires clear, actionable targets
     examples:
       - increase efficiency by 20%
       - reduce errors

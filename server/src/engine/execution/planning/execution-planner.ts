@@ -128,7 +128,7 @@ export class ExecutionPlanner {
       category: categoryInfo.category,
       categoryGateConfig: categoryInfo.gateConfiguration,
       modifiers: modifierResolution.modifiers,
-      methodologyInjected: isMethodologyInjected({
+      frameworkInjected: isMethodologyInjected({
         modifiers: modifierResolution.modifiers,
         promptInjection: convertedPrompt.injection,
       }),

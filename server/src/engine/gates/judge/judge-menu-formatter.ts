@@ -11,7 +11,7 @@ export interface JudgePromptData {
 }
 
 /** Provider that resolves a methodology's judge prompt by framework ID. */
-export type MethodologyJudgePromptProvider = (frameworkId: string) => JudgePromptData | undefined;
+export type FrameworkJudgePromptProvider = (frameworkId: string) => JudgePromptData | undefined;
 
 /**
  * Context about operators already specified in the command.
@@ -34,7 +34,7 @@ export interface OperatorContext {
 export class JudgeMenuFormatter {
   constructor(
     private readonly logger: Logger,
-    private readonly judgePromptProvider?: MethodologyJudgePromptProvider | null
+    private readonly judgePromptProvider?: FrameworkJudgePromptProvider | null
   ) {}
 
   /**
@@ -58,14 +58,14 @@ export class JudgeMenuFormatter {
 
 `;
 
-    const methodologyJudgePrompt = this.getActiveMethodologyJudgePrompt(context);
+    const frameworkJudgePrompt = this.getActiveMethodologyJudgePrompt(context);
 
-    const introLines = methodologyJudgePrompt
+    const introLines = frameworkJudgePrompt
       ? [
-          methodologyJudgePrompt.systemMessage ?? '',
+          frameworkJudgePrompt.systemMessage ?? '',
           '',
           '### Methodology-Specific Instructions',
-          methodologyJudgePrompt.userMessageTemplate ?? '',
+          frameworkJudgePrompt.userMessageTemplate ?? '',
           '',
         ]
       : [

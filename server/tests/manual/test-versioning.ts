@@ -59,12 +59,17 @@ async function readHistory(): Promise<any> {
   }
 }
 
-async function saveVersionManually(resourceType: string, resourceId: string, snapshot: any, version: number) {
-  const history = await readHistory() || {
+async function saveVersionManually(
+  resourceType: string,
+  resourceId: string,
+  snapshot: any,
+  version: number
+) {
+  const history = (await readHistory()) || {
     resource_type: resourceType,
     resource_id: resourceId,
     current_version: 0,
-    versions: []
+    versions: [],
   };
 
   const entry = {
@@ -72,7 +77,7 @@ async function saveVersionManually(resourceType: string, resourceId: string, sna
     date: new Date().toISOString(),
     snapshot,
     diff_summary: `Update to v${version}`,
-    description: `Version ${version}`
+    description: `Version ${version}`,
   };
 
   history.versions.unshift(entry);
@@ -93,31 +98,46 @@ async function main() {
   await createPrompt(1, 'Hello {{input}}! This is version 1.');
 
   // Simulate saving v1 to history
-  await saveVersionManually('prompt', 'version_test', {
-    id: 'version_test',
-    name: 'Version Test Prompt v1',
-    template: 'Hello {{input}}! This is version 1.'
-  }, 1);
+  await saveVersionManually(
+    'prompt',
+    'version_test',
+    {
+      id: 'version_test',
+      name: 'Version Test Prompt v1',
+      template: 'Hello {{input}}! This is version 1.',
+    },
+    1
+  );
 
   // Step 3: Update prompt (v2)
   console.log('\n--- Step 2: Update prompt to v2 ---');
   await createPrompt(2, 'Greetings {{input}}! This is version 2 with changes.');
 
-  await saveVersionManually('prompt', 'version_test', {
-    id: 'version_test',
-    name: 'Version Test Prompt v2',
-    template: 'Greetings {{input}}! This is version 2 with changes.'
-  }, 2);
+  await saveVersionManually(
+    'prompt',
+    'version_test',
+    {
+      id: 'version_test',
+      name: 'Version Test Prompt v2',
+      template: 'Greetings {{input}}! This is version 2 with changes.',
+    },
+    2
+  );
 
   // Step 4: Update prompt (v3)
   console.log('\n--- Step 3: Update prompt to v3 ---');
   await createPrompt(3, 'Welcome {{input}}! This is version 3 - final version.');
 
-  await saveVersionManually('prompt', 'version_test', {
-    id: 'version_test',
-    name: 'Version Test Prompt v3',
-    template: 'Welcome {{input}}! This is version 3 - final version.'
-  }, 3);
+  await saveVersionManually(
+    'prompt',
+    'version_test',
+    {
+      id: 'version_test',
+      name: 'Version Test Prompt v3',
+      template: 'Welcome {{input}}! This is version 3 - final version.',
+    },
+    3
+  );
 
   // Step 5: Verify history file
   console.log('\n--- Step 4: Verify history file ---');

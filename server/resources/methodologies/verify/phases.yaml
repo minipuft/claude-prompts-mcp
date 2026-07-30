@@ -31,7 +31,7 @@ processingSteps:
   - id: voice_load_step
     name: Voice Load
     description: Read bio.md voice table and establish candidate register
-    methodologyBasis: VERIFY Voice phase
+    frameworkBasis: VERIFY Voice phase
     order: 1
     required: true
     marker: '## Voice'
@@ -47,7 +47,7 @@ processingSteps:
   - id: evidence_check_step
     name: Evidence Check
     description: Verify all claims against bio.md claimability
-    methodologyBasis: VERIFY Evidence phase
+    frameworkBasis: VERIFY Evidence phase
     order: 2
     required: true
     marker: '## Evidence'
@@ -66,7 +66,7 @@ processingSteps:
   - id: resonance_map_step
     name: Resonance Map
     description: Map content to JD requirements and values
-    methodologyBasis: VERIFY Resonance phase
+    frameworkBasis: VERIFY Resonance phase
     order: 3
     required: true
     marker: '## Resonance'
@@ -82,7 +82,7 @@ processingSteps:
   - id: inspect_patterns_step
     name: Inspect Patterns
     description: Scan for AI detection flags and voice violations
-    methodologyBasis: VERIFY Inspect phase
+    frameworkBasis: VERIFY Inspect phase
     order: 4
     required: true
     marker: '## Inspect'
@@ -99,7 +99,7 @@ processingSteps:
   - id: field_isolation_step
     name: Field Isolation
     description: Check for content overlap between sections
-    methodologyBasis: VERIFY Field Isolation phase
+    frameworkBasis: VERIFY Field Isolation phase
     order: 5
     required: true
     marker: '## Isolation'
@@ -115,7 +115,7 @@ processingSteps:
   - id: yield_step
     name: Yield
     description: Present changes with before/after and gate tables
-    methodologyBasis: VERIFY Yield phase
+    frameworkBasis: VERIFY Yield phase
     order: 6
     required: true
     marker: '## Yield'
@@ -136,7 +136,7 @@ executionSteps:
     action: >-
       Read bio.md Voice Reference section including says/doesn't-say table,
       structural decisions, and register patterns
-    methodologyPhase: Voice Load
+    frameworkPhase: Voice Load
     dependencies: []
     expected_output: Voice register established with specific patterns to match and avoid
   - id: verify_claims
@@ -144,7 +144,7 @@ executionSteps:
     action: >-
       Cross-reference every claim in content against bio.md Can Claim and Cannot
       Claim sections
-    methodologyPhase: Evidence Check
+    frameworkPhase: Evidence Check
     dependencies:
       - load_voice_reference
     expected_output: Per-claim verification with PASS or FAIL or ADJUST status
@@ -153,7 +153,7 @@ executionSteps:
     action: >-
       Extract JD requirements and values then map each to content coverage and
       identify gaps
-    methodologyPhase: Resonance Map
+    frameworkPhase: Resonance Map
     dependencies:
       - verify_claims
     expected_output: Coverage map showing which JD requirements are addressed where
@@ -162,7 +162,7 @@ executionSteps:
     action: >-
       Check for em-dashes, gerund chains, triple-noun lists, across overuse,
       tool-name leading, and staccato patterns
-    methodologyPhase: Inspect Patterns
+    frameworkPhase: Inspect Patterns
     dependencies:
       - load_voice_reference
     expected_output: Flag list with specific instances and fix recommendations
@@ -171,7 +171,7 @@ executionSteps:
     action: >-
       Compare all sections or answers for content duplication including same
       achievements, same phrasing, and same ground covered
-    methodologyPhase: Field Isolation
+    frameworkPhase: Field Isolation
     dependencies:
       - verify_claims
       - map_jd_alignment
@@ -181,7 +181,7 @@ executionSteps:
     action: >-
       Show before/after for each changed section with rationale and per-section
       gate validation table
-    methodologyPhase: Yield
+    frameworkPhase: Yield
     dependencies:
       - scan_ai_patterns
       - check_overlap

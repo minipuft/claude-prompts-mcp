@@ -105,7 +105,7 @@ export interface FileObserverStats {
   retryCount: number;
   frameworkEvents: number;
   frameworkCacheInvalidations: number;
-  methodologyFileEvents: number;
+  frameworkFileEvents: number;
 }
 
 /**
@@ -186,7 +186,7 @@ export class FileObserver extends EventEmitter {
       retryCount: 0,
       frameworkEvents: 0,
       frameworkCacheInvalidations: 0,
-      methodologyFileEvents: 0,
+      frameworkFileEvents: 0,
     };
 
     // Determine if polling should be used
@@ -448,8 +448,8 @@ export class FileObserver extends EventEmitter {
     // Determine file types
     const isPromptFile = this.isPromptFile(filename);
     const isConfigFile = this.isConfigFile(filename, filePath);
-    const methodologyInfo = this.isMethodologyFile(filename, filePath);
-    const isMethodologyFile = methodologyInfo.isMethodology;
+    const frameworkInfo = this.isMethodologyFile(filename, filePath);
+    const isMethodologyFile = frameworkInfo.isMethodology;
 
     // Check if file is in a registered auxiliary directory (gates, scripts, etc.)
     const isAuxiliaryFile = this.isInAuxiliaryDirectory(filePath);
@@ -483,8 +483,8 @@ export class FileObserver extends EventEmitter {
       ...(isAuxiliaryFile ? { isAuxiliaryFile } : {}),
     };
 
-    if (methodologyInfo.methodologyId) {
-      event.methodologyId = methodologyInfo.methodologyId;
+    if (frameworkInfo.methodologyId) {
+      event.methodologyId = frameworkInfo.methodologyId;
     }
 
     if (category) {
@@ -501,7 +501,7 @@ export class FileObserver extends EventEmitter {
 
     // Track methodology events separately
     if (isMethodologyFile) {
-      this.stats.methodologyFileEvents++;
+      this.stats.frameworkFileEvents++;
     }
 
     this.logger.debug(`File event detected: ${changeType} ${filename} in ${directoryPath}`);
@@ -562,7 +562,7 @@ export class FileObserver extends EventEmitter {
     }
 
     if (event.isMethodologyFile) {
-      this.emit('methodologyFileChange', event);
+      this.emit('frameworkFileChange', event);
     }
   }
 

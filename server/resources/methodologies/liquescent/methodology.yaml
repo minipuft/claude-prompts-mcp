@@ -52,11 +52,11 @@ toolDescriptions:
       command: >-
         The creative direction or concept to explore through LIQUESCENT
         methodology
-methodologyGates:
+frameworkGates:
   - id: dissolve_openness
     name: Dissolve Openness
     description: Verify the creative space has been opened and constraints loosened
-    methodologyArea: Dissolve
+    frameworkArea: Dissolve
     priority: high
     validationCriteria:
       - Initial constraints acknowledged but not accepted as fixed
@@ -65,7 +65,7 @@ methodologyGates:
   - id: flow_connections
     name: Flow Connections
     description: Ensure loose conceptual connections have been explored
-    methodologyArea: Flow
+    frameworkArea: Flow
     priority: high
     validationCriteria:
       - Unexpected associations documented
@@ -74,7 +74,7 @@ methodologyGates:
   - id: crystallize_naming
     name: Crystallize Naming
     description: Verify the vision has been captured in resonant language
-    methodologyArea: Crystallize
+    frameworkArea: Crystallize
     priority: high
     validationCriteria:
       - Core concept has a name that FEELS right
@@ -83,7 +83,7 @@ methodologyGates:
   - id: scout_boundaries
     name: Scout Boundaries
     description: Ensure modern tools and patterns have been researched
-    methodologyArea: Scout
+    frameworkArea: Scout
     priority: high
     validationCriteria:
       - Bleeding-edge tools identified
@@ -92,7 +92,7 @@ methodologyGates:
   - id: iterate_preservation
     name: Iterate Preservation
     description: Verify refinement preserves original creative energy
-    methodologyArea: Iterate
+    frameworkArea: Iterate
     priority: medium
     validationCriteria:
       - Core vision remains intact through iterations
@@ -101,7 +101,7 @@ methodologyGates:
   - id: manifest_embodiment
     name: Manifest Embodiment
     description: Ensure implementation embodies the philosophy
-    methodologyArea: Manifest
+    frameworkArea: Manifest
     priority: high
     validationCriteria:
       - Code reflects conceptual vision
@@ -115,15 +115,15 @@ templateSuggestions:
       Apply the LIQUESCENT methodology: Dissolve constraints, Flow through loose
       connections, Crystallize patterns, Scout modern tools, Iterate with
       energy, Manifest with philosophy.
-    methodologyJustification: Ensures creative thinking is systematic without being rigid
+    frameworkJustification: Ensures creative thinking is systematic without being rigid
     impact: high
   - section: user
     type: addition
     description: Encourage tangential exploration
     content: Follow the weird thought—it might be the breakthrough.
-    methodologyJustification: Loose connections often yield innovation
+    frameworkJustification: Loose connections often yield innovation
     impact: medium
-methodologyElements:
+frameworkElements:
   requiredSections:
     - Dissolve
     - Flow
@@ -143,7 +143,7 @@ argumentSuggestions:
   - name: vibe
     type: string
     description: The emotional/conceptual direction to explore
-    methodologyReason: Dissolve phase needs a starting feeling, not a specification
+    frameworkReason: Dissolve phase needs a starting feeling, not a specification
     examples:
       - neuromorphic gradient ripple
       - liquid becoming
@@ -151,7 +151,7 @@ argumentSuggestions:
   - name: boundaries
     type: string
     description: Which technical boundaries to push
-    methodologyReason: Scout phase needs direction for research
+    frameworkReason: Scout phase needs direction for research
     examples:
       - modern CSS
       - animation techniques
@@ -159,7 +159,7 @@ argumentSuggestions:
   - name: energy
     type: string
     description: The creative energy to preserve through iterations
-    methodologyReason: Iterate phase needs to know what spark to maintain
+    frameworkReason: Iterate phase needs to know what spark to maintain
     examples:
       - Erlich Bachman shroom trip
       - calm precision

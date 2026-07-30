@@ -10,7 +10,7 @@ import {
 import type { PhaseGuardsConfig } from '../../../../src/shared/types/core-config.js';
 import type { ChainSessionService } from '../../../../src/shared/types/chain-session.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
-import type { MethodologyGuide } from '../../../../src/engine/frameworks/types/methodology-types.js';
+import type { FrameworkGuide } from '../../../../src/engine/frameworks/types/methodology-types.js';
 
 const createLogger = (): Logger => ({
   info: jest.fn(),
@@ -42,7 +42,7 @@ function withSession(ctx: ExecutionContext, sessionId = 'session-1'): ExecutionC
 
 const defaultConfig: PhaseGuardsConfig = { mode: 'enforce', maxRetries: 2 };
 
-function createMockGuide(steps: Array<Record<string, unknown>>): MethodologyGuide {
+function createMockGuide(steps: Array<Record<string, unknown>>): FrameworkGuide {
   return {
     enhanceWithMethodology: jest.fn().mockReturnValue({
       processingEnhancements: steps,
@@ -53,13 +53,13 @@ function createMockGuide(steps: Array<Record<string, unknown>>): MethodologyGuid
     validateMethodologyCompliance: jest.fn(),
     getToolDescriptions: jest.fn(),
     renderPhaseGuardOverlay: jest.fn(),
-  } as unknown as MethodologyGuide;
+  } as unknown as FrameworkGuide;
 }
 
-function createRegistry(guide?: MethodologyGuide) {
+function createRegistry(guide?: FrameworkGuide) {
   return {
     getMethodologyGuide: jest
-      .fn<(id: string) => MethodologyGuide | undefined>()
+      .fn<(id: string) => FrameworkGuide | undefined>()
       .mockReturnValue(guide),
   };
 }
@@ -475,7 +475,7 @@ describe('PhaseGuardVerificationStage', () => {
   test('skips when methodology guide returns undefined', async () => {
     const registry = {
       getMethodologyGuide: jest
-        .fn<(id: string) => MethodologyGuide | undefined>()
+        .fn<(id: string) => FrameworkGuide | undefined>()
         .mockReturnValue(undefined),
     };
     const stage = createPhaseGuardVerificationStage(

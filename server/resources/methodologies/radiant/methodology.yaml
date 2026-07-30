@@ -44,11 +44,11 @@ gates:
     - framework-compliance
 
 # Methodology-specific quality gates
-methodologyGates:
+frameworkGates:
   - id: vision_clarity
     name: Vision Clarity
     description: The idea is tied to CloudySky's atmospheric album-adaptive vision and honors recolor-through-tokens.
-    methodologyArea: ReferenceVision
+    frameworkArea: ReferenceVision
     priority: high
     validationCriteria:
       - Idea is explicitly tied to the album-adaptive atmospheric vision
@@ -58,7 +58,7 @@ methodologyGates:
   - id: goals_observable
     name: Goals Observable
     description: Design goals are specific and have observable success criteria.
-    methodologyArea: ArticulateGoals
+    frameworkArea: ArticulateGoals
     priority: high
     validationCriteria:
       - At least one specific design goal is stated
@@ -67,7 +67,7 @@ methodologyGates:
   - id: palette_fidelity
     name: Palette Fidelity
     description: Color is reasoned in OKLCH scene-linear terms with no premature clamp.
-    methodologyArea: DrawPalette
+    frameworkArea: DrawPalette
     priority: high
     validationCriteria:
       - Color is reasoned in OKLCH / scene-linear terms
@@ -77,7 +77,7 @@ methodologyGates:
   - id: motion_legibility
     name: Motion Preserves Legibility
     description: Audio reactivity is expressed as motion/chroma, not luminance.
-    methodologyArea: InfuseAtmosphereMotion
+    frameworkArea: InfuseAtmosphereMotion
     priority: high
     validationCriteria:
       - Audio reactivity drives motion/chroma, not luminance
@@ -87,7 +87,7 @@ methodologyGates:
   - id: surface_routing
     name: Surface Routing Correctness
     description: Bulk color flows through the bridge; selectors are reserved for effects.
-    methodologyArea: AnchorSurfaces
+    frameworkArea: AnchorSurfaces
     priority: high
     validationCriteria:
       - Bulk color is routed through bridge.scss onto Encore/spice tokens
@@ -97,7 +97,7 @@ methodologyGates:
   - id: constraint_fidelity
     name: Constraint Fidelity
     description: Spicetify/CEF limits, performance budgets, and the unified operator are respected.
-    methodologyArea: NavigateConstraints
+    frameworkArea: NavigateConstraints
     priority: medium
     validationCriteria:
       - Spicetify/CEF limits acknowledged (Chrome 146, SDR-only surface)
@@ -107,7 +107,7 @@ methodologyGates:
   - id: live_verification
     name: Live Verification Plan
     description: Verification uses color truth and the live CDP bridge, not CSS tokens.
-    methodologyArea: TestLivingClient
+    frameworkArea: TestLivingClient
     priority: high
     validationCriteria:
       - Verification plan uses color truth (colors() / gradientInputs)
@@ -121,7 +121,7 @@ templateSuggestions:
     description: Prepend the RADIANT design pillars as a persistent reminder
     content: |
       Apply the RADIANT design methodology: Reference the Vision, Articulate Goals, Draw the Palette, Infuse Atmosphere & Motion, Anchor to Surfaces, Navigate Constraints, Test in the Living Client.
-    methodologyJustification: Keeps CloudySky's design goals, vision, palette philosophy, and constraints in view across every idea so implementations stay on-philosophy.
+    frameworkJustification: Keeps CloudySky's design goals, vision, palette philosophy, and constraints in view across every idea so implementations stay on-philosophy.
     impact: high
 
   - section: user
@@ -129,11 +129,11 @@ templateSuggestions:
     description: Anchor the idea to an album context and a named design intent
     content: |
       State the album_context and design_intent this idea is designed against, then address each RADIANT pillar in order.
-    methodologyJustification: Grounds palette and motion decisions in a concrete album and an observable goal, as Draw the Palette and Articulate Goals require.
+    frameworkJustification: Grounds palette and motion decisions in a concrete album and an observable goal, as Draw the Palette and Articulate Goals require.
     impact: medium
 
 # Methodology elements for prompt creation guidance
-methodologyElements:
+frameworkElements:
   requiredSections:
     - Reference the Vision
     - Articulate Goals
@@ -157,7 +157,7 @@ argumentSuggestions:
   - name: album_context
     type: string
     description: The reference album art / palette character the idea is designed against.
-    methodologyReason: Draw the Palette and Reference the Vision require an album anchor — identity-by-light survivability is judged against real cover characteristics.
+    frameworkReason: Draw the Palette and Reference the Vision require an album anchor — identity-by-light survivability is judged against real cover characteristics.
     examples:
       - dark near-black cover
       - highly chromatic green album
@@ -166,7 +166,7 @@ argumentSuggestions:
   - name: design_intent
     type: string
     description: The feeling/mood and specific design goal the idea should evoke.
-    methodologyReason: Articulate Goals requires a named intent with observable success criteria.
+    frameworkReason: Articulate Goals requires a named intent with observable success criteria.
     examples:
       - calm atmospheric depth
       - energetic beat-anticipating shimmer
@@ -175,7 +175,7 @@ argumentSuggestions:
   - name: surface_scope
     type: string
     description: Which layer the idea touches — bridge tokens, atmospheric effect, focal zone, or canvas field.
-    methodologyReason: Anchor to Surfaces requires knowing whether bulk color (bridge) or effects/transparency (global/dom-targets) is in scope.
+    frameworkReason: Anchor to Surfaces requires knowing whether bulk color (bridge) or effects/transparency (global/dom-targets) is in scope.
     examples:
       - bridge token recolor
       - canvas radiance field

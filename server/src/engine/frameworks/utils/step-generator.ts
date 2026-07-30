@@ -23,7 +23,7 @@ export interface ExecutionStepDefinition {
   id: string;
   name: string;
   action: string;
-  methodologyPhase: string;
+  frameworkPhase: string;
   dependencies: string[];
   expected_output: string;
 }
@@ -63,7 +63,7 @@ export interface ProcessingStepDefinition {
   id: string;
   name: string;
   description: string;
-  methodologyBasis: string;
+  frameworkBasis: string;
   order: number;
   required: boolean;
   /** Section header for detection (e.g., "## Context") */
@@ -95,7 +95,7 @@ export function generateProcessingSteps(steps: ProcessingStepDefinition[]): Proc
       id: step.id,
       name: step.name,
       description: step.description,
-      methodologyBasis: step.methodologyBasis,
+      frameworkBasis: step.frameworkBasis,
       order: step.order,
       required: step.required,
       ...(step.section_header && { section_header: step.section_header }),
@@ -113,7 +113,7 @@ export function generateExecutionSteps(steps: ExecutionStepDefinition[]): Execut
     id: step.id,
     name: step.name,
     action: step.action,
-    methodologyPhase: step.methodologyPhase,
+    frameworkPhase: step.frameworkPhase,
     dependencies: step.dependencies || [],
     expected_output: step.expected_output,
   }));
