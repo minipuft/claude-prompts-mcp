@@ -1,9 +1,9 @@
-# Methodology Builder Script Tool Configuration
-# Validates and transforms methodology definitions for resource_manager
+# Framework Builder Script Tool Configuration
+# Validates and transforms framework definitions for resource_manager
 
-id: methodology_builder
-name: Methodology Builder
-description: Validates comprehensive methodology definitions and prepares them for resource_manager execution
+id: framework_builder
+name: Framework Builder
+description: Validates comprehensive framework definitions and prepares them for resource_manager execution
 runtime: python
 script: script.py
 timeout: 30000

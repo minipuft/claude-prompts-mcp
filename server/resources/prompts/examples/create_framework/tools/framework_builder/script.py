@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Methodology Builder Validation Script
+Framework Builder Validation Script
 
-Validates methodology definitions and prepares auto-execute payload for resource_manager.
+Validates framework definitions and prepares auto-execute payload for resource_manager.
 Uses only Python stdlib for maximum portability.
 
 Scoring System (5 Tiers = 100%):
@@ -12,7 +12,7 @@ Scoring System (5 Tiers = 100%):
 - Tier 4: Execution (15%) - processing_steps, execution_steps
 - Tier 5: Advanced (10%) - tool_descriptions, quality_indicators, execution_flow, judge_prompt
 
-ENFORCEMENT: Methodology creation requires 100% score (all tiers complete).
+ENFORCEMENT: Framework creation requires 100% score (all tiers complete).
 """
 
 import json
@@ -82,13 +82,13 @@ def validate_tier1_foundation(data: dict[str, Any]) -> tuple[int, list[str]]:
 def validate_tier2_quality(data: dict[str, Any]) -> tuple[int, list[str]]:
     """Validate Tier 2: Quality Validation (20% total).
 
-    - Methodology Gates (15%): ≥2 gates, each with ≥2 validationCriteria
+    - Framework Gates (15%): ≥2 gates, each with ≥2 validationCriteria
     - Gates Include (5%): gates.include with ≥1 gate ID
     """
     score = 0
     missing = []
 
-    # Methodology Gates (15%)
+    # Framework Gates (15%)
     gates = data.get('methodology_gates', [])
     if not isinstance(gates, list):
         missing.append("[Tier 2 - Gates] methodology_gates must be an array")
@@ -121,14 +121,14 @@ def validate_tier2_quality(data: dict[str, Any]) -> tuple[int, list[str]]:
 def validate_tier3_authoring(data: dict[str, Any]) -> tuple[int, list[str]]:
     """Validate Tier 3: Authoring Support (25% total).
 
-    - Methodology Elements (10%): requiredSections ≥2, sectionDescriptions ≥3
-    - Argument Suggestions (8%): ≥2 args with methodologyReason
-    - Template Suggestions (7%): ≥1 with methodologyJustification
+    - Framework Elements (10%): requiredSections ≥2, sectionDescriptions ≥3
+    - Argument Suggestions (8%): ≥2 args with frameworkReason
+    - Template Suggestions (7%): ≥1 with frameworkJustification
     """
     score = 0
     missing = []
 
-    # Methodology Elements (10%)
+    # Framework Elements (10%)
     elements = data.get('methodology_elements', {})
     if not isinstance(elements, dict) or not elements:
         missing.append("[Tier 3 - Elements] Missing methodology_elements")
@@ -151,22 +151,22 @@ def validate_tier3_authoring(data: dict[str, Any]) -> tuple[int, list[str]]:
     if not isinstance(args, list):
         missing.append("[Tier 3 - Arguments] argument_suggestions must be an array")
     else:
-        valid_args = sum(1 for a in args if a.get('methodologyReason'))
+        valid_args = sum(1 for a in args if a.get('frameworkReason'))
         if valid_args >= 2:
             score += 8  # Full points when minimum met
         else:
-            missing.append(f"[Tier 3 - Arguments] Need ≥2 argument_suggestions with methodologyReason (have {valid_args})")
+            missing.append(f"[Tier 3 - Arguments] Need ≥2 argument_suggestions with frameworkReason (have {valid_args})")
 
     # Template Suggestions (7%)
     suggestions = data.get('template_suggestions', [])
     if not isinstance(suggestions, list):
         missing.append("[Tier 3 - Templates] template_suggestions must be an array")
     else:
-        valid = sum(1 for s in suggestions if s.get('methodologyJustification'))
+        valid = sum(1 for s in suggestions if s.get('frameworkJustification'))
         if valid >= 1:
             score += 7  # Full points when minimum met
         else:
-            missing.append(f"[Tier 3 - Templates] Need ≥1 template_suggestion with methodologyJustification (have {valid})")
+            missing.append(f"[Tier 3 - Templates] Need ≥1 template_suggestion with frameworkJustification (have {valid})")
 
     return score, missing
 
@@ -174,7 +174,7 @@ def validate_tier3_authoring(data: dict[str, Any]) -> tuple[int, list[str]]:
 def validate_tier4_execution(data: dict[str, Any]) -> tuple[int, list[str]]:
     """Validate Tier 4: Execution (15% total).
 
-    - Processing Steps (8%): ≥3 steps with order and methodologyBasis
+    - Processing Steps (8%): ≥3 steps with order and frameworkBasis
     - Execution Steps (7%): ≥3 steps with dependencies and expected_output
     """
     score = 0
@@ -185,11 +185,11 @@ def validate_tier4_execution(data: dict[str, Any]) -> tuple[int, list[str]]:
     if not isinstance(processing, list):
         missing.append("[Tier 4 - Processing] processing_steps must be an array")
     else:
-        valid = sum(1 for s in processing if s.get('order') is not None and s.get('methodologyBasis'))
+        valid = sum(1 for s in processing if s.get('order') is not None and s.get('frameworkBasis'))
         if valid >= 3:
             score += 8  # Full points when minimum met
         else:
-            missing.append(f"[Tier 4 - Processing] Need ≥3 processing_steps with order/methodologyBasis (have {valid})")
+            missing.append(f"[Tier 4 - Processing] Need ≥3 processing_steps with order/frameworkBasis (have {valid})")
 
     # Execution Steps (7%)
     execution = data.get('execution_steps', [])
@@ -264,7 +264,7 @@ def validate_tier5_advanced(data: dict[str, Any]) -> tuple[int, list[str]]:
 # =============================================================================
 
 def calculate_completeness_score(data: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    """Calculate methodology completeness score (0-100%) using 5-tier system.
+    """Calculate framework completeness score (0-100%) using 5-tier system.
 
     Returns:
         Tuple of (total_score, details) where details contains per-tier breakdown.
@@ -341,7 +341,7 @@ def validate_phase_consistency(data: dict[str, Any]) -> tuple[list[str], list[st
 
     # Check methodology_gates reference valid phases
     for gate in data.get("methodology_gates", []):
-        area = gate.get("methodologyArea")
+        area = gate.get("frameworkArea")
         if area and area not in valid_references:
             errors.append(
                 f"Gate '{gate.get('id', 'unknown')}' references unknown phase '{area}'. "
@@ -350,11 +350,11 @@ def validate_phase_consistency(data: dict[str, Any]) -> tuple[list[str], list[st
 
     # Check execution_steps reference valid phases
     for step in data.get("execution_steps", []):
-        phase = step.get("methodologyPhase")
+        phase = step.get("frameworkPhase")
         if phase and phase not in valid_references:
             warnings.append(
                 f"Execution step '{step.get('id', 'unknown')}' references "
-                f"unknown methodologyPhase '{phase}'"
+                f"unknown frameworkPhase '{phase}'"
             )
 
     # Check quality_indicators keys match phases
@@ -473,7 +473,7 @@ def validate_processing_steps(data: dict[str, Any]) -> list[str]:
 def build_resource_manager_params(data: dict[str, Any]) -> dict[str, Any]:
     """Transform validated data into resource_manager parameters."""
     params: dict[str, Any] = {
-        "resource_type": "methodology",
+        "resource_type": "framework",
         "action": "create",
         "id": data["id"],
         "name": data["name"],
@@ -510,7 +510,7 @@ def build_resource_manager_params(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_summary(data: dict[str, Any]) -> dict[str, Any]:
-    """Build summary of methodology contents."""
+    """Build summary of framework contents."""
     return {
         "phases": len(data.get("phases", [])),
         "methodology_gates": len(data.get("methodology_gates", [])),
@@ -527,10 +527,10 @@ def build_summary(data: dict[str, Any]) -> dict[str, Any]:
 # MAIN VALIDATION
 # =============================================================================
 
-def validate_methodology(data: dict[str, Any]) -> dict[str, Any]:
+def validate_framework(data: dict[str, Any]) -> dict[str, Any]:
     """Main validation function.
 
-    ENFORCEMENT: Requires 100% score for methodology creation.
+    ENFORCEMENT: Requires 100% score for framework creation.
     """
     errors: list[str] = []
     warnings: list[str] = []
@@ -568,7 +568,7 @@ def validate_methodology(data: dict[str, Any]) -> dict[str, Any]:
             "score": score,
             "level": level,
             "tier_breakdown": score_details['tiers'],
-            "message": f"Methodology creation requires 100% score. Current: {score}% ({level}). "
+            "message": f"Framework creation requires 100% score. Current: {score}% ({level}). "
                        f"Complete all 5 tiers to match CAGEERF standard.",
         }
 
@@ -622,7 +622,7 @@ def main() -> None:
         print(json.dumps(result, indent=2))
         sys.exit(1)
 
-    result = validate_methodology(input_data)
+    result = validate_framework(input_data)
     print(json.dumps(result, indent=2))
 
     # Exit with non-zero status if validation failed

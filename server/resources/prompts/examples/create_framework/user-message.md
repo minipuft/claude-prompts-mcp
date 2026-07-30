@@ -1,37 +1,37 @@
-# Create Methodology
+# Create Framework
 
 ## System Message
 
-You are a framework architect specializing in methodology design for the Claude Prompts MCP system. Your task is to create production-quality execution methodologies that match the standards of existing frameworks like CAGEERF and ReACT.
+You are a framework architect specializing in framework design for the Claude Prompts MCP system. Your task is to create production-quality execution frameworks that match the standards of existing frameworks like CAGEERF and ReACT.
 
 ## User Message
 
-{% if tool_methodology_builder %}
-{# Auto-execute workflow: methodology_input was provided and validated #}
+{% if tool_framework_builder %}
+{# Auto-execute workflow: framework_input was provided and validated #}
 
-{% if tool_methodology_builder.valid %}
-{% if tool_methodology_builder_result %}
+{% if tool_framework_builder.valid %}
+{% if tool_framework_builder_result %}
 {# Auto-execute completed successfully #}
 
-## ✅ Methodology Created Successfully
+## ✅ Framework Created Successfully
 
-{{ tool_methodology_builder_result.text }}
+{{ tool_framework_builder_result.text }}
 
 **Summary:**
 
-- **ID:** `{{ tool_methodology_builder.auto_execute.params.id }}`
-- **Name:** {{ tool_methodology_builder.auto_execute.params.name }}
-- **Phases:** {{ tool_methodology_builder.summary.phases }}
-- **Methodology Gates:** {{ tool_methodology_builder.summary.methodology_gates }}
-- **Processing Steps:** {{ tool_methodology_builder.summary.processing_steps }}
-- **Execution Steps:** {{ tool_methodology_builder.summary.execution_steps }}
-- **Quality Indicator Phases:** {{ tool_methodology_builder.summary.quality_indicator_phases }}
+- **ID:** `{{ tool_framework_builder.auto_execute.params.id }}`
+- **Name:** {{ tool_framework_builder.auto_execute.params.name }}
+- **Phases:** {{ tool_framework_builder.summary.phases }}
+- **Framework Gates:** {{ tool_framework_builder.summary.methodology_gates }}
+- **Processing Steps:** {{ tool_framework_builder.summary.processing_steps }}
+- **Execution Steps:** {{ tool_framework_builder.summary.execution_steps }}
+- **Quality Indicator Phases:** {{ tool_framework_builder.summary.quality_indicator_phases }}
 
-{% if tool_methodology_builder.warnings | length > 0 %}
+{% if tool_framework_builder.warnings | length > 0 %}
 
 ### ⚠️ Warnings (non-blocking)
 
-{% for warning in tool_methodology_builder.warnings %}
+{% for warning in tool_framework_builder.warnings %}
 
 - {{ warning }}
   {% endfor %}
@@ -39,25 +39,25 @@ You are a framework architect specializing in methodology design for the Claude 
 
 **Next Steps:**
 
-1. Enable the methodology: `resource_manager(resource_type:"methodology", action:"switch", id:"{{ tool_methodology_builder.auto_execute.params.id }}")`
-2. Test with a prompt: `prompt_engine(">>your_prompt @{{ tool_methodology_builder.auto_execute.params.id | upper }}")`
+1. Enable the framework: `resource_manager(resource_type:"framework", action:"switch", id:"{{ tool_framework_builder.auto_execute.params.id }}")`
+2. Test with a prompt: `prompt_engine(">>your_prompt @{{ tool_framework_builder.auto_execute.params.id | upper }}")`
 
 {% else %}
 {# Validation passed but auto-execute not available #}
 
-## ✅ Methodology Validated
+## ✅ Framework Validated
 
-The methodology definition passed validation. Call `resource_manager` with the following parameters:
+The framework definition passed validation. Call `resource_manager` with the following parameters:
 
 ```json
-{{ tool_methodology_builder.auto_execute.params | dump(2) }}
+{{ tool_framework_builder.auto_execute.params | dump(2) }}
 ```
 
-{% if tool_methodology_builder.warnings | length > 0 %}
+{% if tool_framework_builder.warnings | length > 0 %}
 
 ### ⚠️ Warnings (non-blocking)
 
-{% for warning in tool_methodology_builder.warnings %}
+{% for warning in tool_framework_builder.warnings %}
 
 - {{ warning }}
   {% endfor %}
@@ -69,48 +69,48 @@ The methodology definition passed validation. Call `resource_manager` with the f
 
 ## ❌ Validation Failed
 
-The methodology definition has errors that need to be fixed:
+The framework definition has errors that need to be fixed:
 
-{% for error in tool_methodology_builder.errors %}
+{% for error in tool_framework_builder.errors %}
 
 - {{ error }}
   {% endfor %}
 
-{% if tool_methodology_builder.tier_breakdown %}
+{% if tool_framework_builder.tier_breakdown %}
 
 ### Tier Breakdown
 
-| Tier                                      | Score                                                                | Max                                                                |
-| ----------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Foundation (metadata, guidance, phases)   | {{ tool_methodology_builder.tier_breakdown.tier1_foundation.score }} | {{ tool_methodology_builder.tier_breakdown.tier1_foundation.max }} |
-| Quality (gates, include)                  | {{ tool_methodology_builder.tier_breakdown.tier2_quality.score }}    | {{ tool_methodology_builder.tier_breakdown.tier2_quality.max }}    |
-| Authoring (elements, args, templates)     | {{ tool_methodology_builder.tier_breakdown.tier3_authoring.score }}  | {{ tool_methodology_builder.tier_breakdown.tier3_authoring.max }}  |
-| Execution (processing, execution steps)   | {{ tool_methodology_builder.tier_breakdown.tier4_execution.score }}  | {{ tool_methodology_builder.tier_breakdown.tier4_execution.max }}  |
-| Advanced (tools, indicators, flow, judge) | {{ tool_methodology_builder.tier_breakdown.tier5_advanced.score }}   | {{ tool_methodology_builder.tier_breakdown.tier5_advanced.max }}   |
-| **Total**                                 | **{{ tool_methodology_builder.score }}**                             | **100**                                                            |
+| Tier                                      | Score                                                              | Max                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Foundation (metadata, guidance, phases)   | {{ tool_framework_builder.tier_breakdown.tier1_foundation.score }} | {{ tool_framework_builder.tier_breakdown.tier1_foundation.max }} |
+| Quality (gates, include)                  | {{ tool_framework_builder.tier_breakdown.tier2_quality.score }}    | {{ tool_framework_builder.tier_breakdown.tier2_quality.max }}    |
+| Authoring (elements, args, templates)     | {{ tool_framework_builder.tier_breakdown.tier3_authoring.score }}  | {{ tool_framework_builder.tier_breakdown.tier3_authoring.max }}  |
+| Execution (processing, execution steps)   | {{ tool_framework_builder.tier_breakdown.tier4_execution.score }}  | {{ tool_framework_builder.tier_breakdown.tier4_execution.max }}  |
+| Advanced (tools, indicators, flow, judge) | {{ tool_framework_builder.tier_breakdown.tier5_advanced.score }}   | {{ tool_framework_builder.tier_breakdown.tier5_advanced.max }}   |
+| **Total**                                 | **{{ tool_framework_builder.score }}**                             | **100**                                                          |
 
 {% endif %}
 
-{% if tool_methodology_builder.warnings | length > 0 %}
+{% if tool_framework_builder.warnings | length > 0 %}
 
 ### ⚠️ Warnings
 
-{% for warning in tool_methodology_builder.warnings %}
+{% for warning in tool_framework_builder.warnings %}
 
 - {{ warning }}
   {% endfor %}
   {% endif %}
 
-**Methodology creation requires 100% score.** Complete all 5 tiers to match CAGEERF standard.
+**Framework creation requires 100% score.** Complete all 5 tiers to match CAGEERF standard.
 
-Please fix the errors above and try again with corrected `methodology_input`.
+Please fix the errors above and try again with corrected `framework_input`.
 
 {% endif %}
 
 {% else %}
-{# Design workflow: no methodology_input provided, guide LLM to design #}
+{# Design workflow: no framework_input provided, guide LLM to design #}
 
-Create a new methodology framework with the following specifications:
+Create a new framework framework with the following specifications:
 
 **Name:** {{name}}
 **Core Concept:** {{concept}}
@@ -118,11 +118,11 @@ Create a new methodology framework with the following specifications:
 
 ---
 
-## Reference: Existing Methodology Examples
+## Reference: Existing Framework Examples
 
 ### Example 1: CAGEERF (Complete Reference)
 
-**methodology.yaml fields:**
+**framework.yaml fields:**
 
 ```yaml
 id: cageerf
@@ -132,7 +132,7 @@ version: '1.0.0'
 enabled: true
 
 systemPromptGuidance: |
-  Apply the C.A.G.E.E.R.F methodology systematically:
+  Apply the C.A.G.E.E.R.F framework systematically:
 
   **Context**: Establish comprehensive situational awareness and environmental factors
   **Analysis**: Apply structured, systematic examination of the problem or opportunity
@@ -145,11 +145,11 @@ gates:
   include:
     - framework-compliance
 
-methodologyGates:
+frameworkGates:
   - id: context_completeness
     name: Context Completeness
     description: Verify comprehensive situational context is established
-    methodologyArea: Context
+    frameworkArea: Context
     priority: high
     validationCriteria:
       - Environmental factors identified
@@ -159,7 +159,7 @@ methodologyGates:
   - id: analysis_depth
     name: Analysis Depth
     description: Ensure systematic and thorough analytical approach
-    methodologyArea: Analysis
+    frameworkArea: Analysis
     priority: high
     validationCriteria:
       - Multiple perspectives considered
@@ -169,12 +169,12 @@ methodologyGates:
 templateSuggestions:
   - section: system
     type: addition
-    description: Add methodology guidance
-    content: Apply the C.A.G.E.E.R.F methodology systematically.
-    methodologyJustification: Ensures systematic application of principles
+    description: Add framework guidance
+    content: Apply the C.A.G.E.E.R.F framework systematically.
+    frameworkJustification: Ensures systematic application of principles
     impact: high
 
-methodologyElements:
+frameworkElements:
   requiredSections:
     - Context
     - Analysis
@@ -193,7 +193,7 @@ argumentSuggestions:
   - name: context
     type: string
     description: Situational context and background information
-    methodologyReason: Context phase requires clear situational awareness
+    frameworkReason: Context phase requires clear situational awareness
     examples:
       - business context
       - technical environment
@@ -211,7 +211,7 @@ processingSteps:
   - id: context_establishment
     name: Context Establishment
     description: Establish clear situational context and environmental awareness
-    methodologyBasis: CAGEERF Context phase
+    frameworkBasis: CAGEERF Context phase
     order: 1
     required: true
     marker: '## Context'
@@ -223,7 +223,7 @@ processingSteps:
   - id: systematic_analysis
     name: Systematic Analysis
     description: Apply structured analytical approach to the problem
-    methodologyBasis: CAGEERF Analysis phase
+    frameworkBasis: CAGEERF Analysis phase
     order: 2
     required: true
     marker: '## Analysis'
@@ -237,25 +237,25 @@ executionSteps:
   - id: context_analysis
     name: Context Analysis
     action: Analyze situational context and environmental factors
-    methodologyPhase: Context
+    frameworkPhase: Context
     dependencies: []
     expected_output: Comprehensive situational understanding
 
   - id: systematic_examination
     name: Systematic Examination
     action: Apply structured analytical approach
-    methodologyPhase: Analysis
+    frameworkPhase: Analysis
     dependencies:
       - context_analysis
     expected_output: Detailed problem or opportunity analysis
 
 templateEnhancements:
   systemPromptAdditions:
-    - Apply methodology systematically
+    - Apply framework systematically
     - Begin with contextual establishment
     - Follow structured analytical approach
   userPromptModifications:
-    - Structure response using methodology phases
+    - Structure response using framework phases
     - Provide explicit reasoning for each phase
   contextualHints:
     - Consider environmental factors and constraints
@@ -297,7 +297,7 @@ qualityIndicators:
 
 ## Schema Reference
 
-### methodology.yaml Fields
+### framework.yaml Fields
 
 | Field                    | Type   | Required | Description                               |
 | ------------------------ | ------ | -------- | ----------------------------------------- |
@@ -316,7 +316,7 @@ qualityIndicators:
 
 | Field                   | Type   | Description                                    |
 | ----------------------- | ------ | ---------------------------------------------- |
-| `processing_steps`      | array  | Steps with order, required, methodologyBasis   |
+| `processing_steps`      | array  | Steps with order, required, frameworkBasis     |
 | `execution_steps`       | array  | Steps with dependencies, expected_output       |
 | `template_enhancements` | object | systemPromptAdditions, userPromptModifications |
 | `execution_flow`        | object | pre/post processing hooks                      |
@@ -351,28 +351,28 @@ Processing steps can include `marker` + `assertions` for deterministic output ve
 
 Based on **{{name}}** with concept "{{concept}}":
 
-1. **Design phases** ({% if phase_count %}{{phase_count}}{% else %}5-7{% endif %} phases) forming a coherent methodology
+1. **Design phases** ({% if phase_count %}{{phase_count}}{% else %}5-7{% endif %} phases) forming a coherent framework
 2. **Write system_prompt_guidance** with `**PhaseName**: description` format
 3. **Define methodology_gates** with validationCriteria for each phase
-4. **Create processing_steps** with order, required, methodologyBasis, marker, and assertions
+4. **Create processing_steps** with order, required, frameworkBasis, marker, and assertions
 5. **Create execution_steps** with dependencies and expected_output
 6. **Add assertions** to required processing steps: `marker` for section detection + `assertions` for deterministic checks (required, min_length, contains_any, forbids)
 
 ---
 
-## How to Create the Methodology
+## How to Create the Framework
 
-Make a **second `prompt_engine` call** to `>>create_methodology` with all fields in the `options` parameter. The script tool will automatically detect the schema match and create the methodology files.
+Make a **second `prompt_engine` call** to `>>create_framework` with all fields in the `options` parameter. The script tool will automatically detect the schema match and create the framework files.
 
 **Example call:**
 
 ```text
 prompt_engine(
-  command: ">>create_methodology",
+  command: ">>create_framework",
   options: {
-    "id": "your-methodology-id",
-    "name": "Your Methodology Name",
-    "system_prompt_guidance": "Apply the methodology...\n\n**Phase1**: Description\n**Phase2**: Description",
+    "id": "your-framework-id",
+    "name": "Your Framework Name",
+    "system_prompt_guidance": "Apply the framework...\n\n**Phase1**: Description\n**Phase2**: Description",
     "phases": [...],
     "methodology_gates": [...],
     "processing_steps": [...],
@@ -386,7 +386,7 @@ prompt_engine(
 
 ## 5-Tier Completeness Requirements (100% Required)
 
-Methodology creation requires 100% score. All 5 tiers must be complete.
+Framework creation requires 100% score. All 5 tiers must be complete.
 
 ### Tier 1: Foundation (30%)
 
@@ -412,14 +412,14 @@ Methodology creation requires 100% score. All 5 tiers must be complete.
 | Field                  | Type   | Requirement                                     |
 | ---------------------- | ------ | ----------------------------------------------- |
 | `methodology_elements` | object | `requiredSections` ≥2, `sectionDescriptions` ≥3 |
-| `argument_suggestions` | array  | ≥2 args with `methodologyReason`                |
-| `template_suggestions` | array  | ≥1 with `methodologyJustification`              |
+| `argument_suggestions` | array  | ≥2 args with `frameworkReason`                  |
+| `template_suggestions` | array  | ≥1 with `frameworkJustification`                |
 
 ### Tier 4: Execution (15%)
 
 | Field              | Type  | Requirement                                                          |
 | ------------------ | ----- | -------------------------------------------------------------------- |
-| `processing_steps` | array | ≥3 steps with `order` and `methodologyBasis`                         |
+| `processing_steps` | array | ≥3 steps with `order` and `frameworkBasis`                           |
 | `processing_steps` | —     | Required steps should include `marker` + `assertions` for validation |
 | `execution_steps`  | array | ≥3 steps with `dependencies` and `expected_output`                   |
 
@@ -440,7 +440,7 @@ Methodology creation requires 100% score. All 5 tiers must be complete.
 {
   "id": "<lowercase-hyphenated>",
   "name": "<Human Readable Name>",
-  "system_prompt_guidance": "Apply the <NAME> methodology systematically:\n\n**Phase1**: Description\n**Phase2**: Description\n...",
+  "system_prompt_guidance": "Apply the <NAME> framework systematically:\n\n**Phase1**: Description\n**Phase2**: Description\n...",
   "phases": [
     { "id": "phase_1_snake", "name": "Phase 1 Name", "description": "What this phase accomplishes" }
   ],
@@ -452,7 +452,7 @@ Methodology creation requires 100% score. All 5 tiers must be complete.
       "id": "phase_1_quality",
       "name": "Phase 1 Quality",
       "description": "Verify phase 1 requirements are met",
-      "methodologyArea": "Phase1",
+      "frameworkArea": "Phase1",
       "priority": "high",
       "validationCriteria": ["Criteria 1", "Criteria 2"]
     }
@@ -462,7 +462,7 @@ Methodology creation requires 100% score. All 5 tiers must be complete.
       "id": "phase_1_processing",
       "name": "Phase 1 Processing",
       "description": "Process phase 1 requirements",
-      "methodologyBasis": "<NAME> Phase 1",
+      "frameworkBasis": "<NAME> Phase 1",
       "order": 1,
       "required": true,
       "marker": "## Phase 1",
@@ -478,13 +478,13 @@ Methodology creation requires 100% score. All 5 tiers must be complete.
       "id": "phase_1_execution",
       "name": "Phase 1 Execution",
       "action": "Execute phase 1 activities",
-      "methodologyPhase": "Phase1",
+      "frameworkPhase": "Phase1",
       "dependencies": [],
       "expected_output": "Phase 1 deliverables"
     }
   ],
   "template_enhancements": {
-    "systemPromptAdditions": ["Apply methodology systematically"],
+    "systemPromptAdditions": ["Apply framework systematically"],
     "userPromptModifications": ["Structure response using phases"],
     "contextualHints": ["Consider constraints and factors"]
   },
@@ -503,9 +503,9 @@ Methodology creation requires 100% score. All 5 tiers must be complete.
     {
       "section": "system",
       "type": "addition",
-      "description": "Add methodology guidance to system prompt",
-      "content": "Apply methodology systematically",
-      "methodologyJustification": "Ensures consistent application",
+      "description": "Add framework guidance to system prompt",
+      "content": "Apply framework systematically",
+      "frameworkJustification": "Ensures consistent application",
       "impact": "high"
     }
   ],
@@ -522,7 +522,7 @@ Methodology creation requires 100% score. All 5 tiers must be complete.
       "name": "context",
       "type": "string",
       "description": "Background context",
-      "methodologyReason": "Phase 1 requires clear context",
+      "frameworkReason": "Phase 1 requires clear context",
       "examples": ["business context", "technical environment"]
     }
   ],
@@ -544,7 +544,7 @@ Methodology creation requires 100% score. All 5 tiers must be complete.
       }
     }
   },
-  "judge_prompt": "You are evaluating compliance with YOUR_FRAMEWORK methodology..."
+  "judge_prompt": "You are evaluating compliance with YOUR_FRAMEWORK framework..."
 }
 ```
 
@@ -553,7 +553,7 @@ Methodology creation requires 100% score. All 5 tiers must be complete.
 - Phase IDs: snake_case (e.g., `context_establishment`)
 - System prompt guidance: Use `**PhaseName**: description` format
 - methodology_gates: One per major phase with `validationCriteria` array
-- processing_steps: Ordered with `methodologyBasis` linking to phase
+- processing_steps: Ordered with `frameworkBasis` linking to phase
 - processing_steps: Include `marker` + `assertions` for deterministic phase verification (at least on required phases)
 - execution_steps: With `dependencies` array (empty for first step)
 

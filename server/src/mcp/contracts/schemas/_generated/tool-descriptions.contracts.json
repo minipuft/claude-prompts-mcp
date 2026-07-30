@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-07-30T20:01:15.750Z",
+  "lastUpdated": "2026-07-30T22:48:03.836Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -30,7 +30,7 @@
       ]
     },
     "resource_manager": {
-      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks, checkpoints.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | checkpoint\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare | clear\n\nUPDATE: update(id, description:\"new\") — only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\nCHECKPOINT: create (save state), rollback (restore), list (show all), delete (remove), clear (remove all)\n\nCREATION GUIDES:\n• >>create_methodology - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
+      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks, checkpoints.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | checkpoint\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare | clear\n\nUPDATE: update(id, description:\"new\") — only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\nCHECKPOINT: create (save state), rollback (restore), list (show all), delete (remove), clear (remove all)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
       "shortDescription": "Manage prompts, gates, methodologies, and checkpoints",
       "category": "management",
       "parameters": {

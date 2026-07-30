@@ -303,8 +303,8 @@ export class StepExecutionStage extends BasePipelineStage {
    * Auto-execute results are exposed as {{tool_<id>_result}} in templates.
    *
    * For example:
-   * - A tool with id 'methodology_builder' would be available as {{tool_methodology_builder}}
-   * - Its auto-execute result would be available as {{tool_methodology_builder_result}}
+   * - A tool with id 'framework_builder' would be available as {{tool_framework_builder}}
+   * - Its auto-execute result would be available as {{tool_framework_builder_result}}
    */
   private buildTemplateArgs(context: ExecutionContext): Record<string, unknown> {
     const baseArgs = context.getPromptArgs();

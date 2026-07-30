@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Methodology Builder Input",
-  "description": "Comprehensive schema for methodology definitions with all CAGEERF-level fields",
+  "title": "Framework Builder Input",
+  "description": "Comprehensive schema for framework definitions with all CAGEERF-level fields",
   "type": "object",
   "properties": {
     "id": {
@@ -26,11 +26,11 @@
     },
     "enabled": {
       "type": "boolean",
-      "description": "Whether the methodology is enabled (set to true)"
+      "description": "Whether the framework is enabled (set to true)"
     },
     "description": {
       "type": "string",
-      "description": "Brief description of the methodology's purpose"
+      "description": "Brief description of the framework's purpose"
     },
     "system_prompt_guidance": {
       "type": "string",
@@ -42,7 +42,7 @@
       "type": "array",
       "minItems": 2,
       "maxItems": 10,
-      "description": "Core methodology phases (minimum 2, maximum 10)",
+      "description": "Core framework phases (minimum 2, maximum 10)",
       "items": {
         "type": "object",
         "properties": {
@@ -83,7 +83,7 @@
 
     "methodology_gates": {
       "type": "array",
-      "description": "Methodology-specific quality gates with validation criteria",
+      "description": "Framework-specific quality gates with validation criteria",
       "items": {
         "type": "object",
         "properties": {
@@ -100,7 +100,7 @@
             "type": "string",
             "description": "What this gate validates"
           },
-          "methodologyArea": {
+          "frameworkArea": {
             "type": "string",
             "description": "Which phase/area this gate validates (must match a phase name)"
           },
@@ -116,7 +116,7 @@
             "description": "Criteria that must be met for this gate to pass (minimum 2 required)"
           }
         },
-        "required": ["id", "name", "methodologyArea", "validationCriteria"]
+        "required": ["id", "name", "frameworkArea", "validationCriteria"]
       }
     },
 
@@ -144,9 +144,9 @@
             "type": "string",
             "description": "The content to add or modify"
           },
-          "methodologyJustification": {
+          "frameworkJustification": {
             "type": "string",
-            "description": "Why this enhancement supports the methodology"
+            "description": "Why this enhancement supports the framework"
           },
           "impact": {
             "type": "string",
@@ -160,7 +160,7 @@
 
     "methodology_elements": {
       "type": "object",
-      "description": "Required and optional sections for methodology compliance",
+      "description": "Required and optional sections for framework compliance",
       "properties": {
         "requiredSections": {
           "type": "array",
@@ -182,7 +182,7 @@
 
     "argument_suggestions": {
       "type": "array",
-      "description": "Suggested arguments for prompts using this methodology",
+      "description": "Suggested arguments for prompts using this framework",
       "items": {
         "type": "object",
         "properties": {
@@ -199,9 +199,9 @@
             "type": "string",
             "description": "What this argument provides"
           },
-          "methodologyReason": {
+          "frameworkReason": {
             "type": "string",
-            "description": "Why this argument supports the methodology"
+            "description": "Why this argument supports the framework"
           },
           "examples": {
             "type": "array",
@@ -215,7 +215,7 @@
 
     "processing_steps": {
       "type": "array",
-      "description": "Ordered steps for methodology processing",
+      "description": "Ordered steps for framework processing",
       "items": {
         "type": "object",
         "properties": {
@@ -232,9 +232,9 @@
             "type": "string",
             "description": "What this step does"
           },
-          "methodologyBasis": {
+          "frameworkBasis": {
             "type": "string",
-            "description": "Which methodology phase this step implements"
+            "description": "Which framework phase this step implements"
           },
           "order": {
             "type": "integer",
@@ -269,7 +269,7 @@
             "type": "string",
             "description": "What action to perform"
           },
-          "methodologyPhase": {
+          "frameworkPhase": {
             "type": "string",
             "description": "Which phase this step belongs to"
           },

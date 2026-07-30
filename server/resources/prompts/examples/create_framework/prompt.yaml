@@ -1,12 +1,12 @@
-id: create_methodology
-name: Create Methodology
+id: create_framework
+name: Create Framework
 description: Guided framework creation with examples from CAGEERF, ReACT. Outputs structured JSON for resource_manager.
 category: framework-authoring
 userMessageTemplateFile: user-message.md
 
 # Script tools for validation and auto-execution
 tools:
-  - methodology_builder
+  - framework_builder
 
 arguments:
   # Design workflow arguments
@@ -38,7 +38,7 @@ arguments:
     required: false
   - name: enabled
     type: boolean
-    description: Whether the methodology is enabled (set to true)
+    description: Whether the framework is enabled (set to true)
     required: false
   - name: system_prompt_guidance
     type: string

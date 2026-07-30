@@ -37,8 +37,8 @@ const wordCountTool: LoadedScriptTool = {
 };
 
 const frameworkBuilderTool: LoadedScriptTool = {
-  id: 'methodology_builder',
-  name: 'Methodology Builder',
+  id: 'framework_builder',
+  name: 'Framework Builder',
   description: 'Validates methodology definitions',
   scriptPath: 'script.py',
   runtime: 'python',
@@ -50,10 +50,10 @@ const frameworkBuilderTool: LoadedScriptTool = {
     },
     required: ['name', 'methodology'],
   },
-  toolDir: '/prompts/framework-authoring/create_methodology/tools/methodology_builder',
+  toolDir: '/prompts/framework-authoring/create_framework/tools/framework_builder',
   absoluteScriptPath:
-    '/prompts/framework-authoring/create_methodology/tools/methodology_builder/script.py',
-  promptId: 'create_methodology',
+    '/prompts/framework-authoring/create_framework/tools/framework_builder/script.py',
+  promptId: 'create_framework',
   descriptionContent: 'Builds frameworks',
   enabled: true,
   execution: {
@@ -135,7 +135,7 @@ function runTests() {
     const filterResult = modeService.filterByExecutionMode(
       test3Matches,
       [frameworkBuilderTool],
-      'create_methodology'
+      'create_framework'
     );
     console.log('Filter result:');
     console.log('  Ready for execution:', filterResult.readyForExecution.length);
@@ -144,7 +144,7 @@ function runTests() {
 
     if (filterResult.requiresConfirmation) {
       console.log('Confirmation message:', filterResult.pendingConfirmation[0]?.message);
-      const response = modeService.buildConfirmationResponse(filterResult, 'create_methodology');
+      const response = modeService.buildConfirmationResponse(filterResult, 'create_framework');
       console.log('Resume command:', response.resumeCommand);
       console.log('✅ PASS - Tool requires confirmation as expected');
     } else {
@@ -161,13 +161,11 @@ function runTests() {
     {
       name: 'TestMethod',
       methodology: 'TEST',
-      'tool:methodology_builder': true, // Explicit request
+      'tool:framework_builder': true, // Explicit request
     },
     [frameworkBuilderTool]
   );
-  console.log(
-    'Args: { name: "TestMethod", methodology: "TEST", "tool:methodology_builder": true }'
-  );
+  console.log('Args: { name: "TestMethod", methodology: "TEST", "tool:framework_builder": true }');
   console.log('Matches:', test4Matches.length);
   if (test4Matches.length > 0) {
     console.log('  Explicit:', test4Matches[0].explicitRequest);
@@ -175,7 +173,7 @@ function runTests() {
     const filterResult = modeService.filterByExecutionMode(
       test4Matches,
       [frameworkBuilderTool],
-      'create_methodology'
+      'create_framework'
     );
     console.log('Filter result:');
     console.log('  Ready for execution:', filterResult.readyForExecution.length);

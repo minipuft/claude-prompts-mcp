@@ -1,20 +1,20 @@
-# Methodology Builder
+# Framework Builder
 
-Validates and transforms methodology definitions for automatic creation via `resource_manager`.
+Validates and transforms framework definitions for automatic creation via `resource_manager`.
 
 ## Purpose
 
-This tool bridges the gap between methodology design and creation by:
+This tool bridges the gap between framework design and creation by:
 
-1. Validating all methodology fields against a comprehensive schema
+1. Validating all framework fields against a comprehensive schema
 2. Checking phase consistency (gates reference valid phases, etc.)
 3. Validating regex patterns in quality indicators
 4. Ensuring execution step dependencies are acyclic
-5. Preparing the auto-execute payload for seamless methodology creation
+5. Preparing the auto-execute payload for seamless framework creation
 
 ## Input
 
-A complete methodology definition matching the CAGEERF quality standard:
+A complete framework definition matching the CAGEERF quality standard:
 
 | Field                    | Required | Description                               |
 | ------------------------ | -------- | ----------------------------------------- |
@@ -23,7 +23,7 @@ A complete methodology definition matching the CAGEERF quality standard:
 | `system_prompt_guidance` | Yes      | Multiline guidance with **Phase**: format |
 | `phases`                 | Yes      | Array of phase definitions (min 2)        |
 | `methodology_gates`      | No       | Quality gates with validation criteria    |
-| `processing_steps`       | No       | Ordered methodology processing steps      |
+| `processing_steps`       | No       | Ordered framework processing steps        |
 | `execution_steps`        | No       | Steps with dependency graph               |
 | `quality_indicators`     | No       | Keywords/patterns per phase               |
 | `template_suggestions`   | No       | Prompt enhancement suggestions            |
@@ -38,7 +38,7 @@ A complete methodology definition matching the CAGEERF quality standard:
   "auto_execute": {
     "tool": "resource_manager",
     "params": {
-      "resource_type": "methodology",
+      "resource_type": "framework",
       "action": "create",
       "id": "...",
       ...all validated fields...
@@ -57,7 +57,7 @@ A complete methodology definition matching the CAGEERF quality standard:
 
 ## Validation Rules
 
-1. **Phase Consistency**: All `methodologyArea` references in gates must match a defined phase
+1. **Phase Consistency**: All `frameworkArea` references in gates must match a defined phase
 2. **Execution Dependencies**: Dependencies must reference valid step IDs (no circular dependencies)
 3. **Regex Patterns**: All patterns in `quality_indicators` must be valid regular expressions
 4. **ID Format**: IDs must be snake_case or lowercase-hyphenated as appropriate
@@ -65,8 +65,8 @@ A complete methodology definition matching the CAGEERF quality standard:
 
 ## Auto-Execute
 
-When validation passes, the tool outputs `auto_execute` metadata that triggers automatic `resource_manager` call without requiring an LLM round-trip. This creates the methodology immediately.
+When validation passes, the tool outputs `auto_execute` metadata that triggers automatic `resource_manager` call without requiring an LLM round-trip. This creates the framework immediately.
 
 ## Usage
 
-This tool is automatically triggered when the `create_methodology` prompt is executed with methodology design input.
+This tool is automatically triggered when the `create_framework` prompt is executed with framework design input.
