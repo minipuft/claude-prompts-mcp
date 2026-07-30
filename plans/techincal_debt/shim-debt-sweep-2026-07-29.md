@@ -791,7 +791,51 @@ consumers repointed, and the loser deleted — one commit per pair.
 | 1     | 72 non-colliding tokens (`src/`, `tests/`) + resource YAML field names                                                                                                       | **✓ DONE** — 602 + 189 replacements, full gate green                                                             |
 | 2     | 7 colliding pairs adjudicated — **only 2 were duplicates**; see ruling below                                                                                                 | **✓ DONE** — 81 replacements / 27 files, typecheck 0, 1696 tests, `validate:all` 0, `validate:arch` 0, `build` 0 |
 | 3     | On-disk resource dir + filenames + path constants (**3a**), then `resource_type` enum value, contracts, router, indexer, skills-sync, version-history discriminator (**3b**) | **✓ DONE** — 2 commits; all 8 frameworks verified loading from the new path; full gate green                     |
-| 4     | `docs/`, `CLAUDE.md`, `>>create_methodology` prompt id, then `scripts/validate-no-methodology-vocab.js` + registration                                                       | ☐                                                                                                                |
+| 4     | `docs/`, `CLAUDE.md`, `>>create_methodology` prompt id, then `scripts/validate-no-methodology-vocab.js` + registration                                                       | **◐ 2026-07-30** — 7 commits; scope was badly understated, see below. Guard (3.10) BLOCKED                       |
+
+#### Stage 4 outcome: it was not a docs pass — three live regressions came out of it
+
+Stage 4 was written as "docs, CLAUDE.md, one prompt id, then a guard". Measuring first found
+**three functional regressions the earlier stages had introduced and nobody had caught**, because
+each fails silently:
+
+| #   | Regression                                                                                                                                                                                                                                                                                                                                                                                                       | Root cause                                                      | Commit     |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------- |
+| 1   | `config.json` declared `resources.methodologies`; the loader reads `resources.frameworks`. The key was ignored and the default took over — a deliberate disable would have been undone with no error. `config.schema.json` still described the pre-rename shape.                                                                                                                                                 | Config shape binds at load time; `tsc` cannot see it.           | `39db8757` |
+| 2   | **`cpm list methodologies -w server` returned "No methodologies directory found"** against the workspace it ships with. `cli/` is a separate package that was never in Stage 3a's scope, so `TYPE_CONFIG` still resolved `resources/methodologies/methodology.yaml`. Two config keys were dead too.                                                                                                              | Stage 3's "nothing was orphaned" check covered the server only. | `19f9d71b` |
+| 3   | **All 8 frameworks contributed zero gates.** Stage 1 renamed the YAML key to `frameworkGates:` but `FrameworkSchema` still declared `methodologyGates`. The schema is `.passthrough()`, so the file parsed, the key survived on the object, and every typed consumer read `undefined`. Not display-only: `template-enhancer.ts:112` and `generic-methodology-guide.ts:201` build `FrameworkEnhancement` from it. | Same passthrough blind spot; no error at any layer.             | `280603e8` |
+
+Then the planned work: `create_methodology` → `create_framework` (`7d1c32e6`, breaking), two tool
+descriptions that named values the server rejects (`436e2d57` — `resource_type:"methodology"` in a
+worked example, and skills-sync declaring `enum[...|methodology|...]` when `VALID_RESOURCE_TYPES`
+takes `framework`), and ~40 doc instructions that no longer work (`62897a03`).
+
+**A fourth failure, mine, mid-Stage-4**: the docs pass first "corrected" `resource://methodology/`
+to `resource://framework/` without probing — but `RESOURCE_URI_PATTERNS` really did say
+`methodology`, so the docs had been right. Renaming the constant was the smaller fix and matches
+the `resource_type` enum, so that is what landed. The lesson is the compat-site audit's method
+note verbatim: **substituting into prose without probing what the code says.**
+
+> **3.10 (the guard) is BLOCKED, not skipped.** A `validate-no-methodology-vocab.js` cannot pass:
+> **~1658 `methodolog*` hits remain in `server/src` + `tests`** — the `engine/frameworks/methodology/`
+> directory itself, `methodology-file-writer.ts`, `methodology-hot-reload.ts`, `registry.ts`,
+> `generic-methodology-guide.ts`, plus local identifiers throughout the pipeline. Stage 1's "72
+> non-colliding tokens" was never the whole surface. Registering a guard that fails on day one is
+> worse than none. Sequence: finish the internal identifier + file/directory rename, THEN guard.
+>
+> **Deliberately left, each with a reason:**
+>
+> | Left as-is                                   | Why                                                                                                                                                                     |
+> | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | `gates.methodologyGates`                     | Live **config** key (`infra/config/index.ts:299`) with validators in 4 more files — a homonym of the framework-YAML field, not the same thing. Needs its own migration. |
+> | `methodology_gates` / `methodology_elements` | `resource_manager` **contract parameters**. Renaming is a contract-layer job (schema → types → router → manager → service), not a resource rename.                      |
+> | `FrameworkEnhancement.methodologyGates`      | Internal runtime model (`methodology-types.ts:168`), not a data contract.                                                                                               |
+> | Conceptual prose in `docs/`                  | Renaming it while 1658 code identifiers still say `methodology` trades one divergence for another. Follows the identifier rename, not the other way round.              |
+>
+> **Also found, unrelated and pre-existing**: `cli/` declares no jest/ts-jest devDependency
+> despite shipping `jest.config.cjs` and `tests/`, and **no CI workflow references `cli/` at all**.
+> That is why regression #2 shipped silently. Also `cli` is missing from the commitlint scope enum,
+> and `cpm validate --prompts` reports 2 invalid prompts (a duplicate `resume_variant_build`).
 
 #### Stage 2 ruling: the "7 duplicate pairs" framing was wrong
 
@@ -852,7 +896,7 @@ drift, so it needs a wiring audit against `config.json` before either is touched
 | --- | ------ | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------- |
 | 4.1 | ✓      | **NEW** audit — row per ~40 site: `file:line`, what it guards, consumer probe, verdict LOAD-BEARING / SPECULATIVE, evidence | `plans/techincal_debt/compat-site-audit.md`                                       | 3.10    | Every `rg -n "backward compat\|Kept for\|for compatibility" src` hit has a row; zero blank verdicts |
 | 4.2 | ✓      | Row for the id-vs-`section_header` mismatch found during Phase 2.5                                                          | `resources/methodologies/cageerf/phases.yaml`, `implementation_plan/verification` | 4.1     | Row cites both files and the divergent field names                                                  |
-| 4.3 | ☐      | Apply only SPECULATIVE + human-approved verdicts; one commit per site                                                       | (per-site)                                                                        | 4.1     | `test:ci` + exercise the guarded behavior end-to-end                                                |
+| 4.3 | ✓      | Apply only SPECULATIVE + human-approved verdicts; one commit per site                                                       | (per-site)                                                                        | 4.1     | `test:ci` + exercise the guarded behavior end-to-end                                                |
 
 **Gate**: `npm run typecheck && npm run test:ci && npm run validate:all` + `/verify` per changed behavior
 
