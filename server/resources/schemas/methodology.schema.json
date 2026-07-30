@@ -1,7 +1,7 @@
 {
-  "$ref": "#/definitions/MethodologyDefinition",
+  "$ref": "#/definitions/FrameworkResourceDefinition",
   "definitions": {
-    "MethodologyDefinition": {
+    "FrameworkResourceDefinition": {
       "type": "object",
       "properties": {
         "id": {
@@ -12,7 +12,7 @@
           "type": "string",
           "minLength": 1
         },
-        "methodology": {
+        "type": {
           "type": "string",
           "minLength": 1
         },
@@ -44,6 +44,50 @@
           },
           "additionalProperties": false
         },
+        "frameworkGates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "type": "string"
+              },
+              "frameworkArea": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "string",
+                "enum": ["critical", "high", "medium", "low"]
+              },
+              "validationCriteria": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "criteria": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["critical", "high", "medium", "low"]
+              }
+            },
+            "required": ["id", "name"],
+            "additionalProperties": false
+          }
+        },
         "methodologyGates": {
           "type": "array",
           "items": {
@@ -60,7 +104,7 @@
               "description": {
                 "type": "string"
               },
-              "methodologyArea": {
+              "frameworkArea": {
                 "type": "string"
               },
               "priority": {
@@ -120,7 +164,7 @@
               "content": {
                 "type": "string"
               },
-              "methodologyJustification": {
+              "frameworkJustification": {
                 "type": "string"
               },
               "impact": {
@@ -133,11 +177,11 @@
           }
         }
       },
-      "required": ["id", "name", "methodology", "version", "enabled"],
+      "required": ["id", "name", "type", "version", "enabled"],
       "additionalProperties": true
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Methodology Definition",
-  "description": "Schema for methodology.yaml — defines a methodology framework with gates, guidance, and tool overlays."
+  "description": "Schema for framework.yaml — defines a methodology framework with gates, guidance, and tool overlays."
 }

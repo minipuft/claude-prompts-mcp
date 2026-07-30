@@ -64,7 +64,7 @@ export function convertTemplateSuggestions(
  * @param gates - Gate definitions from methodology YAML
  * @returns Array of QualityGate objects
  */
-export function convertMethodologyGates(gates: FrameworkGateDefinition[]): QualityGate[] {
+export function convertFrameworkGates(gates: FrameworkGateDefinition[]): QualityGate[] {
   return gates.map((gate) => ({
     id: gate.id,
     name: gate.name,
@@ -100,7 +100,7 @@ export function convertProcessingSteps(steps: ProcessingStepDefinition[]): Proce
  * @param confidence - Confidence score for the enhancement (default: 0.9)
  * @returns FrameworkEnhancement object
  */
-export function createMethodologyEnhancement(
+export function createFrameworkEnhancement(
   definition: FrameworkDefinitionForEnhancement,
   _context: Record<string, unknown> = {},
   confidence = 0.9
@@ -112,7 +112,7 @@ export function createMethodologyEnhancement(
   return {
     systemPromptGuidance: definition.systemPromptGuidance,
     processingEnhancements: convertProcessingSteps(processingSteps),
-    methodologyGates: convertMethodologyGates(frameworkGates),
+    methodologyGates: convertFrameworkGates(frameworkGates),
     templateSuggestions: convertTemplateSuggestions(templateSuggestions),
     enhancementMetadata: {
       methodology: definition.type,

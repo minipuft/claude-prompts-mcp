@@ -35,7 +35,7 @@ function buildUri(pattern: string, id?: string): string {
  * Resources read from the frameworkManager at request time to ensure
  * hot-reload compatibility - changes are visible immediately.
  */
-export function registerMethodologyResources(
+export function registerFrameworkResources(
   server: McpServer,
   dependencies: ResourceDependencies
 ): void {

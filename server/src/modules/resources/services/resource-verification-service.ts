@@ -1,5 +1,5 @@
 // @lifecycle canonical - Canonical resource schema verification service for CLI and MCP write paths.
-import { validateMethodologySchema } from '../../../engine/frameworks/methodology/methodology-schema.js';
+import { validateFrameworkSchema } from '../../../engine/frameworks/methodology/methodology-schema.js';
 import { validateGateSchema } from '../../../engine/gates/core/gate-schema.js';
 import { validateScriptToolSchema } from '../../../modules/automation/core/script-schema.js';
 import { validateStyleSchema } from '../../../modules/formatting/core/style-schema.js';
@@ -181,7 +181,7 @@ export class ResourceVerificationService {
       case 'gates':
         return validateGateSchema(data, expectedId);
       case 'frameworks':
-        return validateMethodologySchema(data, expectedId);
+        return validateFrameworkSchema(data, expectedId);
       case 'styles':
         return validateStyleSchema(data, expectedId);
       case 'tools':

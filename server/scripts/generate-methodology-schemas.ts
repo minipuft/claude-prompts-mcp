@@ -14,7 +14,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import {
-  MethodologySchema,
+  FrameworkSchema,
   PhasesFileSchema,
 } from '../src/engine/frameworks/methodology/methodology-schema.js';
 
@@ -24,8 +24,8 @@ const SCHEMAS_DIR = join(__dirname, '..', 'resources', 'schemas');
 mkdirSync(SCHEMAS_DIR, { recursive: true });
 
 // Generate framework.yaml schema
-const methodologyJsonSchema = zodToJsonSchema(MethodologySchema, {
-  name: 'MethodologyDefinition',
+const methodologyJsonSchema = zodToJsonSchema(FrameworkSchema, {
+  name: 'FrameworkResourceDefinition',
   $refStrategy: 'none',
 });
 methodologyJsonSchema['$schema'] = 'http://json-schema.org/draft-07/schema#';

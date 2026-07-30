@@ -119,7 +119,7 @@ const createMockFileService = () => {
     loadExistingMethodology: jest.fn(async (id: string) => {
       const data = writtenFiles.get(id.toLowerCase());
       if (data === undefined) return null;
-      // Return ExistingMethodologyData structure (raw YAML representation)
+      // Return ExistingFrameworkData structure (raw YAML representation)
       return {
         methodology: data as unknown as Record<string, unknown>,
         phases: null,
@@ -136,7 +136,7 @@ const createMockFileService = () => {
         id: string,
         existing: { methodology: Record<string, unknown>; systemPrompt: string | null }
       ) => {
-        // Convert ExistingMethodologyData back to FrameworkCreationData
+        // Convert ExistingFrameworkData back to FrameworkCreationData
         const raw = existing.methodology;
         const name = typeof raw['name'] === 'string' ? raw['name'] : undefined;
         const systemGuidance =

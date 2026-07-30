@@ -32,7 +32,7 @@ export interface FrameworkFileWriterDependencies {
   resourceMutationTransaction?: ResourceMutationTransaction;
 }
 
-export interface ExistingMethodologyData {
+export interface ExistingFrameworkData {
   methodology: Record<string, unknown>;
   phases: Record<string, unknown> | null;
   systemPrompt: string | null;
@@ -111,7 +111,7 @@ export class FrameworkFileWriter {
   /**
    * Load existing methodology files from disk
    */
-  async loadExistingMethodology(id: string): Promise<ExistingMethodologyData | null> {
+  async loadExistingMethodology(id: string): Promise<ExistingFrameworkData | null> {
     const frameworkDir = this.getMethodologyDir(id);
     const frameworkPath = join(frameworkDir, 'framework.yaml');
 
@@ -173,7 +173,7 @@ export class FrameworkFileWriter {
   }
 
   /**
-   * Convert raw ExistingMethodologyData to typed FrameworkCreationData.
+   * Convert raw ExistingFrameworkData to typed FrameworkCreationData.
    * Extracts and maps fields from YAML structure to the typed interface.
    *
    * @param id - Methodology identifier
@@ -182,7 +182,7 @@ export class FrameworkFileWriter {
    */
   toMethodologyCreationData(
     id: string,
-    existing: ExistingMethodologyData
+    existing: ExistingFrameworkData
   ): FrameworkCreationData | null {
     const { methodology, phases, systemPrompt } = existing;
 
@@ -308,7 +308,7 @@ export class FrameworkFileWriter {
    */
   async writeMethodologyFiles(
     data: Partial<FrameworkCreationData> & { id: string },
-    existingData?: ExistingMethodologyData | null
+    existingData?: ExistingFrameworkData | null
   ): Promise<FrameworkFileResult> {
     const frameworkDir = this.getMethodologyDir(data.id);
     const frameworkYamlPath = join(frameworkDir, 'framework.yaml');

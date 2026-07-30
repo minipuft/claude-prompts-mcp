@@ -11,7 +11,7 @@
  * │   │                                                             │
  * │   ├── registerPromptResources()      → resource://prompt/...    │
  * │   ├── registerGateResources()        → resource://gate/...      │
- * │   ├── registerMethodologyResources() → resource://framework/..│
+ * │   ├── registerFrameworkResources() → resource://framework/..│
  * │   └── registerObservabilityResources()                          │
  * │       ├── Sessions                   → resource://session/...   │
  * │       └── Metrics                    → resource://metrics/...   │
@@ -24,7 +24,7 @@
  */
 
 import { registerGateResources } from './handlers/gate-resources.js';
-import { registerMethodologyResources } from './handlers/methodology-resources.js';
+import { registerFrameworkResources } from './handlers/methodology-resources.js';
 import { registerObservabilityResources } from './handlers/observability-resources.js';
 import { registerPromptResources } from './handlers/prompt-resources.js';
 
@@ -92,7 +92,7 @@ export function registerResources(server: McpServer, dependencies: ResourceDepen
   // Frameworks
   const frameworksEnabled = cfg.frameworks?.enabled !== false;
   if (frameworksEnabled && dependencies.frameworkManager !== undefined) {
-    registerMethodologyResources(server, dependencies);
+    registerFrameworkResources(server, dependencies);
     logger.debug('[Resources] Methodology resources registered');
   } else if (!frameworksEnabled) {
     logger.debug('[Resources] Methodology resources disabled by config');

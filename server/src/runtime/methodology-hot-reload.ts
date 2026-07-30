@@ -1,11 +1,11 @@
 // @lifecycle canonical - Builds methodology hot-reload config for the hot-reload manager.
-import { createMethodologyHotReloadRegistration } from '../engine/frameworks/methodology/index.js';
+import { createFrameworkHotReloadRegistration } from '../engine/frameworks/methodology/index.js';
 
 import type { Logger } from '../infra/logging/index.js';
 import type { McpToolRouter } from '../mcp/tools/index.js';
 import type { AuxiliaryReloadConfig } from '../modules/hot-reload/hot-reload-observer.js';
 
-export function buildMethodologyAuxiliaryReloadConfig(
+export function buildFrameworkAuxiliaryReloadConfig(
   logger: Logger,
   mcpToolsManager?: McpToolRouter
 ): AuxiliaryReloadConfig | undefined {
@@ -19,7 +19,7 @@ export function buildMethodologyAuxiliaryReloadConfig(
     const registry = frameworkManager.getMethodologyRegistry();
 
     // Wire hot-reload callbacks to keep FrameworkManager.frameworks cache in sync
-    const registration = createMethodologyHotReloadRegistration(logger, registry, undefined, {
+    const registration = createFrameworkHotReloadRegistration(logger, registry, undefined, {
       onMethodologyDeleted: (methodologyId: string) => {
         // Remove framework from cache when methodology is deleted
         frameworkManager.unregister(methodologyId);

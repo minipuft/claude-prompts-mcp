@@ -23,7 +23,7 @@ import type { Logger, ToolDescription, ToolDescriptionsConfig } from '../../shar
 /**
  * Normalize methodology keys for consistent lookup (case-insensitive)
  */
-export function normalizeMethodologyKey(methodology?: string): string | undefined {
+export function normalizeFrameworkKey(methodology?: string): string | undefined {
   if (!methodology) return undefined;
   return methodology.trim().toUpperCase();
 }
@@ -66,7 +66,7 @@ export function cloneToolDescription(description: ToolDescription): ToolDescript
  * Pre-load all methodology tool descriptions from YAML definitions.
  * Returns a Map keyed by normalized methodology/framework ID.
  */
-export function preloadMethodologyDescriptions(
+export function preloadFrameworkDescriptions(
   logger: Logger
 ): Map<string, FrameworkToolDescriptions> {
   const result = new Map<string, FrameworkToolDescriptions>();
@@ -81,8 +81,8 @@ export function preloadMethodologyDescriptions(
 
       const guide = createGenericGuide(definition);
       const descriptions = guide.getToolDescriptions?.() || {};
-      const methodologyKey = normalizeMethodologyKey(guide.type);
-      const frameworkKey = normalizeMethodologyKey(guide.frameworkId);
+      const methodologyKey = normalizeFrameworkKey(guide.type);
+      const frameworkKey = normalizeFrameworkKey(guide.frameworkId);
 
       if (methodologyKey) {
         result.set(methodologyKey, descriptions);
@@ -157,7 +157,7 @@ export function buildActiveConfig(
   frameworkDescriptions: Map<string, FrameworkToolDescriptions>,
   dynamicDescriptionsEnabled: boolean
 ): ToolDescriptionsConfig {
-  const methodologyKey = normalizeMethodologyKey(
+  const methodologyKey = normalizeFrameworkKey(
     activeContext.activeMethodology ?? activeContext.activeFramework
   );
 

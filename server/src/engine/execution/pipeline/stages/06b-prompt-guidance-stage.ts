@@ -7,7 +7,7 @@ import type {
   PromptGuidanceService,
   ServicePromptGuidanceResult,
 } from '../../../frameworks/prompt-guidance/index.js';
-import type { FrameworkMethodology } from '../../../frameworks/types/index.js';
+import type { FrameworkSelection } from '../../../frameworks/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ConvertedPrompt } from '../../types.js';
 import type { FrameworkDecisionInput } from '../decisions/index.js';
@@ -308,7 +308,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
    * Get framework override using the centralized FrameworkDecisionAuthority.
    * This ensures consistent framework resolution across all pipeline stages.
    */
-  private getFrameworkOverride(context: ExecutionContext): FrameworkMethodology | undefined {
+  private getFrameworkOverride(context: ExecutionContext): FrameworkSelection | undefined {
     const decisionInput = this.buildDecisionInput(context);
     const frameworkId = context.frameworkAuthority.getFrameworkId(decisionInput);
     return frameworkId;

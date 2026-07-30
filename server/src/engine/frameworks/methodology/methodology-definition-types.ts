@@ -8,11 +8,11 @@
  *
  * Usage:
  * - Import types from this file for type-safe methodology handling
- * - RuntimeMethodologyLoader loads these types from YAML
+ * - RuntimeFrameworkLoader loads these types from YAML
  */
 
 import type {
-  FrameworkMethodology,
+  FrameworkSelection,
   FrameworkType,
   JudgePromptDefinition,
   FrameworkToolDescriptions,

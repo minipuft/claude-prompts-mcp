@@ -5,7 +5,7 @@ import type { Logger } from '../../../../infra/logging/index.js';
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import type {
   FrameworkExecutionContext,
-  FrameworkMethodology,
+  FrameworkSelection,
 } from '../../../frameworks/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { ExecutionContext } from '../../context/index.js';

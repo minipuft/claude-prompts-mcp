@@ -12,7 +12,7 @@
 
 import {
   BaseMethodologyGuide,
-  type FrameworkMethodology,
+  type FrameworkSelection,
   type FrameworkType,
   type PromptCreationGuidance,
   type ProcessingGuidance,
@@ -35,9 +35,9 @@ import {
   type PhasesDefinition,
 } from '../utils/step-generator.js';
 import {
-  createMethodologyEnhancement,
+  createFrameworkEnhancement,
   convertTemplateSuggestions,
-  convertMethodologyGates,
+  convertFrameworkGates,
   convertProcessingSteps,
 } from '../utils/template-enhancer.js';
 
@@ -46,12 +46,12 @@ import type { ContentAnalysisResult } from '../../../shared/types/index.js';
 import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
 
 /**
- * GenericMethodologyGuide - Data-driven implementation of FrameworkGuide
+ * GenericFrameworkGuide - Data-driven implementation of FrameworkGuide
  *
  * This class can represent any methodology by loading its definition from JSON.
  * All methodology-specific behavior is derived from the JSON data.
  */
-export class GenericMethodologyGuide extends BaseMethodologyGuide {
+export class GenericFrameworkGuide extends BaseMethodologyGuide {
   readonly frameworkId: string;
   readonly frameworkName: string;
   /** The framework type discriminator */
@@ -61,7 +61,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
   private readonly definition: FrameworkResourceDefinition;
 
   /**
-   * Creates a GenericMethodologyGuide from a methodology definition
+   * Creates a GenericFrameworkGuide from a methodology definition
    * @param definition - The loaded methodology definition from JSON
    */
   constructor(definition: FrameworkResourceDefinition) {
@@ -199,7 +199,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
   ): FrameworkEnhancement {
     // Convert methodology gates from definition
     const methodologyGates: QualityGate[] = this.definition.frameworkGates
-      ? convertMethodologyGates(this.definition.frameworkGates)
+      ? convertFrameworkGates(this.definition.frameworkGates)
       : [];
 
     // Convert template suggestions
@@ -306,12 +306,10 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
 }
 
 /**
- * Factory function to create a GenericMethodologyGuide from a definition
+ * Factory function to create a GenericFrameworkGuide from a definition
  * @param definition - The methodology definition from JSON
- * @returns A new GenericMethodologyGuide instance
+ * @returns A new GenericFrameworkGuide instance
  */
-export function createGenericGuide(
-  definition: FrameworkResourceDefinition
-): GenericMethodologyGuide {
-  return new GenericMethodologyGuide(definition);
+export function createGenericGuide(definition: FrameworkResourceDefinition): GenericFrameworkGuide {
+  return new GenericFrameworkGuide(definition);
 }

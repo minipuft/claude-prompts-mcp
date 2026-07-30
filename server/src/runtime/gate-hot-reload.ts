@@ -7,7 +7,7 @@ import type { AuxiliaryReloadConfig } from '../modules/hot-reload/hot-reload-obs
 
 /**
  * Build gate auxiliary reload configuration for HotReloadObserver.
- * Follows the same pattern as buildMethodologyAuxiliaryReloadConfig.
+ * Follows the same pattern as buildFrameworkAuxiliaryReloadConfig.
  *
  * @param logger - Logger instance
  * @param gateManager - GateManager instance (optional)

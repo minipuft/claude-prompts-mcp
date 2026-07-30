@@ -4,7 +4,7 @@
  *
  * Defines the canonical schema for methodology YAML files.
  * Used by both:
- * - RuntimeMethodologyLoader (runtime validation)
+ * - RuntimeFrameworkLoader (runtime validation)
  * - validate-frameworks.ts (CI validation)
  *
  * This ensures SSOT - any schema change is enforced everywhere.
@@ -182,7 +182,7 @@ export interface FrameworkSchemaValidationResult {
  * @param expectedId - Expected ID (should match directory name)
  * @returns Validation result with errors and warnings
  */
-export function validateMethodologySchema(
+export function validateFrameworkSchema(
   data: unknown,
   expectedId?: string
 ): FrameworkSchemaValidationResult {

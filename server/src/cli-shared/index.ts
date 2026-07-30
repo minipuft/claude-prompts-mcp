@@ -58,7 +58,7 @@ export {
   FrameworkGateSchema,
   TemplateSuggestionSchema,
   FrameworkSchema,
-  validateMethodologySchema,
+  validateFrameworkSchema,
   type FrameworkGate,
   type TemplateSuggestion,
   type FrameworkYaml,

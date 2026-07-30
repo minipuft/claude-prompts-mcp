@@ -16,7 +16,7 @@ import { createRuntimeFoundation } from './context.js';
 import { loadPromptData } from './data-loader.js';
 import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildHealthReport } from './health.js';
-import { buildMethodologyAuxiliaryReloadConfig } from './methodology-hot-reload.js';
+import { buildFrameworkAuxiliaryReloadConfig } from './methodology-hot-reload.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
@@ -795,7 +795,7 @@ export class Application {
           name: serviceName,
           start: async () => {
             // Build auxiliary reload configs for methodology, gates, and script tools
-            const frameworkAux = buildMethodologyAuxiliaryReloadConfig(
+            const frameworkAux = buildFrameworkAuxiliaryReloadConfig(
               this.logger,
               this.mcpToolsManager
             );

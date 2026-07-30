@@ -15,8 +15,8 @@ import * as path from 'node:path';
 
 import {
   cloneToolDescription,
-  normalizeMethodologyKey,
-  preloadMethodologyDescriptions,
+  normalizeFrameworkKey,
+  preloadFrameworkDescriptions,
   preloadStyleDescriptions,
   buildActiveConfig,
 } from './tool-description-overlays.js';
@@ -250,7 +250,7 @@ export class ToolDescriptionLoader extends EventEmitter {
 
   hasMethodologyResponseFormat(toolName: string): boolean {
     const context = this.getActiveFrameworkContext();
-    const methodologyKey = normalizeMethodologyKey(
+    const methodologyKey = normalizeFrameworkKey(
       context.activeMethodology ?? context.activeFramework
     );
     if (!methodologyKey) return false;
@@ -264,7 +264,7 @@ export class ToolDescriptionLoader extends EventEmitter {
     try {
       const base = await this.loadBaseConfig();
       this.lastLoadSource = base.source;
-      this.frameworkDescriptions = preloadMethodologyDescriptions(this.logger);
+      this.frameworkDescriptions = preloadFrameworkDescriptions(this.logger);
       this.styleDescriptions = preloadStyleDescriptions(this.logger);
       const activeContext = this.getActiveFrameworkContext();
       const dynamicEnabled =
@@ -355,7 +355,7 @@ export class ToolDescriptionLoader extends EventEmitter {
     this.logger.debug(
       `Getting description for ${toolName} (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
     );
-    const methodologyKey = normalizeMethodologyKey(activeMethodology);
+    const methodologyKey = normalizeFrameworkKey(activeMethodology);
 
     // PRIORITY 1: Methodology-specific descriptions from YAML guides (SOT)
     if (applyMethodologyOverride && methodologyKey) {
@@ -402,7 +402,7 @@ export class ToolDescriptionLoader extends EventEmitter {
 
     const applyMethodologyOverride = options?.applyMethodologyOverride ?? true;
     if (!toolDesc.parameters) return undefined;
-    const methodologyKey = normalizeMethodologyKey(activeMethodology);
+    const methodologyKey = normalizeFrameworkKey(activeMethodology);
 
     if (applyMethodologyOverride && methodologyKey) {
       const frameworkDescs = this.frameworkDescriptions.get(methodologyKey);

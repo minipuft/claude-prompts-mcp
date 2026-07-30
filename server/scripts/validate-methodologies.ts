@@ -14,9 +14,9 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 import {
-  validateMethodologySchema,
+  validateFrameworkSchema,
   validatePhasesSchema,
-  type MethodologySchemaValidationResult,
+  type FrameworkSchemaValidationResult,
 } from '../src/engine/frameworks/methodology/methodology-schema.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -56,7 +56,7 @@ function validateMethodology(dir: string): ValidationResult {
   }
 
   // Use shared schema validation
-  const result: MethodologySchemaValidationResult = validateMethodologySchema(data, id);
+  const result: FrameworkSchemaValidationResult = validateFrameworkSchema(data, id);
   errors.push(...result.errors);
   warnings.push(...result.warnings);
 
@@ -74,7 +74,7 @@ function validateMethodology(dir: string): ValidationResult {
     if (existsSync(phasesPath)) {
       try {
         const phasesData = yaml.load(readFileSync(phasesPath, 'utf-8'));
-        const phasesResult: MethodologySchemaValidationResult = validatePhasesSchema(phasesData);
+        const phasesResult: FrameworkSchemaValidationResult = validatePhasesSchema(phasesData);
         errors.push(...phasesResult.errors.map((e) => `phases.yaml: ${e}`));
         warnings.push(...phasesResult.warnings.map((w) => `phases.yaml: ${w}`));
       } catch (e) {

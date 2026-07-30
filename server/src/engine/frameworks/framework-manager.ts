@@ -15,7 +15,7 @@ import { FrameworkRegistry, createMethodologyRegistry } from './methodology/inde
 import {
   FrameworkDefinition,
   FrameworkExecutionContext,
-  FrameworkMethodology,
+  FrameworkSelection,
   FrameworkSelectionCriteria,
   FrameworkGuide,
 } from './types/index.js';
@@ -485,7 +485,7 @@ export class FrameworkManager extends BaseResourceHandler<
   /**
    * Set default framework
    */
-  setDefaultFramework(methodology: FrameworkMethodology): void {
+  setDefaultFramework(methodology: FrameworkSelection): void {
     if (this.hasResource(methodology)) {
       this.defaultFramework = methodology;
       this.logger.info(`Default framework set to: ${methodology}`);

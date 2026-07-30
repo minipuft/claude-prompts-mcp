@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { isMethodologyInjected } from '../../../../src/engine/execution/pipeline/decisions/injection/methodology-injection.js';
+import { isFrameworkInjected } from '../../../../src/engine/execution/pipeline/decisions/injection/methodology-injection.js';
 import { GateSetResolver } from '../../../../src/engine/gates/services/gate-set-resolver.js';
 
 import type { GateResolutionInput } from '../../../../src/engine/gates/services/gate-set-resolver.js';
@@ -501,7 +501,7 @@ describe('GateSetResolver — methodology nesting driven by the real signal (pla
   // reaches it in production is derived, not the literal `true` T1.5 shipped.
 
   const resolveWith = async (
-    modifiers: Parameters<typeof isMethodologyInjected>[0]['modifiers'],
+    modifiers: Parameters<typeof isFrameworkInjected>[0]['modifiers'],
     prompt = makePrompt()
   ) => {
     const resolver = buildResolver(
@@ -515,7 +515,7 @@ describe('GateSetResolver — methodology nesting driven by the real signal (pla
         prompt,
         frameworkId: 'CAGEERF',
         modifiers: modifiers as GateResolutionInput['modifiers'],
-        frameworkInjected: isMethodologyInjected({
+        frameworkInjected: isFrameworkInjected({
           modifiers,
           promptInjection: prompt.injection,
         }),

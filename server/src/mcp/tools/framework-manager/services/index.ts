@@ -2,7 +2,7 @@
 export {
   FrameworkFileWriter,
   type FrameworkFileWriterDependencies,
-  type ExistingMethodologyData,
+  type ExistingFrameworkData,
   type FrameworkFileResult,
 } from './methodology-file-writer.js';
 export { FrameworkDraftValidator } from './methodology-validator.js';

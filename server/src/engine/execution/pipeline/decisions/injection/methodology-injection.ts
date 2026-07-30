@@ -44,7 +44,7 @@ export interface FrameworkInjectionSignals {
  * tier, methodology gates are still scheduled. That is the same behavior as before this
  * function existed, so it is a remaining gap rather than a regression.
  */
-export function isMethodologyInjected(signals: FrameworkInjectionSignals): boolean {
+export function isFrameworkInjected(signals: FrameworkInjectionSignals): boolean {
   const forced = hasForcingModifier(signals.modifiers);
   if (forced) {
     return true;

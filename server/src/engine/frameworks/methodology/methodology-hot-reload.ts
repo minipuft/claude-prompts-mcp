@@ -7,7 +7,7 @@
  */
 
 import { createGenericGuide } from './generic-methodology-guide.js';
-import { RuntimeMethodologyLoader } from './runtime-methodology-loader.js';
+import { RuntimeFrameworkLoader } from './runtime-methodology-loader.js';
 
 import type { FrameworkRegistry } from './registry.js';
 import type { Logger } from '../../../infra/logging/index.js';
@@ -85,19 +85,19 @@ interface StoredHotReloadConfig {
 export class FrameworkHotReloadCoordinator {
   private logger: Logger;
   private registry: FrameworkRegistry;
-  private loader: RuntimeMethodologyLoader;
+  private loader: RuntimeFrameworkLoader;
   private config: StoredHotReloadConfig;
   private stats: FrameworkHotReloadStats;
 
   constructor(
     logger: Logger,
     registry: FrameworkRegistry,
-    loader?: RuntimeMethodologyLoader,
+    loader?: RuntimeFrameworkLoader,
     config: FrameworkHotReloadConfig = {}
   ) {
     this.logger = logger;
     this.registry = registry;
-    this.loader = loader ?? new RuntimeMethodologyLoader();
+    this.loader = loader ?? new RuntimeFrameworkLoader();
     this.config = {
       debug: config.debug ?? false,
       reloadTimeoutMs: config.reloadTimeoutMs ?? 5000,
@@ -248,7 +248,7 @@ export class FrameworkHotReloadCoordinator {
   /**
    * Get the runtime loader being used
    */
-  getLoader(): RuntimeMethodologyLoader {
+  getLoader(): RuntimeFrameworkLoader {
     return this.loader;
   }
 }
@@ -257,10 +257,10 @@ export class FrameworkHotReloadCoordinator {
  * Create a registration bundle for methodology hot reload.
  * Keeps HotReloadObserver generic by returning only the callback + watch paths.
  */
-export function createMethodologyHotReloadRegistration(
+export function createFrameworkHotReloadRegistration(
   logger: Logger,
   registry: FrameworkRegistry,
-  loader?: RuntimeMethodologyLoader,
+  loader?: RuntimeFrameworkLoader,
   config?: FrameworkHotReloadConfig
 ): FrameworkHotReloadRegistration {
   const runtimeLoader = loader ?? registry.getRuntimeLoader();
@@ -276,10 +276,10 @@ export function createMethodologyHotReloadRegistration(
 /**
  * Factory function to create a FrameworkHotReloadCoordinator
  */
-export function createMethodologyHotReloadCoordinator(
+export function createFrameworkHotReloadCoordinator(
   logger: Logger,
   registry: FrameworkRegistry,
-  loader?: RuntimeMethodologyLoader,
+  loader?: RuntimeFrameworkLoader,
   config?: FrameworkHotReloadConfig
 ): FrameworkHotReloadCoordinator {
   return new FrameworkHotReloadCoordinator(logger, registry, loader, config);

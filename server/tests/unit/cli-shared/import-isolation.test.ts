@@ -47,7 +47,7 @@ describe('cli-shared import isolation', () => {
   it('barrel file exports methodology schemas', async () => {
     const cliShared = await import('../../../src/cli-shared/index.js');
     expect(cliShared.FrameworkSchema).toBeDefined();
-    expect(cliShared.validateMethodologySchema).toBeInstanceOf(Function);
+    expect(cliShared.validateFrameworkSchema).toBeInstanceOf(Function);
   });
 
   it('barrel file exports yaml utilities', async () => {

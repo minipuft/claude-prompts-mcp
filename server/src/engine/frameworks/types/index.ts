@@ -13,7 +13,7 @@ export type {
   ExecutionStep,
   FrameworkDefinition,
   FrameworkExecutionContext,
-  FrameworkMethodology,
+  FrameworkSelection,
   FrameworkSelectionCriteria,
   FrameworkType,
   FrameworkGuide,
@@ -35,7 +35,6 @@ export { BaseMethodologyGuide } from './methodology-types.js';
 export type {
   FrameworkStateInfo,
   FrameworkHealth,
-  PersistedMethodologyState,
   PromptGuidanceAnalytics,
   PromptGuidanceConfig,
   PromptGuidanceResult,

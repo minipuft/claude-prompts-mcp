@@ -1,6 +1,6 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
 import { GateSetResolver } from './gate-set-resolver.js';
-import { isMethodologyInjected } from '../../execution/pipeline/decisions/injection/index.js';
+import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
 
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
@@ -170,7 +170,7 @@ export class GateEnhancementService {
       category: prompt.category ?? '',
       modifiers: executionPlan.modifiers,
       frameworkId: activeFrameworkId,
-      frameworkInjected: isMethodologyInjected({
+      frameworkInjected: isFrameworkInjected({
         modifiers: executionPlan.modifiers,
         promptInjection: prompt.injection,
       }),
@@ -321,7 +321,7 @@ export class GateEnhancementService {
         frameworkId: stepFrameworkId,
         // Read from the step's own prompt, not the chain entry prompt: each step is a distinct
         // prompt and may carry its own injection block.
-        frameworkInjected: isMethodologyInjected({
+        frameworkInjected: isFrameworkInjected({
           modifiers: step.executionPlan?.modifiers,
           promptInjection: prompt.injection,
         }),

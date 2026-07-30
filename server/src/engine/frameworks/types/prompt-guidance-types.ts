@@ -167,22 +167,6 @@ export interface FrameworkHealth {
 }
 
 /**
- * Persisted methodology state for disk storage ()
- */
-export interface PersistedMethodologyState {
-  /** State format version */
-  version: string;
-  /** Whether methodology system is enabled */
-  methodologySystemEnabled: boolean;
-  /** Currently active methodology */
-  activeMethodology: string;
-  /** Last switch timestamp as ISO string */
-  lastSwitchedAt: string;
-  /** Reason for current state */
-  switchReason: string;
-}
-
-/**
  * Template processing guidance from methodology guides.
  * Alias to ProcessingGuidance to keep a single source of truth.
  */

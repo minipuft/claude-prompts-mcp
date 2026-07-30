@@ -44,7 +44,7 @@ export type FrameworkType = string;
  * Framework methodology definitions (includes AUTO for selection)
  * @deprecated Use FrameworkType for type discrimination. This includes 'AUTO' for selection contexts only.
  */
-export type FrameworkMethodology = FrameworkType | 'AUTO';
+export type FrameworkSelection = FrameworkType | 'AUTO';
 
 /**
  * Framework definition structure
@@ -83,7 +83,7 @@ export interface FrameworkSelectionCriteria {
   promptType?: string;
   complexity?: 'low' | 'medium' | 'high';
   domain?: string;
-  userPreference?: FrameworkMethodology;
+  userPreference?: FrameworkSelection;
   executionType?: 'single' | 'chain';
 }
 

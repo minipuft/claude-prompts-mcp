@@ -19,7 +19,7 @@ describe('YAML Methodology Loading', () => {
     resetDefaultRuntimeLoader();
   });
 
-  describe('RuntimeMethodologyLoader', () => {
+  describe('RuntimeFrameworkLoader', () => {
     it('discovers all built-in frameworks from YAML', () => {
       const loader = getDefaultRuntimeLoader();
       const frameworks = loader.discoverMethodologies();
@@ -52,7 +52,7 @@ describe('YAML Methodology Loading', () => {
     });
   });
 
-  describe('GenericMethodologyGuide from YAML', () => {
+  describe('GenericFrameworkGuide from YAML', () => {
     it('creates valid FrameworkGuide from YAML definition', () => {
       const loader = getDefaultRuntimeLoader();
       const definition = loader.loadMethodology('cageerf');

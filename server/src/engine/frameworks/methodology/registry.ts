@@ -9,8 +9,8 @@
 
 import { createGenericGuide } from './generic-methodology-guide.js';
 import {
-  RuntimeMethodologyLoader,
-  type RuntimeMethodologyLoaderConfig,
+  RuntimeFrameworkLoader,
+  type RuntimeFrameworkLoaderConfig,
 } from './runtime-methodology-loader.js';
 import { Logger } from '../../../infra/logging/index.js';
 import { FrameworkGuide } from '../types/index.js';
@@ -34,7 +34,7 @@ export interface FrameworkRegistryConfig {
   /** Whether to validate guides on registration */
   validateOnRegistration: boolean;
   /** Configuration for the runtime YAML loader */
-  runtimeLoaderConfig?: Partial<RuntimeMethodologyLoaderConfig>;
+  runtimeLoaderConfig?: Partial<RuntimeFrameworkLoaderConfig>;
 }
 
 /**
@@ -65,7 +65,7 @@ export class FrameworkRegistry {
   private logger: Logger;
   private config: FrameworkRegistryConfig;
   private initialized = false;
-  private runtimeLoader: RuntimeMethodologyLoader | null = null;
+  private runtimeLoader: RuntimeFrameworkLoader | null = null;
 
   constructor(logger: Logger, config: Partial<FrameworkRegistryConfig> = {}) {
     this.logger = logger;
@@ -76,8 +76,8 @@ export class FrameworkRegistry {
       ...(config.runtimeLoaderConfig ? { runtimeLoaderConfig: config.runtimeLoaderConfig } : {}),
     };
 
-    // RuntimeMethodologyLoader is mandatory - YAML loading is required
-    this.runtimeLoader = new RuntimeMethodologyLoader(this.config.runtimeLoaderConfig);
+    // RuntimeFrameworkLoader is mandatory - YAML loading is required
+    this.runtimeLoader = new RuntimeFrameworkLoader(this.config.runtimeLoaderConfig);
   }
 
   /**
@@ -311,7 +311,7 @@ export class FrameworkRegistry {
     const normalizedId = id.toLowerCase();
 
     if (!this.runtimeLoader) {
-      this.logger.error('RuntimeMethodologyLoader not available for loadAndRegisterById');
+      this.logger.error('RuntimeFrameworkLoader not available for loadAndRegisterById');
       return false;
     }
 
@@ -358,9 +358,9 @@ export class FrameworkRegistry {
     // Required built-in methodology IDs
     const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
 
-    // Fail-fast: RuntimeMethodologyLoader is required
+    // Fail-fast: RuntimeFrameworkLoader is required
     if (!this.runtimeLoader) {
-      throw new Error('RuntimeMethodologyLoader required. YAML loading is mandatory.');
+      throw new Error('RuntimeFrameworkLoader required. YAML loading is mandatory.');
     }
 
     let loadedCount = 0;
@@ -488,9 +488,9 @@ export class FrameworkRegistry {
    * Expose the runtime loader so other components (e.g., hot reload) can reuse
    * the same cache and directory resolution.
    */
-  getRuntimeLoader(): RuntimeMethodologyLoader {
+  getRuntimeLoader(): RuntimeFrameworkLoader {
     if (!this.runtimeLoader) {
-      throw new Error('RuntimeMethodologyLoader not initialized');
+      throw new Error('RuntimeFrameworkLoader not initialized');
     }
     return this.runtimeLoader;
   }

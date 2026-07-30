@@ -1,7 +1,7 @@
 // @lifecycle canonical - Plans operator execution order and dependencies.
 import { CategoryExtractor } from './category-extractor.js';
 import { GateSetResolver } from '../../gates/services/gate-set-resolver.js';
-import { isMethodologyInjected } from '../pipeline/decisions/injection/index.js';
+import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 
 import type { Logger } from '../../../infra/logging/index.js';
 import type { ContentAnalysisResult, ContentAnalyzerPort } from '../../../shared/types/index.js';
@@ -128,7 +128,7 @@ export class ExecutionPlanner {
       category: categoryInfo.category,
       categoryGateConfig: categoryInfo.gateConfiguration,
       modifiers: modifierResolution.modifiers,
-      frameworkInjected: isMethodologyInjected({
+      frameworkInjected: isFrameworkInjected({
         modifiers: modifierResolution.modifiers,
         promptInjection: convertedPrompt.injection,
       }),

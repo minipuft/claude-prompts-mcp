@@ -3,7 +3,7 @@
  * Methodology System Index
  *
  * Centralized exports for the reorganized methodology system.
- * Uses YAML-based loading exclusively via RuntimeMethodologyLoader.
+ * Uses YAML-based loading exclusively via RuntimeFrameworkLoader.
  */
 
 // Export methodology registry
@@ -23,17 +23,17 @@ export type {
 } from './methodology-definition-types.js';
 
 // Export data-driven methodology guide system
-export { GenericMethodologyGuide, createGenericGuide } from './generic-methodology-guide.js';
+export { GenericFrameworkGuide, createGenericGuide } from './generic-methodology-guide.js';
 
 // Export runtime YAML loader (canonical source for methodology loading)
 export {
-  RuntimeMethodologyLoader,
-  createRuntimeMethodologyLoader,
+  RuntimeFrameworkLoader,
+  createRuntimeFrameworkLoader,
   getDefaultRuntimeLoader,
   resetDefaultRuntimeLoader,
 } from './runtime-methodology-loader.js';
 export type {
-  RuntimeMethodologyLoaderConfig,
+  RuntimeFrameworkLoaderConfig,
   LoaderStats,
   FrameworkSchemaValidationResult as FrameworkDraftValidationResult,
 } from './runtime-methodology-loader.js';
@@ -41,8 +41,8 @@ export type {
 // Export hot reload coordinator
 export {
   FrameworkHotReloadCoordinator,
-  createMethodologyHotReloadCoordinator,
-  createMethodologyHotReloadRegistration,
+  createFrameworkHotReloadCoordinator,
+  createFrameworkHotReloadRegistration,
 } from './methodology-hot-reload.js';
 export type {
   FrameworkHotReloadConfig,
@@ -55,7 +55,7 @@ export {
   FrameworkSchema,
   FrameworkGateSchema,
   TemplateSuggestionSchema,
-  validateMethodologySchema,
+  validateFrameworkSchema,
 } from './methodology-schema.js';
 export type {
   FrameworkYaml,

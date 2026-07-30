@@ -25,6 +25,6 @@ export {
   FrameworkDiscoveryProcessor,
   FrameworkVersioningProcessor,
   type FrameworkFileWriterDependencies,
-  type ExistingMethodologyData,
+  type ExistingFrameworkData,
   type FrameworkFileResult,
 } from './services/index.js';

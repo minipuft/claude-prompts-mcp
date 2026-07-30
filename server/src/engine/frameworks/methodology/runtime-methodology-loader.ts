@@ -18,7 +18,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import {
-  validateMethodologySchema,
+  validateFrameworkSchema,
   type FrameworkSchemaValidationResult,
 } from './methodology-schema.js';
 import {
@@ -33,9 +33,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
- * Configuration for RuntimeMethodologyLoader
+ * Configuration for RuntimeFrameworkLoader
  */
-export interface RuntimeMethodologyLoaderConfig {
+export interface RuntimeFrameworkLoaderConfig {
   /** Override default frameworks directory */
   frameworksDir?: string;
   /** Additional directories to scan for methodology overlays (workspace resources) */
@@ -77,7 +77,7 @@ export type { FrameworkSchemaValidationResult } from './methodology-schema.js';
  *
  * @example
  * ```typescript
- * const loader = new RuntimeMethodologyLoader();
+ * const loader = new RuntimeFrameworkLoader();
  *
  * // Discover available frameworks
  * const ids = loader.discoverMethodologies();
@@ -87,7 +87,7 @@ export type { FrameworkSchemaValidationResult } from './methodology-schema.js';
  * const definition = loader.loadMethodology('cageerf');
  * ```
  */
-export class RuntimeMethodologyLoader {
+export class RuntimeFrameworkLoader {
   private cache = new Map<string, FrameworkResourceDefinition>();
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
   private frameworksDir: string;
@@ -96,7 +96,7 @@ export class RuntimeMethodologyLoader {
   private validateOnLoad: boolean;
   private debug: boolean;
 
-  constructor(config: RuntimeMethodologyLoaderConfig = {}) {
+  constructor(config: RuntimeFrameworkLoaderConfig = {}) {
     this.frameworksDir = config.frameworksDir ?? this.resolveMethodologiesDir();
     this.additionalMethodologiesDirs = (config.additionalMethodologiesDirs ?? []).filter(
       (dir) => existsSync(dir) && dir !== this.frameworksDir
@@ -107,10 +107,10 @@ export class RuntimeMethodologyLoader {
 
     if (this.debug) {
       // Use stderr to avoid corrupting STDIO protocol
-      console.error(`[RuntimeMethodologyLoader] Using directory: ${this.frameworksDir}`);
+      console.error(`[RuntimeFrameworkLoader] Using directory: ${this.frameworksDir}`);
       if (this.additionalMethodologiesDirs.length > 0) {
         console.error(
-          `[RuntimeMethodologyLoader] Additional directories: ${this.additionalMethodologiesDirs.join(', ')}`
+          `[RuntimeFrameworkLoader] Additional directories: ${this.additionalMethodologiesDirs.join(', ')}`
         );
       }
     }
@@ -263,7 +263,7 @@ export class RuntimeMethodologyLoader {
 
       if (!existsSync(entryPath)) {
         if (this.debug) {
-          console.error(`[RuntimeMethodologyLoader] Entry point not found: ${entryPath}`);
+          console.error(`[RuntimeFrameworkLoader] Entry point not found: ${entryPath}`);
         }
         return undefined;
       }
@@ -286,27 +286,27 @@ export class RuntimeMethodologyLoader {
         if (!validation.valid) {
           this.stats.loadErrors++;
           console.error(
-            `[RuntimeMethodologyLoader] Validation failed for '${id}':`,
+            `[RuntimeFrameworkLoader] Validation failed for '${id}':`,
             validation.errors.join('; ')
           );
           return undefined;
         }
         if (validation.warnings.length > 0) {
           console.warn(
-            `[RuntimeMethodologyLoader] Warnings for '${id}':`,
+            `[RuntimeFrameworkLoader] Warnings for '${id}':`,
             validation.warnings.join('; ')
           );
         }
       }
 
       if (this.debug) {
-        console.error(`[RuntimeMethodologyLoader] Loaded: ${definition.name} (${id})`);
+        console.error(`[RuntimeFrameworkLoader] Loaded: ${definition.name} (${id})`);
       }
 
       return definition;
     } catch (error) {
       this.stats.loadErrors++;
-      console.error(`[RuntimeMethodologyLoader] Failed to load '${id}':`, error);
+      console.error(`[RuntimeFrameworkLoader] Failed to load '${id}':`, error);
       return undefined;
     }
   }
@@ -456,7 +456,7 @@ export class RuntimeMethodologyLoader {
           }
         } catch (error) {
           console.warn(
-            `[RuntimeMethodologyLoader] Failed to inline phases from ${phasesPath}:`,
+            `[RuntimeFrameworkLoader] Failed to inline phases from ${phasesPath}:`,
             error
           );
         }
@@ -473,7 +473,7 @@ export class RuntimeMethodologyLoader {
           definition.judgePrompt = this.parseJudgePrompt(content);
         } catch (error) {
           console.warn(
-            `[RuntimeMethodologyLoader] Failed to inline judge prompt from ${judgePath}:`,
+            `[RuntimeFrameworkLoader] Failed to inline judge prompt from ${judgePath}:`,
             error
           );
         }
@@ -510,24 +510,24 @@ export class RuntimeMethodologyLoader {
     expectedId: string
   ): FrameworkSchemaValidationResult {
     // Use shared schema validation (SSOT with validate-frameworks.ts)
-    return validateMethodologySchema(definition, expectedId);
+    return validateFrameworkSchema(definition, expectedId);
   }
 }
 
 /**
  * Factory function with default configuration
  */
-export function createRuntimeMethodologyLoader(
-  config?: RuntimeMethodologyLoaderConfig
-): RuntimeMethodologyLoader {
-  return new RuntimeMethodologyLoader(config);
+export function createRuntimeFrameworkLoader(
+  config?: RuntimeFrameworkLoaderConfig
+): RuntimeFrameworkLoader {
+  return new RuntimeFrameworkLoader(config);
 }
 
 // ============================================================================
 // Singleton Instance for Convenience
 // ============================================================================
 
-let defaultLoader: RuntimeMethodologyLoader | null = null;
+let defaultLoader: RuntimeFrameworkLoader | null = null;
 
 /**
  * Get the default runtime methodology loader instance
@@ -535,10 +535,10 @@ let defaultLoader: RuntimeMethodologyLoader | null = null;
  * Creates a singleton instance on first call.
  */
 export function getDefaultRuntimeLoader(
-  config?: RuntimeMethodologyLoaderConfig
-): RuntimeMethodologyLoader {
+  config?: RuntimeFrameworkLoaderConfig
+): RuntimeFrameworkLoader {
   if (!defaultLoader) {
-    defaultLoader = new RuntimeMethodologyLoader(config);
+    defaultLoader = new RuntimeFrameworkLoader(config);
   }
   return defaultLoader;
 }

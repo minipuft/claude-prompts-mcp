@@ -4,7 +4,7 @@
  *
  * Defines common interfaces and patterns shared across resource loaders:
  * - GateDefinitionLoader
- * - RuntimeMethodologyLoader
+ * - RuntimeFrameworkLoader
  * - PromptLoader
  *
  * This module provides type-level unification without forcing inheritance,

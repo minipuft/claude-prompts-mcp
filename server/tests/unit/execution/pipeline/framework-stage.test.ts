@@ -6,7 +6,7 @@ import { FrameworkResolutionStage } from '../../../../src/engine/execution/pipel
 import type { FrameworkManager } from '../../../../src/engine/frameworks/framework-manager.js';
 import type {
   FrameworkExecutionContext,
-  FrameworkMethodology,
+  FrameworkSelection,
 } from '../../../../src/engine/frameworks/types/index.js';
 import type { GateLoader } from '../../../../src/engine/gates/core/gate-loader.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
@@ -53,7 +53,7 @@ const createConvertedPrompt = (overrides: Partial<ConvertedPrompt> = {}): Conver
   ...overrides,
 });
 
-const createFrameworkContext = (methodology: FrameworkMethodology): FrameworkExecutionContext => ({
+const createFrameworkContext = (methodology: FrameworkSelection): FrameworkExecutionContext => ({
   category: 'analysis',
   systemPrompt: `Use ${methodology}`,
   selectedFramework: { name: methodology, methodology },

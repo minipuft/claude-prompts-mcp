@@ -5,9 +5,9 @@
  * Data-driven implementation of GateGuide that works with any gate definition.
  * All behavior is driven by the YAML definition, not hardcoded logic.
  *
- * This mirrors the GenericMethodologyGuide pattern from the framework system.
+ * This mirrors the GenericFrameworkGuide pattern from the framework system.
  *
- * @see GenericMethodologyGuide for the pattern this follows
+ * @see GenericFrameworkGuide for the pattern this follows
  */
 
 import { isGateActiveForContext } from '../utils/gate-activation.js';

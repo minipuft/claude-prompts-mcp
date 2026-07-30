@@ -1,9 +1,9 @@
-// @lifecycle canonical - Runtime YAML loading for gates (mirrors RuntimeMethodologyLoader)
+// @lifecycle canonical - Runtime YAML loading for gates (mirrors RuntimeFrameworkLoader)
 /**
  * Gate Definition Loader
  *
  * Loads gate definitions from YAML source files at runtime,
- * following the same pattern as RuntimeMethodologyLoader.
+ * following the same pattern as RuntimeFrameworkLoader.
  *
  * Features:
  * - Runtime YAML parsing via shared utilities
@@ -12,7 +12,7 @@
  * - Configurable caching for performance
  * - Multi-location directory resolution
  *
- * @see RuntimeMethodologyLoader for the pattern this follows
+ * @see RuntimeFrameworkLoader for the pattern this follows
  */
 
 import { existsSync, readdirSync, readFileSync } from 'fs';
