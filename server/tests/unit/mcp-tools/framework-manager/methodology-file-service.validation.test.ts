@@ -47,7 +47,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     const result = await service.writeMethodologyFiles({
       id: 'complete-method',
       name: 'Complete Method',
-      methodology: 'COMPLETE',
+      type: 'COMPLETE',
       system_prompt_guidance: 'Apply complete principles.',
     });
 
@@ -68,7 +68,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     const result = await service.writeMethodologyFiles({
       id: 'e2e-test',
       name: 'E2E Test Methodology',
-      methodology: 'E2E_TEST',
+      type: 'E2E_TEST',
       system_prompt_guidance: 'Apply E2E principles.',
       judge_prompt: 'Evaluate against E2E policy.',
       phases: [{ id: 'phase-1', name: 'Phase 1', description: 'First phase' }],
@@ -87,7 +87,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     await service.writeMethodologyFiles({
       id: 'merge-test',
       name: 'Merge Test',
-      methodology: 'MERGE_BASE',
+      type: 'MERGE_BASE',
       system_prompt_guidance: 'Original guidance.',
     });
 
@@ -107,7 +107,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     const yamlContent = readFileSync(join(frameworkDir, 'framework.yaml'), 'utf8');
     const promptContent = readFileSync(join(frameworkDir, 'system-prompt.md'), 'utf8');
     expect(yamlContent).toContain('name: Merge Test Updated');
-    expect(yamlContent).toContain('methodology: MERGE_BASE');
+    expect(yamlContent).toContain('type: MERGE_BASE');
     expect(promptContent).toBe('Original guidance.');
   });
 });

@@ -163,7 +163,7 @@ export class FrameworkActionHandler extends ActionHandler {
     let response = `🔍 **Methodology: ${definition.name}**\n\n`;
     response += `**ID**: ${definition.id}\n`;
     response += `**Version**: ${definition.version || '1.0.0'}\n`;
-    response += `**Type**: ${definition.type || definition.methodology}\n`;
+    response += `**Type**: ${definition.type}\n`;
     response += `**Status**: ${definition.enabled !== false ? '✅ Enabled' : '❌ Disabled'}\n\n`;
 
     if (definition.systemPromptGuidance) {
@@ -238,7 +238,7 @@ export class FrameworkActionHandler extends ActionHandler {
       response += `${status} **${definition.name}** (\`${definition.id}\`)\n`;
 
       if (args.show_details) {
-        response += `   Type: ${definition.type || definition.methodology}\n`;
+        response += `   Type: ${definition.type}\n`;
         if (definition.methodologyGates?.length) {
           response += `   Gates: ${definition.methodologyGates.length} methodology-specific\n`;
         }

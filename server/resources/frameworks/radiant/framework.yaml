@@ -6,7 +6,6 @@
 id: radiant
 name: RADIANT Design Methodology
 type: RADIANT
-methodology: RADIANT # Deprecated: use 'type' instead
 version: 1.0.0
 enabled: true
 

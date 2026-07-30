@@ -1,7 +1,6 @@
 id: verify
 name: V.E.R.I.F.Y Resume Audit
 type: VERIFY
-methodology: VERIFY
 enabled: true
 systemPromptGuidance: >-
   Apply the V.E.R.I.F.Y methodology systematically:

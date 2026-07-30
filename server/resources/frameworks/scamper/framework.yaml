@@ -4,7 +4,6 @@
 id: scamper
 name: SCAMPER Framework
 type: SCAMPER
-methodology: SCAMPER # Deprecated: use 'type' instead
 version: '1.0.0'
 enabled: true
 

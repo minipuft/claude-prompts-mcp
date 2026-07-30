@@ -30,7 +30,7 @@
     "directory": "./logs",
     "level": "debug"
   },
-  "methodologies": {
+  "frameworks": {
     "dynamicToolDescriptions": true,
     "enabled": true,
     "systemPromptFrequency": 3,

@@ -40,7 +40,7 @@ describe('YAML Methodology Loading', () => {
         expect(definition).toBeDefined();
         expect(definition?.id).toBe(id);
         expect(definition?.name).toBeTruthy();
-        expect(definition?.methodology).toBeTruthy();
+        expect(definition?.type).toBeTruthy();
         expect(definition?.systemPromptGuidance).toBeTruthy();
       }
     });
@@ -63,7 +63,7 @@ describe('YAML Methodology Loading', () => {
       // Verify FrameworkGuide interface implementation
       expect(guide.frameworkId).toBe('cageerf');
       expect(guide.frameworkName).toBeTruthy();
-      expect(guide.methodology).toBeTruthy();
+      expect(guide.type).toBeTruthy();
       expect(guide.version).toBeTruthy();
 
       // Verify required methods exist

@@ -125,7 +125,7 @@ function frameworkYaml(id: string, opts: CreateResourceOptions): string {
   return [
     `id: ${id}`,
     `name: ${name}`,
-    `methodology: ${id.toUpperCase().replace(/-/g, '_')}`,
+    `type: ${id.toUpperCase().replace(/-/g, '_')}`,
     `version: 1.0.0`,
     `description: >-`,
     `  ${desc}`,

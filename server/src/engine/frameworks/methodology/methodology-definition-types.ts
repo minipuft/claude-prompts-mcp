@@ -32,12 +32,8 @@ export interface FrameworkResourceDefinition {
   id: string;
   /** Human-readable name */
   name: string;
-  /** Framework type discriminator (preferred over 'methodology') */
-  type?: FrameworkType;
-  /**
-   * @deprecated Use 'type' instead. Kept for backward compatibility with existing YAML files.
-   */
-  methodology: FrameworkMethodology;
+  /** Framework type discriminator. Required — the legacy `methodology:` field was removed. */
+  type: FrameworkType;
   /** Version string */
   version: string;
   /** Whether this methodology is enabled */

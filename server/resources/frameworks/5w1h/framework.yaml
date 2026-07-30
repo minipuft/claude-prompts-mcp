@@ -1,7 +1,6 @@
 id: 5w1h
 name: 5W1H Framework
 type: 5W1H
-methodology: 5W1H # Deprecated: use 'type' instead
 version: 1.0.0
 enabled: true
 systemPromptGuidance: >

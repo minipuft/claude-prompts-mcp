@@ -1,7 +1,6 @@
 id: liquescent
 name: LIQUESCENT Creative Flow
 type: LIQUESCENT
-methodology: LIQUESCENT
 enabled: true
 systemPromptGuidance: >-
   Apply the LIQUESCENT methodology for creative concept design and

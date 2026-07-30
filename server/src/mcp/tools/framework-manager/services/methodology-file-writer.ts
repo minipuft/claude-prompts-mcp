@@ -199,11 +199,11 @@ export class FrameworkFileWriter {
     }
 
     // Build typed creation data from raw YAML fields
-    const rawMethodology = methodology['methodology'];
+    const rawTypeValue = methodology['type'];
     const data: FrameworkCreationData = {
       id,
       name,
-      methodology: typeof rawMethodology === 'string' ? rawMethodology : id.toUpperCase(),
+      methodology: typeof rawTypeValue === 'string' ? rawTypeValue : id.toUpperCase(),
       system_prompt_guidance: systemGuidance,
     };
 
@@ -407,10 +407,8 @@ export class FrameworkFileWriter {
       yamlData['name'] = data.name;
     }
 
-    // Type/methodology (both for backward compat) - only if provided
     if (typeValue !== undefined) {
       yamlData['type'] = typeValue;
-      yamlData['methodology'] = typeValue;
     }
 
     // Enabled defaults to true

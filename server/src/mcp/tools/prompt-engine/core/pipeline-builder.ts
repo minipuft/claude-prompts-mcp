@@ -209,8 +209,8 @@ export class PipelineBuilder {
               def.systemPromptGuidance?.trim().split('\n')[0] ??
               'Methodology framework';
             return {
-              id: (def.methodology || def.id).toLowerCase(),
-              name: def.name || def.methodology || def.id,
+              id: (def.type || def.id).toLowerCase(),
+              name: def.name || def.type || def.id,
               description: String(description),
               category: 'guidance' as const,
               userMessageTemplate: '',

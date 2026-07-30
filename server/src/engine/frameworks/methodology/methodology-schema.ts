@@ -123,7 +123,9 @@ export const FrameworkSchema = z
     // Required core fields
     id: z.string().min(1),
     name: z.string().min(1),
-    methodology: z.string().min(1),
+    // Framework type discriminator. Replaced the legacy `methodology:` field, which was
+    // removed once every definition carried `type:` — it duplicated this value verbatim.
+    type: z.string().min(1),
     version: z.string().regex(/^\d+\.\d+\.\d+/, 'Must be semver format (e.g., 1.0.0)'),
     enabled: z.boolean(),
 

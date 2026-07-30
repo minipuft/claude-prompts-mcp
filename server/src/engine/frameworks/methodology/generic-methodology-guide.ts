@@ -56,8 +56,6 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
   readonly frameworkName: string;
   /** The framework type discriminator */
   readonly type: FrameworkType;
-  /** @deprecated Use `type` instead */
-  readonly methodology: FrameworkMethodology;
   readonly version: string;
 
   private readonly definition: FrameworkResourceDefinition;
@@ -71,9 +69,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
     this.definition = definition;
     this.frameworkId = definition.id;
     this.frameworkName = definition.name;
-    // Support both 'type' and legacy 'methodology' fields in definition
-    this.type = definition.type || definition.methodology;
-    this.methodology = this.type; // Backward compat: methodology mirrors type
+    this.type = definition.type;
     this.version = definition.version || '1.0.0';
   }
 
@@ -133,7 +129,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
           'Provide examples to illustrate complex concepts',
         ],
         completenessChecks: elements
-          ? [`Ensure all ${this.methodology} phases are addressed`].concat(
+          ? [`Ensure all ${this.type} phases are addressed`].concat(
               elements.requiredSections.map((s) => `Verify ${s.toLowerCase()} is complete`)
             )
           : [],
@@ -223,7 +219,7 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
       templateSuggestions,
       enhancementMetadata: this.createEnhancementMetadata(
         0.9,
-        `${this.methodology} methodology provides systematic approach`
+        `${this.type} methodology provides systematic approach`
       ),
     };
   }
@@ -238,16 +234,16 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
       // No quality indicators defined - return basic validation
       const combinedText = getCombinedText(prompt);
       const hasMethodologyMention =
-        combinedText.toLowerCase().includes(this.methodology.toLowerCase()) ||
+        combinedText.toLowerCase().includes(this.type.toLowerCase()) ||
         combinedText.toLowerCase().includes(this.frameworkId.toLowerCase());
 
       return {
         compliant: hasMethodologyMention,
         complianceScore: hasMethodologyMention ? 0.5 : 0.2,
-        strengths: hasMethodologyMention ? [`${this.methodology} methodology referenced`] : [],
+        strengths: hasMethodologyMention ? [`${this.type} methodology referenced`] : [],
         improvementAreas: hasMethodologyMention
           ? []
-          : [`Consider applying ${this.methodology} methodology`],
+          : [`Consider applying ${this.type} methodology`],
         specificSuggestions: [],
         frameworkGaps: [],
       };
@@ -286,8 +282,8 @@ export class GenericMethodologyGuide extends BaseMethodologyGuide {
     // Return judge prompt from definition or generate a default based on methodology
     return (
       this.definition.judgePrompt ?? {
-        systemMessage: `You are a ${this.methodology} methodology expert. Select resources that align with ${this.frameworkName} principles.`,
-        userMessageTemplate: `Analyze this task using ${this.methodology} methodology:\n\n**Task:** {{command}}\n\nReturn your selections as JSON with framework, style, gates, and reasoning.`,
+        systemMessage: `You are a ${this.type} methodology expert. Select resources that align with ${this.frameworkName} principles.`,
+        userMessageTemplate: `Analyze this task using ${this.type} methodology:\n\n**Task:** {{command}}\n\nReturn your selections as JSON with framework, style, gates, and reasoning.`,
         outputFormat: 'structured',
       }
     );

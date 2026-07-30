@@ -1,7 +1,6 @@
 id: focus
 name: FOCUS Framework
 type: FOCUS
-methodology: FOCUS
 enabled: true
 systemPromptGuidance: >-
   Apply the FOCUS methodology systematically:

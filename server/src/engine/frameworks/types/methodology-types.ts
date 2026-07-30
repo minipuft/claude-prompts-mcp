@@ -295,7 +295,6 @@ export interface FrameworkGuide {
   /**
    * @deprecated Use `type` instead. Kept for backward compatibility.
    */
-  readonly methodology: FrameworkMethodology;
   readonly version: string;
 
   /**
@@ -378,7 +377,6 @@ export abstract class BaseMethodologyGuide implements FrameworkGuide {
   /**
    * @deprecated Use `type` instead. Kept for backward compatibility.
    */
-  abstract readonly methodology: FrameworkMethodology;
   abstract readonly version: string;
 
   abstract guidePromptCreation(
@@ -419,7 +417,7 @@ export abstract class BaseMethodologyGuide implements FrameworkGuide {
    */
   protected createEnhancementMetadata(confidence: number, reason: string) {
     return {
-      methodology: this.methodology,
+      methodology: this.type,
       confidence,
       applicabilityReason: reason,
       appliedAt: new Date(),

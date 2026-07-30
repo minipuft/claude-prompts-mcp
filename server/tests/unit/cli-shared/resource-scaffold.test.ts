@@ -101,7 +101,7 @@ describe('resource-scaffold', () => {
       const content = readFileSync(join(result.path!, 'framework.yaml'), 'utf8');
       expect(content).toContain('id: my-method');
       expect(content).toContain('name: My Method');
-      expect(content).toContain('methodology: MY_METHOD');
+      expect(content).toContain('type: MY_METHOD');
       expect(content).toContain('version: 1.0.0');
       expect(content).toContain('enabled: false');
 

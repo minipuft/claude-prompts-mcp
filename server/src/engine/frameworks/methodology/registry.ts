@@ -438,13 +438,8 @@ export class FrameworkRegistry {
       errors.push('frameworkName is required and must be a string');
     }
 
-    // Accept either 'type' (preferred) or 'methodology' (deprecated)
-    if (
-      (!guide.type && !guide.methodology) ||
-      (guide.type && typeof guide.type !== 'string') ||
-      (guide.methodology && typeof guide.methodology !== 'string')
-    ) {
-      errors.push('type (or methodology) is required and must be a string');
+    if (!guide.type || typeof guide.type !== 'string') {
+      errors.push('type is required and must be a string');
     }
 
     if (!guide.version || typeof guide.version !== 'string') {
