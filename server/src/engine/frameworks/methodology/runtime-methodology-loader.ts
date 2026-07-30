@@ -509,7 +509,7 @@ export class RuntimeMethodologyLoader {
     definition: MethodologyDefinition,
     expectedId: string
   ): MethodologySchemaValidationResult {
-    // Use shared schema validation (SSOT with validate-methodologies.js)
+    // Use shared schema validation (SSOT with validate-methodologies.ts)
     return validateMethodologySchema(definition, expectedId);
   }
 }
