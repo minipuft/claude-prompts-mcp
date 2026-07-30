@@ -25,9 +25,9 @@ export const RESOURCE_URI_PATTERNS = {
   GATE_GUIDANCE: 'resource://gate/{id}/guidance',
 
   // Methodology resources (Phase 2)
-  FRAMEWORK_LIST: 'resource://methodology/',
-  FRAMEWORK_ITEM: 'resource://methodology/{id}',
-  FRAMEWORK_SYSTEM_PROMPT: 'resource://methodology/{id}/system-prompt',
+  FRAMEWORK_LIST: 'resource://framework/',
+  FRAMEWORK_ITEM: 'resource://framework/{id}',
+  FRAMEWORK_SYSTEM_PROMPT: 'resource://framework/{id}/system-prompt',
 
   // Observability resources (Phase 2)
   SESSION_LIST: 'resource://session/',

@@ -204,7 +204,7 @@ server/src/
 server/resources/               # Hot-reloaded resource definitions
 ├── methodologies/              # Methodology definitions
 │   └── {methodology-id}/
-│       ├── methodology.yaml    # Configuration
+│       ├── framework.yaml    # Configuration
 │       ├── phases.yaml         # Phase definitions
 │       └── system-prompt.md    # Injected guidance
 ├── gates/                      # Gate definitions
@@ -223,7 +223,7 @@ server/resources/               # Hot-reloaded resource definitions
 | --------------------- | --------------------------------------------------------------------- |
 | Add new prompt        | `server/prompts/[category]/` - create `.md` + update `prompts.json`   |
 | Modify pipeline stage | `server/src/execution/pipeline/stages/`                               |
-| Add methodology       | `server/resources/methodologies/{id}/` - create YAML + MD files       |
+| Add methodology       | `server/resources/frameworks/{id}/` - create YAML + MD files          |
 | Add/modify gate       | `server/resources/gates/{id}/` - create `gate.yaml` + `guidance.md`   |
 | Add/modify style      | `server/resources/styles/{id}/` - create `style.yaml` + `guidance.md` |
 | Debug session issues  | `server/src/chain-session/` + `runtime-state/state.db`                |

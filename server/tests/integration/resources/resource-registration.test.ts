@@ -669,10 +669,10 @@ describe('MCP Resources Registration Integration', () => {
     });
 
     test('methodology patterns include full URI scheme', () => {
-      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_LIST).toBe('resource://methodology/');
-      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM).toBe('resource://methodology/{id}');
+      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_LIST).toBe('resource://framework/');
+      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM).toBe('resource://framework/{id}');
       expect(RESOURCE_URI_PATTERNS.FRAMEWORK_SYSTEM_PROMPT).toBe(
-        'resource://methodology/{id}/system-prompt'
+        'resource://framework/{id}/system-prompt'
       );
     });
 

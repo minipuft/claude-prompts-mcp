@@ -11,7 +11,7 @@
  * │   │                                                             │
  * │   ├── registerPromptResources()      → resource://prompt/...    │
  * │   ├── registerGateResources()        → resource://gate/...      │
- * │   ├── registerMethodologyResources() → resource://methodology/..│
+ * │   ├── registerMethodologyResources() → resource://framework/..│
  * │   └── registerObservabilityResources()                          │
  * │       ├── Sessions                   → resource://session/...   │
  * │       └── Metrics                    → resource://metrics/...   │

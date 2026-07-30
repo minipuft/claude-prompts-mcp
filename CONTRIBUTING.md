@@ -123,8 +123,8 @@ All prompt/chain changes flow through MCP tools -- never edit files under `serve
 
 ### Methodology Contributions
 
-- Add methodology definitions under `server/resources/methodologies/{id}/`
-- Follow the structure: `methodology.yaml` + `phases.yaml` + optional `system-prompt.md` and `judge-prompt.md`
+- Add methodology definitions under `server/resources/frameworks/{id}/`
+- Follow the structure: `framework.yaml` + `phases.yaml` + optional `system-prompt.md` and `judge-prompt.md`
 - See [Methodologies Guide](docs/guides/methodologies.md) for configuration
 
 ### Documentation

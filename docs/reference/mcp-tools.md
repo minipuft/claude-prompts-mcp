@@ -23,7 +23,7 @@ system_control(action:"status")
 resource_manager(resource_type:"gate", action:"create", id:"my-gate", guidance:"...")
 
 # Switch methodology
-resource_manager(resource_type:"methodology", action:"switch", id:"cageerf")
+resource_manager(resource_type:"framework", action:"switch", id:"cageerf")
 ```
 
 **That's it.** Resources for READ, tools for WRITE. Everything below is details.
@@ -62,8 +62,8 @@ MCP Resources provide a **read-only, token-efficient** alternative to tool-based
 | `resource://gate/`                | All gates (minimal metadata)         | Discovery - find available gates   |
 | `resource://gate/{id}`            | Gate definition + guidance           | Inspect a specific gate            |
 | `resource://gate/{id}/guidance`   | Raw guidance content only            | Minimal token usage                |
-| `resource://methodology/`         | All frameworks (name, enabled)       | Discovery - find methodologies     |
-| `resource://methodology/{id}`     | Framework config + system prompt     | Inspect methodology details        |
+| `resource://framework/`           | All frameworks (name, enabled)       | Discovery - find methodologies     |
+| `resource://framework/{id}`       | Framework config + system prompt     | Inspect methodology details        |
 
 </details>
 
@@ -465,7 +465,7 @@ prompt_engine(command:">>create_gate id:'code-quality' name:'Code Quality' type:
 
 - `>>create_gate` — Quality gate authoring
 - `>>create_prompt` — Prompt/chain authoring
-- `>>create_methodology` — Framework authoring
+- `>>create_framework` — Framework authoring
 
 See [Script Tools Guide](../guides/script-tools.md) for building your own.
 
@@ -585,17 +585,17 @@ resource_manager(resource_type:"gate", action:"delete", id:"old-gate", confirm:t
 
 ```bash
 # List all methodologies (prefer resources for discovery)
-ReadMcpResourceTool uri="resource://methodology/"
+ReadMcpResourceTool uri="resource://framework/"
 
 # Inspect methodology (prefer resources — full content)
-ReadMcpResourceTool uri="resource://methodology/cageerf"
+ReadMcpResourceTool uri="resource://framework/cageerf"
 
 # Switch active methodology (tools required)
-resource_manager(resource_type:"methodology", action:"switch", id:"react", persist:true)
+resource_manager(resource_type:"framework", action:"switch", id:"react", persist:true)
 
 # Create a custom methodology
 resource_manager(
-  resource_type:"methodology",
+  resource_type:"framework",
   action:"create",
   id:"my-method",
   name:"My Custom Methodology",
@@ -815,7 +815,7 @@ prompt_engine(
 | Prompt not found        | Run `resource_manager(resource_type:"prompt", action:"list")` to see available IDs |
 | Edits not showing       | Run `resource_manager(resource_type:"prompt", action:"reload")`                    |
 | Chain stuck             | Use `force_restart:true` or check `system_control(action:"status")`                |
-| Framework not switching | Use `resource_manager(resource_type:"methodology", action:"switch")`               |
+| Framework not switching | Use `resource_manager(resource_type:"framework", action:"switch")`                 |
 | Gate keeps failing      | Use `gate_action:"skip"` to bypass, or `gate_action:"retry"`                       |
 
 ---
@@ -905,7 +905,7 @@ resource_manager(resource_type:"prompt", action:"history", id:"my_prompt", limit
 
 # Same for gates and methodologies
 resource_manager(resource_type:"gate", action:"history", id:"code-quality")
-resource_manager(resource_type:"methodology", action:"history", id:"cageerf")
+resource_manager(resource_type:"framework", action:"history", id:"cageerf")
 ```
 
 **Output:** Table showing version number, date, changes summary, and description.
@@ -1060,7 +1060,7 @@ Path resolution follows this priority (first match wins):
 | Prompt definitions | `server/resources/prompts/{category}/{id}/prompt.yaml`    |
 | Gate definitions   | `server/resources/gates/{id}/gate.yaml`                   |
 | Style definitions  | `server/resources/styles/{id}/style.yaml`                 |
-| Methodologies      | `server/resources/methodologies/{id}/methodology.yaml`    |
+| Methodologies      | `server/resources/frameworks/{id}/framework.yaml`         |
 | Chain sessions     | SQLite (`runtime-state/state.db`, table `chain_sessions`) |
 | Resource changes   | `runtime-state/resource-changes.jsonl`                    |
 | Server config      | `server/config.json`                                      |

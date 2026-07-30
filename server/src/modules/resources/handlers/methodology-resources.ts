@@ -5,9 +5,9 @@
  * Registers MCP resources for token-efficient methodology/framework discovery and content retrieval.
  *
  * URI Patterns:
- * - resource://methodology/              → List all frameworks (minimal metadata)
- * - resource://methodology/{id}          → Methodology definition + guidelines
- * - resource://methodology/{id}/system-prompt → Raw system prompt template only
+ * - resource://framework/              → List all frameworks (minimal metadata)
+ * - resource://framework/{id}          → Methodology definition + guidelines
+ * - resource://framework/{id}/system-prompt → Raw system prompt template only
  */
 
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -221,7 +221,7 @@ function buildMethodologyContent(framework: {
     if (framework.systemPromptTemplate.length > 500) {
       lines.push('');
       lines.push(
-        `*Full template available at \`resource://methodology/${framework.id}/system-prompt\`*`
+        `*Full template available at \`resource://framework/${framework.id}/system-prompt\`*`
       );
     }
   }

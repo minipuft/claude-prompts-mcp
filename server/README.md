@@ -437,7 +437,7 @@ npx claude-prompts --startup-test --verbose
 
 **"Methodology not found"**
 
-- Custom methodologies need `methodology.yaml` in each subdirectory
+- Custom methodologies need `framework.yaml` in each subdirectory
 - Use `MCP_METHODOLOGIES_PATH` to point to your methodologies folder
 
 **"Permission denied"**

@@ -35,11 +35,11 @@ processingSteps:
     methodologyBasis: CAGEERF Context phase
     order: 1
     required: true
-    section_header: "## Context"          # Required for phase guard detection
-    guards:                               # Optional — defines structural rules
-      required: true                      # Section must exist
-      min_length: 100                     # Minimum character count
-      forbidden_terms:                    # Terms that must NOT appear
+    section_header: "## Context" # Required for phase guard detection
+    guards: # Optional — defines structural rules
+      required: true # Section must exist
+      min_length: 100 # Minimum character count
+      forbidden_terms: # Terms that must NOT appear
         - "TODO"
         - "TBD"
         - "placeholder"
@@ -47,15 +47,15 @@ processingSteps:
 
 ### Available Guard Rules
 
-| Rule | Type | Description |
-|------|------|-------------|
-| `required` | boolean | Section must exist in the output |
-| `min_length` | number | Minimum character count for the section |
-| `max_length` | number | Maximum character count for the section |
-| `contains_any` | string[] | Section must include at least one of these terms (case-insensitive) |
-| `contains_all` | string[] | Section must include ALL of these terms (case-insensitive) |
-| `matches_pattern` | string | Section must match this regex pattern |
-| `forbidden_terms` | string[] | Section must NOT contain any of these terms (word-boundary match) |
+| Rule              | Type     | Description                                                         |
+| ----------------- | -------- | ------------------------------------------------------------------- |
+| `required`        | boolean  | Section must exist in the output                                    |
+| `min_length`      | number   | Minimum character count for the section                             |
+| `max_length`      | number   | Maximum character count for the section                             |
+| `contains_any`    | string[] | Section must include at least one of these terms (case-insensitive) |
+| `contains_all`    | string[] | Section must include ALL of these terms (case-insensitive)          |
+| `matches_pattern` | string   | Section must match this regex pattern                               |
+| `forbidden_terms` | string[] | Section must NOT contain any of these terms (word-boundary match)   |
 
 ### Coherence Requirements
 
@@ -67,11 +67,11 @@ processingSteps:
 
 Phase guard behavior is controlled by the `phaseGuards.mode` config setting:
 
-| Mode | Behavior | When to Use |
-|------|----------|-------------|
-| `enforce` | Creates a pending gate review on failure — blocks chain advancement until resolved | Production quality enforcement |
-| `warn` | Logs a warning but does not block | Development, exploration |
-| `off` | Phase guards are completely skipped | When structural checks are not desired |
+| Mode      | Behavior                                                                           | When to Use                            |
+| --------- | ---------------------------------------------------------------------------------- | -------------------------------------- |
+| `enforce` | Creates a pending gate review on failure — blocks chain advancement until resolved | Production quality enforcement         |
+| `warn`    | Logs a warning but does not block                                                  | Development, exploration               |
+| `off`     | Phase guards are completely skipped                                                | When structural checks are not desired |
 
 ### Configuration
 
@@ -118,6 +118,7 @@ The phase guard pass summary is prepended to the gate review prompt:
 ## Structural Verification: PASS
 
 Deterministic phase guard checks passed (4/4 phases verified):
+
 - **context_establishment**: found, 3/3 checks passed
 - **systematic_analysis**: found, 3/3 checks passed
 - **goal_definition**: found, 3/3 checks passed
@@ -135,16 +136,16 @@ Phase guard failures take priority. A pending gate review is created with struct
 
 ### Composition Matrix
 
-| Phase Guards | Gates | Result |
-|-------------|-------|--------|
-| Pass | Pass | Clean pass — highest quality |
-| Pass | Fail | Structure OK, content needs revision |
-| Fail | (skipped) | Structure must be fixed first |
-| Off | Pass/Fail | Gates only — no structural validation |
+| Phase Guards | Gates     | Result                                |
+| ------------ | --------- | ------------------------------------- |
+| Pass         | Pass      | Clean pass — highest quality          |
+| Pass         | Fail      | Structure OK, content needs revision  |
+| Fail         | (skipped) | Structure must be fixed first         |
+| Off          | Pass/Fail | Gates only — no structural validation |
 
 ## JSON Schema
 
-IDE-friendly JSON Schemas for `phases.yaml` and `methodology.yaml` are generated from the Zod SSOT:
+IDE-friendly JSON Schemas for `phases.yaml` and `framework.yaml` are generated from the Zod SSOT:
 
 ```bash
 npm run generate:schemas

@@ -1,6 +1,5 @@
 # Case Study: Recursive Prompt Engineering
 
-
 Built a prompt engineering tool. Used it to build itself.
 
 ---
@@ -123,7 +122,7 @@ Two-phase UX:
 1. **Design phase** — Missing fields? Template shows guidance and examples
 2. **Validation phase** — All fields present? Script validates → auto-creates
 
-Same pattern for `>>create_prompt` and `>>create_methodology`. Zero API memorization.
+Same pattern for `>>create_prompt` and `>>create_framework`. Zero API memorization.
 
 ---
 
