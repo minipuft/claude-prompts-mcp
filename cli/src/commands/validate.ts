@@ -14,7 +14,7 @@ interface ValidateOptions {
   flags: {
     prompts?: boolean;
     gates?: boolean;
-    methodologies?: boolean;
+    frameworks?: boolean;
     styles?: boolean;
     config?: boolean;
     all?: boolean;
@@ -131,13 +131,13 @@ function detectDuplicateIds(results: ValidationEntry[]): void {
 }
 
 function resolveTypes(flags: ValidateOptions['flags']): ResourceType[] {
-  if (flags.all || (!flags.prompts && !flags.gates && !flags.methodologies && !flags.styles)) {
-    return ['prompts', 'gates', 'methodologies', 'styles'];
+  if (flags.all || (!flags.prompts && !flags.gates && !flags.frameworks && !flags.styles)) {
+    return ['prompts', 'gates', 'frameworks', 'styles'];
   }
   const types: ResourceType[] = [];
   if (flags.prompts) types.push('prompts');
   if (flags.gates) types.push('gates');
-  if (flags.methodologies) types.push('methodologies');
+  if (flags.frameworks) types.push('frameworks');
   if (flags.styles) types.push('styles');
   return types;
 }

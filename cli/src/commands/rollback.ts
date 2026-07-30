@@ -17,7 +17,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm rollback <prompt|gate|methodology|style> <id> <version>\n` +
+      `Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
@@ -25,7 +25,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
 
   if (!options.id || !options.version) {
     console.error(
-      'Usage: cpm rollback <prompt|gate|methodology|style> <id> <version>\nResource ID and target version are required.',
+      'Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\nResource ID and target version are required.',
     );
     return 1;
   }
@@ -56,7 +56,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   }
 
   // Map plural type to singular for versioning API
-  const resourceType = singularName(type) as 'prompt' | 'gate' | 'methodology';
+  const resourceType = singularName(type) as 'prompt' | 'gate' | 'framework';
 
   const result = rollbackVersion(match.dir, resourceType, options.id, targetVersion, currentData);
 

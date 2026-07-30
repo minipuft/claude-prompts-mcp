@@ -15,7 +15,7 @@ export async function list(options: ListOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm list <prompts|gates|methodologies|styles>\n` +
+      `Usage: cpm list <prompts|gates|frameworks|styles>\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;

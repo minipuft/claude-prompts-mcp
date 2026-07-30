@@ -236,16 +236,16 @@ describe('cpm toggle', () => {
     if (existsSync(tmpWs)) rmSync(tmpWs, { recursive: true, force: true });
   });
 
-  it('toggles methodology from false to true', () => {
+  it('toggles framework from false to true', () => {
     const { stdout, exitCode } = run([
-      'toggle', 'methodology', 'test-method',
+      'toggle', 'framework', 'test-method',
       '--workspace', tmpWs,
     ]);
     expect(exitCode).toBe(0);
     expect(stdout).toContain('enabled false -> true');
 
     const content = readFileSync(
-      join(tmpWs, 'resources/methodologies/test-method/methodology.yaml'), 'utf8',
+      join(tmpWs, 'resources/frameworks/test-method/framework.yaml'), 'utf8',
     );
     expect(content).toContain('enabled: true');
   });
@@ -261,14 +261,14 @@ describe('cpm toggle', () => {
 
   it('outputs JSON', () => {
     const { stdout, exitCode } = run([
-      'toggle', 'methodology', 'test-method',
+      'toggle', 'framework', 'test-method',
       '--json', '--workspace', tmpWs,
     ]);
     expect(exitCode).toBe(0);
     const data = JSON.parse(stdout);
     expect(data.previousValue).toBe(false);
     expect(data.newValue).toBe(true);
-    expect(data.type).toBe('methodology');
+    expect(data.type).toBe('framework');
   });
 
   it('errors on prompt type', () => {

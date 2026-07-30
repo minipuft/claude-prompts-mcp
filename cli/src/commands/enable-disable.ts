@@ -14,11 +14,11 @@ interface EnableDisableOptions {
  */
 const SUBSYSTEM_MAP: Record<string, [string, string]> = {
   gates: ['gates.mode', 'Quality gates'],
-  methodologies: ['methodologies.mode', 'Framework methodologies'],
+  frameworks: ['frameworks.mode', 'Framework system'],
   resources: ['resources.mode', 'MCP resource registration'],
   'resources.prompts': ['resources.prompts.mode', 'Prompt resources'],
   'resources.gates': ['resources.gates.mode', 'Gate resources'],
-  'resources.methodologies': ['resources.methodologies.mode', 'Methodology resources'],
+  'resources.frameworks': ['resources.frameworks.mode', 'Framework resources'],
   'resources.observability': ['resources.observability.mode', 'Observability resources'],
   'resources.logs': ['resources.logs.mode', 'Log resources'],
   verification: ['verification.isolation.mode', 'Verification isolation'],

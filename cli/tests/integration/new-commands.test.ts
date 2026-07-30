@@ -176,18 +176,18 @@ describe('cpm create', () => {
     expect(stdout).toContain("Created prompt 'skip-validate'");
   });
 
-  it('creates a methodology with required fields', () => {
+  it('creates a framework with required fields', () => {
     const { stdout, exitCode } = run([
-      'create', 'methodology', 'new-method',
+      'create', 'framework', 'new-method',
       '--name', 'New Method',
       '--workspace', tmpWs,
     ]);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("Created methodology 'new-method'");
+    expect(stdout).toContain("Created framework 'new-method'");
 
-    const yamlPath = join(tmpWs, 'resources/methodologies/new-method/methodology.yaml');
+    const yamlPath = join(tmpWs, 'resources/frameworks/new-method/framework.yaml');
     const content = readFileSync(yamlPath, 'utf8');
-    expect(content).toContain('methodology: NEW_METHOD');
+    expect(content).toContain('framework: NEW_METHOD');
     expect(content).toContain('version: 1.0.0');
   });
 });

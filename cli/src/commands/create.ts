@@ -25,14 +25,14 @@ export async function create(options: CreateOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm create <prompt|gate|methodology|style> <id> [options]\n` +
+      `Usage: cpm create <prompt|gate|framework|style> <id> [options]\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
   }
 
   if (!options.id) {
-    console.error('Usage: cpm create <prompt|gate|methodology|style> <id> [options]\nResource ID is required.');
+    console.error('Usage: cpm create <prompt|gate|framework|style> <id> [options]\nResource ID is required.');
     return 1;
   }
 
@@ -98,7 +98,7 @@ export async function create(options: CreateOptions): Promise<number> {
 function printSubsystemAdvisory(workspace: string, type: string): void {
   const configKeyMap: Record<string, string> = {
     gates: 'gates.mode',
-    methodologies: 'methodologies.mode',
+    frameworks: 'frameworks.mode',
   };
   const configKey = configKeyMap[type];
   if (!configKey) return;
