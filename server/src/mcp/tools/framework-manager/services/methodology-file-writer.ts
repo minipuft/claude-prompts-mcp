@@ -203,7 +203,7 @@ export class FrameworkFileWriter {
     const data: FrameworkCreationData = {
       id,
       name,
-      methodology: typeof rawTypeValue === 'string' ? rawTypeValue : id.toUpperCase(),
+      type: typeof rawTypeValue === 'string' ? rawTypeValue : id.toUpperCase(),
       system_prompt_guidance: systemGuidance,
     };
 
@@ -400,7 +400,7 @@ export class FrameworkFileWriter {
     data: Partial<FrameworkCreationData> & { id: string }
   ): Record<string, unknown> {
     const yamlData: Record<string, unknown> = {};
-    const typeValue = data.type ?? data.methodology;
+    const typeValue = data.type;
 
     // Core fields - id is always required
     yamlData['id'] = data.id.toLowerCase();

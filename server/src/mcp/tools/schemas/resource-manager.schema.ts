@@ -110,9 +110,9 @@ export const resourceManagerInputSchema = z
     /** [Gate] Retry configuration. */
     retry_config: z.record(z.unknown()).optional(),
 
-    // ── Methodology parameters ───────────────────────────────────────────
-    /** [Methodology] Methodology type identifier. */
-    methodology: z.string().optional(),
+    // ── Framework parameters ─────────────────────────────────────────────
+    /** [Framework] Framework type identifier (e.g. 'CAGEERF', 'ReACT'). */
+    framework: z.string().optional(),
     /** [Methodology] System prompt guidance injected when active. */
     system_prompt_guidance: z.string().optional(),
     /** [Methodology] Phase definitions. */

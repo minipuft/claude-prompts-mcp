@@ -125,7 +125,7 @@ describe('ResourceManagerRouter', () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as { text: string }).text).toContain(
-        'only valid for resource_type: "methodology"'
+        'only valid for resource_type: "framework"'
       );
       expect(mockPromptResourceHandler.handleAction).not.toHaveBeenCalled();
     });

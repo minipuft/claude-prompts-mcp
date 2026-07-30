@@ -166,7 +166,7 @@ export interface ResourceManagerInput {
   };
 
   // Methodology-specific parameters
-  methodology?: string;
+  framework?: string;
   system_prompt_guidance?: string;
   phases?: FrameworkPhase[];
   gates?: {

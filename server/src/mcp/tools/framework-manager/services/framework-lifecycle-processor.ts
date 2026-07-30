@@ -41,7 +41,7 @@ export class FrameworkLifecycleProcessor {
   ) {}
 
   async handleCreate(args: FrameworkManagerInput): Promise<ToolResponse> {
-    const { id, name, methodology, system_prompt_guidance } = args;
+    const { id, name, framework, system_prompt_guidance } = args;
 
     if (id === undefined || id === '') {
       return this.error('Methodology ID is required for create action');
@@ -50,11 +50,9 @@ export class FrameworkLifecycleProcessor {
       return this.error('Methodology name is required for create action');
     }
 
-    // Auto-derive type from id if methodology not provided
+    // Auto-derive type from id when the caller omits `framework`
     const derivedType =
-      methodology !== undefined && methodology !== ''
-        ? methodology
-        : id.toUpperCase().replace(/-/g, '_');
+      framework !== undefined && framework !== '' ? framework : id.toUpperCase().replace(/-/g, '_');
 
     // Comprehensive existence check across all state sources
     const exists = this.checkMethodologyExists(id);
@@ -69,7 +67,6 @@ export class FrameworkLifecycleProcessor {
       id,
       name,
       type: derivedType,
-      methodology: derivedType,
       system_prompt_guidance: system_prompt_guidance ?? '',
       enabled: true,
     };
@@ -123,15 +120,12 @@ export class FrameworkLifecycleProcessor {
     };
 
     // Build update data with ONLY the fields provided in the request
-    const frameworkData: Partial<FrameworkCreationData> & { id: string; methodology: string } = {
-      id,
-      methodology: args.methodology ?? '',
-    };
+    const frameworkData: Partial<FrameworkCreationData> & { id: string } = { id };
 
     if (args.name !== undefined) frameworkData.name = args.name;
-    if (args.methodology !== undefined) {
-      frameworkData.type = args.methodology;
-      frameworkData.methodology = args.methodology;
+    // `framework` is the wire name for the type discriminator; FrameworkCreationData calls it `type`.
+    if (args.framework !== undefined) {
+      frameworkData.type = args.framework;
     }
     if (args.system_prompt_guidance !== undefined) {
       frameworkData.system_prompt_guidance = args.system_prompt_guidance;

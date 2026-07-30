@@ -86,10 +86,9 @@ export class FrameworkVersioningProcessor {
     }
 
     // Rebuild methodology data from snapshot
-    const frameworkData: Partial<FrameworkCreationData> & { id: string; methodology: string } = {
+    const frameworkData: Partial<FrameworkCreationData> & { id: string } = {
       id,
       name: String(snapshot['name'] ?? existingFramework.name),
-      methodology: String(snapshot['type'] ?? existingData.methodology['type'] ?? ''),
       type: String(snapshot['type'] ?? existingData.methodology['type']),
       description: String(snapshot['description'] ?? existingData.methodology['description']),
       enabled: (snapshot['enabled'] as boolean) ?? existingData.methodology['enabled'],

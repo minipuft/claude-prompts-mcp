@@ -153,7 +153,7 @@ export interface FrameworkManagerInput {
   action: FrameworkManagerActionId;
   id?: string;
   name?: string;
-  methodology?: string;
+  framework?: string;
   description?: string;
   system_prompt_guidance?: string;
   phases?: PhaseDefinition[];
@@ -241,9 +241,7 @@ export interface FrameworkCreationData {
   id: string;
   name: string;
   /** The framework type discriminator (e.g., 'CAGEERF', 'ReACT') */
-  type?: string;
-  /** @deprecated Use `type` instead. Kept for backward compatibility during migration. */
-  methodology: string;
+  type: string;
   description?: string;
   system_prompt_guidance: string;
   phases?: PhaseDefinition[];

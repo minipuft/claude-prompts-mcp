@@ -120,11 +120,11 @@ export class ResourceManagerRouter {
       };
     }
 
-    // Check methodology-only actions
+    // Check framework-only actions
     if (FRAMEWORK_ONLY_ACTIONS.includes(action) && resourceType !== 'framework') {
       return {
         valid: false,
-        error: `Action "${action}" is only valid for resource_type: "methodology"`,
+        error: `Action "${action}" is only valid for resource_type: "framework"`,
       };
     }
 
@@ -282,7 +282,7 @@ export class ResourceManagerRouter {
 
     if (args.id) frameworkArgs.id = args.id;
     if (args.name) frameworkArgs.name = args.name;
-    if (args.methodology) frameworkArgs.methodology = args.methodology;
+    if (args.framework) frameworkArgs.framework = args.framework;
     if (args.description) frameworkArgs.description = args.description;
     if (args.system_prompt_guidance) {
       frameworkArgs.system_prompt_guidance = args.system_prompt_guidance;
