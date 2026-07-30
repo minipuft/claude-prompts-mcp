@@ -54,7 +54,7 @@
       "enabled": true,
       "maxEntries": 500
     },
-    "methodologies": {
+    "frameworks": {
       "enabled": true
     },
     "observability": {

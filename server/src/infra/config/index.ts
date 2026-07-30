@@ -561,6 +561,19 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     }
     delete (this.config as { methodologies?: unknown }).methodologies;
 
+    // Same rename one level down: `resources.methodologies` -> `resources.frameworks`. Without
+    // this the old key is read as undefined and silently falls back to the default, so a user who
+    // had deliberately disabled framework resources would find them re-enabled with no error.
+    const legacyResources = this.config.resources as
+      | (ResourcesConfig & { methodologies?: { enabled?: boolean } })
+      | undefined;
+    if (legacyResources?.methodologies && !legacyResources.frameworks) {
+      legacyResources.frameworks = legacyResources.methodologies;
+    }
+    if (legacyResources) {
+      delete legacyResources.methodologies;
+    }
+
     if (!this.config.frameworks) {
       this.config.frameworks = {
         enabled: true,

@@ -114,31 +114,31 @@
       }
     },
 
-    "methodologies": {
+    "frameworks": {
       "type": "object",
-      "description": "Framework methodologies (CAGEERF, ReACT, etc.) that guide LLM behavior. Controls three injection types: system-prompt (methodology phases), gate-guidance (quality criteria), and style-guidance (response formatting).",
+      "description": "Frameworks (CAGEERF, ReACT, etc.) that guide LLM behavior. Controls three injection types: system-prompt (framework phases), gate-guidance (quality criteria), and style-guidance (response formatting).",
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable methodology system"
+          "description": "Enable framework system"
         },
         "dynamicToolDescriptions": {
           "type": "boolean",
           "default": true,
-          "description": "Adapt MCP tool descriptions based on active methodology"
+          "description": "Adapt MCP tool descriptions based on active framework"
         },
         "systemPromptFrequency": {
           "type": "integer",
           "default": 2,
           "minimum": 1,
-          "description": "Inject methodology guidance every N chain steps. Higher values reduce token usage at the cost of less frequent methodology reinforcement."
+          "description": "Inject framework guidance every N chain steps. Higher values reduce token usage at the cost of less frequent framework reinforcement."
         },
         "systemPromptTarget": {
           "type": "string",
           "enum": ["steps", "gates", "both"],
           "default": "steps",
-          "description": "Where to inject methodology guidance: 'steps' (normal execution), 'gates' (gate reviews), or 'both'"
+          "description": "Where to inject framework guidance: 'steps' (normal execution), 'gates' (gate reviews), or 'both'"
         },
         "gateGuidanceFrequency": {
           "type": "integer",
@@ -282,7 +282,7 @@
 
     "phaseGuards": {
       "type": "object",
-      "description": "Phase guards: deterministic structural validation of LLM output against methodology phase definitions (zero LLM cost)",
+      "description": "Phase guards: deterministic structural validation of LLM output against framework phase definitions (zero LLM cost)",
       "properties": {
         "mode": {
           "type": "string",
@@ -429,14 +429,14 @@
             }
           }
         },
-        "methodologies": {
+        "frameworks": {
           "type": "object",
-          "description": "Methodology resources (resource://methodology/...)",
+          "description": "Framework resources (resource://framework/...)",
           "properties": {
             "enabled": {
               "type": "boolean",
               "default": true,
-              "description": "Enable methodology resources"
+              "description": "Enable framework resources"
             }
           }
         },
