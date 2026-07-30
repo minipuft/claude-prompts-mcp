@@ -8,19 +8,18 @@
  */
 
 /**
- * Step lifecycle state values used when tracking chain execution progress.
+ * What just happened to a step. Call sites report a milestone; {@link StepMetadata} derives the
+ * sticky {@link StepLifecycle} from it and stamps the matching substate timestamp.
  *
- * @deprecated Use {@link StepLifecycle} (sticky terminal states, SEP-1686-aligned vocabulary)
- * with {@link StepSubstate} flags for non-sticky transient progress (renderedAt, responseAt,
- * validatingSince). Retained during migration window; will be removed once all consumers
- * have migrated to the two-tier model.
+ * `rendered` and `responded` both map to lifecycle `working` — they are distinguished only by
+ * which timestamp gets set, which is precisely the distinction a single enum could not express.
  */
-export enum StepState {
-  PENDING = 'pending',
-  RENDERED = 'rendered',
-  RESPONSE_CAPTURED = 'response_captured',
-  COMPLETED = 'completed',
-}
+export type StepMilestone = 'pending' | 'rendered' | 'responded' | 'completed';
+
+// `enum StepState` (PENDING | RENDERED | RESPONSE_CAPTURED | COMPLETED) was removed here.
+// Its two transient members had no counterpart in the sticky-terminal model: RENDERED and
+// RESPONSE_CAPTURED are not states, they are progress *within* `working`, and are now carried
+// by the {@link StepSubstate} timestamps (`renderedAt`, `respondedAt`). Use {@link StepLifecycle}.
 
 /**
  * SEP-1686-aligned chain run lifecycle. Terminal states (`completed`, `failed`, `cancelled`)
@@ -49,13 +48,13 @@ export type StepLifecycle =
  * Non-sticky progress flags meaningful only when the enclosing step is in `working`.
  * Each timestamp records when the corresponding milestone was reached (epoch ms).
  *
- * Replaces the substate-as-enum granularity of the deprecated {@link StepState}
+ * Replaces the substate-as-enum granularity of the retired `StepState` enum
  * (RENDERED / RESPONSE_CAPTURED) — multiple substates can be true simultaneously,
  * which is naturally expressed as flags rather than as a single enum value.
  */
 export interface StepSubstate {
   renderedAt?: number;
-  responseAt?: number;
+  respondedAt?: number;
   validatingSince?: number;
 }
 
@@ -184,14 +183,18 @@ export type ChainLifecycleEvent =
   | { type: 'chain.completed'; sessionId: string };
 
 /**
- * Metadata tracked for each chain step as it transitions through lifecycle states.
+ * Metadata tracked for each chain step as it transitions through its lifecycle.
  *
- * @deprecated Companion type to {@link StepState}. Migrate to {@link StepLifecycle}
- * + {@link StepSubstate} (sticky lifecycle + non-sticky timestamp flags). Retained
- * during the migration window for legacy step-state consumers.
+ * Two-tier by design: `state` holds the sticky {@link StepLifecycle} value, while the
+ * timestamps below record non-sticky progress *within* `working`. Several timestamps may
+ * be set at once, which is why they are flags rather than a single enum value — the
+ * distinction the retired `StepState` enum could not express.
+ *
+ * `renderedAt` and `respondedAt` are the sole discriminators between a step that has only
+ * been rendered and one whose response was captured; both are `state: 'working'`.
  */
 export interface StepMetadata {
-  state: StepState;
+  state: StepLifecycle;
   isPlaceholder: boolean;
   renderedAt?: number;
   respondedAt?: number;

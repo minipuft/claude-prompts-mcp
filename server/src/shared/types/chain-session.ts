@@ -11,9 +11,8 @@
  * Engine code should cast to ParsedCommand when full type access is needed.
  */
 
-import { StepState } from './chain-execution.js';
-
 import type {
+  StepMilestone,
   ChainRunStatus,
   ChainState,
   PendingGateReview,
@@ -23,8 +22,8 @@ import type {
 import type { ExecutionModifiers, ExecutionPlan } from './core-config.js';
 import type { StateStoreOptions } from './persistence.js';
 
-// Re-export StepState for consumers that previously imported it via modules/chains/types.ts
-export { StepState };
+// Re-export StepMilestone for consumers that previously imported StepState via modules/chains/types.ts
+export type { StepMilestone };
 
 // Re-export SEP-1686-aligned execution-lifecycle types so consumers can continue importing
 // from chain-session.ts without reaching into chain-execution.ts directly.
@@ -201,14 +200,14 @@ export interface ChainSessionService {
   setStepState(
     sessionId: string,
     stepNumber: number,
-    state: StepState,
+    milestone: StepMilestone,
     isPlaceholder?: boolean
   ): boolean;
   getStepState(sessionId: string, stepNumber: number): StepMetadata | undefined;
   transitionStepState(
     sessionId: string,
     stepNumber: number,
-    newState: StepState,
+    newMilestone: StepMilestone,
     isPlaceholder?: boolean
   ): Promise<boolean>;
   isStepComplete(sessionId: string, stepNumber: number): boolean;

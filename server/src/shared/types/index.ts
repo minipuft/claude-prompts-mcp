@@ -40,7 +40,6 @@ export {
 
 // Chain execution types (cross-cutting: engine + modules + mcp)
 export {
-  StepState,
   type StepMetadata,
   type GateReviewHistoryEntry,
   type GateReviewExecutionContext,
@@ -275,7 +274,7 @@ export interface ToolDescription {
     parametersEnabled?: Record<string, ToolParameter | string>;
     parametersDisabled?: Record<string, ToolParameter | string>;
     methodologies?: Record<string, string>;
-    methodologyParameters?: Record<string, Record<string, ToolParameter | string>>;
+    frameworkParameters?: Record<string, Record<string, ToolParameter | string>>;
   };
 }
 

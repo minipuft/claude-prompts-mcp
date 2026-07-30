@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ChainSessionStore, type SessionBlueprint } from '../../../src/modules/chains/manager.js';
-import { StepState } from '../../../src/shared/types/chain-execution.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/shared/types/index.js';
@@ -77,7 +76,7 @@ describe('ChainSessionStore', () => {
     });
 
     await manager.createSession('session-placeholder', 'chain-placeholder', 2);
-    manager.setStepState('session-placeholder', 1, StepState.RENDERED, true);
+    manager.setStepState('session-placeholder', 1, 'rendered', true);
 
     await manager.completeStep('session-placeholder', 1, { preservePlaceholder: true });
 
@@ -334,21 +333,21 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
   test('transitionStepState refuses to overwrite a COMPLETED step', async () => {
     manager = newManager('step-stickiness');
     await manager.createSession('s1', 'chain-a', 2);
-    manager.setStepState('s1', 1, StepState.COMPLETED, false);
+    manager.setStepState('s1', 1, 'completed', false);
 
-    const result = await manager.transitionStepState('s1', 1, StepState.RENDERED);
+    const result = await manager.transitionStepState('s1', 1, 'rendered');
     expect(result).toBe(false);
 
     const metadata = manager.getStepState('s1', 1);
-    expect(metadata?.state).toBe(StepState.COMPLETED);
+    expect(metadata?.state).toBe('completed');
   });
 
   test('transitionStepState allows re-asserting the same terminal state (idempotent no-op)', async () => {
     manager = newManager('step-idempotent');
     await manager.createSession('s1', 'chain-a', 2);
-    manager.setStepState('s1', 1, StepState.COMPLETED, false);
+    manager.setStepState('s1', 1, 'completed', false);
 
-    const result = await manager.transitionStepState('s1', 1, StepState.COMPLETED);
+    const result = await manager.transitionStepState('s1', 1, 'completed');
     expect(result).toBe(true);
   });
 

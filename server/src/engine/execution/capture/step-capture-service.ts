@@ -1,5 +1,4 @@
 // @lifecycle canonical - Captures step results (placeholder or real) in chain sessions.
-import { StepState } from '../../../shared/types/chain-execution.js';
 
 import type { Logger } from '../../../infra/logging/index.js';
 import type { ChainSession, ChainSessionService } from '../../../shared/types/index.js';
@@ -28,7 +27,7 @@ export interface StepCaptureInput {
  */
 export class StepCaptureService {
   constructor(
-    private readonly chainSessionManager: ChainSessionService,
+    private readonly chainSessionStore: ChainSessionService,
     private readonly logger: Logger
   ) {}
 
@@ -63,12 +62,12 @@ export class StepCaptureService {
       return;
     }
 
-    const existingState = this.chainSessionManager.getStepState(sessionId, targetStepNumber);
-    if (existingState?.state === StepState.COMPLETED && !existingState.isPlaceholder) {
+    const existingState = this.chainSessionStore.getStepState(sessionId, targetStepNumber);
+    if (existingState?.state === 'completed' && !existingState.isPlaceholder) {
       return;
     }
 
-    if (existingState?.state === StepState.COMPLETED && existingState.isPlaceholder === true) {
+    if (existingState?.state === 'completed' && existingState.isPlaceholder === true) {
       if (captureResponse !== undefined) {
         await this.replaceplaceholderWithReal(
           context,
@@ -129,13 +128,13 @@ export class StepCaptureService {
   ): Promise<void> {
     const placeholderContent = this.buildPlaceholderContent(chainId, stepNumber, totalSteps);
 
-    await this.chainSessionManager.updateSessionState(sessionId, stepNumber, placeholderContent, {
+    await this.chainSessionStore.updateSessionState(sessionId, stepNumber, placeholderContent, {
       isPlaceholder: true,
       placeholderSource: PLACEHOLDER_SOURCE,
       capturedAt: Date.now(),
     });
 
-    await this.chainSessionManager.completeStep(sessionId, stepNumber, {
+    await this.chainSessionStore.completeStep(sessionId, stepNumber, {
       preservePlaceholder: true,
     });
   }
@@ -151,14 +150,14 @@ export class StepCaptureService {
       `Capturing real response for step ${stepNumber} in chain ${chainId}: ${responseContent.substring(0, 50)}...`
     );
 
-    await this.chainSessionManager.updateSessionState(sessionId, stepNumber, responseContent, {
+    await this.chainSessionStore.updateSessionState(sessionId, stepNumber, responseContent, {
       isPlaceholder: false,
       source: 'user_response',
       capturedAt: Date.now(),
       outputMapping,
     });
 
-    await this.chainSessionManager.completeStep(sessionId, stepNumber, {
+    await this.chainSessionStore.completeStep(sessionId, stepNumber, {
       preservePlaceholder: false,
     });
 
@@ -210,10 +209,10 @@ export class StepCaptureService {
     );
 
     // Only advance if no pending gate review (gated flows advance on PASS verdict)
-    const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+    const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
     const hasPendingReview = pendingReview !== undefined;
     if (!hasPendingReview && !passClearedThisCall) {
-      await this.chainSessionManager.advanceStep(sessionId, targetStepNumber);
+      await this.chainSessionStore.advanceStep(sessionId, targetStepNumber);
     } else if (hasPendingReview) {
       context.diagnostics.info(
         'StepCaptureService',
@@ -251,10 +250,10 @@ export class StepCaptureService {
       outputMapping
     );
 
-    const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+    const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
     const hasPendingReview = pendingReview !== undefined;
     if (!hasPendingReview && !passClearedThisCall) {
-      await this.chainSessionManager.advanceStep(sessionId, targetStepNumber);
+      await this.chainSessionStore.advanceStep(sessionId, targetStepNumber);
     } else if (hasPendingReview) {
       context.diagnostics.info(
         'StepCaptureService',
@@ -276,14 +275,14 @@ export class StepCaptureService {
     sessionContext: SessionContext
   ): void {
     const scopeOptions = context.getScopeOptions();
-    const updatedSession = this.chainSessionManager.getSession(sessionId, scopeOptions);
+    const updatedSession = this.chainSessionStore.getSession(sessionId, scopeOptions);
     if (updatedSession !== undefined) {
       context.sessionContext = {
         ...sessionContext,
         currentStep: updatedSession.state.currentStep,
         totalSteps: updatedSession.state.totalSteps,
       };
-      context.state.session.chainContext = this.chainSessionManager.getChainContext(
+      context.state.session.chainContext = this.chainSessionStore.getChainContext(
         sessionId,
         scopeOptions
       );
