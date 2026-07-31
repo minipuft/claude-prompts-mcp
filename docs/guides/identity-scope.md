@@ -83,7 +83,10 @@ For Claude Desktop, add the flags to your MCP server configuration:
 When deployed behind an API gateway (Kong, Envoy, NGINX) that injects identity headers:
 
 ```bash
-node dist/index.js --transport=streamable-http --port=3000
+# The port comes from the PORT env var or `server.port` in config.json.
+# There is no --port flag; the CLI parses with strict:false, so one would be
+# accepted silently and ignored.
+PORT=3000 node dist/index.js --transport=streamable-http
 ```
 
 The server reads these headers automatically:

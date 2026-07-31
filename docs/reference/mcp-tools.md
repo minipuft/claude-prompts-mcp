@@ -994,9 +994,10 @@ node dist/index.js --transport stdio \
 
 There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `--styles` and
 `--scripts` were documented here but are parsed nowhere in the server; point `--workspace` (or
-`MCP_RESOURCES_PATH`) at a directory instead. The full parsed set is `--client`, `--config`,
-`--debug-startup`, `--help`, `--identity-mode`, `--init`, `--log-level`, `--quiet`,
-`--server-root`, `--startup-test`, `--transport`, `--verbose`, `--workspace`.
+`MCP_RESOURCES_PATH`) at a directory instead. The full parsed set (17, from `server/src/runtime/cli.ts`) is `--client`, `--config`,
+`--debug-startup`, `--help`, `--identity-mode`, `--init`, `--log-level`,
+`--organization-id`, `--quiet`, `--server-root`, `--startup-test`, `--suppress-debug`,
+`--test-mode`, `--transport`, `--verbose`, `--workspace`, `--workspace-id`.
 
 ### Transport Options
 
@@ -1011,11 +1012,14 @@ For HTTP clients, use Streamable HTTP. It's the current MCP standard and replace
 
 ### Environment Variables
 
-| Variable             | Description                                          |
-| -------------------- | ---------------------------------------------------- |
-| `MCP_WORKSPACE`      | Workspace root for config resolution                 |
-| `MCP_RESOURCES_PATH` | Base path for all resources (prompts/, gates/, etc.) |
-| `MCP_CONFIG_PATH`    | Override config.json path                            |
+| Variable                    | Description                                          |
+| --------------------------- | ---------------------------------------------------- |
+| `MCP_WORKSPACE`             | Workspace root for config resolution                 |
+| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.) |
+| `MCP_CONFIG_PATH`           | Override config.json path                            |
+| `MCP_SERVER_ROOT`           | Server package root, used by skills export           |
+| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file      |
+| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file   |
 
 Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
 `MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.

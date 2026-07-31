@@ -1424,12 +1424,52 @@ never compared.
 
 | ID  | Status | Step                                                                                                                                                                                                                                 | Files                                                                  | Depends | Verification                                                                                              |
 | --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
-| 6.0 | ☐      | Enumerate every CLI flag and `MCP_*` env var named anywhere in `docs/`, `README.md`, `server/README.md`, `CONTRIBUTING.md` and the platform manifests; diff against what `src/runtime/{cli,options}.ts` parses and what `src/` reads | (probe only)                                                           | —       | A table of documented-vs-parsed, with every mismatch classified as "remove from docs" or "implement"      |
-| 6.1 | ☐      | Apply the 6.0 verdicts. Name each removed option in place rather than deleting silently, so a user who copied it from an older revision can tell what happened                                                                       | per 6.0                                                                | 6.0     | `validate:readme` 0; no doc names an unparsed flag or unread env var                                      |
-| 6.2 | ☐      | **Automate it.** A `validate:documented-options` script that extracts flags/env vars from docs and fails when one is not parsed/read. This is the only member of the tier that prevents recurrence                                   | `server/scripts/validate-documented-options.js`, `server/package.json` | 6.1     | Fails when a fake `--nonexistent` is added to a doc; passes on a clean tree; registered in `validate:all` |
+| 6.0 | ✓      | Enumerate every CLI flag and `MCP_*` env var named anywhere in `docs/`, `README.md`, `server/README.md`, `CONTRIBUTING.md` and the platform manifests; diff against what `src/runtime/{cli,options}.ts` parses and what `src/` reads | (probe only)                                                           | —       | A table of documented-vs-parsed, with every mismatch classified as "remove from docs" or "implement"      |
+| 6.1 | ✓      | Apply the 6.0 verdicts. Name each removed option in place rather than deleting silently, so a user who copied it from an older revision can tell what happened                                                                       | per 6.0                                                                | 6.0     | `validate:readme` 0; no doc names an unparsed flag or unread env var                                      |
+| 6.2 | ✓      | **Automate it.** A `validate:documented-options` script that extracts flags/env vars from docs and fails when one is not parsed/read. This is the only member of the tier that prevents recurrence                                   | `server/scripts/validate-documented-options.js`, `server/package.json` | 6.1     | Fails when a fake `--nonexistent` is added to a doc; passes on a clean tree; registered in `validate:all` |
 
 **Gate**: `validate:all` green with 6.2 registered; introducing a fabricated flag into any doc
 fails CI.
+
+#### Tier 6 outcome (2026-07-30)
+
+All three rows landed. **Three defects, one of them the fourth recurrence of this tier's own shape.**
+
+| #   | Defect                                                                                                                                                                                      | Verdict                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| E1  | `--port=3000` in `identity-scope.md` is parsed by nothing. `parseServerCliArgs` uses `strict: false`, so it was accepted and silently ignored — the port comes from `PORT` or `server.port` | Removed, with the reason named in place          |
+| E2  | `mcp-tools.md` said **"The full parsed set is …"** and then listed **13 of 17**, omitting `--suppress-debug`, `--test-mode`, `--workspace-id`, `--organization-id`                          | Corrected to all 17, sourced to `runtime/cli.ts` |
+| E3  | `MCP_SERVER_ROOT`, `MCP_SHELL_PRESETS_PATH`, `MCP_VERDICT_PATTERNS_PATH` are read by shipped code and documented **nowhere**                                                                | Documented                                       |
+
+**E2 is the point of this tier.** That sentence was written to _close_ this defect class, and it
+was itself incomplete — the same "the fix was the worse half of the job" shape recorded in the
+tier's own rationale, now on its fourth occurrence.
+
+**E3 is the reverse defect and the plan did not anticipate it.** 6.0 was scoped as
+documented-but-nonexistent; three working env vars turned out to be undiscoverable instead. The
+guard checks docs → source, so it cannot catch this direction — a source → docs check would have
+to decide which internals are _meant_ to be public, which is a judgement call, not a lint.
+Recorded as a known limit rather than papered over.
+
+**6.2 reads ground truth from source at run time**, never a hardcoded list: flag names come from
+the `options:` tables in `server/src/runtime/cli.ts` and `cli/src/cli.ts`, env vars from every
+`process.env['MCP_*']` read in `server/src` + `cli/src`. A guard carrying its own copy of the flag
+set would drift exactly like the docs did. It refuses to pass when it cannot read either source,
+so it cannot succeed vacuously.
+
+False positives it must survive, each found by running it: markdown heading anchors
+(`#mcp-resources--token-efficient-discovery` looks like a flag), other tools' flags quoted in
+examples (`eslint --fix`, `gh release create --title`, `rg --type ts`), camelCase truncation
+(`--testPathPattern` → `--test`), and **wrapped removal notes** — in `server/README.md` the tokens
+sit on one line and "were documented here but are not read" lands on the next, so the removal-note
+exemption checks a ±1 line window. A single-line test passed the first draft and flagged six
+correct lines.
+
+**Verification.** `validate:all` exit 0 with `validate:documented-options` as its **20th** member.
+Negative-verified four ways: exit 1 on a fabricated flag, exit 1 on a fabricated env var, exit 0 on
+a removal note (the documented-removal policy is the fix, not the defect), and — the decisive one —
+exit 1 when E1 is reverted to its original text. typecheck 0, `lint:ratchet` 0 regressions, full
+suite 32 failures = baseline.
 
 > **Why this deserves a tier rather than a bug entry.** The same defect shape recurred three times
 > in one session, and the first fix for it was itself incomplete — the README tables were corrected
