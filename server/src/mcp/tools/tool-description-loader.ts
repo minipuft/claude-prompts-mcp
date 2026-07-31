@@ -144,10 +144,10 @@ export class ToolDescriptionLoader extends EventEmitter {
     this.configManager.on('frameworksConfigChanged', this.frameworksConfigListener);
   }
 
-  private warnOnMethodologyConfigLeak(toolName: string, description: ToolDescription): void {
-    const hasMethodologyDesc = Boolean(description.frameworkAware?.methodologies);
-    const hasMethodologyParams = Boolean(description.frameworkAware?.frameworkParameters);
-    if (hasMethodologyDesc || hasMethodologyParams) {
+  private warnOnFrameworkConfigLeak(toolName: string, description: ToolDescription): void {
+    const hasFrameworkDesc = Boolean(description.frameworkAware?.methodologies);
+    const hasFrameworkParams = Boolean(description.frameworkAware?.frameworkParameters);
+    if (hasFrameworkDesc || hasFrameworkParams) {
       this.logger.warn(
         `[ToolDescriptionLoader] Config contains methodology-specific entries for ${toolName}; YAML overlays are the sole source of truth. Config methodology entries are ignored.`
       );
@@ -210,14 +210,14 @@ export class ToolDescriptionLoader extends EventEmitter {
   private setDescriptionsFromConfig(config: ToolDescriptionsConfig): void {
     this.descriptions.clear();
     for (const [name, description] of Object.entries(config.tools)) {
-      this.warnOnMethodologyConfigLeak(name, description);
+      this.warnOnFrameworkConfigLeak(name, description);
       this.descriptions.set(name, cloneToolDescription(description));
     }
   }
 
   private getActiveFrameworkContext(): {
     activeFramework?: string;
-    activeMethodology?: string;
+    activeFrameworkType?: string;
     frameworkSystemEnabled?: boolean;
   } {
     if (!this.frameworkStateStore) {
@@ -230,7 +230,7 @@ export class ToolDescriptionLoader extends EventEmitter {
 
       return {
         activeFramework: activeFramework?.id,
-        activeMethodology: activeFramework?.type ?? activeFramework?.id,
+        activeFrameworkType: activeFramework?.type ?? activeFramework?.id,
         frameworkSystemEnabled: state?.frameworkSystemEnabled,
       };
     } catch (error) {
@@ -248,14 +248,14 @@ export class ToolDescriptionLoader extends EventEmitter {
     return styleDescs?.[toolName]?.responseFormat;
   }
 
-  hasMethodologyResponseFormat(toolName: string): boolean {
+  hasFrameworkResponseFormat(toolName: string): boolean {
     const context = this.getActiveFrameworkContext();
-    const methodologyKey = normalizeFrameworkKey(
-      context.activeMethodology ?? context.activeFramework
+    const frameworkKey = normalizeFrameworkKey(
+      context.activeFrameworkType ?? context.activeFramework
     );
-    if (!methodologyKey) return false;
+    if (!frameworkKey) return false;
 
-    const frameworkDescs = this.frameworkDescriptions.get(methodologyKey);
+    const frameworkDescs = this.frameworkDescriptions.get(frameworkKey);
     const tool = frameworkDescs?.[toolName as keyof FrameworkToolDescriptions];
     return Boolean(tool?.responseFormat);
   }
@@ -282,7 +282,7 @@ export class ToolDescriptionLoader extends EventEmitter {
       this.isInitialized = true;
 
       this.logger.info(
-        `Synchronized tool descriptions (${reason}); source=${base.source}, framework=${activeContext.activeFramework || 'n/a'}, methodology=${activeContext.activeMethodology || 'n/a'}`
+        `Synchronized tool descriptions (${reason}); source=${base.source}, framework=${activeContext.activeFramework || 'n/a'}, methodology=${activeContext.activeFrameworkType || 'n/a'}`
       );
 
       if (options?.emitChange ?? true) {
@@ -335,8 +335,8 @@ export class ToolDescriptionLoader extends EventEmitter {
   getDescription(
     toolName: string,
     frameworkEnabled?: boolean,
-    activeMethodology?: string,
-    options?: { applyMethodologyOverride?: boolean }
+    activeFrameworkType?: string,
+    options?: { applyFrameworkOverride?: boolean }
   ): string {
     const toolDesc = this.descriptions.get(toolName) || this.defaults.get(toolName);
     if (!toolDesc) {
@@ -351,20 +351,20 @@ export class ToolDescriptionLoader extends EventEmitter {
       return toolDesc.description;
     }
 
-    const applyMethodologyOverride = options?.applyMethodologyOverride ?? true;
+    const applyFrameworkOverride = options?.applyFrameworkOverride ?? true;
     this.logger.debug(
-      `Getting description for ${toolName} (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
+      `Getting description for ${toolName} (framework: ${frameworkEnabled}, methodology: ${activeFrameworkType})`
     );
-    const methodologyKey = normalizeFrameworkKey(activeMethodology);
+    const frameworkKey = normalizeFrameworkKey(activeFrameworkType);
 
     // PRIORITY 1: Methodology-specific descriptions from YAML guides (SOT)
-    if (applyMethodologyOverride && methodologyKey) {
-      const frameworkDescs = this.frameworkDescriptions.get(methodologyKey);
+    if (applyFrameworkOverride && frameworkKey) {
+      const frameworkDescs = this.frameworkDescriptions.get(frameworkKey);
       if (frameworkDescs?.[toolName as keyof FrameworkToolDescriptions]?.description) {
         const frameworkDesc =
           frameworkDescs[toolName as keyof FrameworkToolDescriptions]!.description!;
         this.logger.debug(
-          `Using methodology-specific description from ${activeMethodology ?? methodologyKey} guide for ${toolName}`
+          `Using methodology-specific description from ${activeFrameworkType ?? frameworkKey} guide for ${toolName}`
         );
         return frameworkDesc;
       }
@@ -387,8 +387,8 @@ export class ToolDescriptionLoader extends EventEmitter {
     toolName: string,
     paramName: string,
     frameworkEnabled?: boolean,
-    activeMethodology?: string,
-    options?: { applyMethodologyOverride?: boolean }
+    activeFrameworkType?: string,
+    options?: { applyFrameworkOverride?: boolean }
   ): string | undefined {
     const toolDesc = this.descriptions.get(toolName) || this.defaults.get(toolName);
     if (!toolDesc) {
@@ -400,12 +400,12 @@ export class ToolDescriptionLoader extends EventEmitter {
       return typeof param === 'string' ? param : param?.description;
     }
 
-    const applyMethodologyOverride = options?.applyMethodologyOverride ?? true;
+    const applyFrameworkOverride = options?.applyFrameworkOverride ?? true;
     if (!toolDesc.parameters) return undefined;
-    const methodologyKey = normalizeFrameworkKey(activeMethodology);
+    const frameworkKey = normalizeFrameworkKey(activeFrameworkType);
 
-    if (applyMethodologyOverride && methodologyKey) {
-      const frameworkDescs = this.frameworkDescriptions.get(methodologyKey);
+    if (applyFrameworkOverride && frameworkKey) {
+      const frameworkDescs = this.frameworkDescriptions.get(frameworkKey);
       const frameworkTool = frameworkDescs?.[toolName as keyof FrameworkToolDescriptions];
       if (frameworkTool?.parameters?.[paramName]) {
         const param = frameworkTool.parameters[paramName];

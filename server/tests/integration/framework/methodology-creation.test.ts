@@ -61,7 +61,7 @@ const createMockFrameworkManager = (): FrameworkManager => {
   >();
 
   // Mock methodology registry with all required methods
-  const mockMethodologyRegistry = {
+  const mockFrameworkRegistry = {
     hasGuide: jest.fn((id: string) => registeredFrameworks.has(id.toLowerCase())),
     getRuntimeLoader: jest.fn(() => ({
       clearCache: jest.fn(),
@@ -89,8 +89,8 @@ const createMockFrameworkManager = (): FrameworkManager => {
     unregister: jest.fn((id: string) => {
       return registeredFrameworks.delete(id.toLowerCase());
     }),
-    getMethodologyGuide: jest.fn(() => null),
-    getMethodologyRegistry: jest.fn(() => mockMethodologyRegistry),
+    getFrameworkGuide: jest.fn(() => null),
+    getFrameworkRegistry: jest.fn(() => mockFrameworkRegistry),
   } as unknown as FrameworkManager;
 };
 
@@ -98,15 +98,15 @@ const createMockFileService = () => {
   const writtenFiles: Map<string, FrameworkCreationData> = new Map();
 
   return {
-    methodologyExists: jest.fn((id: string) => writtenFiles.has(id.toLowerCase())),
-    deleteMethodology: jest.fn(async (id: string) => {
+    frameworkExists: jest.fn((id: string) => writtenFiles.has(id.toLowerCase())),
+    deleteFramework: jest.fn(async (id: string) => {
       writtenFiles.delete(id.toLowerCase());
       return true;
     }),
-    getMethodologyDir: jest.fn(
+    getFrameworkDir: jest.fn(
       (id: string) => `/test/server/resources/frameworks/${id.toLowerCase()}`
     ),
-    writeMethodologyFiles: jest.fn(async (data: FrameworkCreationData) => {
+    writeFrameworkFiles: jest.fn(async (data: FrameworkCreationData) => {
       writtenFiles.set(data.id.toLowerCase(), data);
       return {
         success: true,
@@ -116,7 +116,7 @@ const createMockFileService = () => {
         ],
       };
     }),
-    loadExistingMethodology: jest.fn(async (id: string) => {
+    loadExistingFramework: jest.fn(async (id: string) => {
       const data = writtenFiles.get(id.toLowerCase());
       if (data === undefined) return null;
       // Return ExistingFrameworkData structure (raw YAML representation)
@@ -131,7 +131,7 @@ const createMockFileService = () => {
         judgePromptPath: null,
       };
     }),
-    toMethodologyCreationData: jest.fn(
+    toFrameworkCreationData: jest.fn(
       (
         id: string,
         existing: { methodology: Record<string, unknown>; systemPrompt: string | null }

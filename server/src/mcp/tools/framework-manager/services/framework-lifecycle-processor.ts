@@ -55,7 +55,7 @@ export class FrameworkLifecycleProcessor {
       framework !== undefined && framework !== '' ? framework : id.toUpperCase().replace(/-/g, '_');
 
     // Comprehensive existence check across all state sources
-    const exists = this.checkMethodologyExists(id);
+    const exists = this.checkFrameworkExists(id);
     if (exists.inAnySource) {
       return this.error(
         `Methodology '${id}' already exists in: ${exists.sources.join(', ')}. Use update action to modify.`
@@ -81,7 +81,7 @@ export class FrameworkLifecycleProcessor {
     }
 
     // Atomic create with rollback on failure
-    const result = await this.createMethodologyAtomic(id, frameworkData);
+    const result = await this.createFrameworkAtomic(id, frameworkData);
     if (!result.success) {
       return this.error(`Failed to create methodology: ${result.error}`);
     }
@@ -105,7 +105,7 @@ export class FrameworkLifecycleProcessor {
     }
 
     // Load existing YAML files from disk
-    const existingData = await this.ctx.fileService.loadExistingMethodology(id);
+    const existingData = await this.ctx.fileService.loadExistingFramework(id);
     if (existingData === null) {
       return this.error(`Failed to load methodology files for '${id}'. Files may be corrupted.`);
     }
@@ -176,7 +176,7 @@ export class FrameworkLifecycleProcessor {
     }
 
     // Write methodology files with merge from existing data
-    const result = await this.ctx.fileService.writeMethodologyFiles(frameworkData, existingData);
+    const result = await this.ctx.fileService.writeFrameworkFiles(frameworkData, existingData);
 
     if (!result.success) {
       return this.error(`Failed to update methodology: ${result.error}`);
@@ -228,8 +228,8 @@ export class FrameworkLifecycleProcessor {
     }
 
     // Prevent deleting built-in frameworks
-    const builtInMethodologies = ['cageerf', 'react', '5w1h', 'scamper'];
-    if (builtInMethodologies.includes(id.toLowerCase())) {
+    const builtInFrameworks = ['cageerf', 'react', '5w1h', 'scamper'];
+    if (builtInFrameworks.includes(id.toLowerCase())) {
       return this.error(
         `Cannot delete built-in methodology '${id}'. Only custom frameworks can be deleted.`
       );
@@ -351,7 +351,7 @@ export class FrameworkLifecycleProcessor {
   /**
    * Comprehensive existence check across all methodology state sources.
    */
-  private checkMethodologyExists(id: string): {
+  private checkFrameworkExists(id: string): {
     inAnySource: boolean;
     sources: string[];
     filesystem: boolean;
@@ -361,10 +361,10 @@ export class FrameworkLifecycleProcessor {
     const normalizedId = id.toLowerCase();
     const sources: string[] = [];
 
-    const fsExists = this.ctx.fileService.methodologyExists(normalizedId);
+    const fsExists = this.ctx.fileService.frameworkExists(normalizedId);
     if (fsExists) sources.push('filesystem');
 
-    const registry = this.ctx.frameworkManager.getMethodologyRegistry();
+    const registry = this.ctx.frameworkManager.getFrameworkRegistry();
     const registryExists = registry.hasGuide(normalizedId);
     if (registryExists) sources.push('registry');
 
@@ -383,15 +383,15 @@ export class FrameworkLifecycleProcessor {
   /**
    * Atomic methodology creation with rollback on failure.
    */
-  private async createMethodologyAtomic(
+  private async createFrameworkAtomic(
     id: string,
     frameworkData: FrameworkCreationData
   ): Promise<{ success: boolean; error?: string; paths?: string[] }> {
     const normalizedId = id.toLowerCase();
-    const registry = this.ctx.frameworkManager.getMethodologyRegistry();
+    const registry = this.ctx.frameworkManager.getFrameworkRegistry();
 
     // Step 1: Write files to disk
-    const writeResult = await this.ctx.fileService.writeMethodologyFiles(frameworkData, null);
+    const writeResult = await this.ctx.fileService.writeFrameworkFiles(frameworkData, null);
     if (!writeResult.success) {
       return { success: false, error: `File write failed: ${writeResult.error}` };
     }
@@ -403,7 +403,7 @@ export class FrameworkLifecycleProcessor {
     // Step 3: Register in methodology registry
     const registryResult = await registry.loadAndRegisterById(normalizedId);
     if (!registryResult) {
-      await this.ctx.fileService.deleteMethodology(normalizedId);
+      await this.ctx.fileService.deleteFramework(normalizedId);
       return { success: false, error: 'Registry registration failed - files rolled back' };
     }
 
@@ -411,7 +411,7 @@ export class FrameworkLifecycleProcessor {
     const frameworkResult = await this.ctx.frameworkManager.registerFramework(id);
     if (!frameworkResult) {
       registry.unregisterGuide(normalizedId);
-      await this.ctx.fileService.deleteMethodology(normalizedId);
+      await this.ctx.fileService.deleteFramework(normalizedId);
       return {
         success: false,
         error: 'Framework registration failed - registry and files rolled back',

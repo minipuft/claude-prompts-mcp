@@ -73,23 +73,25 @@ export function preloadFrameworkDescriptions(
 
   try {
     const loader = getDefaultRuntimeLoader();
-    const methodologyIds = loader.discoverMethodologies();
+    const frameworkIds = loader.discoverFrameworks();
 
-    for (const id of methodologyIds) {
-      const definition = loader.loadMethodology(id);
+    for (const id of frameworkIds) {
+      const definition = loader.loadFramework(id);
       if (!definition) continue;
 
       const guide = createGenericGuide(definition);
       const descriptions = guide.getToolDescriptions?.() || {};
-      const methodologyKey = normalizeFrameworkKey(guide.type);
-      const frameworkKey = normalizeFrameworkKey(guide.frameworkId);
+      // Each guide is registered under BOTH its type and its id, so a later lookup succeeds
+      // whichever of the two the caller happens to hold.
+      const typeKey = normalizeFrameworkKey(guide.type);
+      const idKey = normalizeFrameworkKey(guide.frameworkId);
 
-      if (methodologyKey) {
-        result.set(methodologyKey, descriptions);
+      if (typeKey) {
+        result.set(typeKey, descriptions);
       }
 
-      if (frameworkKey) {
-        result.set(frameworkKey, descriptions);
+      if (idKey) {
+        result.set(idKey, descriptions);
       }
     }
 
@@ -151,22 +153,22 @@ export function buildActiveConfig(
   baseConfig: ToolDescriptionsConfig,
   activeContext: {
     activeFramework?: string;
-    activeMethodology?: string;
+    activeFrameworkType?: string;
     frameworkSystemEnabled?: boolean;
   },
   frameworkDescriptions: Map<string, FrameworkToolDescriptions>,
   dynamicDescriptionsEnabled: boolean
 ): ToolDescriptionsConfig {
-  const methodologyKey = normalizeFrameworkKey(
-    activeContext.activeMethodology ?? activeContext.activeFramework
+  const frameworkKey = normalizeFrameworkKey(
+    activeContext.activeFrameworkType ?? activeContext.activeFramework
   );
 
   const tools: Record<string, ToolDescription> = {};
   for (const [name, description] of Object.entries(baseConfig.tools)) {
     const baseDescription = cloneToolDescription(description);
 
-    if (dynamicDescriptionsEnabled && methodologyKey) {
-      const frameworkDescs = frameworkDescriptions.get(methodologyKey);
+    if (dynamicDescriptionsEnabled && frameworkKey) {
+      const frameworkDescs = frameworkDescriptions.get(frameworkKey);
       const frameworkTool = frameworkDescs?.[name as keyof FrameworkToolDescriptions] || undefined;
 
       if (frameworkTool?.description) {
@@ -201,8 +203,8 @@ export function buildActiveConfig(
   if (activeContext.activeFramework) {
     generatedConfig.activeFramework = activeContext.activeFramework;
   }
-  if (activeContext.activeMethodology) {
-    generatedConfig.activeMethodology = activeContext.activeMethodology;
+  if (activeContext.activeFrameworkType) {
+    generatedConfig.activeFrameworkType = activeContext.activeFrameworkType;
   }
 
   return generatedConfig;

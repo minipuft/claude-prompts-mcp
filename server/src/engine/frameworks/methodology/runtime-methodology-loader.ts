@@ -39,7 +39,7 @@ export interface RuntimeFrameworkLoaderConfig {
   /** Override default frameworks directory */
   frameworksDir?: string;
   /** Additional directories to scan for methodology overlays (workspace resources) */
-  additionalMethodologiesDirs?: string[];
+  additionalFrameworksDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
   /** Validate definitions on load (default: true) */
@@ -63,7 +63,7 @@ export interface LoaderStats {
   /** Frameworks directory being used */
   frameworksDir: string;
   /** Additional overlay directories */
-  additionalMethodologiesDirs: string[];
+  additionalFrameworksDirs: string[];
 }
 
 // FrameworkSchemaValidationResult is imported from methodology-schema.ts
@@ -80,25 +80,25 @@ export type { FrameworkSchemaValidationResult } from './methodology-schema.js';
  * const loader = new RuntimeFrameworkLoader();
  *
  * // Discover available frameworks
- * const ids = loader.discoverMethodologies();
+ * const ids = loader.discoverFrameworks();
  * // ['cageerf', 'react', '5w1h', 'scamper']
  *
  * // Load a specific methodology
- * const definition = loader.loadMethodology('cageerf');
+ * const definition = loader.loadFramework('cageerf');
  * ```
  */
 export class RuntimeFrameworkLoader {
   private cache = new Map<string, FrameworkResourceDefinition>();
   private stats = { cacheHits: 0, cacheMisses: 0, loadErrors: 0 };
   private frameworksDir: string;
-  private additionalMethodologiesDirs: string[];
+  private additionalFrameworksDirs: string[];
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
 
   constructor(config: RuntimeFrameworkLoaderConfig = {}) {
-    this.frameworksDir = config.frameworksDir ?? this.resolveMethodologiesDir();
-    this.additionalMethodologiesDirs = (config.additionalMethodologiesDirs ?? []).filter(
+    this.frameworksDir = config.frameworksDir ?? this.resolveFrameworksDir();
+    this.additionalFrameworksDirs = (config.additionalFrameworksDirs ?? []).filter(
       (dir) => existsSync(dir) && dir !== this.frameworksDir
     );
     this.enableCache = config.enableCache ?? true;
@@ -108,9 +108,9 @@ export class RuntimeFrameworkLoader {
     if (this.debug) {
       // Use stderr to avoid corrupting STDIO protocol
       console.error(`[RuntimeFrameworkLoader] Using directory: ${this.frameworksDir}`);
-      if (this.additionalMethodologiesDirs.length > 0) {
+      if (this.additionalFrameworksDirs.length > 0) {
         console.error(
-          `[RuntimeFrameworkLoader] Additional directories: ${this.additionalMethodologiesDirs.join(', ')}`
+          `[RuntimeFrameworkLoader] Additional directories: ${this.additionalFrameworksDirs.join(', ')}`
         );
       }
     }
@@ -122,7 +122,7 @@ export class RuntimeFrameworkLoader {
    * @param id - Methodology ID (e.g., 'cageerf', 'react')
    * @returns Loaded definition or undefined if not found
    */
-  loadMethodology(id: string): FrameworkResourceDefinition | undefined {
+  loadFramework(id: string): FrameworkResourceDefinition | undefined {
     const normalizedId = id.toLowerCase();
 
     // Check cache first
@@ -155,13 +155,13 @@ export class RuntimeFrameworkLoader {
    *
    * @returns Array of methodology IDs that have valid entry points
    */
-  discoverMethodologies(): string[] {
+  discoverFrameworks(): string[] {
     // Primary: flat scan
     const primaryIds = discoverYamlDirectories(this.frameworksDir, 'framework.yaml');
     const idSet = new Set(primaryIds.map((id) => id.toLowerCase()));
 
     // Additional: nested scan (flat + grouped). Primary wins on conflict via Set.
-    for (const dir of this.additionalMethodologiesDirs) {
+    for (const dir of this.additionalFrameworksDirs) {
       const additionalIds = discoverNestedYamlDirectories(dir, 'framework.yaml');
       for (const id of additionalIds) {
         idSet.add(id.toLowerCase());
@@ -176,12 +176,12 @@ export class RuntimeFrameworkLoader {
    *
    * @returns Map of ID to definition for all successfully loaded frameworks
    */
-  loadAllMethodologies(): Map<string, FrameworkResourceDefinition> {
+  loadAllFrameworks(): Map<string, FrameworkResourceDefinition> {
     const results = new Map<string, FrameworkResourceDefinition>();
-    const ids = this.discoverMethodologies();
+    const ids = this.discoverFrameworks();
 
     for (const id of ids) {
-      const definition = this.loadMethodology(id);
+      const definition = this.loadFramework(id);
       if (definition) {
         results.set(id, definition);
       }
@@ -196,7 +196,7 @@ export class RuntimeFrameworkLoader {
    * @param id - Methodology ID to check
    * @returns True if the methodology has a valid entry point
    */
-  methodologyExists(id: string): boolean {
+  frameworkExists(id: string): boolean {
     const normalizedId = id.toLowerCase();
 
     // Check primary
@@ -231,7 +231,7 @@ export class RuntimeFrameworkLoader {
       cacheMisses: this.stats.cacheMisses,
       loadErrors: this.stats.loadErrors,
       frameworksDir: this.frameworksDir,
-      additionalMethodologiesDirs: this.additionalMethodologiesDirs,
+      additionalFrameworksDirs: this.additionalFrameworksDirs,
     };
   }
 
@@ -246,7 +246,7 @@ export class RuntimeFrameworkLoader {
    * Get all directories that should be watched for changes (primary + additional)
    */
   getWatchDirectories(): string[] {
-    return [this.frameworksDir, ...this.additionalMethodologiesDirs];
+    return [this.frameworksDir, ...this.additionalFrameworksDirs];
   }
 
   // ============================================================================
@@ -328,7 +328,7 @@ export class RuntimeFrameworkLoader {
    * @returns The base directory to pass to loadFromDir, or undefined
    */
   private findInAdditionalDirs(id: string): string | undefined {
-    for (const dir of this.additionalMethodologiesDirs) {
+    for (const dir of this.additionalFrameworksDirs) {
       // Flat: {dir}/{id}/framework.yaml
       if (existsSync(join(dir, id, 'framework.yaml'))) {
         return dir;
@@ -363,7 +363,7 @@ export class RuntimeFrameworkLoader {
    *   4. Common relative paths (resources/frameworks first, then legacy)
    *   5. Fallback
    */
-  private resolveMethodologiesDir(): string {
+  private resolveFrameworksDir(): string {
     // Standalone fallback — used when PathResolver is not available (tests, standalone).
     // In production, module-initializer passes the resolved dir via config.
 
@@ -400,12 +400,9 @@ export class RuntimeFrameworkLoader {
           const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
           if (pkg.name === 'claude-prompts') {
             // Check resources/frameworks first (new structure)
-            const resourcesMethodologiesPath = join(dir, 'resources', 'frameworks');
-            if (
-              existsSync(resourcesMethodologiesPath) &&
-              this.hasYamlFiles(resourcesMethodologiesPath)
-            ) {
-              return resourcesMethodologiesPath;
+            const resourcesFrameworksPath = join(dir, 'resources', 'frameworks');
+            if (existsSync(resourcesFrameworksPath) && this.hasYamlFiles(resourcesFrameworksPath)) {
+              return resourcesFrameworksPath;
             }
             // Then check legacy location
             const frameworksPath = join(dir, 'frameworks');

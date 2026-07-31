@@ -257,7 +257,7 @@ export class PromptAssetManager {
 
     // Register methodology-specific reload callback (keeps manager generic)
     if (options?.frameworkHotReload?.handler) {
-      this.hotReloadObserver.setMethodologyReloadCallback(options.frameworkHotReload.handler);
+      this.hotReloadObserver.setFrameworkReloadCallback(options.frameworkHotReload.handler);
     }
 
     if (options?.auxiliaryReloads) {

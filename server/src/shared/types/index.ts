@@ -284,9 +284,13 @@ export interface ToolDescriptionsConfig {
   version: string;
   lastUpdated?: string;
   tools: Record<string, ToolDescription>;
-  // Runtime metadata used when the active file is regenerated from framework state
+  // Runtime metadata used when the active file is regenerated from framework state.
+  // These two are not duplicates: overlays are registered under both a framework's id and its
+  // type, so lookup prefers the type and falls back to the id (`activeFrameworkType ?? activeFramework`).
+  /** Active framework's id (e.g. 'cageerf'). */
   activeFramework?: string;
-  activeMethodology?: string;
+  /** Active framework's type (e.g. 'CAGEERF'). Preferred overlay lookup key. */
+  activeFrameworkType?: string;
   generatedFrom?: 'fallback' | 'legacy' | 'defaults' | string;
   generatedAt?: string;
 }
@@ -692,7 +696,7 @@ export type HotReloadEventType =
   | 'prompt_changed'
   | 'config_changed'
   | 'category_changed'
-  | 'methodology_changed'
+  | 'framework_changed'
   | 'gate_changed'
   | 'reload_required';
 
@@ -709,8 +713,8 @@ export interface HotReloadEvent {
   reason: string;
   affectedFiles: string[];
   category?: string;
-  /** Methodology ID for methodology_changed events */
-  methodologyId?: string;
+  /** Methodology ID for framework_changed events */
+  frameworkId?: string;
   /** Gate ID for gate_changed events */
   gateId?: string;
   /** The type of file change (added, modified, removed) */

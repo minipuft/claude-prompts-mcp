@@ -45,11 +45,11 @@ export interface FileChangeEvent {
   timestamp: number;
   isPromptFile: boolean;
   isConfigFile: boolean;
-  isMethodologyFile: boolean;
+  isFrameworkFile: boolean;
   /** True when the file is in a registered auxiliary directory (gates, scripts, etc.) */
   isAuxiliaryFile?: boolean;
   /** Extracted methodology ID for methodology file changes */
-  methodologyId?: string;
+  frameworkId?: string;
   category?: string;
   frameworkAnalysis?: FrameworkAnalysisData;
 }
@@ -72,7 +72,7 @@ export interface FileObserverConfig {
   debounceMs: number;
   watchPromptFiles: boolean;
   watchConfigFiles: boolean;
-  watchMethodologyFiles: boolean;
+  watchFrameworkFiles: boolean;
   recursive: boolean;
   ignoredPatterns: string[];
   maxRetries: number;
@@ -129,7 +129,7 @@ const DEFAULT_CONFIG: FileObserverConfig = {
   debounceMs: 500,
   watchPromptFiles: true,
   watchConfigFiles: true,
-  watchMethodologyFiles: true,
+  watchFrameworkFiles: true,
   recursive: true,
   ignoredPatterns: [
     '**/.git/**',
@@ -448,14 +448,14 @@ export class FileObserver extends EventEmitter {
     // Determine file types
     const isPromptFile = this.isPromptFile(filename);
     const isConfigFile = this.isConfigFile(filename, filePath);
-    const frameworkInfo = this.isMethodologyFile(filename, filePath);
-    const isMethodologyFile = frameworkInfo.isMethodology;
+    const frameworkInfo = this.isFrameworkFile(filename, filePath);
+    const isFrameworkFile = frameworkInfo.isFramework;
 
     // Check if file is in a registered auxiliary directory (gates, scripts, etc.)
     const isAuxiliaryFile = this.isInAuxiliaryDirectory(filePath);
 
     // Skip if we're not watching any applicable type
-    if (!isPromptFile && !isConfigFile && !isMethodologyFile && !isAuxiliaryFile) {
+    if (!isPromptFile && !isConfigFile && !isFrameworkFile && !isAuxiliaryFile) {
       return;
     }
 
@@ -467,7 +467,7 @@ export class FileObserver extends EventEmitter {
       return;
     }
 
-    if (!this.config.watchMethodologyFiles && isMethodologyFile) {
+    if (!this.config.watchFrameworkFiles && isFrameworkFile) {
       return;
     }
 
@@ -479,12 +479,12 @@ export class FileObserver extends EventEmitter {
       timestamp: Date.now(),
       isPromptFile,
       isConfigFile,
-      isMethodologyFile,
+      isFrameworkFile,
       ...(isAuxiliaryFile ? { isAuxiliaryFile } : {}),
     };
 
-    if (frameworkInfo.methodologyId) {
-      event.methodologyId = frameworkInfo.methodologyId;
+    if (frameworkInfo.frameworkId) {
+      event.frameworkId = frameworkInfo.frameworkId;
     }
 
     if (category) {
@@ -500,7 +500,7 @@ export class FileObserver extends EventEmitter {
     }
 
     // Track methodology events separately
-    if (isMethodologyFile) {
+    if (isFrameworkFile) {
       this.stats.frameworkFileEvents++;
     }
 
@@ -561,7 +561,7 @@ export class FileObserver extends EventEmitter {
       this.emit('configFileChange', event);
     }
 
-    if (event.isMethodologyFile) {
+    if (event.isFrameworkFile) {
       this.emit('frameworkFileChange', event);
     }
   }
@@ -676,41 +676,41 @@ export class FileObserver extends EventEmitter {
    * Check if file is a methodology YAML file
    * Methodology files live in resources/frameworks/{id}/ directories and are YAML files
    *
-   * @returns Object with isMethodology flag and extracted methodologyId
+   * @returns Object with isFramework flag and extracted frameworkId
    */
-  private isMethodologyFile(
+  private isFrameworkFile(
     filename: string,
     fullPath?: string
-  ): { isMethodology: boolean; methodologyId?: string } {
+  ): { isFramework: boolean; frameworkId?: string } {
     const ext = path.extname(filename).toLowerCase();
 
     // Must be a YAML file
     if (ext !== '.yaml' && ext !== '.yml') {
-      return { isMethodology: false };
+      return { isFramework: false };
     }
 
     // Check if path contains /frameworks/ directory (matches both resources/frameworks/ and legacy frameworks/)
     if (!fullPath) {
-      return { isMethodology: false };
+      return { isFramework: false };
     }
 
     const normalizedPath = fullPath.replace(/\\/g, '/');
-    const methodologyMatch = normalizedPath.match(/\/frameworks\/([^/]+)\//);
+    const frameworkMatch = normalizedPath.match(/\/frameworks\/([^/]+)\//);
 
-    if (!methodologyMatch) {
-      return { isMethodology: false };
+    if (!frameworkMatch) {
+      return { isFramework: false };
     }
 
     // Extract methodology ID from path (e.g., resources/frameworks/cageerf/framework.yaml -> cageerf)
-    const methodologyId = methodologyMatch[1]?.toLowerCase();
+    const frameworkId = frameworkMatch[1]?.toLowerCase();
 
-    if (!methodologyId) {
-      return { isMethodology: false };
+    if (!frameworkId) {
+      return { isFramework: false };
     }
 
     return {
-      isMethodology: true,
-      methodologyId,
+      isFramework: true,
+      frameworkId,
     };
   }
 

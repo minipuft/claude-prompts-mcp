@@ -25,12 +25,12 @@ export interface FrameworkHotReloadConfig {
    * Callback invoked when a methodology is deleted.
    * Use this to notify FrameworkManager to clear its frameworks Map.
    */
-  onMethodologyDeleted?: (methodologyId: string) => Promise<void> | void;
+  onFrameworkDeleted?: (frameworkId: string) => Promise<void> | void;
   /**
    * Callback invoked when a methodology is reloaded (added/modified).
    * Use this to notify FrameworkManager to refresh its framework definition.
    */
-  onMethodologyReloaded?: (methodologyId: string) => Promise<void> | void;
+  onFrameworkReloaded?: (frameworkId: string) => Promise<void> | void;
 }
 
 /**
@@ -41,7 +41,7 @@ export interface FrameworkHotReloadStats {
   reloadsSucceeded: number;
   reloadsFailed: number;
   lastReloadTime?: number;
-  lastReloadedMethodology?: string;
+  lastReloadedFramework?: string;
 }
 
 /**
@@ -50,7 +50,7 @@ export interface FrameworkHotReloadStats {
 export interface FrameworkHotReloadRegistration {
   /** Directories that should be watched for methodology changes */
   directories: string[];
-  /** Bound handler for use with HotReloadObserver.setMethodologyReloadCallback */
+  /** Bound handler for use with HotReloadObserver.setFrameworkReloadCallback */
   handler: (event: HotReloadEvent) => Promise<void>;
   /** Coordinator instance handling cache clear + re-register */
   coordinator: FrameworkHotReloadCoordinator;
@@ -67,8 +67,8 @@ export interface FrameworkHotReloadRegistration {
  * const coordinator = new FrameworkHotReloadCoordinator(logger, registry, loader);
  *
  * // Register with hot reload manager
- * hotReloadObserver.setMethodologyReloadCallback(
- *   (event) => coordinator.handleMethodologyChange(event)
+ * hotReloadObserver.setFrameworkReloadCallback(
+ *   (event) => coordinator.handleFrameworkChange(event)
  * );
  * ```
  */
@@ -78,8 +78,8 @@ export interface FrameworkHotReloadRegistration {
 interface StoredHotReloadConfig {
   debug: boolean;
   reloadTimeoutMs: number;
-  onMethodologyDeleted?: (methodologyId: string) => Promise<void> | void;
-  onMethodologyReloaded?: (methodologyId: string) => Promise<void> | void;
+  onFrameworkDeleted?: (frameworkId: string) => Promise<void> | void;
+  onFrameworkReloaded?: (frameworkId: string) => Promise<void> | void;
 }
 
 export class FrameworkHotReloadCoordinator {
@@ -101,8 +101,8 @@ export class FrameworkHotReloadCoordinator {
     this.config = {
       debug: config.debug ?? false,
       reloadTimeoutMs: config.reloadTimeoutMs ?? 5000,
-      onMethodologyDeleted: config.onMethodologyDeleted,
-      onMethodologyReloaded: config.onMethodologyReloaded,
+      onFrameworkDeleted: config.onFrameworkDeleted,
+      onFrameworkReloaded: config.onFrameworkReloaded,
     };
     this.stats = {
       reloadsAttempted: 0,
@@ -119,60 +119,60 @@ export class FrameworkHotReloadCoordinator {
    *
    * @param event - Hot reload event from the file watcher
    */
-  async handleMethodologyChange(event: HotReloadEvent): Promise<void> {
+  async handleFrameworkChange(event: HotReloadEvent): Promise<void> {
     this.stats.reloadsAttempted++;
 
-    const methodologyId = event.methodologyId;
-    if (!methodologyId) {
-      this.logger.warn('Methodology hot reload event missing methodologyId, skipping');
+    const frameworkId = event.frameworkId;
+    if (!frameworkId) {
+      this.logger.warn('Methodology hot reload event missing frameworkId, skipping');
       this.stats.reloadsFailed++;
       return;
     }
 
     if (this.config.debug) {
       this.logger.debug(
-        `Processing methodology hot reload for: ${methodologyId} (changeType: ${event.changeType ?? 'unknown'})`
+        `Processing methodology hot reload for: ${frameworkId} (changeType: ${event.changeType ?? 'unknown'})`
       );
     }
 
     // Handle deletion events
     if (event.changeType === 'removed') {
-      return this.handleMethodologyDeletion(methodologyId);
+      return this.handleFrameworkDeletion(frameworkId);
     }
 
     // Handle add/modify events
-    return this.handleMethodologyReload(methodologyId);
+    return this.handleFrameworkReload(frameworkId);
   }
 
   /**
    * Handle methodology deletion - unregister from registry and notify framework manager
    */
-  private async handleMethodologyDeletion(methodologyId: string): Promise<void> {
+  private async handleFrameworkDeletion(frameworkId: string): Promise<void> {
     try {
       // Step 1: Clear loader cache
-      this.loader.clearCache(methodologyId);
+      this.loader.clearCache(frameworkId);
 
       // Step 2: Unregister from registry
-      const removed = this.registry.unregisterGuide(methodologyId);
+      const removed = this.registry.unregisterGuide(frameworkId);
 
       // Step 3: Notify framework manager to clear its frameworks Map
-      if (this.config.onMethodologyDeleted) {
-        await this.config.onMethodologyDeleted(methodologyId);
+      if (this.config.onFrameworkDeleted) {
+        await this.config.onFrameworkDeleted(frameworkId);
       }
 
       if (removed) {
         this.stats.reloadsSucceeded++;
         this.stats.lastReloadTime = Date.now();
-        this.stats.lastReloadedMethodology = methodologyId;
+        this.stats.lastReloadedFramework = frameworkId;
 
-        this.logger.info(`🗑️ Methodology '${methodologyId}' unregistered (files deleted)`);
+        this.logger.info(`🗑️ Methodology '${frameworkId}' unregistered (files deleted)`);
       } else {
-        this.logger.debug(`Methodology '${methodologyId}' was not registered, nothing to remove`);
+        this.logger.debug(`Methodology '${frameworkId}' was not registered, nothing to remove`);
         this.stats.reloadsSucceeded++; // Not a failure, just nothing to do
       }
     } catch (error) {
       this.stats.reloadsFailed++;
-      this.logger.error(`Failed to unregister methodology '${methodologyId}':`, error);
+      this.logger.error(`Failed to unregister methodology '${frameworkId}':`, error);
       throw error;
     }
   }
@@ -180,18 +180,18 @@ export class FrameworkHotReloadCoordinator {
   /**
    * Handle methodology reload - reload from YAML and re-register
    */
-  private async handleMethodologyReload(methodologyId: string): Promise<void> {
+  private async handleFrameworkReload(frameworkId: string): Promise<void> {
     try {
       // Step 1: Clear loader cache for this methodology
-      this.loader.clearCache(methodologyId);
+      this.loader.clearCache(frameworkId);
       if (this.config.debug) {
-        this.logger.debug(`Cleared cache for methodology: ${methodologyId}`);
+        this.logger.debug(`Cleared cache for methodology: ${frameworkId}`);
       }
 
       // Step 2: Reload definition from YAML
-      const definition = this.loader.loadMethodology(methodologyId);
+      const definition = this.loader.loadFramework(frameworkId);
       if (!definition) {
-        throw new Error(`Failed to load methodology definition for '${methodologyId}'`);
+        throw new Error(`Failed to load methodology definition for '${frameworkId}'`);
       }
 
       if (this.config.debug) {
@@ -204,25 +204,25 @@ export class FrameworkHotReloadCoordinator {
       // Step 4: Re-register with registry (replace existing)
       const success = await this.registry.registerGuide(guide, true, 'yaml-runtime');
       if (!success) {
-        throw new Error(`Failed to re-register methodology '${methodologyId}' with registry`);
+        throw new Error(`Failed to re-register methodology '${frameworkId}' with registry`);
       }
 
       // Step 5: Notify framework manager to refresh its framework definition
-      if (this.config.onMethodologyReloaded) {
-        await this.config.onMethodologyReloaded(methodologyId);
+      if (this.config.onFrameworkReloaded) {
+        await this.config.onFrameworkReloaded(frameworkId);
       }
 
       // Update stats
       this.stats.reloadsSucceeded++;
       this.stats.lastReloadTime = Date.now();
-      this.stats.lastReloadedMethodology = methodologyId;
+      this.stats.lastReloadedFramework = frameworkId;
 
       this.logger.info(
-        `🔄 Methodology '${definition.name}' (${methodologyId}) hot reloaded successfully`
+        `🔄 Methodology '${definition.name}' (${frameworkId}) hot reloaded successfully`
       );
     } catch (error) {
       this.stats.reloadsFailed++;
-      this.logger.error(`Failed to hot reload methodology '${methodologyId}':`, error);
+      this.logger.error(`Failed to hot reload methodology '${frameworkId}':`, error);
       throw error;
     }
   }
@@ -268,7 +268,7 @@ export function createFrameworkHotReloadRegistration(
 
   return {
     directories: [runtimeLoader.getMethodologiesDir()],
-    handler: (event: HotReloadEvent) => coordinator.handleMethodologyChange(event),
+    handler: (event: HotReloadEvent) => coordinator.handleFrameworkChange(event),
     coordinator,
   };
 }

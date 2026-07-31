@@ -528,7 +528,7 @@ export interface ContentAnalysisResult {
     hasSystemMessage: boolean;
     hasUserTemplate: boolean;
     hasStructuredReasoning: boolean;
-    hasMethodologyKeywords: boolean;
+    hasFrameworkKeywords: boolean;
     hasComplexAnalysis: boolean;
     advancedChainFeatures?: {
       hasDependencies: boolean;

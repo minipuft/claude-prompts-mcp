@@ -34,9 +34,9 @@ function createMockGateLoader(
       totalLoads: 0,
       lastAccess: null,
     })),
-    isMethodologyGate: jest.fn(async () => false),
-    isMethodologyGateCached: jest.fn(() => false),
-    getMethodologyGateIds: jest.fn(async () => []),
+    isFrameworkGate: jest.fn(async () => false),
+    isFrameworkGateCached: jest.fn(() => false),
+    getFrameworkGateIds: jest.fn(async () => []),
   } as unknown as GateDefinitionProvider;
 }
 

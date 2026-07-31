@@ -7,7 +7,7 @@
  */
 
 // Export methodology registry
-export { FrameworkRegistry, createMethodologyRegistry } from './registry.js';
+export { FrameworkRegistry, createFrameworkRegistry } from './registry.js';
 export type { FrameworkRegistryConfig, FrameworkGuideEntry, FrameworkSource } from './registry.js';
 
 // Export methodology interfaces

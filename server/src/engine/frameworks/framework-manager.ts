@@ -11,7 +11,7 @@
  * - FrameworkStateStore: Runtime enable/disable state
  */
 
-import { FrameworkRegistry, createMethodologyRegistry } from './methodology/index.js';
+import { FrameworkRegistry, createFrameworkRegistry } from './methodology/index.js';
 import {
   FrameworkDefinition,
   FrameworkExecutionContext,
@@ -59,8 +59,8 @@ export interface FrameworkManagerStats {
   totalFrameworks: number;
   /** Number of enabled frameworks */
   enabledFrameworks: number;
-  /** Total methodology guides loaded */
-  totalMethodologies: number;
+  /** Total guides loaded — counts guides, not frameworks, so it may differ from totalFrameworks */
+  totalGuides: number;
   /** Currently active framework */
   activeFramework: string | null;
 }
@@ -120,7 +120,7 @@ export class FrameworkManager extends BaseResourceHandler<
 
   protected async initializeRegistry(): Promise<void> {
     // Initialize methodology registry
-    this.frameworkRegistry = await createMethodologyRegistry(this.logger);
+    this.frameworkRegistry = await createFrameworkRegistry(this.logger);
     this.logger.debug('FrameworkRegistry initialized');
   }
 
@@ -232,7 +232,7 @@ export class FrameworkManager extends BaseResourceHandler<
     return {
       totalFrameworks: frameworks.length,
       enabledFrameworks: enabled.length,
-      totalMethodologies: this.frameworkRegistry?.getAllGuides(false).length ?? 0,
+      totalGuides: this.frameworkRegistry?.getAllGuides(false).length ?? 0,
       activeFramework,
     };
   }
@@ -458,7 +458,7 @@ export class FrameworkManager extends BaseResourceHandler<
   /**
    * Get methodology guide by framework ID
    */
-  getMethodologyGuide(frameworkId: string): FrameworkGuide | undefined {
+  getFrameworkGuide(frameworkId: string): FrameworkGuide | undefined {
     this.ensureInitialized();
     return this.frameworkRegistry!.getGuide(frameworkId.toLowerCase());
   }
@@ -466,7 +466,7 @@ export class FrameworkManager extends BaseResourceHandler<
   /**
    * List available methodology guides
    */
-  listMethodologyGuides(): FrameworkGuide[] {
+  listFrameworkGuides(): FrameworkGuide[] {
     this.ensureInitialized();
     return this.frameworkRegistry!.getAllGuides(true);
   }
@@ -474,7 +474,7 @@ export class FrameworkManager extends BaseResourceHandler<
   /**
    * Expose the methodology registry for integrations
    */
-  getMethodologyRegistry(): FrameworkRegistry {
+  getFrameworkRegistry(): FrameworkRegistry {
     this.ensureInitialized();
     if (!this.frameworkRegistry) {
       throw new Error('Methodology registry not initialized');
@@ -678,7 +678,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
     systemPrompt = systemPrompt.replace(/\{PROMPT_CATEGORY\}/g, prompt.category || 'general');
     systemPrompt = systemPrompt.replace(/\{FRAMEWORK_NAME\}/g, framework.name);
 
-    const guide = this.getMethodologyGuide(framework.id);
+    const guide = this.getFrameworkGuide(framework.id);
     if (guide) {
       const guidance = guide.getSystemPromptGuidance({
         promptName: prompt.name,

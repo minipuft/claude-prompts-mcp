@@ -335,7 +335,7 @@ export interface ResourceIndexerConfig {
   /** Whether to track gates */
   trackGates?: boolean;
   /** Whether to track frameworks */
-  trackMethodologies?: boolean;
+  trackFrameworks?: boolean;
   /** Whether to track styles */
   trackStyles?: boolean;
   /** Whether to track script tools (nested in prompts) */
@@ -363,7 +363,7 @@ export class ResourceIndexer {
       resourcesDir: config.resourcesDir,
       trackPrompts: config.trackPrompts ?? true,
       trackGates: config.trackGates ?? true,
-      trackMethodologies: config.trackMethodologies ?? true,
+      trackFrameworks: config.trackFrameworks ?? true,
       trackStyles: config.trackStyles ?? true,
       trackTools: config.trackTools ?? true,
     };
@@ -384,7 +384,7 @@ export class ResourceIndexer {
     const types: Array<{ type: IndexedResourceType; enabled: boolean; subdir: string }> = [
       { type: 'prompt', enabled: this.config.trackPrompts, subdir: 'prompts' },
       { type: 'gate', enabled: this.config.trackGates, subdir: 'gates' },
-      { type: 'framework', enabled: this.config.trackMethodologies, subdir: 'frameworks' },
+      { type: 'framework', enabled: this.config.trackFrameworks, subdir: 'frameworks' },
       { type: 'style', enabled: this.config.trackStyles, subdir: 'styles' },
     ];
 

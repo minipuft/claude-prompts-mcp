@@ -89,7 +89,7 @@ export interface PromptGuidanceResult {
   /** Guidance metadata */
   metadata: {
     guidanceTime: Date;
-    activeMethodology: string;
+    activeFrameworkType: string;
     totalEnhancements: number;
     confidenceScore: number;
     processingTime: number;
@@ -107,7 +107,7 @@ export interface PromptGuidanceAnalytics {
   /** Average enhancement confidence */
   averageConfidence: number;
   /** Methodology usage distribution */
-  methodologyUsage: Record<
+  frameworkUsage: Record<
     string,
     {
       count: number;
@@ -150,9 +150,9 @@ export interface FrameworkHealth {
   /** System health status */
   status: 'healthy' | 'degraded' | 'error';
   /** Currently active methodology */
-  activeMethodology: string;
+  activeFrameworkType: string;
   /** Whether methodology system is enabled */
-  methodologySystemEnabled: boolean;
+  frameworkSystemEnabled: boolean;
   /** Last switch time */
   lastSwitchTime: Date | null;
   /** Switching performance metrics */

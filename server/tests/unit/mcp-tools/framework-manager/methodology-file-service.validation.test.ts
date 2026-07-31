@@ -31,20 +31,20 @@ describe('FrameworkFileWriter canonical writes', () => {
 
   it('rolls back id-only methodology payloads that fail schema validation', async () => {
     const service = new FrameworkFileWriter({ logger, configManager });
-    const result = await service.writeMethodologyFiles({
+    const result = await service.writeFrameworkFiles({
       id: 'incomplete-method',
     });
 
     // id-only payload lacks required fields (name, methodology) — validation rejects and rolls back
     expect(result.success).toBe(false);
     expect(result.error).toContain('rolled back');
-    const frameworkDir = service.getMethodologyDir('incomplete-method');
+    const frameworkDir = service.getFrameworkDir('incomplete-method');
     expect(existsSync(frameworkDir)).toBe(false);
   });
 
   it('writes valid methodology payloads with all required fields', async () => {
     const service = new FrameworkFileWriter({ logger, configManager });
-    const result = await service.writeMethodologyFiles({
+    const result = await service.writeFrameworkFiles({
       id: 'complete-method',
       name: 'Complete Method',
       type: 'COMPLETE',
@@ -52,7 +52,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     });
 
     expect(result.success).toBe(true);
-    const frameworkDir = service.getMethodologyDir('complete-method');
+    const frameworkDir = service.getFrameworkDir('complete-method');
     const frameworkPath = join(frameworkDir, 'framework.yaml');
     expect(existsSync(frameworkPath)).toBe(true);
 
@@ -65,7 +65,7 @@ describe('FrameworkFileWriter canonical writes', () => {
 
   it('writes phases and prompt files for rich methodology payloads', async () => {
     const service = new FrameworkFileWriter({ logger, configManager });
-    const result = await service.writeMethodologyFiles({
+    const result = await service.writeFrameworkFiles({
       id: 'e2e-test',
       name: 'E2E Test Methodology',
       type: 'E2E_TEST',
@@ -75,7 +75,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     });
 
     expect(result.success).toBe(true);
-    const frameworkDir = service.getMethodologyDir('e2e-test');
+    const frameworkDir = service.getFrameworkDir('e2e-test');
     expect(existsSync(join(frameworkDir, 'framework.yaml'))).toBe(true);
     expect(existsSync(join(frameworkDir, 'system-prompt.md'))).toBe(true);
     expect(existsSync(join(frameworkDir, 'judge-prompt.md'))).toBe(true);
@@ -84,17 +84,17 @@ describe('FrameworkFileWriter canonical writes', () => {
 
   it('merges updates onto existing methodology data instead of overwriting', async () => {
     const service = new FrameworkFileWriter({ logger, configManager });
-    await service.writeMethodologyFiles({
+    await service.writeFrameworkFiles({
       id: 'merge-test',
       name: 'Merge Test',
       type: 'MERGE_BASE',
       system_prompt_guidance: 'Original guidance.',
     });
 
-    const existing = await service.loadExistingMethodology('merge-test');
+    const existing = await service.loadExistingFramework('merge-test');
     expect(existing).not.toBeNull();
 
-    const result = await service.writeMethodologyFiles(
+    const result = await service.writeFrameworkFiles(
       {
         id: 'merge-test',
         name: 'Merge Test Updated',
@@ -103,7 +103,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     );
     expect(result.success).toBe(true);
 
-    const frameworkDir = service.getMethodologyDir('merge-test');
+    const frameworkDir = service.getFrameworkDir('merge-test');
     const yamlContent = readFileSync(join(frameworkDir, 'framework.yaml'), 'utf8');
     const promptContent = readFileSync(join(frameworkDir, 'system-prompt.md'), 'utf8');
     expect(yamlContent).toContain('name: Merge Test Updated');

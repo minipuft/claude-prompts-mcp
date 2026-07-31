@@ -110,7 +110,7 @@ export class HotReloadObserver {
   private config: HotReloadConfig;
   private fileObserver: FileObserver;
   private onReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
-  private onMethodologyReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
+  private onFrameworkReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private onGateReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private auxiliaryReloads: AuxiliaryReloadConfig[] = [];
   private stats: HotReloadStats;
@@ -221,8 +221,8 @@ export class HotReloadObserver {
    * Set the callback for methodology reload events
    * This callback is invoked when methodology YAML files change
    */
-  setMethodologyReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
-    this.onMethodologyReloadCallback = callback;
+  setFrameworkReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
+    this.onFrameworkReloadCallback = callback;
     this.logger.debug('HotReloadObserver: Methodology reload callback registered');
   }
 
@@ -304,7 +304,7 @@ export class HotReloadObserver {
     });
 
     this.fileObserver.on('frameworkFileChange', (event: FileChangeEvent) => {
-      this.handleMethodologyFileChange(event);
+      this.handleFrameworkFileChange(event);
     });
 
     this.fileObserver.on('watcherError', (error: { directoryPath: string; error: Error }) => {
@@ -341,35 +341,35 @@ export class HotReloadObserver {
    * These are processed separately from regular file changes to enable
    * targeted methodology reload without affecting prompt system
    */
-  private async handleMethodologyFileChange(event: FileChangeEvent): Promise<void> {
+  private async handleFrameworkFileChange(event: FileChangeEvent): Promise<void> {
     this.stats.filesChanged++;
-    const methodologyId = event.methodologyId ?? this.extractMethodologyId(event.filePath);
+    const frameworkId = event.frameworkId ?? this.extractFrameworkId(event.filePath);
 
     this.logger.info(
       `🔧 Methodology file change detected: ${event.type} - ${event.filename}` +
-        (methodologyId ? ` (methodology: ${methodologyId})` : '')
+        (frameworkId ? ` (methodology: ${frameworkId})` : '')
     );
 
     // Map FileChangeType to FileChangeOperation (filter out 'renamed' as it becomes 'added' or 'removed')
     const changeType = this.mapToChangeOperation(event.type);
 
     const hotReloadEvent: HotReloadEvent = {
-      type: 'methodology_changed',
+      type: 'framework_changed',
       reason: `Methodology file ${event.type}: ${event.filename}`,
       affectedFiles: [event.filePath],
       timestamp: event.timestamp,
       requiresFullReload: false, // Methodology changes typically don't need full reload
       changeType,
-      ...(methodologyId ? { methodologyId } : {}),
+      ...(frameworkId ? { frameworkId } : {}),
     };
 
     // Use dedicated methodology callback if available, otherwise fall through to general reload
-    if (this.onMethodologyReloadCallback) {
+    if (this.onFrameworkReloadCallback) {
       try {
-        await this.onMethodologyReloadCallback(hotReloadEvent);
-        this.logger.info(`✅ Methodology ${methodologyId ?? 'unknown'} reloaded successfully`);
+        await this.onFrameworkReloadCallback(hotReloadEvent);
+        this.logger.info(`✅ Methodology ${frameworkId ?? 'unknown'} reloaded successfully`);
       } catch (error) {
-        this.logger.error(`❌ Failed to reload methodology ${methodologyId ?? 'unknown'}:`, error);
+        this.logger.error(`❌ Failed to reload methodology ${frameworkId ?? 'unknown'}:`, error);
       }
     } else {
       // Fallback to regular reload processing
@@ -380,7 +380,7 @@ export class HotReloadObserver {
   /**
    * Extract methodology ID from file path
    */
-  private extractMethodologyId(filePath: string): string | undefined {
+  private extractFrameworkId(filePath: string): string | undefined {
     const normalizedPath = filePath.replace(/\\/g, '/');
     const match = normalizedPath.match(/\/frameworks\/([^/]+)\//);
     return match?.[1]?.toLowerCase();

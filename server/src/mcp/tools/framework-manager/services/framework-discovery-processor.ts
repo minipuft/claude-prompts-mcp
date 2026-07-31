@@ -61,9 +61,9 @@ export class FrameworkDiscoveryProcessor {
     // Load methodology data from disk to calculate validation score
     let validationInfo = '';
     try {
-      const existingData = await this.ctx.fileService.loadExistingMethodology(id);
+      const existingData = await this.ctx.fileService.loadExistingFramework(id);
       if (existingData !== null) {
-        const creationData = this.ctx.fileService.toMethodologyCreationData(id, existingData);
+        const creationData = this.ctx.fileService.toFrameworkCreationData(id, existingData);
         if (creationData !== null) {
           const validation = this.validationService.validate(creationData);
           validationInfo = `\n\n**Quality:** ${validation.score}% (${validation.level})`;

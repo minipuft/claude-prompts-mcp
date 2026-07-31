@@ -234,7 +234,7 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
       hasUserTemplate: Boolean(userTemplate.trim()),
       // These are set to false since we removed structural pattern detection
       hasStructuredReasoning: false,
-      hasMethodologyKeywords: false,
+      hasFrameworkKeywords: false,
       hasComplexAnalysis: false,
       advancedChainFeatures: undefined,
     };
@@ -338,7 +338,7 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
         hasSystemMessage: Boolean(prompt.systemMessage),
         hasUserTemplate: Boolean(prompt.userMessageTemplate),
         hasStructuredReasoning: false,
-        hasMethodologyKeywords: false,
+        hasFrameworkKeywords: false,
         hasComplexAnalysis: false,
       },
 

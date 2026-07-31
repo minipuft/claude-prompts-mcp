@@ -56,7 +56,7 @@ export class GateEnhancementStage extends BasePipelineStage {
       return;
     }
 
-    const methodologyGates = await this.enhancementService.loadMethodologyGateIds();
+    const methodologyGates = await this.enhancementService.loadFrameworkGateIds();
     const registeredGates = await this.registrar.registerTemporaryGates(context);
 
     const gateContext = this.enhancementService.resolveGateContext(context);

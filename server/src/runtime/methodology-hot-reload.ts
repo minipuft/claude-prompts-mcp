@@ -16,19 +16,19 @@ export function buildFrameworkAuxiliaryReloadConfig(
   }
 
   try {
-    const registry = frameworkManager.getMethodologyRegistry();
+    const registry = frameworkManager.getFrameworkRegistry();
 
     // Wire hot-reload callbacks to keep FrameworkManager.frameworks cache in sync
     const registration = createFrameworkHotReloadRegistration(logger, registry, undefined, {
-      onMethodologyDeleted: (methodologyId: string) => {
+      onFrameworkDeleted: (frameworkId: string) => {
         // Remove framework from cache when methodology is deleted
-        frameworkManager.unregister(methodologyId);
-        logger.debug(`Framework cache cleared for deleted methodology: ${methodologyId}`);
+        frameworkManager.unregister(frameworkId);
+        logger.debug(`Framework cache cleared for deleted methodology: ${frameworkId}`);
       },
-      onMethodologyReloaded: async (methodologyId: string) => {
+      onFrameworkReloaded: async (frameworkId: string) => {
         // Regenerate framework definition when methodology is reloaded
-        await frameworkManager.reload(methodologyId);
-        logger.debug(`Framework cache refreshed for reloaded methodology: ${methodologyId}`);
+        await frameworkManager.reload(frameworkId);
+        logger.debug(`Framework cache refreshed for reloaded methodology: ${frameworkId}`);
       },
     });
 

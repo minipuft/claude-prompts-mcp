@@ -138,7 +138,7 @@ export interface PipelineInternalState {
     /** Validation results from the gate system */
     validationResults?: unknown[];
     /** IDs of methodology-specific gates registered for this execution */
-    methodologyGateIds: string[];
+    frameworkGateIds: string[];
     /** IDs of canonical gates that were resolved from temporary inputs */
     canonicalGateIdsFromTemporary: string[];
     /** IDs of inline gates registered during extraction */

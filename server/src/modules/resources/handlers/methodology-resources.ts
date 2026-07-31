@@ -115,7 +115,7 @@ export function registerFrameworkResources(
       logger.debug(`[FrameworkResources] Reading methodology: ${id}`);
 
       // Build full methodology content with metadata header
-      const content = buildMethodologyContent(framework);
+      const content = buildFrameworkContent(framework);
 
       return {
         contents: [
@@ -171,7 +171,7 @@ export function registerFrameworkResources(
 /**
  * Build formatted methodology content with metadata header and guidelines
  */
-function buildMethodologyContent(framework: {
+function buildFrameworkContent(framework: {
   id: string;
   name: string;
   description: string;

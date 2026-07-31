@@ -320,7 +320,7 @@ export class FrameworkRegistry {
       this.runtimeLoader.clearCache();
 
       // Load definition from disk
-      const definition = this.runtimeLoader.loadMethodology(normalizedId);
+      const definition = this.runtimeLoader.loadFramework(normalizedId);
 
       if (!definition) {
         this.logger.warn(`Methodology '${id}' not found on disk`);
@@ -366,7 +366,7 @@ export class FrameworkRegistry {
     let loadedCount = 0;
 
     for (const id of builtInIds) {
-      const definition = this.runtimeLoader.loadMethodology(id);
+      const definition = this.runtimeLoader.loadFramework(id);
 
       if (!definition) {
         throw new Error(
@@ -388,12 +388,12 @@ export class FrameworkRegistry {
     this.logger.info(`Loaded ${loadedCount} built-in methodology guides from YAML`);
 
     // Discover and load additional frameworks from YAML
-    const discoveredIds = this.runtimeLoader.discoverMethodologies();
+    const discoveredIds = this.runtimeLoader.discoverFrameworks();
     const additionalIds = discoveredIds.filter((id) => !builtInIds.includes(id));
 
     for (const id of additionalIds) {
       try {
-        const definition = this.runtimeLoader.loadMethodology(id);
+        const definition = this.runtimeLoader.loadFramework(id);
         if (definition) {
           const guide = createGenericGuide(definition);
           const success = await this.registerGuide(guide, false, 'yaml-runtime');
@@ -451,8 +451,8 @@ export class FrameworkRegistry {
       'guidePromptCreation',
       'guideTemplateProcessing',
       'guideExecutionSteps',
-      'enhanceWithMethodology',
-      'validateMethodologyCompliance',
+      'enhanceWithFramework',
+      'validateFrameworkCompliance',
       'getSystemPromptGuidance',
     ];
 
@@ -499,7 +499,7 @@ export class FrameworkRegistry {
 /**
  * Create and initialize a FrameworkRegistry instance
  */
-export async function createMethodologyRegistry(
+export async function createFrameworkRegistry(
   logger: Logger,
   config?: Partial<FrameworkRegistryConfig>
 ): Promise<FrameworkRegistry> {

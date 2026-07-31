@@ -199,10 +199,10 @@ export class PipelineBuilder {
     const frameworksProvider = () => {
       try {
         const loader = getDefaultRuntimeLoader();
-        const ids = loader.discoverMethodologies();
+        const ids = loader.discoverFrameworks();
         return ids
           .map((id) => {
-            const def = loader.loadMethodology(id);
+            const def = loader.loadFramework(id);
             if (!def || def.enabled === false) return null;
             const description =
               (def as unknown as Record<string, unknown>)['description'] ??
@@ -227,7 +227,7 @@ export class PipelineBuilder {
     const judgePromptProvider: FrameworkJudgePromptProvider = (frameworkId) => {
       try {
         const loader = getDefaultRuntimeLoader();
-        const definition = loader.loadMethodology(frameworkId);
+        const definition = loader.loadFramework(frameworkId);
         return definition?.judgePrompt;
       } catch {
         return undefined;

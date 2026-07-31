@@ -46,7 +46,7 @@ export class TemplateEnhancer {
     template: string,
     prompt: ConvertedPrompt,
     // Legacy args kept for interface compatibility but unused
-    _methodologyGuide?: any,
+    _frameworkGuide?: any,
     _framework?: any,
     _context?: any
   ): Promise<{

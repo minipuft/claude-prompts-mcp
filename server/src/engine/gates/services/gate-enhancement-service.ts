@@ -97,13 +97,13 @@ export class GateEnhancementService {
    * Load methodology gate IDs from GateLoader for the current request.
    * Returns fresh data each call — GateLoader handles hot-reload internally.
    */
-  async loadMethodologyGateIds(): Promise<Set<string>> {
+  async loadFrameworkGateIds(): Promise<Set<string>> {
     if (!this.gateLoader) {
       return new Set();
     }
 
     try {
-      const ids = await this.gateLoader.getMethodologyGateIds();
+      const ids = await this.gateLoader.getFrameworkGateIds();
       return new Set(ids);
     } catch (error) {
       this.logger.warn('[GateEnhancementService] Failed to load methodology gate IDs', { error });
@@ -175,17 +175,17 @@ export class GateEnhancementService {
         promptInjection: prompt.injection,
       }),
       frameworkGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
-      knownMethodologyGateIds: [...methodologyGates],
+      knownFrameworkGateIds: [...methodologyGates],
       inlineOperatorGateIds: inlineGateIds,
       clientSelectedGateIds: clientSelectedGates,
       callerGateIds: registeredGates.temporaryGateIds,
       plannedGateIds: executionPlan.gates,
-      methodologyGateIds: registeredGates.canonicalGateIds,
+      frameworkGateIds: registeredGates.canonicalGateIds,
       inlineDefinitionGateIds,
     });
 
     let gateIds = [...context.gates.getAll()];
-    gateIds = this.ensureDefaultMethodologyGate(
+    gateIds = this.ensureDefaultFrameworkGate(
       gateIds,
       gatesConfig,
       activeFrameworkId,
@@ -326,7 +326,7 @@ export class GateEnhancementService {
           promptInjection: prompt.injection,
         }),
         frameworkGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
-        knownMethodologyGateIds: [...methodologyGates],
+        knownFrameworkGateIds: [...methodologyGates],
         inlineOperatorGateIds: stepInlineGates,
         plannedGateIds: plannedGates,
         inlineDefinitionGateIds,
@@ -337,7 +337,7 @@ export class GateEnhancementService {
       // The accumulator is intentionally NOT reset between steps: step N inherits the gates
       // accumulated by steps 1..N-1, which is the pre-existing chain contract.
       let gateIds = [...context.gates.getAll()];
-      gateIds = this.ensureDefaultMethodologyGate(
+      gateIds = this.ensureDefaultFrameworkGate(
         gateIds,
         gatesConfig,
         activeFrameworkId,
@@ -561,7 +561,7 @@ export class GateEnhancementService {
     return result;
   }
 
-  private ensureDefaultMethodologyGate(
+  private ensureDefaultFrameworkGate(
     gateIds: string[],
     gatesConfig: GatesConfig | undefined,
     activeFrameworkId: string | undefined,
@@ -570,8 +570,8 @@ export class GateEnhancementService {
     if (!gatesConfig?.enableMethodologyGates || !activeFrameworkId) {
       return gateIds;
     }
-    const hasMethodologyGate = gateIds.some((gate) => methodologyGates.has(gate));
-    if (hasMethodologyGate) {
+    const hasFrameworkGate = gateIds.some((gate) => methodologyGates.has(gate));
+    if (hasFrameworkGate) {
       return gateIds;
     }
     return [...gateIds, 'framework-compliance'];

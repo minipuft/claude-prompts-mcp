@@ -11,7 +11,7 @@
  */
 
 import {
-  BaseMethodologyGuide,
+  BaseFrameworkGuide,
   type FrameworkSelection,
   type FrameworkType,
   type PromptCreationGuidance,
@@ -51,7 +51,7 @@ import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
  * This class can represent any methodology by loading its definition from JSON.
  * All methodology-specific behavior is derived from the JSON data.
  */
-export class GenericFrameworkGuide extends BaseMethodologyGuide {
+export class GenericFrameworkGuide extends BaseFrameworkGuide {
   readonly frameworkId: string;
   readonly frameworkName: string;
   /** The framework type discriminator */
@@ -193,7 +193,7 @@ export class GenericFrameworkGuide extends BaseMethodologyGuide {
   /**
    * Enhance execution with methodology-specific improvements
    */
-  enhanceWithMethodology(
+  enhanceWithFramework(
     prompt: ConvertedPrompt,
     context: Record<string, unknown>
   ): FrameworkEnhancement {
@@ -227,23 +227,21 @@ export class GenericFrameworkGuide extends BaseMethodologyGuide {
   /**
    * Validate methodology compliance using quality indicators from JSON
    */
-  validateMethodologyCompliance(prompt: ConvertedPrompt): FrameworkValidation {
+  validateFrameworkCompliance(prompt: ConvertedPrompt): FrameworkValidation {
     const qualityIndicators = this.definition.phases?.qualityIndicators;
 
     if (!qualityIndicators || Object.keys(qualityIndicators).length === 0) {
       // No quality indicators defined - return basic validation
       const combinedText = getCombinedText(prompt);
-      const hasMethodologyMention =
+      const hasFrameworkMention =
         combinedText.toLowerCase().includes(this.type.toLowerCase()) ||
         combinedText.toLowerCase().includes(this.frameworkId.toLowerCase());
 
       return {
-        compliant: hasMethodologyMention,
-        complianceScore: hasMethodologyMention ? 0.5 : 0.2,
-        strengths: hasMethodologyMention ? [`${this.type} methodology referenced`] : [],
-        improvementAreas: hasMethodologyMention
-          ? []
-          : [`Consider applying ${this.type} methodology`],
+        compliant: hasFrameworkMention,
+        complianceScore: hasFrameworkMention ? 0.5 : 0.2,
+        strengths: hasFrameworkMention ? [`${this.type} methodology referenced`] : [],
+        improvementAreas: hasFrameworkMention ? [] : [`Consider applying ${this.type} methodology`],
         specificSuggestions: [],
         frameworkGaps: [],
       };

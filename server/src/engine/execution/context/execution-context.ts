@@ -140,7 +140,7 @@ export class ExecutionContext {
       },
       gates: {
         temporaryGateIds: [],
-        methodologyGateIds: [],
+        frameworkGateIds: [],
         canonicalGateIdsFromTemporary: [],
         registeredInlineGateIds: [],
         advisoryWarnings: [],

@@ -1031,7 +1031,7 @@ async function loadGateIR(gateDir: string): Promise<SkillIR> {
   };
 }
 
-async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
+async function loadFrameworkIR(methDir: string): Promise<SkillIR> {
   const yamlPath = path.join(methDir, 'framework.yaml');
   const raw = await readFile(yamlPath, 'utf-8');
   const data = yaml.load(raw) as FrameworkYaml;
@@ -1195,7 +1195,7 @@ async function loadAllResources(
         if (!md.isDirectory()) continue;
         if (filters?.id && md.name !== filters.id) continue;
         try {
-          resources.push(await loadMethodologyIR(path.join(methBase, md.name)));
+          resources.push(await loadFrameworkIR(path.join(methBase, md.name)));
         } catch (e) {
           output.error(`  skip methodology ${md.name}: ${(e as Error).message}`);
         }

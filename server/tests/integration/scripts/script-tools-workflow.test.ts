@@ -69,7 +69,7 @@ const createMockAnalyzer = (): Pick<ContentAnalyzer, 'analyzePrompt' | 'isLLMEna
       hasSystemMessage: false,
       hasUserTemplate: true,
       hasStructuredReasoning: false,
-      hasMethodologyKeywords: false,
+      hasFrameworkKeywords: false,
       hasComplexAnalysis: false,
     },
     complexity: 'medium',

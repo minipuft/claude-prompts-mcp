@@ -28,11 +28,11 @@ export class FrameworkActionHandler extends ActionHandler {
           reason: args.reason,
         });
       case 'inspect':
-        return await this.inspectMethodology({
+        return await this.inspectFramework({
           methodology_id: args.methodology_id || args.framework,
         });
       case 'list_frameworks':
-        return await this.listMethodologiesAction({
+        return await this.listFrameworksAction({
           show_details: args.show_details,
         });
       default:
@@ -84,14 +84,14 @@ export class FrameworkActionHandler extends ActionHandler {
     const activeFramework = currentState?.activeFramework || 'CAGEERF';
 
     const runtimeLoader = getDefaultRuntimeLoader();
-    const methodologyIds = runtimeLoader.discoverMethodologies();
+    const frameworkIds = runtimeLoader.discoverFrameworks();
 
     let response = `📋 **Available Frameworks**\n\n`;
 
     frameworks.forEach((framework: any) => {
       const isActive = framework.id.toUpperCase() === activeFramework.toUpperCase();
       const status = isActive ? '🟢 ACTIVE' : '⚪ Available';
-      const frameworkDef = runtimeLoader.loadMethodology(framework.id.toLowerCase());
+      const frameworkDef = runtimeLoader.loadFramework(framework.id.toLowerCase());
 
       response += `**${framework.name}** ${status}\n`;
 
@@ -125,8 +125,8 @@ export class FrameworkActionHandler extends ActionHandler {
       response += `\n💡 Use 'show_details: true' for more information about each framework.\n`;
     }
 
-    if (methodologyIds.length > 0) {
-      response += `\n📦 Data-driven frameworks: ${methodologyIds.length} available`;
+    if (frameworkIds.length > 0) {
+      response += `\n📦 Data-driven frameworks: ${frameworkIds.length} available`;
       response += `\n🔍 Use \`operation:"list_frameworks"\` for methodology-specific details`;
     }
 
@@ -135,12 +135,12 @@ export class FrameworkActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'list_frameworks');
   }
 
-  private async inspectMethodology(args: { methodology_id?: string }): Promise<ToolResponse> {
-    const methodologyId = args.methodology_id?.toLowerCase();
+  private async inspectFramework(args: { methodology_id?: string }): Promise<ToolResponse> {
+    const frameworkId = args.methodology_id?.toLowerCase();
     const runtimeLoader = getDefaultRuntimeLoader();
 
-    if (!methodologyId) {
-      const available = runtimeLoader.discoverMethodologies();
+    if (!frameworkId) {
+      const available = runtimeLoader.discoverFrameworks();
       return this.createMinimalSystemResponse(
         `📋 **Available Frameworks**\n\n` +
           `Use \`operation:"inspect" methodology_id:"<id>"\` to inspect a specific methodology.\n\n` +
@@ -149,12 +149,12 @@ export class FrameworkActionHandler extends ActionHandler {
       );
     }
 
-    const definition = runtimeLoader.loadMethodology(methodologyId);
+    const definition = runtimeLoader.loadFramework(frameworkId);
 
     if (!definition) {
-      const available = runtimeLoader.discoverMethodologies();
+      const available = runtimeLoader.discoverFrameworks();
       return this.createMinimalSystemResponse(
-        `❌ **Methodology Not Found**: \`${methodologyId}\`\n\n` +
+        `❌ **Methodology Not Found**: \`${frameworkId}\`\n\n` +
           `Available frameworks: ${available.join(', ')}`,
         'inspect_methodology'
       );
@@ -216,11 +216,11 @@ export class FrameworkActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'inspect_methodology');
   }
 
-  private async listMethodologiesAction(args: { show_details?: boolean }): Promise<ToolResponse> {
+  private async listFrameworksAction(args: { show_details?: boolean }): Promise<ToolResponse> {
     const runtimeLoader = getDefaultRuntimeLoader();
-    const methodologyIds = runtimeLoader.discoverMethodologies();
+    const frameworkIds = runtimeLoader.discoverFrameworks();
 
-    if (methodologyIds.length === 0) {
+    if (frameworkIds.length === 0) {
       return this.createMinimalSystemResponse(
         `📋 **No Frameworks Found**\n\n` +
           `Ensure YAML files exist in \`resources/frameworks/<id>/framework.yaml\`.`,
@@ -228,10 +228,10 @@ export class FrameworkActionHandler extends ActionHandler {
       );
     }
 
-    let response = `📋 **Available Frameworks** (${methodologyIds.length})\n\n`;
+    let response = `📋 **Available Frameworks** (${frameworkIds.length})\n\n`;
 
-    for (const id of methodologyIds) {
-      const definition = runtimeLoader.loadMethodology(id);
+    for (const id of frameworkIds) {
+      const definition = runtimeLoader.loadFramework(id);
       if (!definition) continue;
 
       const status = definition.enabled !== false ? '✅' : '⚪';

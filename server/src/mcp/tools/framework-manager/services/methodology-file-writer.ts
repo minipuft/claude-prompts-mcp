@@ -78,8 +78,8 @@ export class FrameworkFileWriter {
    * @param id - Methodology identifier
    * @returns true if framework.yaml exists for this ID
    */
-  methodologyExists(id: string): boolean {
-    const frameworkDir = this.getMethodologyDir(id);
+  frameworkExists(id: string): boolean {
+    const frameworkDir = this.getFrameworkDir(id);
     const frameworkPath = join(frameworkDir, 'framework.yaml');
     return existsSync(frameworkPath);
   }
@@ -90,8 +90,8 @@ export class FrameworkFileWriter {
    * @param id - Methodology identifier
    * @returns true if deletion succeeded
    */
-  async deleteMethodology(id: string): Promise<boolean> {
-    const frameworkDir = this.getMethodologyDir(id);
+  async deleteFramework(id: string): Promise<boolean> {
+    const frameworkDir = this.getFrameworkDir(id);
 
     if (!existsSync(frameworkDir)) {
       return false;
@@ -111,8 +111,8 @@ export class FrameworkFileWriter {
   /**
    * Load existing methodology files from disk
    */
-  async loadExistingMethodology(id: string): Promise<ExistingFrameworkData | null> {
-    const frameworkDir = this.getMethodologyDir(id);
+  async loadExistingFramework(id: string): Promise<ExistingFrameworkData | null> {
+    const frameworkDir = this.getFrameworkDir(id);
     const frameworkPath = join(frameworkDir, 'framework.yaml');
 
     if (!existsSync(frameworkPath)) {
@@ -180,7 +180,7 @@ export class FrameworkFileWriter {
    * @param existing - Raw methodology data loaded from disk
    * @returns Typed FrameworkCreationData or null if essential fields missing
    */
-  toMethodologyCreationData(
+  toFrameworkCreationData(
     id: string,
     existing: ExistingFrameworkData
   ): FrameworkCreationData | null {
@@ -231,7 +231,7 @@ export class FrameworkFileWriter {
     // methodology_gates the snake_case authoring-payload key. Accept all three on read.
     const phasesSource = phases ?? methodology;
     const rawPhases = phasesSource['phases'];
-    const rawMethodologyGates =
+    const rawFrameworkGates =
       methodology['frameworkGates'] ??
       methodology['methodologyGates'] ??
       phasesSource['methodology_gates'];
@@ -242,7 +242,7 @@ export class FrameworkFileWriter {
     const rawTemplateEnhancements =
       phasesSource['templateEnhancements'] ?? phasesSource['template_enhancements'];
     const rawExecutionFlow = phasesSource['executionFlow'] ?? phasesSource['execution_flow'];
-    const rawMethodologyElements =
+    const rawFrameworkElements =
       methodology['frameworkElements'] ?? phasesSource['methodology_elements'];
     const rawArgumentSuggestions =
       methodology['argumentSuggestions'] ?? phasesSource['argument_suggestions'];
@@ -252,8 +252,8 @@ export class FrameworkFileWriter {
     if (Array.isArray(rawPhases)) {
       data.phases = rawPhases as NonNullable<FrameworkCreationData['phases']>;
     }
-    if (Array.isArray(rawMethodologyGates)) {
-      data.methodology_gates = rawMethodologyGates as NonNullable<
+    if (Array.isArray(rawFrameworkGates)) {
+      data.methodology_gates = rawFrameworkGates as NonNullable<
         FrameworkCreationData['methodology_gates']
       >;
     }
@@ -282,8 +282,8 @@ export class FrameworkFileWriter {
         FrameworkCreationData['execution_flow']
       >;
     }
-    if (rawMethodologyElements !== undefined && rawMethodologyElements !== null) {
-      data.methodology_elements = rawMethodologyElements as NonNullable<
+    if (rawFrameworkElements !== undefined && rawFrameworkElements !== null) {
+      data.methodology_elements = rawFrameworkElements as NonNullable<
         FrameworkCreationData['methodology_elements']
       >;
     }
@@ -306,11 +306,11 @@ export class FrameworkFileWriter {
    * @param data - Methodology data (can be partial for updates)
    * @param existingData - Existing methodology data to merge with (null for create)
    */
-  async writeMethodologyFiles(
+  async writeFrameworkFiles(
     data: Partial<FrameworkCreationData> & { id: string },
     existingData?: ExistingFrameworkData | null
   ): Promise<FrameworkFileResult> {
-    const frameworkDir = this.getMethodologyDir(data.id);
+    const frameworkDir = this.getFrameworkDir(data.id);
     const frameworkYamlPath = join(frameworkDir, 'framework.yaml');
 
     const txResult = await this.mutationTransaction.run({
@@ -322,13 +322,13 @@ export class FrameworkFileWriter {
         paths.push(frameworkDir);
 
         // Build and merge framework.yaml
-        const newMethodologyData = this.buildMethodologyYamlData(data);
-        const finalMethodologyData =
+        const newFrameworkData = this.buildFrameworkYamlData(data);
+        const finalFrameworkData =
           existingData !== undefined && existingData !== null
-            ? this.deepMerge(existingData.methodology, newMethodologyData)
-            : newMethodologyData;
+            ? this.deepMerge(existingData.methodology, newFrameworkData)
+            : newFrameworkData;
 
-        const frameworkContent = serializeYaml(finalMethodologyData, { sortKeys: false });
+        const frameworkContent = serializeYaml(finalFrameworkData, { sortKeys: false });
         await safeWriteFile(frameworkYamlPath, frameworkContent);
         paths.push(frameworkYamlPath);
 
@@ -396,7 +396,7 @@ export class FrameworkFileWriter {
   /**
    * Build framework.yaml data from input (only sets defined fields)
    */
-  buildMethodologyYamlData(
+  buildFrameworkYamlData(
     data: Partial<FrameworkCreationData> & { id: string }
   ): Record<string, unknown> {
     const yamlData: Record<string, unknown> = {};
@@ -497,7 +497,7 @@ export class FrameworkFileWriter {
    * Get the directory path for a methodology.
    * Used by versioning service to locate history files.
    */
-  public getMethodologyDir(id: string): string {
+  public getFrameworkDir(id: string): string {
     const serverRoot = this.configManager.getServerRoot();
     return join(serverRoot, 'resources', 'frameworks', id.toLowerCase());
   }

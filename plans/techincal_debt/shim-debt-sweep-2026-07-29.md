@@ -837,6 +837,58 @@ note verbatim: **substituting into prose without probing what the code says.**
 > That is why regression #2 shipped silently. Also `cli` is missing from the commitlint scope enum,
 > and `cpm validate --prompts` reports 2 invalid prompts (a duplicate `resume_variant_build`).
 
+#### Internal rename, pass 2 (identifiers) — ✓ 2026-07-30
+
+Sequenced by risk class after the operator chose "finish the internal rename first". Pass 1
+(exported symbols) landed as `7d16376f`, taking 1616 → 1481. Pass 2 takes **1481 → 1102**:
+379 identifier references across 61 files.
+
+**The classification, not the substitution, was the work.** Of 91 distinct compound identifiers,
+a cross-check against `resources/`, `tooling/`, `config.json` and `docs/` found only **9 that
+appear in any data file**. Those 9 are the boundary; the other 82 are provably internal and
+mechanically safe. Three more (`inspect_methodology`, `methodology_id`, `methodology_changed`)
+were probed individually — the first two are MCP wire tokens (an `operation` label and an input
+parameter, kept), the third had 3 internal references and **no consumer at all**, so it became
+`framework_changed`. Pass 1 had protected it on suspicion; pass 2 had the evidence.
+
+**Four identifiers could not take the blanket target name** — same-file collisions where the
+naive rename would have collapsed two distinct concepts:
+
+| Identifier                      | Naive target         | What it actually is                                                                                       | Renamed to            |
+| ------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------- | --------------------- |
+| `activeMethodology`             | `activeFramework`    | The framework **type**; `activeFramework` on the same object is its **id**, read as `type ?? id`.         | `activeFrameworkType` |
+| `totalMethodologies`            | `totalFrameworks`    | Counts **guides** (`getAllGuides()`), and `totalFrameworks` already sits beside it in the same interface. | `totalGuides`         |
+| `methodologyKey`/`frameworkKey` | — (pair)             | Two lookup keys in one scope: overlays register each guide under **both** its type and its id.            | `typeKey` / `idKey`   |
+| `frameworkMethodology`          | `frameworkFramework` | A local holding `selectedFramework?.type`.                                                                | `frameworkType`       |
+
+The `activeMethodology` case is the one that mattered: `ToolDescriptionsConfig` carries both
+fields and the lookup is `activeMethodology ?? activeFramework`. Merging them would have removed
+the type-preferred/id-fallback behaviour silently — nothing would have failed to compile. The
+duality is now documented on the interface, which is why it read as a duplicate in the first place.
+It is runtime-only metadata: the generated `tool-descriptions.contracts.json` carries neither key,
+which is what made the rename safe.
+
+**Verification.** typecheck 0 · unit 1703/1703 · validate:all 0 · validate:arch 0 (2 pre-existing
+warnings) · build 0 · ratchet 3476 (no regression). Integration/e2e measured **before and after on
+the same tree: 11 suites / 34 tests failing in both, identical failure sets** — the pre-existing
+Tier-IT backlog, unmoved. All 8 frameworks validate; the server boots over STDIO and registers all
+three tools. Every protected token was count-compared against `HEAD` and is unchanged.
+
+> **Two probes of mine were falsified mid-pass, both caught before they did damage.** The
+> collision detector reported zero same-file collisions when `mcp/tools/index.ts` demonstrably
+> contained both names — a `comm` invocation that silently produced nothing. And the generated
+> `sed` script had every `\b` converted to a literal backspace byte by `echo`, so the first
+> "successful" run replaced nothing while reporting 59 files touched. The count check
+> (`1481` unchanged) is what exposed it. **A rename that reports success is not evidence it ran.**
+
+> **Also found**: `npm run generate:schemas` writes raw `JSON.stringify(…, 2)` while the committed
+> schemas are prettier-formatted, so every regeneration dirties `methodology.schema.json` with
+> formatting-only churn and every commit collapses it back. Harmless today, but it makes any
+> staleness check on that file unreliable. Not fixed here — it is not a rename.
+
+**Remaining**: 1102 hits — comment/doc prose (pass 3), 12 file + 2 directory renames (pass 4),
+then the guard (pass 5).
+
 #### Stage 2 ruling: the "7 duplicate pairs" framing was wrong
 
 Adjudicated by structural diff, not by name. The collision set splits three ways, and treating it

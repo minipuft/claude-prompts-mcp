@@ -44,13 +44,13 @@ const defaultConfig: PhaseGuardsConfig = { mode: 'enforce', maxRetries: 2 };
 
 function createMockGuide(steps: Array<Record<string, unknown>>): FrameworkGuide {
   return {
-    enhanceWithMethodology: jest.fn().mockReturnValue({
+    enhanceWithFramework: jest.fn().mockReturnValue({
       processingEnhancements: steps,
     }),
     guidePromptCreation: jest.fn(),
     guideTemplateProcessing: jest.fn(),
     guideExecutionSteps: jest.fn(),
-    validateMethodologyCompliance: jest.fn(),
+    validateFrameworkCompliance: jest.fn(),
     getToolDescriptions: jest.fn(),
     renderPhaseGuardOverlay: jest.fn(),
   } as unknown as FrameworkGuide;
@@ -58,9 +58,7 @@ function createMockGuide(steps: Array<Record<string, unknown>>): FrameworkGuide 
 
 function createRegistry(guide?: FrameworkGuide) {
   return {
-    getMethodologyGuide: jest
-      .fn<(id: string) => FrameworkGuide | undefined>()
-      .mockReturnValue(guide),
+    getFrameworkGuide: jest.fn<(id: string) => FrameworkGuide | undefined>().mockReturnValue(guide),
   };
 }
 
@@ -474,7 +472,7 @@ describe('PhaseGuardVerificationStage', () => {
 
   test('skips when methodology guide returns undefined', async () => {
     const registry = {
-      getMethodologyGuide: jest
+      getFrameworkGuide: jest
         .fn<(id: string) => FrameworkGuide | undefined>()
         .mockReturnValue(undefined),
     };

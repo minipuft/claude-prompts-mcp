@@ -35,9 +35,9 @@ export interface GateDefinitionProvider {
     context: { promptCategory?: string; framework?: string; explicitRequest?: boolean }
   ): boolean;
   getStatistics(): { cachedGates: number; totalLoads: number; lastAccess: Date | null };
-  isMethodologyGate(gateId: string): Promise<boolean>;
-  isMethodologyGateCached(gateId: string): boolean;
-  getMethodologyGateIds(): Promise<string[]>;
+  isFrameworkGate(gateId: string): Promise<boolean>;
+  isFrameworkGateCached(gateId: string): boolean;
+  getFrameworkGateIds(): Promise<string[]>;
 }
 
 /**
@@ -253,19 +253,19 @@ export class GateLoader implements GateDefinitionProvider {
    * @param gateId - Gate identifier to check
    * @returns true if gate has gate_type === 'framework', false otherwise
    */
-  async isMethodologyGate(gateId: string): Promise<boolean> {
+  async isFrameworkGate(gateId: string): Promise<boolean> {
     const gate = await this.loadGate(gateId);
     return gate?.gate_type === 'framework';
   }
 
   /**
    * Check if a gate ID is a methodology gate using cached data only (synchronous).
-   * Returns false if gate is not in cache - use isMethodologyGate for definitive check.
+   * Returns false if gate is not in cache - use isFrameworkGate for definitive check.
    *
    * @param gateId - Gate identifier to check
    * @returns true if cached gate has gate_type === 'framework', false otherwise
    */
-  isMethodologyGateCached(gateId: string): boolean {
+  isFrameworkGateCached(gateId: string): boolean {
     const cached = this.gateCache.get(gateId) ?? this.gateCache.get(gateId.toLowerCase());
     return cached?.gate_type === 'framework';
   }
@@ -276,7 +276,7 @@ export class GateLoader implements GateDefinitionProvider {
    *
    * @returns Array of methodology gate IDs
    */
-  async getMethodologyGateIds(): Promise<string[]> {
+  async getFrameworkGateIds(): Promise<string[]> {
     const allGates = this.definitionLoader.loadAllGates();
     return Array.from(allGates.values())
       .filter((gate) => gate.gate_type === 'framework')

@@ -25,4 +25,4 @@ export type {
   TemplateEnhancement,
 } from '../types/methodology-types.js';
 
-export { BaseMethodologyGuide } from '../types/methodology-types.js';
+export { BaseFrameworkGuide } from '../types/methodology-types.js';

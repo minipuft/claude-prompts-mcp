@@ -38,7 +38,7 @@ import type { ExecutionContext } from '../../context/index.js';
 export const PHASE_GUARD_GATE_ID = '__phase_guard__';
 
 type FrameworkRegistryProvider = () =>
-  | { getMethodologyGuide(id: string): FrameworkGuide | undefined }
+  | { getFrameworkGuide(id: string): FrameworkGuide | undefined }
   | undefined;
 
 type PhaseGuardsConfigProvider = () => PhaseGuardsConfig | undefined;
@@ -233,10 +233,10 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     const registry = this.frameworkRegistryProvider();
     if (!registry) return [];
 
-    const guide = registry.getMethodologyGuide(frameworkId);
+    const guide = registry.getFrameworkGuide(frameworkId);
     if (!guide) return [];
 
-    const enhancement = guide.enhanceWithMethodology(
+    const enhancement = guide.enhanceWithFramework(
       { id: 'phase-guard-check', name: '', description: '', category: '' } as any,
       {}
     );

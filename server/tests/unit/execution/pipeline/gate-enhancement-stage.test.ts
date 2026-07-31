@@ -17,7 +17,7 @@ import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js'
  * Creates a mock GateLoader that returns specified methodology gate IDs.
  */
 const createMockGateLoader = (
-  methodologyGateIds: string[] = ['framework-compliance', 'research-quality', 'technical-accuracy']
+  frameworkGateIds: string[] = ['framework-compliance', 'research-quality', 'technical-accuracy']
 ): GateLoader =>
   ({
     loadGate: jest.fn(),
@@ -28,13 +28,13 @@ const createMockGateLoader = (
     clearCache: jest.fn(),
     isGateActive: jest.fn(),
     getStatistics: jest.fn(),
-    isMethodologyGate: jest
+    isFrameworkGate: jest
       .fn()
-      .mockImplementation((gateId: string) => Promise.resolve(methodologyGateIds.includes(gateId))),
-    isMethodologyGateCached: jest
+      .mockImplementation((gateId: string) => Promise.resolve(frameworkGateIds.includes(gateId))),
+    isFrameworkGateCached: jest
       .fn()
-      .mockImplementation((gateId: string) => methodologyGateIds.includes(gateId)),
-    getMethodologyGateIds: jest.fn().mockResolvedValue(methodologyGateIds),
+      .mockImplementation((gateId: string) => frameworkGateIds.includes(gateId)),
+    getFrameworkGateIds: jest.fn().mockResolvedValue(frameworkGateIds),
     setTemporaryGateRegistry: jest.fn(),
   }) as unknown as GateLoader;
 

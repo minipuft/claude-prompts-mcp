@@ -41,7 +41,7 @@ export interface PromptGuidanceResult {
   systemPromptInjection?: SystemPromptInjectionResult;
   templateProcessingGuidance?: ProcessingGuidance;
   executionStepGuidance?: StepGuidance;
-  activeMethodology: string;
+  activeFrameworkType: string;
   guidanceApplied: boolean;
   processingTimeMs: number;
   metadata: {
@@ -128,7 +128,7 @@ export class PromptGuidanceService {
 
     try {
       const activeFramework = await this.getActiveFramework(options.frameworkOverride);
-      const frameworkGuide = await this.getMethodologyGuide(activeFramework.type);
+      const frameworkGuide = await this.getFrameworkGuide(activeFramework.type);
 
       // Surface methodology guidance (read-only hints)
       const processingGuidance = frameworkGuide.guideTemplateProcessing(
@@ -142,7 +142,7 @@ export class PromptGuidanceService {
 
       const result: PromptGuidanceResult = {
         originalPrompt: prompt,
-        activeMethodology: activeFramework.type,
+        activeFrameworkType: activeFramework.type,
         templateProcessingGuidance: processingGuidance,
         executionStepGuidance: stepGuidance,
         guidanceApplied: false,
@@ -171,7 +171,7 @@ export class PromptGuidanceService {
         options.includeSystemPromptInjection !== false
       ) {
         try {
-          const injectionResult = this.injectMethodologyGuidance(
+          const injectionResult = this.injectFrameworkGuidance(
             prompt,
             activeFramework,
             frameworkGuide
@@ -239,7 +239,7 @@ export class PromptGuidanceService {
 
       return {
         originalPrompt: prompt,
-        activeMethodology: 'CAGEERF',
+        activeFrameworkType: 'CAGEERF',
         guidanceApplied: false,
         processingTimeMs: Date.now() - startTime,
         metadata: {
@@ -256,7 +256,7 @@ export class PromptGuidanceService {
    *
    * Simple implementation: get guidance from methodology guide, combine with template.
    */
-  private injectMethodologyGuidance(
+  private injectFrameworkGuidance(
     prompt: ConvertedPrompt,
     framework: FrameworkDefinition,
     guide: FrameworkGuide
@@ -375,11 +375,11 @@ export class PromptGuidanceService {
       throw new Error('FrameworkManager not set');
     }
 
-    const targetMethodology = frameworkOverride || this.frameworkManager.selectFramework().type;
+    const targetFramework = frameworkOverride || this.frameworkManager.selectFramework().type;
 
-    const framework = this.frameworkManager.getFramework(targetMethodology);
+    const framework = this.frameworkManager.getFramework(targetFramework);
     if (!framework) {
-      throw new Error(`Framework ${targetMethodology} not found`);
+      throw new Error(`Framework ${targetFramework} not found`);
     }
 
     return framework;
@@ -388,12 +388,12 @@ export class PromptGuidanceService {
   /**
    * Get methodology guide for framework
    */
-  private async getMethodologyGuide(methodology: string): Promise<FrameworkGuide> {
+  private async getFrameworkGuide(methodology: string): Promise<FrameworkGuide> {
     if (!this.frameworkManager) {
       throw new Error('FrameworkManager not set');
     }
 
-    const guide = this.frameworkManager.getMethodologyGuide(methodology);
+    const guide = this.frameworkManager.getFrameworkGuide(methodology);
     if (!guide) {
       throw new Error(`Methodology guide for ${methodology} not found`);
     }

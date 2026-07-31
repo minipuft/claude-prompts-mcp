@@ -162,12 +162,12 @@ export class ChainOperatorExecutor {
     let gateGuidance = '';
     if (gateGuidanceEnabled && gateIdsToRender.length > 0) {
       // Get framework and category context if available
-      let frameworkMethodology = 'CAGEERF';
+      let frameworkType = 'CAGEERF';
       let category = 'general';
 
       const reviewStepContext = await this.resolveFrameworkContext(targetStep ?? undefined);
       if (reviewStepContext) {
-        frameworkMethodology = reviewStepContext.selectedFramework?.type || 'CAGEERF';
+        frameworkType = reviewStepContext.selectedFramework?.type || 'CAGEERF';
         category = reviewStepContext.category || 'general';
       }
 
@@ -175,7 +175,7 @@ export class ChainOperatorExecutor {
       if (this.gateGuidanceRenderer) {
         try {
           gateGuidance = await this.gateGuidanceRenderer.renderGuidance(gateIdsToRender, {
-            framework: frameworkMethodology,
+            framework: frameworkType,
             category,
             promptId: targetStep?.promptId,
             explicitGateIds,

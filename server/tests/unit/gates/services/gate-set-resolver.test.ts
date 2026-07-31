@@ -42,9 +42,9 @@ const createGateManager = (categoryGates: string[] = [], frameworkScopedGates: s
     })),
   }) as unknown as Parameters<typeof buildResolver>[1];
 
-const createGateLoader = (methodologyGateIds: string[] = []) =>
+const createGateLoader = (frameworkGateIds: string[] = []) =>
   ({
-    getMethodologyGateIds: jest.fn(async () => methodologyGateIds),
+    getFrameworkGateIds: jest.fn(async () => frameworkGateIds),
   }) as unknown as Parameters<typeof buildResolver>[2];
 
 function buildResolver(
@@ -247,7 +247,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
   test('a failing gate loader degrades to no methodology veto rather than throwing', async () => {
     const logger = createLogger();
     const failingLoader = {
-      getMethodologyGateIds: jest.fn(async () => {
+      getFrameworkGateIds: jest.fn(async () => {
         throw new Error('definitions unreadable');
       }),
     };
@@ -287,7 +287,7 @@ describe('GateSetResolver — fixes delivered by routing enhancement through one
       baseInput({
         prompt: makePrompt({ gateConfiguration: { framework_gates: false } }),
         // rank 40 — the tier the opt-out previously could not reach
-        methodologyGateIds: ['framework-compliance'],
+        frameworkGateIds: ['framework-compliance'],
       })
     );
 
@@ -328,21 +328,21 @@ describe('GateSetResolver — fixes delivered by routing enhancement through one
     expect(result.accepted[0]?.source).toBe('prompt-config');
   });
 
-  test('knownMethodologyGateIds is used in place of a registry read', async () => {
+  test('knownFrameworkGateIds is used in place of a registry read', async () => {
     const loader = createGateLoader(['should-not-be-read']);
     const resolver = buildResolver(createLogger(), createGateManager(), loader);
 
     const result = await resolver.resolve(
       baseInput({
         frameworkInjected: false,
-        knownMethodologyGateIds: ['framework-compliance'],
+        knownFrameworkGateIds: ['framework-compliance'],
         plannedGateIds: ['framework-compliance', 'code-quality'],
       })
     );
 
     expect(result.gateIds).toEqual(['code-quality']);
     expect(
-      (loader as unknown as { getMethodologyGateIds: jest.Mock }).getMethodologyGateIds
+      (loader as unknown as { getFrameworkGateIds: jest.Mock }).getFrameworkGateIds
     ).not.toHaveBeenCalled();
   });
 

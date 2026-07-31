@@ -322,17 +322,14 @@ export interface FrameworkGuide {
    * @param context Current execution context
    * @returns Methodology enhancements to apply
    */
-  enhanceWithMethodology(
-    prompt: ConvertedPrompt,
-    context: Record<string, any>
-  ): FrameworkEnhancement;
+  enhanceWithFramework(prompt: ConvertedPrompt, context: Record<string, any>): FrameworkEnhancement;
 
   /**
    * Validate that a prompt follows methodology principles
    * @param prompt The prompt to validate
    * @returns Validation results and improvement suggestions
    */
-  validateMethodologyCompliance(prompt: ConvertedPrompt): FrameworkValidation;
+  validateFrameworkCompliance(prompt: ConvertedPrompt): FrameworkValidation;
 
   /**
    * Get methodology-specific system prompt guidance
@@ -361,7 +358,7 @@ export interface FrameworkGuide {
  * Base class for methodology guides
  * Provides common functionality for all methodology implementations
  */
-export abstract class BaseMethodologyGuide implements FrameworkGuide {
+export abstract class BaseFrameworkGuide implements FrameworkGuide {
   abstract readonly frameworkId: string;
   abstract readonly frameworkName: string;
   /** The framework type discriminator */
@@ -383,12 +380,12 @@ export abstract class BaseMethodologyGuide implements FrameworkGuide {
     semanticAnalysis: ContentAnalysisResult
   ): StepGuidance;
 
-  abstract enhanceWithMethodology(
+  abstract enhanceWithFramework(
     prompt: ConvertedPrompt,
     context: Record<string, any>
   ): FrameworkEnhancement;
 
-  abstract validateMethodologyCompliance(prompt: ConvertedPrompt): FrameworkValidation;
+  abstract validateFrameworkCompliance(prompt: ConvertedPrompt): FrameworkValidation;
 
   abstract getSystemPromptGuidance(context: Record<string, any>): string;
 

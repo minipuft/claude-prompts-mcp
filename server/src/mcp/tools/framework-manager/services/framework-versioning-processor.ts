@@ -54,7 +54,7 @@ export class FrameworkVersioningProcessor {
     }
 
     // Load existing data to capture current state
-    const existingData = await this.ctx.fileService.loadExistingMethodology(id);
+    const existingData = await this.ctx.fileService.loadExistingFramework(id);
     if (existingData === null) {
       return this.error(`Failed to load current methodology state`);
     }
@@ -96,10 +96,7 @@ export class FrameworkVersioningProcessor {
     };
 
     // Write restored methodology files
-    const writeResult = await this.ctx.fileService.writeMethodologyFiles(
-      frameworkData,
-      existingData
-    );
+    const writeResult = await this.ctx.fileService.writeFrameworkFiles(frameworkData, existingData);
     if (!writeResult.success) {
       return this.error(`Rollback write failed: ${writeResult.error}`);
     }

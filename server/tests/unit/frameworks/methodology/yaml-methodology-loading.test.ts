@@ -22,7 +22,7 @@ describe('YAML Methodology Loading', () => {
   describe('RuntimeFrameworkLoader', () => {
     it('discovers all built-in frameworks from YAML', () => {
       const loader = getDefaultRuntimeLoader();
-      const frameworks = loader.discoverMethodologies();
+      const frameworks = loader.discoverFrameworks();
 
       expect(frameworks).toContain('cageerf');
       expect(frameworks).toContain('react');
@@ -36,7 +36,7 @@ describe('YAML Methodology Loading', () => {
       const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
 
       for (const id of builtInIds) {
-        const definition = loader.loadMethodology(id);
+        const definition = loader.loadFramework(id);
         expect(definition).toBeDefined();
         expect(definition?.id).toBe(id);
         expect(definition?.name).toBeTruthy();
@@ -47,7 +47,7 @@ describe('YAML Methodology Loading', () => {
 
     it('throws fail-fast error for missing methodology', () => {
       const loader = getDefaultRuntimeLoader();
-      const result = loader.loadMethodology('nonexistent-methodology');
+      const result = loader.loadFramework('nonexistent-methodology');
       expect(result).toBeUndefined();
     });
   });
@@ -55,7 +55,7 @@ describe('YAML Methodology Loading', () => {
   describe('GenericFrameworkGuide from YAML', () => {
     it('creates valid FrameworkGuide from YAML definition', () => {
       const loader = getDefaultRuntimeLoader();
-      const definition = loader.loadMethodology('cageerf');
+      const definition = loader.loadFramework('cageerf');
       expect(definition).toBeDefined();
 
       const guide = createGenericGuide(definition!);
@@ -70,8 +70,8 @@ describe('YAML Methodology Loading', () => {
       expect(typeof guide.guidePromptCreation).toBe('function');
       expect(typeof guide.guideTemplateProcessing).toBe('function');
       expect(typeof guide.guideExecutionSteps).toBe('function');
-      expect(typeof guide.enhanceWithMethodology).toBe('function');
-      expect(typeof guide.validateMethodologyCompliance).toBe('function');
+      expect(typeof guide.enhanceWithFramework).toBe('function');
+      expect(typeof guide.validateFrameworkCompliance).toBe('function');
       expect(typeof guide.getSystemPromptGuidance).toBe('function');
     });
 
@@ -80,7 +80,7 @@ describe('YAML Methodology Loading', () => {
       const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
 
       for (const id of builtInIds) {
-        const definition = loader.loadMethodology(id);
+        const definition = loader.loadFramework(id);
         expect(definition).toBeDefined();
 
         const guide = createGenericGuide(definition!);
@@ -96,7 +96,7 @@ describe('YAML Methodology Loading', () => {
       const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
 
       for (const id of builtInIds) {
-        const definition = loader.loadMethodology(id);
+        const definition = loader.loadFramework(id);
         const guide = createGenericGuide(definition!);
 
         const guidance = guide.getSystemPromptGuidance({});

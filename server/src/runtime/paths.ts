@@ -233,7 +233,7 @@ export class PathResolver {
    *   2. ${workspace}/frameworks/ (legacy, if exists)
    *   3. ${packageRoot}/resources/frameworks/ (default)
    */
-  getMethodologiesPath(): string {
+  getFrameworksPath(): string {
     if (this.cache.frameworks) return this.cache.frameworks;
     const { resolved, source } = this.resolveResourceSubdir('frameworks');
     this.cache.frameworks = resolved;
@@ -298,7 +298,7 @@ export class PathResolver {
       resources: this.getResourcesPath(),
       config: this.getConfigPath(),
       prompts: this.getPromptsPath(),
-      frameworks: this.getMethodologiesPath(),
+      frameworks: this.getFrameworksPath(),
       gates: this.getGatesPath(),
       scripts: this.getScriptsPath(),
       styles: this.getStylesPath(),

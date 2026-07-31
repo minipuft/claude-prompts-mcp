@@ -29,7 +29,7 @@ export type {
   TemplateEnhancement,
 } from './methodology-types.js';
 
-export { BaseMethodologyGuide } from './methodology-types.js';
+export { BaseFrameworkGuide } from './methodology-types.js';
 
 // Prompt guidance types
 export type {

@@ -533,12 +533,12 @@ export class McpToolRouter {
     // Get current framework state for dynamic descriptions
     const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled() ?? false;
     const activeFramework = this.frameworkStateStore?.getActiveFramework();
-    const activeMethodology = activeFramework?.type ?? activeFramework?.id;
+    const activeFrameworkType = activeFramework?.type ?? activeFramework?.id;
 
     this.logger.info(`🔧 Registering tools with framework-aware descriptions:`);
     this.logger.info(`   Framework enabled: ${frameworkEnabled}`);
     this.logger.info(`   Active framework: ${activeFramework?.id ?? 'none'}`);
-    this.logger.info(`   Active methodology: ${activeMethodology ?? 'none'}`);
+    this.logger.info(`   Active methodology: ${activeFrameworkType ?? 'none'}`);
     this.logger.info(
       `   Tool description manager: ${
         this.toolDescriptionLoader != null ? 'available' : 'not available'
@@ -553,8 +553,8 @@ export class McpToolRouter {
         this.toolDescriptionLoader?.getDescription(
           'prompt_engine',
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? '';
 
       const getPromptEngineParamDescription = (paramName: string, fallback: string) =>
@@ -562,14 +562,14 @@ export class McpToolRouter {
           'prompt_engine',
           paramName,
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? fallback;
 
       // Log which description source is being used for transparency
       if (this.toolDescriptionLoader != null) {
         this.logger.info(
-          `   prompt_engine: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
+          `   prompt_engine: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, methodology: ${activeFrameworkType})`
         );
       } else {
         this.logger.info(
@@ -728,14 +728,14 @@ export class McpToolRouter {
         this.toolDescriptionLoader?.getDescription(
           'system_control',
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? '';
 
       // Log which description source is being used for transparency
       if (this.toolDescriptionLoader != null) {
         this.logger.info(
-          `   system_control: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
+          `   system_control: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, methodology: ${activeFrameworkType})`
         );
       } else {
         this.logger.info(
@@ -748,8 +748,8 @@ export class McpToolRouter {
           'system_control',
           paramName,
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? fallback;
 
       // Build schema with methodology-aware parameter descriptions
@@ -808,8 +808,8 @@ export class McpToolRouter {
         this.toolDescriptionLoader?.getDescription(
           'resource_manager',
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? '';
 
       this.mcpServer.registerTool(

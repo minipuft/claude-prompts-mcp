@@ -33,9 +33,9 @@ function createProvider(gates: Record<string, LightweightGateDefinition>): GateD
     clearCache: jest.fn(),
     isGateActive: jest.fn(),
     getStatistics: jest.fn(),
-    isMethodologyGate: jest.fn(),
-    isMethodologyGateCached: jest.fn(),
-    getMethodologyGateIds: jest.fn(),
+    isFrameworkGate: jest.fn(),
+    isFrameworkGateCached: jest.fn(),
+    getFrameworkGateIds: jest.fn(),
   } as unknown as GateDefinitionProvider;
 }
 

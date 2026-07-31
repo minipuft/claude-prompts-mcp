@@ -798,7 +798,7 @@ export class FrameworkSemanticIntegration {
           hasSystemMessage: false,
           hasUserTemplate: false,
           hasStructuredReasoning: false,
-          hasMethodologyKeywords: false,
+          hasFrameworkKeywords: false,
           hasComplexAnalysis: false,
         },
         complexity: 'low',

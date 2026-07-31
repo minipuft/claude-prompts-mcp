@@ -56,7 +56,7 @@ export interface GateResolutionInput {
   /** Rank 50 — a chain's `finalValidation`. */
   readonly chainGateIds?: readonly string[] | undefined;
   /** Rank 40 — the active framework's methodology gates. */
-  readonly methodologyGateIds?: readonly string[] | undefined;
+  readonly frameworkGateIds?: readonly string[] | undefined;
   /** Whether to auto-assign category gates (rank 20). Defaults to true. */
   readonly autoAssignCategoryGates?: boolean | undefined;
   /**
@@ -69,7 +69,7 @@ export interface GateResolutionInput {
    * Methodology gate ids the caller has already loaded. Supplying them avoids a second registry
    * read; omitting them makes the resolver load its own.
    */
-  readonly knownMethodologyGateIds?: readonly string[] | undefined;
+  readonly knownFrameworkGateIds?: readonly string[] | undefined;
 }
 
 /** One accepted gate and the source it is attributed to. */
@@ -162,7 +162,7 @@ export class GateSetResolver {
       'prompt-config'
     );
     this.addAll(accumulated, input.chainGateIds, 'chain-level');
-    this.addAll(accumulated, input.methodologyGateIds, 'framework-guide');
+    this.addAll(accumulated, input.frameworkGateIds, 'framework-guide');
 
     if (input.autoAssignCategoryGates !== false) {
       this.addAll(accumulated, this.registryGateIds(input), 'registry-auto');
@@ -266,7 +266,7 @@ export class GateSetResolver {
       });
     }
 
-    vetoes.push(...(await this.buildMethodologyVetoes(input)));
+    vetoes.push(...(await this.buildFrameworkVetoes(input)));
 
     return vetoes;
   }
@@ -279,7 +279,7 @@ export class GateSetResolver {
    * switch is operator intent, so both bind every rank; `framework_gates: false` is an author
    * preference and stops at rank 60, like `exclude`.
    */
-  private async buildMethodologyVetoes(input: GateResolutionInput): Promise<GateVeto[]> {
+  private async buildFrameworkVetoes(input: GateResolutionInput): Promise<GateVeto[]> {
     const applicable: Array<{ name: string; bindsUpToRank: number }> = [];
 
     if (!input.frameworkInjected) {
@@ -299,19 +299,19 @@ export class GateSetResolver {
       return [];
     }
 
-    const methodologyGateIds = await this.resolveMethodologyGateIds(input);
-    if (methodologyGateIds.size === 0) {
+    const frameworkGateIds = await this.resolveFrameworkGateIds(input);
+    if (frameworkGateIds.size === 0) {
       return [];
     }
 
-    const rejects = (gateId: string): boolean => methodologyGateIds.has(gateId);
+    const rejects = (gateId: string): boolean => frameworkGateIds.has(gateId);
     return applicable.map((veto) => ({ ...veto, rejects }));
   }
 
   /** Caller-supplied ids win over a registry read; the registry is the fallback. */
-  private async resolveMethodologyGateIds(input: GateResolutionInput): Promise<Set<string>> {
-    if (input.knownMethodologyGateIds !== undefined) {
-      return new Set(input.knownMethodologyGateIds);
+  private async resolveFrameworkGateIds(input: GateResolutionInput): Promise<Set<string>> {
+    if (input.knownFrameworkGateIds !== undefined) {
+      return new Set(input.knownFrameworkGateIds);
     }
 
     if (this.gateLoader === undefined) {
@@ -320,7 +320,7 @@ export class GateSetResolver {
     }
 
     try {
-      return new Set(await this.gateLoader.getMethodologyGateIds());
+      return new Set(await this.gateLoader.getFrameworkGateIds());
     } catch (error) {
       this.logger.warn('[GateSetResolver] Failed to load methodology gate ids', { error });
       return new Set();

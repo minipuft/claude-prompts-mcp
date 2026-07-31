@@ -31,7 +31,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
    * Request-scoped methodology gate IDs (set during execute, used synchronously within).
    * Reset to null after execute completes to prevent stale data across requests.
    */
-  private currentRequestMethodologyGates: Set<string> | null = null;
+  private currentRequestFrameworkGates: Set<string> | null = null;
 
   constructor(
     private readonly frameworkManager: FrameworkManager,
@@ -46,7 +46,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
    * Load methodology gate IDs from GateLoader for the current request.
    * Returns fresh data each call - GateLoader handles hot-reload internally.
    */
-  private async loadMethodologyGateIds(): Promise<Set<string>> {
+  private async loadFrameworkGateIds(): Promise<Set<string>> {
     if (!this.gateLoader) {
       this.logger.debug(
         '[FrameworkResolutionStage] No GateLoader available for methodology gate detection'
@@ -55,7 +55,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     }
 
     try {
-      const ids = await this.gateLoader.getMethodologyGateIds();
+      const ids = await this.gateLoader.getFrameworkGateIds();
       return new Set(ids);
     } catch (error) {
       this.logger.warn('[FrameworkResolutionStage] Failed to load methodology gate IDs', { error });
@@ -67,7 +67,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     this.logEntry(context);
 
     // Load fresh methodology gate IDs for this request (prevents stale cache after hot-reload)
-    this.currentRequestMethodologyGates = await this.loadMethodologyGateIds();
+    this.currentRequestFrameworkGates = await this.loadFrameworkGateIds();
 
     if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
@@ -125,7 +125,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
         ? this.chainStepsRequireFramework(context)
         : false;
       const singleRequiresFramework = context.hasSinglePromptCommand()
-        ? this.hasMethodologyGate(context.parsedCommand.inlineGateIds)
+        ? this.hasFrameworkGate(context.parsedCommand.inlineGateIds)
         : false;
 
       const requiresFramework = Boolean(
@@ -143,7 +143,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       ? this.chainStepsRequireFramework(context)
       : false;
     const singleRequiresFramework = context.hasSinglePromptCommand()
-      ? this.hasMethodologyGate(context.parsedCommand.inlineGateIds)
+      ? this.hasFrameworkGate(context.parsedCommand.inlineGateIds)
       : false;
 
     const requiresFramework = Boolean(
@@ -330,11 +330,11 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       return true;
     }
 
-    if (this.hasMethodologyGate(step.executionPlan?.gates)) {
+    if (this.hasFrameworkGate(step.executionPlan?.gates)) {
       return true;
     }
 
-    if (this.hasMethodologyGate(step.inlineGateIds)) {
+    if (this.hasFrameworkGate(step.inlineGateIds)) {
       return true;
     }
 
@@ -345,14 +345,14 @@ export class FrameworkResolutionStage extends BasePipelineStage {
    * Check if any gates in the array are methodology gates.
    * Uses request-scoped data loaded at start of execute().
    */
-  private hasMethodologyGate(gates?: readonly string[] | null): boolean {
+  private hasFrameworkGate(gates?: readonly string[] | null): boolean {
     if (!Array.isArray(gates)) {
       return false;
     }
 
     return gates.some(
       (gateId) =>
-        Boolean(gateId) && (this.currentRequestMethodologyGates?.has(gateId as string) ?? false)
+        Boolean(gateId) && (this.currentRequestFrameworkGates?.has(gateId as string) ?? false)
     );
   }
 }
