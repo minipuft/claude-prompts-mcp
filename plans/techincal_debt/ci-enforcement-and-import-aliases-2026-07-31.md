@@ -78,9 +78,14 @@ The required contexts stay pending indefinitely and the PR cannot be merged exce
 override.
 
 This was latent until today: while the required contexts were unmatchable (F1), every PR was
-blocked equally, so the docs-only case was invisible. **Fixing F1 makes F1b live.** A docs-only PR
-is not hypothetical here — `d25b323c`, `0e76c03a`, and the plan-file commits on the current branch
-are all doc-only changes.
+blocked equally, so the docs-only case was invisible. **Fixing F1 makes F1b live.**
+
+Scope correction, observed live on 2026-07-31: for `pull_request` events GitHub evaluates path
+filters against the **PR's entire diff**, not the incremental push. Pushing two doc-only commits
+(`5033bc2e`, `6022bb0a`) to PR #150 still triggered CI, because the PR as a whole contains `.ts`
+changes. So doc-only _commits_ inside a mixed PR are safe; the trap is a PR whose **every** file
+matches `paths-ignore` — a CHANGELOG-only fix, a plan-file-only PR, a docs correction. Those are
+routine in this repo, so the exposure is real, but narrower than "any PR containing a doc commit".
 
 Remedy is the documented GitHub pattern: a companion workflow with the **inverse** trigger
 (`paths:` matching what CI ignores) whose jobs are named identically and do nothing but succeed —
