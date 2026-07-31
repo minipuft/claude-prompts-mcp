@@ -1,7 +1,13 @@
 # CI Enforcement Gaps, Release Process, and `#` Import Migration
 
 **Date**: 2026-07-31
-**Branch**: not yet cut — Tier 1 branches off `origin/main` after PR #150 merges
+**Branch**: `fix/ci-enforcement-and-workflow-gaps`, cut 2026-07-31 from
+`refactor/retire-compat-shims-and-methodology-vocab` @ `db5eb408` — **stacked, not off `main`**.
+PR #150 is deliberately held unmerged so release-please does not open the 3.0.0 Release PR until
+more work is finalized for that release. Stacking is required, not preferred: `origin/main` carries
+10 `validate:all` members and 3 `validate-no-*` scripts against this branch's 21 and 8, so Tier 1
+cannot enforce guards that do not exist there, and #150 already modifies `ci.yml`.
+**Consequence**: this branch's PR shows #150's commits until #150 lands, and must merge after it.
 **Work type**: bug_fix (Tier 1–2), refactor (Tier 3, deferred)
 **Status**: **Not started.** F1 partially closed in-flight (branch-protection contexts corrected
 2026-07-31, see F1). Everything else open.
