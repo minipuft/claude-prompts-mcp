@@ -61,4 +61,4 @@ Plugin installs (Claude Code, OpenCode, Gemini) set `MCP_WORKSPACE` automaticall
 
 ## Reference
 
-For all env vars including fine-grained path overrides (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, etc.), see [CLI Configuration](../reference/mcp-tools.md#cli-configuration).
+For the env vars the server actually reads (`MCP_WORKSPACE`, `MCP_RESOURCES_PATH`, `MCP_CONFIG_PATH`), see [CLI Configuration](../reference/mcp-tools.md#cli-configuration). There are no per-resource-type path overrides.

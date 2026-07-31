@@ -328,7 +328,7 @@ This repo uses a Release PR flow to ensure the npm package version and changelog
       "command": "npx",
       "args": ["-y", "claude-prompts@latest", "--client", "claude-code"],
       "env": {
-        "MCP_PROMPTS_PATH": "/home/user/projects/my-app/prompts"
+        "MCP_WORKSPACE": "/home/user/projects/my-app"
       }
     }
   }
@@ -387,8 +387,8 @@ All flags accept both `--flag=value` and `--flag value` formats.
 # Use a workspace
 npx claude-prompts --workspace /path/to/workspace
 
-# Override specific paths
-npx claude-prompts --prompts /path/to/prompts
+# Override where resources are loaded from
+npx claude-prompts --workspace /path/to/workspace --config /path/to/config.json
 
 # Select transport
 npx claude-prompts --transport sse
@@ -442,7 +442,7 @@ npx claude-prompts --startup-test --verbose
 
 **Changes not appearing**
 
-- Confirm you're editing files under your configured `MCP_WORKSPACE` / `MCP_PROMPTS_PATH`
+- Confirm you're editing files under your configured `MCP_WORKSPACE` / `MCP_RESOURCES_PATH`
 - If needed, restart Claude Desktop (most clients restart MCP servers on reconnect)
 
 ---

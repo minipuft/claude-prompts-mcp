@@ -988,14 +988,15 @@ All flags accept both `--flag=value` and `--flag value` formats.
 
 ```bash
 node dist/index.js --transport stdio \
-  --prompts /path/to/prompts \
-  --gates /path/to/gates \
-  --frameworks /path/to/frameworks \
-  --styles /path/to/styles \
-  --scripts /path/to/scripts \
   --workspace /path/to/workspace \
   --config /path/to/config.json
 ```
+
+There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `--styles` and
+`--scripts` were documented here but are parsed nowhere in the server; point `--workspace` (or
+`MCP_RESOURCES_PATH`) at a directory instead. The full parsed set is `--client`, `--config`,
+`--debug-startup`, `--help`, `--identity-mode`, `--init`, `--log-level`, `--quiet`,
+`--server-root`, `--startup-test`, `--transport`, `--verbose`, `--workspace`.
 
 ### Transport Options
 
@@ -1010,25 +1011,24 @@ For HTTP clients, use Streamable HTTP. It's the current MCP standard and replace
 
 ### Environment Variables
 
-| Variable              | Description                                          |
-| --------------------- | ---------------------------------------------------- |
-| `MCP_RESOURCES_PATH`  | Base path for all resources (prompts/, gates/, etc.) |
-| `MCP_PROMPTS_PATH`    | Override prompts directory                           |
-| `MCP_GATES_PATH`      | Override gates directory                             |
-| `MCP_FRAMEWORKS_PATH` | Override frameworks directory                        |
-| `MCP_STYLES_PATH`     | Override styles directory                            |
-| `MCP_SCRIPTS_PATH`    | Override scripts directory                           |
-| `MCP_WORKSPACE`       | Workspace root for config resolution                 |
-| `MCP_CONFIG_PATH`     | Override config.json path                            |
+| Variable             | Description                                          |
+| -------------------- | ---------------------------------------------------- |
+| `MCP_WORKSPACE`      | Workspace root for config resolution                 |
+| `MCP_RESOURCES_PATH` | Base path for all resources (prompts/, gates/, etc.) |
+| `MCP_CONFIG_PATH`    | Override config.json path                            |
+
+Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
+`MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.
 
 ### Resolution Priority
 
 Path resolution follows this priority (first match wins):
 
-1. **CLI flags** — `--prompts /path` (highest priority, explicit override)
-2. **Individual env vars** — `MCP_PROMPTS_PATH` (per-resource override)
-3. **Unified env var** — `MCP_RESOURCES_PATH/prompts/` (all resources)
-4. **Package defaults** — `server/resources/prompts/` (lowest priority)
+1. **Unified env var** — `MCP_RESOURCES_PATH/prompts/` (all resources)
+2. **Package defaults** — `server/resources/prompts/` (lowest priority)
+
+Workspace resources overlay the bundled ones. There is no per-resource-type override layer —
+the two tiers previously documented above these (CLI flags and individual env vars) do not exist.
 
 **Example: MCP config with custom resources**
 
