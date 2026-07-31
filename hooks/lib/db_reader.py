@@ -285,7 +285,7 @@ def _view_row_to_hook_state(row: sqlite3.Row) -> dict | None:
     if not in_progress and not pending_at_final:
         return None
 
-    result = {
+    result: dict[str, object] = {
         "chain_id": row["chain_id"] or "",
         "current_step": current,
         "total_steps": total,
@@ -423,7 +423,7 @@ def _session_to_hook_state(session: dict) -> dict | None:
     if not in_progress and not pending_at_final:
         return None
 
-    result = {
+    result: dict[str, object] = {
         "chain_id": session.get("chainId", session.get("chain_id", "")),
         "current_step": current,
         "total_steps": total,
