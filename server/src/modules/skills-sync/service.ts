@@ -332,7 +332,7 @@ interface ClientResourceSelection {
 }
 
 /** Built-in defaults shared across adapters. */
-const SYNC_DEFAULTS = { license: 'AGPL-3.0-only', adapterVersion: '1.0.0' } as const;
+const SYNC_DEFAULTS = { license: 'MIT', adapterVersion: '1.0.0' } as const;
 
 /**
  * Hardcoded client registry — the CLI knows everything about each client.

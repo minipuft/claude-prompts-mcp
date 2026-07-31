@@ -23,7 +23,7 @@
     "hot-reload",
     "reasoning"
   ],
-  "license": "AGPL-3.0-only",
+  "license": "MIT",
   "long_description": "Turn your prompt library into a programmable engine. Hot-reload for live editing, symbolic command syntax (>>prompt --> >>chain @framework :: 'gate'), framework injection, and self-evaluating quality gates. Supports version history, rollback, and hooks for extra reliability",
   "manifest_version": "0.3",
   "name": "claude-prompts",
