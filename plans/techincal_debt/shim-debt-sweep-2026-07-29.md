@@ -1579,3 +1579,70 @@ suite 32 failures = baseline.
 > while the config example, the command example and the troubleshooting line still told users to
 > use the dead options. Fixing the reference and leaving the instructions is the worse half of the
 > job. 6.2 is the part that matters; 6.0/6.1 are one-time cleanup.
+
+### Tier E2E: the SSE handshake hang. Opened 2026-07-31 from Tier IT.
+
+Tier IT closed with `test:integration` fully green, but `test:all` is not, and the residue is a
+single e2e test. This tier exists so it stops being carried as a footnote.
+
+**Measured, not assumed.** `MCP Server Smoke Tests › server registers expected MCP tools via HTTP`
+hangs its SSE handshake whenever e2e runs after any substantial jest run in the same shell:
+
+| Sequence                 | Result     |
+| ------------------------ | ---------- |
+| e2e alone                | passes 4/4 |
+| `test:unit` → e2e        | **fails**  |
+| `test:integration` → e2e | **fails**  |
+
+**The slowness hypothesis is already falsified — do not retry it.** Raising the internal bound
+10s → 30s and jest's 20s → 60s moved the error three times and then exhausted the full 30s. Those
+edits were reverted, because a bound raised on a wrong diagnosis only makes the suite fail slower.
+This is a hang, not latency.
+
+**Free narrowing from the `verify:mcp` work**: the same spawn over **streamable-http** does _not_
+hang under the identical preconditions (981ms alone, 846ms after `test:unit`, 1013ms after
+`test:integration`). The defect is **transport-specific, not spawn-specific**. That is the single
+most useful fact here and it is why E.2 exists.
+
+| ID  | Status | Step                                                                                                                                                                                                                                                                                                                                                                       | Files                                  | Depends | Verification                                             |
+| --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------- | -------------------------------------------------------- |
+| E.0 | ☐      | **Re-measure before editing** — every count in this plan that was checked was wrong. Confirm the hang still reproduces on the current tree and that the three sequences above still hold                                                                                                                                                                                   | (measurement only)                     | —       | Failure recorded with the sequence that triggers it      |
+| E.1 | ☐      | Isolate the mechanism. Leads, in order of suspicion: leaked handles (`test:unit` runs `--forceExit`, which masks them), port/socket exhaustion, orphaned child processes. Rule each in or out with evidence — do not fix on the first plausible story                                                                                                                      | `tests/e2e/helpers/http-mcp-client.ts` | E.0     | Named mechanism + the probe that proves it               |
+| E.2 | ☐      | **Decide whether to fix SSE or retire it.** MCP superseded SSE with streamable HTTP, and `verify:mcp` already proves the streamable-http path is healthy. If nothing ships depending on SSE, deleting the transport is a smaller change than debugging it — and removes a path the project would otherwise maintain forever. Answer with consumer evidence, not preference | `src/mcp/http/**`, `tests/e2e/**`      | E.1     | Verdict recorded with the consumer probe behind it       |
+| E.3 | ☐      | Apply the E.2 verdict — fix the mechanism, or remove the SSE transport and its tests in one commit (`cleanup-standards.md`: no deferred cleanup)                                                                                                                                                                                                                           | per E.2                                | E.2     | `test:all` exits 0                                       |
+| E.4 | ☐      | Close the loop in CI. The E2E step is already blocking, so a flake here is a red main; confirm it is genuinely stable rather than lucky                                                                                                                                                                                                                                    | `.github/workflows/ci.yml`             | E.3     | `npm run test:all` exits 0 across **3 consecutive** runs |
+
+**Gate**: `npm run test:all` exits 0 three times running, then `npm run validate:full`.
+
+> Do not let this tier reopen `test:integration`. That suite is green and stable at 350/350 across
+> 3 runs; if a change here reddens it, the change is wrong, not the suite.
+
+### Tier V: does the validation surface still earn its runtime? Opened 2026-07-31.
+
+Two questions this sweep created and never asked. Both are about whether the tooling built to
+enforce quality is itself worth what it costs — the same eviction test `claude-md-authoring.md`
+applies to always-loaded context, pointed at scripts instead.
+
+`validate:all` grew from 11 members to **20** during this sweep (three added by Tiers 3/5/6 alone).
+Nobody has asked whether all 20 still catch something. A guard that can no longer fail is not free:
+it costs runtime on every pre-commit and it reads as coverage that is not there.
+
+`verify:mcp` (added 2026-07-31) proves the three MCP tools **answer**. It does not prove they answer
+**correctly** — the checks are presence-and-shape predicates. That was the right first version, and
+it is the wrong last version if it is going to replace a manual review pass.
+
+| ID  | Status | Step                                                                                                                                                                                                                                                                       | Files                                      | Depends | Verification                                                                  |
+| --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ------- | ----------------------------------------------------------------------------- |
+| V.0 | ☐      | Inventory all 20 members with **measured** wall-clock each, not estimated. Record what each one catches in one sentence                                                                                                                                                    | `server/package.json`, `server/scripts/**` | —       | Table of 20: name, runtime, what it catches                                   |
+| V.1 | ☐      | Per member, answer: can it still fail? Negative-verify by planting the violation it forbids. A guard that cannot be made to fail is either obsolete or broken — both are findings                                                                                          | `server/scripts/**`                        | V.0     | Each member either fails on a planted violation, or is marked obsolete/broken |
+| V.2 | ☐      | Apply V.1: delete obsolete members and their scripts in the same commit; repair broken ones. Allowlist entries whose retirement condition has come true go too                                                                                                             | `server/package.json`, `server/scripts/**` | V.1     | `validate:all` passes with the surviving members; no member is unfalsifiable  |
+| V.3 | ☐      | **Deepen `verify:mcp` from "answers" to "answers correctly."** Assert content, not shape — e.g. a known prompt id appears in the listing, the active framework matches `system_control status`, a known gate resolves. `TOOL_CHECKS` is a data table, so each is one entry | `server/scripts/verify-mcp-surface.mjs`    | —       | Planting a wrong-but-well-formed response fails the check                     |
+| V.4 | ☐      | Revisit `verify:mcp` placement once V.3 lands. It is deliberately outside `validate:all` (spawns a process, ~4s, binds a port). Decide if `validate:full` should host it, or if it stays a human/agent-invoked tool                                                        | `server/package.json`                      | V.3     | Placement recorded with the reason, either way                                |
+
+**Gate**: `validate:all` passes with every surviving member negative-verified, and `verify:mcp`
+fails on a plausible-but-wrong response.
+
+> V.1 is the row that matters. V.0 is bookkeeping and V.2 follows mechanically from V.1 — but a
+> guard nobody has tried to break is an assumption wearing a script's clothing. This sweep already
+> shipped one: `validate-no-methodology-vocab`'s blanket `tests/` exemption made it unable to catch
+> the 18 stale assertions it was written for, and that went unnoticed until the suite was repaired.
