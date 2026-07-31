@@ -198,7 +198,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
     context: Record<string, unknown>
   ): FrameworkEnhancement {
     // Convert framework gates from definition
-    const methodologyGates: QualityGate[] = this.definition.frameworkGates
+    const frameworkGates: QualityGate[] = this.definition.frameworkGates
       ? convertFrameworkGates(this.definition.frameworkGates)
       : [];
 
@@ -215,11 +215,11 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
     return {
       systemPromptGuidance: this.getSystemPromptGuidance(context),
       processingEnhancements,
-      methodologyGates,
+      frameworkGates,
       templateSuggestions,
       enhancementMetadata: this.createEnhancementMetadata(
         0.9,
-        `${this.type} methodology provides systematic approach`
+        `${this.type} framework provides systematic approach`
       ),
     };
   }
@@ -240,8 +240,8 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
       return {
         compliant: hasFrameworkMention,
         complianceScore: hasFrameworkMention ? 0.5 : 0.2,
-        strengths: hasFrameworkMention ? [`${this.type} methodology referenced`] : [],
-        improvementAreas: hasFrameworkMention ? [] : [`Consider applying ${this.type} methodology`],
+        strengths: hasFrameworkMention ? [`${this.type} framework referenced`] : [],
+        improvementAreas: hasFrameworkMention ? [] : [`Consider applying ${this.type} framework`],
         specificSuggestions: [],
         frameworkGaps: [],
       };
@@ -280,8 +280,8 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
     // Return judge prompt from definition or generate a default based on framework
     return (
       this.definition.judgePrompt ?? {
-        systemMessage: `You are a ${this.type} methodology expert. Select resources that align with ${this.frameworkName} principles.`,
-        userMessageTemplate: `Analyze this task using ${this.type} methodology:\n\n**Task:** {{command}}\n\nReturn your selections as JSON with framework, style, gates, and reasoning.`,
+        systemMessage: `You are a ${this.type} framework expert. Select resources that align with ${this.frameworkName} principles.`,
+        userMessageTemplate: `Analyze this task using ${this.type} framework:\n\n**Task:** {{command}}\n\nReturn your selections as JSON with framework, style, gates, and reasoning.`,
         outputFormat: 'structured',
       }
     );

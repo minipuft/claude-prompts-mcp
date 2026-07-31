@@ -999,6 +999,70 @@ longer vocabulary. `methodology_gates` (53), `methodologyGates` (36), `methodolo
 test fixture data, and `rename-symbols.ts`'s historical record. **The guard (pass 5) can now be
 written, but it must allowlist the contract surface rather than demand zero.**
 
+#### Internal rename, pass 5 (whole repo) — ✓ 2026-07-30
+
+The first pass measured the **whole repository** rather than `server/src`, and the number was
+**1418, not 569** — passes 1-4 had been scoped to a subtree the whole time. Final: **1418 → 447**.
+
+**Five live defects, none of them cosmetic.** The rename was the thing that surfaced them:
+
+| #   | Defect                                                                                                                                                                                                                                                      | Why nothing caught it                                                                                                                                                                                                                                                                                                                                                                                  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **The Python hook read a column value that never existed.** `db_reader.py` queried `resource_index WHERE type = 'methodology'`; the indexer writes `'framework'` (`IndexedResourceType`). `get_valid_frameworks_from_db()` returned `[]` on every call.     | Cross-language: Python reading SQLite written by TypeScript. No TS tooling can see it, and `except sqlite3.Error: return []` swallows failure. **Worse, the callers are fail-open** — an empty list reads as "DB unavailable", so `@framework` validation silently degraded to no validation rather than erroring. Verified against a live `state.db`: old query 0 rows, fixed query all 8 frameworks. |
+| 2   | **5 shipped framework YAMLs advertised a `resource_type` the server rejects.** Their `toolDescriptions` overlays told the model to call `resource_manager(resource_type:"methodology")` while the Zod enum is `['prompt','gate','framework','checkpoint']`. | These overlays _replace_ the base description when their framework is active, so CAGEERF — the default — actively misdirected. Stage 4 fixed this exact defect in the contract JSON; the YAML overlays were never in scope.                                                                                                                                                                            |
+| 3   | **A runtime user-facing message advertised the same rejected value** (`framework-discovery-processor.ts`), shown precisely when a user has no frameworks and needs the command to work.                                                                     | Message strings are invisible to every check in the suite.                                                                                                                                                                                                                                                                                                                                             |
+| 4   | **`server/README.md` documented five environment variables that are read nowhere** (`MCP_PROMPTS_PATH`, `MCP_METHODOLOGIES_PATH`, `MCP_GATES_PATH`, `MCP_SCRIPTS_PATH`, `MCP_STYLES_PATH`) and omitted the live `MCP_RESOURCES_PATH`.                       | Only `MCP_METHODOLOGIES_PATH` was in rename scope, but fixing one row and leaving four identically-dead ones would document a lie more neatly. Table corrected.                                                                                                                                                                                                                                        |
+| 5   | **Two doc examples passed an invalid `GateSource`.** `addAll(methodologyGates, "methodology")` / `"framework"` — neither is in the union; the valid value is `'framework-guide'`.                                                                           | Pass 5 initially changed `"methodology"` → `"framework"`, making it _plausibly_ wrong rather than fixing it. Caught on audit.                                                                                                                                                                                                                                                                          |
+
+**The sweep nearly shipped its own worst regression.** Running the masked transform over `src`
+inverted the legacy config migration: it read and deleted the **new** key instead of the legacy
+one, and the second block became `delete legacyResources.frameworks` unconditionally — wiping
+`resources.frameworks` for every user. `tsc` caught the first block only through a cast mismatch
+and **could not see the second at all**. Worse, the same sweep neutered the guard test written in
+the `bb1f590a` follow-up: it now wrote `frameworks:` and asserted `config.frameworks` was
+undefined. **The regression and its test broke together.** Both reverted; the guard test passes 5/5.
+
+> **The lesson is not "mask better".** It is that a whole-file automated substitution cannot be
+> applied to files where the token is _semantically load-bearing on both sides of an assignment_.
+> A back-compat migration reads the old name and writes the new one, so any rename of "the old
+> name" destroys it by construction. Those files must be edited by hand, and the sweep must be run
+> **before** hand-edits, never after — it rewrote my own freshly-written comments into
+> self-contradictions twice (`gate.yaml`, `db_reader.py`).
+
+**Three `methodologyGates` homonyms**, finally separated: the **config key** `gates.methodologyGates`
+(6 sites, on-disk), the **YAML deprecated alias** (`framework-schema.ts`, deliberate fold-forward),
+and the **runtime model field** `FrameworkEnhancement.methodologyGates` — internal, renamed to
+`frameworkGates`. `enhancementMetadata.methodology` holds `this.type` and became `frameworkType`.
+
+**`GatePassCriteriaSchema.methodology` → `framework`** is a real data-key rename. No shipped gate
+uses it and the docs already documented it moving, but it gets the same fold-forward the framework
+YAML got, plus `tests/unit/gates/pass-criteria-framework-fold.test.ts` (3 tests, negative-verified:
+1 fails with the transform removed). Pinning it because the identical `.passthrough()` silent-loss
+already shipped once as regression #3.
+
+**Deleted, not renamed: `server/graphs/*.dot`** (314 hits, 8 tracked files). Last touched
+2026-01-07, they cite `src/frameworks/...` — a layout that stopped existing at the 5-layer
+migration. Nothing references them and no script regenerates them. Renaming would have made a
+seven-month-stale artifact _look_ current.
+
+**Verification**: typecheck 0 · unit **1706/1706** (3 new) · validate:all 0 · validate:arch 0 ·
+build 0 · ratchet 3476 · `validate:readme` 0. Integration compared with vocabulary normalised on
+both sides, since renaming test descriptions makes a naive diff report ten fake regressions:
+**zero newly broken, and two genuinely fixed** — the `ResourceIndexer` tests asserting
+`'methodology'` against an indexer that writes `'framework'`. Pre-existing failures **34 → 32**.
+
+**Remaining 447, all deliberate**: `plans/` (155) and `CHANGELOG.md` (15) are the historical record
+of this sweep; `remotion/` (35) is a separate tutorial-video app with its own build, absent from CI,
+whose `SCRIPT.md` is spoken narration; `server` (234) is contract surface —
+`methodology_gates`/`methodology_elements` (the `framework_builder` authoring payload),
+`methodology_compliance` (a gate `pass_criteria` value), `gates.methodologyGates` (config),
+`{METHODOLOGY}` (a prompt-template placeholder), the two deliberate back-compat folds, and
+`scripts/rename-symbols.ts`'s record of past renames.
+
+> **The guard should not demand zero.** Every one of those 234 is load-bearing. A useful
+> `validate-no-methodology-vocab.js` allowlists the contract surface by exact token and fails on
+> anything else — which is now a small, stable list rather than the moving target it was at 1658.
+
 #### Stage 2 ruling: the "7 duplicate pairs" framing was wrong
 
 Adjudicated by structural diff, not by name. The collision set splits three ways, and treating it

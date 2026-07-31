@@ -25,7 +25,7 @@ export class FrameworkDraftValidator {
     if (!data.system_prompt_guidance?.trim()) {
       errors.push('system_prompt_guidance is required - defines core LLM guidance');
     } else if (!hasPhases) {
-      errors.push('phases is required - defines methodology structure');
+      errors.push('phases is required - defines framework structure');
     } else if (!hasGates) {
       errors.push('methodology_gates is required - enables quality validation');
     }
@@ -50,7 +50,7 @@ export class FrameworkDraftValidator {
         warnings.push('Add template_suggestions for system/user prompt hints');
       }
       if (!data.description?.trim()) {
-        warnings.push('Add description for methodology overview');
+        warnings.push('Add description for framework overview');
       }
     }
 
@@ -73,7 +73,7 @@ export class FrameworkDraftValidator {
    * Shows one focused error with helpful example.
    */
   createErrorResponse(id: string, validation: FrameworkDraftValidationResult): ToolResponse {
-    let message = `❌ Methodology '${id}' validation failed (${validation.score}% complete)\n\n`;
+    let message = `❌ Framework '${id}' validation failed (${validation.score}% complete)\n\n`;
     message += `**Issue:** ${validation.errors[0]}\n\n`;
 
     // Show contextual example based on what's missing
@@ -111,7 +111,7 @@ export class FrameworkDraftValidator {
    * Format validation result into human-readable success message.
    */
   formatSuccess(id: string, validation: FrameworkDraftValidationResult, paths: string[]): string {
-    let message = `✅ Methodology '${id}' created (${validation.score}% - ${validation.level})\n\n`;
+    let message = `✅ Framework '${id}' created (${validation.score}% - ${validation.level})\n\n`;
     message += `**Files:**\n${paths.map((p) => `  • ${p}`).join('\n')}\n\n`;
 
     if (validation.warnings.length > 0) {

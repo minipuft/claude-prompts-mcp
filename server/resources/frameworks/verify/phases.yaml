@@ -188,7 +188,7 @@ executionSteps:
     expected_output: Final content with gate tables showing PASS status across all phases
 templateEnhancements:
   systemPromptAdditions:
-    - Apply V.E.R.I.F.Y methodology to all resume and application content
+    - Apply V.E.R.I.F.Y framework to all resume and application content
     - bio.md is the source of truth for voice and claimability
     - Every section must pass all 5 gates before presentation
   userPromptModifications:

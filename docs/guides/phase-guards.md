@@ -1,10 +1,10 @@
 # Phase Guards Guide
 
-Phase guards provide deterministic structural validation of LLM output against methodology phase definitions. They run at zero LLM cost and compose with gate reviews for comprehensive quality assurance.
+Phase guards provide deterministic structural validation of LLM output against framework phase definitions. They run at zero LLM cost and compose with gate reviews for comprehensive quality assurance.
 
 ## How Phase Guards Work
 
-When a methodology defines `processingSteps` with `section_header` and `guards` fields in `phases.yaml`, Pipeline Stage 09b automatically checks the LLM's response after execution.
+When a framework defines `processingSteps` with `section_header` and `guards` fields in `phases.yaml`, Pipeline Stage 09b automatically checks the LLM's response after execution.
 
 ```
 LLM Output → Section Splitter → Phase Guard Evaluator → Result
@@ -19,7 +19,7 @@ LLM Output → Section Splitter → Phase Guard Evaluator → Result
 Phase guards activate when ALL of these are true:
 
 1. A framework is active (via `@CAGEERF`, `@5W1H`, etc.)
-2. The methodology's `phases.yaml` has processing steps with `section_header` + `guards`
+2. The framework's `phases.yaml` has processing steps with `section_header` + `guards`
 3. Phase guards mode is not `off` in config
 4. The execution is within a chain session (phase guards validate chain step responses)
 
@@ -32,7 +32,7 @@ processingSteps:
   - id: context_establishment
     name: Context Establishment
     description: Establish clear situational context
-    methodologyBasis: CAGEERF Context phase
+    frameworkBasis: CAGEERF Context phase
     order: 1
     required: true
     section_header: "## Context" # Required for phase guard detection

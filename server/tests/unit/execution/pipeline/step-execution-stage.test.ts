@@ -71,13 +71,13 @@ describe('StepExecutionStage', () => {
       promptArgs: { topic: 'AI' },
     };
     context.frameworkContext = {
-      systemPrompt: 'Apply the C.A.G.E.E.R.F methodology systematically.',
+      systemPrompt: 'Apply the C.A.G.E.E.R.F framework systematically.',
     } as any;
 
     await stage.execute(context);
 
     expect(context.executionResults?.content).toContain(
-      'Apply the C.A.G.E.E.R.F methodology systematically.'
+      'Apply the C.A.G.E.E.R.F framework systematically.'
     );
     expect(context.executionResults?.content).toContain('Process AI');
   });
@@ -89,7 +89,7 @@ describe('StepExecutionStage', () => {
 
     const promptWithGuidance: ConvertedPrompt = {
       ...samplePrompt,
-      systemMessage: 'Apply the C.A.G.E.E.R.F methodology systematically before answering.',
+      systemMessage: 'Apply the C.A.G.E.E.R.F framework systematically before answering.',
     };
 
     const context = new ExecutionContext({ command: '>>demo topic="AI"' });

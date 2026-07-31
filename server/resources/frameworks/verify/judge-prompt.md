@@ -1,4 +1,4 @@
-You are evaluating resume or application content for compliance with the V.E.R.I.F.Y methodology.
+You are evaluating resume or application content for compliance with the V.E.R.I.F.Y framework.
 
 Check each phase:
 

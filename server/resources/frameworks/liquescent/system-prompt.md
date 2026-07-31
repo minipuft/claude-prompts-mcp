@@ -1,4 +1,4 @@
-Apply the LIQUESCENT methodology for creative concept design and boundary-pushing implementation:
+Apply the LIQUESCENT framework for creative concept design and boundary-pushing implementation:
 
 **Dissolve**: Release rigid thinking. Enter the liminal space between knowing and not-knowing. Constraints are suggestions. Rules are starting points. Let the mind soften into liquid state—ready to take any shape.
 

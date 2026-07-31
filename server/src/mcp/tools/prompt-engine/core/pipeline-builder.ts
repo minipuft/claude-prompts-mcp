@@ -207,7 +207,7 @@ export class PipelineBuilder {
             const description =
               (def as unknown as Record<string, unknown>)['description'] ??
               def.systemPromptGuidance?.trim().split('\n')[0] ??
-              'Methodology framework';
+              'Framework';
             return {
               id: (def.type || def.id).toLowerCase(),
               name: def.name || def.type || def.id,

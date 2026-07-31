@@ -1,5 +1,5 @@
 # CAGEERF Phase Definitions
-# Defines the processing and execution steps for the CAGEERF methodology
+# Defines the processing and execution steps for the CAGEERF framework
 
 # Processing steps used in template processing
 processingSteps:
@@ -139,7 +139,7 @@ executionTypeEnhancements:
 # Template enhancements for processing guidance
 templateEnhancements:
   systemPromptAdditions:
-    - Apply CAGEERF methodology systematically
+    - Apply CAGEERF framework systematically
     - Begin with contextual establishment
     - Follow structured analytical approach
     - Ensure goals are specific and measurable
@@ -268,12 +268,12 @@ qualityIndicators:
   framework:
     keywords:
       - framework
-      - methodology
+      - framework
       - systematic
       - structured
       - comprehensive
     patterns:
-      - framework|methodology|systematic
+      - framework|framework|systematic
       - structured|organized|comprehensive
       - consistent|coherent|integrated
       - cageerf|phases|holistic

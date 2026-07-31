@@ -61,9 +61,9 @@ describe('ResourceChangeTracker baseline comparison', () => {
       },
       {
         resourceType: 'methodology',
-        resourceId: 'methodology-a',
-        filePath: '/virtual/frameworks/methodology-a/framework.yaml',
-        contentHash: 'hash-methodology-a',
+        resourceId: 'framework-a',
+        filePath: '/virtual/frameworks/framework-a/framework.yaml',
+        contentHash: 'hash-framework-a',
       },
       {
         resourceType: 'style',
@@ -110,9 +110,9 @@ describe('ResourceChangeTracker baseline comparison', () => {
       },
       {
         resourceType: 'methodology',
-        resourceId: 'methodology-a',
-        filePath: '/virtual/frameworks/methodology-a/framework.yaml',
-        contentHash: 'hash-methodology-a',
+        resourceId: 'framework-a',
+        filePath: '/virtual/frameworks/framework-a/framework.yaml',
+        contentHash: 'hash-framework-a',
       },
       {
         resourceType: 'style',

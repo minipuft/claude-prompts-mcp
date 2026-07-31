@@ -1,21 +1,21 @@
-# Methodologies Guide
+# Frameworks Guide
 
-Methodologies are reasoning frameworks that the server injects into your prompts. They structure how the LLM thinks — adding phase labels, quality criteria, and evaluation patterns to every response.
+Frameworks are reasoning frameworks that the server injects into your prompts. They structure how the LLM thinks — adding phase labels, quality criteria, and evaluation patterns to every response.
 
 ## Why This Matters
 
 | Problem                 | Solution                                            | Result                          |
 | ----------------------- | --------------------------------------------------- | ------------------------------- |
 | **Unstructured output** | Phase-based reasoning (Context, Analysis, Goals...) | Consistent, reviewable sections |
-| **Skipped thinking**    | Methodology gates with validation criteria          | Each phase checked for depth    |
+| **Skipped thinking**    | Framework gates with validation criteria            | Each phase checked for depth    |
 | **One-size-fits-all**   | 6 built-in + custom creation                        | Match the framework to the task |
 
 > [!TIP]
-> **Quick start:** Run `system_control(action: "framework", operation: "switch", framework: "cageerf")` to activate a methodology. Every prompt after that receives CAGEERF phase guidance automatically.
+> **Quick start:** Run `system_control(action: "framework", operation: "switch", framework: "cageerf")` to activate a framework. Every prompt after that receives CAGEERF phase guidance automatically.
 
 ---
 
-## Built-in Methodologies
+## Built-in Frameworks
 
 | ID           | Name          | Best For                                 | Phases                                                                   |
 | ------------ | ------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
@@ -28,11 +28,11 @@ Methodologies are reasoning frameworks that the server injects into your prompts
 
 ---
 
-## Using Methodologies
+## Using Frameworks
 
 ### Switch the Active Framework
 
-The active methodology applies to all subsequent prompts in the session:
+The active framework applies to all subsequent prompts in the session:
 
 ```
 system_control(action: "framework", operation: "switch", framework: "cageerf")
@@ -40,7 +40,7 @@ system_control(action: "framework", operation: "switch", framework: "cageerf")
 
 ### Per-Request Override
 
-Use the `@` operator to apply a specific methodology to a single prompt without changing the session default:
+Use the `@` operator to apply a specific framework to a single prompt without changing the session default:
 
 ```
 prompt_engine(command: "@REACT >>my_prompt")
@@ -48,32 +48,32 @@ prompt_engine(command: "@REACT >>my_prompt")
 
 ### Disable for a Single Request
 
-Use modifiers to suppress methodology injection:
+Use modifiers to suppress framework injection:
 
-| Modifier     | Effect                                              |
-| ------------ | --------------------------------------------------- |
-| `%clean`     | Disable all injection (methodology + gates + style) |
-| `%lean`      | Disable methodology and style, keep gates           |
-| `%guided`    | Force all injection on                              |
-| `%framework` | Force methodology injection on                      |
+| Modifier     | Effect                                            |
+| ------------ | ------------------------------------------------- |
+| `%clean`     | Disable all injection (framework + gates + style) |
+| `%lean`      | Disable framework and style, keep gates           |
+| `%guided`    | Force all injection on                            |
+| `%framework` | Force framework injection on                      |
 
 ```
 prompt_engine(command: "%clean >>my_prompt")
 ```
 
 > [!NOTE]
-> **Standalone prompts** (non-chain) inject the methodology once. For chains, injection frequency is configurable — see [Injection Control](./injection-control.md).
+> **Standalone prompts** (non-chain) inject the framework once. For chains, injection frequency is configurable — see [Injection Control](./injection-control.md).
 
 ---
 
 ## What Gets Injected
 
-When a methodology is active, the server adds guidance at multiple levels:
+When a framework is active, the server adds guidance at multiple levels:
 
 | Layer                         | What                                          | Where                       |
 | ----------------------------- | --------------------------------------------- | --------------------------- |
 | **System prompt guidance**    | Phase descriptions and reasoning instructions | Prepended to system prompt  |
-| **Methodology gates**         | Per-phase quality validation criteria         | Added to gate review        |
+| **Framework gates**           | Per-phase quality validation criteria         | Added to gate review        |
 | **Tool description overlays** | Framework-branded tool descriptions           | Visible in MCP tool listing |
 | **Phase guards**              | Structural assertions on output sections      | Post-execution verification |
 
@@ -83,7 +83,7 @@ When a methodology is active, the server adds guidance at multiple levels:
 When CAGEERF is active, this guidance is injected into every prompt:
 
 ```
-Apply the C.A.G.E.E.R.F methodology systematically:
+Apply the C.A.G.E.E.R.F framework systematically:
 
 **Context**: Establish comprehensive situational awareness and environmental factors
 **Analysis**: Apply structured, systematic examination of the problem or opportunity
@@ -97,14 +97,14 @@ Apply the C.A.G.E.E.R.F methodology systematically:
 
 ---
 
-## Creating a Custom Methodology
+## Creating a Custom Framework
 
 Use the built-in `>>create_framework` prompt to design and validate a new framework:
 
 ```
 prompt_engine(command: ">>create_framework", options: {
   "name": "My Framework",
-  "concept": "A methodology for systematic API design"
+  "concept": "A framework for systematic API design"
 })
 ```
 
@@ -113,7 +113,7 @@ The prompt guides you through designing phases, then validates against a **5-tie
 | Tier           | Weight | What It Checks                                                      |
 | -------------- | ------ | ------------------------------------------------------------------- |
 | **Foundation** | 30%    | id, name, system prompt guidance, phases (min 2)                    |
-| **Quality**    | 20%    | Methodology gates with validation criteria                          |
+| **Quality**    | 20%    | Framework gates with validation criteria                            |
 | **Authoring**  | 25%    | Required sections, argument suggestions, template hints             |
 | **Execution**  | 15%    | Processing steps with assertions, execution steps with dependencies |
 | **Advanced**   | 10%    | Tool description overlays, quality indicators, judge prompt         |
@@ -123,7 +123,7 @@ The prompt guides you through designing phases, then validates against a **5-tie
 
 ### File Structure
 
-Each methodology lives in its own directory under `server/resources/frameworks/`:
+Each framework lives in its own directory under `server/resources/frameworks/`:
 
 ```
 server/resources/frameworks/{id}/
@@ -172,20 +172,20 @@ processingSteps:
 system_control(action: "status")
 ```
 
-Returns the active framework, available methodologies, and current injection settings.
+Returns the active framework, available frameworks, and current injection settings.
 
 ```
 system_control(action: "framework", operation: "list")
 ```
 
-Lists all registered methodologies with their enabled status.
+Lists all registered frameworks with their enabled status.
 
 ---
 
 ## See Also
 
-- **[Injection Control](./injection-control.md)** — Frequency, targets, and modifiers for methodology injection
-- **[Phase Guards](./phase-guards.md)** — Deterministic structural validation of methodology phases
-- **[Gates Guide](./gates.md)** — Quality validation criteria (complements methodology structure)
-- **[Judge Mode](./judge-mode.md)** — Context-isolated evaluation using methodology judge prompts
-- **[Architecture Overview](../architecture/overview.md)** — How methodologies integrate with the pipeline
+- **[Injection Control](./injection-control.md)** — Frequency, targets, and modifiers for framework injection
+- **[Phase Guards](./phase-guards.md)** — Deterministic structural validation of framework phases
+- **[Gates Guide](./gates.md)** — Quality validation criteria (complements framework structure)
+- **[Judge Mode](./judge-mode.md)** — Context-isolated evaluation using framework judge prompts
+- **[Architecture Overview](../architecture/overview.md)** — How frameworks integrate with the pipeline

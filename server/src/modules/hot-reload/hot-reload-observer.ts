@@ -223,7 +223,7 @@ export class HotReloadObserver {
    */
   setFrameworkReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
     this.onFrameworkReloadCallback = callback;
-    this.logger.debug('HotReloadObserver: Methodology reload callback registered');
+    this.logger.debug('HotReloadObserver: Framework reload callback registered');
   }
 
   /**
@@ -346,8 +346,8 @@ export class HotReloadObserver {
     const frameworkId = event.frameworkId ?? this.extractFrameworkId(event.filePath);
 
     this.logger.info(
-      `🔧 Methodology file change detected: ${event.type} - ${event.filename}` +
-        (frameworkId ? ` (methodology: ${frameworkId})` : '')
+      `🔧 Framework file change detected: ${event.type} - ${event.filename}` +
+        (frameworkId ? ` (framework: ${frameworkId})` : '')
     );
 
     // Map FileChangeType to FileChangeOperation (filter out 'renamed' as it becomes 'added' or 'removed')
@@ -355,7 +355,7 @@ export class HotReloadObserver {
 
     const hotReloadEvent: HotReloadEvent = {
       type: 'framework_changed',
-      reason: `Methodology file ${event.type}: ${event.filename}`,
+      reason: `Framework file ${event.type}: ${event.filename}`,
       affectedFiles: [event.filePath],
       timestamp: event.timestamp,
       requiresFullReload: false, // Framework changes typically don't need full reload
@@ -367,9 +367,9 @@ export class HotReloadObserver {
     if (this.onFrameworkReloadCallback) {
       try {
         await this.onFrameworkReloadCallback(hotReloadEvent);
-        this.logger.info(`✅ Methodology ${frameworkId ?? 'unknown'} reloaded successfully`);
+        this.logger.info(`✅ Framework ${frameworkId ?? 'unknown'} reloaded successfully`);
       } catch (error) {
-        this.logger.error(`❌ Failed to reload methodology ${frameworkId ?? 'unknown'}:`, error);
+        this.logger.error(`❌ Failed to reload framework ${frameworkId ?? 'unknown'}:`, error);
       }
     } else {
       // Fallback to regular reload processing

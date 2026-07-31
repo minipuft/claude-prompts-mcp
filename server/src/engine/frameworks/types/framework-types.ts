@@ -160,14 +160,14 @@ export interface FrameworkEnhancement {
   processingEnhancements: ProcessingStep[];
 
   // Quality gates specific to framework
-  methodologyGates: QualityGate[];
+  frameworkGates: QualityGate[];
 
   // Template structure suggestions
   templateSuggestions: TemplateEnhancement[];
 
   // Execution metadata
   enhancementMetadata: {
-    methodology: string;
+    frameworkType: string;
     confidence: number;
     applicabilityReason: string;
     appliedAt: Date;
@@ -403,7 +403,7 @@ export abstract class BaseFrameworkGuide implements FrameworkGuide {
    */
   protected createEnhancementMetadata(confidence: number, reason: string) {
     return {
-      methodology: this.type,
+      frameworkType: this.type,
       confidence,
       applicabilityReason: reason,
       appliedAt: new Date(),

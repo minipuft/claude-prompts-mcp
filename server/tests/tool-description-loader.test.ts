@@ -115,7 +115,7 @@ describe('ToolDescriptionLoader (framework-aware active config)', () => {
     resetDefaultRuntimeLoader();
   });
 
-  it('loads descriptions from generated contracts and applies methodology overlays', async () => {
+  it('loads descriptions from generated contracts and applies framework overlays', async () => {
     const root = await setupTempConfigRoot();
     const configManager = new FakeConfigManager(
       root,

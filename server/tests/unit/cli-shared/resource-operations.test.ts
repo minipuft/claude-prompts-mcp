@@ -358,7 +358,7 @@ describe('resource-operations', () => {
         [
           'id: tricky-enabled',
           'enabled: true',
-          'description: This methodology enabled new features', // "enabled" in text
+          'description: This framework enabled new features', // "enabled" in text
         ].join('\n')
       );
 
@@ -367,7 +367,7 @@ describe('resource-operations', () => {
 
       const content = readYaml(dir, 'framework.yaml');
       expect(content).toContain('enabled: false');
-      expect(content).toContain('This methodology enabled new features'); // Unchanged
+      expect(content).toContain('This framework enabled new features'); // Unchanged
     });
   });
 

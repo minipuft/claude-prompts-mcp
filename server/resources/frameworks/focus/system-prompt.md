@@ -1,4 +1,4 @@
-Apply the FOCUS methodology systematically:
+Apply the FOCUS framework systematically:
 
 **Frame**: Frame the problem clearly - define scope, constraints, and success criteria
 **Observe**: Observe and gather relevant information - collect data, identify patterns

@@ -23,9 +23,9 @@ import type { Logger, ToolDescription, ToolDescriptionsConfig } from '../../shar
 /**
  * Normalize framework keys for consistent lookup (case-insensitive)
  */
-export function normalizeFrameworkKey(methodology?: string): string | undefined {
-  if (!methodology) return undefined;
-  return methodology.trim().toUpperCase();
+export function normalizeFrameworkKey(framework?: string): string | undefined {
+  if (!framework) return undefined;
+  return framework.trim().toUpperCase();
 }
 
 /**
@@ -41,8 +41,8 @@ export function cloneToolDescription(description: ToolDescription): ToolDescript
   if (description.frameworkAware) {
     const frameworkAware = { ...description.frameworkAware };
 
-    if (description.frameworkAware.methodologies) {
-      frameworkAware.methodologies = { ...description.frameworkAware.methodologies };
+    if (description.frameworkAware.frameworks) {
+      frameworkAware.frameworks = { ...description.frameworkAware.frameworks };
     }
     if (description.frameworkAware.parametersEnabled) {
       frameworkAware.parametersEnabled = { ...description.frameworkAware.parametersEnabled };
@@ -95,10 +95,10 @@ export function preloadFrameworkDescriptions(
       }
     }
 
-    logger.info(`Pre-loaded tool descriptions for ${result.size} methodologies from YAML (SOT)`);
+    logger.info(`Pre-loaded tool descriptions for ${result.size} frameworks from YAML (SOT)`);
   } catch (error) {
     logger.error(
-      `Failed to pre-load methodology descriptions: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to pre-load framework descriptions: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 

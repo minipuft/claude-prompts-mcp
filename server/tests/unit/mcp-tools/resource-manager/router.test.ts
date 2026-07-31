@@ -319,7 +319,7 @@ describe('ResourceManagerRouter', () => {
       );
     });
 
-    test('transforms methodology parameters correctly', async () => {
+    test('transforms framework parameters correctly', async () => {
       const args: ResourceManagerInput = {
         resource_type: 'framework',
         action: 'switch',

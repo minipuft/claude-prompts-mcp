@@ -72,7 +72,7 @@ export interface FrameworkEntry {
   framework: FrameworkDefinition;
   enabled: boolean;
   registeredAt: Date;
-  source: 'methodology' | 'custom';
+  source: 'builtin' | 'custom';
 }
 
 /**
@@ -161,7 +161,7 @@ export class FrameworkManager extends BaseResourceHandler<
           framework,
           enabled: framework.enabled,
           registeredAt: new Date(),
-          source: 'methodology',
+          source: 'builtin',
         });
       }
     }
@@ -377,8 +377,8 @@ export class FrameworkManager extends BaseResourceHandler<
   /**
    * Get framework by framework type (case-insensitive)
    */
-  getFramework(methodology: string): FrameworkDefinition | undefined {
-    return this.get(methodology);
+  getFramework(framework: string): FrameworkDefinition | undefined {
+    return this.get(framework);
   }
 
   /**
@@ -477,7 +477,7 @@ export class FrameworkManager extends BaseResourceHandler<
   getFrameworkRegistry(): FrameworkRegistry {
     this.ensureInitialized();
     if (!this.frameworkRegistry) {
-      throw new Error('Methodology registry not initialized');
+      throw new Error('Framework registry not initialized');
     }
     return this.frameworkRegistry;
   }
@@ -485,12 +485,12 @@ export class FrameworkManager extends BaseResourceHandler<
   /**
    * Set default framework
    */
-  setDefaultFramework(methodology: FrameworkSelection): void {
-    if (this.hasResource(methodology)) {
-      this.defaultFramework = methodology;
-      this.logger.info(`Default framework set to: ${methodology}`);
+  setDefaultFramework(framework: FrameworkSelection): void {
+    if (this.hasResource(framework)) {
+      this.defaultFramework = framework;
+      this.logger.info(`Default framework set to: ${framework}`);
     } else {
-      throw new Error(`Framework ${methodology} not found`);
+      throw new Error(`Framework ${framework} not found`);
     }
   }
 
@@ -510,7 +510,7 @@ export class FrameworkManager extends BaseResourceHandler<
 
       const guideLoaded = await this.frameworkRegistry.loadAndRegisterById(normalizedId);
       if (!guideLoaded) {
-        this.logger.warn(`Failed to load methodology guide for '${frameworkId}'`);
+        this.logger.warn(`Failed to load framework guide for '${frameworkId}'`);
         return false;
       }
 
@@ -563,7 +563,7 @@ export class FrameworkManager extends BaseResourceHandler<
       }
 
       this.logger.info(
-        `Generated ${this.frameworks.size} framework definitions from methodology guides`
+        `Generated ${this.frameworks.size} framework definitions from framework guides`
       );
     } catch (error) {
       this.logger.error('Failed to generate framework definitions:', error);
@@ -599,11 +599,11 @@ export class FrameworkManager extends BaseResourceHandler<
    * Generate system prompt template wrapper
    */
   private generateSystemPromptTemplate(guide: FrameworkGuide): string {
-    return `You are operating under the ${guide.frameworkName} methodology for {PROMPT_NAME}.
+    return `You are operating under the ${guide.frameworkName} framework for {PROMPT_NAME}.
 
 {FRAMEWORK_GUIDANCE}
 
-Apply this methodology systematically to ensure comprehensive and structured responses.`;
+Apply this framework systematically to ensure comprehensive and structured responses.`;
   }
 
   /**
@@ -620,7 +620,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
       case 'SCAMPER':
         return 'Creative problem-solving: Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse';
       default:
-        return `${guide.type} methodology for systematic approach`;
+        return `${guide.type} framework for systematic approach`;
     }
   }
 

@@ -86,12 +86,12 @@ arguments:
 
 Control which quality gates apply to this prompt.
 
-| Field                     | Type       | Description                               |
-| ------------------------- | ---------- | ----------------------------------------- |
-| `include`                 | `string[]` | Canonical gate IDs to enforce.            |
-| `exclude`                 | `string[]` | Auto-assigned gates to ignore.            |
-| `framework_gates`         | `boolean`  | Enable methodology gates? Default `true`. |
-| `inline_gate_definitions` | `object[]` | Custom gate rules for this prompt.        |
+| Field                     | Type       | Description                             |
+| ------------------------- | ---------- | --------------------------------------- |
+| `include`                 | `string[]` | Canonical gate IDs to enforce.          |
+| `exclude`                 | `string[]` | Auto-assigned gates to ignore.          |
+| `framework_gates`         | `boolean`  | Enable framework gates? Default `true`. |
+| `inline_gate_definitions` | `object[]` | Custom gate rules for this prompt.      |
 
 ### Example
 
@@ -172,7 +172,7 @@ Each of the three injection types accepts the same three fields:
 | `frequency` | `object`  | `{ mode: every \| first-only \| never, interval?: number }`. |
 | `target`    | `enum`    | `steps`, `gates`, or `both`.                                 |
 
-Injection types: `system-prompt` (framework methodology), `gate-guidance` (gate criteria),
+Injection types: `system-prompt` (framework), `gate-guidance` (gate criteria),
 `style-guidance` (response formatting).
 
 ### Fields that survive normalization
@@ -194,14 +194,14 @@ below it.
 ```yaml
 injection:
   system-prompt:
-    enabled: false # no methodology for this prompt, under any active framework
+    enabled: false # no framework for this prompt, under any active framework
   style-guidance:
     frequency:
       mode: first-only
     target: steps
 ```
 
-**`system-prompt.enabled: false` also withholds methodology-scoring gates.** Scoring adherence to a
-methodology that was never injected is incoherent, so the gates go with the injection
-([ADR 0001](../adr/0001-gate-resolution-precedence.md)). Gates unrelated to methodology are
-unaffected, and `%judge` overrides the opt-out because judge selection requires the methodology.
+**`system-prompt.enabled: false` also withholds framework-scoring gates.** Scoring adherence to a
+framework that was never injected is incoherent, so the gates go with the injection
+([ADR 0001](../adr/0001-gate-resolution-precedence.md)). Gates unrelated to framework are
+unaffected, and `%judge` overrides the opt-out because judge selection requires the framework.

@@ -1,4 +1,4 @@
-You are evaluating compliance with the RADIANT design methodology for CloudySky — an album-adaptive Spicetify theme with a runtime OKLCH scene-linear color pipeline. Score the response against each pillar:
+You are evaluating compliance with the RADIANT design framework for CloudySky — an album-adaptive Spicetify theme with a runtime OKLCH scene-linear color pipeline. Score the response against each pillar:
 
 1. **Reference the Vision** — Is the idea anchored to the atmospheric, album-adaptive, recolor-through-Spotify-tokens vision (not per-element repaint)? Is a feeling/mood named?
 2. **Articulate Goals** — Are specific design goals stated, each with an observable success criterion?

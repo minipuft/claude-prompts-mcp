@@ -3,7 +3,7 @@ name: LIQUESCENT Creative Flow
 type: LIQUESCENT
 enabled: true
 systemPromptGuidance: >-
-  Apply the LIQUESCENT methodology for creative concept design and
+  Apply the LIQUESCENT framework for creative concept design and
   boundary-pushing implementation:
 
 
@@ -50,7 +50,7 @@ toolDescriptions:
     parameters:
       command: >-
         The creative direction or concept to explore through LIQUESCENT
-        methodology
+        framework
 frameworkGates:
   - id: dissolve_openness
     name: Dissolve Openness
@@ -111,7 +111,7 @@ templateSuggestions:
     type: addition
     description: Add creative flow guidance to system prompt
     content: >-
-      Apply the LIQUESCENT methodology: Dissolve constraints, Flow through loose
+      Apply the LIQUESCENT framework: Dissolve constraints, Flow through loose
       connections, Crystallize patterns, Scout modern tools, Iterate with
       energy, Manifest with philosophy.
     frameworkJustification: Ensures creative thinking is systematic without being rigid

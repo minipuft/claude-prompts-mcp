@@ -37,14 +37,14 @@ Use CLI flags to pin identity at launch time:
 
 Client presets: `claude-code`, `codex`, `gemini`, `opencode`, `cursor`, `unknown`.
 
-| Client preset | Handoff profile | Status | Handoff note |
-| --- | --- | --- | --- |
-| `claude-code` | `task_tool_v1` | canonical | Task tool flow |
-| `codex` | `spawn_agent_v1` | canonical | `spawn_agent` preferred with runtime fallback guidance |
-| `gemini` | `gemini_subagent_v1` | canonical | Gemini sub-agent capability guidance |
-| `opencode` | `opencode_agent_v1` | canonical | OpenCode agent capability guidance |
-| `cursor` | `cursor_agent_v1` | experimental/testing | Cursor handoff strategy is enabled but explicitly in testing |
-| `unknown` | `neutral_v1` | canonical | Neutral fallback instructions |
+| Client preset | Handoff profile      | Status               | Handoff note                                                 |
+| ------------- | -------------------- | -------------------- | ------------------------------------------------------------ |
+| `claude-code` | `task_tool_v1`       | canonical            | Task tool flow                                               |
+| `codex`       | `spawn_agent_v1`     | canonical            | `spawn_agent` preferred with runtime fallback guidance       |
+| `gemini`      | `gemini_subagent_v1` | canonical            | Gemini sub-agent capability guidance                         |
+| `opencode`    | `opencode_agent_v1`  | canonical            | OpenCode agent capability guidance                           |
+| `cursor`      | `cursor_agent_v1`    | experimental/testing | Cursor handoff strategy is enabled but explicitly in testing |
+| `unknown`     | `neutral_v1`         | canonical            | Neutral fallback instructions                                |
 
 ```bash
 # Pin to a specific workspace
@@ -88,12 +88,12 @@ node dist/index.js --transport=streamable-http --port=3000
 
 The server reads these headers automatically:
 
-| Header | Maps To | Priority |
-|--------|---------|----------|
-| `x-workspace-id`, `x-project-id` | `workspaceId` | Highest |
-| `x-organization-id`, `x-org-id` | `organizationId` | Fallback |
-| `x-actor-id`, `x-user-id` | `actorId` | Audit only |
-| `mcp-session-id` | `transportSessionId` | Audit only |
+| Header                           | Maps To              | Priority   |
+| -------------------------------- | -------------------- | ---------- |
+| `x-workspace-id`, `x-project-id` | `workspaceId`        | Highest    |
+| `x-organization-id`, `x-org-id`  | `organizationId`     | Fallback   |
+| `x-actor-id`, `x-user-id`        | `actorId`            | Audit only |
+| `mcp-session-id`                 | `transportSessionId` | Audit only |
 
 OAuth token claims (via `authInfo.extra`) take priority over headers when both are present.
 
@@ -118,33 +118,33 @@ CLI launch flags (`--workspace-id`, `--organization-id`, `--client`) override `i
 
 ### Policy Modes
 
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| `permissive` (default) | HTTP: per-request claims override launch defaults. STDIO: launch defaults preferred, overrides allowed if `allowPerRequestOverride: true` | Multi-tenant gateways, development |
-| `locked` | Launch defaults always authoritative. Override attempts are logged and rejected. | Production single-workspace servers |
+| Mode                   | Behavior                                                                                                                                  | Use Case                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `permissive` (default) | HTTP: per-request claims override launch defaults. STDIO: launch defaults preferred, overrides allowed if `allowPerRequestOverride: true` | Multi-tenant gateways, development  |
+| `locked`               | Launch defaults always authoritative. Override attempts are logged and rejected.                                                          | Production single-workspace servers |
 
 ### Resolution Priority
 
 The server resolves identity through this hierarchy (first match wins):
 
-| Source | Transport | When Used |
-|--------|-----------|-----------|
-| OAuth token claims (`authInfo.extra`) | HTTP | Gateway forwards JWT claims |
-| Request headers (`x-workspace-id`) | HTTP | Gateway injects headers |
-| Launch defaults (`--workspace-id`) | Both | CLI flags or config |
-| Default (`"default"`) | Both | No identity provided |
+| Source                                | Transport | When Used                   |
+| ------------------------------------- | --------- | --------------------------- |
+| OAuth token claims (`authInfo.extra`) | HTTP      | Gateway forwards JWT claims |
+| Request headers (`x-workspace-id`)    | HTTP      | Gateway injects headers     |
+| Launch defaults (`--workspace-id`)    | Both      | CLI flags or config         |
+| Default (`"default"`)                 | Both      | No identity provided        |
 
 ### Client Profile Resolution Priority (Handoff Routing)
 
 The server resolves handoff client profile through this hierarchy (first match wins):
 
-| Source | Transport | When Used |
-|--------|-----------|-----------|
-| Launch defaults (`identity.launchDefaults.client*`) | Both | Authoritative deployment default |
+| Source                                                            | Transport   | When Used                                        |
+| ----------------------------------------------------------------- | ----------- | ------------------------------------------------ |
+| Launch defaults (`identity.launchDefaults.client*`)               | Both        | Authoritative deployment default                 |
 | Trusted request metadata (`authInfo.extra`, `x-client-*` headers) | Mostly HTTP | Gateway/auth integration provides client profile |
-| Request hint (`options.client_profile`) | Both | Caller passes protocol-level hint |
-| SDK heuristic (`clientInfo.name/version`) | Both | MCP SDK exposes client metadata |
-| Unknown fallback | Both | No profile signal available (`neutral_v1`) |
+| Request hint (`options.client_profile`)                           | Both        | Caller passes protocol-level hint                |
+| SDK heuristic (`clientInfo.name/version`)                         | Both        | MCP SDK exposes client metadata                  |
+| Unknown fallback                                                  | Both        | No profile signal available (`neutral_v1`)       |
 
 ### Why Launch Flags Are Authoritative on STDIO
 
@@ -189,13 +189,13 @@ In practice:
 
 ## What Gets Isolated
 
-| State | Isolated Per Scope | Notes |
-|-------|-------------------|-------|
-| Chain sessions | Yes | Same `chain_id` runs independently across workspaces |
-| Framework switches | Yes | Workspace A on CAGEERF, workspace B on ReACT |
-| Gate system state | Yes | Enable/disable, health metrics, validation history |
-| Argument history | Yes | Per-workspace argument tracking |
-| Resource index | No | Shared file-based resources (prompts, gates, styles) |
+| State              | Isolated Per Scope | Notes                                                |
+| ------------------ | ------------------ | ---------------------------------------------------- |
+| Chain sessions     | Yes                | Same `chain_id` runs independently across workspaces |
+| Framework switches | Yes                | Workspace A on CAGEERF, workspace B on ReACT         |
+| Gate system state  | Yes                | Enable/disable, health metrics, validation history   |
+| Argument history   | Yes                | Per-workspace argument tracking                      |
+| Resource index     | No                 | Shared file-based resources (prompts, gates, styles) |
 
 ## Troubleshooting
 
@@ -213,5 +213,5 @@ In practice:
 - [Workspace Identity Migration](workspace-organization-identity-migration.md) -- naming migration history
 - [Client Integration](client-integration.md) -- per-client install snippets and verification steps
 - [Client Capabilities Reference](../reference/client-capabilities.md) -- presets, profile mapping, and limits
-- [Injection Control](injection-control.md) -- per-request methodology injection
+- [Injection Control](injection-control.md) -- per-request framework injection
 - [Architecture Overview](../architecture/overview.md) -- pipeline stage reference

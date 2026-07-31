@@ -124,14 +124,14 @@ export class FrameworkHotReloadCoordinator {
 
     const frameworkId = event.frameworkId;
     if (!frameworkId) {
-      this.logger.warn('Methodology hot reload event missing frameworkId, skipping');
+      this.logger.warn('Framework hot reload event missing frameworkId, skipping');
       this.stats.reloadsFailed++;
       return;
     }
 
     if (this.config.debug) {
       this.logger.debug(
-        `Processing methodology hot reload for: ${frameworkId} (changeType: ${event.changeType ?? 'unknown'})`
+        `Processing framework hot reload for: ${frameworkId} (changeType: ${event.changeType ?? 'unknown'})`
       );
     }
 
@@ -165,14 +165,14 @@ export class FrameworkHotReloadCoordinator {
         this.stats.lastReloadTime = Date.now();
         this.stats.lastReloadedFramework = frameworkId;
 
-        this.logger.info(`🗑️ Methodology '${frameworkId}' unregistered (files deleted)`);
+        this.logger.info(`🗑️ Framework '${frameworkId}' unregistered (files deleted)`);
       } else {
-        this.logger.debug(`Methodology '${frameworkId}' was not registered, nothing to remove`);
+        this.logger.debug(`Framework '${frameworkId}' was not registered, nothing to remove`);
         this.stats.reloadsSucceeded++; // Not a failure, just nothing to do
       }
     } catch (error) {
       this.stats.reloadsFailed++;
-      this.logger.error(`Failed to unregister methodology '${frameworkId}':`, error);
+      this.logger.error(`Failed to unregister framework '${frameworkId}':`, error);
       throw error;
     }
   }
@@ -185,17 +185,17 @@ export class FrameworkHotReloadCoordinator {
       // Step 1: Clear loader cache for this framework
       this.loader.clearCache(frameworkId);
       if (this.config.debug) {
-        this.logger.debug(`Cleared cache for methodology: ${frameworkId}`);
+        this.logger.debug(`Cleared cache for framework: ${frameworkId}`);
       }
 
       // Step 2: Reload definition from YAML
       const definition = this.loader.loadFramework(frameworkId);
       if (!definition) {
-        throw new Error(`Failed to load methodology definition for '${frameworkId}'`);
+        throw new Error(`Failed to load framework definition for '${frameworkId}'`);
       }
 
       if (this.config.debug) {
-        this.logger.debug(`Reloaded definition for methodology: ${definition.name}`);
+        this.logger.debug(`Reloaded definition for framework: ${definition.name}`);
       }
 
       // Step 3: Create new guide from definition
@@ -204,7 +204,7 @@ export class FrameworkHotReloadCoordinator {
       // Step 4: Re-register with registry (replace existing)
       const success = await this.registry.registerGuide(guide, true, 'yaml-runtime');
       if (!success) {
-        throw new Error(`Failed to re-register methodology '${frameworkId}' with registry`);
+        throw new Error(`Failed to re-register framework '${frameworkId}' with registry`);
       }
 
       // Step 5: Notify framework manager to refresh its framework definition
@@ -218,11 +218,11 @@ export class FrameworkHotReloadCoordinator {
       this.stats.lastReloadedFramework = frameworkId;
 
       this.logger.info(
-        `🔄 Methodology '${definition.name}' (${frameworkId}) hot reloaded successfully`
+        `🔄 Framework '${definition.name}' (${frameworkId}) hot reloaded successfully`
       );
     } catch (error) {
       this.stats.reloadsFailed++;
-      this.logger.error(`Failed to hot reload methodology '${frameworkId}':`, error);
+      this.logger.error(`Failed to hot reload framework '${frameworkId}':`, error);
       throw error;
     }
   }

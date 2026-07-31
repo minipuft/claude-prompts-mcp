@@ -4,11 +4,7 @@
     "url": "https://github.com/minipuft"
   },
   "compatibility": {
-    "platforms": [
-      "darwin",
-      "win32",
-      "linux"
-    ],
+    "platforms": ["darwin", "win32", "linux"],
     "runtimes": {
       "node": ">=18.18.0"
     }
@@ -28,7 +24,7 @@
     "reasoning"
   ],
   "license": "AGPL-3.0-only",
-  "long_description": "Turn your prompt library into a programmable engine. Hot-reload for live editing, symbolic command syntax (>>prompt --> >>chain @framework :: 'gate'), methodology injection, and self-evaluating quality gates. Supports version history, rollback, and hooks for extra reliability",
+  "long_description": "Turn your prompt library into a programmable engine. Hot-reload for live editing, symbolic command syntax (>>prompt --> >>chain @framework :: 'gate'), framework injection, and self-evaluating quality gates. Supports version history, rollback, and hooks for extra reliability",
   "manifest_version": "0.3",
   "name": "claude-prompts",
   "repository": {
@@ -38,10 +34,7 @@
   "server": {
     "entry_point": "server/dist/index.js",
     "mcp_config": {
-      "args": [
-        "${__dirname}/server/dist/index.js",
-        "--transport=stdio"
-      ],
+      "args": ["${__dirname}/server/dist/index.js", "--transport=stdio"],
       "command": "node",
       "env": {
         "MCP_RESOURCES_PATH": "${__dirname}/server/resources",
@@ -57,7 +50,7 @@
       "name": "prompt_engine"
     },
     {
-      "description": "CRUD operations for prompts, gates, and methodologies. Manage templates and workflows.",
+      "description": "CRUD operations for prompts, gates, and frameworks. Manage templates and workflows.",
       "name": "resource_manager"
     },
     {

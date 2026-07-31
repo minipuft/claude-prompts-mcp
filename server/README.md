@@ -363,16 +363,17 @@ Supported presets:
 
 ### Environment Variables
 
-| Variable                 | Purpose                                         | Example                          |
-| ------------------------ | ----------------------------------------------- | -------------------------------- |
-| `MCP_WORKSPACE`          | Base directory containing prompts/, config.json | `/home/user/my-prompts`          |
-| `MCP_PROMPTS_PATH`       | Direct path to a prompts directory              | `/path/to/prompts`               |
-| `MCP_METHODOLOGIES_PATH` | Custom methodologies directory                  | `/path/to/methodologies`         |
-| `MCP_GATES_PATH`         | Custom gates directory                          | `/path/to/gates`                 |
-| `MCP_SCRIPTS_PATH`       | Custom scripts directory                        | `/path/to/scripts`               |
-| `MCP_STYLES_PATH`        | Custom styles directory                         | `/path/to/styles`                |
-| `MCP_CONFIG_PATH`        | Custom server config.json                       | `/path/to/config.json`           |
-| `LOG_LEVEL`              | Logging verbosity                               | `debug`, `info`, `warn`, `error` |
+| Variable             | Purpose                                                      | Example                          |
+| -------------------- | ------------------------------------------------------------ | -------------------------------- |
+| `MCP_WORKSPACE`      | Base directory containing prompts/, config.json              | `/home/user/my-prompts`          |
+| `MCP_RESOURCES_PATH` | Resources base override (frameworks, gates, styles, scripts) | `/path/to/resources`             |
+| `MCP_CONFIG_PATH`    | Custom server config.json                                    | `/path/to/config.json`           |
+| `LOG_LEVEL`          | Logging verbosity                                            | `debug`, `info`, `warn`, `error` |
+
+Per-resource-type path overrides (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_STYLES_PATH`,
+`MCP_SCRIPTS_PATH`, and the former `MCP_METHODOLOGIES_PATH`) were documented here but are not read
+anywhere in the server. Point `MCP_RESOURCES_PATH` at a resources directory instead; workspace
+resources overlay the bundled ones.
 
 **Resolution priority:** CLI flags > Environment variables > Workspace subdirectory > Package defaults
 
@@ -435,10 +436,10 @@ npx claude-prompts --startup-test --verbose
 - Check `MCP_WORKSPACE` points to a directory containing `prompts/`
 - Run `npx claude-prompts --startup-test --verbose` to see resolved paths
 
-**"Methodology not found"**
+**"Framework not found"**
 
-- Custom methodologies need `framework.yaml` in each subdirectory
-- Use `MCP_METHODOLOGIES_PATH` to point to your methodologies folder
+- Custom frameworks need `framework.yaml` in each subdirectory of `resources/frameworks/`
+- Use `MCP_RESOURCES_PATH` to point at the resources directory that contains them
 
 **"Permission denied"**
 

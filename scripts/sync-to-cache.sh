@@ -77,7 +77,7 @@ if [ -d "$SOURCE_DIR/server" ]; then
         mkdir -p "$CACHE_DIR/server/runtime-state"
         cp "$SOURCE_DIR/server/runtime-state/"*.db "$CACHE_DIR/server/runtime-state/" 2>/dev/null || true
     fi
-    # Sync resources (prompts, gates, methodologies)
+    # Sync resources (prompts, gates, frameworks)
     if [ -d "$SOURCE_DIR/server/resources" ]; then
         cp -r "$SOURCE_DIR/server/resources" "$CACHE_DIR/server/"
     fi

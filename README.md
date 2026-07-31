@@ -161,7 +161,7 @@ Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` 
 
 </details>
 
-**Custom resources**: `--init=~/my-prompts` scaffolds a workspace of prompts, gates, methodologies, and styles. Edit the starter templates (YAML schema), or have your AI author new ones via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing workspace if you already have one in the right shape. See [Custom Resources Guide](docs/guides/custom-resources.md).
+**Custom resources**: `--init=~/my-prompts` scaffolds a workspace of prompts, gates, frameworks, and styles. Edit the starter templates (YAML schema), or have your AI author new ones via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing workspace if you already have one in the right shape. See [Custom Resources Guide](docs/guides/custom-resources.md).
 
 ---
 
@@ -171,12 +171,12 @@ Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` 
 
 Four primitives you author, version, and compose. The bundled set ships 90+ prompts across 11 categories. All hot-reloadable, all versioned with rollback.
 
-| Primitive       | Symbol | What it is                                                                                                                                                                                                                     | Example                                      |
-| --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| Prompt template | `>>`   | Versioned YAML with named arguments; hot-reload on save                                                                                                                                                                        | `>>code_review target:'src/auth/'`           |
-| Gate            | `::`   | Validation criterion the AI checks its own output against; blocking or advisory; can shell-verify                                                                                                                              | `:: 'cite sources'` · `:: verify:"npm test"` |
-| Methodology     | `@`    | Reasoning framework that shapes how the AI works through the problem; plug in your own or use built-ins like `@ReACT`, `@5W1H`, or the project's own `@CAGEERF` scaffold ([Methodologies Guide](docs/guides/methodologies.md)) | `@ReACT` · `@your_framework`                 |
-| Style           | `#`    | Output formatting and tone                                                                                                                                                                                                     | `#analytical` · `#concise`                   |
+| Primitive       | Symbol | What it is                                                                                                                                                                                                               | Example                                      |
+| --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| Prompt template | `>>`   | Versioned YAML with named arguments; hot-reload on save                                                                                                                                                                  | `>>code_review target:'src/auth/'`           |
+| Gate            | `::`   | Validation criterion the AI checks its own output against; blocking or advisory; can shell-verify                                                                                                                        | `:: 'cite sources'` · `:: verify:"npm test"` |
+| Framework       | `@`    | Reasoning framework that shapes how the AI works through the problem; plug in your own or use built-ins like `@ReACT`, `@5W1H`, or the project's own `@CAGEERF` scaffold ([Frameworks Guide](docs/guides/frameworks.md)) | `@ReACT` · `@your_framework`                 |
+| Style           | `#`    | Output formatting and tone                                                                                                                                                                                               | `#analytical` · `#concise`                   |
 
 All four are managed through the `resource_manager` tool. Your AI creates, edits, versions, and rolls back resources through MCP; no file editing required. Failed gate checks can retry automatically or pause for your decision ([Gates Guide](docs/guides/gates.md)). Build your first primitive: [Prompt Authoring Tutorial](docs/tutorials/build-first-prompt.md).
 

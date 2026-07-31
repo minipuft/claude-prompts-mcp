@@ -30,7 +30,7 @@ resource_manager(resource_type: "prompt", action: "list")
 
 ### prompt_engine
 
-Execute prompts and chains with CAGEERF methodology.
+Execute prompts and chains with CAGEERF framework.
 
 **Single prompt:**
 
@@ -58,7 +58,7 @@ prompt_engine(chain_id: "chain-xyz#2", user_response: "...", gate_verdict: "GATE
 
 ### resource_manager
 
-CRUD operations for prompts, gates, and methodologies.
+CRUD operations for prompts, gates, and frameworks.
 
 **List resources:**
 
@@ -92,7 +92,7 @@ system_control(action: "status")
 system_control(action: "framework", operation: "list")
 ```
 
-## CAGEERF Methodology
+## CAGEERF Framework
 
 Prompts follow the C.A.G.E.E.R.F framework:
 
@@ -131,7 +131,7 @@ GATE_REVIEW: FAIL - Missing error handling
 ## Prompt Categories
 
 - **development** - Code-related tasks
-- **guidance** - Methodology and reasoning
+- **guidance** - Framework and reasoning
 - **analysis** - Deep investigation
 - **workflows** - Multi-step processes
 

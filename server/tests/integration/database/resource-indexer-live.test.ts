@@ -99,11 +99,11 @@ describe('ResourceIndexer — live server resources', () => {
 
     expect(stats.prompt).toBe(indexer.queryByType('prompt').length);
     expect(stats.gate).toBe(indexer.queryByType('gate').length);
-    expect(stats.methodology).toBe(indexer.queryByType('methodology').length);
+    expect(stats.framework).toBe(indexer.queryByType('methodology').length);
     expect(stats.style).toBe(indexer.queryByType('style').length);
 
     // Total should be positive
-    const total = stats.prompt + stats.gate + stats.methodology + stats.style;
+    const total = stats.prompt + stats.gate + stats.framework + stats.style;
     expect(total).toBeGreaterThan(0);
   });
 

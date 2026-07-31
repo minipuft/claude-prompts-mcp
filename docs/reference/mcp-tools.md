@@ -22,7 +22,7 @@ system_control(action:"status")
 # Create a gate (use tools for mutations)
 resource_manager(resource_type:"gate", action:"create", id:"my-gate", guidance:"...")
 
-# Switch methodology
+# Switch framework
 resource_manager(resource_type:"framework", action:"switch", id:"cageerf")
 ```
 
@@ -44,15 +44,15 @@ resource_manager(resource_type:"framework", action:"switch", id:"cageerf")
 
 MCP Resources provide a **read-only, token-efficient** alternative to tool-based list/inspect operations. Use resources when you need to:
 
-- **Discover** available prompts, gates, and methodologies without consuming execution tokens
-- **Read** prompt templates, gate guidance, or methodology configs in a structured format
+- **Discover** available prompts, gates, and frameworks without consuming execution tokens
+- **Read** prompt templates, gate guidance, or framework configs in a structured format
 - **Monitor** active chain sessions and pipeline metrics for observability
 - **Recover context** after compaction or long tasks via session resources
 
 ### Resource URIs
 
 <details>
-<summary><strong>Content Resources (Prompts, Gates, Methodologies)</strong></summary>
+<summary><strong>Content Resources (Prompts, Gates, Frameworks)</strong></summary>
 
 | URI Pattern                       | Returns                              | Use Case                           |
 | --------------------------------- | ------------------------------------ | ---------------------------------- |
@@ -62,8 +62,8 @@ MCP Resources provide a **read-only, token-efficient** alternative to tool-based
 | `resource://gate/`                | All gates (minimal metadata)         | Discovery - find available gates   |
 | `resource://gate/{id}`            | Gate definition + guidance           | Inspect a specific gate            |
 | `resource://gate/{id}/guidance`   | Raw guidance content only            | Minimal token usage                |
-| `resource://framework/`           | All frameworks (name, enabled)       | Discovery - find methodologies     |
-| `resource://framework/{id}`       | Framework config + system prompt     | Inspect methodology details        |
+| `resource://framework/`           | All frameworks (name, enabled)       | Discovery - find frameworks        |
+| `resource://framework/{id}`       | Framework config + system prompt     | Inspect framework details          |
 
 </details>
 
@@ -85,12 +85,12 @@ MCP Resources provide a **read-only, token-efficient** alternative to tool-based
 
 Resources are **4-30x more token efficient** than equivalent tool calls:
 
-| Operation            | Tool Call           | Resource    | Savings |
-| -------------------- | ------------------- | ----------- | ------- |
-| List 80 prompts      | ~4500 chars         | ~2800 chars | **38%** |
-| List 13 gates        | ~600 chars          | ~400 chars  | **33%** |
-| List 5 methodologies | ~350 chars          | ~200 chars  | **43%** |
-| Pipeline metrics     | ~15KB (raw samples) | ~500 bytes  | **97%** |
+| Operation         | Tool Call           | Resource    | Savings |
+| ----------------- | ------------------- | ----------- | ------- |
+| List 80 prompts   | ~4500 chars         | ~2800 chars | **38%** |
+| List 13 gates     | ~600 chars          | ~400 chars  | **33%** |
+| List 5 frameworks | ~350 chars          | ~200 chars  | **43%** |
+| Pipeline metrics  | ~15KB (raw samples) | ~500 bytes  | **97%** |
 
 </details>
 
@@ -182,7 +182,7 @@ prompt_engine(command:"[modifiers] [framework] prompt_id [args] [gates]")
 # Simple prompt execution
 prompt_engine(command:"code_review file:'api.ts'")
 
-# With framework methodology
+# With framework
 prompt_engine(command:"@CAGEERF security_audit target:'auth module'")
 
 # With inline quality gates
@@ -215,7 +215,7 @@ part — a Windows path or a regex in `options` arrives exactly as sent.
 
 | Operator     | Syntax         | Example                    | Purpose                                 |
 | ------------ | -------------- | -------------------------- | --------------------------------------- |
-| Framework    | `@NAME`        | `@CAGEERF prompt`          | Apply methodology                       |
+| Framework    | `@NAME`        | `@CAGEERF prompt`          | Apply framework                         |
 | Chain        | `-->`          | `step1 --> step2`          | Sequential execution                    |
 | Delegation   | `==>`          | `step1 ==> step2`          | Hand off step to sub-agent              |
 | Repetition   | `* N`          | `>>prompt * 3`             | Repeat with same args (chain shorthand) |
@@ -476,21 +476,21 @@ See [Script Tools Guide](../guides/script-tools.md) for building your own.
 
 ## `resource_manager` — Unified Resource Management
 
-Create, update, delete, and manage prompts, gates, and methodologies through a single unified interface.
+Create, update, delete, and manage prompts, gates, and frameworks through a single unified interface.
 
 ### Basic Syntax
 
 ```bash
-resource_manager(resource_type:"prompt|gate|methodology", action:"...", ...)
+resource_manager(resource_type:"prompt|gate|framework", action:"...", ...)
 ```
 
 ### Resource Types
 
-| Type          | Description                   | Specific Actions                         |
-| ------------- | ----------------------------- | ---------------------------------------- |
-| `prompt`      | Template and chain management | `analyze_type`, `analyze_gates`, `guide` |
-| `gate`        | Quality validation criteria   | —                                        |
-| `methodology` | Execution frameworks          | `switch`                                 |
+| Type        | Description                   | Specific Actions                         |
+| ----------- | ----------------------------- | ---------------------------------------- |
+| `prompt`    | Template and chain management | `analyze_type`, `analyze_gates`, `guide` |
+| `gate`      | Quality validation criteria   | —                                        |
+| `framework` | Execution frameworks          | `switch`                                 |
 
 ### Common Actions
 
@@ -581,26 +581,26 @@ resource_manager(resource_type:"gate", action:"update", id:"source-verification"
 resource_manager(resource_type:"gate", action:"delete", id:"old-gate", confirm:true)
 ```
 
-### Methodologies
+### Frameworks
 
 ```bash
-# List all methodologies (prefer resources for discovery)
+# List all frameworks (prefer resources for discovery)
 ReadMcpResourceTool uri="resource://framework/"
 
-# Inspect methodology (prefer resources — full content)
+# Inspect framework (prefer resources — full content)
 ReadMcpResourceTool uri="resource://framework/cageerf"
 
-# Switch active methodology (tools required)
+# Switch active framework (tools required)
 resource_manager(resource_type:"framework", action:"switch", id:"react", persist:true)
 
-# Create a custom methodology
+# Create a custom framework
 resource_manager(
   resource_type:"framework",
   action:"create",
   id:"my-method",
-  name:"My Custom Methodology",
+  name:"My Custom Framework",
   description:"A custom problem-solving framework",
-  system_prompt_guidance:"Apply my methodology systematically...",
+  system_prompt_guidance:"Apply my framework systematically...",
   phases:[
     {"id":"phase1", "name":"Define", "description":"Define the problem"},
     {"id":"phase2", "name":"Solve", "description":"Implement solution"}
@@ -631,7 +631,7 @@ resource_manager(
 | `pass_criteria` | Array of success conditions                       |
 | `activation`    | When gate activates (categories, frameworks)      |
 
-**Methodology Parameters:**
+**Framework Parameters:**
 
 | Parameter                | Purpose                                     |
 | ------------------------ | ------------------------------------------- |
@@ -673,7 +673,7 @@ system_control(action:"gates", operation:"list")
 | Action      | Operations                            | Purpose                   |
 | ----------- | ------------------------------------- | ------------------------- |
 | `status`    | —                                     | Runtime overview          |
-| `framework` | `list`, `switch`, `enable`, `disable` | Methodology management    |
+| `framework` | `list`, `switch`, `enable`, `disable` | Framework management      |
 | `gates`     | `list`, `enable`, `disable`, `status` | Gate management           |
 | `analytics` | —                                     | Execution metrics         |
 | `config`    | —                                     | View config overlays      |
@@ -741,11 +741,11 @@ The server injects guidance into prompts. Control this per-execution or globally
 
 ### Three Injection Types
 
-| Type             | What It Adds          | Default         |
-| ---------------- | --------------------- | --------------- |
-| `system-prompt`  | Framework methodology | Every 2 steps   |
-| `gate-guidance`  | Quality criteria      | Every step      |
-| `style-guidance` | Response formatting   | First step only |
+| Type             | What It Adds        | Default         |
+| ---------------- | ------------------- | --------------- |
+| `system-prompt`  | Framework           | Every 2 steps   |
+| `gate-guidance`  | Quality criteria    | Every step      |
+| `style-guidance` | Response formatting | First step only |
 
 ### Quick Control with Modifiers
 
@@ -872,7 +872,7 @@ prompt_engine(command:"investigation target:'incident'")
 <details>
 <summary><strong>Version History</strong></summary>
 
-All resources (prompts, gates, methodologies) automatically track version history. Each update saves a snapshot before changes, enabling rollback and comparison.
+All resources (prompts, gates, frameworks) automatically track version history. Each update saves a snapshot before changes, enabling rollback and comparison.
 
 ### Configuration
 
@@ -903,7 +903,7 @@ resource_manager(resource_type:"prompt", action:"history", id:"my_prompt")
 # View with limit
 resource_manager(resource_type:"prompt", action:"history", id:"my_prompt", limit:10)
 
-# Same for gates and methodologies
+# Same for gates and frameworks
 resource_manager(resource_type:"gate", action:"history", id:"code-quality")
 resource_manager(resource_type:"framework", action:"history", id:"cageerf")
 ```
@@ -990,7 +990,7 @@ All flags accept both `--flag=value` and `--flag value` formats.
 node dist/index.js --transport stdio \
   --prompts /path/to/prompts \
   --gates /path/to/gates \
-  --methodologies /path/to/methodologies \
+  --frameworks /path/to/frameworks \
   --styles /path/to/styles \
   --scripts /path/to/scripts \
   --workspace /path/to/workspace \
@@ -1010,16 +1010,16 @@ For HTTP clients, use Streamable HTTP. It's the current MCP standard and replace
 
 ### Environment Variables
 
-| Variable                 | Description                                          |
-| ------------------------ | ---------------------------------------------------- |
-| `MCP_RESOURCES_PATH`     | Base path for all resources (prompts/, gates/, etc.) |
-| `MCP_PROMPTS_PATH`       | Override prompts directory                           |
-| `MCP_GATES_PATH`         | Override gates directory                             |
-| `MCP_METHODOLOGIES_PATH` | Override methodologies directory                     |
-| `MCP_STYLES_PATH`        | Override styles directory                            |
-| `MCP_SCRIPTS_PATH`       | Override scripts directory                           |
-| `MCP_WORKSPACE`          | Workspace root for config resolution                 |
-| `MCP_CONFIG_PATH`        | Override config.json path                            |
+| Variable              | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| `MCP_RESOURCES_PATH`  | Base path for all resources (prompts/, gates/, etc.) |
+| `MCP_PROMPTS_PATH`    | Override prompts directory                           |
+| `MCP_GATES_PATH`      | Override gates directory                             |
+| `MCP_FRAMEWORKS_PATH` | Override frameworks directory                        |
+| `MCP_STYLES_PATH`     | Override styles directory                            |
+| `MCP_SCRIPTS_PATH`    | Override scripts directory                           |
+| `MCP_WORKSPACE`       | Workspace root for config resolution                 |
+| `MCP_CONFIG_PATH`     | Override config.json path                            |
 
 ### Resolution Priority
 
@@ -1060,7 +1060,7 @@ Path resolution follows this priority (first match wins):
 | Prompt definitions | `server/resources/prompts/{category}/{id}/prompt.yaml`    |
 | Gate definitions   | `server/resources/gates/{id}/gate.yaml`                   |
 | Style definitions  | `server/resources/styles/{id}/style.yaml`                 |
-| Methodologies      | `server/resources/frameworks/{id}/framework.yaml`         |
+| Frameworks         | `server/resources/frameworks/{id}/framework.yaml`         |
 | Chain sessions     | SQLite (`runtime-state/state.db`, table `chain_sessions`) |
 | Resource changes   | `runtime-state/resource-changes.jsonl`                    |
 | Server config      | `server/config.json`                                      |

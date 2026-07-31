@@ -490,7 +490,7 @@ export class FrameworkSemanticIntegration {
     semanticAnalysis: ContentAnalysisResult,
     frameworkContext: FrameworkExecutionContext
   ): string {
-    const baseApproach = `Execute as ${semanticAnalysis.executionType} using ${frameworkContext.selectedFramework.name} methodology`;
+    const baseApproach = `Execute as ${semanticAnalysis.executionType} using ${frameworkContext.selectedFramework.name} framework`;
 
     // Add mode-specific context
     if (semanticAnalysis.analysisMetadata.mode === 'semantic') {
@@ -701,7 +701,7 @@ export class FrameworkSemanticIntegration {
         },
       },
       recommendations: {
-        executionApproach: `Execute as ${semanticAnalysis.executionType} without framework methodology`,
+        executionApproach: `Execute as ${semanticAnalysis.executionType} without framework`,
         expectedPerformance: {
           processingTime: this.estimateProcessingTime(semanticAnalysis),
           memoryUsage: this.estimateMemoryUsage(semanticAnalysis),

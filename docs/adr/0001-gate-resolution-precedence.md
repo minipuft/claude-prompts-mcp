@@ -14,14 +14,14 @@ built, the project needs one stated order that implementations can be checked ag
 
 Every claim below was read out of the tree at the commit this ADR was written against.
 
-| #   | Finding                                                                                                                                                                                                                                                                                                                                                                       | Evidence                                                                                                                                                                                                                                                                                         |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| F1  | Source priority is **provenance-only, not subtractive**. `GateAccumulator.add` uses `GATE_SOURCE_PRIORITY` to decide which _source label_ a duplicate gate ID keeps. A higher-priority source can neither remove nor suppress a gate a lower-priority source added — the accumulated set is a union.                                                                          | `pipeline/state/accumulators/gate-accumulator.ts:43-84`; ranking at `pipeline/state/types.ts:29-37`                                                                                                                                                                                              |
-| F2  | **`framework_gates: false` is inert on the live path.** The planner's methodology-gate filter reads `convertedPrompt.enhancedGateConfiguration`, and `enhancedGateConfiguration` has **no writer anywhere in the repo** — it is declared once and read in five places. A prompt's YAML flag lands in `gateConfiguration.framework_gates`, which that filter does not consult. | filter at `execution/planning/execution-planner.ts:154`; declaration `execution/types.ts:73`; readers `execution-planner.ts:154,548,560` + `chain-session-router.ts:267`; writers: none                                                                                                          |
-| F3  | The documented "4-level" and "5-level" precedence in `CategoryExtractor.selectGatesWithPrecedence` / `selectGatesWithEnhancedPrecedence` describes **no live behavior** — both methods have zero callers. They also conflate two concerns: `framework_gates !== false` gates category gates _and_ framework gates.                                                            | `execution/planning/category-extractor.ts:229,363`; caller search over `--type ts` returns only the definitions                                                                                                                                                                                  |
-| F4  | **`%lean` keeps framework-dependent gates while suppressing the methodology they score against.** `%lean` sets `requiresFramework: false` and leaves the gate set untouched, so `framework-compliance` may still be scheduled with no methodology injected.                                                                                                                   | `execution-planner.ts:464-466`; documented intent at `docs/guides/injection-control.md:77`                                                                                                                                                                                                       |
-| F5  | `inline_gate_definitions` reaches display and analysis only — six consumers, all rendering or previewing. A live registration seam for prompt-scoped ad-hoc gates already exists (`TemporaryGateRegistry`, surfaced through the `temporary-request` source).                                                                                                                  | consumers: `chain-session-router.ts:287`, `gate-analyzer.ts:394`, `prompt-lifecycle-processor.ts:149`, `prompt-discovery-processor.ts:335`, `skills-sync/service.ts:789`, `resource-scaffold.ts:60`; seam: `gates/core/temporary-gate-registry.ts`, `gates/services/temporary-gate-registrar.ts` |
-| F6  | The injection hierarchy has seven levels and no prompt tier, so a prompt cannot refuse a methodology system prompt.                                                                                                                                                                                                                                                           | `docs/guides/injection-control.md:88-100`; `decisions/injection/internal/hierarchy-resolver.ts`                                                                                                                                                                                                  |
+| #   | Finding                                                                                                                                                                                                                                                                                                                                                                     | Evidence                                                                                                                                                                                                                                                                                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| F1  | Source priority is **provenance-only, not subtractive**. `GateAccumulator.add` uses `GATE_SOURCE_PRIORITY` to decide which _source label_ a duplicate gate ID keeps. A higher-priority source can neither remove nor suppress a gate a lower-priority source added — the accumulated set is a union.                                                                        | `pipeline/state/accumulators/gate-accumulator.ts:43-84`; ranking at `pipeline/state/types.ts:29-37`                                                                                                                                                                                              |
+| F2  | **`framework_gates: false` is inert on the live path.** The planner's framework-gate filter reads `convertedPrompt.enhancedGateConfiguration`, and `enhancedGateConfiguration` has **no writer anywhere in the repo** — it is declared once and read in five places. A prompt's YAML flag lands in `gateConfiguration.framework_gates`, which that filter does not consult. | filter at `execution/planning/execution-planner.ts:154`; declaration `execution/types.ts:73`; readers `execution-planner.ts:154,548,560` + `chain-session-router.ts:267`; writers: none                                                                                                          |
+| F3  | The documented "4-level" and "5-level" precedence in `CategoryExtractor.selectGatesWithPrecedence` / `selectGatesWithEnhancedPrecedence` describes **no live behavior** — both methods have zero callers. They also conflate two concerns: `framework_gates !== false` gates category gates _and_ framework gates.                                                          | `execution/planning/category-extractor.ts:229,363`; caller search over `--type ts` returns only the definitions                                                                                                                                                                                  |
+| F4  | **`%lean` keeps framework-dependent gates while suppressing the framework they score against.** `%lean` sets `requiresFramework: false` and leaves the gate set untouched, so `framework-compliance` may still be scheduled with no framework injected.                                                                                                                     | `execution-planner.ts:464-466`; documented intent at `docs/guides/injection-control.md:77`                                                                                                                                                                                                       |
+| F5  | `inline_gate_definitions` reaches display and analysis only — six consumers, all rendering or previewing. A live registration seam for prompt-scoped ad-hoc gates already exists (`TemporaryGateRegistry`, surfaced through the `temporary-request` source).                                                                                                                | consumers: `chain-session-router.ts:287`, `gate-analyzer.ts:394`, `prompt-lifecycle-processor.ts:149`, `prompt-discovery-processor.ts:335`, `skills-sync/service.ts:789`, `resource-scaffold.ts:60`; seam: `gates/core/temporary-gate-registry.ts`, `gates/services/temporary-gate-registrar.ts` |
+| F6  | The injection hierarchy has seven levels and no prompt tier, so a prompt cannot refuse a framework system prompt.                                                                                                                                                                                                                                                           | `docs/guides/injection-control.md:88-100`; `decisions/injection/internal/hierarchy-resolver.ts`                                                                                                                                                                                                  |
 
 Only `gate_type: 'framework'` distinguishes a framework-dependent gate, and exactly one bundled gate
 carries it (`server/resources/gates/framework-compliance/gate.yaml`). Category auto-assignment
@@ -58,7 +58,7 @@ source a duplicate ID is attributed to, and which definition body wins under (b)
 | 80   | `temporary-request` | caller-supplied gate spec via the MCP `gates` parameter                       |
 | 60   | `prompt-config`     | prompt/folder configuration — **including `inline_gate_definitions`**         |
 | 50   | `chain-level`       | a chain's `finalValidation`                                                   |
-| 40   | `methodology`       | active framework's methodology gates                                          |
+| 40   | `framework`         | active framework's framework gates                                            |
 | 20   | `registry-auto`     | `GateManager.selectGates()` — the registry's activation-rule query. See below |
 
 This is the existing `GATE_SOURCE_PRIORITY` table, adopted unchanged as the canonical ranking.
@@ -87,19 +87,19 @@ serve both callers.
 **Stage 2 — subtractive.** One **precomputed input**, then a **set of vetoes with no defined order
 between them**.
 
-_Input (not a veto):_ resolve whether a methodology is injected for this execution, through the
+_Input (not a veto):_ resolve whether a framework is injected for this execution, through the
 injection hierarchy in (c). It is computed before the veto set because one veto reads it.
 
 _Veto set._ Every member removes gates and nothing else, so all members commute — a gate vetoed by
 any member is absent from the result regardless of evaluation order. Implementations may evaluate
 them in any order or in parallel; tests must not pin an order between them.
 
-| Veto                                   | Removes                                                                                        | Binds sources up to rank                                             |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `%clean` / `%framework` modifier       | the entire set                                                                                 | **100** — the caller's own instruction, so it binds everything       |
-| `exclude` list (prompt, then category) | the named IDs                                                                                  | **60** — author preference, so it cannot veto the caller (80/90/100) |
-| Methodology nesting                    | every gate with `gate_type: 'framework'`, when the input resolved to "no methodology injected" | **100** — a coherence invariant, see (c)                             |
-| Global `enableMethodologyGates: false` | methodology gates, server-wide                                                                 | **100** — operator configuration                                     |
+| Veto                                   | Removes                                                                                      | Binds sources up to rank                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `%clean` / `%framework` modifier       | the entire set                                                                               | **100** — the caller's own instruction, so it binds everything       |
+| `exclude` list (prompt, then category) | the named IDs                                                                                | **60** — author preference, so it cannot veto the caller (80/90/100) |
+| Framework nesting                      | every gate with `gate_type: 'framework'`, when the input resolved to "no framework injected" | **100** — a coherence invariant, see (c)                             |
+| Global `enableMethodologyGates: false` | framework gates, server-wide                                                                 | **100** — operator configuration                                     |
 
 **Each veto declares the highest source rank it binds.** This is the one place where Stage 1's
 ranking becomes subtractive, and it is deliberate: a veto whose scope is unstated defaults to
@@ -112,10 +112,10 @@ parameter (80) keeps it against any prompt or category `exclude`.
 Within a single rank tier, exclude beats include: an ID both included and excluded by prompt-level
 config is excluded.
 
-Existing behavior preserved: modifier clears at `execution-planner.ts:454-462`, global methodology
+Existing behavior preserved: modifier clears at `execution-planner.ts:454-462`, global framework
 filter at `gate-enhancement-service.ts:158-167`.
 
-`framework_gates: false` is redefined as a **prompt-level opt-out of methodology gates only** —
+`framework_gates: false` is redefined as a **prompt-level opt-out of framework gates only** —
 scoped to `gate_type: 'framework'`, applied at step 4 alongside the nesting rule. It stops gating
 category gates (the F3 conflation is not carried forward), and it must be read from
 `gateConfiguration`, the field loaders actually populate.
@@ -130,7 +130,7 @@ category gates (the F3 conflation is not carried forward), and it must be read f
 - When an inline definition declares an ID that already resolves to a registered gate, the ID stays
   a **single entry** in the set and the body is resolved field by field: **a field the
   higher-ranked source declares replaces it wholesale; a field it omits is inherited unchanged.**
-  At rank 60 a prompt's inline definition overrides a `registry-auto` or `methodology` body, and is
+  At rank 60 a prompt's inline definition overrides a `registry-auto` or `framework` body, and is
   itself overridden by a caller-supplied `temporary-request` spec.
 
 | Field kind                                                                          | Strategy                                                  | Why                                                                                                                                                 |
@@ -147,11 +147,11 @@ merge is rejected: it is the mechanism that yields configurations no author wrot
   (or the definition's declared scope) and are referenced afterwards by canonical ID — reusing the
   seam in F5 rather than adding a second registration path into gate selection.
 
-### (c) Methodology-gate nesting
+### (c) Framework-gate nesting
 
 **Unconditional, scoped to `gate_type: 'framework'`. No feature flag.**
 
-When no methodology is injected for an execution, framework-typed gates are withheld. This covers
+When no framework is injected for an execution, framework-typed gates are withheld. This covers
 `%lean`, `%clean`, a per-prompt injection opt-out, and any config-level suppression, because all of
 them are resolved by the same step-1 query.
 
@@ -162,7 +162,7 @@ Two boundaries this deliberately does not cross:
   suggests, and only `framework-compliance` changes behavior today.
 - No flag guards this. Per `cleanup-standards.md`, a flag is warranted when someone could
   legitimately choose the old behavior or when the value is only gradeable live. Scoring adherence
-  to a methodology that was never injected is neither — it is a defect with a verifiable target, so
+  to a framework that was never injected is neither — it is a defect with a verifiable target, so
   it ships on and the old path is deleted rather than parked behind a knob.
 
 The injection hierarchy grows a **prompt tier between step and chain**, taking it to eight levels:
@@ -225,14 +225,14 @@ The model above was checked against five systems that resolve policy from layere
 findings are convergent across systems designed independently of each other, which is the reason
 they are adopted here rather than treated as one option among several.
 
-| System                       | Mechanism                                                                                                                                                                            | What it settles here                                                                                                                                                                  |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Kubernetes dynamic admission | Mutating phase runs first, then validating; validating webhooks are **called in parallel and any rejection fails the request**, so validation observes the final post-mutation state | The two-stage split, and that the subtractive stage is order-independent by construction                                                                                              |
-| OPA / Rego                   | Statement order "does not matter — reordering any two statements means the policy means exactly the same thing"; deny-override denies if at least one rule denies                    | Monotonic vetoes are what make layered composition tractable; ordering a commutative set buys nothing                                                                                 |
-| AWS Cedar                    | Default-deny, forbid-wins-over-permit, order-independent evaluation, no side effects — designed so guardrails "cannot be accidentally overridden"                                    | The veto-scope column in Stage 2. Cedar's unconditional forbid-wins is justified as a _safety_ property, which is why it is adopted for methodology nesting but **not** for `exclude` |
-| CSS cascade layers           | Layer precedence is evaluated **before** selector specificity; `revert-layer` opts an element out of one layer                                                                       | Stage 1 unchanged — explicit named layers outrank finer-grained strength, which is what `GATE_SOURCE_PRIORITY` already is. `exclude` is our `revert-layer`                            |
-| ESLint flat config           | Replaced the implicit `eslintrc` directory cascade with one explicit array, last-match-wins                                                                                          | Names our actual failure mode: the cascade was abandoned because of "confusion about which rules were actually being applied" — F1/F2/F3 are that confusion                           |
-| `webpack-merge`              | Per-key strategies (`append`, `prepend`, `replace`, `unique`) declared explicitly rather than one global deep merge                                                                  | The per-field table in (b)                                                                                                                                                            |
+| System                       | Mechanism                                                                                                                                                                            | What it settles here                                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kubernetes dynamic admission | Mutating phase runs first, then validating; validating webhooks are **called in parallel and any rejection fails the request**, so validation observes the final post-mutation state | The two-stage split, and that the subtractive stage is order-independent by construction                                                                                            |
+| OPA / Rego                   | Statement order "does not matter — reordering any two statements means the policy means exactly the same thing"; deny-override denies if at least one rule denies                    | Monotonic vetoes are what make layered composition tractable; ordering a commutative set buys nothing                                                                               |
+| AWS Cedar                    | Default-deny, forbid-wins-over-permit, order-independent evaluation, no side effects — designed so guardrails "cannot be accidentally overridden"                                    | The veto-scope column in Stage 2. Cedar's unconditional forbid-wins is justified as a _safety_ property, which is why it is adopted for framework nesting but **not** for `exclude` |
+| CSS cascade layers           | Layer precedence is evaluated **before** selector specificity; `revert-layer` opts an element out of one layer                                                                       | Stage 1 unchanged — explicit named layers outrank finer-grained strength, which is what `GATE_SOURCE_PRIORITY` already is. `exclude` is our `revert-layer`                          |
+| ESLint flat config           | Replaced the implicit `eslintrc` directory cascade with one explicit array, last-match-wins                                                                                          | Names our actual failure mode: the cascade was abandoned because of "confusion about which rules were actually being applied" — F1/F2/F3 are that confusion                         |
+| `webpack-merge`              | Per-key strategies (`append`, `prepend`, `replace`, `unique`) declared explicitly rather than one global deep merge                                                                  | The per-field table in (b)                                                                                                                                                          |
 
 Two cautions taken from the same sources:
 
@@ -253,7 +253,7 @@ Two cautions taken from the same sources:
    precedence implementation. Rejected: it predates the accumulator, has no provenance tracking, no
    callers, and carries the `framework_gates` conflation (F3). Adopting it would mean porting the
    accumulator's diagnostics onto it.
-3. **Gate the nesting rule behind a flag** (`enableMethodologyGateNesting`). Rejected under the
+3. **Gate the nesting rule behind a flag** (`enableFrameworkGateNesting`). Rejected under the
    parity-gate rule in `cleanup-standards.md`: it would ship a permanent second code path for a
    defect fix whose correct outcome is verifiable offline, with no stated evidence that would ever
    retire it.
@@ -270,7 +270,7 @@ Two cautions taken from the same sources:
 - One order, stated once, that T2 and T3 can be tested against rather than inferred from.
 - F2 and F3 stop being latent: the phantom field and the dead resolver are on a removal path instead
   of waiting to mislead the next reader.
-- `%lean` becomes coherent — no gate scores adherence to a methodology that was not injected.
+- `%lean` becomes coherent — no gate scores adherence to a framework that was not injected.
 - Prompt authors get a real opt-out, replacing the `%clean` / `%lean` call-site workaround, which is
   per-request and so is lost on chain continuations.
 
@@ -279,7 +279,7 @@ Two cautions taken from the same sources:
 | Risk                                                                                                     | Mitigation                                                                                                                                                                    |
 | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Workspaces with inert `inline_gate_definitions` gain live gates on upgrade                               | Two-release warn-then-arm (d); changelog entry                                                                                                                                |
-| `framework_gates: false` starts having an effect where it previously had none, in either direction       | It only ever gated methodology gates in its documented meaning; the F3 category conflation was never live, so no shipped behavior depends on it                               |
+| `framework_gates: false` starts having an effect where it previously had none, in either direction       | It only ever gated framework gates in its documented meaning; the F3 category conflation was never live, so no shipped behavior depends on it                                 |
 | Prompt tier placed above chain surprises a chain author who expected chain config to win                 | Documented in the 8-level table; the prompt tier is opt-in per prompt and absent by default                                                                                   |
 | A prompt author expects `exclude` to remove a gate the caller supplied, and it does not (rank cap of 60) | Stated in the Stage 2 table and surfaced in the (a) test; the author-facing alternative is to not include the gate rather than to exclude someone else's                      |
 | A future veto is added that is genuinely order-dependent, breaking the commutativity the model assumes   | The permutation property test in Validation fails when a non-commutative veto is introduced, which is the intended signal to revisit this ADR rather than to reorder silently |

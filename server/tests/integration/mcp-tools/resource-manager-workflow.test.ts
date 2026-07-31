@@ -242,12 +242,12 @@ const createMockFrameworkManager = () => {
           if (id && frameworks.has(id)) {
             activeFramework = id;
             return {
-              content: [{ type: 'text', text: `Switched to methodology: ${id}` }],
+              content: [{ type: 'text', text: `Switched to framework: ${id}` }],
               isError: false,
             } as ToolResponse;
           }
           return {
-            content: [{ type: 'text', text: `Methodology ${id} not found` }],
+            content: [{ type: 'text', text: `Framework ${id} not found` }],
             isError: true,
           } as ToolResponse;
 
@@ -258,21 +258,21 @@ const createMockFrameworkManager = () => {
               content: [
                 {
                   type: 'text',
-                  text: `Methodology: ${framework?.id}\nName: ${framework?.name}\nEnabled: ${framework?.enabled}`,
+                  text: `Framework: ${framework?.id}\nName: ${framework?.name}\nEnabled: ${framework?.enabled}`,
                 },
               ],
               isError: false,
             } as ToolResponse;
           }
           return {
-            content: [{ type: 'text', text: `Methodology ${id} not found` }],
+            content: [{ type: 'text', text: `Framework ${id} not found` }],
             isError: true,
           } as ToolResponse;
 
         case 'create':
           if (id && frameworks.has(id)) {
             return {
-              content: [{ type: 'text', text: `Methodology ${id} already exists` }],
+              content: [{ type: 'text', text: `Framework ${id} already exists` }],
               isError: true,
             } as ToolResponse;
           }
@@ -284,7 +284,7 @@ const createMockFrameworkManager = () => {
             });
           }
           return {
-            content: [{ type: 'text', text: `Created methodology: ${id}` }],
+            content: [{ type: 'text', text: `Created framework: ${id}` }],
             isError: false,
           } as ToolResponse;
 
@@ -292,12 +292,12 @@ const createMockFrameworkManager = () => {
           if (id && frameworks.has(id)) {
             frameworks.delete(id);
             return {
-              content: [{ type: 'text', text: `Deleted methodology: ${id}` }],
+              content: [{ type: 'text', text: `Deleted framework: ${id}` }],
               isError: false,
             } as ToolResponse;
           }
           return {
-            content: [{ type: 'text', text: `Methodology ${id} not found` }],
+            content: [{ type: 'text', text: `Framework ${id} not found` }],
             isError: true,
           } as ToolResponse;
 
@@ -431,7 +431,7 @@ describe('Resource Manager Workflow Integration', () => {
       expect(deleteResult.isError).toBe(false);
     });
 
-    test('methodology switch workflow', async () => {
+    test('framework switch workflow', async () => {
       // List available frameworks
       const listResult = await router.handleAction(
         {
@@ -460,7 +460,7 @@ describe('Resource Manager Workflow Integration', () => {
   });
 
   describe('Action Validation Integration', () => {
-    test('switch action only routes to methodology handler', async () => {
+    test('switch action only routes to framework handler', async () => {
       // Switch on prompt should fail validation before reaching handler
       const promptSwitch = await router.handleAction(
         {
@@ -554,14 +554,14 @@ describe('Resource Manager Workflow Integration', () => {
       );
     });
 
-    test('methodology parameters pass through correctly', async () => {
+    test('framework parameters pass through correctly', async () => {
       await router.handleAction(
         {
           resource_type: 'framework',
           action: 'create',
           id: 'new-method',
-          name: 'New Methodology',
-          system_prompt_guidance: 'Apply this methodology',
+          name: 'New Framework',
+          system_prompt_guidance: 'Apply this framework',
           persist: true,
           reason: 'Testing creation',
         },
@@ -572,8 +572,8 @@ describe('Resource Manager Workflow Integration', () => {
         expect.objectContaining({
           action: 'create',
           id: 'new-method',
-          name: 'New Methodology',
-          system_prompt_guidance: 'Apply this methodology',
+          name: 'New Framework',
+          system_prompt_guidance: 'Apply this framework',
           persist: true,
           reason: 'Testing creation',
         }),

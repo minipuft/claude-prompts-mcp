@@ -121,7 +121,7 @@ function gateYaml(id: string, opts: CreateResourceOptions): string {
 
 function frameworkYaml(id: string, opts: CreateResourceOptions): string {
   const name = opts.name ?? id;
-  const desc = opts.description ?? `${name} methodology`;
+  const desc = opts.description ?? `${name} framework`;
   return [
     `id: ${id}`,
     `name: ${name}`,
@@ -132,8 +132,8 @@ function frameworkYaml(id: string, opts: CreateResourceOptions): string {
     `enabled: false`,
     '',
     'systemPromptGuidance: |',
-    `  Apply the ${name} methodology systematically.`,
-    '  Define your methodology phases and guidance here.',
+    `  Apply the ${name} framework systematically.`,
+    '  Define your framework phases and guidance here.',
     '',
     '# phasesFile: phases.yaml',
     '# judgePromptFile: judge-prompt.md',
@@ -143,11 +143,11 @@ function frameworkYaml(id: string, opts: CreateResourceOptions): string {
     '#   include:',
     '#     - framework-compliance',
     '',
-    '# --- Methodology-Specific Gates (uncomment to define) ---',
+    '# --- Framework-Specific Gates (uncomment to define) ---',
     '# frameworkGates:',
     '#   - id: phase_completeness',
     '#     name: Phase Completeness',
-    '#     description: Verify all methodology phases are addressed',
+    '#     description: Verify all framework phases are addressed',
     '#     frameworkArea: Core',
     '#     priority: high',
     '#     validationCriteria:',
@@ -210,7 +210,7 @@ const COMPANION_FILES: Record<ResourceType, { name: string; content: string }> =
   },
   frameworks: {
     name: 'system-prompt.md',
-    content: 'Apply the methodology systematically, ensuring thorough coverage of each phase.\n',
+    content: 'Apply the framework systematically, ensuring thorough coverage of each phase.\n',
   },
   styles: {
     name: 'guidance.md',

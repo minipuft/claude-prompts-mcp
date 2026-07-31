@@ -1,4 +1,4 @@
-# ReACT Methodology Definition
+# ReACT Framework Definition
 # Reasoning and Acting cycles for systematic problem-solving
 
 id: react
@@ -8,7 +8,7 @@ version: '1.0.0'
 enabled: true
 
 systemPromptGuidance: |
-  Apply the ReACT methodology systematically:
+  Apply the ReACT framework systematically:
 
   **Reason**: Think through the problem systematically and develop a clear approach
   **Act**: Take specific, purposeful actions based on your reasoning
@@ -66,9 +66,9 @@ frameworkGates:
 templateSuggestions:
   - section: system
     type: addition
-    description: Add ReACT methodology guidance
+    description: Add ReACT framework guidance
     content: |
-      Apply the ReACT methodology: Reason through the problem systematically, take specific purposeful Actions, Observe results and feedback, then adjust your reasoning based on observations. Continue cycles until the objective is achieved.
+      Apply the ReACT framework: Reason through the problem systematically, take specific purposeful Actions, Observe results and feedback, then adjust your reasoning based on observations. Continue cycles until the objective is achieved.
     frameworkJustification: Ensures systematic application of reasoning-action cycles
     impact: high
 
@@ -108,7 +108,7 @@ argumentSuggestions:
   - name: actions
     type: array
     description: Potential actions that can be taken
-    frameworkReason: ReACT methodology emphasizes specific, purposeful actions
+    frameworkReason: ReACT framework emphasizes specific, purposeful actions
     examples:
       - analyze metrics
       - test hypothesis
@@ -134,7 +134,7 @@ toolDescriptions:
       SYNTAX:
       - >>prompt_id key:"value"              # Run prompt with arguments
       - >>step1 --> >>step2                  # Chain multiple steps
-      - @ReACT >>prompt                      # Apply ReACT methodology
+      - @ReACT >>prompt                      # Apply ReACT framework
       - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
       - :: verify:"cmd" loop:true            # Autonomous until pass
 
@@ -144,15 +144,15 @@ toolDescriptions:
       command: 'Prompt ID to expand. Resulting prompt will include ReACT cycle guidance for you to apply.'
   resource_manager:
     description: |
-      🗂️ RESOURCE MANAGER [ReACT]: Unified CRUD for prompts, gates, and methodologies.
+      🗂️ RESOURCE MANAGER [ReACT]: Unified CRUD for prompts, gates, and frameworks.
 
-      USAGE: resource_manager(resource_type:"prompt|gate|methodology", action:"...", ...)
-      RESOURCE TYPES: prompt (templates), gate (quality criteria), methodology (frameworks)
-      ACTIONS: create | update | delete | list | inspect | reload | switch (methodology only)
+      USAGE: resource_manager(resource_type:"prompt|gate|framework", action:"...", ...)
+      RESOURCE TYPES: prompt (templates), gate (quality criteria), framework (CAGEERF, ReACT, 5W1H, SCAMPER)
+      ACTIONS: create | update | delete | list | inspect | reload | switch (framework only)
 
       Use action:"guide" with goal:"observe" for evidence-gathering recommendations before acting.
     parameters:
-      resource_type: "Type of resource: 'prompt', 'gate', or 'methodology'"
+      resource_type: "Type of resource: 'prompt', 'gate', or 'framework'"
       action: "Use 'guide' with goal:'observe' to favor actions that gather evidence before modifying."
   system_control:
     description: |

@@ -374,14 +374,14 @@ describe('MCP Resources Registration Integration', () => {
     });
   });
 
-  describe('Methodology Resource Handlers', () => {
+  describe('Framework Resource Handlers', () => {
     const testFrameworks = [
       {
         id: 'CAGEERF',
         name: 'CAGEERF Framework',
-        description: 'Context, Analysis, Goals, Execution, Evaluation, Refinement methodology',
+        description: 'Context, Analysis, Goals, Execution, Evaluation, Refinement framework',
         type: 'methodology',
-        systemPromptTemplate: 'Apply the CAGEERF methodology systematically...',
+        systemPromptTemplate: 'Apply the CAGEERF framework systematically...',
         executionGuidelines: ['Start with context', 'Analyze thoroughly', 'Set clear goals'],
         priority: 100,
         enabled: true,
@@ -411,10 +411,10 @@ describe('MCP Resources Registration Integration', () => {
       registerResources(mockMcpServer as never, dependencies);
     });
 
-    test('registers methodology resources when frameworkManager is provided', () => {
+    test('registers framework resources when frameworkManager is provided', () => {
       expect(registeredResources.has('frameworks')).toBe(true);
       expect(registeredResources.has('methodology')).toBe(true);
-      expect(registeredResources.has('methodology-system-prompt')).toBe(true);
+      expect(registeredResources.has('framework-system-prompt')).toBe(true);
     });
 
     test('frameworks list handler returns all frameworks with metadata', async () => {
@@ -436,7 +436,7 @@ describe('MCP Resources Registration Integration', () => {
       expect(text).toContain('ReACT: ReACT Framework [disabled]');
     });
 
-    test('individual methodology handler returns full content', async () => {
+    test('individual framework handler returns full content', async () => {
       const handler = registeredResources.get('methodology')?.readHandler;
       expect(handler).toBeDefined();
 
@@ -451,7 +451,7 @@ describe('MCP Resources Registration Integration', () => {
       const content = result.contents[0].text;
       expect(content).toContain('# CAGEERF Framework');
       expect(content).toContain('**ID:** `CAGEERF`');
-      expect(content).toContain('**Type:** methodology');
+      expect(content).toContain('**Type:** framework');
       expect(content).toContain('**Priority:** 100');
       expect(content).toContain('**Enabled:** Yes');
       expect(content).toContain('## Execution Guidelines');
@@ -459,8 +459,8 @@ describe('MCP Resources Registration Integration', () => {
       expect(content).toContain('## System Prompt Template');
     });
 
-    test('methodology system prompt handler returns raw template only', async () => {
-      const handler = registeredResources.get('methodology-system-prompt')?.readHandler;
+    test('framework system prompt handler returns raw template only', async () => {
+      const handler = registeredResources.get('framework-system-prompt')?.readHandler;
       expect(handler).toBeDefined();
 
       const result = (await handler!(
@@ -471,10 +471,10 @@ describe('MCP Resources Registration Integration', () => {
       )) as { contents: Array<{ text: string }> };
 
       expect(result.contents).toHaveLength(1);
-      expect(result.contents[0].text).toBe('Apply the CAGEERF methodology systematically...');
+      expect(result.contents[0].text).toBe('Apply the CAGEERF framework systematically...');
     });
 
-    test('methodology handler throws for non-existent methodology', async () => {
+    test('framework handler throws for non-existent framework', async () => {
       const handler = registeredResources.get('methodology')?.readHandler;
 
       await expect(
@@ -484,7 +484,7 @@ describe('MCP Resources Registration Integration', () => {
           ),
           { id: 'non-existent' }
         )
-      ).rejects.toThrow('Methodology not found: non-existent');
+      ).rejects.toThrow('Framework not found: non-existent');
     });
   });
 
@@ -668,7 +668,7 @@ describe('MCP Resources Registration Integration', () => {
       expect(RESOURCE_URI_PATTERNS.GATE_GUIDANCE).toBe('resource://gate/{id}/guidance');
     });
 
-    test('methodology patterns include full URI scheme', () => {
+    test('framework patterns include full URI scheme', () => {
       expect(RESOURCE_URI_PATTERNS.FRAMEWORK_LIST).toBe('resource://framework/');
       expect(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM).toBe('resource://framework/{id}');
       expect(RESOURCE_URI_PATTERNS.FRAMEWORK_SYSTEM_PROMPT).toBe(

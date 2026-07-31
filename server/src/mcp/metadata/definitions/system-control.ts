@@ -39,7 +39,7 @@ const operations: ActionDescriptor[] = [
     category: 'framework',
     status: 'working',
     requiredArgs: ['framework'],
-    description: 'Changes active methodology via framework manager.',
+    description: 'Changes active framework via framework manager.',
   },
   {
     id: 'framework:enable',
@@ -47,7 +47,7 @@ const operations: ActionDescriptor[] = [
     category: 'framework',
     status: 'working',
     requiredArgs: [],
-    description: 'Turns on methodology injection globally.',
+    description: 'Turns on framework injection globally.',
   },
   {
     id: 'framework:disable',
@@ -55,7 +55,7 @@ const operations: ActionDescriptor[] = [
     category: 'framework',
     status: 'working',
     requiredArgs: [],
-    description: 'Turns off methodology injection globally.',
+    description: 'Turns off framework injection globally.',
   },
   {
     id: 'gates:list',

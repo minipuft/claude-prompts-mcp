@@ -191,9 +191,9 @@ Parameters: {{ tool_builder.auto_execute.params | dump }}
 
 ---
 
-## Real-World Example: Methodology Builder
+## Real-World Example: Framework Builder
 
-The `create_framework` prompt uses auto-execute to create new framework methodologies.
+The `create_framework` prompt uses auto-execute to create new frameworks.
 
 ### Directory Structure
 
@@ -202,9 +202,9 @@ resources/prompts/examples/create_framework/
 ├── prompt.yaml
 ├── user-message.md
 └── tools/
-    └── methodology_builder/
+    └── framework_builder/
         ├── tool.yaml      # trigger: schema_match
-        ├── schema.json    # Validates methodology structure
+        ├── schema.json    # Validates framework structure
         └── script.py      # Returns auto_execute for resource_manager
 ```
 
@@ -241,7 +241,7 @@ print(json.dumps(validate(json.load(sys.stdin))))
 
 ### Usage
 
-**Design mode** — Get guidance on creating a methodology:
+**Design mode** — Get guidance on creating a framework:
 
 ```
 prompt_engine(command: ">>create_framework", options: {

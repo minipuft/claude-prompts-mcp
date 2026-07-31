@@ -3,7 +3,7 @@ name: V.E.R.I.F.Y Resume Audit
 type: VERIFY
 enabled: true
 systemPromptGuidance: >-
-  Apply the V.E.R.I.F.Y methodology systematically:
+  Apply the V.E.R.I.F.Y framework systematically:
 
 
   **Voice**: Load bio.md voice table and establish candidate register. Read
@@ -16,7 +16,7 @@ toolDescriptions:
   prompt_engine:
     description: >-
       PROMPT ENGINE [VERIFY]: Resume content validation with V.E.R.I.F.Y
-      methodology: Voice authenticity, Evidence verification, Resonance mapping,
+      framework: Voice authenticity, Evidence verification, Resonance mapping,
       Inspect patterns, Field isolation, Yield presentation.
     parameters:
       command: Resume or application content audit prompt
@@ -76,9 +76,9 @@ frameworkGates:
 templateSuggestions:
   - section: system
     type: addition
-    description: Add VERIFY methodology enforcement to resume writing prompts
+    description: Add VERIFY framework enforcement to resume writing prompts
     content: >-
-      Apply V.E.R.I.F.Y methodology: Voice (bio.md register) then Evidence
+      Apply V.E.R.I.F.Y framework: Voice (bio.md register) then Evidence
       (claimability gate) then Resonance (JD alignment) then Inspect (AI
       detection) then Field Isolation (overlap prevention) then Yield (present
       with gate tables)

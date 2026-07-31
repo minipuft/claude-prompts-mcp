@@ -17,7 +17,7 @@ import type { FrameworkCreationData } from '../../../../src/mcp/tools/framework-
 
 import { FrameworkDraftValidator } from '../../../../src/mcp/tools/framework-manager/services/framework-draft-validator.js';
 
-describe('Methodology Validation', () => {
+describe('Framework Validation', () => {
   let validationService: FrameworkDraftValidator;
 
   beforeEach(() => {
@@ -30,7 +30,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '', // Empty - invalid
       };
 
@@ -46,7 +46,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [], // Empty - invalid
       };
@@ -63,7 +63,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
         methodology_gates: [], // Empty - invalid
@@ -81,7 +81,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
         methodology_gates: [
@@ -109,7 +109,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '', // Invalid
       };
 
@@ -121,7 +121,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
       };
 
@@ -133,7 +133,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
       };
@@ -146,7 +146,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
         methodology_gates: [
@@ -169,7 +169,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         description: 'A description',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
@@ -209,7 +209,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance', // 30%
       };
 
@@ -221,7 +221,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }], // 60%
       };
@@ -234,7 +234,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
         methodology_gates: [
@@ -259,7 +259,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '', // Invalid - will have error
       };
 
@@ -273,7 +273,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
         methodology_gates: [
@@ -302,7 +302,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         description: 'A description',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
@@ -344,7 +344,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '',
       };
 
@@ -358,7 +358,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
         methodology_gates: [
@@ -384,7 +384,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         description: 'A description',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
@@ -425,7 +425,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '   \n\t  ',
       };
 
@@ -439,7 +439,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         description: '  ',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
@@ -467,7 +467,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         // phases undefined
       };
@@ -482,7 +482,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [],
       };
@@ -499,7 +499,7 @@ describe('Methodology Validation', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '', // Missing 1
         phases: [], // Missing 2
         methodology_gates: [], // Missing 3
@@ -518,7 +518,7 @@ describe('Methodology Validation', () => {
       let data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '',
       };
       let result = validationService.validate(data);

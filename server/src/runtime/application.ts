@@ -1167,7 +1167,7 @@ export class Application {
       disabled.push('system prompt injection');
     }
     if (!gatesConfig.enableMethodologyGates) {
-      disabled.push('methodology gates');
+      disabled.push('framework gates');
     }
     if (!config.dynamicToolDescriptions) {
       disabled.push('dynamic tool descriptions');

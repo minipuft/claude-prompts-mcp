@@ -8,7 +8,7 @@ Default settings work for most cases. Customize when you're hitting token budget
 
 | Type             | What It Adds                                        | Default Frequency | Default Target |
 | ---------------- | --------------------------------------------------- | ----------------- | -------------- |
-| `system-prompt`  | Framework methodology phases (CAGEERF, ReACT, etc.) | Every 2 steps     | `steps`        |
+| `system-prompt`  | Framework phases (CAGEERF, ReACT, etc.)             | Every 2 steps     | `steps`        |
 | `gate-guidance`  | Quality validation criteria and review instructions | First step only   | `both`         |
 | `style-guidance` | Response formatting rules                           | First step only   | `steps`        |
 
@@ -19,11 +19,11 @@ Default settings work for most cases. Customize when you're hitting token budget
 
 ## Configuration (config.json)
 
-All injection settings live under the `methodologies` section:
+All injection settings live under the `frameworks` section:
 
 ```json
 {
-  "methodologies": {
+  "frameworks": {
     "enabled": true,
     "systemPromptFrequency": 3,
     "systemPromptTarget": "steps",
@@ -53,19 +53,19 @@ Controls how often injection occurs during chain execution:
 
 Controls which execution contexts receive injection:
 
-| Value   | Receives Injection          | Use When                                                                                       |
-| ------- | --------------------------- | ---------------------------------------------------------------------------------------------- |
-| `steps` | Normal chain step execution | Default for system-prompt and style — methodology and formatting only needed during generation |
-| `gates` | Gate review responses only  | Rarely useful alone                                                                            |
-| `both`  | Both steps and gate reviews | Default for gate-guidance — criteria needed during both generation and review                  |
+| Value   | Receives Injection          | Use When                                                                                     |
+| ------- | --------------------------- | -------------------------------------------------------------------------------------------- |
+| `steps` | Normal chain step execution | Default for system-prompt and style — framework and formatting only needed during generation |
+| `gates` | Gate review responses only  | Rarely useful alone                                                                          |
+| `both`  | Both steps and gate reviews | Default for gate-guidance — criteria needed during both generation and review                |
 
 ### Enable/Disable
 
-| Setting                       | Controls                                      |
-| ----------------------------- | --------------------------------------------- |
-| `methodologies.enabled`       | System-prompt injection (methodology on/off)  |
-| `gates.enabled`               | Gate-guidance injection (follows gate system) |
-| `methodologies.styleGuidance` | Style-guidance injection                      |
+| Setting                    | Controls                                      |
+| -------------------------- | --------------------------------------------- |
+| `frameworks.enabled`       | System-prompt injection (framework on/off)    |
+| `gates.enabled`            | Gate-guidance injection (follows gate system) |
+| `frameworks.styleGuidance` | Style-guidance injection                      |
 
 ## Command Modifiers (Per-Request Override)
 
@@ -76,7 +76,7 @@ Modifiers override config.json settings for a single execution:
 | `%clean`     | Disable ALL injection                                              | Bare prompt, minimal tokens        |
 | `%lean`      | Disable system-prompt and style-guidance, keep non-framework gates | Token-efficient with quality gates |
 | `%guided`    | Force ALL injection                                                | Maximum guidance                   |
-| `%framework` | Force system-prompt injection                                      | Methodology reinforcement          |
+| `%framework` | Force system-prompt injection                                      | Framework reinforcement            |
 
 **Usage**: Prefix the command:
 
@@ -123,7 +123,7 @@ description: "..."
 
 injection:
   system-prompt:
-    enabled: false # no methodology for this prompt, under any active framework
+    enabled: false # no framework for this prompt, under any active framework
   style-guidance:
     frequency:
       mode: first-only
@@ -134,11 +134,11 @@ Each of the three injection types accepts `enabled`, `frequency`, and `target`. 
 rejected at load time, and `conditions` is deliberately unavailable here: every condition case
 describes a position within a chain rather than a property of a prompt.
 
-**Setting `system-prompt.enabled: false` also withholds gates that score methodology adherence.**
-Scoring adherence to a methodology that was never injected is incoherent, so those gates are
+**Setting `system-prompt.enabled: false` also withholds gates that score framework adherence.**
+Scoring adherence to a framework that was never injected is incoherent, so those gates are
 withheld together with the injection — see [ADR 0001](../adr/0001-gate-resolution-precedence.md).
-Gates unrelated to methodology are unaffected. `%judge` overrides the opt-out, because the judge
-selection phase requires the methodology to be present.
+Gates unrelated to framework are unaffected. `%judge` overrides the opt-out, because the judge
+selection phase requires the framework to be present.
 
 <details>
 <summary><strong>Runtime Overrides (system_control)</strong></summary>
@@ -161,7 +161,7 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 
 ```json
 {
-  "methodologies": {
+  "frameworks": {
     "enabled": false,
     "styleGuidance": false
   }
@@ -172,7 +172,7 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 
 ```json
 {
-  "methodologies": {
+  "frameworks": {
     "systemPromptFrequency": 1,
     "gateGuidanceFrequency": 1,
     "styleGuidanceFrequency": 1
@@ -180,11 +180,11 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 }
 ```
 
-### Balanced (methodology every 3 steps, gates first-only)
+### Balanced (framework every 3 steps, gates first-only)
 
 ```json
 {
-  "methodologies": {
+  "frameworks": {
     "systemPromptFrequency": 3,
     "gateGuidanceFrequency": 0,
     "styleGuidanceFrequency": 0
@@ -194,7 +194,7 @@ Overrides support scope (`session`, `chain`, `step`) and optional TTL expiration
 
 ## Relationship to Phase Guards
 
-The `phaseGuards` config (`mode: enforce|warn|off`) controls structural validation of methodology phase compliance. This is separate from injection — phase guards check whether the LLM output matches expected structure, while injection controls what guidance the LLM receives.
+The `phaseGuards` config (`mode: enforce|warn|off`) controls structural validation of framework phase compliance. This is separate from injection — phase guards check whether the LLM output matches expected structure, while injection controls what guidance the LLM receives.
 
 See [Phase Guards Guide](./phase-guards.md) for details.
 
@@ -209,6 +209,6 @@ See [Gates Guide](./gates.md) for details.
 ## See Also
 
 - **[Gates Guide](./gates.md)** — Gate types, activation rules, and gate response format
-- **[Phase Guards Guide](./phase-guards.md)** — Structural validation of methodology phase compliance
+- **[Phase Guards Guide](./phase-guards.md)** — Structural validation of framework phase compliance
 - **[Troubleshooting](./troubleshooting.md)** — "Framework Not Injecting" and other injection-related issues
 - **[MCP Tools Reference](../reference/mcp-tools.md)** — `system_control` parameters for injection overrides

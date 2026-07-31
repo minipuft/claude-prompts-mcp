@@ -247,8 +247,8 @@ export class GateHotReloadCoordinator {
           if (criteria.forbidden_patterns) {
             normalizedCriteria.forbidden_patterns = criteria.forbidden_patterns;
           }
-          if (criteria.methodology) {
-            normalizedCriteria.methodology = criteria.methodology;
+          if (criteria.framework) {
+            normalizedCriteria.framework = criteria.framework;
           }
           if (criteria.min_compliance_score !== undefined) {
             normalizedCriteria.min_compliance_score = criteria.min_compliance_score;

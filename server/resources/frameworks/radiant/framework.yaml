@@ -1,17 +1,17 @@
-# RADIANT Methodology Definition
+# RADIANT Framework Definition
 # CloudySky design-language framework — a persistent reminder of design goals, vision,
 # palette philosophy, motion, surfaces, constraints, and verification across every visual
 # idea and implementation. Source of truth (runtime-loaded; no build artifacts).
 
 id: radiant
-name: RADIANT Design Methodology
+name: RADIANT Design Framework
 type: RADIANT
 version: 1.0.0
 enabled: true
 
 # System prompt guidance injected when framework is active
 systemPromptGuidance: |
-  Apply the RADIANT design methodology to every CloudySky visual idea and implementation.
+  Apply the RADIANT design framework to every CloudySky visual idea and implementation.
   RADIANT is a persistent reminder of the design pillars, not a one-time gate — before
   proposing or building anything, restate the pillars the idea must honor and check the
   work against them.
@@ -42,7 +42,7 @@ gates:
   include:
     - framework-compliance
 
-# Methodology-specific quality gates
+# Framework-specific quality gates
 frameworkGates:
   - id: vision_clarity
     name: Vision Clarity
@@ -119,7 +119,7 @@ templateSuggestions:
     type: addition
     description: Prepend the RADIANT design pillars as a persistent reminder
     content: |
-      Apply the RADIANT design methodology: Reference the Vision, Articulate Goals, Draw the Palette, Infuse Atmosphere & Motion, Anchor to Surfaces, Navigate Constraints, Test in the Living Client.
+      Apply the RADIANT design framework: Reference the Vision, Articulate Goals, Draw the Palette, Infuse Atmosphere & Motion, Anchor to Surfaces, Navigate Constraints, Test in the Living Client.
     frameworkJustification: Keeps CloudySky's design goals, vision, palette philosophy, and constraints in view across every idea so implementations stay on-philosophy.
     impact: high
 
@@ -131,7 +131,7 @@ templateSuggestions:
     frameworkJustification: Grounds palette and motion decisions in a concrete album and an observable goal, as Draw the Palette and Articulate Goals require.
     impact: medium
 
-# Methodology elements for prompt creation guidance
+# Framework elements for prompt creation guidance
 frameworkElements:
   requiredSections:
     - Reference the Vision
@@ -184,7 +184,7 @@ argumentSuggestions:
 toolDescriptions:
   prompt_engine:
     description: |
-      🌅 PROMPT ENGINE [RADIANT]: CloudySky design-language methodology with ground-truth validation.
+      🌅 PROMPT ENGINE [RADIANT]: CloudySky design-language framework with ground-truth validation.
 
       WHAT IT RETURNS: Prepared prompt + RADIANT pillar instructions (Reference the Vision → Articulate Goals → Draw the Palette → Infuse Atmosphere & Motion → Anchor to Surfaces → Navigate Constraints → Test in the Living Client).
       WHAT YOU DO: Restate the pillars and check each visual idea/implementation against them.
@@ -192,7 +192,7 @@ toolDescriptions:
       SYNTAX:
       - >>prompt_id key:"value"              # Run prompt with arguments
       - >>step1 --> >>step2                  # Chain multiple steps
-      - @RADIANT >>prompt                    # Apply RADIANT methodology
+      - @RADIANT >>prompt                    # Apply RADIANT framework
       - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
 
       PRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)
@@ -201,9 +201,9 @@ toolDescriptions:
       command: 'Prompt ID or CloudySky visual idea to expand. Result includes RADIANT pillar guidance for you to apply.'
   resource_manager:
     description: |
-      🗂️ RESOURCE MANAGER [RADIANT]: Unified CRUD for prompts, gates, and methodologies. Use action:"guide" with your current RADIANT pillar for phase-appropriate recommendations.
+      🗂️ RESOURCE MANAGER [RADIANT]: Unified CRUD for prompts, gates, and frameworks. Use action:"guide" with your current RADIANT pillar for phase-appropriate recommendations.
     parameters:
-      resource_type: "Type of resource: 'prompt', 'gate', or 'methodology'"
+      resource_type: "Type of resource: 'prompt', 'gate', or 'framework'"
       action: "Use 'guide' with your current RADIANT pillar for phase-appropriate action recommendations."
   system_control:
     description: |

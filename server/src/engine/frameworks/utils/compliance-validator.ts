@@ -162,7 +162,7 @@ export function validateCompliance(
         type: 'addition',
         description: `Add ${capitalizedPhase.toLowerCase()} framework`,
         content: `Include comprehensive ${capitalizedPhase.toLowerCase()} considerations in your approach.`,
-        frameworkJustification: `Methodology requires ${capitalizedPhase.toLowerCase()} phase coverage`,
+        frameworkJustification: `Framework requires ${capitalizedPhase.toLowerCase()} phase coverage`,
         impact: 'high',
       });
     }

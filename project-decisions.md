@@ -18,7 +18,7 @@
 | **Duration**      | ~14 months (initial commit → present)                            |
 | **Key Tech**      | Node.js 22, native SQLite, Zod, Express, esbuild, Jest, chokidar |
 
-**What it is**: A production MCP (Model Context Protocol) server that provides AI agents with a structured prompt execution engine, resource management system, and runtime state management. It serves as a plugin for Claude Code, Gemini CLI, and OpenCode — enabling prompt chaining, quality gates, methodology frameworks, and resource lifecycle management through standardized MCP tool calls.
+**What it is**: A production MCP (Model Context Protocol) server that provides AI agents with a structured prompt execution engine, resource management system, and runtime state management. It serves as a plugin for Claude Code, Gemini CLI, and OpenCode — enabling prompt chaining, quality gates, frameworks, and resource lifecycle management through standardized MCP tool calls.
 
 ---
 
@@ -174,7 +174,7 @@ This single command: plans a topic, delegates implementation to a sub-agent, rev
 - `-->` Chain steps sequentially, passing results forward
 - `==>` Delegate next step to a Task tool sub-agent with context isolation
 - `:: criteria` Inline quality gates with pass/fail criteria
-- `@ framework` Override active methodology
+- `@ framework` Override active framework
 - `% modifier` Execution modifiers (%clean, %lean)
 - `*N` Repeat step N times
 
@@ -226,7 +226,7 @@ Violations are caught at build time, not runtime.
 
 - Auto-detects WSL2 via `os.release()` and switches to polling mode
 - Debounces events (500ms) to batch rapid changes
-- Classifies changes by type (prompt, config, methodology, gate) for targeted reload
+- Classifies changes by type (prompt, config, framework, gate) for targeted reload
 - Supports auxiliary directories for extension watching
 
 **Evidence**: `server/src/modules/hot-reload/file-observer.ts` — WSL2 detection at lines 115-122, debouncing and event classification throughout.
@@ -257,7 +257,7 @@ Violations are caught at build time, not runtime.
 
 - **Validation gates**: Block execution until criteria pass (content checks, pattern matching, shell verification)
 - **Guidance gates**: Provide advisory feedback without blocking
-- **Methodology gates**: Framework-specific quality checks
+- **Framework gates**: Framework-specific quality checks
 - **Inline gates**: Ad-hoc criteria via `::` operator syntax
 
 Gates are defined as YAML resources, hot-reloaded, and enforced by `GateEnforcementAuthority` (SSOT for enforcement decisions).
@@ -268,7 +268,7 @@ Gates are defined as YAML resources, hot-reloaded, and enforced by `GateEnforcem
 
 ### 14. Resource Indexer with Ranked Search
 
-**Decision**: Index all resources (prompts, gates, methodologies, styles, tools) into SQLite with application-level ranked search.
+**Decision**: Index all resources (prompts, gates, frameworks, styles, tools) into SQLite with application-level ranked search.
 
 **Rationale**: File-based resource discovery is slow for search operations. The indexer:
 

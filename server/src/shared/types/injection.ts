@@ -526,7 +526,7 @@ export const DISABLE_INJECT_MODIFIERS: readonly string[] = ['clean', 'lean'] as 
  * Human-readable descriptions for injection types.
  */
 export const INJECTION_TYPE_DESCRIPTIONS: Readonly<Record<InjectionType, string>> = {
-  'system-prompt': 'Framework methodology system prompts (CAGEERF, ReACT, etc.)',
+  'system-prompt': 'Framework system prompts (CAGEERF, ReACT, etc.)',
   'gate-guidance': 'Quality gate validation guidance and criteria',
   'style-guidance': 'Response style and formatting guidance',
 } as const;

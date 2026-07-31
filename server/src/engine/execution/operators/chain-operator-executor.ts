@@ -557,7 +557,7 @@ export class ChainOperatorExecutor {
     return [
       '---',
       '',
-      '## 🎯 Framework Methodology Active',
+      '## 🎯 Framework Framework Active',
       '',
       `**${frameworkName}**`,
       '',

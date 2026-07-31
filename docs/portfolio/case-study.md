@@ -22,15 +22,15 @@ npx -y claude-prompts@latest
 
 ```
 resource_manager(resource_type:"prompt", action:"list")                        # See your prompts
-prompt_engine(command:">>analyze_code @CAGEERF")     # Run with methodology
+prompt_engine(command:">>analyze_code @CAGEERF")     # Run with framework
 ```
 
-| Before                           | After                                      |
-| -------------------------------- | ------------------------------------------ |
-| Edit → restart → test (5-10 min) | Edit → test instantly (<1 min)             |
-| Scattered prompt files           | Git-versioned Markdown library             |
-| Variable reasoning quality       | 4 methodology frameworks enforce structure |
-| Manual quality checks            | Quality gates auto-validate                |
+| Before                           | After                          |
+| -------------------------------- | ------------------------------ |
+| Edit → restart → test (5-10 min) | Edit → test instantly (<1 min) |
+| Scattered prompt files           | Git-versioned Markdown library |
+| Variable reasoning quality       | 4 frameworks enforce structure |
+| Manual quality checks            | Quality gates auto-validate    |
 
 ---
 
@@ -40,7 +40,7 @@ prompt_engine(command:">>analyze_code @CAGEERF")     # Run with methodology
 # List prompts
 resource_manager(resource_type:"prompt", action:"list")
 
-# Run with methodology
+# Run with framework
 prompt_engine(command:">>diagnose @CAGEERF scope:'performance'")
 
 # Chain steps
@@ -71,7 +71,7 @@ Parse → Validate → Plan → Enhance → Execute → Format → Return
 
 Operators:
 >>   Execute prompt by ID
-@    Apply methodology (CAGEERF, ReACT, 5W1H, SCAMPER)
+@    Apply framework (CAGEERF, ReACT, 5W1H, SCAMPER)
 ::   Quality gate (inline criteria)
 -->  Chain to next step
 ```

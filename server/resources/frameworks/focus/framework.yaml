@@ -3,7 +3,7 @@ name: FOCUS Framework
 type: FOCUS
 enabled: true
 systemPromptGuidance: >-
-  Apply the FOCUS methodology systematically:
+  Apply the FOCUS framework systematically:
 
 
   **Frame**: Frame the problem clearly - define scope, constraints, and success
@@ -34,7 +34,7 @@ toolDescriptions:
       SYNTAX:
       - >>prompt_id key:"value"              # Run prompt with arguments
       - >>step1 --> >>step2                  # Chain multiple steps
-      - @FOCUS >>prompt                      # Apply FOCUS methodology
+      - @FOCUS >>prompt                      # Apply FOCUS framework
       - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
       - :: verify:"cmd" loop:true            # Autonomous until pass
 
@@ -62,8 +62,8 @@ frameworkGates:
 templateSuggestions:
   - section: system
     type: addition
-    description: Add FOCUS methodology guidance
-    content: Apply FOCUS methodology systematically
+    description: Add FOCUS framework guidance
+    content: Apply FOCUS framework systematically
     frameworkJustification: Ensures focused problem-solving
     impact: high
 frameworkElements:

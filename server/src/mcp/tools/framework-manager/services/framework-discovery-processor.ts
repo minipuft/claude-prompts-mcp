@@ -20,7 +20,7 @@ export class FrameworkDiscoveryProcessor {
     if (frameworks.length === 0) {
       return this.success(
         `📋 No frameworks found${enabled_only ? ' (enabled only)' : ''}\n\n` +
-          `Use resource_manager(resource_type:"methodology", action:"create", ...) to add a new methodology.`
+          `Use resource_manager(resource_type:"framework", action:"create", ...) to add a new framework.`
       );
     }
 
@@ -46,13 +46,13 @@ export class FrameworkDiscoveryProcessor {
     const { id } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for inspect action');
+      return this.error('Framework ID is required for inspect action');
     }
 
     const framework = this.ctx.frameworkManager.getFramework(id);
 
     if (framework === undefined) {
-      return this.error(`Methodology '${id}' not found`);
+      return this.error(`Framework '${id}' not found`);
     }
 
     const isActive = this.ctx.frameworkStateStore?.getActiveFramework()?.id === framework.id;
@@ -76,11 +76,11 @@ export class FrameworkDiscoveryProcessor {
         }
       }
     } catch (error) {
-      this.ctx.logger.debug(`Could not load methodology data for validation: ${id}`, { error });
+      this.ctx.logger.debug(`Could not load framework data for validation: ${id}`, { error });
     }
 
     return this.success(
-      `Methodology: ${framework.name}\n\n` +
+      `Framework: ${framework.name}\n\n` +
         `Details:\n` +
         `  ID: ${framework.id}\n` +
         `  Type: ${framework.type}\n` +

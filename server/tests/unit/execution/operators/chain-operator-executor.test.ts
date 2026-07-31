@@ -166,9 +166,9 @@ describe('ChainOperatorExecutor', () => {
       mockConvertedPrompts,
       undefined,
       async () => ({
-        selectedFramework: { methodology: 'CAGEERF', name: 'CAGEERF' },
+        selectedFramework: { framework: 'CAGEERF', name: 'CAGEERF' },
         category: 'code',
-        systemPrompt: 'Apply the CAGEERF methodology with rigor.',
+        systemPrompt: 'Apply the CAGEERF framework with rigor.',
       })
     );
 
@@ -178,8 +178,8 @@ describe('ChainOperatorExecutor', () => {
       currentStepIndex: 0,
     });
 
-    expect(result.content).toContain('Framework Methodology Active');
-    expect(result.content).toContain('Apply the CAGEERF methodology with rigor.');
+    expect(result.content).toContain('Framework Framework Active');
+    expect(result.content).toContain('Apply the CAGEERF framework with rigor.');
   });
 
   test('uses step-level framework context when provided', async () => {
@@ -193,7 +193,7 @@ describe('ChainOperatorExecutor', () => {
           promptId: 'analyze',
           args: { code: 'context' },
           frameworkContext: {
-            selectedFramework: { name: 'SCAMPER', methodology: 'SCAMPER' },
+            selectedFramework: { name: 'SCAMPER', framework: 'SCAMPER' },
             systemPrompt: 'Use SCAMPER for ideation.',
           } as any,
         },
@@ -207,8 +207,8 @@ describe('ChainOperatorExecutor', () => {
 
   test('skips duplicate framework banners when prompt already contains guidance', async () => {
     const frameworkResolver = jest.fn().mockResolvedValue({
-      selectedFramework: { methodology: 'CAGEERF', name: 'CAGEERF' },
-      systemPrompt: 'Apply the methodology.',
+      selectedFramework: { framework: 'CAGEERF', name: 'CAGEERF' },
+      systemPrompt: 'Apply the framework.',
     });
 
     const executor = new ChainOperatorExecutor(
@@ -216,7 +216,7 @@ describe('ChainOperatorExecutor', () => {
       [
         {
           ...mockConvertedPrompts[0],
-          systemMessage: 'You are operating under the C.A.G.E.E.R.F methodology for prompts.',
+          systemMessage: 'You are operating under the C.A.G.E.E.R.F framework for prompts.',
         },
       ],
       undefined,
@@ -230,9 +230,9 @@ describe('ChainOperatorExecutor', () => {
     });
 
     expect(frameworkResolver).not.toHaveBeenCalled();
-    expect(result.content).not.toContain('Framework Methodology Active');
+    expect(result.content).not.toContain('Framework Framework Active');
     expect(result.content).toContain(
-      'You are operating under the C.A.G.E.E.R.F methodology for prompts.'
+      'You are operating under the C.A.G.E.E.R.F framework for prompts.'
     );
   });
 
@@ -381,7 +381,7 @@ describe('ChainOperatorExecutor', () => {
         {
           gateId: 'framework-compliance',
           gateName: 'Framework Compliance',
-          criteriaSummary: 'Follow methodology',
+          criteriaSummary: 'Follow framework',
           metadata: { stepNumber: 2 },
         },
       ],

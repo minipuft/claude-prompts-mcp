@@ -12,10 +12,10 @@
  * Used to prevent duplicate injection of framework system prompts.
  */
 export const FRAMEWORK_INDICATORS = [
-  'Apply the C.A.G.E.E.R.F methodology systematically',
-  'Apply the ReACT methodology systematically',
-  'Apply the 5W1H methodology systematically',
-  'Apply the SCAMPER methodology systematically',
+  'Apply the C.A.G.E.E.R.F framework systematically',
+  'Apply the ReACT framework systematically',
+  'Apply the 5W1H framework systematically',
+  'Apply the SCAMPER framework systematically',
   'You are operating under the C.A.G.E.E.R.F',
   'You are operating under the ReACT',
   'You are operating under the 5W1H',

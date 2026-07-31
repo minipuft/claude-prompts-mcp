@@ -275,7 +275,7 @@ export interface ToolDescription {
     disabled?: string;
     parametersEnabled?: Record<string, ToolParameter | string>;
     parametersDisabled?: Record<string, ToolParameter | string>;
-    methodologies?: Record<string, string>;
+    frameworks?: Record<string, string>;
     frameworkParameters?: Record<string, Record<string, ToolParameter | string>>;
   };
 }

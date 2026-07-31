@@ -13,7 +13,7 @@ import {
 
 import type { FrameworkGuide } from '../../../../src/engine/frameworks/types/index.js';
 
-describe('YAML Methodology Loading', () => {
+describe('YAML Framework Loading', () => {
   beforeAll(() => {
     // Reset loader to ensure clean state
     resetDefaultRuntimeLoader();
@@ -31,7 +31,7 @@ describe('YAML Methodology Loading', () => {
       expect(frameworks.length).toBeGreaterThanOrEqual(4);
     });
 
-    it('loads each built-in methodology definition', () => {
+    it('loads each built-in framework definition', () => {
       const loader = getDefaultRuntimeLoader();
       const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
 
@@ -45,9 +45,9 @@ describe('YAML Methodology Loading', () => {
       }
     });
 
-    it('throws fail-fast error for missing methodology', () => {
+    it('throws fail-fast error for missing framework', () => {
       const loader = getDefaultRuntimeLoader();
-      const result = loader.loadFramework('nonexistent-methodology');
+      const result = loader.loadFramework('nonexistent-framework');
       expect(result).toBeUndefined();
     });
   });

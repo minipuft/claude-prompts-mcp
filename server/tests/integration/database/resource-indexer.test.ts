@@ -166,7 +166,7 @@ describe('ResourceIndexer', () => {
       const stats = indexer.getStats();
       expect(stats.prompt).toBe(1);
       expect(stats.gate).toBe(1);
-      expect(stats.methodology).toBe(1);
+      expect(stats.framework).toBe(1);
       expect(stats.style).toBe(1);
     });
 
@@ -330,7 +330,7 @@ describe('ResourceIndexer', () => {
       const stats = indexer.getStats();
       expect(stats.prompt).toBe(3);
       expect(stats.gate).toBe(1);
-      expect(stats.methodology).toBe(0);
+      expect(stats.framework).toBe(0);
       expect(stats.style).toBe(0);
     });
   });

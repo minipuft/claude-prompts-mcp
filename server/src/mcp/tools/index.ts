@@ -538,7 +538,7 @@ export class McpToolRouter {
     this.logger.info(`🔧 Registering tools with framework-aware descriptions:`);
     this.logger.info(`   Framework enabled: ${frameworkEnabled}`);
     this.logger.info(`   Active framework: ${activeFramework?.id ?? 'none'}`);
-    this.logger.info(`   Active methodology: ${activeFrameworkType ?? 'none'}`);
+    this.logger.info(`   Active framework: ${activeFrameworkType ?? 'none'}`);
     this.logger.info(
       `   Tool description manager: ${
         this.toolDescriptionLoader != null ? 'available' : 'not available'
@@ -569,7 +569,7 @@ export class McpToolRouter {
       // Log which description source is being used for transparency
       if (this.toolDescriptionLoader != null) {
         this.logger.info(
-          `   prompt_engine: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, methodology: ${activeFrameworkType})`
+          `   prompt_engine: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, framework: ${activeFrameworkType})`
         );
       } else {
         this.logger.info(
@@ -735,7 +735,7 @@ export class McpToolRouter {
       // Log which description source is being used for transparency
       if (this.toolDescriptionLoader != null) {
         this.logger.info(
-          `   system_control: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, methodology: ${activeFrameworkType})`
+          `   system_control: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, framework: ${activeFrameworkType})`
         );
       } else {
         this.logger.info(

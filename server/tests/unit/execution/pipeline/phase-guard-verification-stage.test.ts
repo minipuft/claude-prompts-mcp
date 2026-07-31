@@ -470,7 +470,7 @@ describe('PhaseGuardVerificationStage', () => {
     expect(sessionStore.setPendingGateReview).not.toHaveBeenCalled();
   });
 
-  test('skips when methodology guide returns undefined', async () => {
+  test('skips when framework guide returns undefined', async () => {
     const registry = {
       getFrameworkGuide: jest
         .fn<(id: string) => FrameworkGuide | undefined>()

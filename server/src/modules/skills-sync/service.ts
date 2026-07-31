@@ -449,7 +449,7 @@ function validateSkillsSyncOptions(opts: SkillsSyncOptions): void {
 
   if (opts.resourceType != null && !VALID_RESOURCE_TYPES.has(opts.resourceType)) {
     throw usageError(
-      `Invalid resource type: ${opts.resourceType}. Expected one of: prompt, gate, methodology, style.`
+      `Invalid resource type: ${opts.resourceType}. Expected one of: prompt, gate, framework, style.`
     );
   }
 
@@ -1054,7 +1054,7 @@ async function loadFrameworkIR(methDir: string): Promise<SkillIR> {
   return {
     id: data.id,
     name: data.name,
-    description: `${data.name} methodology (${data.type})`,
+    description: `${data.name} framework (${data.type})`,
     resourceType: 'framework',
     category: null,
     enabled: data.enabled ?? true,
@@ -1197,7 +1197,7 @@ async function loadAllResources(
         try {
           resources.push(await loadFrameworkIR(path.join(methBase, md.name)));
         } catch (e) {
-          output.error(`  skip methodology ${md.name}: ${(e as Error).message}`);
+          output.error(`  skip framework ${md.name}: ${(e as Error).message}`);
         }
       }
     } catch {
@@ -3364,7 +3364,7 @@ Commands:
 Options:
   --client <id|all>           Target client (${Object.keys(CLIENT_REGISTRY).join(', ')}, all)
   --scope <user|project>      Output scope (default: user)
-  --resource-type <type>      Filter by type (prompt, gate, methodology, style)
+  --resource-type <type>      Filter by type (prompt, gate, framework, style)
   --id <resourceId>           Filter to single resource
   --prune                     For sync: delete stale managed skills (default)
   --no-prune                  For sync: skip stale managed skill deletion

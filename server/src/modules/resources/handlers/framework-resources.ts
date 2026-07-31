@@ -100,7 +100,7 @@ export function registerFrameworkResources(
       list: undefined, // Individual items discovered via list resource
     }),
     {
-      description: 'Individual methodology with definition and execution guidelines',
+      description: 'Individual framework with definition and execution guidelines',
       mimeType: 'text/markdown',
     },
     async (uri, variables): Promise<ReadResourceResult> => {
@@ -109,10 +109,10 @@ export function registerFrameworkResources(
       const framework = frameworkManager.getFramework(id);
 
       if (framework === undefined) {
-        throw new ResourceNotFoundError('Methodology', id);
+        throw new ResourceNotFoundError('Framework', id);
       }
 
-      logger.debug(`[FrameworkResources] Reading methodology: ${id}`);
+      logger.debug(`[FrameworkResources] Reading framework: ${id}`);
 
       // Build full framework content with metadata header
       const content = buildFrameworkContent(framework);
@@ -131,12 +131,12 @@ export function registerFrameworkResources(
 
   // Resource: Raw system prompt template only (for minimal token usage)
   server.registerResource(
-    'methodology-system-prompt',
+    'framework-system-prompt',
     new ResourceTemplate(RESOURCE_URI_PATTERNS.FRAMEWORK_SYSTEM_PROMPT, {
       list: undefined, // Discovered via framework/{id} resource
     }),
     {
-      description: 'Raw methodology system prompt template only',
+      description: 'Raw framework system prompt template only',
       mimeType: 'text/markdown',
     },
     async (uri, variables): Promise<ReadResourceResult> => {
@@ -145,7 +145,7 @@ export function registerFrameworkResources(
       const framework = frameworkManager.getFramework(id);
 
       if (framework === undefined) {
-        throw new ResourceNotFoundError('Methodology', id);
+        throw new ResourceNotFoundError('Framework', id);
       }
 
       logger.debug(`[FrameworkResources] Reading system prompt for: ${id}`);
@@ -165,7 +165,7 @@ export function registerFrameworkResources(
     }
   );
 
-  logger.info('[FrameworkResources] Registered methodology resources');
+  logger.info('[FrameworkResources] Registered framework resources');
 }
 
 /**

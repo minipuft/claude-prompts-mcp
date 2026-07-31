@@ -69,7 +69,7 @@ export class FrameworkActionHandler extends ActionHandler {
     response += `**Description**: ${framework.description}\n`;
     response += `**Type**: ${framework.type}\n\n`;
     response += `**Guidelines**: ${framework.executionGuidelines.join(' • ')}\n\n`;
-    response += `✅ All future prompt executions will now use the ${framework.id} methodology.`;
+    response += `✅ All future prompt executions will now use the ${framework.id} framework.`;
 
     return this.createMinimalSystemResponse(response, 'switch_framework');
   }
@@ -127,7 +127,7 @@ export class FrameworkActionHandler extends ActionHandler {
 
     if (frameworkIds.length > 0) {
       response += `\n📦 Data-driven frameworks: ${frameworkIds.length} available`;
-      response += `\n🔍 Use \`operation:"list_frameworks"\` for methodology-specific details`;
+      response += `\n🔍 Use \`operation:"list_frameworks"\` for framework-specific details`;
     }
 
     response += `\n🔄 Switch frameworks using: action="framework", operation="switch", framework="<name>"`;
@@ -143,7 +143,7 @@ export class FrameworkActionHandler extends ActionHandler {
       const available = runtimeLoader.discoverFrameworks();
       return this.createMinimalSystemResponse(
         `📋 **Available Frameworks**\n\n` +
-          `Use \`operation:"inspect" methodology_id:"<id>"\` to inspect a specific methodology.\n\n` +
+          `Use \`operation:"inspect" methodology_id:"<id>"\` to inspect a specific framework.\n\n` +
           `Available: ${available.join(', ')}`,
         'inspect_methodology'
       );
@@ -154,13 +154,13 @@ export class FrameworkActionHandler extends ActionHandler {
     if (!definition) {
       const available = runtimeLoader.discoverFrameworks();
       return this.createMinimalSystemResponse(
-        `❌ **Methodology Not Found**: \`${frameworkId}\`\n\n` +
+        `❌ **Framework Not Found**: \`${frameworkId}\`\n\n` +
           `Available frameworks: ${available.join(', ')}`,
         'inspect_methodology'
       );
     }
 
-    let response = `🔍 **Methodology: ${definition.name}**\n\n`;
+    let response = `🔍 **Framework: ${definition.name}**\n\n`;
     response += `**ID**: ${definition.id}\n`;
     response += `**Version**: ${definition.version || '1.0.0'}\n`;
     response += `**Type**: ${definition.type}\n`;
@@ -211,7 +211,7 @@ export class FrameworkActionHandler extends ActionHandler {
       )}\n\n`;
     }
 
-    response += `💡 Use \`action:"framework" operation:"switch" framework:"${definition.id}"\` to activate this methodology.`;
+    response += `💡 Use \`action:"framework" operation:"switch" framework:"${definition.id}"\` to activate this framework.`;
 
     return this.createMinimalSystemResponse(response, 'inspect_methodology');
   }

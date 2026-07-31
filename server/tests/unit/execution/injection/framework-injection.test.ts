@@ -15,7 +15,7 @@ describe('isFrameworkInjected', () => {
       expect(isFrameworkInjected({ modifiers: { clean: true } })).toBe(false);
     });
 
-    it('reports injected under %judge, which forces the methodology in', () => {
+    it('reports injected under %judge, which forces the framework in', () => {
       // Mirrors InjectionDecisionService.checkModifiers: %judge forces system-prompt injection
       // so the judge selection phase always sees the framework.
       expect(isFrameworkInjected({ modifiers: { judge: true } })).toBe(true);
@@ -69,7 +69,7 @@ describe('isFrameworkInjected', () => {
       ).toBe(true);
     });
 
-    it('lets %judge force the methodology in over a prompt-level opt-out', () => {
+    it('lets %judge force the framework in over a prompt-level opt-out', () => {
       expect(
         isFrameworkInjected({
           modifiers: { judge: true },

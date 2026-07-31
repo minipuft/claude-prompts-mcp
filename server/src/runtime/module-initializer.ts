@@ -168,7 +168,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     ...(additionalFrameworksDirs.length > 0 ? { additionalFrameworksDirs } : {}),
   });
   if (isVerbose && additionalFrameworksDirs.length > 0) {
-    logger.info(`  📂 Additional methodology directories: ${additionalFrameworksDirs.join(', ')}`);
+    logger.info(`  📂 Additional framework directories: ${additionalFrameworksDirs.join(', ')}`);
   }
 
   const stylesDir = pathResolver?.getStylesPath();

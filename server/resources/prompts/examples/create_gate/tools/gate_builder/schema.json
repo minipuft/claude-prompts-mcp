@@ -100,9 +100,9 @@
             "maximum": 1,
             "description": "Pass threshold for LLM check"
           },
-          "methodology": {
+          "framework": {
             "type": "string",
-            "description": "Methodology ID for compliance check"
+            "description": "Framework ID for compliance check"
           },
           "min_compliance_score": {
             "type": "number",

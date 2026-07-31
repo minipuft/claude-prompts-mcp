@@ -161,12 +161,12 @@ export class FrameworkRegistry {
       this.guides.set(normalizedId, entry);
 
       this.logger.debug(
-        `Registered ${isBuiltIn ? 'built-in' : 'custom'} methodology guide: ${guide.frameworkName} (${guide.frameworkId}) [${source}]`
+        `Registered ${isBuiltIn ? 'built-in' : 'custom'} framework guide: ${guide.frameworkName} (${guide.frameworkId}) [${source}]`
       );
 
       return true;
     } catch (error) {
-      this.logger.error(`Failed to register methodology guide ${guide.frameworkId}:`, error);
+      this.logger.error(`Failed to register framework guide ${guide.frameworkId}:`, error);
       return false;
     }
   }
@@ -236,7 +236,7 @@ export class FrameworkRegistry {
     const entry = this.guides.get(guideId.toLowerCase());
     if (entry) {
       entry.enabled = enabled;
-      this.logger.info(`Methodology guide '${guideId}' ${enabled ? 'enabled' : 'disabled'}`);
+      this.logger.info(`Framework guide '${guideId}' ${enabled ? 'enabled' : 'disabled'}`);
       return true;
     }
 
@@ -255,12 +255,12 @@ export class FrameworkRegistry {
     const normalizedId = guideId.toLowerCase();
 
     if (!this.guides.has(normalizedId)) {
-      this.logger.warn(`Cannot unregister unknown methodology guide: ${guideId}`);
+      this.logger.warn(`Cannot unregister unknown framework guide: ${guideId}`);
       return false;
     }
 
     this.guides.delete(normalizedId);
-    this.logger.info(`Methodology guide '${guideId}' unregistered from registry`);
+    this.logger.info(`Framework guide '${guideId}' unregistered from registry`);
     return true;
   }
 
@@ -323,7 +323,7 @@ export class FrameworkRegistry {
       const definition = this.runtimeLoader.loadFramework(normalizedId);
 
       if (!definition) {
-        this.logger.warn(`Methodology '${id}' not found on disk`);
+        this.logger.warn(`Framework '${id}' not found on disk`);
         return false;
       }
 
@@ -334,12 +334,12 @@ export class FrameworkRegistry {
       const success = await this.registerGuide(guide, false, 'yaml-runtime');
 
       if (success) {
-        this.logger.info(`Dynamically loaded and registered methodology: ${id}`);
+        this.logger.info(`Dynamically loaded and registered framework: ${id}`);
       }
 
       return success;
     } catch (error) {
-      this.logger.error(`Failed to load and register methodology '${id}':`, error);
+      this.logger.error(`Failed to load and register framework '${id}':`, error);
       return false;
     }
   }
@@ -353,7 +353,7 @@ export class FrameworkRegistry {
    * All frameworks must be defined in resources/frameworks/<id>/framework.yaml.
    */
   private async loadBuiltInGuides(): Promise<void> {
-    this.logger.debug('Loading built-in methodology guides from YAML...');
+    this.logger.debug('Loading built-in framework guides from YAML...');
 
     // Required built-in framework IDs
     const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
@@ -370,7 +370,7 @@ export class FrameworkRegistry {
 
       if (!definition) {
         throw new Error(
-          `FATAL: Methodology '${id}' not found. Expected: resources/frameworks/${id}/framework.yaml`
+          `FATAL: Framework '${id}' not found. Expected: resources/frameworks/${id}/framework.yaml`
         );
       }
 
@@ -378,14 +378,14 @@ export class FrameworkRegistry {
       const success = await this.registerGuide(guide, true, 'yaml-runtime');
 
       if (!success) {
-        throw new Error(`Failed to register built-in methodology guide: ${id}`);
+        throw new Error(`Failed to register built-in framework guide: ${id}`);
       }
 
       loadedCount++;
-      this.logger.debug(`Loaded methodology from YAML: ${id}`);
+      this.logger.debug(`Loaded framework from YAML: ${id}`);
     }
 
-    this.logger.info(`Loaded ${loadedCount} built-in methodology guides from YAML`);
+    this.logger.info(`Loaded ${loadedCount} built-in framework guides from YAML`);
 
     // Discover and load additional frameworks from YAML
     const discoveredIds = this.runtimeLoader.discoverFrameworks();
@@ -398,11 +398,11 @@ export class FrameworkRegistry {
           const guide = createGenericGuide(definition);
           const success = await this.registerGuide(guide, false, 'yaml-runtime');
           if (success) {
-            this.logger.info(`Discovered additional methodology from YAML: ${id}`);
+            this.logger.info(`Discovered additional framework from YAML: ${id}`);
           }
         }
       } catch (error) {
-        this.logger.warn(`Failed to load discovered methodology '${id}':`, error);
+        this.logger.warn(`Failed to load discovered framework '${id}':`, error);
       }
     }
   }
@@ -411,7 +411,7 @@ export class FrameworkRegistry {
    * Load custom framework guides
    */
   private async loadCustomGuides(customGuides: FrameworkGuide[]): Promise<void> {
-    this.logger.debug(`Loading ${customGuides.length} custom methodology guides...`);
+    this.logger.debug(`Loading ${customGuides.length} custom framework guides...`);
 
     for (const guide of customGuides) {
       const success = await this.registerGuide(guide, false);
@@ -420,7 +420,7 @@ export class FrameworkRegistry {
       }
     }
 
-    this.logger.info(`Loaded ${customGuides.length} custom methodology guides`);
+    this.logger.info(`Loaded ${customGuides.length} custom framework guides`);
   }
 
   /**

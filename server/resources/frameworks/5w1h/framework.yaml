@@ -4,7 +4,7 @@ type: 5W1H
 version: 1.0.0
 enabled: true
 systemPromptGuidance: >
-  Apply the 5W1H methodology systematically:
+  Apply the 5W1H framework systematically:
 
 
   **Who**: Identify all stakeholders, actors, and people involved or affected
@@ -85,9 +85,9 @@ frameworkGates:
 templateSuggestions:
   - section: system
     type: addition
-    description: Add 5W1H methodology guidance
+    description: Add 5W1H framework guidance
     content: >
-      Apply the 5W1H methodology systematically: Who (stakeholders), What
+      Apply the 5W1H framework systematically: Who (stakeholders), What
       (objectives), When (timing), Where (context), Why (purpose), How
       (methods). Ensure comprehensive coverage of all questions for thorough
       analysis.
@@ -173,7 +173,7 @@ toolDescriptions:
       SYNTAX:
       - >>prompt_id key:"value"              # Run prompt with arguments
       - >>step1 --> >>step2                  # Chain multiple steps
-      - @5W1H >>prompt                       # Apply 5W1H methodology
+      - @5W1H >>prompt                       # Apply 5W1H framework
       - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
       - :: verify:"cmd" loop:true            # Autonomous until pass
 
@@ -184,23 +184,23 @@ toolDescriptions:
   resource_manager:
     description: >
       🗂️ RESOURCE MANAGER [5W1H]: Unified CRUD for prompts, gates, and
-      methodologies.
+      frameworks.
 
 
-      USAGE: resource_manager(resource_type:"prompt|gate|methodology",
+      USAGE: resource_manager(resource_type:"prompt|gate|framework",
       action:"...", ...)
 
-      RESOURCE TYPES: prompt (templates), gate (quality criteria), methodology
+      RESOURCE TYPES: prompt (templates), gate (quality criteria), framework
       (frameworks)
 
       ACTIONS: create | update | delete | list | inspect | reload | switch
-      (methodology only)
+      (framework only)
 
 
       Use action:"guide" with goal:"who/what/when/where/why/how" for
       question-specific recommendations.
     parameters:
-      resource_type: "Type of resource: 'prompt', 'gate', or 'methodology'"
+      resource_type: "Type of resource: 'prompt', 'gate', or 'framework'"
       action: >-
         Use 'guide' with goal:'who/what/when/where/why/how' for
         question-specific recommendations.

@@ -114,7 +114,7 @@ executionTypeEnhancements:
 
 templateEnhancements:
   systemPromptAdditions:
-    - Apply ReACT methodology with reasoning-action cycles
+    - Apply ReACT framework with reasoning-action cycles
     - Think systematically before taking actions
     - Observe and analyze results after each action
     - Adjust approach based on observations

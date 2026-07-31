@@ -277,7 +277,7 @@ export class PromptGuidanceService {
     if (template.includes('{FRAMEWORK_GUIDANCE}')) {
       enhancedPromptText = template.replace('{FRAMEWORK_GUIDANCE}', guidance);
     } else {
-      enhancedPromptText = `${template}\n\n## ${framework.type} Methodology\n\n${guidance}`;
+      enhancedPromptText = `${template}\n\n## ${framework.type} Framework\n\n${guidance}`;
     }
 
     // Apply simple variable substitution
@@ -388,14 +388,14 @@ export class PromptGuidanceService {
   /**
    * Get framework guide for framework
    */
-  private async getFrameworkGuide(methodology: string): Promise<FrameworkGuide> {
+  private async getFrameworkGuide(framework: string): Promise<FrameworkGuide> {
     if (!this.frameworkManager) {
       throw new Error('FrameworkManager not set');
     }
 
-    const guide = this.frameworkManager.getFrameworkGuide(methodology);
+    const guide = this.frameworkManager.getFrameworkGuide(framework);
     if (!guide) {
-      throw new Error(`Methodology guide for ${methodology} not found`);
+      throw new Error(`Framework guide for ${framework} not found`);
     }
 
     return guide;

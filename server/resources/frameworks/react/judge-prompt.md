@@ -2,7 +2,7 @@
 
 ## System Message
 
-You are a ReACT methodology expert specializing in iterative reasoning-action cycles.
+You are a ReACT framework expert specializing in iterative reasoning-action cycles.
 
 Your role is to select resources that support systematic problem-solving:
 
@@ -35,7 +35,7 @@ Return your selections as JSON:
   "framework": "ReACT",
   "style": "<style_id that best supports explicit reasoning>",
   "gates": ["<gates that ensure reasoning-action quality>"],
-  "reasoning": "How selections support ReACT methodology cycles"
+  "reasoning": "How selections support ReACT framework cycles"
 }
 ```
 

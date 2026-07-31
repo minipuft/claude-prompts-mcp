@@ -44,10 +44,10 @@ export class FrameworkLifecycleProcessor {
     const { id, name, framework, system_prompt_guidance } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for create action');
+      return this.error('Framework ID is required for create action');
     }
     if (name === undefined || name === '') {
-      return this.error('Methodology name is required for create action');
+      return this.error('Framework name is required for create action');
     }
 
     // Auto-derive type from id when the caller omits `framework`
@@ -58,7 +58,7 @@ export class FrameworkLifecycleProcessor {
     const exists = this.checkFrameworkExists(id);
     if (exists.inAnySource) {
       return this.error(
-        `Methodology '${id}' already exists in: ${exists.sources.join(', ')}. Use update action to modify.`
+        `Framework '${id}' already exists in: ${exists.sources.join(', ')}. Use update action to modify.`
       );
     }
 
@@ -83,7 +83,7 @@ export class FrameworkLifecycleProcessor {
     // Atomic create with rollback on failure
     const result = await this.createFrameworkAtomic(id, frameworkData);
     if (!result.success) {
-      return this.error(`Failed to create methodology: ${result.error}`);
+      return this.error(`Failed to create framework: ${result.error}`);
     }
 
     // Trigger refresh for any dependent systems
@@ -96,27 +96,27 @@ export class FrameworkLifecycleProcessor {
     const { id } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for update action');
+      return this.error('Framework ID is required for update action');
     }
 
     const existingFramework = this.ctx.frameworkManager.getFramework(id);
     if (existingFramework === undefined) {
-      return this.error(`Methodology '${id}' not found. Use create action to add new methodology.`);
+      return this.error(`Framework '${id}' not found. Use create action to add new framework.`);
     }
 
     // Load existing YAML files from disk
     const existingData = await this.ctx.fileService.loadExistingFramework(id);
     if (existingData === null) {
-      return this.error(`Failed to load methodology files for '${id}'. Files may be corrupted.`);
+      return this.error(`Failed to load framework files for '${id}'. Files may be corrupted.`);
     }
 
     // Capture before state for diff generation
     const beforeState: Record<string, unknown> = {
-      id: existingData.methodology['id'],
-      name: existingData.methodology['name'],
-      type: existingData.methodology['type'],
-      description: existingData.methodology['description'],
-      enabled: existingData.methodology['enabled'],
+      id: existingData.framework['id'],
+      name: existingData.framework['name'],
+      type: existingData.framework['type'],
+      description: existingData.framework['description'],
+      enabled: existingData.framework['enabled'],
     };
 
     // Build update data with ONLY the fields provided in the request
@@ -138,10 +138,10 @@ export class FrameworkLifecycleProcessor {
     // Build after state for diff generation
     const afterState: Record<string, unknown> = {
       id,
-      name: frameworkData.name ?? existingData.methodology['name'],
-      type: frameworkData.type ?? existingData.methodology['type'],
-      description: frameworkData.description ?? existingData.methodology['description'],
-      enabled: frameworkData.enabled ?? existingData.methodology['enabled'],
+      name: frameworkData.name ?? existingData.framework['name'],
+      type: frameworkData.type ?? existingData.framework['type'],
+      description: frameworkData.description ?? existingData.framework['description'],
+      enabled: frameworkData.enabled ?? existingData.framework['enabled'],
     };
 
     // Save version before update (auto-versioning)
@@ -167,11 +167,9 @@ export class FrameworkLifecycleProcessor {
 
       if (versionResult.success) {
         versionSaved = versionResult.version;
-        this.ctx.logger.debug(`Saved version ${versionSaved} for methodology ${id}`);
+        this.ctx.logger.debug(`Saved version ${versionSaved} for framework ${id}`);
       } else {
-        this.ctx.logger.warn(
-          `Failed to save version for methodology ${id}: ${versionResult.error}`
-        );
+        this.ctx.logger.warn(`Failed to save version for framework ${id}: ${versionResult.error}`);
       }
     }
 
@@ -179,7 +177,7 @@ export class FrameworkLifecycleProcessor {
     const result = await this.ctx.fileService.writeFrameworkFiles(frameworkData, existingData);
 
     if (!result.success) {
-      return this.error(`Failed to update methodology: ${result.error}`);
+      return this.error(`Failed to update framework: ${result.error}`);
     }
 
     // Trigger refresh to reload frameworks
@@ -193,7 +191,7 @@ export class FrameworkLifecycleProcessor {
     );
 
     let response =
-      `✅ Methodology '${id}' updated successfully\n\n` +
+      `✅ Framework '${id}' updated successfully\n\n` +
       `📁 Files updated:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n`;
 
     if (versionSaved !== undefined) {
@@ -213,25 +211,25 @@ export class FrameworkLifecycleProcessor {
     const { id, confirm } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for delete action');
+      return this.error('Framework ID is required for delete action');
     }
 
     if (confirm !== true) {
       return this.error(
-        `⚠️ Delete requires confirmation.\n\nTo delete methodology '${id}', set confirm: true`
+        `⚠️ Delete requires confirmation.\n\nTo delete framework '${id}', set confirm: true`
       );
     }
 
     const existingFramework = this.ctx.frameworkManager.getFramework(id);
     if (existingFramework === undefined) {
-      return this.error(`Methodology '${id}' not found`);
+      return this.error(`Framework '${id}' not found`);
     }
 
     // Prevent deleting built-in frameworks
     const builtInFrameworks = ['cageerf', 'react', '5w1h', 'scamper'];
     if (builtInFrameworks.includes(id.toLowerCase())) {
       return this.error(
-        `Cannot delete built-in methodology '${id}'. Only custom frameworks can be deleted.`
+        `Cannot delete built-in framework '${id}'. Only custom frameworks can be deleted.`
       );
     }
 
@@ -240,7 +238,7 @@ export class FrameworkLifecycleProcessor {
     const frameworkDir = path.join(serverRoot, 'resources', 'frameworks', id.toLowerCase());
 
     if (!existsSync(frameworkDir)) {
-      return this.error(`Methodology directory not found: ${frameworkDir}`);
+      return this.error(`Framework directory not found: ${frameworkDir}`);
     }
 
     // Remove framework directory
@@ -248,7 +246,7 @@ export class FrameworkLifecycleProcessor {
       await fs.rm(frameworkDir, { recursive: true });
     } catch (error) {
       return this.error(
-        `Failed to delete methodology directory: ${
+        `Failed to delete framework directory: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -264,7 +262,7 @@ export class FrameworkLifecycleProcessor {
     await this.ctx.onRefresh?.();
 
     return this.success(
-      `✅ Methodology '${id}' deleted successfully\n\n` +
+      `✅ Framework '${id}' deleted successfully\n\n` +
         `📁 Directory removed: ${frameworkDir}\n\n` +
         `🔄 Framework registry updated`
     );
@@ -274,12 +272,12 @@ export class FrameworkLifecycleProcessor {
     const { id, reason } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for reload action');
+      return this.error('Framework ID is required for reload action');
     }
 
     const existingFramework = this.ctx.frameworkManager.getFramework(id);
     if (existingFramework === undefined) {
-      return this.error(`Methodology '${id}' not found`);
+      return this.error(`Framework '${id}' not found`);
     }
 
     // Trigger full refresh (framework registry doesn't have per-item reload)
@@ -287,14 +285,14 @@ export class FrameworkLifecycleProcessor {
 
     const reasonText = reason !== undefined && reason !== '' ? ` (reason: ${reason})` : '';
 
-    return this.success(`🔄 Methodology '${id}' reloaded successfully${reasonText}`);
+    return this.success(`🔄 Framework '${id}' reloaded successfully${reasonText}`);
   }
 
   async handleSwitch(args: FrameworkManagerInput): Promise<ToolResponse> {
     const { id, reason } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for switch action');
+      return this.error('Framework ID is required for switch action');
     }
 
     const targetFramework = this.ctx.frameworkManager.getFramework(id);
@@ -303,7 +301,7 @@ export class FrameworkLifecycleProcessor {
         .listFrameworks(true)
         .map((f) => f.id)
         .join(', ');
-      return this.error(`Methodology '${id}' not found.\n\nAvailable: ${availableFrameworks}`);
+      return this.error(`Framework '${id}' not found.\n\nAvailable: ${availableFrameworks}`);
     }
 
     // Check if already active

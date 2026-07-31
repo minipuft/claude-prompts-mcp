@@ -29,7 +29,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     rmSync(workspaceDir, { recursive: true, force: true });
   });
 
-  it('rolls back id-only methodology payloads that fail schema validation', async () => {
+  it('rolls back id-only framework payloads that fail schema validation', async () => {
     const service = new FrameworkFileWriter({ logger, configManager });
     const result = await service.writeFrameworkFiles({
       id: 'incomplete-method',
@@ -42,7 +42,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     expect(existsSync(frameworkDir)).toBe(false);
   });
 
-  it('writes valid methodology payloads with all required fields', async () => {
+  it('writes valid framework payloads with all required fields', async () => {
     const service = new FrameworkFileWriter({ logger, configManager });
     const result = await service.writeFrameworkFiles({
       id: 'complete-method',
@@ -63,11 +63,11 @@ describe('FrameworkFileWriter canonical writes', () => {
     expect(content).toMatch(/version:\s*["']?1\.0\.0["']?/);
   });
 
-  it('writes phases and prompt files for rich methodology payloads', async () => {
+  it('writes phases and prompt files for rich framework payloads', async () => {
     const service = new FrameworkFileWriter({ logger, configManager });
     const result = await service.writeFrameworkFiles({
       id: 'e2e-test',
-      name: 'E2E Test Methodology',
+      name: 'E2E Test Framework',
       type: 'E2E_TEST',
       system_prompt_guidance: 'Apply E2E principles.',
       judge_prompt: 'Evaluate against E2E policy.',
@@ -82,7 +82,7 @@ describe('FrameworkFileWriter canonical writes', () => {
     expect(existsSync(join(frameworkDir, 'phases.yaml'))).toBe(true);
   });
 
-  it('merges updates onto existing methodology data instead of overwriting', async () => {
+  it('merges updates onto existing framework data instead of overwriting', async () => {
     const service = new FrameworkFileWriter({ logger, configManager });
     await service.writeFrameworkFiles({
       id: 'merge-test',

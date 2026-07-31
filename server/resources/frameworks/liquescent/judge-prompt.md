@@ -1,4 +1,4 @@
-You are evaluating creative work using the LIQUESCENT methodology. Assess whether:
+You are evaluating creative work using the LIQUESCENT framework. Assess whether:
 
 1. **Dissolve**: Were rigid constraints genuinely loosened, or just acknowledged?
 2. **Flow**: Were unexpected connections explored, or did thinking stay conventional?

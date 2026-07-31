@@ -112,10 +112,10 @@ export function createFrameworkEnhancement(
   return {
     systemPromptGuidance: definition.systemPromptGuidance,
     processingEnhancements: convertProcessingSteps(processingSteps),
-    methodologyGates: convertFrameworkGates(frameworkGates),
+    frameworkGates: convertFrameworkGates(frameworkGates),
     templateSuggestions: convertTemplateSuggestions(templateSuggestions),
     enhancementMetadata: {
-      methodology: definition.type,
+      frameworkType: definition.type,
       confidence,
       applicabilityReason: `${definition.type} framework provides systematic approach`,
       appliedAt: new Date(),

@@ -184,7 +184,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
     expect(result.gateIds).toEqual(['content-structure']);
   });
 
-  test('methodology nesting binds every rank, including the caller', async () => {
+  test('framework nesting binds every rank, including the caller', async () => {
     const resolver = buildResolver(
       createLogger(),
       createGateManager(),
@@ -202,7 +202,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
     // Coherence invariant: nothing scores adherence to a framework that was not injected,
     // even when the caller asked for it by name at rank 100.
     expect(result.gateIds).toEqual(['code-quality']);
-    expect(result.vetoed.get('framework-compliance')).toBe('methodology-nesting');
+    expect(result.vetoed.get('framework-compliance')).toBe('framework-nesting');
   });
 
   test('framework_gates:false binds only up to rank 60, unlike nesting', async () => {
@@ -232,7 +232,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
     expect(callerAsked.gateIds).toEqual(['framework-compliance']);
   });
 
-  test('no methodology gate ids means no methodology veto is built', async () => {
+  test('no framework gate ids means no framework veto is built', async () => {
     const resolver = buildResolver(
       createLogger(),
       createGateManager(['content-structure']),
@@ -244,7 +244,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
     expect(result.gateIds).toEqual(['content-structure']);
   });
 
-  test('a failing gate loader degrades to no methodology veto rather than throwing', async () => {
+  test('a failing gate loader degrades to no framework veto rather than throwing', async () => {
     const logger = createLogger();
     const failingLoader = {
       getFrameworkGateIds: jest.fn(async () => {
@@ -276,7 +276,7 @@ describe('GateSetResolver — fixes delivered by routing enhancement through one
     expect(result.vetoed.get('content-structure')).toBe('exclude');
   });
 
-  test('framework_gates:false removes a methodology-tier gate, not just a planned one', async () => {
+  test('framework_gates:false removes a framework-tier gate, not just a planned one', async () => {
     const resolver = buildResolver(
       createLogger(),
       createGateManager(),
@@ -311,7 +311,7 @@ describe('GateSetResolver — fixes delivered by routing enhancement through one
 
     // Operator configuration, not an author preference — it outranks an explicit request.
     expect(result.gateIds).toEqual(['content-structure']);
-    expect(result.vetoed.get('framework-compliance')).toBe('methodology-gates-disabled');
+    expect(result.vetoed.get('framework-compliance')).toBe('framework-gates-disabled');
   });
 
   test('plannedGateIds join the prompt-config tier and are vetoable by exclude', async () => {
@@ -464,7 +464,7 @@ describe('GateSetResolver — refactor baseline', () => {
     );
 
     expect(result.gateIds).toEqual(['content-structure']);
-    expect(result.vetoed.get('framework-compliance')).toBe('methodology-nesting');
+    expect(result.vetoed.get('framework-compliance')).toBe('framework-nesting');
   });
 
   test('autoAssignCategoryGates:false suppresses the registry-auto tier only', async () => {
@@ -495,7 +495,7 @@ describe('GateSetResolver — refactor baseline', () => {
   });
 });
 
-describe('GateSetResolver — methodology nesting driven by the real signal (plan item 2.4)', () => {
+describe('GateSetResolver — framework nesting driven by the real signal (plan item 2.4)', () => {
   // These compose the projection with the resolver rather than passing `frameworkInjected`
   // by hand. The hand-written cases above prove the veto works; these prove the signal that
   // reaches it in production is derived, not the literal `true` T1.5 shipped.
@@ -527,7 +527,7 @@ describe('GateSetResolver — methodology nesting driven by the real signal (pla
     const result = await resolveWith({ lean: true });
 
     expect(result.gateIds).not.toContain('framework-compliance');
-    expect(result.vetoed.get('framework-compliance')).toBe('methodology-nesting');
+    expect(result.vetoed.get('framework-compliance')).toBe('framework-nesting');
   });
 
   test('%lean leaves non-framework gates untouched', async () => {
@@ -544,7 +544,7 @@ describe('GateSetResolver — methodology nesting driven by the real signal (pla
     expect(sorted(result.gateIds)).toEqual(['content-structure', 'framework-compliance']);
   });
 
-  test('a prompt opting out of the methodology loses its methodology gates', async () => {
+  test('a prompt opting out of the framework loses its framework gates', async () => {
     const optedOut = makePrompt({
       injection: { 'system-prompt': { enabled: false } },
     });
@@ -552,10 +552,10 @@ describe('GateSetResolver — methodology nesting driven by the real signal (pla
     const result = await resolveWith(undefined, optedOut);
 
     expect(result.gateIds).toEqual(['content-structure']);
-    expect(result.vetoed.get('framework-compliance')).toBe('methodology-nesting');
+    expect(result.vetoed.get('framework-compliance')).toBe('framework-nesting');
   });
 
-  test('%judge keeps framework gates, since it forces the methodology in', async () => {
+  test('%judge keeps framework gates, since it forces the framework in', async () => {
     const result = await resolveWith({ judge: true });
 
     expect(result.gateIds).toContain('framework-compliance');

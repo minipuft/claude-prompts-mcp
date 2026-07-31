@@ -30,7 +30,7 @@ const buildFrameworkValidator = (): FrameworkValidator => {
     CAGEERF: {
       id: 'CAGEERF',
       name: 'CAGEERF',
-      description: 'Default methodology',
+      description: 'Default framework',
       systemPromptTemplate: 'Default prompt',
       executionGuidelines: [],
       applicableTypes: [],

@@ -224,7 +224,7 @@ describe('GateEnhancementStage', () => {
     expect(context.gateInstructions).toContain('Guidance:');
   });
 
-  test('filters methodology gates when disabled in framework config', async () => {
+  test('filters framework gates when disabled in framework config', async () => {
     const gateService = createGateService();
     const mockGateLoader = createMockGateLoader();
     const stage = createStage({

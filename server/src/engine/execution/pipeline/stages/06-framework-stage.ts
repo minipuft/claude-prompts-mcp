@@ -49,7 +49,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   private async loadFrameworkGateIds(): Promise<Set<string>> {
     if (!this.gateLoader) {
       this.logger.debug(
-        '[FrameworkResolutionStage] No GateLoader available for methodology gate detection'
+        '[FrameworkResolutionStage] No GateLoader available for framework gate detection'
       );
       return new Set();
     }
@@ -58,7 +58,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       const ids = await this.gateLoader.getFrameworkGateIds();
       return new Set(ids);
     } catch (error) {
-      this.logger.warn('[FrameworkResolutionStage] Failed to load methodology gate IDs', { error });
+      this.logger.warn('[FrameworkResolutionStage] Failed to load framework gate IDs', { error });
       return new Set();
     }
   }

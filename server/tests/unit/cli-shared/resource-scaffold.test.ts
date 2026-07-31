@@ -90,7 +90,7 @@ describe('resource-scaffold', () => {
       expect(existsSync(join(result.path!, 'guidance.md'))).toBe(true);
     });
 
-    it('creates methodology directory with YAML and system-prompt', () => {
+    it('creates framework directory with YAML and system-prompt', () => {
       const result = createResourceDir(tempDir, 'frameworks', 'my-method', {
         name: 'My Method',
         description: 'A custom method',

@@ -62,7 +62,7 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `llm_self_check` / `
 | Gate | Severity | Activation | Description |
 |------|----------|------------|-------------|
 | `creed-fidelity` | high | development · frameworks: RADIANT | CloudySky visual work must hold itself against the Materials Creed at the top of docs/DESIGN_BIBLE.md. The output states three things: the numbered creed line the work SERVES, the numbered line it most RISKS violating, and the observable check (tools/cdp probe, screenshot, or measured delta) that would catch the violation. If no CloudySky visual/aesthetic surface is in play, state "creed: n/a — no visual surface" and pass. |
-| `framework-compliance` | — | development, analysis, research, architecture, debugging, documentation, planning · frameworks: CAGEERF, ReACT, 5W1H, SCAMPER | Ensures responses follow the active framework methodology (CAGEERF, ReACT, 5W1H, SCAMPER). Requires BOTH a matching framework context AND a relevant prompt category to activate. This prevents methodology gates from applying to simple prompts like greetings. |
+| `framework-compliance` | — | development, analysis, research, architecture, debugging, documentation, planning · frameworks: CAGEERF, ReACT, 5W1H, SCAMPER | Ensures responses follow the active framework (CAGEERF, ReACT, 5W1H, SCAMPER). Requires BOTH a matching framework context AND a relevant prompt category to activate. This prevents framework gates from applying to simple prompts like greetings. |
 
 ---
 

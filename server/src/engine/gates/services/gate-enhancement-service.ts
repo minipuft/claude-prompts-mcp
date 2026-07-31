@@ -106,7 +106,7 @@ export class GateEnhancementService {
       const ids = await this.gateLoader.getFrameworkGateIds();
       return new Set(ids);
     } catch (error) {
-      this.logger.warn('[GateEnhancementService] Failed to load methodology gate IDs', { error });
+      this.logger.warn('[GateEnhancementService] Failed to load framework gate IDs', { error });
       return new Set();
     }
   }
@@ -151,7 +151,7 @@ export class GateEnhancementService {
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
     gatesConfig: GatesConfig | undefined,
-    methodologyGates: Set<string>,
+    frameworkGateIds: Set<string>,
     /** Canonical ids for this prompt's inline definitions, already registered by the caller. */
     inlineDefinitionGateIds: readonly string[] = []
   ): Promise<void> {
@@ -175,7 +175,7 @@ export class GateEnhancementService {
         promptInjection: prompt.injection,
       }),
       frameworkGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
-      knownFrameworkGateIds: [...methodologyGates],
+      knownFrameworkGateIds: [...frameworkGateIds],
       inlineOperatorGateIds: inlineGateIds,
       clientSelectedGateIds: clientSelectedGates,
       callerGateIds: registeredGates.temporaryGateIds,
@@ -189,14 +189,14 @@ export class GateEnhancementService {
       gateIds,
       gatesConfig,
       activeFrameworkId,
-      methodologyGates
+      frameworkGateIds
     );
 
     if (gatesConfig !== undefined && !gatesConfig.enableMethodologyGates) {
       const beforeCount = gateIds.length;
-      gateIds = gateIds.filter((gate) => !methodologyGates.has(gate));
+      gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
       if (beforeCount !== gateIds.length) {
-        context.diagnostics.info('GateEnhancement', 'Methodology gates filtered by config', {
+        context.diagnostics.info('GateEnhancement', 'Framework gates filtered by config', {
           filtered: beforeCount - gateIds.length,
           remaining: gateIds.length,
         });
@@ -273,7 +273,7 @@ export class GateEnhancementService {
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
     gatesConfig: GatesConfig | undefined,
-    methodologyGates: Set<string>,
+    frameworkGateIds: Set<string>,
     /**
      * Canonical ids for every step's inline definitions, registered up front by the caller.
      *
@@ -326,7 +326,7 @@ export class GateEnhancementService {
           promptInjection: prompt.injection,
         }),
         frameworkGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
-        knownFrameworkGateIds: [...methodologyGates],
+        knownFrameworkGateIds: [...frameworkGateIds],
         inlineOperatorGateIds: stepInlineGates,
         plannedGateIds: plannedGates,
         inlineDefinitionGateIds,
@@ -341,11 +341,11 @@ export class GateEnhancementService {
         gateIds,
         gatesConfig,
         activeFrameworkId,
-        methodologyGates
+        frameworkGateIds
       );
 
       if (gatesConfig !== undefined && !gatesConfig.enableMethodologyGates) {
-        gateIds = gateIds.filter((gate) => !methodologyGates.has(gate));
+        gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
       }
 
       gateIds = this.filterGatesByStepNumber(gateIds, step.stepNumber);
@@ -565,12 +565,12 @@ export class GateEnhancementService {
     gateIds: string[],
     gatesConfig: GatesConfig | undefined,
     activeFrameworkId: string | undefined,
-    methodologyGates: Set<string>
+    frameworkGateIds: Set<string>
   ): string[] {
     if (!gatesConfig?.enableMethodologyGates || !activeFrameworkId) {
       return gateIds;
     }
-    const hasFrameworkGate = gateIds.some((gate) => methodologyGates.has(gate));
+    const hasFrameworkGate = gateIds.some((gate) => frameworkGateIds.has(gate));
     if (hasFrameworkGate) {
       return gateIds;
     }

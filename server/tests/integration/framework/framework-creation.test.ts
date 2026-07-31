@@ -121,7 +121,7 @@ const createMockFileService = () => {
       if (data === undefined) return null;
       // Return ExistingFrameworkData structure (raw YAML representation)
       return {
-        methodology: data as unknown as Record<string, unknown>,
+        framework: data as unknown as Record<string, unknown>,
         phases: null,
         systemPrompt: data.system_prompt_guidance,
         judgePrompt: null,
@@ -134,10 +134,10 @@ const createMockFileService = () => {
     toFrameworkCreationData: jest.fn(
       (
         id: string,
-        existing: { methodology: Record<string, unknown>; systemPrompt: string | null }
+        existing: { framework: Record<string, unknown>; systemPrompt: string | null }
       ) => {
         // Convert ExistingFrameworkData back to FrameworkCreationData
-        const raw = existing.methodology;
+        const raw = existing.framework;
         const name = typeof raw['name'] === 'string' ? raw['name'] : undefined;
         const systemGuidance =
           existing.systemPrompt ??
@@ -148,8 +148,7 @@ const createMockFileService = () => {
         return {
           id,
           name,
-          methodology:
-            typeof raw['methodology'] === 'string' ? raw['methodology'] : id.toUpperCase(),
+          framework: typeof raw['methodology'] === 'string' ? raw['methodology'] : id.toUpperCase(),
           system_prompt_guidance: systemGuidance,
           ...raw, // Include all other fields
         } as FrameworkCreationData;
@@ -160,7 +159,7 @@ const createMockFileService = () => {
   };
 };
 
-describe('Methodology Creation Integration', () => {
+describe('Framework Creation Integration', () => {
   let logger: Logger;
   let configManager: ConfigManager;
   let frameworkManager: FrameworkManager;
@@ -186,13 +185,13 @@ describe('Methodology Creation Integration', () => {
   });
 
   describe('Validation Requirements', () => {
-    test('rejects methodology missing phases', async () => {
+    test('rejects framework missing phases', async () => {
       // Arrange: Framework without phases (should fail validation)
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'no-phases-test',
         name: 'No Phases Framework',
-        system_prompt_guidance: 'Apply this methodology.',
+        system_prompt_guidance: 'Apply this framework.',
         // Missing: phases
         // Missing: methodology_gates
       };
@@ -206,13 +205,13 @@ describe('Methodology Creation Integration', () => {
       expect(text).toContain('phases is required');
     });
 
-    test('rejects methodology missing methodology_gates', async () => {
+    test('rejects framework missing methodology_gates', async () => {
       // Arrange: Framework with phases but no gates
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'no-gates-test',
         name: 'No Gates Framework',
-        system_prompt_guidance: 'Apply this methodology.',
+        system_prompt_guidance: 'Apply this framework.',
         phases: [
           { id: 'phase1', name: 'Phase 1', description: 'First phase' },
           { id: 'phase2', name: 'Phase 2', description: 'Second phase' },
@@ -229,13 +228,13 @@ describe('Methodology Creation Integration', () => {
       expect(text).toContain('methodology_gates is required');
     });
 
-    test('creates valid methodology with all required fields', async () => {
+    test('creates valid framework with all required fields', async () => {
       // Arrange: Complete framework with all required fields
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'valid-test',
         name: 'Valid Test Framework',
-        system_prompt_guidance: 'Apply this methodology systematically.',
+        system_prompt_guidance: 'Apply this framework systematically.',
         phases: [
           { id: 'phase1', name: 'Phase 1', description: 'First phase' },
           { id: 'phase2', name: 'Phase 2', description: 'Second phase' },
@@ -264,13 +263,13 @@ describe('Methodology Creation Integration', () => {
   });
 
   describe('Completeness Scoring', () => {
-    test('shows 80% score for minimal valid methodology', async () => {
+    test('shows 80% score for minimal valid framework', async () => {
       // Arrange: Minimal valid framework (only required fields)
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'minimal-valid',
         name: 'Minimal Valid Framework',
-        system_prompt_guidance: 'Apply this methodology.',
+        system_prompt_guidance: 'Apply this framework.',
         phases: [
           { id: 'phase1', name: 'Phase 1', description: 'First' },
           { id: 'phase2', name: 'Phase 2', description: 'Second' },
@@ -303,7 +302,7 @@ describe('Methodology Creation Integration', () => {
         id: 'enhanced-test',
         name: 'Enhanced Test Framework',
         description: 'A complete framework', // +5%
-        system_prompt_guidance: 'Apply this methodology.',
+        system_prompt_guidance: 'Apply this framework.',
         phases: [
           { id: 'phase1', name: 'Phase 1', description: 'First' },
           { id: 'phase2', name: 'Phase 2', description: 'Second' },
@@ -424,7 +423,7 @@ describe('Methodology Creation Integration', () => {
       expect((response.content[0] as { text: string }).text).toContain('name is required');
     });
 
-    test('rejects duplicate methodology ID', async () => {
+    test('rejects duplicate framework ID', async () => {
       // Arrange: Create first framework (valid)
       const firstInput: FrameworkManagerInput = {
         action: 'create',
@@ -478,7 +477,7 @@ describe('Methodology Creation Integration', () => {
   });
 
   describe('Inspect Action', () => {
-    test('shows methodology details for existing methodology', async () => {
+    test('shows framework details for existing framework', async () => {
       // Arrange: Create a framework first
       const createInput: FrameworkManagerInput = {
         action: 'create',
@@ -515,7 +514,7 @@ describe('Methodology Creation Integration', () => {
       const text = (response.content[0] as { text: string }).text;
 
       // Should show basic details
-      expect(text).toContain('Methodology:');
+      expect(text).toContain('Framework:');
       expect(text).toContain('ID: inspect-test');
     });
   });

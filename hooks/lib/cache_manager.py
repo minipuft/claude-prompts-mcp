@@ -309,7 +309,7 @@ def is_valid_framework(framework: str) -> bool:
         framework: Framework name to validate (e.g., "CAGEERF", "ReACT")
 
     Returns:
-        True if framework exists in server's registered methodologies
+        True if framework exists in server's registered frameworks
     """
     valid = get_valid_frameworks()
     return framework.lower() in valid

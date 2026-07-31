@@ -85,7 +85,7 @@ export const GatePassCriteriaSchema = z
     forbidden_patterns: z.array(z.string()).optional(),
 
     // Framework compliance options
-    methodology: z.string().optional(),
+    framework: z.string().optional(),
     min_compliance_score: z.number().min(0).max(1).optional(),
     severity: z.enum(['warn', 'fail']).optional(),
     quality_indicators: z
@@ -141,8 +141,20 @@ export const GatePassCriteriaSchema = z
     script_tool_timeout: z.number().int().positive().optional(),
     /** Working directory for script execution */
     script_tool_working_dir: z.string().optional(),
+    /** @deprecated Pre-rename spelling of `framework`; folded in by the transform below. */
+    methodology: z.string().optional(),
   })
-  .passthrough(); // Allow additional fields for extensibility
+  .passthrough() // Allow additional fields for extensibility
+  // Fold the pre-rename spelling forward, matching what FrameworkSchema does for
+  // `methodologyGates`. Without this a gate authored before the rename still parses (passthrough
+  // keeps the key) but no typed consumer reads it, so the criterion silently evaluates as absent —
+  // the same failure mode that made every framework contribute zero gates.
+  .transform((data) => {
+    if (data.framework === undefined && data.methodology !== undefined) {
+      return { ...data, framework: data.methodology };
+    }
+    return data;
+  });
 
 export type GatePassCriteriaYaml = z.infer<typeof GatePassCriteriaSchema>;
 

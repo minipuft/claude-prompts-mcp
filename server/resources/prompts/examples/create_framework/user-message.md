@@ -110,7 +110,7 @@ Please fix the errors above and try again with corrected `framework_input`.
 {% else %}
 {# Design workflow: no framework_input provided, guide LLM to design #}
 
-Create a new framework framework with the following specifications:
+Create a new framework with the following specifications:
 
 **Name:** {{name}}
 **Core Concept:** {{concept}}

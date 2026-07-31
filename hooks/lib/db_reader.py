@@ -162,7 +162,7 @@ def get_valid_styles_from_db(conn: sqlite3.Connection | None = None) -> list[str
 
 
 def get_valid_frameworks_from_db(conn: sqlite3.Connection | None = None) -> list[str]:
-    """Get valid framework/methodology IDs from resource_index."""
+    """Get valid framework IDs from resource_index."""
     should_close = False
     if conn is None:
         conn = _connect_readonly()
@@ -171,7 +171,11 @@ def get_valid_frameworks_from_db(conn: sqlite3.Connection | None = None) -> list
         return []
 
     try:
-        cursor = conn.execute("SELECT LOWER(id) as id FROM resource_index WHERE type = 'methodology' ORDER BY id")
+        # `framework` is the value the indexer writes (IndexedResourceType in
+        # server/src/infra/database/resource-indexer.ts). This read is cross-language, so nothing
+        # in the TypeScript build can catch it drifting: it previously used the pre-rename spelling
+        # and silently returned zero rows, which the fail-open callers read as "DB unavailable".
+        cursor = conn.execute("SELECT LOWER(id) as id FROM resource_index WHERE type = 'framework' ORDER BY id")
         return [row["id"] for row in cursor]
     except sqlite3.Error:
         return []

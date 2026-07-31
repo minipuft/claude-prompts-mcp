@@ -44,7 +44,7 @@ describe('cli-shared import isolation', () => {
     expect(cliShared.validateGateSchema).toBeInstanceOf(Function);
   });
 
-  it('barrel file exports methodology schemas', async () => {
+  it('barrel file exports framework schemas', async () => {
     const cliShared = await import('../../../src/cli-shared/index.js');
     expect(cliShared.FrameworkSchema).toBeDefined();
     expect(cliShared.validateFrameworkSchema).toBeInstanceOf(Function);

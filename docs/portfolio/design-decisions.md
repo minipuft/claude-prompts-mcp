@@ -86,7 +86,7 @@ We expose **3 MCP tools** instead of 20+ specialized tools:
 | Tool               | Purpose                                |
 | ------------------ | -------------------------------------- |
 | `prompt_engine`    | Execute prompts and chains             |
-| `resource_manager` | CRUD for prompts, gates, methodologies |
+| `resource_manager` | CRUD for prompts, gates, frameworks    |
 | `system_control`   | Status, framework switching, analytics |
 
 **Why Consolidation?**
@@ -186,7 +186,7 @@ Three components prevent distributed state bugs:
 | Prompts           | `server/prompts/**/*.md`                      | FileObserver → PromptAssetManager |
 | Gates             | `server/resources/gates/*/gate.yaml`          | GateHotReloadCoordinator          |
 | Styles            | `server/resources/styles/*/style.yaml`        | StyleHotReloadCoordinator         |
-| Methodologies     | `server/resources/frameworks/*/*.yaml`        | MethodologyHotReload              |
+| Frameworks        | `server/resources/frameworks/*/*.yaml`        | FrameworkHotReload                |
 | Tool Descriptions | `_generated/tool-descriptions.contracts.json` | ToolDescriptionLoader             |
 
 ### Hot-Reload Strategy
@@ -202,11 +202,11 @@ Three components prevent distributed state bugs:
 
 ### Injection Types
 
-| Type             | Content                               | Default Frequency   |
-| ---------------- | ------------------------------------- | ------------------- |
-| `system-prompt`  | Methodology guidance (CAGEERF, ReACT) | Every 2 chain steps |
-| `gate-guidance`  | Quality validation criteria           | Every step          |
-| `style-guidance` | Response formatting                   | First step only     |
+| Type             | Content                             | Default Frequency   |
+| ---------------- | ----------------------------------- | ------------------- |
+| `system-prompt`  | Framework guidance (CAGEERF, ReACT) | Every 2 chain steps |
+| `gate-guidance`  | Quality validation criteria         | Every step          |
+| `style-guidance` | Response formatting                 | First step only     |
 
 ### 7-Level Resolution Hierarchy
 
@@ -246,7 +246,7 @@ server/resources/gates/
 | 80       | Temporary request      | Request-scoped gates               |
 | 60       | Prompt config          | Gates in prompt metadata           |
 | 50       | Chain-level            | Gates for entire chain             |
-| 40       | Methodology            | Framework-specific gates           |
+| 40       | Framework              | Framework-specific gates           |
 | 20       | Registry auto          | Default gates                      |
 
 **Why Priority-Based?**
@@ -331,4 +331,4 @@ This codebase balances **strict software engineering patterns** (pipelines, cont
 3. **Safety**: Validation at boundaries, graceful degradation on errors
 4. **Evolvability**: Internal structure changes without breaking external API
 
-The architecture enables experimentation (try different methodologies, gates, styles) while maintaining the guard rails that make production use safe.
+The architecture enables experimentation (try different frameworks, gates, styles) while maintaining the guard rails that make production use safe.

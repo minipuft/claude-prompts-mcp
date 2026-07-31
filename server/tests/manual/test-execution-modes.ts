@@ -39,14 +39,14 @@ const wordCountTool: LoadedScriptTool = {
 const frameworkBuilderTool: LoadedScriptTool = {
   id: 'framework_builder',
   name: 'Framework Builder',
-  description: 'Validates methodology definitions',
+  description: 'Validates framework definitions',
   scriptPath: 'script.py',
   runtime: 'python',
   inputSchema: {
     type: 'object',
     properties: {
       name: { type: 'string' },
-      methodology: { type: 'string' },
+      framework: { type: 'string' },
     },
     required: ['name', 'methodology'],
   },
@@ -60,7 +60,7 @@ const frameworkBuilderTool: LoadedScriptTool = {
     mode: 'confirm',
     trigger: 'parameter_match',
     confidence: 0.85,
-    confirmMessage: 'Create new methodology with the provided configuration?',
+    confirmMessage: 'Create new framework with the provided configuration?',
   },
 };
 
@@ -120,12 +120,10 @@ function runTests() {
 
   // ===== TEST 3: Confirm mode - pending confirmation =====
   console.log('\n--- TEST 3: Confirm mode (should require confirmation) ---');
-  const test3Matches = detectionService.detectTools(
-    '',
-    { name: 'TestMethod', methodology: 'TEST' },
-    [frameworkBuilderTool]
-  );
-  console.log('Args: { name: "TestMethod", methodology: "TEST" }');
+  const test3Matches = detectionService.detectTools('', { name: 'TestMethod', framework: 'TEST' }, [
+    frameworkBuilderTool,
+  ]);
+  console.log('Args: { name: "TestMethod", framework: "TEST" }');
   console.log('Matches:', test3Matches.length);
   if (test3Matches.length > 0) {
     console.log('  Tool:', test3Matches[0].toolId);
@@ -160,12 +158,12 @@ function runTests() {
     '',
     {
       name: 'TestMethod',
-      methodology: 'TEST',
+      framework: 'TEST',
       'tool:framework_builder': true, // Explicit request
     },
     [frameworkBuilderTool]
   );
-  console.log('Args: { name: "TestMethod", methodology: "TEST", "tool:framework_builder": true }');
+  console.log('Args: { name: "TestMethod", framework: "TEST", "tool:framework_builder": true }');
   console.log('Matches:', test4Matches.length);
   if (test4Matches.length > 0) {
     console.log('  Explicit:', test4Matches[0].explicitRequest);

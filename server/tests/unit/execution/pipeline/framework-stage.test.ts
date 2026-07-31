@@ -51,10 +51,10 @@ const createConvertedPrompt = (overrides: Partial<ConvertedPrompt> = {}): Conver
   ...overrides,
 });
 
-const createFrameworkContext = (methodology: FrameworkSelection): FrameworkExecutionContext => ({
+const createFrameworkContext = (framework: FrameworkSelection): FrameworkExecutionContext => ({
   category: 'analysis',
-  systemPrompt: `Use ${methodology}`,
-  selectedFramework: { name: methodology, methodology },
+  systemPrompt: `Use ${framework}`,
+  selectedFramework: { name: framework, framework },
 });
 
 describe('FrameworkResolutionStage', () => {
@@ -136,7 +136,7 @@ describe('FrameworkResolutionStage', () => {
     expect(context.frameworkContext).toBe(frameworkContext);
   });
 
-  test('applies frameworks to chain steps that require methodology gates', async () => {
+  test('applies frameworks to chain steps that require framework gates', async () => {
     const context = new ExecutionContext({ command: '>>chain' } as any);
     const stepOnePrompt = createConvertedPrompt({ id: 'first' });
     const stepTwoPrompt = createConvertedPrompt({ id: 'second' });

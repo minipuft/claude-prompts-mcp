@@ -116,7 +116,7 @@ executionTypeEnhancements:
         - Establish validation checkpoints for each step
 templateEnhancements:
   systemPromptAdditions:
-    - Apply 5W1H systematic questioning methodology
+    - Apply 5W1H systematic questioning framework
     - Address Who, What, When, Where, Why, How comprehensively
     - Ensure complete coverage of all stakeholders and requirements
     - Use systematic questioning to uncover hidden requirements

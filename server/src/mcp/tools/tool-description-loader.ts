@@ -60,8 +60,8 @@ const DEFAULT_TOOL_DESCRIPTION_ENTRIES: Array<[string, ToolDescription]> = [
     'resource_manager',
     {
       description:
-        '📦 RESOURCE MANAGER: Unified CRUD for prompts, gates, and methodologies. resource_type: prompt|gate|methodology. Actions: create|update|delete|list|inspect|reload + analyze_type|analyze_gates|guide (prompt only) + switch (methodology only).',
-      shortDescription: 'Manage prompts, gates, methodologies',
+        '📦 RESOURCE MANAGER: Unified CRUD for prompts, gates, and frameworks. resource_type: prompt|gate|framework. Actions: create|update|delete|list|inspect|reload + analyze_type|analyze_gates|guide (prompt only) + switch (framework only).',
+      shortDescription: 'Manage prompts, gates, frameworks',
       category: 'management',
     },
   ],
@@ -145,11 +145,11 @@ export class ToolDescriptionLoader extends EventEmitter {
   }
 
   private warnOnFrameworkConfigLeak(toolName: string, description: ToolDescription): void {
-    const hasFrameworkDesc = Boolean(description.frameworkAware?.methodologies);
+    const hasFrameworkDesc = Boolean(description.frameworkAware?.frameworks);
     const hasFrameworkParams = Boolean(description.frameworkAware?.frameworkParameters);
     if (hasFrameworkDesc || hasFrameworkParams) {
       this.logger.warn(
-        `[ToolDescriptionLoader] Config contains methodology-specific entries for ${toolName}; YAML overlays are the sole source of truth. Config methodology entries are ignored.`
+        `[ToolDescriptionLoader] Config contains framework-specific entries for ${toolName}; YAML overlays are the sole source of truth. Config framework entries are ignored.`
       );
     }
   }
@@ -282,7 +282,7 @@ export class ToolDescriptionLoader extends EventEmitter {
       this.isInitialized = true;
 
       this.logger.info(
-        `Synchronized tool descriptions (${reason}); source=${base.source}, framework=${activeContext.activeFramework || 'n/a'}, methodology=${activeContext.activeFrameworkType || 'n/a'}`
+        `Synchronized tool descriptions (${reason}); source=${base.source}, framework=${activeContext.activeFramework || 'n/a'}, framework=${activeContext.activeFrameworkType || 'n/a'}`
       );
 
       if (options?.emitChange ?? true) {
@@ -353,7 +353,7 @@ export class ToolDescriptionLoader extends EventEmitter {
 
     const applyFrameworkOverride = options?.applyFrameworkOverride ?? true;
     this.logger.debug(
-      `Getting description for ${toolName} (framework: ${frameworkEnabled}, methodology: ${activeFrameworkType})`
+      `Getting description for ${toolName} (framework: ${frameworkEnabled}, framework: ${activeFrameworkType})`
     );
     const frameworkKey = normalizeFrameworkKey(activeFrameworkType);
 
@@ -364,7 +364,7 @@ export class ToolDescriptionLoader extends EventEmitter {
         const frameworkDesc =
           frameworkDescs[toolName as keyof FrameworkToolDescriptions]!.description!;
         this.logger.debug(
-          `Using methodology-specific description from ${activeFrameworkType ?? frameworkKey} guide for ${toolName}`
+          `Using framework-specific description from ${activeFrameworkType ?? frameworkKey} guide for ${toolName}`
         );
         return frameworkDesc;
       }

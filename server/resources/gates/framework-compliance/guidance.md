@@ -3,5 +3,5 @@
 - 5W1H: Address Who, What, When, Where, Why, How in comprehensive analysis
 - SCAMPER: Apply creative thinking techniques (Substitute, Combine, Adapt, Modify, Put to other uses, Eliminate, Reverse)
 - Structure responses according to framework principles
-- Include systematic thinking and methodology awareness
+- Include systematic thinking and framework awareness
 - Show iterative improvement and refinement processes

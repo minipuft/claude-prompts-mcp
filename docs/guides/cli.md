@@ -48,7 +48,7 @@ cpm validate --styles
 | ------------------------ | ----------------------------------------------------- |
 | `--prompts`              | Validate prompts only                                 |
 | `--gates`                | Validate gates only                                   |
-| `--methodologies`        | Validate methodologies only                           |
+| `--frameworks`           | Validate frameworks only                              |
 | `--styles`               | Validate styles only                                  |
 | `--all`                  | Validate all resource types (default)                 |
 | `--config`               | Also validate `config.json` keys and values           |
@@ -81,7 +81,7 @@ cpm inspect framework cageerf -w server
 cpm inspect style analytical
 ```
 
-Accepts both singular and plural type names (`prompt`/`prompts`, `gate`/`gates`, `methodology`/`methodologies`, `style`/`styles`).
+Accepts both singular and plural type names (`prompt`/`prompts`, `gate`/`gates`, `framework`/`frameworks`, `style`/`styles`).
 
 ### init
 
@@ -217,7 +217,7 @@ Only prompts have categories — other resource types should use `rename` instea
 
 ### toggle
 
-Toggle the `enabled` field for methodologies or styles.
+Toggle the `enabled` field for frameworks or styles.
 
 ```bash
 cpm toggle framework cageerf --workspace server
@@ -230,7 +230,7 @@ cpm toggle style analytical --json
 | `-w, --workspace <path>` | Workspace directory                |
 | `--json`                 | JSON output                        |
 
-Flips `enabled: true` to `false` (or vice versa). Only methodologies and styles have an `enabled` field. Exit codes: `0` toggled, `1` error.
+Flips `enabled: true` to `false` (or vice versa). Only frameworks and styles have an `enabled` field. Exit codes: `0` toggled, `1` error.
 
 ### link-gate
 

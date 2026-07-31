@@ -93,11 +93,11 @@ export function registerResources(server: McpServer, dependencies: ResourceDepen
   const frameworksEnabled = cfg.frameworks?.enabled !== false;
   if (frameworksEnabled && dependencies.frameworkManager !== undefined) {
     registerFrameworkResources(server, dependencies);
-    logger.debug('[Resources] Methodology resources registered');
+    logger.debug('[Resources] Framework resources registered');
   } else if (!frameworksEnabled) {
-    logger.debug('[Resources] Methodology resources disabled by config');
+    logger.debug('[Resources] Framework resources disabled by config');
   } else {
-    logger.warn('[Resources] FrameworkManager not available, skipping methodology resources');
+    logger.warn('[Resources] FrameworkManager not available, skipping framework resources');
   }
 
   // Observability (sessions + metrics)

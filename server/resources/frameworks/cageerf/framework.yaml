@@ -1,4 +1,4 @@
-# CAGEERF Methodology Definition
+# CAGEERF Framework Definition
 # This YAML file is the source of truth for the CAGEERF framework (runtime-loaded; no build artifacts).
 
 id: cageerf
@@ -9,7 +9,7 @@ enabled: true
 
 # System prompt guidance injected when framework is active
 systemPromptGuidance: |
-  Apply the C.A.G.E.E.R.F methodology systematically:
+  Apply the C.A.G.E.E.R.F framework systematically:
 
   **Context**: Establish comprehensive situational awareness and environmental factors
   **Analysis**: Apply structured, systematic examination of the problem or opportunity
@@ -18,7 +18,7 @@ systemPromptGuidance: |
   **Evaluation**: Create robust success metrics and assessment methods
   **Refinement**: Enable continuous improvement and iteration processes
 
-  Ensure each phase builds logically on the previous phases while maintaining focus on practical, actionable outcomes. Consider stakeholder perspectives, resource constraints, and environmental factors throughout the methodology application.
+  Ensure each phase builds logically on the previous phases while maintaining focus on practical, actionable outcomes. Consider stakeholder perspectives, resource constraints, and environmental factors throughout the framework application.
 
 # Reference to phases file (inlined at build time)
 phasesFile: phases.yaml
@@ -31,7 +31,7 @@ gates:
   include:
     - framework-compliance
 
-# Methodology-specific quality gates
+# Framework-specific quality gates
 frameworkGates:
   - id: context_completeness
     name: Context Completeness
@@ -77,9 +77,9 @@ frameworkGates:
 templateSuggestions:
   - section: system
     type: addition
-    description: Add CAGEERF methodology guidance
+    description: Add CAGEERF framework guidance
     content: |
-      Apply the C.A.G.E.E.R.F methodology: establish Context, perform systematic Analysis, define clear Goals, plan Execution, create Evaluation criteria, and enable Refinement.
+      Apply the C.A.G.E.E.R.F framework: establish Context, perform systematic Analysis, define clear Goals, plan Execution, create Evaluation criteria, and enable Refinement.
     frameworkJustification: Ensures systematic application of CAGEERF principles
     impact: high
 
@@ -91,7 +91,7 @@ templateSuggestions:
     frameworkJustification: Guides comprehensive thinking through all CAGEERF phases
     impact: medium
 
-# Methodology elements for prompt creation guidance
+# Framework elements for prompt creation guidance
 frameworkElements:
   requiredSections:
     - Context
@@ -109,7 +109,7 @@ frameworkElements:
     Execution: Actionable steps and implementation approach
     Evaluation: Success criteria and measurement methods
     Refinement: Iteration and improvement processes
-    Framework: Overarching methodology and principles
+    Framework: Overarching framework and principles
 
 # Argument suggestions for prompt creation
 argumentSuggestions:
@@ -144,7 +144,7 @@ argumentSuggestions:
 toolDescriptions:
   prompt_engine:
     description: |
-      🚀 PROMPT ENGINE [CAGEERF]: Execute prompts with C.A.G.E.E.R.F methodology and ground-truth validation.
+      🚀 PROMPT ENGINE [CAGEERF]: Execute prompts with C.A.G.E.E.R.F framework and ground-truth validation.
 
       WHAT IT RETURNS: Prepared prompt + CAGEERF phase instructions (Context→Analysis→Goals→Execution→Evaluation→Refinement).
       WHAT YOU DO: Execute each phase yourself using the returned structure.
@@ -152,7 +152,7 @@ toolDescriptions:
       SYNTAX:
       - >>prompt_id key:"value"              # Run prompt with arguments
       - >>step1 --> >>step2                  # Chain multiple steps
-      - @CAGEERF >>prompt                    # Apply CAGEERF methodology
+      - @CAGEERF >>prompt                    # Apply CAGEERF framework
       - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
       - :: verify:"cmd" loop:true            # Autonomous until pass
 
@@ -162,15 +162,15 @@ toolDescriptions:
       command: 'Prompt ID to expand. Resulting prompt will include CAGEERF phase guidance for you to apply.'
   resource_manager:
     description: |
-      🗂️ RESOURCE MANAGER [CAGEERF]: Unified CRUD for prompts, gates, and methodologies.
+      🗂️ RESOURCE MANAGER [CAGEERF]: Unified CRUD for prompts, gates, and frameworks.
 
-      USAGE: resource_manager(resource_type:"prompt|gate|methodology", action:"...", ...)
-      RESOURCE TYPES: prompt (templates), gate (quality criteria), methodology (frameworks)
-      ACTIONS: create | update | delete | list | inspect | reload | switch (methodology only)
+      USAGE: resource_manager(resource_type:"prompt|gate|framework", action:"...", ...)
+      RESOURCE TYPES: prompt (templates), gate (quality criteria), framework (CAGEERF, ReACT, 5W1H, SCAMPER)
+      ACTIONS: create | update | delete | list | inspect | reload | switch (framework only)
 
       Use action:"guide" with resource_type:"prompt" for phase-appropriate recommendations.
     parameters:
-      resource_type: "Type of resource: 'prompt', 'gate', or 'methodology'"
+      resource_type: "Type of resource: 'prompt', 'gate', or 'framework'"
       action: "Use 'guide' with your current CAGEERF phase for phase-appropriate action recommendations."
   system_control:
     description: |

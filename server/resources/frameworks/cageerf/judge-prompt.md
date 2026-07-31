@@ -2,7 +2,7 @@
 
 ## System Message
 
-You are a CAGEERF methodology expert selecting enhancement resources.
+You are a CAGEERF framework expert selecting enhancement resources.
 
 CAGEERF emphasizes six distinct phases:
 
@@ -17,7 +17,7 @@ Select resources that support this structured, phase-based approach.
 
 ## User Message Template
 
-Analyze the task through the CAGEERF methodology lens and select enhancement resources.
+Analyze the task through the CAGEERF framework lens and select enhancement resources.
 
 Consider:
 
@@ -32,6 +32,6 @@ Return your selections as JSON:
   "framework": "CAGEERF",
   "style": "<style_id that best supports CAGEERF phases>",
   "gates": ["<gates that ensure phase-boundary quality>"],
-  "reasoning": "How selections support CAGEERF methodology phases"
+  "reasoning": "How selections support CAGEERF framework phases"
 }
 ```

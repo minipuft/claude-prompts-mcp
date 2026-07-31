@@ -33,7 +33,7 @@ export interface FrameworkFileWriterDependencies {
 }
 
 export interface ExistingFrameworkData {
-  methodology: Record<string, unknown>;
+  framework: Record<string, unknown>;
   phases: Record<string, unknown> | null;
   systemPrompt: string | null;
   judgePrompt: string | null;
@@ -100,10 +100,10 @@ export class FrameworkFileWriter {
     try {
       const { rm } = await import('fs/promises');
       await rm(frameworkDir, { recursive: true });
-      this.logger.debug(`Deleted methodology directory: ${frameworkDir}`);
+      this.logger.debug(`Deleted framework directory: ${frameworkDir}`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to delete methodology '${id}':`, error);
+      this.logger.error(`Failed to delete framework '${id}':`, error);
       return false;
     }
   }
@@ -120,8 +120,8 @@ export class FrameworkFileWriter {
     }
 
     try {
-      const methodology = await loadYamlFile<Record<string, unknown>>(frameworkPath);
-      if (methodology === undefined) {
+      const framework = await loadYamlFile<Record<string, unknown>>(frameworkPath);
+      if (framework === undefined) {
         this.logger.error(`Failed to parse framework.yaml for ${id}`);
         return null;
       }
@@ -129,7 +129,7 @@ export class FrameworkFileWriter {
       // Load phases.yaml if referenced
       let phases: Record<string, unknown> | null = null;
       let phasesPath: string | null = null;
-      const phasesFileRef = methodology['phasesFile'];
+      const phasesFileRef = framework['phasesFile'];
       if (phasesFileRef !== undefined && phasesFileRef !== null) {
         phasesPath = join(frameworkDir, String(phasesFileRef));
         if (existsSync(phasesPath)) {
@@ -148,7 +148,7 @@ export class FrameworkFileWriter {
       // Load judge-prompt.md if referenced
       let judgePrompt: string | null = null;
       let judgePromptPath: string | null = null;
-      const judgePromptFileRef = methodology['judgePromptFile'];
+      const judgePromptFileRef = framework['judgePromptFile'];
       if (judgePromptFileRef !== undefined && judgePromptFileRef !== null) {
         judgePromptPath = join(frameworkDir, String(judgePromptFileRef));
         if (existsSync(judgePromptPath)) {
@@ -157,7 +157,7 @@ export class FrameworkFileWriter {
       }
 
       return {
-        methodology,
+        framework,
         phases,
         systemPrompt,
         judgePrompt,
@@ -167,7 +167,7 @@ export class FrameworkFileWriter {
         judgePromptPath,
       };
     } catch (error) {
-      this.logger.error(`Error loading methodology ${id}:`, error);
+      this.logger.error(`Error loading framework ${id}:`, error);
       return null;
     }
   }
@@ -184,22 +184,22 @@ export class FrameworkFileWriter {
     id: string,
     existing: ExistingFrameworkData
   ): FrameworkCreationData | null {
-    const { methodology, phases, systemPrompt } = existing;
+    const { framework, phases, systemPrompt } = existing;
 
     // Extract required fields from raw YAML (use bracket notation for Record<string, unknown>)
-    const rawName = methodology['name'];
-    const rawSystemGuidance = methodology['system_prompt_guidance'];
+    const rawName = framework['name'];
+    const rawSystemGuidance = framework['system_prompt_guidance'];
     const name = typeof rawName === 'string' ? rawName : undefined;
     const systemGuidance =
       systemPrompt ?? (typeof rawSystemGuidance === 'string' ? rawSystemGuidance : undefined);
 
     if (name === undefined || systemGuidance === undefined) {
-      this.logger.debug(`Methodology '${id}' missing required fields for completeness check`);
+      this.logger.debug(`Framework '${id}' missing required fields for completeness check`);
       return null;
     }
 
     // Build typed creation data from raw YAML fields
-    const rawTypeValue = methodology['type'];
+    const rawTypeValue = framework['type'];
     const data: FrameworkCreationData = {
       id,
       name,
@@ -208,11 +208,11 @@ export class FrameworkFileWriter {
     };
 
     // Map optional fields from framework.yaml (use bracket notation)
-    const rawDescription = methodology['description'];
-    const rawType = methodology['type'];
-    const rawEnabled = methodology['enabled'];
-    const rawGates = methodology['gates'];
-    const rawToolDescriptions = methodology['tool_descriptions'];
+    const rawDescription = framework['description'];
+    const rawType = framework['type'];
+    const rawEnabled = framework['enabled'];
+    const rawGates = framework['gates'];
+    const rawToolDescriptions = framework['tool_descriptions'];
 
     if (typeof rawDescription === 'string') data.description = rawDescription;
     if (typeof rawType === 'string') data.type = rawType;
@@ -229,11 +229,11 @@ export class FrameworkFileWriter {
     // Map phases-related fields (may come from phases.yaml or framework.yaml)
     // YAML uses camelCase (frameworkGates); methodologyGates is the pre-rename spelling and
     // methodology_gates the snake_case authoring-payload key. Accept all three on read.
-    const phasesSource = phases ?? methodology;
+    const phasesSource = phases ?? framework;
     const rawPhases = phasesSource['phases'];
     const rawFrameworkGates =
-      methodology['frameworkGates'] ??
-      methodology['methodologyGates'] ??
+      framework['frameworkGates'] ??
+      framework['methodologyGates'] ??
       phasesSource['methodology_gates'];
     const rawProcessingSteps = phasesSource['processingSteps'] ?? phasesSource['processing_steps'];
     const rawExecutionSteps = phasesSource['executionSteps'] ?? phasesSource['execution_steps'];
@@ -243,11 +243,11 @@ export class FrameworkFileWriter {
       phasesSource['templateEnhancements'] ?? phasesSource['template_enhancements'];
     const rawExecutionFlow = phasesSource['executionFlow'] ?? phasesSource['execution_flow'];
     const rawFrameworkElements =
-      methodology['frameworkElements'] ?? phasesSource['methodology_elements'];
+      framework['frameworkElements'] ?? phasesSource['methodology_elements'];
     const rawArgumentSuggestions =
-      methodology['argumentSuggestions'] ?? phasesSource['argument_suggestions'];
+      framework['argumentSuggestions'] ?? phasesSource['argument_suggestions'];
     const rawTemplateSuggestions =
-      methodology['templateSuggestions'] ?? phasesSource['template_suggestions'];
+      framework['templateSuggestions'] ?? phasesSource['template_suggestions'];
 
     if (Array.isArray(rawPhases)) {
       data.phases = rawPhases as NonNullable<FrameworkCreationData['phases']>;
@@ -325,7 +325,7 @@ export class FrameworkFileWriter {
         const newFrameworkData = this.buildFrameworkYamlData(data);
         const finalFrameworkData =
           existingData !== undefined && existingData !== null
-            ? this.deepMerge(existingData.methodology, newFrameworkData)
+            ? this.deepMerge(existingData.framework, newFrameworkData)
             : newFrameworkData;
 
         const frameworkContent = serializeYaml(finalFrameworkData, { sortKeys: false });
@@ -381,8 +381,8 @@ export class FrameworkFileWriter {
       return {
         success: false,
         error: txResult.rolledBack
-          ? `Methodology write failed and was rolled back: ${txResult.error}`
-          : `Methodology write failed: ${txResult.error}`,
+          ? `Framework write failed and was rolled back: ${txResult.error}`
+          : `Framework write failed: ${txResult.error}`,
       };
     }
 

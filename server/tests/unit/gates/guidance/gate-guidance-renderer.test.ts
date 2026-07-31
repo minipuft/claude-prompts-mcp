@@ -81,7 +81,7 @@ describe('GateGuidanceRenderer (loader integration)', () => {
           id: gateId,
           name: 'Framework Excellence',
           type: 'framework',
-          guidance: '- Follow methodology expectations.',
+          guidance: '- Follow framework expectations.',
           activation: { categories: ['analysis'] },
         };
       }
@@ -105,7 +105,7 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     expect(guidance).toContain('**Post-Execution Review Guidelines:**');
   });
 
-  test('filters framework guidance down to the active methodology', async () => {
+  test('filters framework guidance down to the active framework', async () => {
     const loader = createMockLoader();
     (loader.loadGate as jest.Mock).mockResolvedValue({
       id: 'framework-compliance',
@@ -127,7 +127,7 @@ describe('GateGuidanceRenderer (loader integration)', () => {
       framework: 'CAGEERF',
     });
 
-    expect(guidance).toContain('CAGEERF Methodology Guidelines');
+    expect(guidance).toContain('CAGEERF Framework Guidelines');
     expect(guidance).toContain(
       'Provide context, analysis, goals, execution, evaluation, refinement'
     );

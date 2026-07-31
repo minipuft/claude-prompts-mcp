@@ -283,11 +283,11 @@ export class GateSetResolver {
     const applicable: Array<{ name: string; bindsUpToRank: number }> = [];
 
     if (!input.frameworkInjected) {
-      applicable.push({ name: 'methodology-nesting', bindsUpToRank: RANK['inline-operator'] });
+      applicable.push({ name: 'framework-nesting', bindsUpToRank: RANK['inline-operator'] });
     }
     if (input.frameworkGatesEnabled === false) {
       applicable.push({
-        name: 'methodology-gates-disabled',
+        name: 'framework-gates-disabled',
         bindsUpToRank: RANK['inline-operator'],
       });
     }
@@ -315,14 +315,14 @@ export class GateSetResolver {
     }
 
     if (this.gateLoader === undefined) {
-      this.logger.debug('[GateSetResolver] No GateLoader; methodology gates cannot be identified');
+      this.logger.debug('[GateSetResolver] No GateLoader; framework gates cannot be identified');
       return new Set();
     }
 
     try {
       return new Set(await this.gateLoader.getFrameworkGateIds());
     } catch (error) {
-      this.logger.warn('[GateSetResolver] Failed to load methodology gate ids', { error });
+      this.logger.warn('[GateSetResolver] Failed to load framework gate ids', { error });
       return new Set();
     }
   }

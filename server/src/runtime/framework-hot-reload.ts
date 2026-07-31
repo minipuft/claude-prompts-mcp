@@ -11,7 +11,7 @@ export function buildFrameworkAuxiliaryReloadConfig(
 ): AuxiliaryReloadConfig | undefined {
   const frameworkManager = mcpToolsManager?.getFrameworkManager?.();
   if (!frameworkManager) {
-    logger.debug('Framework manager unavailable; skipping methodology hot reload wiring.');
+    logger.debug('Framework manager unavailable; skipping framework hot reload wiring.');
     return undefined;
   }
 
@@ -23,12 +23,12 @@ export function buildFrameworkAuxiliaryReloadConfig(
       onFrameworkDeleted: (frameworkId: string) => {
         // Remove framework from cache when framework is deleted
         frameworkManager.unregister(frameworkId);
-        logger.debug(`Framework cache cleared for deleted methodology: ${frameworkId}`);
+        logger.debug(`Framework cache cleared for deleted framework: ${frameworkId}`);
       },
       onFrameworkReloaded: async (frameworkId: string) => {
         // Regenerate framework definition when framework is reloaded
         await frameworkManager.reload(frameworkId);
-        logger.debug(`Framework cache refreshed for reloaded methodology: ${frameworkId}`);
+        logger.debug(`Framework cache refreshed for reloaded framework: ${frameworkId}`);
       },
     });
 
@@ -43,7 +43,7 @@ export function buildFrameworkAuxiliaryReloadConfig(
     };
   } catch (error) {
     logger.warn(
-      'Failed to configure methodology hot reload; continuing with prompt-only reload:',
+      'Failed to configure framework hot reload; continuing with prompt-only reload:',
       error
     );
     return undefined;
