@@ -52,6 +52,7 @@
     "start:production": "node dist/index.js --quiet --transport=stdio",
     "start:development": "node dist/index.js --verbose --transport=sse",
     "start:test": "node dist/index.js --startup-test",
+    "verify:mcp": "node scripts/verify-mcp-surface.mjs",
     "help": "node dist/index.js --help",
     "test": "npm run pretest && npm run test:unit",
     "pretest": "npm run generate:contracts",

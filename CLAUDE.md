@@ -35,6 +35,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Command | Purpose |
 |---------|---------|
 | `npm run build` | esbuild bundle -> `dist/index.js` |
+| `npm run verify:mcp` | Spawn a server from `dist/` and prove all 3 MCP tools answer — **use instead of restarting Claude Code to check a build**. Refuses to run against a stale `dist/` |
 | `npm run typecheck` | Strict TS type validation |
 | `npm test` | Full Jest suite |
 | `npm run lint:ratchet` | Fail if ESLint violations increased |
