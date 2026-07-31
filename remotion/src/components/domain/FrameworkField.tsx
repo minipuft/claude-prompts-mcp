@@ -1,7 +1,7 @@
 /**
- * Methodology Field
+ * Framework Field
  *
- * An encompassing field that represents methodology alignment.
+ * An encompassing field that represents framework alignment.
  * Content aligns and transforms within the field's influence.
  */
 
@@ -13,8 +13,8 @@ import { springs } from '../../design-system/tokens';
 import { liquidBreath } from '../../utils/liquescent-animations';
 import { perlin2D } from '../../design-system/physics';
 
-export interface MethodologyFieldProps {
-  methodologyName: string;
+export interface FrameworkFieldProps {
+  frameworkName: string;
   phases?: string[];
   activePhaseIndex?: number;
   state?: LiquescentState;
@@ -25,8 +25,8 @@ export interface MethodologyFieldProps {
   style?: React.CSSProperties;
 }
 
-export const MethodologyField: React.FC<MethodologyFieldProps> = ({
-  methodologyName,
+export const FrameworkField: React.FC<FrameworkFieldProps> = ({
+  frameworkName,
   phases = [],
   activePhaseIndex = -1,
   state = 'dormant',
@@ -88,7 +88,7 @@ export const MethodologyField: React.FC<MethodologyFieldProps> = ({
     opacity: expansionProgress,
   };
 
-  // Methodology label
+  // Framework label
   const labelStyle: React.CSSProperties = {
     position: 'absolute',
     top: -10,
@@ -111,7 +111,7 @@ export const MethodologyField: React.FC<MethodologyFieldProps> = ({
       <div style={fieldOverlayStyle} />
 
       <div style={labelStyle}>
-        {methodologyName}
+        {frameworkName}
       </div>
 
       {/* Phase indicators */}
@@ -193,7 +193,7 @@ export const MethodologyField: React.FC<MethodologyFieldProps> = ({
 };
 
 /**
- * CAGEERF Methodology Field - pre-configured for CAGEERF phases
+ * CAGEERF Framework Field - pre-configured for CAGEERF phases
  */
 export const CAGEERFField: React.FC<{
   activePhase?: 'context' | 'analysis' | 'goals' | 'execution' | 'evaluation' | 'refinement';
@@ -217,16 +217,16 @@ export const CAGEERFField: React.FC<{
   };
 
   return (
-    <MethodologyField
-      methodologyName="CAGEERF"
+    <FrameworkField
+      frameworkName="CAGEERF"
       phases={phases}
       activePhaseIndex={activePhase ? phaseMap[activePhase] : -1}
       state={state}
       expandFrame={expandFrame}
     >
       {children}
-    </MethodologyField>
+    </FrameworkField>
   );
 };
 
-export default MethodologyField;
+export default FrameworkField;

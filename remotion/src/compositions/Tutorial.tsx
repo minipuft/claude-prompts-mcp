@@ -8,7 +8,7 @@
  * 1. Introduction (0:00-0:08) - What is Claude Prompts MCP
  * 2. Basic Usage (0:08-0:25) - Running prompts with >>
  * 3. Chains (0:25-0:45) - Sequential execution with -->
- * 4. Frameworks (0:45-1:00) - Methodology injection with @
+ * 4. Frameworks (0:45-1:00) - Framework injection with @
  * 5. Gates (1:00-1:15) - Quality validation with ::
  * 6. Putting It Together (1:15-1:30) - Combined example
  *
@@ -113,9 +113,9 @@ const CHAIN_LINES: TerminalLine[] = [
 const FRAMEWORK_LINES: TerminalLine[] = [
   { type: 'command', text: '>>research @CAGEERF topic:"API design"' },
   { type: 'tool', name: 'prompt_engine', args: '>>research @CAGEERF' },
-  { type: 'mcp-return', text: '← Template + CAGEERF methodology injected' },
+  { type: 'mcp-return', text: '← Template + CAGEERF framework injected' },
   { type: 'output', text: '' },
-  { type: 'assistant', text: 'Following CAGEERF methodology for API design:' },
+  { type: 'assistant', text: 'Following CAGEERF framework for API design:' },
   { type: 'output', text: '' },
   { type: 'output', text: '  [C] Context: REST vs GraphQL trade-offs' },
   { type: 'output', text: '  [A] Analysis: GraphQL fits data relationships' },
@@ -141,7 +141,7 @@ const COMBINED_LINES: TerminalLine[] = [
   { type: 'command', text: '>>analyze @CAGEERF --> >>implement :: code-quality' },
   { type: 'tool', name: 'prompt_engine', args: 'chain + framework + gate' },
   { type: 'output', text: '' },
-  { type: 'mcp-return', text: '← Step 1: analyze + CAGEERF methodology' },
+  { type: 'mcp-return', text: '← Step 1: analyze + CAGEERF framework' },
   { type: 'output', text: '[1/2]' },
   { type: 'assistant', text: '[C] Context: Auth module complexity...' },
   { type: 'success', text: '✓ Analysis complete → context to step 2' },
@@ -883,7 +883,7 @@ const FrameworkSection: React.FC = () => {
     >
       <SectionTitle
         title={SECTION_TITLES.frameworks}
-        subtitle="Apply structured methodologies to prompts"
+        subtitle="Apply structured frameworks to prompts"
         startFrame={0}
       />
 
@@ -892,12 +892,12 @@ const FrameworkSection: React.FC = () => {
         <OperatorBadge
           operator="@"
           label="Framework Operator"
-          description="Inject methodology guidance (CAGEERF, ReACT, etc.)"
+          description="Inject framework guidance (CAGEERF, ReACT, etc.)"
           startFrame={20}
         />
       </div>
 
-      {/* Terminal wrapped in CAGEERF methodology field */}
+      {/* Terminal wrapped in CAGEERF framework field */}
       <div style={{ marginTop: 40, width: 750, opacity: liquidFadeIn(frame, 50, 25, 'dissolution', fps) }}>
         <CAGEERFField
           activePhase={getActivePhase()}
@@ -1051,7 +1051,7 @@ const CombinedSection: React.FC = () => {
       {/* All operators */}
       <div style={{ marginTop: 160, display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
         <OperatorBadge operator=">>" label="Prompt" description="Execute" startFrame={20} />
-        <OperatorBadge operator="@" label="Framework" description="Methodology" startFrame={30} />
+        <OperatorBadge operator="@" label="Framework" description="Structure" startFrame={30} />
         <OperatorBadge operator="-->" label="Chain" description="Sequence" startFrame={40} />
         <OperatorBadge operator="::" label="Gate" description="Validate" startFrame={50} />
       </div>

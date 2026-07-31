@@ -5,5 +5,5 @@ export {
   type TerminalLine,
 } from "./LiquescentTerminal";
 export * from "./ValidationMembrane";
-export * from "./MethodologyField";
+export * from "./FrameworkField";
 export * from "./FlowChannel";

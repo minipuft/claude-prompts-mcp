@@ -34,6 +34,7 @@ User Command          MCP Server              Claude (Client)
 ```
 
 **Visual indicators in terminal**:
+
 - `TOOL` badge = MCP tool call
 - `← italic text` = MCP server return value
 - `⚡ CLAUDE` badge = Claude's generated response
@@ -53,6 +54,7 @@ What is MCP → Basic Execution → Chained Workflows → Structured Thinking �
 **Goal**: Establish what this tool is and who it's for.
 
 ### Visual
+
 - Dark background with subtle particle drift
 - "Claude Prompts MCP" assembles from fragments (CoalesceText)
 - Subtitle fades in: "Template automation for Claude"
@@ -73,6 +75,7 @@ Core tools:
 ```
 
 ### Narration (text overlay or future voiceover)
+
 > "Claude Prompts MCP lets you build reusable prompt templates with chains, quality gates, and structured reasoning — all hot-reloadable."
 
 ---
@@ -82,6 +85,7 @@ Core tools:
 **Goal**: Show the simplest use case — running a prompt.
 
 ### Visual
+
 - Section title: "Basic Usage"
 - Subtitle: "Execute prompts with >> prefix"
 - Operator badge appears: `>>` = "Prompt Prefix"
@@ -101,12 +105,14 @@ TOOL prompt_engine(>>code-review)
 ```
 
 ### Key Points
+
 - `>>prompt_id` triggers Claude to call our MCP tool
 - MCP server returns the prepared prompt template
 - **Claude generates the actual response** based on the template
 - Arguments passed as `key:"value"` pairs (interpolated into template)
 
 ### Hint (bottom of screen)
+
 > "Arguments are passed as key:\"value\" pairs"
 
 ---
@@ -116,6 +122,7 @@ TOOL prompt_engine(>>code-review)
 **Goal**: Demonstrate multi-step workflows with context passing.
 
 ### Visual
+
 - Section title: "Chaining Prompts"
 - Subtitle: "Connect prompts for multi-step workflows"
 - Operator badge: `-->` = "Chain Operator"
@@ -139,6 +146,7 @@ TOOL prompt_engine(chain: 3 steps)
 ```
 
 ### Key Points
+
 - `-->` chains prompts, passing context between steps
 - MCP server prepares each step's template
 - **Claude generates each step's response**
@@ -146,7 +154,9 @@ TOOL prompt_engine(chain: 3 steps)
 - Chain state persists — resume if interrupted
 
 ### Visual Enhancement
+
 Three membrane boxes showing step progression:
+
 - `analyze` (liquescent/complete) — Claude finished this step
 - `plan` (awakening/in-progress) — Claude working on this
 - `implement` (dormant/pending) — Waiting for previous steps
@@ -155,11 +165,12 @@ Three membrane boxes showing step progression:
 
 ## Section 4: Frameworks (0:45–1:00)
 
-**Goal**: Show how methodologies structure Claude's thinking.
+**Goal**: Show how frameworks structure Claude's thinking.
 
 ### Visual
+
 - Section title: "Frameworks"
-- Subtitle: "Apply structured methodologies to prompts"
+- Subtitle: "Apply structured frameworks to prompts"
 - Operator badge: `@` = "Framework Operator"
 
 ### Terminal Content
@@ -167,9 +178,9 @@ Three membrane boxes showing step progression:
 ```text
 ❯ >>research @CAGEERF topic:"API design"
 TOOL prompt_engine(>>research @CAGEERF)
-← Template + CAGEERF methodology injected
+← Template + CAGEERF framework injected
 
-⚡ CLAUDE Following CAGEERF methodology for API design:
+⚡ CLAUDE Following CAGEERF framework for API design:
 
   [C] Context: REST vs GraphQL trade-offs
   [A] Analysis: GraphQL fits data relationships
@@ -178,14 +189,16 @@ TOOL prompt_engine(>>research @CAGEERF)
 ```
 
 ### Key Points
-- `@FRAMEWORK` tells MCP server to inject methodology guidance
+
+- `@FRAMEWORK` tells MCP server to inject framework guidance
 - MCP server adds framework instructions to the prompt template
-- **Claude follows the methodology** in its response
+- **Claude follows the framework** in its response
 - Structures Claude's reasoning without changing the prompt definition
 - Can combine with chains: `@CAGEERF >>analyze --> >>implement`
 
 ### Future Enhancement
-Show CAGEERF phases as visual indicators (MethodologyField component)
+
+Show CAGEERF phases as visual indicators (FrameworkField component)
 
 ---
 
@@ -194,6 +207,7 @@ Show CAGEERF phases as visual indicators (MethodologyField component)
 **Goal**: Demonstrate output validation.
 
 ### Visual
+
 - Section title: "Quality Gates"
 - Subtitle: "Validate outputs against quality criteria"
 - Operator badge: `::` = "Gate Operator"
@@ -215,6 +229,7 @@ TOOL prompt_engine(>>refactor :: 'no breaking...')
 ```
 
 ### Key Points
+
 - `::` attaches quality criteria to the prompt
 - Claude generates its response normally
 - **MCP server validates Claude's response** against criteria
@@ -223,6 +238,7 @@ TOOL prompt_engine(>>refactor :: 'no breaking...')
 - Inline gates: `:: 'your criteria here'`
 
 ### Severity Levels (optional callout)
+
 - Critical/High: Must pass (blocking)
 - Medium/Low: Warns, continues (advisory)
 
@@ -233,6 +249,7 @@ TOOL prompt_engine(>>refactor :: 'no breaking...')
 **Goal**: Show the full power of combined operators.
 
 ### Visual
+
 - Section title: "Complete Example"
 - Subtitle: "Combine operators for powerful workflows"
 - All operator badges displayed together
@@ -243,7 +260,7 @@ TOOL prompt_engine(>>refactor :: 'no breaking...')
 ❯ >>analyze @CAGEERF --> >>implement :: code-quality
 TOOL prompt_engine(chain + framework + gate)
 
-← Step 1: analyze + CAGEERF methodology
+← Step 1: analyze + CAGEERF framework
 [1/2]
 ⚡ CLAUDE [C] Context: Auth module complexity...
 ✓ Analysis complete → context to step 2
@@ -259,7 +276,7 @@ TOOL prompt_engine(chain + framework + gate)
 
 ```text
 >>analyze      MCP prepares 'analyze' template
-@CAGEERF       MCP injects methodology guidance
+@CAGEERF       MCP injects framework guidance
 -->            Chain: pass context to next step
 >>implement    MCP prepares 'implement' template
 :: code-quality  MCP validates Claude's response
@@ -282,6 +299,7 @@ User sees structured, validated output
 ```
 
 ### Closing Message
+
 > "Start building with Claude Prompts MCP"
 > `npm install claude-prompts`
 
@@ -290,20 +308,23 @@ User sees structured, validated output
 ## Visual Language
 
 ### Color Semantics (from Liquescent theme)
-| State | Color | Meaning |
-|-------|-------|---------|
-| dormant | Cyan | Idle, waiting |
-| awakening | Amber | Processing, active |
-| liquescent | Chartreuse | Complete, success |
-| error | Coral | Failed, attention needed |
+
+| State      | Color      | Meaning                  |
+| ---------- | ---------- | ------------------------ |
+| dormant    | Cyan       | Idle, waiting            |
+| awakening  | Amber      | Processing, active       |
+| liquescent | Chartreuse | Complete, success        |
+| error      | Coral      | Failed, attention needed |
 
 ### Typography
+
 - Section titles: System UI, 42px, semibold
 - Terminal content: JetBrains Mono, 13px
 - Operator badges: Monospace, amber highlight
 - Hints: System UI, 14px, tertiary color
 
 ### Animation Principles
+
 - Liquid fade-ins (spring-based, no CSS transitions)
 - Breathing effects on active elements
 - Typing effect for terminal commands (25-40 chars/sec)
@@ -314,17 +335,19 @@ User sees structured, validated output
 ## Technical Notes
 
 ### Frame Budget (30fps)
-| Section | Frames | Seconds |
-|---------|--------|---------|
-| Intro | 240 | 8s |
-| Basic | 510 | 17s |
-| Chains | 600 | 20s |
-| Frameworks | 450 | 15s |
-| Gates | 450 | 15s |
-| Combined | 450 | 15s |
-| **Total** | **2700** | **90s** |
+
+| Section    | Frames   | Seconds |
+| ---------- | -------- | ------- |
+| Intro      | 240      | 8s      |
+| Basic      | 510      | 17s     |
+| Chains     | 600      | 20s     |
+| Frameworks | 450      | 15s     |
+| Gates      | 450      | 15s     |
+| Combined   | 450      | 15s     |
+| **Total**  | **2700** | **90s** |
 
 ### Typing Speed
+
 - Commands: 25-30 chars/sec (deliberate, readable)
 - Output: 40 chars/sec (faster, less focus)
 - Pause 0.5-1s after each completed line
@@ -338,17 +361,18 @@ User sees structured, validated output
 
 ### Terminal Line Types (MCP Flow)
 
-| Line Type | Visual | Purpose |
-|-----------|--------|---------|
-| `command` | `❯ >>prompt` | User input |
-| `tool` | `TOOL prompt_engine(...)` | MCP tool call (amber badge) |
-| `mcp-return` | `← italic text` | MCP server return value |
-| `assistant` | `⚡ CLAUDE text` | Claude's generated response (cyan badge) |
-| `output` | `  indented text` | General output |
-| `success` | `✓ text` | Success message (chartreuse) |
-| `error` | `text` | Error message (coral) |
+| Line Type    | Visual                    | Purpose                                  |
+| ------------ | ------------------------- | ---------------------------------------- |
+| `command`    | `❯ >>prompt`              | User input                               |
+| `tool`       | `TOOL prompt_engine(...)` | MCP tool call (amber badge)              |
+| `mcp-return` | `← italic text`           | MCP server return value                  |
+| `assistant`  | `⚡ CLAUDE text`          | Claude's generated response (cyan badge) |
+| `output`     | `  indented text`         | General output                           |
+| `success`    | `✓ text`                  | Success message (chartreuse)             |
+| `error`      | `text`                    | Error message (coral)                    |
 
 This clearly shows the MCP server/client relationship:
+
 1. User writes command → `command`
 2. Claude calls MCP tool → `tool`
 3. MCP server returns template → `mcp-return`
@@ -360,19 +384,23 @@ This clearly shows the MCP server/client relationship:
 ## Future Enhancements
 
 ### Potential Additional Sections
+
 1. **Verification Gates (Ralph Loops)** — `:: verify:"npm test" loop:true`
 2. **Version History** — `resource_manager(action:"history")`
 3. **Checkpoints** — `resource_manager(resource_type:"checkpoint")`
 4. **Judge Selection** — `%judge` modifier
 
 ### Audio/Voiceover
+
 If adding narration:
+
 - Professional, calm tone
 - ~120 words per minute
 - Sync with terminal animations
 - Music: Ambient, minimal, non-distracting
 
 ### Localization
+
 - Subtitles in multiple languages
 - Separate audio tracks
 - Adjust typing speed for readability
@@ -399,6 +427,6 @@ npx remotion render src/index.ts Tutorial --output=out/test.mp4 --frames=0-240
 
 ## Changelog
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2025-01-26 | Initial script based on cleanup and README review |
+| Version | Date       | Changes                                           |
+| ------- | ---------- | ------------------------------------------------- |
+| 1.0     | 2025-01-26 | Initial script based on cleanup and README review |
