@@ -19,7 +19,7 @@ const createLogger = () => ({
 });
 
 /**
- * Creates a mock GateLoader that returns specified methodology gate IDs.
+ * Creates a mock GateLoader that returns specified framework gate IDs.
  */
 const createMockGateLoader = (frameworkGateIds: string[] = ['framework-compliance']): GateLoader =>
   ({

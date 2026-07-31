@@ -1,8 +1,8 @@
-// @lifecycle canonical - Methodology and style overlay resolution for tool descriptions.
+// @lifecycle canonical - Framework and style overlay resolution for tool descriptions.
 /**
  * Tool Description Overlays
  *
- * Pure functions for preloading methodology/style descriptions and building
+ * Pure functions for preloading framework/style descriptions and building
  * overlay-applied tool description configs. No class state — all dependencies
  * passed as parameters.
  *
@@ -21,7 +21,7 @@ import type { StyleToolDescriptionYaml } from '../../modules/formatting/core/sty
 import type { Logger, ToolDescription, ToolDescriptionsConfig } from '../../shared/types/index.js';
 
 /**
- * Normalize methodology keys for consistent lookup (case-insensitive)
+ * Normalize framework keys for consistent lookup (case-insensitive)
  */
 export function normalizeFrameworkKey(methodology?: string): string | undefined {
   if (!methodology) return undefined;
@@ -63,8 +63,8 @@ export function cloneToolDescription(description: ToolDescription): ToolDescript
 }
 
 /**
- * Pre-load all methodology tool descriptions from YAML definitions.
- * Returns a Map keyed by normalized methodology/framework ID.
+ * Pre-load all framework tool descriptions from YAML definitions.
+ * Returns a Map keyed by normalized framework ID.
  */
 export function preloadFrameworkDescriptions(
   logger: Logger
@@ -147,7 +147,7 @@ export function weaveResponseFormat(description: string, responseFormat: string)
 }
 
 /**
- * Build active tool description config by applying methodology overlays to base config.
+ * Build active tool description config by applying framework overlays to base config.
  */
 export function buildActiveConfig(
   baseConfig: ToolDescriptionsConfig,

@@ -488,7 +488,7 @@ describe('Resource Manager Workflow Integration', () => {
       expect(gateSwitch.isError).toBe(true);
       expect(gateManager.handleAction).not.toHaveBeenCalled();
 
-      // Switch on methodology should succeed
+      // Switch on framework should succeed
       const frameworkSwitch = await router.handleAction(
         {
           resource_type: 'framework',
@@ -598,7 +598,7 @@ describe('Resource Manager Workflow Integration', () => {
       await router.handleAction({ resource_type: 'gate', action: 'list' }, context);
       expect(gateManager.handleAction).toHaveBeenCalledWith(expect.any(Object), context);
 
-      // Methodology
+      // Framework
       await router.handleAction({ resource_type: 'framework', action: 'list' }, context);
       expect(frameworkManager.handleAction).toHaveBeenCalledWith(expect.any(Object), context);
     });
@@ -652,7 +652,7 @@ describe('Resource Manager Workflow Integration', () => {
         {}
       );
 
-      // Switch methodology
+      // Switch framework
       await router.handleAction(
         {
           resource_type: 'framework',

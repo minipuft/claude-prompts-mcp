@@ -1762,7 +1762,7 @@ function buildClaudeCodeSkill(ir: SkillIR, duplicateIds?: Set<string>): OutputFi
     body += '\n';
   }
 
-  // Methodology-specific: phase summary
+  // Framework-specific: phase summary
   if (ir.frameworkData && Array.isArray(ir.frameworkData.phases)) {
     body += `## Phases\n\n`;
     const phases = ir.frameworkData.phases as Array<Record<string, unknown>>;
@@ -1917,7 +1917,7 @@ function buildAgentSkillsSkill(
     body += '\n';
   }
 
-  // Methodology phases
+  // Framework phases
   if (ir.frameworkData && Array.isArray(ir.frameworkData.phases)) {
     body += `## Phases\n\n`;
     const phases = ir.frameworkData.phases as Array<Record<string, unknown>>;

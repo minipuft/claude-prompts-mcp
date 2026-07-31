@@ -1,4 +1,4 @@
-// @lifecycle canonical - Pre-injection projection of whether a methodology is injected.
+// @lifecycle canonical - Pre-injection projection of whether a framework is injected.
 
 import { DISABLE_INJECT_MODIFIERS, FORCE_INJECT_MODIFIERS, MODIFIER_EFFECTS } from './constants.js';
 
@@ -18,7 +18,7 @@ export interface FrameworkInjectionSignals {
 }
 
 /**
- * Whether a methodology system prompt is injected for this execution, judged from the signals
+ * Whether a framework system prompt is injected for this execution, judged from the signals
  * available BEFORE the injection stage runs.
  *
  * ## Why a projection and not the decision
@@ -36,12 +36,12 @@ export interface FrameworkInjectionSignals {
  *
  * Tiers this cannot see — runtime session overrides, chain/category/global `enabled` flags, and
  * frequency rules — can only make the real answer MORE restrictive, never less. Returning `true`
- * when they are unknown means the nesting veto withholds methodology gates only on positive
- * suppression: an author or caller who explicitly turned the methodology off. A gate is never
+ * when they are unknown means the nesting veto withholds framework gates only on positive
+ * suppression: an author or caller who explicitly turned the framework off. A gate is never
  * withheld on a guess, so this cannot silently drop a gate someone was relying on.
  *
- * Consequence to know: under a config where a methodology is disabled at the chain or global
- * tier, methodology gates are still scheduled. That is the same behavior as before this
+ * Consequence to know: under a config where a framework is disabled at the chain or global
+ * tier, framework gates are still scheduled. That is the same behavior as before this
  * function existed, so it is a remaining gap rather than a regression.
  */
 export function isFrameworkInjected(signals: FrameworkInjectionSignals): boolean {
@@ -54,16 +54,16 @@ export function isFrameworkInjected(signals: FrameworkInjectionSignals): boolean
     return false;
   }
 
-  // An explicit `false` suppresses; `true` and `undefined` both leave the methodology injected,
+  // An explicit `false` suppresses; `true` and `undefined` both leave the framework injected,
   // so an author who declares only `frequency` or `target` does not change gate scheduling.
   return signals.promptInjection?.['system-prompt']?.enabled !== false;
 }
 
 /**
- * Whether a modifier forces the methodology in regardless of configuration.
+ * Whether a modifier forces the framework in regardless of configuration.
  *
  * Mirrors `InjectionDecisionService.checkModifiers`, which special-cases `%judge` for
- * `system-prompt` so the judge selection phase always sees the methodology.
+ * `system-prompt` so the judge selection phase always sees the framework.
  */
 function hasForcingModifier(modifiers: FrameworkInjectionSignals['modifiers']): boolean {
   if (modifiers === undefined) {

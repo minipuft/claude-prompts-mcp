@@ -2,15 +2,15 @@
 /**
  * Compliance Validator
  *
- * Generic utility for validating methodology compliance using data-driven
+ * Generic utility for validating framework compliance using data-driven
  * phase definitions from YAML/JSON. Extracts validation logic from
- * TypeScript methodology guides to work with any methodology definition.
+ * TypeScript framework guides to work with any framework definition.
  */
 
 import type { FrameworkValidation, TemplateEnhancement } from '../types/methodology-types.js';
 
 /**
- * Quality indicator definition from methodology YAML
+ * Quality indicator definition from framework YAML
  */
 export interface QualityIndicator {
   keywords: string[];
@@ -18,7 +18,7 @@ export interface QualityIndicator {
 }
 
 /**
- * Phase quality indicators from methodology definition
+ * Phase quality indicators from framework definition
  */
 export interface PhaseQualityIndicators {
   [phaseName: string]: QualityIndicator;
@@ -96,11 +96,11 @@ export function detectPhase(text: string, indicators: QualityIndicator): PhaseDe
 }
 
 /**
- * Validates methodology compliance for a given text
+ * Validates framework compliance for a given text
  * @param text - Combined text to validate
- * @param qualityIndicators - Phase quality indicators from methodology definition
+ * @param qualityIndicators - Phase quality indicators from framework definition
  * @param options - Validation options
- * @returns Methodology validation result
+ * @returns Framework validation result
  */
 export function validateCompliance(
   text: string,

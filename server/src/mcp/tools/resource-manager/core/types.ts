@@ -3,7 +3,7 @@
  * Unified Resource Manager Types
  *
  * Defines the types for the unified resource_manager MCP tool
- * that routes to prompt, gate, and methodology handlers.
+ * that routes to prompt, gate, and framework handlers.
  */
 
 import type { Logger, ToolResponse } from '../../../../shared/types/index.js';
@@ -69,7 +69,7 @@ export type ResourceAction =
   | 'analyze_type' // prompt only
   | 'analyze_gates' // prompt only
   | 'guide' // prompt only
-  | 'switch' // methodology only
+  | 'switch' // framework only
   | 'history' // versioning (all types)
   | 'rollback' // versioning (all types) + checkpoint
   | 'compare' // versioning (all types)
@@ -165,7 +165,7 @@ export interface ResourceManagerInput {
     preserve_context?: boolean;
   };
 
-  // Methodology-specific parameters
+  // Framework-specific parameters
   framework?: string;
   system_prompt_guidance?: string;
   phases?: FrameworkPhase[];
@@ -177,7 +177,7 @@ export interface ResourceManagerInput {
   enabled?: boolean;
   persist?: boolean;
 
-  // Advanced methodology parameters (not advertised for token efficiency)
+  // Advanced framework parameters (not advertised for token efficiency)
   methodology_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
   methodology_elements?: FrameworkElements;

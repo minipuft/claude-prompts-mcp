@@ -2,9 +2,9 @@
 /**
  * Stateful Framework State Manager
  *
- * Manages the active framework methodology state and provides framework switching capabilities.
+ * Manages the active framework state and provides framework switching capabilities.
  * This tracks switching mechanics (timing, success/failure, counts) and framework state.
- * This is separate from execution strategy analysis - it handles WHICH framework methodology
+ * This is separate from execution strategy analysis - it handles WHICH framework
  * to apply (built-in or custom) while semantic analysis handles execution strategies.
  */
 

@@ -1,12 +1,12 @@
-// @lifecycle canonical - Data-driven methodology guide implementation.
+// @lifecycle canonical - Data-driven framework guide implementation.
 /**
- * Generic Methodology Guide
+ * Generic Framework Guide
  *
  * A data-driven implementation of FrameworkGuide that works with JSON
- * methodology definitions. This eliminates the need for TypeScript classes
- * per methodology - the same class works for any registered framework (built-in or custom).
+ * framework definitions. This eliminates the need for TypeScript classes
+ * per framework - the same class works for any registered framework (built-in or custom).
  *
- * All methodology-specific behavior is driven by the JSON definition loaded
+ * All framework-specific behavior is driven by the JSON definition loaded
  * at runtime from resources/frameworks/.
  */
 
@@ -48,8 +48,8 @@ import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
 /**
  * GenericFrameworkGuide - Data-driven implementation of FrameworkGuide
  *
- * This class can represent any methodology by loading its definition from JSON.
- * All methodology-specific behavior is derived from the JSON data.
+ * This class can represent any framework by loading its definition from JSON.
+ * All framework-specific behavior is derived from the JSON data.
  */
 export class GenericFrameworkGuide extends BaseFrameworkGuide {
   readonly frameworkId: string;
@@ -61,8 +61,8 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   private readonly definition: FrameworkResourceDefinition;
 
   /**
-   * Creates a GenericFrameworkGuide from a methodology definition
-   * @param definition - The loaded methodology definition from JSON
+   * Creates a GenericFrameworkGuide from a framework definition
+   * @param definition - The loaded framework definition from JSON
    */
   constructor(definition: FrameworkResourceDefinition) {
     super();
@@ -74,13 +74,13 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
-   * Guide prompt creation using the methodology's structure
+   * Guide prompt creation using the framework's structure
    */
   guidePromptCreation(intent: string, context?: Record<string, unknown>): PromptCreationGuidance {
     const elements = this.definition.frameworkElements;
     const argumentSuggestions = this.definition.argumentSuggestions || [];
 
-    // Build structure guidance from methodology elements
+    // Build structure guidance from framework elements
     const systemPromptSuggestions: string[] = [];
     const userTemplateSuggestions: string[] = [];
 
@@ -143,7 +143,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
-   * Guide template processing with methodology-specific steps
+   * Guide template processing with framework-specific steps
    */
   guideTemplateProcessing(template: string, executionType: ExecutionType): ProcessingGuidance {
     const phases = this.definition.phases;
@@ -170,7 +170,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
-   * Guide execution steps using methodology phases
+   * Guide execution steps using framework phases
    */
   guideExecutionSteps(
     prompt: ConvertedPrompt,
@@ -191,13 +191,13 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
-   * Enhance execution with methodology-specific improvements
+   * Enhance execution with framework-specific improvements
    */
   enhanceWithFramework(
     prompt: ConvertedPrompt,
     context: Record<string, unknown>
   ): FrameworkEnhancement {
-    // Convert methodology gates from definition
+    // Convert framework gates from definition
     const methodologyGates: QualityGate[] = this.definition.frameworkGates
       ? convertFrameworkGates(this.definition.frameworkGates)
       : [];
@@ -225,7 +225,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
-   * Validate methodology compliance using quality indicators from JSON
+   * Validate framework compliance using quality indicators from JSON
    */
   validateFrameworkCompliance(prompt: ConvertedPrompt): FrameworkValidation {
     const qualityIndicators = this.definition.phases?.qualityIndicators;
@@ -253,14 +253,14 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
-   * Get methodology-specific system prompt guidance
+   * Get framework-specific system prompt guidance
    */
   getSystemPromptGuidance(context: Record<string, unknown>): string {
     return this.definition.systemPromptGuidance;
   }
 
   /**
-   * Get methodology-specific tool descriptions
+   * Get framework-specific tool descriptions
    */
   getToolDescriptions(): FrameworkToolDescriptions {
     // Return tool descriptions from definition or empty defaults
@@ -274,10 +274,10 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
-   * Get methodology-specific judge prompt for resource selection
+   * Get framework-specific judge prompt for resource selection
    */
   getJudgePrompt(): JudgePromptDefinition {
-    // Return judge prompt from definition or generate a default based on methodology
+    // Return judge prompt from definition or generate a default based on framework
     return (
       this.definition.judgePrompt ?? {
         systemMessage: `You are a ${this.type} methodology expert. Select resources that align with ${this.frameworkName} principles.`,
@@ -288,7 +288,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
-   * Get the raw methodology definition
+   * Get the raw framework definition
    * Useful for introspection and debugging
    */
   getDefinition(): FrameworkResourceDefinition {
@@ -296,7 +296,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
-   * Get gate configuration for this methodology
+   * Get gate configuration for this framework
    */
   getGateConfiguration(): { include?: string[]; exclude?: string[] } | undefined {
     return this.definition.gates;
@@ -305,7 +305,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
 
 /**
  * Factory function to create a GenericFrameworkGuide from a definition
- * @param definition - The methodology definition from JSON
+ * @param definition - The framework definition from JSON
  * @returns A new GenericFrameworkGuide instance
  */
 export function createGenericGuide(definition: FrameworkResourceDefinition): GenericFrameworkGuide {

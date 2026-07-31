@@ -2,7 +2,7 @@
 /**
  * Tool Description Loader
  *
- * Manages externalized tool descriptions with methodology-aware overlays.
+ * Manages externalized tool descriptions with framework-aware overlays.
  * Base descriptions loaded from generated contracts (tool-descriptions.contracts.json).
  * Overlay resolution delegated to tool-description-overlays.ts.
  *
@@ -82,10 +82,10 @@ export function getDefaultToolDescription(toolName: string): ToolDescription | u
 }
 
 /**
- * Manages tool descriptions loaded from generated contracts with methodology overlays.
+ * Manages tool descriptions loaded from generated contracts with framework overlays.
  *
  * Load flow:
- *   contracts JSON → in-memory Map → methodology overlays applied → getDescription() serves result
+ *   contracts JSON → in-memory Map → framework overlays applied → getDescription() serves result
  */
 export class ToolDescriptionLoader extends EventEmitter {
   private logger: Logger;
@@ -357,7 +357,7 @@ export class ToolDescriptionLoader extends EventEmitter {
     );
     const frameworkKey = normalizeFrameworkKey(activeFrameworkType);
 
-    // PRIORITY 1: Methodology-specific descriptions from YAML guides (SOT)
+    // PRIORITY 1: Framework-specific descriptions from YAML guides (SOT)
     if (applyFrameworkOverride && frameworkKey) {
       const frameworkDescs = this.frameworkDescriptions.get(frameworkKey);
       if (frameworkDescs?.[toolName as keyof FrameworkToolDescriptions]?.description) {

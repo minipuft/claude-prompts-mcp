@@ -1,8 +1,8 @@
-// @lifecycle canonical - Framework tool handler MCP entrypoint for methodology CRUD operations.
+// @lifecycle canonical - Framework tool handler MCP entrypoint for framework CRUD operations.
 /**
  * Framework Tool Handler MCP Tool
  *
- * Thin routing layer for methodology lifecycle management.
+ * Thin routing layer for framework lifecycle management.
  * Domain logic delegated to services:
  * - FrameworkLifecycleProcessor: create, update, delete, reload, switch
  * - FrameworkDiscoveryProcessor: list, inspect

@@ -3,8 +3,8 @@
  * Prompt Guidance Type Definitions
  *
  * Contains all types related to prompt enhancement, system prompt injection,
- * and methodology-driven template processing. These types support the prompt
- * guidance system that enhances MCP prompts with methodology-specific improvements.
+ * and framework-driven template processing. These types support the prompt
+ * guidance system that enhances MCP prompts with framework-specific improvements.
  */
 
 import type {
@@ -18,11 +18,11 @@ import type { ConvertedPrompt } from '../../execution/types.js';
  * System prompt injection configuration
  */
 export interface SystemPromptInjectionConfig {
-  /** Whether to inject methodology guidance into system prompts */
+  /** Whether to inject framework guidance into system prompts */
   enabled: boolean;
   /** Priority of injection (higher values override lower) */
   priority: number;
-  /** Template for injecting methodology guidance */
+  /** Template for injecting framework guidance */
   injectionTemplate: string;
   /** Variables available for injection template */
   availableVariables: string[];
@@ -34,9 +34,9 @@ export interface SystemPromptInjectionConfig {
 export interface SystemPromptInjectionResult {
   /** Original system prompt before injection */
   originalPrompt: string;
-  /** Enhanced system prompt with methodology guidance */
+  /** Enhanced system prompt with framework guidance */
   enhancedPrompt: string;
-  /** Methodology guidance that was injected */
+  /** Framework guidance that was injected */
   injectedGuidance: string;
   /** Framework that provided the guidance */
   sourceFramework: FrameworkDefinition;
@@ -57,7 +57,7 @@ export interface SystemPromptInjectionResult {
 }
 
 /**
- * Methodology tracking state
+ * Framework tracking state
  */
 /**
  * Prompt guidance configuration
@@ -65,7 +65,7 @@ export interface SystemPromptInjectionResult {
 export interface PromptGuidanceConfig {
   /** System prompt injection configuration */
   systemPromptInjection: SystemPromptInjectionConfig;
-  /** Methodology tracking configuration */
+  /** Framework tracking configuration */
   frameworkTracking: {
     enabled: boolean;
     persistState: boolean;
@@ -84,7 +84,7 @@ export interface PromptGuidanceResult {
   enhancedPrompt: ConvertedPrompt;
   /** System prompt injection result */
   systemPromptInjection: SystemPromptInjectionResult | null;
-  /** Applied methodology enhancement */
+  /** Applied framework enhancement */
   frameworkEnhancement: FrameworkEnhancement | null;
   /** Guidance metadata */
   metadata: {
@@ -106,7 +106,7 @@ export interface PromptGuidanceAnalytics {
   successRate: number;
   /** Average enhancement confidence */
   averageConfidence: number;
-  /** Methodology usage distribution */
+  /** Framework usage distribution */
   frameworkUsage: Record<
     string,
     {
@@ -144,14 +144,14 @@ export interface FrameworkStateInfo {
 }
 
 /**
- * Methodology system health information ()
+ * Framework system health information ()
  */
 export interface FrameworkHealth {
   /** System health status */
   status: 'healthy' | 'degraded' | 'error';
-  /** Currently active methodology */
+  /** Currently active framework */
   activeFrameworkType: string;
-  /** Whether methodology system is enabled */
+  /** Whether framework system is enabled */
   frameworkSystemEnabled: boolean;
   /** Last switch time */
   lastSwitchTime: Date | null;
@@ -167,7 +167,7 @@ export interface FrameworkHealth {
 }
 
 /**
- * Template processing guidance from methodology guides.
+ * Template processing guidance from framework guides.
  * Alias to ProcessingGuidance to keep a single source of truth.
  */
 export type TemplateProcessingGuidance = ProcessingGuidance;

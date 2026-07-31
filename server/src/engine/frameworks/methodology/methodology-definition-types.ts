@@ -1,13 +1,13 @@
-// @lifecycle canonical - Type definitions for methodology system.
+// @lifecycle canonical - Type definitions for framework system.
 /**
- * Methodology Definition Types
+ * Framework Definition Types
  *
  * Shared type definitions used by the runtime YAML loader.
- * This file provides the canonical type definitions for methodology configurations
+ * This file provides the canonical type definitions for framework configurations
  * loaded from YAML source files (runtime only).
  *
  * Usage:
- * - Import types from this file for type-safe methodology handling
+ * - Import types from this file for type-safe framework handling
  * - RuntimeFrameworkLoader loads these types from YAML
  */
 
@@ -21,9 +21,9 @@ import type { PhaseQualityIndicators } from '../utils/compliance-validator.js';
 import type { PhasesDefinition } from '../utils/step-generator.js';
 
 /**
- * Complete methodology definition loaded from YAML source
+ * Complete framework definition loaded from YAML source
  *
- * This is the main interface for methodology configurations. Each methodology
+ * This is the main interface for framework configurations. Each framework
  * (built-in or custom) provides a definition file that conforms to this interface.
  * Use FrameworkManager.listFrameworks() to see registered frameworks.
  */
@@ -32,13 +32,13 @@ export interface FrameworkResourceDefinition {
   id: string;
   /** Human-readable name */
   name: string;
-  /** Framework type discriminator. Required — the legacy `methodology:` field was removed. */
+  /** Framework type discriminator. Required — the legacy `framework:` field was removed. */
   type: FrameworkType;
   /** Version string */
   version: string;
-  /** Whether this methodology is enabled */
+  /** Whether this framework is enabled */
   enabled: boolean;
-  /** System prompt guidance injected when methodology is active */
+  /** System prompt guidance injected when framework is active */
   systemPromptGuidance: string;
   /** Gate configuration - include/exclude specific gates */
   gates?: {
@@ -49,11 +49,11 @@ export interface FrameworkResourceDefinition {
   frameworkGates?: FrameworkGateDefinition[];
   /** Suggestions for template improvements */
   templateSuggestions?: TemplateSuggestionDefinition[];
-  /** Required/optional sections for methodology */
+  /** Required/optional sections for framework */
   frameworkElements?: FrameworkElementsDefinition;
-  /** Suggested arguments for prompts using this methodology */
+  /** Suggested arguments for prompts using this framework */
   argumentSuggestions?: ArgumentSuggestionDefinition[];
-  /** Custom tool descriptions when methodology is active */
+  /** Custom tool descriptions when framework is active */
   toolDescriptions?: FrameworkToolDescriptions;
   /** Execution phases and quality indicators */
   phases?: PhasesDefinition & {
@@ -64,10 +64,10 @@ export interface FrameworkResourceDefinition {
 }
 
 /**
- * Methodology gate definition
+ * Framework gate definition
  *
- * Defines a quality gate specific to a methodology. These gates are
- * automatically applied when the methodology is active.
+ * Defines a quality gate specific to a framework. These gates are
+ * automatically applied when the framework is active.
  */
 export interface FrameworkGateDefinition {
   /** Unique gate identifier */
@@ -76,7 +76,7 @@ export interface FrameworkGateDefinition {
   name: string;
   /** Description of what this gate validates */
   description: string;
-  /** Which methodology area this gate applies to */
+  /** Which framework area this gate applies to */
   frameworkArea: string;
   /** Gate priority level */
   priority: 'high' | 'medium' | 'low';
@@ -87,8 +87,8 @@ export interface FrameworkGateDefinition {
 /**
  * Template suggestion definition
  *
- * Provides methodology-specific suggestions for improving templates.
- * These suggestions help prompt authors align with methodology best practices.
+ * Provides framework-specific suggestions for improving templates.
+ * These suggestions help prompt authors align with framework best practices.
  */
 export interface TemplateSuggestionDefinition {
   /** Which section of the template to modify */
@@ -99,16 +99,16 @@ export interface TemplateSuggestionDefinition {
   description: string;
   /** Suggested content */
   content: string;
-  /** Why this change aligns with methodology */
+  /** Why this change aligns with framework */
   frameworkJustification: string;
   /** Impact level of implementing this suggestion */
   impact: 'high' | 'medium' | 'low';
 }
 
 /**
- * Methodology elements definition
+ * Framework elements definition
  *
- * Defines the structural requirements for prompts using this methodology.
+ * Defines the structural requirements for prompts using this framework.
  */
 export interface FrameworkElementsDefinition {
   /** Sections that must be present */
@@ -122,7 +122,7 @@ export interface FrameworkElementsDefinition {
 /**
  * Argument suggestion definition
  *
- * Suggests arguments that prompts should include when using this methodology.
+ * Suggests arguments that prompts should include when using this framework.
  */
 export interface ArgumentSuggestionDefinition {
   /** Argument name */
@@ -131,7 +131,7 @@ export interface ArgumentSuggestionDefinition {
   type: string;
   /** Description of the argument */
   description: string;
-  /** Why this argument is important for the methodology */
+  /** Why this argument is important for the framework */
   frameworkReason: string;
   /** Example values */
   examples: string[];

@@ -199,7 +199,7 @@ describe('GateSetResolver — Stage 2 veto binding ranks', () => {
       })
     );
 
-    // Coherence invariant: nothing scores adherence to a methodology that was not injected,
+    // Coherence invariant: nothing scores adherence to a framework that was not injected,
     // even when the caller asked for it by name at rank 100.
     expect(result.gateIds).toEqual(['code-quality']);
     expect(result.vetoed.get('framework-compliance')).toBe('methodology-nesting');
@@ -384,7 +384,7 @@ describe('GateSetResolver — order independence (ADR 0001 Stage 2)', () => {
       results.push(sorted(result.gateIds));
     }
 
-    // 6 permutations, one outcome. Both vetoes (exclude, methodology-nesting) fire on the same
+    // 6 permutations, one outcome. Both vetoes (exclude, framework-nesting) fire on the same
     // input, and neither ordering of them changes the result.
     expect(results).toHaveLength(6);
     for (const outcome of results) {
@@ -534,7 +534,7 @@ describe('GateSetResolver — methodology nesting driven by the real signal (pla
     const result = await resolveWith({ lean: true });
 
     // %lean is documented as keeping gates. What it must stop keeping is the gate that scores
-    // adherence to a methodology it suppressed — not every gate.
+    // adherence to a framework it suppressed — not every gate.
     expect(result.gateIds).toContain('content-structure');
   });
 

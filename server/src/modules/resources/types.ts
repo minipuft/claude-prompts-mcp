@@ -24,7 +24,7 @@ export const RESOURCE_URI_PATTERNS = {
   GATE_ITEM: 'resource://gate/{id}',
   GATE_GUIDANCE: 'resource://gate/{id}/guidance',
 
-  // Methodology resources (Phase 2)
+  // Framework resources (Phase 2)
   FRAMEWORK_LIST: 'resource://framework/',
   FRAMEWORK_ITEM: 'resource://framework/{id}',
   FRAMEWORK_SYSTEM_PROMPT: 'resource://framework/{id}/system-prompt',
@@ -73,7 +73,7 @@ export interface GateResourceMetadata extends ResourceListItem {
 }
 
 /**
- * Methodology resource metadata for list responses
+ * Framework resource metadata for list responses
  */
 export interface FrameworkResourceMetadata extends ResourceListItem {
   type: string;
@@ -139,7 +139,7 @@ export interface ResourceDependencies {
         }
       | undefined;
   };
-  // Methodology/framework dependencies (Phase 2)
+  // Framework dependencies (Phase 2)
   frameworkManager?: {
     listFrameworks(enabledOnly?: boolean): Array<{
       id: string;

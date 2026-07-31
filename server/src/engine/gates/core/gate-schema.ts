@@ -20,7 +20,7 @@
  * |----------------------------|-----------------------------------------------|-----------------------------------------------------------------------|
  * | `inline_guidance`          | **None** — rendered as agent-facing checklist | Soft criteria the agent self-assesses (style, completeness reminders) |
  * | `llm_self_check`           | **Reserved** — runner not yet implemented     | (Not usable today)                                                    |
- * | `methodology_compliance`   | **Hard** — phase guards (stage 09b) check     | Required output sections per active methodology phases.yaml           |
+ * | `methodology_compliance`   | **Hard** — phase guards (stage 09b) check     | Required output sections per active framework phases.yaml           |
  * |                            | section presence + min_length + forbidden_terms |                                                                     |
  * | `shell_verify`             | **Hard** — runs shell command, exit 0 = pass  | Ground-truth checks: tests passing, files existing, content claims    |
  * |                            | (supports `shell_stdin_source: agent_response`) | matching reality (file paths, line counts, symbol locations)        |
@@ -61,7 +61,7 @@ export const GatePassCriteriaSchema = z
      *   previously-named `content_check` and `pattern_check` (which were
      *   intentionally skipped by GateValidator — see gate-validator.ts).
      * - `llm_self_check`: type declared, runner not yet implemented. Reserved.
-     * - `methodology_compliance`: enforced by methodology phase guards
+     * - `methodology_compliance`: enforced by framework phase guards
      *   (stage 09b) — checks section presence + min_length + forbidden_terms
      *   per active framework's `phases.yaml`.
      * - `shell_verify`: runs `shell_command`, exit 0 = pass. Hard enforcement.
@@ -84,7 +84,7 @@ export const GatePassCriteriaSchema = z
     required_patterns: z.array(z.string()).optional(),
     forbidden_patterns: z.array(z.string()).optional(),
 
-    // Methodology compliance options
+    // Framework compliance options
     methodology: z.string().optional(),
     min_compliance_score: z.number().min(0).max(1).optional(),
     severity: z.enum(['warn', 'fail']).optional(),
@@ -232,7 +232,7 @@ export const GateDefinitionSchema = z
     enforcementMode: z.enum(['blocking', 'advisory', 'informational']).optional(),
     /**
      * Gate type classification for dynamic identification.
-     * - 'framework': Methodology-related gates, filtered when frameworks disabled
+     * - 'framework': Framework-related gates, filtered when frameworks disabled
      * - 'category': Category-based gates (code, documentation, etc.)
      * - 'custom': User-defined custom gates
      */

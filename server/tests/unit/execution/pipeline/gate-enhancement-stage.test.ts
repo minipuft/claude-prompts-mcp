@@ -14,7 +14,7 @@ import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
 
 /**
- * Creates a mock GateLoader that returns specified methodology gate IDs.
+ * Creates a mock GateLoader that returns specified framework gate IDs.
  */
 const createMockGateLoader = (
   frameworkGateIds: string[] = ['framework-compliance', 'research-quality', 'technical-accuracy']

@@ -1,8 +1,8 @@
-// @lifecycle canonical - File service for methodology YAML read-merge-write operations.
+// @lifecycle canonical - File service for framework YAML read-merge-write operations.
 /**
- * Methodology File Service
+ * Framework File Service
  *
- * Provides read-merge-write pattern for methodology YAML files.
+ * Provides read-merge-write pattern for framework YAML files.
  * Ensures updates are additive rather than destructive.
  */
 
@@ -73,9 +73,9 @@ export class FrameworkFileWriter {
   // ==========================================================================
 
   /**
-   * Check if a methodology exists on the filesystem
+   * Check if a framework exists on the filesystem
    *
-   * @param id - Methodology identifier
+   * @param id - Framework identifier
    * @returns true if framework.yaml exists for this ID
    */
   frameworkExists(id: string): boolean {
@@ -85,9 +85,9 @@ export class FrameworkFileWriter {
   }
 
   /**
-   * Delete a methodology directory from the filesystem
+   * Delete a framework directory from the filesystem
    *
-   * @param id - Methodology identifier
+   * @param id - Framework identifier
    * @returns true if deletion succeeded
    */
   async deleteFramework(id: string): Promise<boolean> {
@@ -109,7 +109,7 @@ export class FrameworkFileWriter {
   }
 
   /**
-   * Load existing methodology files from disk
+   * Load existing framework files from disk
    */
   async loadExistingFramework(id: string): Promise<ExistingFrameworkData | null> {
     const frameworkDir = this.getFrameworkDir(id);
@@ -176,8 +176,8 @@ export class FrameworkFileWriter {
    * Convert raw ExistingFrameworkData to typed FrameworkCreationData.
    * Extracts and maps fields from YAML structure to the typed interface.
    *
-   * @param id - Methodology identifier
-   * @param existing - Raw methodology data loaded from disk
+   * @param id - Framework identifier
+   * @param existing - Raw framework data loaded from disk
    * @returns Typed FrameworkCreationData or null if essential fields missing
    */
   toFrameworkCreationData(
@@ -302,9 +302,9 @@ export class FrameworkFileWriter {
   }
 
   /**
-   * Write methodology files with optional merge from existing data
-   * @param data - Methodology data (can be partial for updates)
-   * @param existingData - Existing methodology data to merge with (null for create)
+   * Write framework files with optional merge from existing data
+   * @param data - Framework data (can be partial for updates)
+   * @param existingData - Existing framework data to merge with (null for create)
    */
   async writeFrameworkFiles(
     data: Partial<FrameworkCreationData> & { id: string },
@@ -435,7 +435,7 @@ export class FrameworkFileWriter {
       yamlData['toolDescriptions'] = data.tool_descriptions;
     }
 
-    // Advanced methodology fields (only if defined and non-empty)
+    // Advanced framework fields (only if defined and non-empty)
     if (data.methodology_gates !== undefined && data.methodology_gates.length > 0) {
       yamlData['frameworkGates'] = data.methodology_gates;
     }
@@ -494,7 +494,7 @@ export class FrameworkFileWriter {
   // ==========================================================================
 
   /**
-   * Get the directory path for a methodology.
+   * Get the directory path for a framework.
    * Used by versioning service to locate history files.
    */
   public getFrameworkDir(id: string): string {

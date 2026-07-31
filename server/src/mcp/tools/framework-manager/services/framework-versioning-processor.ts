@@ -85,7 +85,7 @@ export class FrameworkVersioningProcessor {
       return this.error('Rollback failed: No snapshot found in target version');
     }
 
-    // Rebuild methodology data from snapshot
+    // Rebuild framework data from snapshot
     const frameworkData: Partial<FrameworkCreationData> & { id: string } = {
       id,
       name: String(snapshot['name'] ?? existingFramework.name),
@@ -95,7 +95,7 @@ export class FrameworkVersioningProcessor {
       system_prompt_guidance: existingData.systemPrompt ?? '',
     };
 
-    // Write restored methodology files
+    // Write restored framework files
     const writeResult = await this.ctx.fileService.writeFrameworkFiles(frameworkData, existingData);
     if (!writeResult.success) {
       return this.error(`Rollback write failed: ${writeResult.error}`);

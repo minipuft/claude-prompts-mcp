@@ -3,7 +3,7 @@
  * YAML Utilities
  *
  * Provides runtime YAML parsing and file loading utilities.
- * Designed to serve both methodology loading and future prompt YAML support.
+ * Designed to serve both framework loading and future prompt YAML support.
  *
  * @example
  * ```typescript
@@ -15,7 +15,7 @@
  * // Load YAML file
  * const config = loadYamlFileSync<Config>('config.yaml');
  *
- * // Discover methodology directories
+ * // Discover framework directories
  * const frameworks = discoverYamlDirectories('./frameworks');
  * ```
  */

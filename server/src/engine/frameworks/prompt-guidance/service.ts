@@ -130,7 +130,7 @@ export class PromptGuidanceService {
       const activeFramework = await this.getActiveFramework(options.frameworkOverride);
       const frameworkGuide = await this.getFrameworkGuide(activeFramework.type);
 
-      // Surface methodology guidance (read-only hints)
+      // Surface framework guidance (read-only hints)
       const processingGuidance = frameworkGuide.guideTemplateProcessing(
         prompt.userMessageTemplate ?? '',
         'single'
@@ -252,9 +252,9 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Inject methodology guidance into system prompt (inlined from SystemPromptInjector)
+   * Inject framework guidance into system prompt (inlined from SystemPromptInjector)
    *
-   * Simple implementation: get guidance from methodology guide, combine with template.
+   * Simple implementation: get guidance from framework guide, combine with template.
    */
   private injectFrameworkGuidance(
     prompt: ConvertedPrompt,
@@ -263,7 +263,7 @@ export class PromptGuidanceService {
   ): SystemPromptInjectionResult {
     const startTime = Date.now();
 
-    // Get guidance from methodology guide
+    // Get guidance from framework guide
     const guidance = guide.getSystemPromptGuidance({
       promptName: prompt.name,
       promptCategory: prompt.category,
@@ -386,7 +386,7 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Get methodology guide for framework
+   * Get framework guide for framework
    */
   private async getFrameworkGuide(methodology: string): Promise<FrameworkGuide> {
     if (!this.frameworkManager) {

@@ -1,8 +1,8 @@
-// @lifecycle canonical - Loads methodology guides and tracks their registration state.
+// @lifecycle canonical - Loads framework guides and tracks their registration state.
 /**
- * Methodology Registry
+ * Framework Registry
  *
- * Centralized registry for loading and managing methodology guides.
+ * Centralized registry for loading and managing framework guides.
  * Uses YAML-based loading exclusively with fail-fast behavior.
  * All frameworks must be defined in resources/frameworks/<id>/framework.yaml.
  */
@@ -15,21 +15,21 @@ import {
 import { Logger } from '../../../infra/logging/index.js';
 import { FrameworkGuide } from '../types/index.js';
 
-// Data-driven methodology system (YAML-only)
+// Data-driven framework system (YAML-only)
 
 /**
- * Methodology source type for tracking how a guide was loaded
+ * Framework source type for tracking how a guide was loaded
  * YAML-runtime is the only production source; 'custom' for user-provided guides
  */
 export type FrameworkSource = 'yaml-runtime' | 'custom';
 
 /**
- * Methodology registry configuration
+ * Framework registry configuration
  */
 export interface FrameworkRegistryConfig {
-  /** Whether to auto-load built-in methodology guides */
+  /** Whether to auto-load built-in framework guides */
   autoLoadBuiltIn: boolean;
-  /** Custom methodology guides to load */
+  /** Custom framework guides to load */
   customGuides?: FrameworkGuide[];
   /** Whether to validate guides on registration */
   validateOnRegistration: boolean;
@@ -38,7 +38,7 @@ export interface FrameworkRegistryConfig {
 }
 
 /**
- * Methodology guide registry entry
+ * Framework guide registry entry
  */
 export interface FrameworkGuideEntry {
   guide: FrameworkGuide;
@@ -55,9 +55,9 @@ export interface FrameworkGuideEntry {
 }
 
 /**
- * Methodology Registry
+ * Framework Registry
  *
- * Manages the loading, registration, and lifecycle of methodology guides.
+ * Manages the loading, registration, and lifecycle of framework guides.
  * Provides a clean separation between guide management and framework orchestration.
  */
 export class FrameworkRegistry {
@@ -81,7 +81,7 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Initialize the methodology registry
+   * Initialize the framework registry
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
@@ -93,7 +93,7 @@ export class FrameworkRegistry {
     const startTime = performance.now();
 
     try {
-      // Load built-in methodology guides if enabled
+      // Load built-in framework guides if enabled
       if (this.config.autoLoadBuiltIn) {
         await this.loadBuiltInGuides();
       }
@@ -116,7 +116,7 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Register a methodology guide
+   * Register a framework guide
    */
   async registerGuide(
     guide: FrameworkGuide,
@@ -172,7 +172,7 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Get a methodology guide by ID
+   * Get a framework guide by ID
    */
   getGuide(guideId: string): FrameworkGuide | undefined {
     this.ensureInitialized();
@@ -188,7 +188,7 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Get all registered methodology guides
+   * Get all registered framework guides
    */
   getAllGuides(enabledOnly: boolean = true): FrameworkGuide[] {
     this.ensureInitialized();
@@ -228,7 +228,7 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Enable or disable a methodology guide
+   * Enable or disable a framework guide
    */
   setGuideEnabled(guideId: string, enabled: boolean): boolean {
     this.ensureInitialized();
@@ -245,7 +245,7 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Unregister a methodology guide from the registry
+   * Unregister a framework guide from the registry
    *
    * @param guideId - The guide ID to unregister
    * @returns true if the guide was found and removed
@@ -297,12 +297,12 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Load and register a methodology by ID from disk
+   * Load and register a framework by ID from disk
    *
-   * Used for hot-reload when a new methodology is created via MCP tools.
+   * Used for hot-reload when a new framework is created via MCP tools.
    * Loads the YAML definition and creates a guide, then registers it.
    *
-   * @param id - Methodology ID to load
+   * @param id - Framework ID to load
    * @returns true if successfully loaded and registered
    */
   async loadAndRegisterById(id: string): Promise<boolean> {
@@ -347,7 +347,7 @@ export class FrameworkRegistry {
   // Private implementation methods
 
   /**
-   * Load built-in methodology guides
+   * Load built-in framework guides
    *
    * YAML loading is mandatory with fail-fast behavior.
    * All frameworks must be defined in resources/frameworks/<id>/framework.yaml.
@@ -355,7 +355,7 @@ export class FrameworkRegistry {
   private async loadBuiltInGuides(): Promise<void> {
     this.logger.debug('Loading built-in methodology guides from YAML...');
 
-    // Required built-in methodology IDs
+    // Required built-in framework IDs
     const builtInIds = ['cageerf', 'react', '5w1h', 'scamper'];
 
     // Fail-fast: RuntimeFrameworkLoader is required
@@ -408,7 +408,7 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Load custom methodology guides
+   * Load custom framework guides
    */
   private async loadCustomGuides(customGuides: FrameworkGuide[]): Promise<void> {
     this.logger.debug(`Loading ${customGuides.length} custom methodology guides...`);
@@ -424,7 +424,7 @@ export class FrameworkRegistry {
   }
 
   /**
-   * Validate a methodology guide
+   * Validate a framework guide
    */
   private validateGuide(guide: FrameworkGuide): { valid: boolean; errors: string[] } {
     const errors: string[] = [];

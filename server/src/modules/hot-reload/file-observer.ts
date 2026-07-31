@@ -48,7 +48,7 @@ export interface FileChangeEvent {
   isFrameworkFile: boolean;
   /** True when the file is in a registered auxiliary directory (gates, scripts, etc.) */
   isAuxiliaryFile?: boolean;
-  /** Extracted methodology ID for methodology file changes */
+  /** Extracted framework ID for framework file changes */
   frameworkId?: string;
   category?: string;
   frameworkAnalysis?: FrameworkAnalysisData;
@@ -202,7 +202,7 @@ export class FileObserver extends EventEmitter {
 
   /**
    * Register directories used by auxiliary reload handlers (gates, scripts, etc.).
-   * Files in these directories bypass prompt/config/methodology classification
+   * Files in these directories bypass prompt/config/framework classification
    * so they can reach auxiliary reload handlers downstream.
    */
   registerAuxiliaryDirectories(directories: string[]): void {
@@ -499,7 +499,7 @@ export class FileObserver extends EventEmitter {
       }
     }
 
-    // Track methodology events separately
+    // Track framework events separately
     if (isFrameworkFile) {
       this.stats.frameworkFileEvents++;
     }
@@ -673,8 +673,8 @@ export class FileObserver extends EventEmitter {
   }
 
   /**
-   * Check if file is a methodology YAML file
-   * Methodology files live in resources/frameworks/{id}/ directories and are YAML files
+   * Check if file is a framework YAML file
+   * Framework files live in resources/frameworks/{id}/ directories and are YAML files
    *
    * @returns Object with isFramework flag and extracted frameworkId
    */
@@ -701,7 +701,7 @@ export class FileObserver extends EventEmitter {
       return { isFramework: false };
     }
 
-    // Extract methodology ID from path (e.g., resources/frameworks/cageerf/framework.yaml -> cageerf)
+    // Extract framework ID from path (e.g., resources/frameworks/cageerf/framework.yaml -> cageerf)
     const frameworkId = frameworkMatch[1]?.toLowerCase();
 
     if (!frameworkId) {

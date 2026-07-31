@@ -1,9 +1,9 @@
-// @lifecycle canonical - Coordinates methodology hot reload between file watcher and registry
+// @lifecycle canonical - Coordinates framework hot reload between file watcher and registry
 /**
- * Methodology Hot Reload Coordinator
+ * Framework Hot Reload Coordinator
  *
- * Handles the integration between file system watching and methodology registry,
- * enabling hot reload of methodology definitions when YAML files change.
+ * Handles the integration between file system watching and framework registry,
+ * enabling hot reload of framework definitions when YAML files change.
  */
 
 import { createGenericGuide } from './generic-methodology-guide.js';
@@ -22,12 +22,12 @@ export interface FrameworkHotReloadConfig {
   /** Reload timeout in ms */
   reloadTimeoutMs?: number;
   /**
-   * Callback invoked when a methodology is deleted.
+   * Callback invoked when a framework is deleted.
    * Use this to notify FrameworkManager to clear its frameworks Map.
    */
   onFrameworkDeleted?: (frameworkId: string) => Promise<void> | void;
   /**
-   * Callback invoked when a methodology is reloaded (added/modified).
+   * Callback invoked when a framework is reloaded (added/modified).
    * Use this to notify FrameworkManager to refresh its framework definition.
    */
   onFrameworkReloaded?: (frameworkId: string) => Promise<void> | void;
@@ -45,10 +45,10 @@ export interface FrameworkHotReloadStats {
 }
 
 /**
- * Result returned when creating a methodology hot reload registration
+ * Result returned when creating a framework hot reload registration
  */
 export interface FrameworkHotReloadRegistration {
-  /** Directories that should be watched for methodology changes */
+  /** Directories that should be watched for framework changes */
   directories: string[];
   /** Bound handler for use with HotReloadObserver.setFrameworkReloadCallback */
   handler: (event: HotReloadEvent) => Promise<void>;
@@ -57,10 +57,10 @@ export interface FrameworkHotReloadRegistration {
 }
 
 /**
- * Methodology Hot Reload Coordinator
+ * Framework Hot Reload Coordinator
  *
- * Coordinates between the file watching system and methodology registry to
- * enable seamless hot reload of methodology definitions.
+ * Coordinates between the file watching system and framework registry to
+ * enable seamless hot reload of framework definitions.
  *
  * @example
  * ```typescript
@@ -112,9 +112,9 @@ export class FrameworkHotReloadCoordinator {
   }
 
   /**
-   * Handle a methodology file change event
+   * Handle a framework file change event
    *
-   * For 'removed' events: unregisters the methodology from the registry
+   * For 'removed' events: unregisters the framework from the registry
    * For other events: reloads the definition from YAML and re-registers
    *
    * @param event - Hot reload event from the file watcher
@@ -145,7 +145,7 @@ export class FrameworkHotReloadCoordinator {
   }
 
   /**
-   * Handle methodology deletion - unregister from registry and notify framework manager
+   * Handle framework deletion - unregister from registry and notify framework manager
    */
   private async handleFrameworkDeletion(frameworkId: string): Promise<void> {
     try {
@@ -178,11 +178,11 @@ export class FrameworkHotReloadCoordinator {
   }
 
   /**
-   * Handle methodology reload - reload from YAML and re-register
+   * Handle framework reload - reload from YAML and re-register
    */
   private async handleFrameworkReload(frameworkId: string): Promise<void> {
     try {
-      // Step 1: Clear loader cache for this methodology
+      // Step 1: Clear loader cache for this framework
       this.loader.clearCache(frameworkId);
       if (this.config.debug) {
         this.logger.debug(`Cleared cache for methodology: ${frameworkId}`);
@@ -254,7 +254,7 @@ export class FrameworkHotReloadCoordinator {
 }
 
 /**
- * Create a registration bundle for methodology hot reload.
+ * Create a registration bundle for framework hot reload.
  * Keeps HotReloadObserver generic by returning only the callback + watch paths.
  */
 export function createFrameworkHotReloadRegistration(

@@ -10,13 +10,13 @@ import type { FrameworkDefinition, FrameworkExecutionContext } from './methodolo
 import type { ContentAnalysisResult } from '../../../shared/types/index.js';
 
 /**
- * Integrated analysis result combining semantic intelligence and framework methodology
+ * Integrated analysis result combining semantic intelligence and framework
  */
 export interface IntegratedAnalysisResult {
   // Semantic analysis results - PROMPT INTELLIGENCE
   semanticAnalysis: ContentAnalysisResult;
 
-  // Framework execution context - METHODOLOGY GUIDANCE
+  // Framework execution context - FRAMEWORK GUIDANCE
   frameworkContext: FrameworkExecutionContext | null;
 
   // Integration metadata

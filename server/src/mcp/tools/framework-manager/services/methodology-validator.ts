@@ -1,15 +1,15 @@
-// @lifecycle canonical - Methodology validation operations: scoring, error formatting, success formatting.
+// @lifecycle canonical - Framework validation operations: scoring, error formatting, success formatting.
 
 import type { ToolResponse } from '../../../../shared/types/index.js';
 import type { FrameworkCreationData, FrameworkDraftValidationResult } from '../core/types.js';
 
 export class FrameworkDraftValidator {
   /**
-   * Validate methodology with strict requirements.
+   * Validate framework with strict requirements.
    *
    * Required fields (80% threshold):
    * - system_prompt_guidance (core LLM guidance)
-   * - phases (methodology structure)
+   * - phases (framework structure)
    * - methodology_gates (quality validation)
    *
    * Returns structured errors for focused user guidance.

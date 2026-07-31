@@ -1,7 +1,7 @@
 /**
  * Legacy config key migration.
  *
- * The methodology -> framework vocabulary sweep renamed two config sections. Both migrations
+ * The framework -> framework vocabulary sweep renamed two config sections. Both migrations
  * fail SILENTLY when absent: the old key is read as undefined and the default takes over, so a
  * user who had deliberately turned something off finds it back on with no error emitted. These
  * tests pin the adoption because `tsc` cannot see it — the shape is only bound at load time.

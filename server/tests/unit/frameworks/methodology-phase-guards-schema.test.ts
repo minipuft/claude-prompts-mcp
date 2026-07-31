@@ -1,10 +1,10 @@
 /**
- * Tests for methodology phase guard schema validation.
+ * Tests for framework phase guard schema validation.
  *
  * Verifies:
  * - PhaseGuardSchema accepts valid phase guard configs
  * - PhaseGuardSchema rejects invalid configs
- * - Existing methodology YAMLs still parse (backward compatibility)
+ * - Existing framework YAMLs still parse (backward compatibility)
  * - ProcessingStepDefinition accepts marker + guards
  */
 

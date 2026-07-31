@@ -10,16 +10,16 @@ import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
 /**
- * Optional methodology fields that can be copied directly from input to methodology data.
+ * Optional framework fields that can be copied directly from input to framework data.
  * Used by both create and update handlers.
  */
-const OPTIONAL_METHODOLOGY_FIELDS = [
+const OPTIONAL_FRAMEWORK_FIELDS = [
   // Basic optional fields
   'description',
   'phases',
   'gates',
   'tool_descriptions',
-  // Advanced methodology fields
+  // Advanced framework fields
   'methodology_gates',
   'template_suggestions',
   'methodology_elements',
@@ -62,7 +62,7 @@ export class FrameworkLifecycleProcessor {
       );
     }
 
-    // Create methodology data with available fields
+    // Create framework data with available fields
     const frameworkData: FrameworkCreationData = {
       id,
       name,
@@ -175,7 +175,7 @@ export class FrameworkLifecycleProcessor {
       }
     }
 
-    // Write methodology files with merge from existing data
+    // Write framework files with merge from existing data
     const result = await this.ctx.fileService.writeFrameworkFiles(frameworkData, existingData);
 
     if (!result.success) {
@@ -235,7 +235,7 @@ export class FrameworkLifecycleProcessor {
       );
     }
 
-    // Get methodology directory path
+    // Get framework directory path
     const serverRoot = this.ctx.configManager.getServerRoot();
     const frameworkDir = path.join(serverRoot, 'resources', 'frameworks', id.toLowerCase());
 
@@ -243,7 +243,7 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Methodology directory not found: ${frameworkDir}`);
     }
 
-    // Remove methodology directory
+    // Remove framework directory
     try {
       await fs.rm(frameworkDir, { recursive: true });
     } catch (error) {
@@ -282,7 +282,7 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Methodology '${id}' not found`);
     }
 
-    // Trigger full refresh (methodology registry doesn't have per-item reload)
+    // Trigger full refresh (framework registry doesn't have per-item reload)
     await this.ctx.onRefresh?.();
 
     const reasonText = reason !== undefined && reason !== '' ? ` (reason: ${reason})` : '';
@@ -349,7 +349,7 @@ export class FrameworkLifecycleProcessor {
   // ============================================================================
 
   /**
-   * Comprehensive existence check across all methodology state sources.
+   * Comprehensive existence check across all framework state sources.
    */
   private checkFrameworkExists(id: string): {
     inAnySource: boolean;
@@ -381,7 +381,7 @@ export class FrameworkLifecycleProcessor {
   }
 
   /**
-   * Atomic methodology creation with rollback on failure.
+   * Atomic framework creation with rollback on failure.
    */
   private async createFrameworkAtomic(
     id: string,
@@ -400,7 +400,7 @@ export class FrameworkLifecycleProcessor {
     const loader = registry.getRuntimeLoader();
     loader.clearCache();
 
-    // Step 3: Register in methodology registry
+    // Step 3: Register in framework registry
     const registryResult = await registry.loadAndRegisterById(normalizedId);
     if (!registryResult) {
       await this.ctx.fileService.deleteFramework(normalizedId);
@@ -422,10 +422,10 @@ export class FrameworkLifecycleProcessor {
   }
 
   /**
-   * Copy defined optional fields from input to methodology data.
+   * Copy defined optional fields from input to framework data.
    */
   private assignOptionalFields(target: FrameworkCreationData, source: FrameworkManagerInput): void {
-    for (const field of OPTIONAL_METHODOLOGY_FIELDS) {
+    for (const field of OPTIONAL_FRAMEWORK_FIELDS) {
       const value = source[field];
       if (value !== undefined) {
         (target as unknown as Record<string, unknown>)[field] = value;

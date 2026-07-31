@@ -1,4 +1,4 @@
-// @lifecycle canonical - Enhances templates with methodology-specific guidance blocks.
+// @lifecycle canonical - Enhances templates with framework-specific guidance blocks.
 /**
  * Template Enhancer - Resource-Driven Implementation
  *

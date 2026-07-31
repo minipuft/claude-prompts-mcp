@@ -6,7 +6,7 @@ export type GateBody = Record<string, unknown>;
 /**
  * Resolve one gate body over another, field by field, per ADR 0001 (b).
  *
- * `base` is the lower-ranked body (a `registry-auto` or `methodology` definition); `override` is
+ * `base` is the lower-ranked body (a `registry-auto` or `framework` definition); `override` is
  * the higher-ranked one (a prompt's inline definition at rank 60, or a caller's spec at rank 80).
  *
  * ## Why this is a shallow replace, and why that is the whole rule

@@ -195,7 +195,7 @@ export function discoverYamlFiles(
 /**
  * Discover subdirectories containing a YAML entry point file
  *
- * Useful for discovering methodology directories or other
+ * Useful for discovering framework directories or other
  * structured YAML configurations where each subdirectory
  * represents a distinct entity.
  *
@@ -338,7 +338,7 @@ export function isYamlFile(filePath: string, options?: { includeYml?: boolean })
  * @example
  * ```typescript
  * getYamlBaseName('path/to/config.yaml') // 'config'
- * getYamlBaseName('methodology.yml')     // 'methodology'
+ * getYamlBaseName('framework.yaml')      // 'framework'
  * ```
  */
 export function getYamlBaseName(filePath: string): string {

@@ -1,9 +1,9 @@
-// @lifecycle canonical - Core framework and methodology type definitions.
+// @lifecycle canonical - Core framework and framework type definitions.
 /**
- * Methodology Guide Type Definitions
+ * Framework Guide Type Definitions
  *
- * Contains all types related to methodology guides, framework definitions,
- * and methodology-specific interfaces. This consolidates types from multiple
+ * Contains all types related to framework guides, framework definitions,
+ * and framework-specific interfaces. This consolidates types from multiple
  * sources to eliminate duplication.
  */
 
@@ -41,7 +41,7 @@ export function isBuiltinFramework(type: string): type is BuiltinFrameworkType {
 export type FrameworkType = string;
 
 /**
- * Framework methodology definitions (includes AUTO for selection)
+ * Framework definitions (includes AUTO for selection)
  * @deprecated Use FrameworkType for type discrimination. This includes 'AUTO' for selection contexts only.
  */
 export type FrameworkSelection = FrameworkType | 'AUTO';
@@ -88,17 +88,17 @@ export interface FrameworkSelectionCriteria {
 }
 
 /**
- * Guidance for creating new prompts based on methodology
+ * Guidance for creating new prompts based on framework
  */
 export interface PromptCreationGuidance {
-  // Structure guidance for different methodology sections
+  // Structure guidance for different framework sections
   structureGuidance: {
     systemPromptSuggestions: string[];
     userTemplateSuggestions: string[];
     argumentSuggestions: ArgumentGuidance[];
   };
 
-  // Methodology-specific prompt elements
+  // Framework-specific prompt elements
   frameworkElements: {
     requiredSections: string[];
     optionalSections: string[];
@@ -117,7 +117,7 @@ export interface PromptCreationGuidance {
  * Guidance for processing templates during execution
  */
 export interface ProcessingGuidance {
-  // Methodology-specific processing steps
+  // Framework-specific processing steps
   processingSteps: ProcessingStep[];
 
   // Template enhancement suggestions
@@ -139,7 +139,7 @@ export interface ProcessingGuidance {
  * Guidance for step sequencing in execution
  */
 export interface StepGuidance {
-  // Methodology-specific step sequence
+  // Framework-specific step sequence
   stepSequence: ExecutionStep[];
 
   // Step-specific enhancements
@@ -150,7 +150,7 @@ export interface StepGuidance {
 }
 
 /**
- * Overall methodology enhancement for execution
+ * Overall framework enhancement for execution
  */
 export interface FrameworkEnhancement {
   // System prompt enhancements
@@ -159,7 +159,7 @@ export interface FrameworkEnhancement {
   // Processing enhancements
   processingEnhancements: ProcessingStep[];
 
-  // Quality gates specific to methodology
+  // Quality gates specific to framework
   methodologyGates: QualityGate[];
 
   // Template structure suggestions
@@ -234,7 +234,7 @@ export interface TemplateEnhancement {
 }
 
 /**
- * Tool-specific descriptions for a methodology
+ * Tool-specific descriptions for a framework
  */
 export interface FrameworkToolDescription {
   description?: string;
@@ -244,7 +244,7 @@ export interface FrameworkToolDescription {
 }
 
 /**
- * Complete tool descriptions provided by a methodology guide
+ * Complete tool descriptions provided by a framework guide
  */
 export interface FrameworkToolDescriptions {
   prompt_engine?: FrameworkToolDescription;
@@ -254,7 +254,7 @@ export interface FrameworkToolDescriptions {
 
 /**
  * Judge prompt definition for resource selection in the two-phase client-driven flow.
- * Framework-specific judges can customize how resources are selected for their methodology.
+ * Framework-specific judges can customize how resources are selected for their framework.
  */
 export interface JudgePromptDefinition {
   /** System message setting the judge's context and expertise */
@@ -266,7 +266,7 @@ export interface JudgePromptDefinition {
 }
 
 /**
- * Methodology validation results
+ * Framework validation results
  */
 export interface FrameworkValidation {
   compliant: boolean;
@@ -278,7 +278,7 @@ export interface FrameworkValidation {
 }
 
 /**
- * Main interface for methodology guides
+ * Main interface for framework guides
  * Framework adapters implement this to provide guidance rather than analysis
  */
 export interface FrameworkGuide {
@@ -290,10 +290,10 @@ export interface FrameworkGuide {
   readonly version: string;
 
   /**
-   * Guide the creation of new prompts using this methodology
+   * Guide the creation of new prompts using this framework
    * @param intent The user's intent or goal for the prompt
    * @param context Additional context information
-   * @returns Guidance for structuring the prompt according to methodology
+   * @returns Guidance for structuring the prompt according to framework
    */
   guidePromptCreation(intent: string, context?: Record<string, any>): PromptCreationGuidance;
 
@@ -301,7 +301,7 @@ export interface FrameworkGuide {
    * Guide template processing during execution
    * @param template The template being processed
    * @param executionType The execution strategy from semantic analyzer
-   * @returns Processing guidance based on methodology
+   * @returns Processing guidance based on framework
    */
   guideTemplateProcessing(template: string, executionType: ExecutionType): ProcessingGuidance;
 
@@ -309,7 +309,7 @@ export interface FrameworkGuide {
    * Guide execution step sequencing
    * @param prompt The prompt being executed
    * @param semanticAnalysis Results from unified semantic analyzer
-   * @returns Step-by-step guidance based on methodology
+   * @returns Step-by-step guidance based on framework
    */
   guideExecutionSteps(
     prompt: ConvertedPrompt,
@@ -317,46 +317,46 @@ export interface FrameworkGuide {
   ): StepGuidance;
 
   /**
-   * Enhance execution with methodology-specific improvements
+   * Enhance execution with framework-specific improvements
    * @param prompt The prompt to enhance
    * @param context Current execution context
-   * @returns Methodology enhancements to apply
+   * @returns Framework enhancements to apply
    */
   enhanceWithFramework(prompt: ConvertedPrompt, context: Record<string, any>): FrameworkEnhancement;
 
   /**
-   * Validate that a prompt follows methodology principles
+   * Validate that a prompt follows framework principles
    * @param prompt The prompt to validate
    * @returns Validation results and improvement suggestions
    */
   validateFrameworkCompliance(prompt: ConvertedPrompt): FrameworkValidation;
 
   /**
-   * Get methodology-specific system prompt guidance
+   * Get framework-specific system prompt guidance
    * @param context Execution context
-   * @returns System prompt additions for this methodology
+   * @returns System prompt additions for this framework
    */
   getSystemPromptGuidance(context: Record<string, any>): string;
 
   /**
-   * Get methodology-specific tool descriptions (optional)
-   * Provides custom descriptions for MCP tools when this methodology is active
-   * @returns Tool descriptions customized for this methodology
+   * Get framework-specific tool descriptions (optional)
+   * Provides custom descriptions for MCP tools when this framework is active
+   * @returns Tool descriptions customized for this framework
    */
   getToolDescriptions?(): FrameworkToolDescriptions;
 
   /**
-   * Get methodology-specific judge prompt for resource selection (optional)
+   * Get framework-specific judge prompt for resource selection (optional)
    * Used in the two-phase client-driven judge flow to customize how resources
-   * are selected for this methodology.
-   * @returns Judge prompt definition customized for this methodology
+   * are selected for this framework.
+   * @returns Judge prompt definition customized for this framework
    */
   getJudgePrompt?(): JudgePromptDefinition;
 }
 
 /**
- * Base class for methodology guides
- * Provides common functionality for all methodology implementations
+ * Base class for framework guides
+ * Provides common functionality for all framework implementations
  */
 export abstract class BaseFrameworkGuide implements FrameworkGuide {
   abstract readonly frameworkId: string;

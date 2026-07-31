@@ -10,7 +10,7 @@
  * - resource_manager: Unified CRUD for prompts, gates, and frameworks
  *
  * ARCHITECTURE:
- * - Framework-aware tool descriptions that change based on active methodology
+ * - Framework-aware tool descriptions that change based on active framework
  * - Single source of truth for each functional area
  * - Integrated ToolDescriptionLoader for dynamic descriptions
  * - Improved maintainability and clear separation of concerns
@@ -51,7 +51,7 @@ import {
 } from '../../engine/gates/core/gate-verdict-contract.js';
 import { GateStateStore, createGateStateStore } from '../../engine/gates/gate-state-store.js';
 import { PromptAssetManager } from '../../modules/prompts/index.js';
-// Gate evaluator removed - now using Framework methodology validation
+// Gate evaluator removed - now using Framework validation
 import { createContentAnalyzer } from '../../modules/semantic/configurable-semantic-analyzer.js';
 import { createSemanticIntegrationFactory } from '../../modules/semantic/integrations/index.js';
 import { ConversationStore } from '../../modules/text-refs/conversation.js';
@@ -484,7 +484,7 @@ export class McpToolRouter {
   }
 
   /**
-   * Expose the framework manager for runtime integrations (e.g., methodology hot reload).
+   * Expose the framework manager for runtime integrations (e.g., framework hot reload).
    */
   getFrameworkManager(): FrameworkManager | undefined {
     return this.frameworkManager;
@@ -577,7 +577,7 @@ export class McpToolRouter {
         );
       }
 
-      // Build schema with methodology-aware parameter descriptions
+      // Build schema with framework-aware parameter descriptions
       const promptEngineSchema = buildPromptEngineSchema(
         isValidGateVerdict,
         GATE_VERDICT_VALIDATION_MESSAGE,
@@ -752,7 +752,7 @@ export class McpToolRouter {
           { applyFrameworkOverride: true }
         ) ?? fallback;
 
-      // Build schema with methodology-aware parameter descriptions
+      // Build schema with framework-aware parameter descriptions
       const systemControlSchema = buildSystemControlSchema(getSystemControlParamDescription);
 
       this.mcpServer.registerTool(
@@ -817,7 +817,7 @@ export class McpToolRouter {
         {
           title: 'Resource Manager',
           description: resourceManagerDescription,
-          // Hand-written schema — includes .passthrough() for advanced methodology fields
+          // Hand-written schema — includes .passthrough() for advanced framework fields
           inputSchema: resourceManagerInputSchema,
         },
         async (args: ResourceManagerSchemaInput, extra: unknown) => {
@@ -830,7 +830,7 @@ export class McpToolRouter {
               };
             }
             // Cast to ResourceManagerInput - the generated schema uses .passthrough() so advanced
-            // methodology fields flow through, but router expects the more specific local type
+            // framework fields flow through, but router expects the more specific local type
             const toolResponse = await router.handleAction(
               args as ResourceManagerInput,
               (this.enrichExtraWithClientInfo(extra) ?? {}) as Record<string, unknown>

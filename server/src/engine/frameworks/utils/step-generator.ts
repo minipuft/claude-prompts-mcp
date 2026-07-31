@@ -3,7 +3,7 @@
  * Step Generator
  *
  * Generic utility for generating processing and execution steps from
- * methodology definitions. Works with phase and step data from YAML/JSON
+ * framework definitions. Works with phase and step data from YAML/JSON
  * to create step sequences and enhancements.
  */
 
@@ -17,7 +17,7 @@ import type {
 } from '../types/methodology-types.js';
 
 /**
- * Execution step definition from methodology YAML
+ * Execution step definition from framework YAML
  */
 export interface ExecutionStepDefinition {
   id: string;
@@ -57,7 +57,7 @@ export interface ExecutionTypeEnhancements {
 }
 
 /**
- * Processing step definition from methodology YAML
+ * Processing step definition from framework YAML
  */
 export interface ProcessingStepDefinition {
   id: string;
@@ -73,7 +73,7 @@ export interface ProcessingStepDefinition {
 }
 
 /**
- * Phases definition from methodology YAML
+ * Phases definition from framework YAML
  */
 export interface PhasesDefinition {
   processingSteps?: ProcessingStepDefinition[];
@@ -164,7 +164,7 @@ export function createStepGuidance(
   phases: PhasesDefinition,
   semanticAnalysis?: ContentAnalysisResult
 ): StepGuidance {
-  // #todo: Expose executionSteps via a “methodology_steps” toolcall (akin to %judge) so the client LLM can request structured steps for the user query; currently guidance-only.
+  // #todo: Expose executionSteps via a “framework_steps” toolcall (akin to %judge) so the client LLM can request structured steps for the user query; currently guidance-only.
   const executionSteps = phases.executionSteps ? generateExecutionSteps(phases.executionSteps) : [];
 
   const stepEnhancements: Record<string, string[]> = {};

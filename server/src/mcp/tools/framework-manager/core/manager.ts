@@ -2,7 +2,7 @@
 /**
  * Framework Tool Handler
  *
- * Thin routing layer for methodology lifecycle management.
+ * Thin routing layer for framework lifecycle management.
  * Domain logic delegated to services:
  * - FrameworkLifecycleProcessor: create, update, delete, reload, switch
  * - FrameworkDiscoveryProcessor: list, inspect

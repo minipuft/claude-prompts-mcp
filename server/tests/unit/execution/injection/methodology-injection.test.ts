@@ -1,4 +1,4 @@
-// @lifecycle canonical - Unit tests for the pre-injection methodology projection (plan item 2.4)
+// @lifecycle canonical - Unit tests for the pre-injection framework projection (plan item 2.4)
 import { describe, expect, it } from '@jest/globals';
 
 import { isFrameworkInjected } from '../../../../src/engine/execution/pipeline/decisions/injection/methodology-injection.js';
@@ -6,7 +6,7 @@ import { isFrameworkInjected } from '../../../../src/engine/execution/pipeline/d
 describe('isFrameworkInjected', () => {
   describe('modifiers', () => {
     it('reports suppressed under %lean — the incoherence this exists to fix', () => {
-      // F4 in the plan: %lean suppressed the methodology system prompt while keeping the gates
+      // F4 in the plan: %lean suppressed the framework system prompt while keeping the gates
       // that score adherence to it. This is the signal that lets the nesting veto drop them.
       expect(isFrameworkInjected({ modifiers: { lean: true } })).toBe(false);
     });
@@ -17,7 +17,7 @@ describe('isFrameworkInjected', () => {
 
     it('reports injected under %judge, which forces the methodology in', () => {
       // Mirrors InjectionDecisionService.checkModifiers: %judge forces system-prompt injection
-      // so the judge selection phase always sees the methodology.
+      // so the judge selection phase always sees the framework.
       expect(isFrameworkInjected({ modifiers: { judge: true } })).toBe(true);
     });
 
@@ -47,7 +47,7 @@ describe('isFrameworkInjected', () => {
 
     it('ignores a rule that declares only frequency or target', () => {
       // Declaring how often to inject is not declaring whether to — an author tuning frequency
-      // must not lose their methodology gates as a side effect.
+      // must not lose their framework gates as a side effect.
       expect(
         isFrameworkInjected({
           promptInjection: { 'system-prompt': { frequency: { mode: 'first-only' } } },

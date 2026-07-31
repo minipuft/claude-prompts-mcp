@@ -62,7 +62,7 @@ export interface GatePassCriteria {
   required_patterns?: string[];
   forbidden_patterns?: string[];
 
-  // Methodology compliance options
+  // Framework compliance options
   methodology?: string;
   min_compliance_score?: number;
   severity?: 'warn' | 'fail';

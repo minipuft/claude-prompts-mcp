@@ -1,4 +1,4 @@
-// @lifecycle canonical - Builds methodology hot-reload config for the hot-reload manager.
+// @lifecycle canonical - Builds framework hot-reload config for the hot-reload manager.
 import { createFrameworkHotReloadRegistration } from '../engine/frameworks/methodology/index.js';
 
 import type { Logger } from '../infra/logging/index.js';
@@ -21,12 +21,12 @@ export function buildFrameworkAuxiliaryReloadConfig(
     // Wire hot-reload callbacks to keep FrameworkManager.frameworks cache in sync
     const registration = createFrameworkHotReloadRegistration(logger, registry, undefined, {
       onFrameworkDeleted: (frameworkId: string) => {
-        // Remove framework from cache when methodology is deleted
+        // Remove framework from cache when framework is deleted
         frameworkManager.unregister(frameworkId);
         logger.debug(`Framework cache cleared for deleted methodology: ${frameworkId}`);
       },
       onFrameworkReloaded: async (frameworkId: string) => {
-        // Regenerate framework definition when methodology is reloaded
+        // Regenerate framework definition when framework is reloaded
         await frameworkManager.reload(frameworkId);
         logger.debug(`Framework cache refreshed for reloaded methodology: ${frameworkId}`);
       },

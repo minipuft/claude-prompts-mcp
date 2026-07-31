@@ -1,4 +1,4 @@
-// @lifecycle canonical - Barrel exports for framework and methodology type contracts.
+// @lifecycle canonical - Barrel exports for framework and framework type contracts.
 /**
  * Framework Types Index
  *
@@ -7,7 +7,7 @@
  * and provides a single source of truth for framework types.
  */
 
-// Methodology guide types
+// Framework guide types
 export type {
   ArgumentGuidance,
   ExecutionStep,

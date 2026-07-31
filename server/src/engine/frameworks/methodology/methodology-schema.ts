@@ -1,8 +1,8 @@
-// @lifecycle canonical - Single source of truth for methodology YAML validation
+// @lifecycle canonical - Single source of truth for framework YAML validation
 /**
- * Methodology Schema (Zod)
+ * Framework Schema (Zod)
  *
- * Defines the canonical schema for methodology YAML files.
+ * Defines the canonical schema for framework YAML files.
  * Used by both:
  * - RuntimeFrameworkLoader (runtime validation)
  * - validate-frameworks.ts (CI validation)
@@ -36,7 +36,7 @@ export const TemplateSuggestionSchema = z.object({
   type: z.enum(['addition', 'structure', 'modification']),
   description: z.string().optional(), // Description of the suggestion
   content: z.string().optional(), // Suggested content to add
-  frameworkJustification: z.string().optional(), // Why this aligns with methodology
+  frameworkJustification: z.string().optional(), // Why this aligns with framework
   impact: z.enum(['high', 'medium', 'low']).optional(),
 });
 
@@ -116,14 +116,14 @@ export const PhasesFileSchema = z
 export type PhasesFileYaml = z.infer<typeof PhasesFileSchema>;
 
 // ============================================
-// Main Methodology Schema
+// Main Framework Schema
 // ============================================
 export const FrameworkSchema = z
   .object({
     // Required core fields
     id: z.string().min(1),
     name: z.string().min(1),
-    // Framework type discriminator. Replaced the legacy `methodology:` field, which was
+    // Framework type discriminator. Replaced the legacy `framework:` field, which was
     // removed once every definition carried `type:` — it duplicated this value verbatim.
     type: z.string().min(1),
     version: z.string().regex(/^\d+\.\d+\.\d+/, 'Must be semver format (e.g., 1.0.0)'),
@@ -176,7 +176,7 @@ export interface FrameworkSchemaValidationResult {
 }
 
 /**
- * Validate a methodology definition against the schema
+ * Validate a framework definition against the schema
  *
  * @param data - Raw YAML data to validate
  * @param expectedId - Expected ID (should match directory name)

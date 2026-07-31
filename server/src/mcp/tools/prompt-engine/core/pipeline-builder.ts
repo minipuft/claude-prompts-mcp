@@ -371,7 +371,7 @@ export class PipelineBuilder {
       responseCaptureStage,
       shellVerificationStage, // 08b - Shell verification (Ralph Wiggum loops)
       executionStage,
-      phaseGuardVerificationStage, // 09b - Phase guard verification (methodology phases)
+      phaseGuardVerificationStage, // 09b - Phase guard verification (framework phases)
       gateReviewStage,
       formattingStage,
       postFormattingStage,

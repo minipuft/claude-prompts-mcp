@@ -1,8 +1,8 @@
-// @lifecycle canonical - Enforces methodology phase-guard verification in the execution pipeline.
+// @lifecycle canonical - Enforces framework phase-guard verification in the execution pipeline.
 /**
  * Pipeline Stage 09b: Phase Guard Verification
  *
- * Deterministic structural validation of LLM output against methodology phase guards.
+ * Deterministic structural validation of LLM output against framework phase guards.
  * Evaluates phase markers and content rules (min_length, contains_any, etc.) without LLM cost.
  *
  * Position: After StepExecutionStage (09), before GateReviewStage (10-gate)
@@ -12,7 +12,7 @@
  * and review rendering. Phase guards do NOT independently short-circuit via setResponse().
  *
  * Flow:
- * 1. Check if framework active AND methodology has phases with guards
+ * 1. Check if framework active AND framework has phases with guards
  * 2. If no guards → pass through (no-op)
  * 3. Evaluate user_response against phase markers/guards
  * 4. If all pass → merge guard summary into pending gate review (if any)
@@ -88,7 +88,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       return;
     }
 
-    // 4. Get methodology phases with guards
+    // 4. Get framework phases with guards
     const phases = this.getPhasesWithGuards(frameworkId);
     if (phases.length === 0) {
       this.logExit({ skipped: 'No phases with guards' });
@@ -227,7 +227,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
   }
 
   /**
-   * Extract processing steps that have guards from the methodology guide.
+   * Extract processing steps that have guards from the framework guide.
    */
   private getPhasesWithGuards(frameworkId: string): ProcessingStep[] {
     const registry = this.frameworkRegistryProvider();
@@ -251,7 +251,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    *
    * Reads `user_response` from the MCP request — the LLM's actual output
    * from the previous turn. This is what guards should validate (did the
-   * LLM follow methodology phases?), NOT the rendered template from Stage 09.
+   * LLM follow framework phases?), NOT the rendered template from Stage 09.
    */
   private extractOutputText(context: ExecutionContext): string | undefined {
     const userResponse = context.mcpRequest.user_response?.trim();

@@ -58,7 +58,7 @@ export class FrameworkDiscoveryProcessor {
     const isActive = this.ctx.frameworkStateStore?.getActiveFramework()?.id === framework.id;
     const activeStatus = isActive ? 'Active' : 'Inactive';
 
-    // Load methodology data from disk to calculate validation score
+    // Load framework data from disk to calculate validation score
     let validationInfo = '';
     try {
       const existingData = await this.ctx.fileService.loadExistingFramework(id);

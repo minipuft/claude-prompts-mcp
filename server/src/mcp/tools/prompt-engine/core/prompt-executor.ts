@@ -234,7 +234,7 @@ export class PromptExecutor {
     );
     this.chainOperatorExecutor = this.createChainOperatorExecutor();
 
-    // Inject GateLoader into ExecutionPlanner for dynamic methodology gate detection
+    // Inject GateLoader into ExecutionPlanner for dynamic framework gate detection
     this.executionPlanner.setGateLoader(this.lightweightGateSystem.gateLoader);
 
     // Inject GateManager into ExecutionPlanner for category-based gate selection

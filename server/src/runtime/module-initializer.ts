@@ -158,7 +158,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     }
   }
 
-  // Initialize methodology + style loaders with PathResolver-resolved dirs
+  // Initialize framework + style loaders with PathResolver-resolved dirs
   // This ensures PathResolver is the SSOT for directory resolution and enables overlays.
   // Must happen before any pipeline/tool code calls getDefaultRuntimeLoader().
   const frameworksDir = pathResolver?.getFrameworksPath();

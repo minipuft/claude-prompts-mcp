@@ -1,8 +1,8 @@
-// @lifecycle canonical - Exposes phase-guard evaluation APIs for methodology validation.
+// @lifecycle canonical - Exposes phase-guard evaluation APIs for framework validation.
 /**
  * Phase Guard Evaluation Module
  *
- * Deterministic structural validation for methodology phases.
+ * Deterministic structural validation for framework phases.
  * Parses LLM output by section headers and evaluates phase guards.
  */
 

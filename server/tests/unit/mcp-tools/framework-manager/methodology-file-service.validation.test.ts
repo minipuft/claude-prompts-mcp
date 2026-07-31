@@ -35,7 +35,7 @@ describe('FrameworkFileWriter canonical writes', () => {
       id: 'incomplete-method',
     });
 
-    // id-only payload lacks required fields (name, methodology) — validation rejects and rolls back
+    // id-only payload lacks required fields (name, framework) — validation rejects and rolls back
     expect(result.success).toBe(false);
     expect(result.error).toContain('rolled back');
     const frameworkDir = service.getFrameworkDir('incomplete-method');

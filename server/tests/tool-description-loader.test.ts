@@ -111,7 +111,7 @@ async function setupTempConfigRoot(): Promise<string> {
 
 describe('ToolDescriptionLoader (framework-aware active config)', () => {
   beforeEach(() => {
-    // Ensure runtime methodology loader singleton does not leak state between tests.
+    // Ensure runtime framework loader singleton does not leak state between tests.
     resetDefaultRuntimeLoader();
   });
 

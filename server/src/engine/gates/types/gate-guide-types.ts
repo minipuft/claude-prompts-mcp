@@ -101,7 +101,7 @@ export interface GateDefinitionYaml {
   enforcementMode?: GateEnforcementMode;
   /**
    * Gate type classification for dynamic identification.
-   * - 'framework': Methodology-related gates, filtered when frameworks disabled
+   * - 'framework': Framework-related gates, filtered when frameworks disabled
    * - 'category': Category-based gates (code, documentation, etc.)
    * - 'custom': User-defined custom gates
    */

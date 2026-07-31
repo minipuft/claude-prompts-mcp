@@ -1,19 +1,19 @@
-// @lifecycle canonical - Barrel exports for methodology registry and guides.
+// @lifecycle canonical - Barrel exports for framework registry and guides.
 /**
- * Methodology System Index
+ * Framework System Index
  *
- * Centralized exports for the reorganized methodology system.
+ * Centralized exports for the reorganized framework system.
  * Uses YAML-based loading exclusively via RuntimeFrameworkLoader.
  */
 
-// Export methodology registry
+// Export framework registry
 export { FrameworkRegistry, createFrameworkRegistry } from './registry.js';
 export type { FrameworkRegistryConfig, FrameworkGuideEntry, FrameworkSource } from './registry.js';
 
-// Export methodology interfaces
+// Export framework interfaces
 export * from './interfaces.js';
 
-// Export methodology definition types (canonical source)
+// Export framework definition types (canonical source)
 export type {
   FrameworkResourceDefinition,
   FrameworkGateDefinition,
@@ -22,10 +22,10 @@ export type {
   ArgumentSuggestionDefinition,
 } from './methodology-definition-types.js';
 
-// Export data-driven methodology guide system
+// Export data-driven framework guide system
 export { GenericFrameworkGuide, createGenericGuide } from './generic-methodology-guide.js';
 
-// Export runtime YAML loader (canonical source for methodology loading)
+// Export runtime YAML loader (canonical source for framework loading)
 export {
   RuntimeFrameworkLoader,
   createRuntimeFrameworkLoader,
@@ -50,7 +50,7 @@ export type {
   FrameworkHotReloadRegistration,
 } from './methodology-hot-reload.js';
 
-// Export shared Zod schema (SSOT for methodology validation)
+// Export shared Zod schema (SSOT for framework validation)
 export {
   FrameworkSchema,
   FrameworkGateSchema,

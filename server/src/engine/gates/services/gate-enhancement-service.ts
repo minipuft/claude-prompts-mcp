@@ -94,7 +94,7 @@ export class GateEnhancementService {
   }
 
   /**
-   * Load methodology gate IDs from GateLoader for the current request.
+   * Load framework gate IDs from GateLoader for the current request.
    * Returns fresh data each call — GateLoader handles hot-reload internally.
    */
   async loadFrameworkGateIds(): Promise<Set<string>> {

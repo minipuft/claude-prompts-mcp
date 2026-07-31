@@ -23,7 +23,7 @@ export type FrameworkManagerActionId =
   | 'compare';
 
 /**
- * Phase definition for methodology
+ * Phase definition for framework
  */
 export interface PhaseDefinition {
   id: string;
@@ -33,11 +33,11 @@ export interface PhaseDefinition {
 }
 
 // ============================================================================
-// Advanced Methodology Types (for CAGEERF-quality frameworks)
+// Advanced Framework Types (for CAGEERF-quality frameworks)
 // ============================================================================
 
 /**
- * Methodology-specific quality gate with validation criteria
+ * Framework-specific quality gate with validation criteria
  */
 export interface FrameworkGate {
   id: string;
@@ -89,7 +89,7 @@ export interface TemplateSuggestion {
 }
 
 /**
- * Methodology elements for prompt creation guidance
+ * Framework elements for prompt creation guidance
  */
 export interface FrameworkElements {
   requiredSections: string[];
@@ -174,7 +174,7 @@ export interface FrameworkManagerInput {
   confirm?: boolean;
   reason?: string;
 
-  // Advanced methodology fields (not advertised in tool description for token efficiency)
+  // Advanced framework fields (not advertised in tool description for token efficiency)
   methodology_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
   methodology_elements?: FrameworkElements;
@@ -217,10 +217,10 @@ export interface FrameworkManagerDependencies {
 }
 
 /**
- * Methodology validation result with structured error handling
+ * Framework validation result with structured error handling
  */
 export interface FrameworkDraftValidationResult {
-  /** Whether the methodology passes validation (all required fields present) */
+  /** Whether the framework passes validation (all required fields present) */
   valid: boolean;
   /** Quality level based on field coverage */
   level: 'incomplete' | 'standard' | 'full';
@@ -235,7 +235,7 @@ export interface FrameworkDraftValidationResult {
 }
 
 /**
- * Methodology creation data
+ * Framework creation data
  */
 export interface FrameworkCreationData {
   id: string;
@@ -252,7 +252,7 @@ export interface FrameworkCreationData {
   tool_descriptions?: FrameworkManagerInput['tool_descriptions'];
   enabled?: boolean;
 
-  // Advanced methodology fields (for CAGEERF-quality frameworks)
+  // Advanced framework fields (for CAGEERF-quality frameworks)
   methodology_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
   methodology_elements?: FrameworkElements;

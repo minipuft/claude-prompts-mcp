@@ -17,7 +17,7 @@ type GuidanceStore = Record<string, ServicePromptGuidanceResult>;
 /**
  * Pipeline Stage: Prompt Guidance
  *
- * Applies methodology-driven system prompt injection and template enhancement
+ * Applies framework-driven system prompt injection and template enhancement
  * using the centralized PromptGuidanceService. In the two-phase client-driven
  * judge flow, this stage applies style enhancement from client selections.
  *

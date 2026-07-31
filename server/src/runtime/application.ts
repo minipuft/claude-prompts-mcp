@@ -395,7 +395,7 @@ export class Application {
             get: (id: string) => this.gateManager!.get(id),
           }
         : undefined,
-      // Phase 2: Methodology resources
+      // Phase 2: Framework resources
       frameworkManager:
         fm != null
           ? {
@@ -794,7 +794,7 @@ export class Application {
         this.serviceOrchestrator.register({
           name: serviceName,
           start: async () => {
-            // Build auxiliary reload configs for methodology, gates, and script tools
+            // Build auxiliary reload configs for framework, gates, and script tools
             const frameworkAux = buildFrameworkAuxiliaryReloadConfig(
               this.logger,
               this.mcpToolsManager

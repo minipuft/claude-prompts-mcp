@@ -1,7 +1,7 @@
 /**
- * Methodology Creation Integration Test
+ * Framework Creation Integration Test
  *
- * Tests the complete methodology creation workflow with real modules:
+ * Tests the complete framework creation workflow with real modules:
  * - FrameworkToolHandler (real validation logic)
  * - FrameworkFileWriter (mocked filesystem)
  * - FrameworkManager (real registration)
@@ -60,7 +60,7 @@ const createMockFrameworkManager = (): FrameworkManager => {
     { id: string; name: string; type: string; enabled: boolean; description: string }
   >();
 
-  // Mock methodology registry with all required methods
+  // Mock framework registry with all required methods
   const mockFrameworkRegistry = {
     hasGuide: jest.fn((id: string) => registeredFrameworks.has(id.toLowerCase())),
     getRuntimeLoader: jest.fn(() => ({
@@ -187,7 +187,7 @@ describe('Methodology Creation Integration', () => {
 
   describe('Validation Requirements', () => {
     test('rejects methodology missing phases', async () => {
-      // Arrange: Methodology without phases (should fail validation)
+      // Arrange: Framework without phases (should fail validation)
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'no-phases-test',
@@ -207,7 +207,7 @@ describe('Methodology Creation Integration', () => {
     });
 
     test('rejects methodology missing methodology_gates', async () => {
-      // Arrange: Methodology with phases but no gates
+      // Arrange: Framework with phases but no gates
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'no-gates-test',
@@ -230,7 +230,7 @@ describe('Methodology Creation Integration', () => {
     });
 
     test('creates valid methodology with all required fields', async () => {
-      // Arrange: Complete methodology with all required fields
+      // Arrange: Complete framework with all required fields
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'valid-test',
@@ -265,7 +265,7 @@ describe('Methodology Creation Integration', () => {
 
   describe('Completeness Scoring', () => {
     test('shows 80% score for minimal valid methodology', async () => {
-      // Arrange: Minimal valid methodology (only required fields)
+      // Arrange: Minimal valid framework (only required fields)
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'minimal-valid',
@@ -297,7 +297,7 @@ describe('Methodology Creation Integration', () => {
     });
 
     test('shows higher score with optional fields', async () => {
-      // Arrange: Methodology with optional fields
+      // Arrange: Framework with optional fields
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'enhanced-test',
@@ -347,7 +347,7 @@ describe('Methodology Creation Integration', () => {
 
   describe('Field Preservation', () => {
     test('preserves all advanced fields in written data', async () => {
-      // Arrange: Methodology with all field types
+      // Arrange: Framework with all field types
       const input: FrameworkManagerInput = {
         action: 'create',
         id: 'preservation-test',
@@ -425,7 +425,7 @@ describe('Methodology Creation Integration', () => {
     });
 
     test('rejects duplicate methodology ID', async () => {
-      // Arrange: Create first methodology (valid)
+      // Arrange: Create first framework (valid)
       const firstInput: FrameworkManagerInput = {
         action: 'create',
         id: 'duplicate-test',
@@ -479,7 +479,7 @@ describe('Methodology Creation Integration', () => {
 
   describe('Inspect Action', () => {
     test('shows methodology details for existing methodology', async () => {
-      // Arrange: Create a methodology first
+      // Arrange: Create a framework first
       const createInput: FrameworkManagerInput = {
         action: 'create',
         id: 'inspect-test',
@@ -503,14 +503,14 @@ describe('Methodology Creation Integration', () => {
       };
       await manager.handleAction(createInput, {});
 
-      // Act: Inspect the methodology
+      // Act: Inspect the framework
       const inspectInput: FrameworkManagerInput = {
         action: 'inspect',
         id: 'inspect-test',
       };
       const response = await manager.handleAction(inspectInput, {});
 
-      // Assert: Should show methodology details
+      // Assert: Should show framework details
       expect(response.isError).toBe(false);
       const text = (response.content[0] as { text: string }).text;
 

@@ -1,13 +1,13 @@
-// @lifecycle canonical - Interface exports for methodology guides and registry contracts.
+// @lifecycle canonical - Interface exports for framework guides and registry contracts.
 /**
- * Methodology Interfaces -  Implementation
+ * Framework Interfaces -  Implementation
  *
- * Consolidated interfaces for methodology guides and registry management.
- * This file centralizes all methodology-related interfaces that were
+ * Consolidated interfaces for framework guides and registry management.
+ * This file centralizes all framework-related interfaces that were
  * previously distributed across multiple files.
  */
 
-// Re-export all methodology interfaces from the consolidated types
+// Re-export all framework interfaces from the consolidated types
 export type {
   ArgumentGuidance,
   ExecutionStep,

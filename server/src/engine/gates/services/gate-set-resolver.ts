@@ -27,8 +27,8 @@ export interface GateResolutionInput {
   /** Active framework id, or undefined when none is active. Never derived here. */
   readonly frameworkId?: string | undefined;
   /**
-   * Whether a methodology system prompt is actually injected for this execution, resolved by
-   * the injection hierarchy. Drives the nesting veto: scoring adherence to a methodology that
+   * Whether a framework system prompt is actually injected for this execution, resolved by
+   * the injection hierarchy. Drives the nesting veto: scoring adherence to a framework that
    * was not injected is incoherent, so those gates are withheld.
    */
   readonly frameworkInjected: boolean;
@@ -55,18 +55,18 @@ export interface GateResolutionInput {
   readonly inlineDefinitionGateIds?: readonly string[] | undefined;
   /** Rank 50 — a chain's `finalValidation`. */
   readonly chainGateIds?: readonly string[] | undefined;
-  /** Rank 40 — the active framework's methodology gates. */
+  /** Rank 40 — the active framework's framework gates. */
   readonly frameworkGateIds?: readonly string[] | undefined;
   /** Whether to auto-assign category gates (rank 20). Defaults to true. */
   readonly autoAssignCategoryGates?: boolean | undefined;
   /**
-   * Operator-level switch (`gatesConfig.enableMethodologyGates`). `false` withholds methodology
+   * Operator-level switch (`gatesConfig.enableMethodologyGates`). `false` withholds framework
    * gates server-wide and binds every rank — it is operator configuration, not a preference.
    * Defaults to enabled.
    */
   readonly frameworkGatesEnabled?: boolean | undefined;
   /**
-   * Methodology gate ids the caller has already loaded. Supplying them avoids a second registry
+   * Framework gate ids the caller has already loaded. Supplying them avoids a second registry
    * read; omitting them makes the resolver load its own.
    */
   readonly knownFrameworkGateIds?: readonly string[] | undefined;
@@ -272,7 +272,7 @@ export class GateSetResolver {
   }
 
   /**
-   * The three vetoes that key off the methodology gate set. They share one id set, so it is
+   * The three vetoes that key off the framework gate set. They share one id set, so it is
    * resolved once and only when at least one of them applies.
    *
    * Their binding ranks differ on purpose: nesting is a coherence invariant and the config
@@ -364,7 +364,7 @@ export class GateSetResolver {
 /**
  * `%clean` and `%framework` drop every gate; `%lean` and `%judge` drop none. `%lean` keeping
  * its gates is the documented, intended behavior — what it must NOT keep is a gate that scores
- * methodology adherence, and the nesting veto handles that separately.
+ * framework adherence, and the nesting veto handles that separately.
  */
 function buildModifierVeto(modifiers: ExecutionModifiers | undefined): GateVeto | undefined {
   if (modifiers?.clean !== true && modifiers?.framework !== true) {

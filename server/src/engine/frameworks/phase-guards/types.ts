@@ -2,7 +2,7 @@
 /**
  * Phase Guard Evaluation Types
  *
- * Result types for deterministic methodology phase guard evaluation.
+ * Result types for deterministic framework phase guard evaluation.
  * Used by the phase guard evaluator and pipeline Stage 09b.
  */
 
@@ -26,7 +26,7 @@ export interface PhaseGuardCheckResult {
  * Result of evaluating all guards for a single phase
  */
 export interface PhaseGuardResult {
-  /** Phase identifier from methodology */
+  /** Phase identifier from framework */
   phase: string;
   /** Section header used for detection */
   section_header: string;

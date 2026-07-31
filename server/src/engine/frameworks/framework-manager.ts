@@ -1,4 +1,4 @@
-// @lifecycle canonical - Coordinates methodology selection and framework execution contexts.
+// @lifecycle canonical - Coordinates framework selection and framework execution contexts.
 /**
  * Framework Manager
  *
@@ -6,8 +6,8 @@
  * Extends BaseResourceHandler to provide unified resource management patterns.
  *
  * Coordinates between:
- * - FrameworkRegistry: Manages methodology guides (source of truth)
- * - FrameworkDefinitions: Generated from methodology guides
+ * - FrameworkRegistry: Manages framework guides (source of truth)
+ * - FrameworkDefinitions: Generated from framework guides
  * - FrameworkStateStore: Runtime enable/disable state
  */
 
@@ -78,7 +78,7 @@ export interface FrameworkEntry {
 /**
  * Framework Manager
  *
- * Provides methodology selection and system prompt generation.
+ * Provides framework selection and system prompt generation.
  * Generates FrameworkDefinitions from FrameworkGuides.
  *
  * @example
@@ -119,13 +119,13 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   protected async initializeRegistry(): Promise<void> {
-    // Initialize methodology registry
+    // Initialize framework registry
     this.frameworkRegistry = await createFrameworkRegistry(this.logger);
     this.logger.debug('FrameworkRegistry initialized');
   }
 
   protected override async postRegistryInit(): Promise<void> {
-    // Generate framework definitions from methodology guides
+    // Generate framework definitions from framework guides
     await this.generateFrameworkDefinitions();
     this.logger.info(`Generated ${this.frameworks.size} framework definitions`);
   }
@@ -179,7 +179,7 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   protected async reloadResource(id: string): Promise<boolean> {
-    // For frameworks, reloading means regenerating from methodology guide
+    // For frameworks, reloading means regenerating from framework guide
     const guide = this.frameworkRegistry?.getGuide(id.toLowerCase());
     if (!guide) return false;
 
@@ -375,7 +375,7 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
-   * Get framework by methodology type (case-insensitive)
+   * Get framework by framework type (case-insensitive)
    */
   getFramework(methodology: string): FrameworkDefinition | undefined {
     return this.get(methodology);
@@ -456,7 +456,7 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
-   * Get methodology guide by framework ID
+   * Get framework guide by framework ID
    */
   getFrameworkGuide(frameworkId: string): FrameworkGuide | undefined {
     this.ensureInitialized();
@@ -464,7 +464,7 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
-   * List available methodology guides
+   * List available framework guides
    */
   listFrameworkGuides(): FrameworkGuide[] {
     this.ensureInitialized();
@@ -472,7 +472,7 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
-   * Expose the methodology registry for integrations
+   * Expose the framework registry for integrations
    */
   getFrameworkRegistry(): FrameworkRegistry {
     this.ensureInitialized();
@@ -547,7 +547,7 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
-   * Generate framework definitions from methodology guides
+   * Generate framework definitions from framework guides
    */
   private async generateFrameworkDefinitions(): Promise<void> {
     try {
@@ -572,7 +572,7 @@ export class FrameworkManager extends BaseResourceHandler<
   }
 
   /**
-   * Generate a single framework definition from a methodology guide
+   * Generate a single framework definition from a framework guide
    */
   private generateSingleFrameworkDefinition(guide: FrameworkGuide): FrameworkDefinition | null {
     try {
@@ -625,7 +625,7 @@ Apply this methodology systematically to ensure comprehensive and structured res
   }
 
   /**
-   * Get execution guidelines from methodology guide
+   * Get execution guidelines from framework guide
    */
   private getExecutionGuidelines(guide: FrameworkGuide): string[] {
     const processingGuidance = guide.guideTemplateProcessing('', 'single');

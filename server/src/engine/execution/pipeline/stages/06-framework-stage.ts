@@ -1,4 +1,4 @@
-// @lifecycle canonical - Applies framework methodology guidance to prompts.
+// @lifecycle canonical - Applies framework guidance to prompts.
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../../infra/logging/index.js';
@@ -17,18 +17,18 @@ type FrameworkEnabledProvider = () => boolean;
 /**
  * Pipeline Stage 6: Framework Resolution
  *
- * Injects methodology-specific system prompts and framework context,
+ * Injects framework-specific system prompts and framework context,
  * supporting both default framework and temporary overrides via symbolic operators (@).
  *
  * Dependencies: context.executionPlan, context.convertedPrompt
- * Output: context.frameworkContext (methodology, system prompts)
+ * Output: context.frameworkContext (framework, system prompts)
  * Can Early Exit: No
  */
 export class FrameworkResolutionStage extends BasePipelineStage {
   readonly name = 'FrameworkResolution';
 
   /**
-   * Request-scoped methodology gate IDs (set during execute, used synchronously within).
+   * Request-scoped framework gate IDs (set during execute, used synchronously within).
    * Reset to null after execute completes to prevent stale data across requests.
    */
   private currentRequestFrameworkGates: Set<string> | null = null;
@@ -43,7 +43,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   }
 
   /**
-   * Load methodology gate IDs from GateLoader for the current request.
+   * Load framework gate IDs from GateLoader for the current request.
    * Returns fresh data each call - GateLoader handles hot-reload internally.
    */
   private async loadFrameworkGateIds(): Promise<Set<string>> {
@@ -66,7 +66,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    // Load fresh methodology gate IDs for this request (prevents stale cache after hot-reload)
+    // Load fresh framework gate IDs for this request (prevents stale cache after hot-reload)
     this.currentRequestFrameworkGates = await this.loadFrameworkGateIds();
 
     if (context.state.session.isBlueprintRestored) {
@@ -342,7 +342,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   }
 
   /**
-   * Check if any gates in the array are methodology gates.
+   * Check if any gates in the array are framework gates.
    * Uses request-scoped data loaded at start of execute().
    */
   private hasFrameworkGate(gates?: readonly string[] | null): boolean {

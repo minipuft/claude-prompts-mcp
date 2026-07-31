@@ -64,7 +64,7 @@ export interface ConvertedPrompt {
   /**
    * Prompt-level injection control, carried from the prompt's own YAML. Read by the injection
    * hierarchy as the tier between step and chain config, and by gate resolution to decide
-   * whether methodology-scoring gates are coherent for this execution.
+   * whether framework-scoring gates are coherent for this execution.
    */
   injection?: PromptInjectionConfig;
   executionModifiers?: ExecutionModifiers; // Optional default modifiers applied when executing this prompt

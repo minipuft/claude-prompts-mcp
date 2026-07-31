@@ -889,6 +889,50 @@ three tools. Every protected token was count-compared against `HEAD` and is unch
 **Remaining**: 1102 hits — comment/doc prose (pass 3), 12 file + 2 directory renames (pass 4),
 then the guard (pass 5).
 
+#### Internal rename, pass 3 (comment prose) — ✓ 2026-07-30
+
+**1102 → 626.** 468 of 488 full-line comments plus 6 trailing comments, across 97 files.
+Committed as `4c493402` for pass 2 first, so this diff is prose-only and reviewable on its own.
+
+Two categories were masked rather than renamed, and the distinction is the whole design of the
+transform: a comment may legitimately **name** something that must not change.
+
+| Masked                                                                                                                                                       | Why                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `methodology_gates`, `methodology_elements`, `methodologyGates`, `methodology_compliance`, `enableMethodologyGates`, `methodology_id`, `inspect_methodology` | Config keys, MCP parameters and gate `pass_criteria` values. Prose describing them still has to spell them correctly. |
+| `methodology-schema.ts`, `methodology-types.ts`, and the other 10 filenames                                                                                  | Pass 4 moves these. Renaming a `@see` target before the file moves points it at nothing.                              |
+
+Masking is per-token, not per-line, so a line like
+``* - `methodology_compliance`: enforced by methodology phase guards`` renames the prose and
+keeps the token: **20 comments remain and every one of them is a deliberate reference** to a
+protected token or a not-yet-moved filename.
+
+**Three defects the pass surfaced, each fixed on the spot:**
+
+1. **"framework framework"** in 13 places. Earlier stages had already renamed the adjective but
+   not the noun ("framework methodology guidance"), so a correct substitution produced a doubled
+   word. Confirmed absent at `HEAD` before fixing, so all 13 were mine.
+2. **A doc example was falsified by its own rename.** `getYamlBaseName('methodology.yml') //
+'methodology'` had the _expected return value_ renamed while the input stayed, making the
+   example wrong. Changed to `('framework.yaml') // 'framework'` — consistent and current.
+3. **Pass 2's identifier regex required lowercase `methodolog`, so ALL-CAPS never matched.**
+   `OPTIONAL_METHODOLOGY_FIELDS` (module-local, 2 references, absent from every data file) was a
+   pass-2 miss and is folded in here as `OPTIONAL_FRAMEWORK_FIELDS`.
+
+> **Newly deferred**: `{METHODOLOGY}` is a **prompt-template placeholder** substituted with
+> `framework.type` (`prompt-guidance/service.ts:288`). No shipped resource or doc uses it, but a
+> workspace template could, so it is an authoring-facing token, not prose. It is also already
+> inconsistent with its neighbour `{FRAMEWORK_NAME}` — the natural target is `{FRAMEWORK_TYPE}`,
+> which makes it a contract-layer change alongside `methodology_gates`, not a rename.
+
+**Verification**: typecheck 0 · unit 1703/1703 · validate:all 0 · validate:arch 0 · build 0 ·
+ratchet 3476 unchanged · integration/e2e 11 suites / 34 tests, still the untouched baseline. The
+diff was checked line-by-line to contain **no non-comment changes** beyond the 6 known trailing
+comments, whose code portions are byte-identical.
+
+**Remaining**: 626 hits — 554 code/string (protected tokens and path literals), 52 import paths,
+20 protected comments. Pass 4 (12 files + 2 directories) claims the import paths; the guard follows.
+
 #### Stage 2 ruling: the "7 duplicate pairs" framing was wrong
 
 Adjudicated by structural diff, not by name. The collision set splits three ways, and treating it

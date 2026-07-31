@@ -52,7 +52,7 @@ export {
   type GateSchemaValidationResult,
 } from '../engine/gates/core/gate-schema.js';
 
-// ── Methodology schemas (pure Zod) ──────────────────────────────────────────
+// ── Framework schemas (pure Zod) ──────────────────────────────────────────
 
 export {
   FrameworkGateSchema,

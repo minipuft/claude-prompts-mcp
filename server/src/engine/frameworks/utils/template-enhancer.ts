@@ -2,9 +2,9 @@
 /**
  * Template Enhancer
  *
- * Generic utility for applying methodology-driven template enhancements.
- * Works with template suggestions and methodology elements from YAML/JSON
- * definitions without requiring methodology-specific TypeScript code.
+ * Generic utility for applying framework-driven template enhancements.
+ * Works with template suggestions and framework elements from YAML/JSON
+ * definitions without requiring framework-specific TypeScript code.
  */
 
 import type { ProcessingStepDefinition } from './step-generator.js';
@@ -27,7 +27,7 @@ export type TemplateSuggestion = TemplateSuggestionDefinition;
 export type { ProcessingStepDefinition } from './step-generator.js';
 
 /**
- * Methodology definition subset for enhancement
+ * Framework definition subset for enhancement
  */
 export interface FrameworkDefinitionForEnhancement {
   id: string;
@@ -42,8 +42,8 @@ export interface FrameworkDefinitionForEnhancement {
 }
 
 /**
- * Converts methodology template suggestions to TemplateEnhancement format
- * @param suggestions - Template suggestions from methodology YAML
+ * Converts framework template suggestions to TemplateEnhancement format
+ * @param suggestions - Template suggestions from framework YAML
  * @returns Array of TemplateEnhancement objects
  */
 export function convertTemplateSuggestions(
@@ -60,8 +60,8 @@ export function convertTemplateSuggestions(
 }
 
 /**
- * Converts methodology gate definitions to QualityGate format
- * @param gates - Gate definitions from methodology YAML
+ * Converts framework gate definitions to QualityGate format
+ * @param gates - Gate definitions from framework YAML
  * @returns Array of QualityGate objects
  */
 export function convertFrameworkGates(gates: FrameworkGateDefinition[]): QualityGate[] {
@@ -77,7 +77,7 @@ export function convertFrameworkGates(gates: FrameworkGateDefinition[]): Quality
 
 /**
  * Converts processing step definitions to ProcessingStep format
- * @param steps - Processing step definitions from methodology YAML
+ * @param steps - Processing step definitions from framework YAML
  * @returns Array of ProcessingStep objects
  */
 export function convertProcessingSteps(steps: ProcessingStepDefinition[]): ProcessingStep[] {
@@ -94,8 +94,8 @@ export function convertProcessingSteps(steps: ProcessingStepDefinition[]): Proce
 }
 
 /**
- * Creates a FrameworkEnhancement from a methodology definition
- * @param definition - Methodology definition from YAML/JSON
+ * Creates a FrameworkEnhancement from a framework definition
+ * @param definition - Framework definition from YAML/JSON
  * @param _context - Execution context (currently unused, for future extensions)
  * @param confidence - Confidence score for the enhancement (default: 0.9)
  * @returns FrameworkEnhancement object
@@ -124,8 +124,8 @@ export function createFrameworkEnhancement(
 }
 
 /**
- * Gets system prompt guidance from a methodology definition
- * @param definition - Methodology definition
+ * Gets system prompt guidance from a framework definition
+ * @param definition - Framework definition
  * @param _context - Execution context (for future template interpolation)
  * @returns System prompt guidance string
  */

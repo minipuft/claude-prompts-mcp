@@ -7,7 +7,7 @@
 export type GateSource =
   | 'inline-operator' // From :: operator in command
   | 'client-selection' // From judge phase selection
-  | 'framework-guide' // From framework methodology guide
+  | 'framework-guide' // From framework guide
   | 'prompt-config' // From prompt/folder configuration
   | 'temporary-request' // User-provided temporary gate
   | 'chain-level' // From chain's finalValidation
@@ -23,7 +23,7 @@ export type GateSource =
  * 3. temporary-request (80) - User-provided gate spec via MCP
  * 4. prompt-config (60) - Prompt author's configured gates
  * 5. chain-level (50) - Chain's finalValidation configuration
- * 6. methodology (40) - Framework methodology gates
+ * 6. framework (40) - Framework gates
  * 7. registry-auto (20) - GateManager.selectGates() activation rules - lowest
  */
 export const GATE_SOURCE_PRIORITY: Record<GateSource, number> = {

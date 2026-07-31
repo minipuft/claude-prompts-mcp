@@ -335,7 +335,7 @@ export class ResourceManagerRouter {
       frameworkArgs.reason = args.reason;
     }
 
-    // Advanced methodology parameters (pass-through)
+    // Advanced framework parameters (pass-through)
     if (args.methodology_gates) {
       frameworkArgs.methodology_gates = args.methodology_gates;
     }

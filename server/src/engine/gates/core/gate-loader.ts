@@ -247,8 +247,8 @@ export class GateLoader implements GateDefinitionProvider {
   }
 
   /**
-   * Check if a gate is a methodology/framework gate by loading and inspecting its definition.
-   * Framework gates have gate_type === 'framework' and are filtered when methodology gates are disabled.
+   * Check if a gate is a framework gate by loading and inspecting its definition.
+   * Framework gates have gate_type === 'framework' and are filtered when framework gates are disabled.
    *
    * @param gateId - Gate identifier to check
    * @returns true if gate has gate_type === 'framework', false otherwise
@@ -259,7 +259,7 @@ export class GateLoader implements GateDefinitionProvider {
   }
 
   /**
-   * Check if a gate ID is a methodology gate using cached data only (synchronous).
+   * Check if a gate ID is a framework gate using cached data only (synchronous).
    * Returns false if gate is not in cache - use isFrameworkGate for definitive check.
    *
    * @param gateId - Gate identifier to check
@@ -271,10 +271,10 @@ export class GateLoader implements GateDefinitionProvider {
   }
 
   /**
-   * Get all methodology gate IDs from loaded definitions.
+   * Get all framework gate IDs from loaded definitions.
    * Scans the definitions directory and returns IDs of gates with gate_type === 'framework'.
    *
-   * @returns Array of methodology gate IDs
+   * @returns Array of framework gate IDs
    */
   async getFrameworkGateIds(): Promise<string[]> {
     const allGates = this.definitionLoader.loadAllGates();

@@ -1,7 +1,7 @@
 /**
- * Methodology Validation Unit Tests
+ * Framework Validation Unit Tests
  *
- * Tests the validateMethodology logic which blocks creation of
+ * Tests the validateFramework logic which blocks creation of
  * incomplete frameworks and provides focused error guidance.
  *
  * Validation tiers (80% threshold):

@@ -1,12 +1,12 @@
-// @lifecycle canonical - Methodology resource handler for MCP resources protocol.
+// @lifecycle canonical - Framework resource handler for MCP resources protocol.
 /**
- * Methodology Resources Handler
+ * Framework Resources Handler
  *
- * Registers MCP resources for token-efficient methodology/framework discovery and content retrieval.
+ * Registers MCP resources for token-efficient framework discovery and content retrieval.
  *
  * URI Patterns:
  * - resource://framework/              → List all frameworks (minimal metadata)
- * - resource://framework/{id}          → Methodology definition + guidelines
+ * - resource://framework/{id}          → Framework definition + guidelines
  * - resource://framework/{id}/system-prompt → Raw system prompt template only
  */
 
@@ -30,7 +30,7 @@ function buildUri(pattern: string, id?: string): string {
 }
 
 /**
- * Register methodology-related MCP resources.
+ * Register framework-related MCP resources.
  *
  * Resources read from the frameworkManager at request time to ensure
  * hot-reload compatibility - changes are visible immediately.
@@ -93,7 +93,7 @@ export function registerFrameworkResources(
     }
   );
 
-  // Resource: Individual methodology with full definition and guidelines
+  // Resource: Individual framework with full definition and guidelines
   server.registerResource(
     'framework',
     new ResourceTemplate(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM, {
@@ -114,7 +114,7 @@ export function registerFrameworkResources(
 
       logger.debug(`[FrameworkResources] Reading methodology: ${id}`);
 
-      // Build full methodology content with metadata header
+      // Build full framework content with metadata header
       const content = buildFrameworkContent(framework);
 
       return {
@@ -133,7 +133,7 @@ export function registerFrameworkResources(
   server.registerResource(
     'methodology-system-prompt',
     new ResourceTemplate(RESOURCE_URI_PATTERNS.FRAMEWORK_SYSTEM_PROMPT, {
-      list: undefined, // Discovered via methodology/{id} resource
+      list: undefined, // Discovered via framework/{id} resource
     }),
     {
       description: 'Raw methodology system prompt template only',
@@ -169,7 +169,7 @@ export function registerFrameworkResources(
 }
 
 /**
- * Build formatted methodology content with metadata header and guidelines
+ * Build formatted framework content with metadata header and guidelines
  */
 function buildFrameworkContent(framework: {
   id: string;

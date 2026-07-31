@@ -4,13 +4,13 @@ import type { Logger } from '../../../infra/logging/index.js';
 import type { ToolResponse } from '../../../shared/types/index.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 
-/** Narrow type for methodology judge prompt data — avoids frameworks/ import. */
+/** Narrow type for framework judge prompt data — avoids frameworks/ import. */
 export interface JudgePromptData {
   systemMessage?: string;
   userMessageTemplate?: string;
 }
 
-/** Provider that resolves a methodology's judge prompt by framework ID. */
+/** Provider that resolves a framework's judge prompt by framework ID. */
 export type FrameworkJudgePromptProvider = (frameworkId: string) => JudgePromptData | undefined;
 
 /**

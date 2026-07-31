@@ -778,7 +778,7 @@ export class ResourceIndexer {
   }
 
   /**
-   * Get valid framework/methodology IDs from the index.
+   * Get valid framework IDs from the index.
    * Replaces directory-scanning _meta.valid_frameworks from cache files.
    */
   getValidFrameworks(): string[] {

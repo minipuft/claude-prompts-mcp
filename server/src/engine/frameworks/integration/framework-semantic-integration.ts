@@ -5,7 +5,7 @@
  *
  * Key Integration Points:
  * - Semantic Analysis provides WHAT the prompt needs (complexity, structure, requirements)
- * - Framework Manager provides HOW to approach it (methodology, system prompts)
+ * - Framework Manager provides HOW to approach it (framework, system prompts)
  * - Integration layer coordinates between systems WITHOUT interference
  */
 

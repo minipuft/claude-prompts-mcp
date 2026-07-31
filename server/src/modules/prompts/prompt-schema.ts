@@ -162,12 +162,12 @@ export const PromptInjectionRuleSchema = z
  *
  * Resolved between step and chain config: a prompt's declaration about itself outranks the
  * chain or category it runs inside. Setting `system-prompt.enabled: false` also withholds
- * gates that score methodology adherence — scoring a methodology that was never injected
+ * gates that score framework adherence — scoring a framework that was never injected
  * is incoherent (ADR 0001).
  */
 export const PromptInjectionConfigSchema = z
   .object({
-    /** Framework methodology system prompt injection */
+    /** Framework system prompt injection */
     'system-prompt': PromptInjectionRuleSchema.optional(),
     /** Quality gate guidance injection */
     'gate-guidance': PromptInjectionRuleSchema.optional(),

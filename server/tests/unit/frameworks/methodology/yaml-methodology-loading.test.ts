@@ -1,7 +1,7 @@
 /**
- * YAML Methodology Loading Tests
+ * YAML Framework Loading Tests
  *
- * Tests that verify YAML-based methodology loading works correctly.
+ * Tests that verify YAML-based framework loading works correctly.
  * Replaces the deprecated TypeScript guide tests.
  */
 

@@ -477,7 +477,7 @@ export class ExecutionPlanner {
 // ============================================================================
 
 /**
- * Resolve whether a methodology system prompt is required, from the execution modifiers.
+ * Resolve whether a framework system prompt is required, from the execution modifiers.
  *
  * This is the half of the former `applyModifierOverrides` that belongs to planning. The other
  * half — what those modifiers do to the gate set — moved to `GateSetResolver`, because gates
@@ -485,7 +485,7 @@ export class ExecutionPlanner {
  * put a framework decision inside the gates domain, which `no-frameworks-in-gates` exists to
  * prevent.
  *
- * `%clean` and `%lean` both suppress the methodology; `%framework` and `%judge` both force it.
+ * `%clean` and `%lean` both suppress the framework; `%framework` and `%judge` both force it.
  */
 function resolveFrameworkRequirement(
   modifiers: ExecutionModifiers | undefined,

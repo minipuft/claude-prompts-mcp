@@ -38,7 +38,7 @@ const PARAM_DEFAULTS = {
 // ---------------------------------------------------------------------------
 
 /**
- * Build the system_control input schema with methodology-aware descriptions.
+ * Build the system_control input schema with framework-aware descriptions.
  */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types
 export function buildSystemControlSchema(resolve: DescriptionResolver = identity) {

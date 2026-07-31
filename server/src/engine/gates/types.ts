@@ -238,7 +238,7 @@ export interface LightweightGateDefinition {
   };
   /**
    * Gate type classification for dynamic identification.
-   * 'framework' gates are methodology-related and can be filtered when frameworks are disabled.
+   * 'framework' gates are framework-related and can be filtered when frameworks are disabled.
    */
   gate_type?: 'framework' | 'category' | 'custom';
 
@@ -267,7 +267,7 @@ export interface GatesConfig {
   enabled: boolean;
   /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
   definitionsDirectory?: string;
-  /** Enable methodology-specific gates (auto-added based on active framework) */
+  /** Enable framework-specific gates (auto-added based on active framework) */
   enableMethodologyGates?: boolean;
   /**
    * Execute a prompt's `inline_gate_definitions` instead of only displaying them.

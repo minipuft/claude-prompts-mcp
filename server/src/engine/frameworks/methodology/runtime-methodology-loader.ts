@@ -1,8 +1,8 @@
 // @lifecycle canonical - Runtime YAML loading for frameworks (replaces build-time compilation)
 /**
- * Runtime Methodology Loader
+ * Runtime Framework Loader
  *
- * Loads methodology definitions directly from YAML source files at runtime,
+ * Loads framework definitions directly from YAML source files at runtime,
  * eliminating the need for build-time YAML→JSON compilation.
  *
  * Features:
@@ -38,7 +38,7 @@ const __dirname = dirname(__filename);
 export interface RuntimeFrameworkLoaderConfig {
   /** Override default frameworks directory */
   frameworksDir?: string;
-  /** Additional directories to scan for methodology overlays (workspace resources) */
+  /** Additional directories to scan for framework overlays (workspace resources) */
   additionalFrameworksDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
@@ -70,9 +70,9 @@ export interface LoaderStats {
 export type { FrameworkSchemaValidationResult } from './methodology-schema.js';
 
 /**
- * Runtime Methodology Loader
+ * Runtime Framework Loader
  *
- * Provides runtime loading of methodology definitions from YAML source files,
+ * Provides runtime loading of framework definitions from YAML source files,
  * replacing the build-time compilation step.
  *
  * @example
@@ -83,7 +83,7 @@ export type { FrameworkSchemaValidationResult } from './methodology-schema.js';
  * const ids = loader.discoverFrameworks();
  * // ['cageerf', 'react', '5w1h', 'scamper']
  *
- * // Load a specific methodology
+ * // Load a specific framework
  * const definition = loader.loadFramework('cageerf');
  * ```
  */
@@ -117,9 +117,9 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
-   * Load a methodology definition by ID
+   * Load a framework definition by ID
    *
-   * @param id - Methodology ID (e.g., 'cageerf', 'react')
+   * @param id - Framework ID (e.g., 'cageerf', 'react')
    * @returns Loaded definition or undefined if not found
    */
   loadFramework(id: string): FrameworkResourceDefinition | undefined {
@@ -151,9 +151,9 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
-   * Discover all available methodology IDs
+   * Discover all available framework IDs
    *
-   * @returns Array of methodology IDs that have valid entry points
+   * @returns Array of framework IDs that have valid entry points
    */
   discoverFrameworks(): string[] {
     // Primary: flat scan
@@ -191,10 +191,10 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
-   * Check if a methodology exists
+   * Check if a framework exists
    *
-   * @param id - Methodology ID to check
-   * @returns True if the methodology has a valid entry point
+   * @param id - Framework ID to check
+   * @returns True if the framework has a valid entry point
    */
   frameworkExists(id: string): boolean {
     const normalizedId = id.toLowerCase();
@@ -254,7 +254,7 @@ export class RuntimeFrameworkLoader {
   // ============================================================================
 
   /**
-   * Load a methodology from a specific base directory
+   * Load a framework from a specific base directory
    */
   private loadFromDir(id: string, baseDir: string): FrameworkResourceDefinition | undefined {
     try {
@@ -312,7 +312,7 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
-   * Attempt to load a methodology from additional directories.
+   * Attempt to load a framework from additional directories.
    * Tries flat path first, then scans for grouped nesting.
    */
   private loadFromAdditionalDirs(id: string): FrameworkResourceDefinition | undefined {
@@ -322,7 +322,7 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
-   * Find which additional directory contains a methodology ID.
+   * Find which additional directory contains a framework ID.
    * Checks flat ({dir}/{id}/framework.yaml) and grouped ({dir}/{group}/{id}/framework.yaml).
    *
    * @returns The base directory to pass to loadFromDir, or undefined
@@ -422,7 +422,7 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
-   * Check if a directory contains YAML methodology files
+   * Check if a directory contains YAML framework files
    */
   private hasYamlFiles(dirPath: string): boolean {
     try {
@@ -500,7 +500,7 @@ export class RuntimeFrameworkLoader {
   }
 
   /**
-   * Validate a methodology definition using shared Zod schema
+   * Validate a framework definition using shared Zod schema
    */
   private validateDefinition(
     definition: FrameworkResourceDefinition,
@@ -527,7 +527,7 @@ export function createRuntimeFrameworkLoader(
 let defaultLoader: RuntimeFrameworkLoader | null = null;
 
 /**
- * Get the default runtime methodology loader instance
+ * Get the default runtime framework loader instance
  *
  * Creates a singleton instance on first call.
  */

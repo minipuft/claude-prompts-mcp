@@ -713,7 +713,7 @@ export interface HotReloadEvent {
   reason: string;
   affectedFiles: string[];
   category?: string;
-  /** Methodology ID for framework_changed events */
+  /** Framework ID for framework_changed events */
   frameworkId?: string;
   /** Gate ID for gate_changed events */
   gateId?: string;
