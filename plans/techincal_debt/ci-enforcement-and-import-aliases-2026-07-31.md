@@ -9,17 +9,22 @@ more work is finalized for that release. Stacking is required, not preferred: `o
 cannot enforce guards that do not exist there, and #150 already modifies `ci.yml`.
 **Consequence**: this branch's PR shows #150's commits until #150 lands, and must merge after it.
 **Work type**: bug_fix (Tier 1–2), refactor (Tier 3, deferred)
-**Status**: **Not started.** F1 partially closed in-flight (branch-protection contexts corrected
-2026-07-31, see F1). Everything else open.
+**Status**: **Tier 1 complete** (2026-07-31, gate passed — see Tier 1 Gate verdict). 1.4 held at ◐
+by design until this branch merges. Tier 2 open. Tier 3 deferred.
 
-| Measure                                           | Now               | Target |
-| ------------------------------------------------- | ----------------- | ------ |
-| `validate:all` members enforced in CI             | **5/21**          | 21/21  |
-| Recurrence guards (`validate:no-*`) run in CI     | **0/8**           | 8/8    |
-| Unpinned tool installs in workflows               | **2**             | 0      |
-| Node version CI tests vs. Node version shipped    | 22.x/24           | same   |
-| Dead steps in `.husky/pre-push`                   | **1**             | 0      |
-| PR classes that can never satisfy required checks | **1** (docs-only) | 0      |
+| Measure                                           | Before            | Now       | Target |
+| ------------------------------------------------- | ----------------- | --------- | ------ |
+| `validate:all` members enforced in CI             | **5/21**          | **23/23** | all    |
+| Recurrence guards (`validate:no-*`) run in CI     | **0/8**           | **8/8**   | 8/8    |
+| Unpinned tool installs in workflows               | **2**             | **0**     | 0      |
+| Node version CI tests vs. Node version shipped    | 22.x/24           | 22.x+24   | same   |
+| Dead steps in `.husky/pre-push`                   | **1**             | 1         | 0 (T2) |
+| PR classes that can never satisfy required checks | **1** (docs-only) | **0**     | 0      |
+
+`validate:all` grew 21 → 23 in Tier 1 (`validate:required-contexts` plus its self-test). It also
+**exited 1 on committed HEAD** when Tier 1 started — `validate:documented-options` flagged npm's
+own `--prefix` as an undocumented flag of ours. Nothing caught it because nothing ran it. That is
+F2 demonstrating itself, not a side issue.
 
 ---
 
@@ -251,16 +256,81 @@ them makes F1b worse.
 
 | #   | Step                                                                                                                                                                                         | Closes | Status |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------ |
-| 1.1 | Add companion workflow with inverse `paths:` trigger, jobs named `Lint & Validate` and `Build`, no-op success — so every PR reports                                                          | F1b    | ☐      |
-| 1.2 | Add `npm run validate:all` as a step in the CI `lint` job                                                                                                                                    | F2     | ☐      |
-| 1.3 | Resolve the overlap 1.2 creates: `lint:ratchet`, `validate:contracts`, `validate:metadata`, `validate:versions` would run twice — drop the standalone steps or drop them from `validate:all` | F2     | ☐      |
-| 1.4 | Decide the required-context set and apply it (candidates: `Lint & Validate`, `Build`; `Test` only if F7 is resolved first)                                                                   | F1, F7 | ☐      |
-| 1.5 | Add a guard that fails when a workflow job's `name:` no longer matches a required context — sibling of the `validate-no-*` pattern                                                           | F1     | ☐      |
-| 1.6 | Add `24` to `ci.yml` `strategy.matrix.node`                                                                                                                                                  | F3     | ☐      |
-| 1.7 | Pin `pyrefly` and `renovate`; add a renovate `customManagers` regex so both stay tracked                                                                                                     | F6     | ☐      |
+| 1.1 | ~~Companion workflow with inverse `paths:` trigger~~ → **dropped `paths-ignore` instead** (see Deviations)                                                                                   | F1b    | ✓      |
+| 1.2 | Add `npm run validate:all` as a step in the CI `lint` job                                                                                                                                    | F2     | ✓      |
+| 1.3 | Resolve the overlap 1.2 creates: `lint:ratchet`, `validate:contracts`, `validate:metadata`, `validate:versions` would run twice — drop the standalone steps or drop them from `validate:all` | F2     | ✓      |
+| 1.4 | Decide the required-context set and apply it (candidates: `Lint & Validate`, `Build`; `Test` only if F7 is resolved first)                                                                   | F1, F7 | ◐      |
+| 1.5 | Add a guard that fails when a workflow job's `name:` no longer matches a required context — sibling of the `validate-no-*` pattern                                                           | F1     | ✓      |
+| 1.6 | Add `24` to `ci.yml` `strategy.matrix.node`                                                                                                                                                  | F3     | ✓      |
+| 1.7 | Pin `pyrefly` and `renovate`; add a renovate `customManagers` regex so both stay tracked                                                                                                     | F6     | ✓      |
 
 **Exit**: a PR that reintroduces `StepState` fails CI; a docs-only PR reports and merges; the
 published Node version is in the test matrix.
+
+### Gate verdict — PASS (executed 2026-07-31)
+
+Each claim proved by making it fail first, not by reading the config:
+
+| Claim                                     | Proof                                                                                                                               |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| A `StepState` regression now fails CI     | Wrote `src/shared/__tier1_probe.ts` exporting `StepState` → `validate:all` exit **1**; removed → exit **0**                         |
+| The rename guard can fail                 | Renamed the real `Test Suite` job in `ci.yml` → `validate:required-contexts` exit **1**; restored → **0**. Plus 4/4 self-test rules |
+| Docs-only PRs report                      | `paths-ignore` removed from both triggers; every PR into `main` now triggers the workflow                                           |
+| Shipped Node is tested                    | matrix `["22.x","24"]`; `.node-version` (what all three publish paths read) is `24`                                                 |
+| Pinned pyrefly is the version that passes | `pyrefly==1.1.1` in a clean venv against `hooks/` → **0 errors**                                                                    |
+| Renovate config is valid                  | `renovate-config-validator --strict` exit **0** (was **1** — see Deviations)                                                        |
+
+Tier-wide: `typecheck` 0 · `validate:all` 0 (23/23) · `test:ci` 0 (146 suites / 1732 tests) ·
+`npx eslint` clean on the new script.
+
+### Deviations
+
+1. **1.1 — dropped `paths-ignore` rather than adding the companion workflow.** The companion
+   pattern is unsound here: `paths` and `paths-ignore` both fire on "any file matches", so a mixed
+   docs+code PR triggers **both** workflows and produces two check runs sharing a name. A required
+   context resolves to the most recent run with that name, so the no-op job could satisfy a check
+   the real job failed — a worse bug than the one being fixed. Cost of dropping is runner minutes
+   on docs-only PRs. Rationale is recorded as a comment above the `on:` block, not just here.
+
+2. **1.3 went further than "drop the duplicate steps".** `validate:arch` is a `validate:all`
+   member, so the conditional `architecture` job and its `architecture-scope` scope-detector became
+   pure duplication and were removed (−2 jobs, −1 checkout+install each). `pr-summary` was rewired
+   to `[lint, cli, build, test-suite]`. The two `astral-sh/ruff-action` steps were also removed —
+   `validate:python` inside `validate:all` is now the single definition of the Python gate rather
+   than a second, silently divergent one.
+
+3. **F7 fixed as a prerequisite of 1.4, not deferred.** Added a literal-named `Test Suite`
+   aggregator (`needs: test`, asserts `needs.test.result == 'success'`). Matrix legs keep their
+   interpolated names and are never required; the aggregate is stable across matrix changes.
+
+4. **1.7 grew a fourth pin.** `renovate-config-validator` ran unpinned _and_ its "Check config
+   syntax" step was pure `echo` — it could not fail, and its text advertised auto-merge settings
+   that had just been turned off. Step deleted, validator pinned to `renovate@44.5.2`, `--strict`
+   added. `--strict` then failed on a pre-existing pending migration (`baseBranches` →
+   `baseBranchPatterns`), verified pre-existing by running the validator against `git show HEAD`.
+   One-line rename applied.
+
+5. **Prerequisite not in the plan.** `validate:all` could not be added to CI while it exited 1.
+   `validate:documented-options` was flagging npm's `--prefix`; added to that script's existing
+   `NOT_OUR_OPTIONS` allowlist, which is the mechanism its own error message prescribes.
+
+6. **`develop` removed from the `push:` trigger.** `git ls-remote --heads origin develop` returns
+   nothing — the branch does not exist. Matches the same removal from `renovate.json5`.
+
+### 1.4 is ◐ deliberately — do not apply before this branch merges
+
+`.github/required-contexts.json` declares `["Lint & Validate", "CLI", "Build", "Test Suite"]`.
+Live protection is still `["Lint & Validate", "Build"]`.
+
+**`CLI` and `Test Suite` do not exist on `main`.** `Test Suite` is created by this branch;
+`CLI` is not required today. Applying the new set now would require two contexts nothing on `main`
+reports — which is F1 exactly, re-created by the step meant to close it, and it would block PR #150
+along with every other open PR.
+
+Apply **after** this branch lands, using the command in the JSON's `$comment`, then confirm with
+`gh api repos/OWNER/REPO/commits/<sha>/check-runs --jq '.check_runs[].name'` that all four report.
+Until then `validate:required-contexts` still earns its keep: it proves the declared set is
+satisfiable by the workflows in the tree.
 
 ## Tier 2 — Husky and gate coherence
 
@@ -346,13 +416,23 @@ specifier rewriting.
    `argument-hint: <patch|minor|major> [--dry-run]`). A model must not be able to self-trigger an
    npm publish, a tag, or a version bump. Keep the flag.
 
-   The real cost is **content coupling**: the skill holds both the executable procedure (must stay
-   gated) and the setup templates / workflow examples that `ci-release.md` explicitly defers to it
-   for — and the flag hides both. That is why this plan was written against `ci-release.md` alone.
-   Two ways out, neither of which touches the flag: (a) accept it and have the operator run
-   `/release` when its reference half is needed, or (b) split the reference half into a
-   model-invocable skill, leaving `/release` purely executable. Prefer (b) if this recurs; (a) is
-   fine if it does not. Either way, run `/release` once before Tier 1 to check F1–F10 against it —
-   the standards half is the only input to this plan that was unavailable.
+   The real cost was **content coupling**: the skill held both the executable procedure (stays
+   gated) and the setup templates / workflow examples that `ci-release.md` defers to it for — and
+   the flag hid both. **Resolved 2026-07-31** by splitting along skill type rather than topic:
 
-   The audit did produce one concrete alignment defect from the rule that _was_ readable — F5b.
+   | Skill                  | Type      | Invocable               | Holds                                                                           |
+   | ---------------------- | --------- | ----------------------- | ------------------------------------------------------------------------------- |
+   | `/release`             | task      | gated (`/release` only) | SKILL.md steps 0–9, unchanged                                                   |
+   | `/release-engineering` | reference | **yes**                 | pipeline architecture, branch protection, workflow hygiene, `repo-bootstrap.md` |
+
+   `changelog-conventions.md` was deleted rather than moved — `/changelog-generator` already
+   declares itself SSOT for commit-type → section mapping and carries a richer table.
+
+   **This closed F1 at its source.** `repo-bootstrap.md`'s bootstrap checklist read
+   `Required status checks (lint, build, test)` — job ids. Any repo configured from that checklist
+   inherits F1. The section now names the check-run-vs-job-id distinction and ships a probe that
+   compares the two, so the next repo does not repeat it. `/release-engineering` also documents the
+   `paths-ignore` trap (F1b).
+
+   Remaining: run `/release` once before Tier 1 to check F1–F10 against the executor half, which
+   stays gated by design. The audit also produced F5b from the rule that _was_ readable.

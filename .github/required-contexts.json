@@ -1,0 +1,18 @@
+{
+  "$comment": [
+    "SSOT for the status checks required to merge into `main`.",
+    "GitHub matches a required context against a check-run NAME, which is a job's `name:`",
+    "field — not its job id. Writing the id produces a context nothing ever reports, and every",
+    "PR then blocks with all checks green. That is exactly what happened here: protection",
+    "required [\"lint\",\"build\"] while CI reported `Lint & Validate` and `Build`.",
+    "",
+    "`npm run validate:required-contexts` (in validate:all) fails when an entry below no longer",
+    "matches a job `name:` in .github/workflows/, so a rename breaks CI instead of merges.",
+    "Applying this list to the branch is a separate, deliberate step:",
+    "  jq -r '.contexts[]' .github/required-contexts.json |",
+    "  gh api -X PATCH repos/minipuft/claude-prompts/branches/main/protection/required_status_checks \\",
+    "    --input -"
+  ],
+  "branch": "main",
+  "contexts": ["Lint & Validate", "CLI", "Build", "Test Suite"]
+}

@@ -50,6 +50,7 @@ const NOT_OUR_OPTIONS = new Set([
   '--strict', // npm run validate:identity-backfill -- --strict
   '--mode', // npm run validate:readme --mode=block
   '--test', // truncation of jest's --testPathPattern
+  '--prefix', // npm --prefix server run build
   // Generic placeholder in "All flags accept both `--flag=value` and `--flag value`".
   '--flag',
   '--type', // ripgrep's --type, quoted in an ADR's caller-search note
