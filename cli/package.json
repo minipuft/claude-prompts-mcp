@@ -17,8 +17,11 @@
     "node": ">=18.18.0"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.10.8",
     "esbuild": "^0.27.2",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.1.2",
     "typescript": "^5.9.3"
   }
 }

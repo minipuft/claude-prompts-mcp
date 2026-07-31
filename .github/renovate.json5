@@ -15,7 +15,7 @@
 
   // Repository-specific settings
   "timezone": "UTC",
-  "baseBranches": ["main", "develop"],
+  "baseBranches": ["main"],
 
   // Limit concurrent PRs to avoid overwhelming maintainers
   "prConcurrentLimit": 5,
@@ -23,8 +23,8 @@
   "prHourlyLimit": 2,
 
   // Auto-merge configuration
-  "platformAutomerge": true,
-  "automerge": true,
+  "platformAutomerge": false,
+  "automerge": false,
   "automergeType": "pr",
   "automergeStrategy": "squash",
 
@@ -35,14 +35,14 @@
   "commitMessageExtra": "to {{#if isPinDigest}}{{{newDigestShort}}}{{else}}{{#if isMajor}}{{prettyNewMajor}}{{else}}{{#if isSingleVersion}}{{prettyNewVersion}}{{else}}{{newValue}}{{/if}}{{/if}}{{/if}}",
 
   // Package file detection
-  "enabledManagers": ["npm"],
+  "enabledManagers": ["npm", "github-actions"],
   "packageRules": [
     {
       "description": "Security updates - immediate and auto-merge",
       "matchUpdateTypes": ["patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "matchCurrentVersion": "!/^0/",
-      "automerge": true,
+      "automerge": false,
       "schedule": ["at any time"],
       "labels": ["dependencies", "security", "auto-merge"],
       "groupName": "Security patches"
@@ -51,7 +51,7 @@
       "description": "Production dependencies - patch and minor updates",
       "matchDepTypes": ["dependencies"],
       "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true,
+      "automerge": false,
       "schedule": ["before 3am on Monday"],
       "labels": ["dependencies", "production", "auto-merge"],
       "groupName": "Production dependencies (minor & patch)"
@@ -70,7 +70,7 @@
       "description": "Dev dependencies - patch and minor updates",
       "matchDepTypes": ["devDependencies"],
       "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true,
+      "automerge": false,
       "schedule": ["before 3am on Monday"],
       "labels": ["dependencies", "dev", "auto-merge"],
       "groupName": "Dev dependencies (minor & patch)"
@@ -138,7 +138,7 @@
   // Vulnerability alerts
   "vulnerabilityAlerts": {
     "labels": ["security", "vulnerability"],
-    "automerge": true,
+    "automerge": false,
     "schedule": ["at any time"]
   },
 
@@ -160,7 +160,7 @@
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": ["before 3am on the first day of the month"],
-    "automerge": true,
+    "automerge": false,
     "commitMessageAction": "refresh",
     "labels": ["dependencies", "lockfile-maintenance"]
   },
@@ -183,16 +183,4 @@
   "rangeStrategy": "auto",
   "respectLatest": true,
 
-  // Post-upgrade tasks
-  "postUpgradeTasks": {
-    "commands": [
-      "npm run build",
-      "npm run typecheck"
-    ],
-    "fileFilters": [
-      "package-lock.json",
-      "dist/**"
-    ],
-    "executionMode": "branch"
-  }
 }

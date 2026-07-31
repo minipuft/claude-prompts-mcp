@@ -171,3 +171,7 @@ state.db
 server/resources/gates/path-verification/
 server/scripts/verify-path-claims.mjs
 server/tests/integration/gates/path-verification.test.ts
+
+# CLI build output (built by server/esbuild.config.mjs into server/dist, and
+# by `npm -w cli run build` into cli/dist for standalone dev)
+cli/dist/

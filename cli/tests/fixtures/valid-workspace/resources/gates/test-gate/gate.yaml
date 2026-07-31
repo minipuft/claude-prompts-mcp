@@ -4,5 +4,5 @@ type: validation
 description: A test gate for validation
 guidanceFile: guidance.md
 pass_criteria:
-  - type: content_check
-    min_length: 10
+  - type: inline_guidance
+    guidance: Confirm the response addresses the request.

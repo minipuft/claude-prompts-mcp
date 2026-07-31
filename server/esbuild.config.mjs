@@ -15,6 +15,11 @@ import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// The `cpm` CLI ships as a second bin of this package (package.json "bin").
+// Its build config lives with its source in cli/ and is imported rather than
+// duplicated here, so the two entry points cannot drift.
+import { buildCli } from '../cli/esbuild.config.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
 
@@ -128,6 +133,11 @@ async function build() {
         }
       }
 
+      // Second bin: the cpm CLI, bundled from cli/src with the shared config.
+      // Emitted into dist/ so package.json "files": ["dist"] ships it.
+      console.log('\nBuilding cpm CLI...');
+      await buildCli({ outfile: join(__dirname, 'dist', 'cpm.js'), minify: isProduction });
+
       // Generate type declarations (consumed via package.json "types" field)
       console.log('Generating type declarations...');
       execSync('npx tsc --emitDeclarationOnly --declaration --outDir dist', {
@@ -135,7 +145,7 @@ async function build() {
         cwd: __dirname,
       });
 
-      console.log('\nBuild complete: dist/index.js');
+      console.log('\nBuild complete: dist/index.js, dist/cpm.js');
     }
   } catch (error) {
     console.error('Build failed:', error);

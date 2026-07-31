@@ -1,20 +1,22 @@
 name: CI
 
+# No `paths-ignore` here, deliberately. A PR whose every file matches an ignore
+# pattern (a CHANGELOG-only fix, a plan-file-only PR) never triggers the workflow,
+# so no check runs are created — which GitHub does not treat as a skipped job. The
+# required contexts stay pending forever and the PR can only merge by admin override.
+#
+# The documented remedy — a companion workflow with the inverse `paths:` trigger and
+# identically named no-op jobs — is worse here: `paths` and `paths-ignore` both fire on
+# "any file matches", so a mixed docs+code PR triggers BOTH workflows and produces two
+# check runs sharing a name. A required context resolves to the most recent run with
+# that name, so the no-op could satisfy a check the real job failed.
+#
+# Running full CI on docs-only PRs costs runner minutes. That is the cheaper error.
 on:
   push:
-    branches: [main, develop]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - ".github/*.md"
-      - "LICENSE"
+    branches: [main]
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - ".github/*.md"
-      - "LICENSE"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -55,68 +57,62 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline --no-audit
 
-      - name: Validate contracts
-        run: npm run validate:contracts
-
-      - name: Validate metadata
-        run: npm run validate:metadata
-
-      - name: Validate versions
-        run: npm run validate:versions
+      # Pinned on purpose. An unpinned `pip install pyrefly` turned an untouched branch
+      # red on 2026-07-31 when the package went 0.55.x -> 1.1.1 and the newer inference
+      # flagged two pre-existing lines no commit had touched. Renovate tracks both
+      # versions through the customManagers regex in .github/renovate.json5.
+      # ruff is installed here rather than via astral-sh/ruff-action because
+      # `validate:python` (inside validate:all) is the single definition of the Python
+      # gate — the action would have been a second, silently divergent one.
+      - name: Install pinned Python tooling
+        working-directory: .
+        run: pip install ruff==0.15.5 pyrefly==1.1.1 --quiet
 
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Lint (ratchet)
-        run: npm run lint:ratchet
-
-      - name: Lint Python hooks (Ruff)
-        uses: astral-sh/ruff-action@v3
-        with:
-          src: ./hooks
-
-      - name: Format Python hooks (Ruff)
-        uses: astral-sh/ruff-action@v3
-        with:
-          src: ./hooks
-          args: format --check
+      # The whole suite, not a hand-picked subset. Before this, 16 of validate:all's 21
+      # members ran in no automated gate — including all eight `validate:no-*` recurrence
+      # guards, whose entire purpose is to make a retirement permanent. A PR reintroducing
+      # `ChainSessionManager` or `StepState` merged green.
+      # Members already covered elsewhere were removed from this job rather than run twice:
+      # lint:ratchet, validate:contracts, validate:metadata, validate:versions, validate:arch.
+      - name: Validate (full suite)
+        run: npm run validate:all
 
       - name: Typecheck Python hooks (Pyrefly)
         working-directory: .
-        run: |
-          pip install pyrefly --quiet
-          pyrefly check --baseline hooks/.pyrefly-baseline.json
+        run: pyrefly check --baseline hooks/.pyrefly-baseline.json
 
-  architecture-scope:
-    name: Architecture Scope
+  # The cpm CLI ships as the `cpm` bin of the claude-prompts npm package and
+  # bundles server/src/cli-shared, so a server-side change can break it without
+  # touching cli/. It is validated on every run, not on a path filter.
+  cli:
+    name: CLI
     runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.scope.outputs.should_run }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
-          fetch-depth: 0
+          node-version-file: ".node-version"
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Detect architecture-relevant changes
-        id: scope
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}" --depth=1
-            CHANGED_FILES=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
-          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-            CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}"...HEAD)
-          else
-            CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD)
-          fi
+      - name: Install dependencies (root workspaces)
+        run: npm ci --prefer-offline --no-audit
 
-          echo "$CHANGED_FILES"
+      - name: Typecheck
+        run: npm -w cli run typecheck
 
-          if printf '%s\n' "$CHANGED_FILES" | grep -Eq '^(server/src/mcp/tools/|server/src/infra/http/transport/|server/src/runtime/)'; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-          fi
+      # Build before test: the integration suite execs cli/dist/cpm.js
+      - name: Build
+        run: npm -w cli run build
+
+      - name: Test
+        run: npm -w cli run test:ci
 
   # ============================================================
   # Stage 2: Build (single Node LTS, upload artifact)
@@ -168,8 +164,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # 24 is what actually ships: every publish path (npm, docker, extension) reads
+      # .node-version, which is 24. Testing only 22.x meant a Node-24-specific regression
+      # passed CI and shipped. 22.x stays because engines.node is ">=22.0.0".
       matrix:
-        node: ["22.x"]
+        node: ["22.x", "24"]
     defaults:
       run:
         working-directory: server
@@ -215,48 +214,31 @@ jobs:
         run: npm run test:e2e
 
   # ============================================================
-  # Stage 4: Architecture validation (MCP paths only)
-  # Runs only when MCP/runtime code changes
+  # Stage 4: Matrix aggregator
+  #
+  # `Test (Node 22.x)` is a check-run name derived from a matrix value, so it changes
+  # whenever the matrix changes — requiring it would re-create the "required context
+  # nothing reports" bug the moment a Node version is added or dropped. This job's name
+  # is a literal, so it is stable, and `needs.test.result` is only `success` when every
+  # matrix leg succeeded. Require this one, never the interpolated ones.
   # ============================================================
-  architecture:
-    name: Architecture Validation
-    needs: [lint, architecture-scope]
+  test-suite:
+    name: Test Suite
+    needs: test
+    if: always()
     runs-on: ubuntu-latest
-    if: |
-      always() &&
-      needs.lint.result != 'cancelled' &&
-      needs.architecture-scope.result == 'success' &&
-      needs.architecture-scope.outputs.should_run == 'true' &&
-      (
-        github.event_name == 'pull_request' ||
-        needs.lint.result == 'success'
-      )
-    defaults:
-      run:
-        working-directory: server
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_LTS }}
-          cache: npm
-          cache-dependency-path: server/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci --prefer-offline --no-audit
-
-      - name: Validate architecture rules
-        run: npm run validate:arch
+      - name: Assert every matrix leg passed
+        run: |
+          echo "test matrix aggregate result: ${{ needs.test.result }}"
+          [ "${{ needs.test.result }}" = "success" ] || exit 1
 
   # ============================================================
   # PR Summary: Comment with validation results
   # ============================================================
   pr-summary:
     name: PR Summary
-    needs: [lint, build, test, architecture]
+    needs: [lint, cli, build, test-suite]
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -279,9 +261,9 @@ jobs:
         uses: actions/github-script@v8
         env:
           LINT_RESULT: ${{ needs.lint.result }}
+          CLI_RESULT: ${{ needs.cli.result }}
           BUILD_RESULT: ${{ needs.build.result }}
-          TEST_RESULT: ${{ needs.test.result }}
-          ARCH_RESULT: ${{ needs.architecture.result }}
+          TEST_RESULT: ${{ needs.test-suite.result }}
         with:
           script: |
             const fs = require('fs');
@@ -293,13 +275,13 @@ jobs:
             }
 
             const lintResult = process.env.LINT_RESULT || 'unknown';
+            const cliResult = process.env.CLI_RESULT || 'unknown';
             const buildResult = process.env.BUILD_RESULT || 'unknown';
             const testResult = process.env.TEST_RESULT || 'unknown';
-            const archResult = process.env.ARCH_RESULT || 'unknown';
             const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
 
             const statusEmoji = (result) => result === 'success' ? '✅' : result === 'skipped' ? '⏭️' : '❌';
-            const allPassed = lintResult === 'success' && buildResult === 'success' && testResult === 'success' && (archResult === 'success' || archResult === 'skipped');
+            const allPassed = [lintResult, cliResult, buildResult, testResult].every((r) => r === 'success');
 
             const message = [
               allPassed ? '## ✅ CI Passed' : '## ❌ CI Failed',
@@ -307,9 +289,9 @@ jobs:
               '| Stage | Status |',
               '|-------|--------|',
               `| Lint & Validate | ${statusEmoji(lintResult)} ${lintResult} |`,
+              `| CLI | ${statusEmoji(cliResult)} ${cliResult} |`,
               `| Build | ${statusEmoji(buildResult)} ${buildResult} |`,
-              `| Test (Node 22) | ${statusEmoji(testResult)} ${testResult} |`,
-              `| Architecture | ${statusEmoji(archResult)} ${archResult} |`,
+              `| Test Suite | ${statusEmoji(testResult)} ${testResult} |`,
               '',
               '<details>',
               '<summary>Files changed</summary>',

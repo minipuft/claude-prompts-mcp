@@ -8,6 +8,9 @@
 		},
 		{
 			"path": "../../minipuft-plugins"
+		},
+		{
+			"path": "../../claude-prompts-media"
 		}
 	],
     "settings": {

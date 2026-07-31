@@ -18,18 +18,31 @@ The CLI and MCP server share validation logic but operate independently — the 
 
 ## Installation
 
-The CLI is built from source and not published to npm separately. After cloning the repo:
+The CLI ships as the `cpm` bin of the `claude-prompts` npm package — no clone required, and no MCP server needs to be installed or running.
 
 ```bash
-npm install          # from repo root (workspace install)
-npm -w cli run build # produces cli/dist/cpm.js
+# One-off, from any directory
+npx -p claude-prompts cpm validate --all -w ./my-workspace
+
+# Or install globally
+npm install -g claude-prompts
+cpm validate --all -w ./my-workspace
 ```
 
-Optionally symlink for global access:
+`cpm` is a self-contained bundle with no runtime dependencies, so it works against any workspace directory on disk.
+
+<details>
+<summary><strong>Building from source (contributors)</strong></summary>
 
 ```bash
-npm -w cli link
+npm install            # from repo root — installs the cli workspace
+npm -w cli run build   # produces cli/dist/cpm.js
+node cli/dist/cpm.js --help
 ```
+
+`npm --prefix server run build` also emits `server/dist/cpm.js` from the same source; that is the copy published to npm.
+
+</details>
 
 ## Commands
 
