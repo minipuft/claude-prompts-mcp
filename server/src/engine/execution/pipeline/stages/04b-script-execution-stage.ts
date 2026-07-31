@@ -13,7 +13,7 @@
  *
  * Output:
  * - context.state.scripts.results (Map<toolId, ScriptExecutionResult>)
- * - context.state.scripts.toolsSkipped (string[]) - Manual mode tools without explicit request
+ * - context.state.scripts.toolsSkipped (string[]) - `trigger: explicit` tools without an explicit request
  * - context.state.scripts.toolsPendingConfirmation (string[]) - Confirm mode tools awaiting approval
  *
  * The script results are later merged into template context in ExecutionStage (09)
@@ -26,7 +26,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../../infra/logging/index.js';
 import type {
-  ExecutionModeServicePort,
+  ToolTriggerFilterPort,
   ScriptExecutorPort,
   ToolDetectionServicePort,
   LoadedScriptTool,
@@ -44,7 +44,7 @@ import type { ExecutionContext } from '../../context/index.js';
  *
  * This stage is a thin orchestration layer:
  * - ToolDetectionService handles detection and trigger types
- * - ExecutionModeService handles confirmation filtering (confirm: true)
+ * - ToolTriggerFilter handles confirmation filtering (confirm: true)
  * - ScriptExecutor handles subprocess execution
  */
 export class ScriptExecutionStage extends BasePipelineStage {
@@ -53,7 +53,7 @@ export class ScriptExecutionStage extends BasePipelineStage {
   constructor(
     private readonly scriptExecutor: ScriptExecutorPort,
     private readonly toolDetectionService: ToolDetectionServicePort,
-    private readonly executionModeService: ExecutionModeServicePort,
+    private readonly toolTriggerFilter: ToolTriggerFilterPort,
     logger: Logger
   ) {
     super(logger);
@@ -126,8 +126,8 @@ export class ScriptExecutionStage extends BasePipelineStage {
       }
     }
 
-    // Filter normal tools by execution mode (auto/manual/confirm)
-    const filterResult = this.executionModeService.filterByExecutionMode(
+    // Partition normal tools on their trigger/confirm settings
+    const filterResult = this.toolTriggerFilter.filterByTrigger(
       normalMatches,
       prompt.scriptTools,
       prompt.id
@@ -138,7 +138,10 @@ export class ScriptExecutionStage extends BasePipelineStage {
 
     // Log skipped and pending tools
     if (toolsSkipped.length > 0) {
-      context.diagnostics.info(this.name, `Manual mode tools skipped: ${toolsSkipped.join(', ')}`);
+      context.diagnostics.info(
+        this.name,
+        `Explicit-trigger tools skipped: ${toolsSkipped.join(', ')}`
+      );
     }
     if (toolsPendingConfirmation.length > 0) {
       context.diagnostics.info(
@@ -165,7 +168,7 @@ export class ScriptExecutionStage extends BasePipelineStage {
       scripts.toolsPendingConfirmation = toolsPendingConfirmation;
     }
     if (filterResult.requiresConfirmation) {
-      scripts.confirmationRequired = this.executionModeService.buildConfirmationResponse(
+      scripts.confirmationRequired = this.toolTriggerFilter.buildConfirmationResponse(
         filterResult,
         prompt.id
       );
@@ -276,7 +279,7 @@ export class ScriptExecutionStage extends BasePipelineStage {
 
       // Log confirmation bypass if applicable
       if (match.requiresConfirmation && match.explicitRequest) {
-        this.executionModeService.logManualOverride(tool.id);
+        this.toolTriggerFilter.logManualOverride(tool.id);
       }
 
       const result = await this.executeScriptTool(context, tool, match.extractedInputs);
@@ -326,13 +329,8 @@ export class ScriptExecutionStage extends BasePipelineStage {
 export function createScriptExecutionStage(
   scriptExecutor: ScriptExecutorPort,
   toolDetectionService: ToolDetectionServicePort,
-  executionModeService: ExecutionModeServicePort,
+  toolTriggerFilter: ToolTriggerFilterPort,
   logger: Logger
 ): ScriptExecutionStage {
-  return new ScriptExecutionStage(
-    scriptExecutor,
-    toolDetectionService,
-    executionModeService,
-    logger
-  );
+  return new ScriptExecutionStage(scriptExecutor, toolDetectionService, toolTriggerFilter, logger);
 }

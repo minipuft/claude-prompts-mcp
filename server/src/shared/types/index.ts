@@ -53,7 +53,7 @@ export {
 // Also import locally for use by interfaces defined in this file
 import type {
   ConfirmationRequired,
-  ExecutionModeFilterResult,
+  ToolTriggerFilterResult,
   LoadedScriptTool,
   ScriptExecutionRequest,
   ScriptExecutionResult,
@@ -593,16 +593,16 @@ export interface ToolDetectionServicePort {
 
 /**
  * Execution mode service interface (engine/ contract).
- * Concrete: modules/automation/execution/execution-mode-service.ts ExecutionModeService
+ * Concrete: modules/automation/execution/tool-trigger-filter.ts ToolTriggerFilter
  */
-export interface ExecutionModeServicePort {
-  filterByExecutionMode(
+export interface ToolTriggerFilterPort {
+  filterByTrigger(
     matches: ToolDetectionMatch[],
     tools: LoadedScriptTool[],
     promptId: string
-  ): ExecutionModeFilterResult;
+  ): ToolTriggerFilterResult;
   buildConfirmationResponse(
-    filterResult: ExecutionModeFilterResult,
+    filterResult: ToolTriggerFilterResult,
     promptId: string
   ): ConfirmationRequired;
   logManualOverride(toolId: string): void;

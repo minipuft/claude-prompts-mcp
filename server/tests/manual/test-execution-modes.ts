@@ -5,7 +5,7 @@
  */
 
 import { ToolDetectionService } from '../../src/modules/automation/detection/tool-detection-service.js';
-import { ExecutionModeService } from '../../src/modules/automation/execution/execution-mode-service.js';
+import { ToolTriggerFilter } from '../../src/modules/automation/execution/tool-trigger-filter.js';
 import { DEFAULT_EXECUTION_CONFIG } from '../../src/modules/automation/types.js';
 import type { LoadedScriptTool, ExecutionConfig } from '../../src/modules/automation/types.js';
 
@@ -77,7 +77,7 @@ const manualTool: LoadedScriptTool = {
 
 function runTests() {
   const detectionService = new ToolDetectionService({ debug: true, minConfidence: 0.7 });
-  const modeService = new ExecutionModeService({ debug: true });
+  const modeService = new ToolTriggerFilter({ debug: true });
 
   console.log('\n' + '='.repeat(70));
   console.log('SCRIPT-TOOLS EXECUTION MODE TESTS');
@@ -94,11 +94,7 @@ function runTests() {
     console.log('  Mode:', test1Matches[0].recommendedMode);
     console.log('  Explicit:', test1Matches[0].explicitRequest);
 
-    const filterResult = modeService.filterByExecutionMode(
-      test1Matches,
-      [wordCountTool],
-      'test_prompt'
-    );
+    const filterResult = modeService.filterByTrigger(test1Matches, [wordCountTool], 'test_prompt');
     console.log('Filter result:');
     console.log('  Ready for execution:', filterResult.readyForExecution.length);
     console.log('  Requires confirmation:', filterResult.requiresConfirmation);
@@ -130,7 +126,7 @@ function runTests() {
     console.log('  Confidence:', test3Matches[0].confidence);
     console.log('  Mode:', test3Matches[0].recommendedMode);
 
-    const filterResult = modeService.filterByExecutionMode(
+    const filterResult = modeService.filterByTrigger(
       test3Matches,
       [frameworkBuilderTool],
       'create_framework'
@@ -168,7 +164,7 @@ function runTests() {
   if (test4Matches.length > 0) {
     console.log('  Explicit:', test4Matches[0].explicitRequest);
 
-    const filterResult = modeService.filterByExecutionMode(
+    const filterResult = modeService.filterByTrigger(
       test4Matches,
       [frameworkBuilderTool],
       'create_framework'
@@ -210,11 +206,7 @@ function runTests() {
   if (test6Matches.length > 0) {
     console.log('  Explicit:', test6Matches[0].explicitRequest);
 
-    const filterResult = modeService.filterByExecutionMode(
-      test6Matches,
-      [manualTool],
-      'test_prompt'
-    );
+    const filterResult = modeService.filterByTrigger(test6Matches, [manualTool], 'test_prompt');
     console.log('Filter result:');
     console.log('  Ready for execution:', filterResult.readyForExecution.length);
     console.log('  Skipped manual:', filterResult.skippedManual.length);

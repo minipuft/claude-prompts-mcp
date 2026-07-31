@@ -1,6 +1,6 @@
-// @lifecycle canonical - Unit tests for ExecutionModeService.
+// @lifecycle canonical - Unit tests for ToolTriggerFilter.
 /**
- * ExecutionModeService Unit Tests
+ * ToolTriggerFilter Unit Tests
  *
  * Tests the execution mode filtering service including:
  * - Confirmation filtering (confirm: true)
@@ -9,11 +9,11 @@
  */
 
 import {
-  ExecutionModeService,
-  createExecutionModeService,
-  getDefaultExecutionModeService,
-  resetDefaultExecutionModeService,
-} from '../../../../src/modules/automation/execution/execution-mode-service.js';
+  ToolTriggerFilter,
+  createToolTriggerFilter,
+  getDefaultToolTriggerFilter,
+  resetDefaultToolTriggerFilter,
+} from '../../../../src/modules/automation/execution/tool-trigger-filter.js';
 import { resetDefaultPendingConfirmationTracker } from '../../../../src/modules/automation/execution/pending-confirmation-tracker.js';
 import type {
   LoadedScriptTool,
@@ -21,15 +21,15 @@ import type {
 } from '../../../../src/modules/automation/types.js';
 import { DEFAULT_EXECUTION_CONFIG } from '../../../../src/modules/automation/types.js';
 
-describe('ExecutionModeService', () => {
-  let service: ExecutionModeService;
+describe('ToolTriggerFilter', () => {
+  let service: ToolTriggerFilter;
 
   beforeEach(() => {
-    service = createExecutionModeService({ debug: false });
+    service = createToolTriggerFilter({ debug: false });
   });
 
   afterEach(() => {
-    resetDefaultExecutionModeService();
+    resetDefaultToolTriggerFilter();
     resetDefaultPendingConfirmationTracker();
   });
 
@@ -60,12 +60,12 @@ describe('ExecutionModeService', () => {
     ...overrides,
   });
 
-  describe('filterByExecutionMode', () => {
+  describe('filterByTrigger', () => {
     it('should pass non-confirm tools to ready for execution', () => {
       const tool = createMockTool({ execution: { ...DEFAULT_EXECUTION_CONFIG, confirm: false } });
       const match = createMockMatch({ requiresConfirmation: false });
 
-      const result = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result = service.filterByTrigger([match], [tool], 'test_prompt');
 
       expect(result.readyForExecution).toHaveLength(1);
       expect(result.readyForExecution[0].toolId).toBe('test_tool');
@@ -90,7 +90,7 @@ describe('ExecutionModeService', () => {
         explicitRequest: false,
       });
 
-      const result = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result = service.filterByTrigger([match], [tool], 'test_prompt');
 
       expect(result.readyForExecution).toHaveLength(0);
       expect(result.pendingConfirmation).toHaveLength(1);
@@ -110,7 +110,7 @@ describe('ExecutionModeService', () => {
         explicitRequest: true, // User explicitly approved
       });
 
-      const result = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result = service.filterByTrigger([match], [tool], 'test_prompt');
 
       expect(result.readyForExecution).toHaveLength(1);
       expect(result.readyForExecution[0].toolId).toBe('confirm_tool');
@@ -130,7 +130,7 @@ describe('ExecutionModeService', () => {
         requiresConfirmation: true,
       });
 
-      const result = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result = service.filterByTrigger([match], [tool], 'test_prompt');
 
       expect(result.pendingConfirmation[0].message).toBe('Execute My Tool?');
     });
@@ -161,7 +161,7 @@ describe('ExecutionModeService', () => {
         }),
       ];
 
-      const result = service.filterByExecutionMode(
+      const result = service.filterByTrigger(
         matches,
         [autoTool, confirmTool, explicitConfirmTool],
         'test_prompt'
@@ -180,7 +180,7 @@ describe('ExecutionModeService', () => {
       const tool = createMockTool({ id: 'existing_tool' });
       const match = createMockMatch({ toolId: 'nonexistent_tool' });
 
-      const result = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result = service.filterByTrigger([match], [tool], 'test_prompt');
 
       expect(result.readyForExecution).toHaveLength(0);
       expect(result.skippedManual).toHaveLength(0);
@@ -191,7 +191,7 @@ describe('ExecutionModeService', () => {
       const tool = createMockTool();
       const match = createMockMatch({ requiresConfirmation: undefined });
 
-      const result = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result = service.filterByTrigger([match], [tool], 'test_prompt');
 
       expect(result.readyForExecution).toHaveLength(1);
     });
@@ -232,28 +232,28 @@ describe('ExecutionModeService', () => {
 
   describe('factory functions', () => {
     it('should create service with default config', () => {
-      const service = createExecutionModeService();
-      expect(service).toBeInstanceOf(ExecutionModeService);
+      const service = createToolTriggerFilter();
+      expect(service).toBeInstanceOf(ToolTriggerFilter);
     });
 
     it('should create service with custom config', () => {
-      const service = createExecutionModeService({ debug: true });
-      expect(service).toBeInstanceOf(ExecutionModeService);
+      const service = createToolTriggerFilter({ debug: true });
+      expect(service).toBeInstanceOf(ToolTriggerFilter);
     });
   });
 
   describe('default instance management', () => {
     it('should return same instance on multiple calls', () => {
-      const instance1 = getDefaultExecutionModeService();
-      const instance2 = getDefaultExecutionModeService();
+      const instance1 = getDefaultToolTriggerFilter();
+      const instance2 = getDefaultToolTriggerFilter();
 
       expect(instance1).toBe(instance2);
     });
 
     it('should create new instance after reset', () => {
-      const instance1 = getDefaultExecutionModeService();
-      resetDefaultExecutionModeService();
-      const instance2 = getDefaultExecutionModeService();
+      const instance1 = getDefaultToolTriggerFilter();
+      resetDefaultToolTriggerFilter();
+      const instance2 = getDefaultToolTriggerFilter();
 
       expect(instance1).not.toBe(instance2);
     });
@@ -273,13 +273,13 @@ describe('ExecutionModeService', () => {
       });
 
       // First call: should require confirmation
-      const result1 = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result1 = service.filterByTrigger([match], [tool], 'test_prompt');
       expect(result1.readyForExecution).toHaveLength(0);
       expect(result1.pendingConfirmation).toHaveLength(1);
       expect(result1.requiresConfirmation).toBe(true);
 
       // Second call (re-run): should auto-approve
-      const result2 = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result2 = service.filterByTrigger([match], [tool], 'test_prompt');
       expect(result2.readyForExecution).toHaveLength(1);
       expect(result2.readyForExecution[0].toolId).toBe('confirm_tool');
       expect(result2.pendingConfirmation).toHaveLength(0);
@@ -299,7 +299,7 @@ describe('ExecutionModeService', () => {
         requiresConfirmation: true,
         extractedInputs: { key: 'value1' },
       });
-      const result1 = service.filterByExecutionMode([match1], [tool], 'test_prompt');
+      const result1 = service.filterByTrigger([match1], [tool], 'test_prompt');
       expect(result1.pendingConfirmation).toHaveLength(1);
 
       // Second call with different inputs
@@ -308,7 +308,7 @@ describe('ExecutionModeService', () => {
         requiresConfirmation: true,
         extractedInputs: { key: 'value2' }, // Different value
       });
-      const result2 = service.filterByExecutionMode([match2], [tool], 'test_prompt');
+      const result2 = service.filterByTrigger([match2], [tool], 'test_prompt');
 
       // Should still require confirmation (inputs don't match)
       expect(result2.pendingConfirmation).toHaveLength(1);
@@ -327,14 +327,14 @@ describe('ExecutionModeService', () => {
       });
 
       // First call: pending
-      service.filterByExecutionMode([match], [tool], 'test_prompt');
+      service.filterByTrigger([match], [tool], 'test_prompt');
 
       // Second call: auto-approve
-      const result2 = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result2 = service.filterByTrigger([match], [tool], 'test_prompt');
       expect(result2.readyForExecution).toHaveLength(1);
 
       // Third call: should require confirmation again (pending was cleared)
-      const result3 = service.filterByExecutionMode([match], [tool], 'test_prompt');
+      const result3 = service.filterByTrigger([match], [tool], 'test_prompt');
       expect(result3.pendingConfirmation).toHaveLength(1);
       expect(result3.requiresConfirmation).toBe(true);
     });

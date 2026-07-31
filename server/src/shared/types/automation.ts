@@ -306,7 +306,7 @@ export interface ScriptInputValidationResult {
 }
 
 // ============================================================================
-// Execution Mode Service Types
+// Tool Trigger Filter Types
 // ============================================================================
 
 /**
@@ -328,16 +328,16 @@ export interface ToolPendingConfirmation {
 }
 
 /**
- * Result of execution mode filtering.
+ * Result of trigger/confirm filtering.
  *
- * Returned by ExecutionModeService when filtering tool matches by execution mode.
+ * Returned by ToolTriggerFilter when partitioning tool matches.
  */
-export interface ExecutionModeFilterResult {
-  /** Tools ready for immediate execution (mode: auto, matched successfully) */
+export interface ToolTriggerFilterResult {
+  /** Tools ready for immediate execution (default trigger, matched successfully) */
   readyForExecution: ToolDetectionMatch[];
-  /** Tools skipped due to mode: manual (without explicit request) */
+  /** Tools skipped due to `trigger: explicit` (no explicit request). Legacy: always empty. */
   skippedManual: string[];
-  /** Tools requiring user confirmation (mode: confirm) */
+  /** Tools requiring user confirmation (`confirm: true`) */
   pendingConfirmation: ToolPendingConfirmation[];
   /** Whether pipeline should return early for confirmation */
   requiresConfirmation: boolean;

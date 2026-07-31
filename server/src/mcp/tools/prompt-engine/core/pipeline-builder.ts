@@ -70,8 +70,8 @@ import {
   createVerifyActiveStateStore,
 } from '../../../../engine/gates/shell/index.js';
 import { createToolDetectionService } from '../../../../modules/automation/detection/tool-detection-service.js';
-import { createExecutionModeService } from '../../../../modules/automation/execution/execution-mode-service.js';
 import { createScriptExecutor } from '../../../../modules/automation/execution/script-executor.js';
+import { createToolTriggerFilter } from '../../../../modules/automation/execution/tool-trigger-filter.js';
 
 import type { PipelineDependencies } from './pipeline-dependencies.js';
 import type { GateService } from '../../../../engine/gates/services/gate-service-interface.js';
@@ -166,11 +166,11 @@ export class PipelineBuilder {
     // Script execution stage (04b)
     const scriptExecutor = createScriptExecutor({ debug: false });
     const toolDetectionService = createToolDetectionService({ debug: false });
-    const executionModeService = createExecutionModeService({ debug: false });
+    const toolTriggerFilter = createToolTriggerFilter({ debug: false });
     const scriptExecutionStage = new ScriptExecutionStage(
       scriptExecutor,
       toolDetectionService,
-      executionModeService,
+      toolTriggerFilter,
       deps.logger
     );
 

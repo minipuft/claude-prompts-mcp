@@ -1,13 +1,15 @@
-// @lifecycle canonical - Execution mode filtering for prompt-scoped script tools.
+// @lifecycle canonical - Trigger/confirm filtering for prompt-scoped script tools.
 /**
- * Execution Mode Service
+ * Tool Trigger Filter
  *
- * Filters tool detection matches by their execution mode configuration,
- * identifying which tools are ready for execution, which require confirmation,
- * and which were skipped due to manual mode.
+ * Partitions tool detection matches into those ready to run now and those needing
+ * user confirmation, deciding from each tool's `trigger` and `confirm` settings.
  *
- * This service implements the execution mode logic extracted from the pipeline
- * stage to maintain thin orchestration patterns.
+ * Named for what it does rather than for the retired `mode` field: `mode: auto|manual|confirm`
+ * was replaced by `trigger` + `confirm`, so "execution mode" no longer describes anything the
+ * schema has. `ExecutionModeSchema` keeps its name because it still parses the deprecated field.
+ *
+ * Extracted from the pipeline stage to keep orchestration thin.
  *
  * Re-run to Approve:
  * When a tool requires confirmation, users can re-run the same command to approve.
@@ -21,19 +23,19 @@ import {
   type PendingConfirmationTracker,
 } from './pending-confirmation-tracker.js';
 
-import type { ExecutionModeServicePort } from '../../../shared/types/index.js';
+import type { ToolTriggerFilterPort } from '../../../shared/types/index.js';
 import type {
   LoadedScriptTool,
   ToolDetectionMatch,
-  ExecutionModeFilterResult,
+  ToolTriggerFilterResult,
   ToolPendingConfirmation,
   ConfirmationRequired,
 } from '../types.js';
 
 /**
- * Configuration for the ExecutionModeService.
+ * Configuration for the ToolTriggerFilter.
  */
-export interface ExecutionModeServiceConfig {
+export interface ToolTriggerFilterConfig {
   /** Enable debug logging */
   debug?: boolean;
   /** Custom pending confirmation tracker (default: singleton) */
@@ -41,16 +43,16 @@ export interface ExecutionModeServiceConfig {
 }
 
 /**
- * Execution Mode Service
+ * Tool Trigger Filter
  *
- * Filters detected tool matches based on their execution mode configuration,
- * separating them into ready-to-execute, skipped, and pending-confirmation groups.
+ * Filters detected tool matches on their `trigger`/`confirm` settings, separating them into
+ * ready-to-execute, skipped, and pending-confirmation groups.
  *
  * @example
  * ```typescript
- * const service = new ExecutionModeService();
+ * const service = new ToolTriggerFilter();
  *
- * const filterResult = service.filterByExecutionMode(matches, tools, promptId);
+ * const filterResult = service.filterByTrigger(matches, tools, promptId);
  *
  * if (filterResult.requiresConfirmation) {
  *   return service.buildConfirmationResponse(filterResult, promptId);
@@ -59,17 +61,17 @@ export interface ExecutionModeServiceConfig {
  * // Execute filterResult.readyForExecution tools
  * ```
  */
-export class ExecutionModeService implements ExecutionModeServicePort {
+export class ToolTriggerFilter implements ToolTriggerFilterPort {
   private readonly debug: boolean;
   private readonly confirmationTracker: PendingConfirmationTracker;
 
-  constructor(config: ExecutionModeServiceConfig = {}) {
+  constructor(config: ToolTriggerFilterConfig = {}) {
     this.debug = config.debug ?? false;
     this.confirmationTracker = config.confirmationTracker ?? getDefaultPendingConfirmationTracker();
 
     if (this.debug) {
       // eslint-disable-next-line no-console
-      console.error('[ExecutionModeService] Initialized');
+      console.error('[ToolTriggerFilter] Initialized');
     }
   }
 
@@ -89,11 +91,11 @@ export class ExecutionModeService implements ExecutionModeServicePort {
    * @param promptId - Parent prompt ID for resume command
    * @returns Categorized filter result
    */
-  filterByExecutionMode(
+  filterByTrigger(
     matches: ToolDetectionMatch[],
     tools: LoadedScriptTool[],
     promptId: string
-  ): ExecutionModeFilterResult {
+  ): ToolTriggerFilterResult {
     const readyForExecution: ToolDetectionMatch[] = [];
     const skippedManual: string[] = []; // Legacy field, always empty now
     const pendingConfirmation: ToolPendingConfirmation[] = [];
@@ -105,7 +107,7 @@ export class ExecutionModeService implements ExecutionModeServicePort {
       if (tool === undefined) {
         if (this.debug) {
           // eslint-disable-next-line no-console
-          console.error(`[ExecutionModeService] Tool not found: ${match.toolId}`);
+          console.error(`[ToolTriggerFilter] Tool not found: ${match.toolId}`);
         }
         continue;
       }
@@ -119,7 +121,7 @@ export class ExecutionModeService implements ExecutionModeServicePort {
         if (this.debug && needsConfirmation) {
           // eslint-disable-next-line no-console
           console.error(
-            `[ExecutionModeService] Tool '${tool.id}' confirmation bypassed via explicit arg`
+            `[ToolTriggerFilter] Tool '${tool.id}' confirmation bypassed via explicit arg`
           );
         }
         continue;
@@ -138,7 +140,7 @@ export class ExecutionModeService implements ExecutionModeServicePort {
           readyForExecution.push(match);
           if (this.debug) {
             // eslint-disable-next-line no-console
-            console.error(`[ExecutionModeService] Tool '${tool.id}' auto-approved via re-run`);
+            console.error(`[ToolTriggerFilter] Tool '${tool.id}' auto-approved via re-run`);
           }
           continue;
         }
@@ -151,7 +153,7 @@ export class ExecutionModeService implements ExecutionModeServicePort {
       }
     }
 
-    const result: ExecutionModeFilterResult = {
+    const result: ToolTriggerFilterResult = {
       readyForExecution,
       skippedManual,
       pendingConfirmation,
@@ -160,7 +162,7 @@ export class ExecutionModeService implements ExecutionModeServicePort {
 
     if (this.debug) {
       // eslint-disable-next-line no-console
-      console.error('[ExecutionModeService] Filter result:', {
+      console.error('[ToolTriggerFilter] Filter result:', {
         ready: readyForExecution.length,
         pending: pendingConfirmation.length,
       });
@@ -175,12 +177,12 @@ export class ExecutionModeService implements ExecutionModeServicePort {
    * Users can approve by simply re-running the same command.
    * The tracker remembers the pending confirmation and auto-approves on match.
    *
-   * @param filterResult - Result from filterByExecutionMode
+   * @param filterResult - Result from filterByTrigger
    * @param promptId - Parent prompt ID
    * @returns Structured confirmation response
    */
   buildConfirmationResponse(
-    filterResult: ExecutionModeFilterResult,
+    filterResult: ToolTriggerFilterResult,
     promptId: string
   ): ConfirmationRequired {
     const toolNames = filterResult.pendingConfirmation.map((t) => t.toolName).join(', ');
@@ -228,7 +230,7 @@ export class ExecutionModeService implements ExecutionModeServicePort {
   logManualOverride(toolId: string): void {
     // eslint-disable-next-line no-console
     console.warn(
-      `[ExecutionModeService] WARN: Tool '${toolId}' confirmation bypassed via explicit arg`
+      `[ToolTriggerFilter] WARN: Tool '${toolId}' confirmation bypassed via explicit arg`
     );
   }
 }
@@ -236,30 +238,28 @@ export class ExecutionModeService implements ExecutionModeServicePort {
 /**
  * Factory function with default configuration.
  */
-export function createExecutionModeService(
-  config?: ExecutionModeServiceConfig
-): ExecutionModeService {
-  return new ExecutionModeService(config);
+export function createToolTriggerFilter(config?: ToolTriggerFilterConfig): ToolTriggerFilter {
+  return new ToolTriggerFilter(config);
 }
 
 // ============================================================================
 // Default Instance Management (singleton pattern)
 // ============================================================================
 
-let defaultService: ExecutionModeService | null = null;
+let defaultService: ToolTriggerFilter | null = null;
 
 /**
- * Get the default ExecutionModeService instance.
+ * Get the default ToolTriggerFilter instance.
  * Creates one if it doesn't exist.
  */
-export function getDefaultExecutionModeService(): ExecutionModeService {
-  defaultService ??= new ExecutionModeService();
+export function getDefaultToolTriggerFilter(): ToolTriggerFilter {
+  defaultService ??= new ToolTriggerFilter();
   return defaultService;
 }
 
 /**
  * Reset the default service (useful for testing).
  */
-export function resetDefaultExecutionModeService(): void {
+export function resetDefaultToolTriggerFilter(): void {
   defaultService = null;
 }

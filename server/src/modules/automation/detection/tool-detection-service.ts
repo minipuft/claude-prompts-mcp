@@ -188,7 +188,7 @@ export class ToolDetectionService implements ToolDetectionServicePort {
    * - always: Always matches (logging, metrics, setup tools)
    * - schema_match: Matches when args validate against schema
    *
-   * Note: The `confirm` option is handled downstream in ExecutionModeService,
+   * Note: The `confirm` option is handled downstream in ToolTriggerFilter,
    * not during detection. Detection determines IF a tool matches, not
    * whether to ask for confirmation.
    */

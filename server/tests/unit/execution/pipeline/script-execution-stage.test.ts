@@ -5,13 +5,13 @@ import { ScriptExecutionStage } from '../../../../src/engine/execution/pipeline/
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ToolDetectionService } from '../../../../src/modules/automation/detection/tool-detection-service.js';
-import type { ExecutionModeService } from '../../../../src/modules/automation/execution/execution-mode-service.js';
+import type { ToolTriggerFilter } from '../../../../src/modules/automation/execution/tool-trigger-filter.js';
 import type { ScriptExecutor } from '../../../../src/modules/automation/execution/script-executor.js';
 import type {
   LoadedScriptTool,
   ScriptExecutionResult,
   ToolDetectionMatch,
-  ExecutionModeFilterResult,
+  ToolTriggerFilterResult,
 } from '../../../../src/modules/automation/types.js';
 
 const createLogger = (): Logger =>
@@ -63,7 +63,7 @@ const createExecutionResult = (
 describe('ScriptExecutionStage', () => {
   let scriptExecutor: jest.Mocked<ScriptExecutor>;
   let toolDetectionService: jest.Mocked<ToolDetectionService>;
-  let executionModeService: jest.Mocked<ExecutionModeService>;
+  let toolTriggerFilter: jest.Mocked<ToolTriggerFilter>;
   let stage: ScriptExecutionStage;
 
   beforeEach(() => {
@@ -75,21 +75,21 @@ describe('ScriptExecutionStage', () => {
       detectTools: jest.fn().mockReturnValue([]),
     } as unknown as jest.Mocked<ToolDetectionService>;
 
-    executionModeService = {
-      filterByExecutionMode: jest.fn().mockReturnValue({
+    toolTriggerFilter = {
+      filterByTrigger: jest.fn().mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
-      } satisfies ExecutionModeFilterResult),
+      } satisfies ToolTriggerFilterResult),
       buildConfirmationResponse: jest.fn(),
       logManualOverride: jest.fn(),
-    } as unknown as jest.Mocked<ExecutionModeService>;
+    } as unknown as jest.Mocked<ToolTriggerFilter>;
 
     stage = new ScriptExecutionStage(
       scriptExecutor,
       toolDetectionService,
-      executionModeService,
+      toolTriggerFilter,
       createLogger()
     );
   });
@@ -194,7 +194,7 @@ describe('ScriptExecutionStage', () => {
 
       toolDetectionService.detectTools.mockReturnValue([match]);
       scriptExecutor.execute.mockResolvedValue(createExecutionResult({ output: { valid: true } }));
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [],
@@ -244,7 +244,7 @@ describe('ScriptExecutionStage', () => {
           output: { valid: true, warnings: ['Consider adding more detail'] },
         })
       );
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [],
@@ -294,7 +294,7 @@ describe('ScriptExecutionStage', () => {
           output: { valid: false, errors: ['Missing required field: name'] },
         })
       );
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [],
@@ -347,7 +347,7 @@ describe('ScriptExecutionStage', () => {
           output: null,
         })
       );
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [],
@@ -398,7 +398,7 @@ describe('ScriptExecutionStage', () => {
           output: 'plain text output',
         })
       );
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [],
@@ -451,7 +451,7 @@ describe('ScriptExecutionStage', () => {
 
       toolDetectionService.detectTools.mockReturnValue([autoMatch, normalMatch]);
       scriptExecutor.execute.mockResolvedValue(createExecutionResult({ output: { valid: true } }));
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [
@@ -472,7 +472,7 @@ describe('ScriptExecutionStage', () => {
       // Normal tool went through confirmation flow
       expect(context.state.scripts?.toolsPendingConfirmation).toContain('normal-tool');
       // FilterByExecutionMode was called only with normal matches
-      expect(executionModeService.filterByExecutionMode).toHaveBeenCalledWith(
+      expect(toolTriggerFilter.filterByTrigger).toHaveBeenCalledWith(
         [normalMatch],
         expect.any(Array),
         'test'
@@ -510,7 +510,7 @@ describe('ScriptExecutionStage', () => {
       };
 
       toolDetectionService.detectTools.mockReturnValue([match]);
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [match],
         skippedManual: [],
         pendingConfirmation: [],
@@ -522,7 +522,7 @@ describe('ScriptExecutionStage', () => {
 
       // Tool goes through normal flow, not auto-approved
       expect(context.state.scripts?.autoApprovedTools).toBeUndefined();
-      expect(executionModeService.filterByExecutionMode).toHaveBeenCalled();
+      expect(toolTriggerFilter.filterByTrigger).toHaveBeenCalled();
     });
   });
 
@@ -567,7 +567,7 @@ describe('ScriptExecutionStage', () => {
         durationMs: 50,
         error: 'Process exited with code 1',
       });
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [],
@@ -618,7 +618,7 @@ describe('ScriptExecutionStage', () => {
         exitCode: 0,
         durationMs: 50,
       });
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [],
@@ -671,7 +671,7 @@ describe('ScriptExecutionStage', () => {
         exitCode: 0,
         durationMs: 50,
       });
-      executionModeService.filterByExecutionMode.mockReturnValue({
+      toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
         skippedManual: [],
         pendingConfirmation: [],

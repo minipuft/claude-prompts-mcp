@@ -4,7 +4,7 @@
  * Tests the complete autoApproveOnValid flow with real modules:
  * - ScriptExecutionStage (real)
  * - ToolDetectionService (real)
- * - ExecutionModeService (real)
+ * - ToolTriggerFilter (real)
  *
  * Mocks:
  * - ScriptExecutor (controlled outputs - no actual subprocess)
@@ -22,7 +22,7 @@ import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 
 import { ScriptExecutionStage } from '../../../src/engine/execution/pipeline/stages/04b-script-execution-stage.js';
 import { ToolDetectionService } from '../../../src/modules/automation/detection/tool-detection-service.js';
-import { ExecutionModeService } from '../../../src/modules/automation/execution/execution-mode-service.js';
+import { ToolTriggerFilter } from '../../../src/modules/automation/execution/tool-trigger-filter.js';
 import { resetDefaultPendingConfirmationTracker } from '../../../src/modules/automation/execution/pending-confirmation-tracker.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 
@@ -98,7 +98,7 @@ const createNormalConfirmToolFixture = (id: string): LoadedScriptTool => ({
 describe('Script Auto-Approve Flow Integration', () => {
   let logger: Logger;
   let toolDetectionService: ToolDetectionService;
-  let executionModeService: ExecutionModeService;
+  let toolTriggerFilter: ToolTriggerFilter;
   let mockScriptExecutor: jest.Mocked<ScriptExecutor>;
 
   beforeEach(() => {
@@ -108,7 +108,7 @@ describe('Script Auto-Approve Flow Integration', () => {
 
     // Use REAL services - not mocks
     toolDetectionService = new ToolDetectionService();
-    executionModeService = new ExecutionModeService();
+    toolTriggerFilter = new ToolTriggerFilter();
 
     // Only mock the I/O boundary (ScriptExecutor)
     mockScriptExecutor = {
@@ -122,7 +122,7 @@ describe('Script Auto-Approve Flow Integration', () => {
       const stage = new ScriptExecutionStage(
         mockScriptExecutor,
         toolDetectionService,
-        executionModeService,
+        toolTriggerFilter,
         logger
       );
 
@@ -181,7 +181,7 @@ describe('Script Auto-Approve Flow Integration', () => {
       const stage = new ScriptExecutionStage(
         mockScriptExecutor,
         toolDetectionService,
-        executionModeService,
+        toolTriggerFilter,
         logger
       );
 
@@ -240,7 +240,7 @@ describe('Script Auto-Approve Flow Integration', () => {
       const stage = new ScriptExecutionStage(
         mockScriptExecutor,
         toolDetectionService,
-        executionModeService,
+        toolTriggerFilter,
         logger
       );
 
@@ -300,7 +300,7 @@ describe('Script Auto-Approve Flow Integration', () => {
       const stage = new ScriptExecutionStage(
         mockScriptExecutor,
         toolDetectionService,
-        executionModeService,
+        toolTriggerFilter,
         logger
       );
 
