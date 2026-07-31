@@ -8,13 +8,13 @@
  */
 
 import type { ContentAnalysisResult } from '../../../shared/types/index.js';
-import type { PhaseGuard } from '../methodology/methodology-schema.js';
+import type { PhaseGuard } from '../definitions/framework-schema.js';
 import type {
   ProcessingGuidance,
   StepGuidance,
   ProcessingStep,
   ExecutionStep,
-} from '../types/methodology-types.js';
+} from '../types/framework-types.js';
 
 /**
  * Execution step definition from framework YAML

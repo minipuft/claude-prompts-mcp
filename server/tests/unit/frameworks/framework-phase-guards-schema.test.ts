@@ -11,8 +11,8 @@
 import {
   PhaseGuardSchema,
   validatePhasesSchema,
-} from '../../../src/engine/frameworks/methodology/methodology-schema.js';
-import type { PhaseGuard } from '../../../src/engine/frameworks/methodology/methodology-schema.js';
+} from '../../../src/engine/frameworks/definitions/framework-schema.js';
+import type { PhaseGuard } from '../../../src/engine/frameworks/definitions/framework-schema.js';
 import type { ProcessingStepDefinition } from '../../../src/engine/frameworks/utils/step-generator.js';
 
 describe('PhaseGuardSchema', () => {

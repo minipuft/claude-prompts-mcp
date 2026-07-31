@@ -14,9 +14,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 // Import all module managers
 import { createRuntimeFoundation } from './context.js';
 import { loadPromptData } from './data-loader.js';
+import { buildFrameworkAuxiliaryReloadConfig } from './framework-hot-reload.js';
 import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildHealthReport } from './health.js';
-import { buildFrameworkAuxiliaryReloadConfig } from './methodology-hot-reload.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';

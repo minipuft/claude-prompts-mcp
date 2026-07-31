@@ -14,7 +14,7 @@ import path from 'path';
 
 import { load as loadYaml } from 'js-yaml';
 
-import { FrameworkSchema } from '../../../src/engine/frameworks/methodology/methodology-schema.js';
+import { FrameworkSchema } from '../../../src/engine/frameworks/definitions/framework-schema.js';
 
 const FRAMEWORK_YAML = path.join(
   process.cwd(),

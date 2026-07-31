@@ -6,7 +6,7 @@ import path from 'path';
 import { describe, expect, it, beforeEach, jest } from '@jest/globals';
 
 import { createToolDescriptionLoader } from '../src/mcp/tools/tool-description-loader.js';
-import { resetDefaultRuntimeLoader } from '../src/engine/frameworks/methodology/index.js';
+import { resetDefaultRuntimeLoader } from '../src/engine/frameworks/definitions/index.js';
 
 import type { ConfigManager } from '../src/infra/config/index.js';
 import type { FrameworkStateStore } from '../src/engine/frameworks/framework-state-store.js';

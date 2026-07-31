@@ -23,6 +23,6 @@ export type {
   QualityGate,
   StepGuidance,
   TemplateEnhancement,
-} from '../types/methodology-types.js';
+} from '../types/framework-types.js';
 
-export { BaseFrameworkGuide } from '../types/methodology-types.js';
+export { BaseFrameworkGuide } from '../types/framework-types.js';

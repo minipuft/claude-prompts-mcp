@@ -63,7 +63,7 @@ export {
   type TemplateSuggestion,
   type FrameworkYaml,
   type FrameworkSchemaValidationResult,
-} from '../engine/frameworks/methodology/methodology-schema.js';
+} from '../engine/frameworks/definitions/framework-schema.js';
 
 // ── Style schemas (pure Zod) ────────────────────────────────────────────────
 

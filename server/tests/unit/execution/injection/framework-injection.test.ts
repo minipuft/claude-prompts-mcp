@@ -1,7 +1,7 @@
 // @lifecycle canonical - Unit tests for the pre-injection framework projection (plan item 2.4)
 import { describe, expect, it } from '@jest/globals';
 
-import { isFrameworkInjected } from '../../../../src/engine/execution/pipeline/decisions/injection/methodology-injection.js';
+import { isFrameworkInjected } from '../../../../src/engine/execution/pipeline/decisions/injection/framework-injection.js';
 
 describe('isFrameworkInjected', () => {
   describe('modifiers', () => {

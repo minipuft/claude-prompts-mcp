@@ -10,11 +10,11 @@ import {
   initializeResourceChangeTracker,
   compareResourceBaseline,
 } from './resource-change-tracking.js';
+import { getDefaultRuntimeLoader } from '../engine/frameworks/definitions/runtime-framework-loader.js';
 import {
   createFrameworkStateStore,
   FrameworkStateStore,
 } from '../engine/frameworks/framework-state-store.js';
-import { getDefaultRuntimeLoader } from '../engine/frameworks/methodology/runtime-methodology-loader.js';
 import { createGateManager, GateManager } from '../engine/gates/gate-manager.js';
 import { createMetricsCollector } from '../infra/observability/metrics/index.js';
 import { ResourceChangeTracker } from '../infra/observability/tracking/index.js';

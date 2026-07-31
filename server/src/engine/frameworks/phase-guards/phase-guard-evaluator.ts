@@ -13,7 +13,7 @@ import type {
   PhaseGuardEvaluationResult,
   PhaseGuardResult,
 } from './types.js';
-import type { ProcessingStep } from '../types/methodology-types.js';
+import type { ProcessingStep } from '../types/framework-types.js';
 
 /**
  * Evaluate LLM output against all phase guards.

@@ -6,8 +6,8 @@
  * enabling hot reload of framework definitions when YAML files change.
  */
 
-import { createGenericGuide } from './generic-methodology-guide.js';
-import { RuntimeFrameworkLoader } from './runtime-methodology-loader.js';
+import { createGenericGuide } from './generic-framework-guide.js';
+import { RuntimeFrameworkLoader } from './runtime-framework-loader.js';
 
 import type { FrameworkRegistry } from './registry.js';
 import type { Logger } from '../../../infra/logging/index.js';
@@ -267,7 +267,7 @@ export function createFrameworkHotReloadRegistration(
   const coordinator = new FrameworkHotReloadCoordinator(logger, registry, runtimeLoader, config);
 
   return {
-    directories: [runtimeLoader.getMethodologiesDir()],
+    directories: [runtimeLoader.getFrameworksDir()],
     handler: (event: HotReloadEvent) => coordinator.handleFrameworkChange(event),
     coordinator,
   };

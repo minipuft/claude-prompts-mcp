@@ -23,7 +23,7 @@ import {
   type JudgePromptDefinition,
   type QualityGate,
   type TemplateEnhancement,
-} from '../types/methodology-types.js';
+} from '../types/framework-types.js';
 import {
   validateCompliance,
   getCombinedText,
@@ -41,7 +41,7 @@ import {
   convertProcessingSteps,
 } from '../utils/template-enhancer.js';
 
-import type { FrameworkResourceDefinition } from './methodology-definition-types.js';
+import type { FrameworkResourceDefinition } from './framework-definition-types.js';
 import type { ContentAnalysisResult } from '../../../shared/types/index.js';
 import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
 

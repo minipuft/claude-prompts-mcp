@@ -50,7 +50,7 @@ function classifyGate(gate) {
 
   // PR review gates
   if (cats.includes('pr-review')) return 'PR Review';
-  // Framework methodology
+  // Framework
   if (hasFramework || gate.gate_type === 'framework') return 'Framework';
   // Planning / workflow
   if (cats.includes('planning') && !cats.includes('code')) return 'Planning';

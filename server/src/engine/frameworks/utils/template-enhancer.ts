@@ -11,13 +11,13 @@ import type { ProcessingStepDefinition } from './step-generator.js';
 import type {
   FrameworkGateDefinition as CanonicalGateDefinition,
   TemplateSuggestionDefinition,
-} from '../methodology/methodology-definition-types.js';
+} from '../definitions/framework-definition-types.js';
 import type {
   FrameworkEnhancement,
   TemplateEnhancement,
   QualityGate,
   ProcessingStep,
-} from '../types/methodology-types.js';
+} from '../types/framework-types.js';
 
 // Re-export canonical types with local aliases for backwards compatibility
 export type FrameworkGateDefinition = CanonicalGateDefinition;

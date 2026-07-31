@@ -13,7 +13,7 @@
 import {
   getDefaultRuntimeLoader,
   createGenericGuide,
-} from '../../engine/frameworks/methodology/index.js';
+} from '../../engine/frameworks/definitions/index.js';
 import { getDefaultStyleDefinitionLoader } from '../../modules/formatting/core/style-definition-loader.js';
 
 import type { FrameworkToolDescriptions } from '../../engine/frameworks/types/index.js';

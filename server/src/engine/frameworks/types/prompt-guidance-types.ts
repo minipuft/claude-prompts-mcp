@@ -11,7 +11,7 @@ import type {
   FrameworkDefinition,
   FrameworkEnhancement,
   ProcessingGuidance,
-} from './methodology-types.js';
+} from './framework-types.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
 
 /**

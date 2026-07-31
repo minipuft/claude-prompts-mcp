@@ -16,7 +16,7 @@ import type {
   FrameworkType,
   JudgePromptDefinition,
   FrameworkToolDescriptions,
-} from '../types/methodology-types.js';
+} from '../types/framework-types.js';
 import type { PhaseQualityIndicators } from '../utils/compliance-validator.js';
 import type { PhasesDefinition } from '../utils/step-generator.js';
 

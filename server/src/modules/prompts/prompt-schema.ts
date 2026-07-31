@@ -9,7 +9,7 @@
  * - ResourceVerificationService (MCP tool validation)
  *
  * @see gate-schema.ts for the pattern this follows
- * @see methodology-schema.ts for the pattern this follows
+ * @see framework-schema.ts for the pattern this follows
  */
 
 import { z } from 'zod';

@@ -5,7 +5,7 @@ import type { FrameworkStateStore } from '../../../../engine/frameworks/framewor
 import type { VersionHistoryService } from '../../../../modules/versioning/index.js';
 import type { ConfigManager, Logger } from '../../../../shared/types/index.js';
 import type { ObjectDiffGenerator } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
-import type { FrameworkFileWriter } from '../services/methodology-file-writer.js';
+import type { FrameworkFileWriter } from '../services/framework-file-writer.js';
 
 export interface FrameworkResourceContext {
   logger: Logger;

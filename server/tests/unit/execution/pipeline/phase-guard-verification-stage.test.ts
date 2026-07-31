@@ -10,7 +10,7 @@ import {
 import type { PhaseGuardsConfig } from '../../../../src/shared/types/core-config.js';
 import type { ChainSessionService } from '../../../../src/shared/types/chain-session.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
-import type { FrameworkGuide } from '../../../../src/engine/frameworks/types/methodology-types.js';
+import type { FrameworkGuide } from '../../../../src/engine/frameworks/types/framework-types.js';
 
 const createLogger = (): Logger => ({
   info: jest.fn(),

@@ -27,9 +27,9 @@ export type {
   QualityGate,
   StepGuidance,
   TemplateEnhancement,
-} from './methodology-types.js';
+} from './framework-types.js';
 
-export { BaseFrameworkGuide } from './methodology-types.js';
+export { BaseFrameworkGuide } from './framework-types.js';
 
 // Prompt guidance types
 export type {

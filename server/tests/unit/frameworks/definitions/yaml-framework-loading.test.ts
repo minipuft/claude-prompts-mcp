@@ -9,7 +9,7 @@ import {
   getDefaultRuntimeLoader,
   createGenericGuide,
   resetDefaultRuntimeLoader,
-} from '../../../../src/engine/frameworks/methodology/index.js';
+} from '../../../../src/engine/frameworks/definitions/index.js';
 
 import type { FrameworkGuide } from '../../../../src/engine/frameworks/types/index.js';
 

@@ -28,10 +28,7 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '../../../../infra/logging/index.js';
 import type { ChainSessionService } from '../../../../shared/types/chain-session.js';
 import type { PhaseGuardsConfig } from '../../../../shared/types/core-config.js';
-import type {
-  ProcessingStep,
-  FrameworkGuide,
-} from '../../../frameworks/types/methodology-types.js';
+import type { ProcessingStep, FrameworkGuide } from '../../../frameworks/types/framework-types.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 /** Sentinel gate ID used for phase-guard-created pending reviews. */

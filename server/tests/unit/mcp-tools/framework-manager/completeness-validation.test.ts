@@ -15,7 +15,7 @@ import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 
 import type { FrameworkCreationData } from '../../../../src/mcp/tools/framework-manager/core/types.js';
 
-import { FrameworkDraftValidator } from '../../../../src/mcp/tools/framework-manager/services/methodology-validator.js';
+import { FrameworkDraftValidator } from '../../../../src/mcp/tools/framework-manager/services/framework-draft-validator.js';
 
 describe('Methodology Validation', () => {
   let validationService: FrameworkDraftValidator;

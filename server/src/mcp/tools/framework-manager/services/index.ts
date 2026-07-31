@@ -4,8 +4,8 @@ export {
   type FrameworkFileWriterDependencies,
   type ExistingFrameworkData,
   type FrameworkFileResult,
-} from './methodology-file-writer.js';
-export { FrameworkDraftValidator } from './methodology-validator.js';
+} from './framework-file-writer.js';
+export { FrameworkDraftValidator } from './framework-draft-validator.js';
 export { FrameworkLifecycleProcessor } from './framework-lifecycle-processor.js';
 export { FrameworkDiscoveryProcessor } from './framework-discovery-processor.js';
 export { FrameworkVersioningProcessor } from './framework-versioning-processor.js';

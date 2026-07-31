@@ -23,8 +23,8 @@
  * @module resources
  */
 
+import { registerFrameworkResources } from './handlers/framework-resources.js';
 import { registerGateResources } from './handlers/gate-resources.js';
-import { registerFrameworkResources } from './handlers/methodology-resources.js';
 import { registerObservabilityResources } from './handlers/observability-resources.js';
 import { registerPromptResources } from './handlers/prompt-resources.js';
 

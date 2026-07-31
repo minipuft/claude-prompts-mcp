@@ -6,7 +6,7 @@
  * metadata used by the framework switching layer.
  */
 
-import type { FrameworkDefinition, FrameworkExecutionContext } from './methodology-types.js';
+import type { FrameworkDefinition, FrameworkExecutionContext } from './framework-types.js';
 import type { ContentAnalysisResult } from '../../../shared/types/index.js';
 
 /**

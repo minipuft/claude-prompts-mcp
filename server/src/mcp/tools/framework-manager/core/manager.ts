@@ -14,10 +14,10 @@
 import { VersionHistoryService } from '../../../../modules/versioning/index.js';
 import { ObjectDiffGenerator } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import { FrameworkDiscoveryProcessor } from '../services/framework-discovery-processor.js';
+import { FrameworkDraftValidator } from '../services/framework-draft-validator.js';
+import { FrameworkFileWriter } from '../services/framework-file-writer.js';
 import { FrameworkLifecycleProcessor } from '../services/framework-lifecycle-processor.js';
 import { FrameworkVersioningProcessor } from '../services/framework-versioning-processor.js';
-import { FrameworkFileWriter } from '../services/methodology-file-writer.js';
-import { FrameworkDraftValidator } from '../services/methodology-validator.js';
 
 import type { FrameworkResourceContext } from './context.js';
 import type { FrameworkManagerInput, FrameworkManagerDependencies } from './types.js';

@@ -14,7 +14,7 @@
  */
 
 import { ConvertedPrompt } from '../../engine/execution/types.js';
-import { BUILTIN_FRAMEWORK_TYPES } from '../../engine/frameworks/types/methodology-types.js';
+import { BUILTIN_FRAMEWORK_TYPES } from '../../engine/frameworks/types/framework-types.js';
 import { SemanticAnalysisConfig } from '../../types.js';
 
 import type { LLMClient } from './types.js';

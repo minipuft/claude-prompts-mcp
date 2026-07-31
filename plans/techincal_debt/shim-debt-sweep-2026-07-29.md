@@ -933,6 +933,72 @@ comments, whose code portions are byte-identical.
 **Remaining**: 626 hits — 554 code/string (protected tokens and path literals), 52 import paths,
 20 protected comments. Pass 4 (12 files + 2 directories) claims the import paths; the guard follows.
 
+#### Internal rename, pass 4 (files + directories) — ✓ 2026-07-30
+
+**626 → 569.** 19 files and 2 directories moved with `git mv` (history preserved), import paths
+rewritten across 47 files, plus one npm script rename. **No `methodology`-named file or directory
+remains anywhere under `src`, `tests`, or `scripts`.**
+
+**The directory is `definitions/`, not `framework/`.** A literal substitution gives
+`frameworks/framework/framework-schema.ts` — stuttering, and the only sibling named after the
+domain object rather than its role (`integration/`, `phase-guards/`, `prompt-guidance/`, `types/`,
+`utils/`). The contents are the schema, definition types, runtime loader, registry, generic guide
+and hot-reload coordinator: _how a framework definition gets loaded and registered_. Operator call.
+
+**Filenames follow the symbol, not the token.** Each file was renamed after its primary export
+rather than by substitution, which caught one trap: `methodology-validator.ts` exports
+`FrameworkDraftValidator` (stage 2 gave it that name because it scores an authoring draft, unlike
+`FrameworkValidator` which resolves ids). Substituting would have produced a second
+`framework-validator.ts` — recreating precisely the homonym this sweep exists to remove. It is
+`framework-draft-validator.ts`.
+
+**`server/scripts/` was outside passes 2 and 3 — the third instance of the same miss** (after the
+CLI in stage 4 and the contract JSON in stage 3). Both renamed scripts still carried
+`METHODOLOGIES_DIR`, `validateMethodology`, `methodologyJsonSchema` and stale prose; the generator
+was also writing `"title": "Methodology Definition"` into the IDE-facing schema. Folded in here.
+`METHODOLOGIES_DIR` is another ALL-CAPS identifier of the class pass 2's regex could not see.
+
+**"framework framework" recurred twice more** — once in `generate-gate-index.js`, once inside the
+schema generator's own description string, where it surfaced only after regenerating and reading
+the output diff. Fixed at the source, not in the generated file.
+
+> **The barrel question, answered against the code rather than the rule.** `CLAUDE.md` says "no
+> barrel/`index.ts` re-export files", which reads as a blanket ban. The **enforced** guard
+> (`validate-no-crosslayer-reexport.js`) says the opposite in its own header: _"Deliberately NOT
+> flagged: … a barrel with no compat marker. The marker is what distinguishes 'kept so old imports
+> still resolve' from 'this is the module's public surface'."_ `src/` holds **60 `index.ts` files
+> and only 6 carry a compat marker**. What is banned is the _compat shim_, not the barrel.
+> `definitions/index.ts` has no marker and stays. **Action: the CLAUDE.md wording overstates the
+> rule and should be corrected to say "no compat re-export shims" — a doc fix, not a code change.**
+
+> **A verification probe of mine was vacuous in passes 2 and 3.** I compared integration failure
+> _name sets_ before/after using `grep "✕"`, which emits nothing unless jest runs `--verbose` — so
+> both sides were empty files and `comm` dutifully reported "identical". The **counts** in those
+> passes were real evidence and are unaffected; the name-set claim was not evidence at all. Pass 4
+> re-ran it against the `●` summary lines, which do parse: **34 baseline vs 34 after, zero newly
+> broken, zero fixed.** Two probes falsified in pass 2, one here — the pattern is that a probe
+> returning "no differences" needs its non-empty output checked before the result is believed.
+
+> **One integration test is flaky**, oscillating the failure count between 33 and 34 across
+> identical runs (observed 4×). Not introduced here — it explains the 12/35 reading in pass 2 that
+> a re-run resolved to 11/34. Worth pinning, but it belongs with the Tier-IT backlog.
+
+**Verification**: typecheck 0 · unit 1703/1703 · validate:all 0 (incl. the renamed
+`validate:frameworks` member) · validate:arch 0 · build 0 · ratchet 3476 after fixing the +5
+`import/order` and +1 `prettier` regressions the path rewrites caused, fixed on the 54 touched
+files only so ratchet movement stayed attributable. Behavioural: server boots over STDIO and
+registers all three tools; **`cli/` rebuilds and lists all 8 frameworks** — the package with no CI
+and no test deps, whose blind spot shipped regression #2. Both renamed npm scripts run.
+`docs/architecture/overview.md` had one row invalidated by the moves and was corrected; a sweep
+confirmed no other doc, README, CHANGELOG or workflow references a moved path.
+
+**Remaining**: 569 hits, and the character of what is left has changed completely — it is no
+longer vocabulary. `methodology_gates` (53), `methodologyGates` (36), `methodology_elements` (22),
+`methodology_id` (6), `methodology_compliance` (6) are contract/config surface; bare `methodology`
+(344) is dominated by the `'methodology'` resource-type literal in SQLite and MCP registration,
+test fixture data, and `rename-symbols.ts`'s historical record. **The guard (pass 5) can now be
+written, but it must allowlist the contract surface rather than demand zero.**
+
 #### Stage 2 ruling: the "7 duplicate pairs" framing was wrong
 
 Adjudicated by structural diff, not by name. The collision set splits three ways, and treating it

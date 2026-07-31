@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { FrameworkDraftValidator } from './methodology-validator.js';
+import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { ToolResponse } from '../../../../shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';

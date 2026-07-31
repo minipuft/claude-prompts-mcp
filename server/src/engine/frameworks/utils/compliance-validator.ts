@@ -7,7 +7,7 @@
  * TypeScript framework guides to work with any framework definition.
  */
 
-import type { FrameworkValidation, TemplateEnhancement } from '../types/methodology-types.js';
+import type { FrameworkValidation, TemplateEnhancement } from '../types/framework-types.js';
 
 /**
  * Quality indicator definition from framework YAML

@@ -7,11 +7,11 @@
  * All frameworks must be defined in resources/frameworks/<id>/framework.yaml.
  */
 
-import { createGenericGuide } from './generic-methodology-guide.js';
+import { createGenericGuide } from './generic-framework-guide.js';
 import {
   RuntimeFrameworkLoader,
   type RuntimeFrameworkLoaderConfig,
-} from './runtime-methodology-loader.js';
+} from './runtime-framework-loader.js';
 import { Logger } from '../../../infra/logging/index.js';
 import { FrameworkGuide } from '../types/index.js';
 

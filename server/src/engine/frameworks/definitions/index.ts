@@ -20,10 +20,10 @@ export type {
   TemplateSuggestionDefinition,
   FrameworkElementsDefinition,
   ArgumentSuggestionDefinition,
-} from './methodology-definition-types.js';
+} from './framework-definition-types.js';
 
 // Export data-driven framework guide system
-export { GenericFrameworkGuide, createGenericGuide } from './generic-methodology-guide.js';
+export { GenericFrameworkGuide, createGenericGuide } from './generic-framework-guide.js';
 
 // Export runtime YAML loader (canonical source for framework loading)
 export {
@@ -31,24 +31,24 @@ export {
   createRuntimeFrameworkLoader,
   getDefaultRuntimeLoader,
   resetDefaultRuntimeLoader,
-} from './runtime-methodology-loader.js';
+} from './runtime-framework-loader.js';
 export type {
   RuntimeFrameworkLoaderConfig,
   LoaderStats,
   FrameworkSchemaValidationResult as FrameworkDraftValidationResult,
-} from './runtime-methodology-loader.js';
+} from './runtime-framework-loader.js';
 
 // Export hot reload coordinator
 export {
   FrameworkHotReloadCoordinator,
   createFrameworkHotReloadCoordinator,
   createFrameworkHotReloadRegistration,
-} from './methodology-hot-reload.js';
+} from './framework-hot-reload.js';
 export type {
   FrameworkHotReloadConfig,
   FrameworkHotReloadStats,
   FrameworkHotReloadRegistration,
-} from './methodology-hot-reload.js';
+} from './framework-hot-reload.js';
 
 // Export shared Zod schema (SSOT for framework validation)
 export {
@@ -56,10 +56,10 @@ export {
   FrameworkGateSchema,
   TemplateSuggestionSchema,
   validateFrameworkSchema,
-} from './methodology-schema.js';
+} from './framework-schema.js';
 export type {
   FrameworkYaml,
   FrameworkGate,
   TemplateSuggestion,
   FrameworkSchemaValidationResult,
-} from './methodology-schema.js';
+} from './framework-schema.js';

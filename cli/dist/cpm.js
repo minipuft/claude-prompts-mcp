@@ -4278,7 +4278,7 @@ var PromptInjectionRuleSchema = external_exports.object({
   target: external_exports.enum(["steps", "gates", "both"]).optional()
 }).strict();
 var PromptInjectionConfigSchema = external_exports.object({
-  /** Framework methodology system prompt injection */
+  /** Framework system prompt injection */
   "system-prompt": PromptInjectionRuleSchema.optional(),
   /** Quality gate guidance injection */
   "gate-guidance": PromptInjectionRuleSchema.optional(),
@@ -4448,7 +4448,7 @@ var GatePassCriteriaSchema = external_exports.object({
    *   previously-named `content_check` and `pattern_check` (which were
    *   intentionally skipped by GateValidator — see gate-validator.ts).
    * - `llm_self_check`: type declared, runner not yet implemented. Reserved.
-   * - `methodology_compliance`: enforced by methodology phase guards
+   * - `methodology_compliance`: enforced by framework phase guards
    *   (stage 09b) — checks section presence + min_length + forbidden_terms
    *   per active framework's `phases.yaml`.
    * - `shell_verify`: runs `shell_command`, exit 0 = pass. Hard enforcement.
@@ -4469,7 +4469,7 @@ var GatePassCriteriaSchema = external_exports.object({
   max_length: external_exports.number().int().positive().optional(),
   required_patterns: external_exports.array(external_exports.string()).optional(),
   forbidden_patterns: external_exports.array(external_exports.string()).optional(),
-  // Methodology compliance options
+  // Framework compliance options
   methodology: external_exports.string().optional(),
   min_compliance_score: external_exports.number().min(0).max(1).optional(),
   severity: external_exports.enum(["warn", "fail"]).optional(),
@@ -4556,7 +4556,7 @@ var GateDefinitionSchema = external_exports.object({
   enforcementMode: external_exports.enum(["blocking", "advisory", "informational"]).optional(),
   /**
    * Gate type classification for dynamic identification.
-   * - 'framework': Methodology-related gates, filtered when frameworks disabled
+   * - 'framework': Framework-related gates, filtered when frameworks disabled
    * - 'category': Category-based gates (code, documentation, etc.)
    * - 'custom': User-defined custom gates
    */
@@ -4614,7 +4614,7 @@ function validateGateSchema(data, expectedId) {
 }
 __name(validateGateSchema, "validateGateSchema");
 
-// ../server/src/engine/frameworks/methodology/methodology-schema.ts
+// ../server/src/engine/frameworks/definitions/framework-schema.ts
 var FrameworkGateSchema = external_exports.object({
   id: external_exports.string().min(1),
   name: external_exports.string().min(1),
@@ -4633,7 +4633,7 @@ var TemplateSuggestionSchema = external_exports.object({
   content: external_exports.string().optional(),
   // Suggested content to add
   frameworkJustification: external_exports.string().optional(),
-  // Why this aligns with methodology
+  // Why this aligns with framework
   impact: external_exports.enum(["high", "medium", "low"]).optional()
 });
 var PhaseGuardSchema = external_exports.object({
@@ -4683,7 +4683,7 @@ var FrameworkSchema = external_exports.object({
   // Required core fields
   id: external_exports.string().min(1),
   name: external_exports.string().min(1),
-  // Framework type discriminator. Replaced the legacy `methodology:` field, which was
+  // Framework type discriminator. Replaced the legacy `framework:` field, which was
   // removed once every definition carried `type:` — it duplicated this value verbatim.
   type: external_exports.string().min(1),
   version: external_exports.string().regex(/^\d+\.\d+\.\d+/, "Must be semver format (e.g., 1.0.0)"),
@@ -4695,6 +4695,8 @@ var FrameworkSchema = external_exports.object({
     include: external_exports.array(external_exports.string()).optional(),
     exclude: external_exports.array(external_exports.string()).optional()
   }).optional(),
+  frameworkGates: external_exports.array(FrameworkGateSchema).optional(),
+  /** @deprecated Pre-rename spelling of `frameworkGates`; folded in by the preprocess below. */
   methodologyGates: external_exports.array(FrameworkGateSchema).optional(),
   // File references (validated separately for existence)
   phasesFile: external_exports.string().optional(),
@@ -4703,8 +4705,13 @@ var FrameworkSchema = external_exports.object({
   systemPromptGuidance: external_exports.string().optional(),
   toolDescriptions: external_exports.record(external_exports.unknown()).optional(),
   templateSuggestions: external_exports.array(TemplateSuggestionSchema).optional()
-}).passthrough();
-function validateMethodologySchema(data, expectedId) {
+}).passthrough().transform((data) => {
+  if (data.frameworkGates === void 0 && data.methodologyGates !== void 0) {
+    return { ...data, frameworkGates: data.methodologyGates };
+  }
+  return data;
+});
+function validateFrameworkSchema(data, expectedId) {
   const errors = [];
   const warnings = [];
   const result = FrameworkSchema.safeParse(data);
@@ -4730,7 +4737,7 @@ function validateMethodologySchema(data, expectedId) {
     warnings
   };
 }
-__name(validateMethodologySchema, "validateMethodologySchema");
+__name(validateFrameworkSchema, "validateFrameworkSchema");
 
 // ../server/src/modules/formatting/core/style-schema.ts
 var StyleToolDescriptionSchema = external_exports.object({
@@ -8353,7 +8360,7 @@ ${warningLines.join("\n")}`);
       case "gates":
         return validateGateSchema(data, expectedId);
       case "frameworks":
-        return validateMethodologySchema(data, expectedId);
+        return validateFrameworkSchema(data, expectedId);
       case "styles":
         return validateStyleSchema(data, expectedId);
       case "tools":
@@ -8488,7 +8495,7 @@ function frameworkYaml(id, opts) {
     "#     - framework-compliance",
     "",
     "# --- Methodology-Specific Gates (uncomment to define) ---",
-    "# methodologyGates:",
+    "# frameworkGates:",
     "#   - id: phase_completeness",
     "#     name: Phase Completeness",
     "#     description: Verify all methodology phases are addressed",

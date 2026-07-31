@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Methodology YAML Validator
+ * Framework YAML Validator
  *
  * Imports Zod schemas directly from TypeScript source (via tsx).
  * No build step required.
@@ -17,10 +17,10 @@ import {
   validateFrameworkSchema,
   validatePhasesSchema,
   type FrameworkSchemaValidationResult,
-} from '../src/engine/frameworks/methodology/methodology-schema.js';
+} from '../src/engine/frameworks/definitions/framework-schema.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const METHODOLOGIES_DIR = join(__dirname, '..', 'resources', 'frameworks');
+const FRAMEWORKS_DIR = join(__dirname, '..', 'resources', 'frameworks');
 const args = process.argv.slice(2);
 const STRICT = args.includes('--strict');
 const VERBOSE = args.includes('--verbose');
@@ -35,7 +35,7 @@ interface ValidationResult {
 // ============================================
 // VALIDATION (file existence checks are CI-specific)
 // ============================================
-function validateMethodology(dir: string): ValidationResult {
+function validateFramework(dir: string): ValidationResult {
   const id = basename(dir);
   const yamlPath = join(dir, 'framework.yaml');
   const errors: string[] = [];
@@ -91,19 +91,19 @@ function validateMethodology(dir: string): ValidationResult {
 // MAIN
 // ============================================
 function main(): void {
-  console.log('Validating methodology YAML files...\n');
+  console.log('Validating framework YAML files...\n');
 
-  if (!existsSync(METHODOLOGIES_DIR)) {
+  if (!existsSync(FRAMEWORKS_DIR)) {
     console.log('No frameworks directory found. Skipping.');
     process.exit(0);
   }
 
-  const dirs = readdirSync(METHODOLOGIES_DIR, { withFileTypes: true })
+  const dirs = readdirSync(FRAMEWORKS_DIR, { withFileTypes: true })
     .filter((e) => e.isDirectory())
-    .map((e) => join(METHODOLOGIES_DIR, e.name));
+    .map((e) => join(FRAMEWORKS_DIR, e.name));
 
   if (dirs.length === 0) {
-    console.log('No methodology directories found.');
+    console.log('No framework directories found.');
     process.exit(0);
   }
 
@@ -111,7 +111,7 @@ function main(): void {
   let hasWarnings = false;
 
   for (const dir of dirs) {
-    const { id, valid, errors, warnings } = validateMethodology(dir);
+    const { id, valid, errors, warnings } = validateFramework(dir);
 
     if (!valid) {
       hasErrors = true;
@@ -126,7 +126,7 @@ function main(): void {
     }
   }
 
-  console.log(`\nValidation complete: ${dirs.length} methodology(ies)`);
+  console.log(`\nValidation complete: ${dirs.length} framework(ies)`);
 
   if (hasErrors) {
     console.error('\n✗ Validation failed');

@@ -2,7 +2,7 @@ import {
   evaluatePhaseGuards,
   buildPhaseGuardPassSummary,
 } from '../../../../src/engine/frameworks/phase-guards/phase-guard-evaluator.js';
-import type { ProcessingStep } from '../../../../src/engine/frameworks/types/methodology-types.js';
+import type { ProcessingStep } from '../../../../src/engine/frameworks/types/framework-types.js';
 import type { PhaseGuardEvaluationResult } from '../../../../src/engine/frameworks/phase-guards/types.js';
 
 function makePhase(

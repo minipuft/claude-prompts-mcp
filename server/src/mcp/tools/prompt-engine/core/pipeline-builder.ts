@@ -53,7 +53,7 @@ import {
   ResponseFormattingStage,
   PostFormattingCleanupStage,
 } from '../../../../engine/execution/pipeline/index.js';
-import { getDefaultRuntimeLoader } from '../../../../engine/frameworks/methodology/index.js';
+import { getDefaultRuntimeLoader } from '../../../../engine/frameworks/definitions/index.js';
 import {
   JudgeMenuFormatter,
   type FrameworkJudgePromptProvider,

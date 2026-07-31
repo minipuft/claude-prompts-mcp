@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { isFrameworkInjected } from '../../../../src/engine/execution/pipeline/decisions/injection/methodology-injection.js';
+import { isFrameworkInjected } from '../../../../src/engine/execution/pipeline/decisions/injection/framework-injection.js';
 import { GateSetResolver } from '../../../../src/engine/gates/services/gate-set-resolver.js';
 
 import type { GateResolutionInput } from '../../../../src/engine/gates/services/gate-set-resolver.js';

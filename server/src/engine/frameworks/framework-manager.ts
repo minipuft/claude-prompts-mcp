@@ -11,7 +11,7 @@
  * - FrameworkStateStore: Runtime enable/disable state
  */
 
-import { FrameworkRegistry, createFrameworkRegistry } from './methodology/index.js';
+import { FrameworkRegistry, createFrameworkRegistry } from './definitions/index.js';
 import {
   FrameworkDefinition,
   FrameworkExecutionContext,

@@ -20,14 +20,14 @@ import { fileURLToPath } from 'url';
 import {
   validateFrameworkSchema,
   type FrameworkSchemaValidationResult,
-} from './methodology-schema.js';
+} from './framework-schema.js';
 import {
   loadYamlFileSync,
   discoverYamlDirectories,
   discoverNestedYamlDirectories,
 } from '../../../shared/utils/yaml/index.js';
 
-import type { FrameworkResourceDefinition } from './methodology-definition-types.js';
+import type { FrameworkResourceDefinition } from './framework-definition-types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -66,8 +66,8 @@ export interface LoaderStats {
   additionalFrameworksDirs: string[];
 }
 
-// FrameworkSchemaValidationResult is imported from methodology-schema.ts
-export type { FrameworkSchemaValidationResult } from './methodology-schema.js';
+// FrameworkSchemaValidationResult is imported from framework-schema.ts
+export type { FrameworkSchemaValidationResult } from './framework-schema.js';
 
 /**
  * Runtime Framework Loader
@@ -238,7 +238,7 @@ export class RuntimeFrameworkLoader {
   /**
    * Get the frameworks directory being used
    */
-  getMethodologiesDir(): string {
+  getFrameworksDir(): string {
     return this.frameworksDir;
   }
 

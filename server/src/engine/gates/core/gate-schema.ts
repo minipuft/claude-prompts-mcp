@@ -9,7 +9,7 @@
  *
  * This ensures SSOT — any schema change is enforced everywhere.
  *
- * @see methodology-schema.ts for the pattern this follows
+ * @see framework-schema.ts for the pattern this follows
  *
  * ## Gate Enforcement Modes (taxonomy)
  *

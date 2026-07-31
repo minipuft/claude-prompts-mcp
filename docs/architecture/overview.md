@@ -664,12 +664,12 @@ MCP notification sent to clients
 
 ### Watched Directories
 
-| Resource      | Directory Source                           | Registration                                         |
-| ------------- | ------------------------------------------ | ---------------------------------------------------- |
-| Prompts       | `getPromptsDirectory()` + category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`     |
-| Gates         | `getGatesDirectory()`                      | `createGateHotReloadRegistration()` auxiliary reload |
-| Methodologies | `runtimeLoader.getMethodologiesDir()`      | `methodology-hot-reload.ts` auxiliary reload         |
-| Styles        | `loader.getStylesDir()`                    | `style-hot-reload.ts` auxiliary reload               |
+| Resource   | Directory Source                           | Registration                                         |
+| ---------- | ------------------------------------------ | ---------------------------------------------------- |
+| Prompts    | `getPromptsDirectory()` + category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`     |
+| Gates      | `getGatesDirectory()`                      | `createGateHotReloadRegistration()` auxiliary reload |
+| Frameworks | `runtimeLoader.getFrameworksDir()`         | `framework-hot-reload.ts` auxiliary reload           |
+| Styles     | `loader.getStylesDir()`                    | `style-hot-reload.ts` auxiliary reload               |
 
 ### Limitations
 

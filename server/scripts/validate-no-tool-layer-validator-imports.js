@@ -6,7 +6,7 @@ const IMPORT_PATTERN = [
   'cli-shared/resource-validation',
   'modules/prompts/prompt-schema',
   'engine/gates/core/gate-schema',
-  'engine/frameworks/methodology/methodology-schema',
+  'engine/frameworks/definitions/framework-schema',
   'modules/formatting/core/style-schema',
   'modules/automation/core/script-schema',
 ].join('|');

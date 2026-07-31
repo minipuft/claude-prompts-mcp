@@ -182,6 +182,6 @@
     }
   },
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Methodology Definition",
-  "description": "Schema for framework.yaml — defines a methodology framework with gates, guidance, and tool overlays."
+  "title": "Framework Definition",
+  "description": "Schema for framework.yaml — defines a framework with gates, guidance, and tool overlays."
 }
