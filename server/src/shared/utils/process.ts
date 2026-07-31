@@ -385,8 +385,22 @@ function spawnProcess(opts: SpawnOptions): Promise<ProcessResult> {
       }
     });
 
-    if (stdin !== undefined && stdin !== '') {
-      proc.stdin?.write(stdin);
+    // A child that never reads stdin is legitimate: `printf "%s" "$VAR"`, `true`, or any script
+    // that only inspects env vars. Such a child can exit before this write lands, leaving the pipe
+    // closed — and Node then emits EPIPE on the stdin stream. With no listener that is an unhandled
+    // 'error' event, which took down the whole verification and surfaced as a bare `write EPIPE`
+    // from a gate whose command had in fact worked. Because it is a race between the write and the
+    // child's exit, it only lost under load, which is what made it look like test-order pollution.
+    proc.stdin?.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EPIPE' || error.code === 'ERR_STREAM_DESTROYED') {
+        return; // The child chose not to read stdin. Not a failure of the command.
+      }
+      // Any other pipe failure is real and must stay visible rather than be swallowed here.
+      stderr += `stdin error: ${error.message}\n`;
+    });
+
+    if (stdin !== undefined && stdin !== '' && proc.stdin && !proc.stdin.destroyed) {
+      proc.stdin.write(stdin);
     }
     proc.stdin?.end();
 
