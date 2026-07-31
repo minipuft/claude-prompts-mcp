@@ -240,7 +240,7 @@ Another session is writing to this working tree. Evidence: `loader.ts` mtime 19:
 19:05:47 probe; `markdown-prompt-parser.ts` appeared in the tree between two consecutive
 `git status` runs; tracked+untracked count went 48 → 57 during this tier. Staging anything under
 those conditions risks committing a half-written file, so **no commit, no split, nothing staged**
-— per the "split only if safe and non-destructive" instruction. Step 0.1 remains ☐.
+— per the "split only if safe and non-destructive" instruction. Step 0.1 was later marked ⊘ SUPERSEDED — the branch was never cut and the work landed on the existing feature branch instead.
 
 **Deviation 3 — integration tests are run by NOTHING, and have rotted.**
 Discovered while acting on the `test:ci` caveat below. `test:ci` = `test:unit`; CI's test job ran
@@ -520,10 +520,11 @@ updated to the new names **in the same commit as step 3.9**, never separately �
 lags the code by even one commit reintroduces exactly the two-names-one-concept defect this
 sweep exists to remove.
 
-### Tier IT: Integration test repair — DEFERRED, but blocks Tier 1
+### Tier IT: Integration test repair — COMPLETE (2026-07-31)
 
-**Status: deferred by decision 2026-07-29.** Not scheduled. Documented here so the finding is not
-lost and so nobody mistakes a red baseline for a Tier 1 regression.
+**Status: COMPLETE 2026-07-31.** All rows resolved; `test:integration` is 32/32 suites and 350/350
+tests, exit 0 across 3 consecutive runs, and CI now blocks on it. The deferral notes below are kept
+as the record of why it was scheduled late, not as current status — see "Tier IT outcome".
 
 **Does it block Tier 1? NO — checked, and the answer is no.**
 Step 1.1 touches `tests/integration/gates/gate-category-selection.test.ts`, which was run in
@@ -585,7 +586,7 @@ Do not treat the table above as a rot baseline until step IT.0 re-measures it.
 | IT.5  | ✓      | **DONE — 8 failures, not 6; storage migration, not a null bug.** Versioning moved from sidecar files to SQLite: `loadHistory(resourceDir)` is now `loadHistory(resourceType, resourceId)` and `saveVersion` lost its `resourceDir` parameter, so every argument in the test harness was shifted by one and the service had no `DatabasePort` at all. Harness rewired to current signatures + a real `SqliteEngine`; 26 dead directory references removed                                                         | `tests/integration/versioning/version-history-workflow.test.ts`                                                                 | IT.0                            | Suite green                                                                  |
 | IT.6  | ✓      | **DONE — the test asserted superseded behaviour, and production is right.** Pull now refuses to write any section whose canonical content contains Nunjucks control flow (`service.ts`), because reverse-compiling a rendered skill over a template destroys the template. The test asserted the old lossy contract ("the conditional IS lost"). Rewritten to assert preservation **and** that the skip is reported — a silent refusal would leave the author believing the edit landed                          | `tests/integration/skills-sync/pull-command.test.ts`                                                                            | IT.0, concurrent work committed | Suite green                                                                  |
 | IT.7  | ✓      | **DONE — and the row was nearly closed as obsolete by mistake.** The suite passed 3 straight full-suite runs, then failed the 4th at `duration 2101ms` vs `< 1500`. Fix: compare against the command's own runtime (`sleep 5`, bound `< 4000`) so the assertion answers "was it killed early?" rather than measuring process-group cleanup latency; `timedOut`/`exitCode` already carry the deterministic proof                                                                                                  | `tests/integration/gates/shell-verification-flow.test.ts`                                                                       | IT.0                            | **DONE** — 10 consecutive runs green (16 including the confirmation batch)   |
-| IT.9  | ✓      | **DONE — 4 failing suites had no row.** `resource-indexer`, `resource-indexer-live`, `startup-bootstrap`, `resource-manager-workflow` asserted the pre-rename vocabulary (`queryByType('methodology')`, `resource_type: "methodology"`) against production that correctly says `framework`. **Fixed** — 6 call sites, all 4 suites green (41 tests). Row stays ☐ only for its guard half: see IT.10                                                                                                              | `tests/integration/database/*.test.ts`, `tests/integration/mcp-tools/resource-manager-workflow.test.ts`                         | IT.0                            | **Tests DONE**; guard pending                                                |
+| IT.9  | ✓      | **DONE — 4 failing suites had no row.** `resource-indexer`, `resource-indexer-live`, `startup-bootstrap`, `resource-manager-workflow` asserted the pre-rename vocabulary (`queryByType('methodology')`, `resource_type: "methodology"`) against production that correctly says `framework`. **Fixed** — 6 call sites, all 4 suites green (41 tests). Its guard half landed as IT.10 (also ✓)                                                                                                                     | `tests/integration/database/*.test.ts`, `tests/integration/mcp-tools/resource-manager-workflow.test.ts`                         | IT.0                            | **Tests DONE**; guard pending                                                |
 | IT.10 | ✓      | **DONE — narrowed the 5.8 guard's blanket test exemption.** `validate-no-methodology-vocab.js:62` is `{ file: 'tests/', match: 'methodolog' }`, exempting the entire test tree. That is why 18 stale `methodology` hits in `tests/integration` survived a guard written to prevent exactly this, and its stated retirement condition ("same commit as the fold each one guards") is unverifiable because the entry names no fold. Replace with per-file entries scoped to the folds they actually pin            | `server/scripts/validate-no-methodology-vocab.js`                                                                               | IT.9                            | Guard fails when a stale `methodology` assertion is reintroduced in `tests/` |
 | IT.8  | ✓      | **DONE.** Retirement condition met (integration green 3/3 locally). `continue-on-error` deleted, the step already precedes E2E, and the debt rationale was replaced rather than left as a stale breadcrumb. `ci.yml` parses                                                                                                                                                                                                                                                                                      | `.github/workflows/ci.yml`                                                                                                      | IT.1-IT.7                       | `npm run test:integration` exits 0; CI blocks on integration failures        |
 
@@ -711,7 +712,7 @@ CI impact is unchanged by IT.8: the E2E step was already blocking and had no `co
 **Gate**: `npm run typecheck && npm run test:ci && npm run validate:all && npm run lint:ratchet:baseline`
 _(1.3-1.6 are independent — parallelizable)_
 
-**Tier 1 status: PARTIAL (2 of 7). 1.1 + 1.2 complete and gate-verified. 1.3-1.7 blocked.**
+**Tier 1 status: COMPLETE (7 of 7).** All rows ✓ and gate-verified. (This line read "PARTIAL (2 of 7)" long after 1.3-1.7 landed — a stale summary above accurate rows, the same untrusted-inventory defect the plan exists to catch. Trust the row marks; re-measure the prose.)
 
 Gate result for the 1.1/1.2 slice, run 2026-07-29:
 
@@ -749,7 +750,7 @@ report is deleting against a number nobody has audited.
 
 **Gate**: `npm run typecheck && npm run test:ci && npm run validate:all && npm run validate:arch && npm run lint:ratchet:baseline`
 
-**Tier 2 status: 1 of 5. 2.1 complete. 2.2-2.5 blocked — one blocker is a decision, not a dependency.**
+**Tier 2 status: COMPLETE (5 of 5).** All rows ✓. (Previously read "1 of 5 ... blocked" after the blocker was resolved and 2.2-2.5 landed.)
 
 #### Barrel audit (step 2.1, 2026-07-29)
 
