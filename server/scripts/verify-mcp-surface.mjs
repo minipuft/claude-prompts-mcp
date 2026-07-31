@@ -49,35 +49,122 @@ const HEALTH_TIMEOUT_MS = 25_000;
 const RPC_TIMEOUT_MS = 20_000;
 
 /**
+ * Ground truth read from disk at run time.
+ *
+ * Deliberately derived, never hardcoded. A literal list of framework ids here would be correct on
+ * the day it was written and quietly wrong after the next rename — which is the exact rot that
+ * left `verify:action-metadata` reading two files that no longer existed while reporting success.
+ */
+const DISK_FRAMEWORK_IDS = readdirSync(path.join(SERVER_ROOT, 'resources', 'frameworks'), {
+  withFileTypes: true,
+})
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name);
+
+/** Compare display names to directory ids without caring about dots, case or spacing. */
+const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Response text by check label, so one check can be asserted against another. */
+const seen = new Map();
+
+/** Parse `**category**: id, id, ...` listing lines into ids. */
+function parseListedPromptIds(text) {
+  return text
+    .split('\n')
+    .filter((line) => /^\*\*[^*]+\*\*:/.test(line))
+    .flatMap((line) => line.slice(line.indexOf(':') + 1).split(','))
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+/**
  * Read-only probes, one line of output each.
  *
  * Each names the tool it exercises and a predicate over the response text. Adding a check is one
  * entry — that is deliberate, so this stays cheap to extend as the surface grows.
+ *
+ * ASSERT CONTENT, NOT SHAPE. The first version of this file tested `/prompts/i` against the prompt
+ * listing and `text.length > 0` against the framework listing. Both pass on a server that has lost
+ * every prompt and every framework, because the words survive in the header and the footer. A
+ * check that a wrong-but-well-formed response satisfies is a check that reports health it has not
+ * measured — and this script exists to be trusted in place of a manual review pass.
+ *
+ * Each predicate returns `true`, or a string naming what was actually wrong.
  */
 const TOOL_CHECKS = [
   {
+    // Cross-checked against the framework listing below, which is what makes it falsifiable:
+    // agreement between two independent renderings cannot be faked by either one alone.
     label: 'system_control status',
     tool: 'system_control',
     args: { action: 'status' },
-    expect: (text) => /status|framework/i.test(text),
+    expect: (text) => {
+      const active = text.match(/Framework System.*?\(([^)]+)\)/)?.[1];
+      if (!active) return 'status does not name an active framework';
+      if (!DISK_FRAMEWORK_IDS.some((id) => normalize(active).includes(normalize(id)))) {
+        return `active framework "${active}" matches no framework on disk`;
+      }
+      return true;
+    },
   },
   {
+    // The declared count and the enumerated ids come from different parts of the renderer, so a
+    // listing that silently drops prompts fails here even though the header still says "Prompts".
     label: 'resource_manager prompt list',
     tool: 'resource_manager',
     args: { resource_type: 'prompt', action: 'list' },
-    expect: (text) => /prompts/i.test(text),
+    expect: (text) => {
+      const declared = Number(text.match(/\*\*Prompts\*\*\s*\((\d+)\)/)?.[1]);
+      if (!Number.isFinite(declared)) return 'listing does not declare a prompt count';
+      if (declared === 0) return 'listing declares zero prompts';
+      const listed = parseListedPromptIds(text);
+      if (listed.length !== declared) {
+        return `declares ${declared} prompts but enumerates ${listed.length}`;
+      }
+      return true;
+    },
   },
   {
+    // Same catalogue reached through the other tool. Disagreement means one of the two reads a
+    // different registry than the operator thinks — invisible to any per-tool check.
     label: 'prompt_engine listprompts',
     tool: 'prompt_engine',
     args: { command: '>>listprompts' },
-    expect: (text) => /prompts/i.test(text),
+    expect: (text) => {
+      const listed = parseListedPromptIds(text);
+      if (listed.length === 0) return 'listing enumerates no prompts';
+      const viaResourceManager = parseListedPromptIds(
+        seen.get('resource_manager prompt list') ?? ''
+      );
+      if (viaResourceManager.length === 0) return 'no resource_manager listing to compare against';
+      // Compare the id SETS, not the counts. Equal counts are satisfied by two catalogues that
+      // disagree about every entry, and a tool reading the wrong registry usually still returns a
+      // plausible number of prompts.
+      const other = new Set(viaResourceManager);
+      const divergent = listed.filter((id) => !other.has(id));
+      if (divergent.length > 0) {
+        return `prompt_engine lists ${divergent.length} prompt(s) resource_manager does not, e.g. "${divergent[0]}"`;
+      }
+      if (listed.length !== viaResourceManager.length) {
+        return `prompt_engine lists ${listed.length} but resource_manager lists ${viaResourceManager.length}`;
+      }
+      return true;
+    },
   },
   {
+    // Every framework on disk must be served, and exactly one must be active. `length > 0` passed
+    // on an empty catalogue; this does not.
     label: 'system_control framework list',
     tool: 'system_control',
     args: { action: 'framework', operation: 'list' },
-    expect: (text) => text.trim().length > 0,
+    expect: (text) => {
+      const flat = normalize(text);
+      const missing = DISK_FRAMEWORK_IDS.filter((id) => !flat.includes(normalize(id)));
+      if (missing.length > 0) return `frameworks on disk but not listed: ${missing.join(', ')}`;
+      const activeCount = (text.match(/ACTIVE/g) ?? []).length;
+      if (activeCount !== 1) return `expected exactly 1 active framework, found ${activeCount}`;
+      return true;
+    },
   },
 ];
 
@@ -310,11 +397,80 @@ async function runSurfaceChecks(baseUrl) {
       record(check.label, false, `tool reported isError — ${text.slice(0, 80)}`);
       continue;
     }
-    record(check.label, check.expect(text), `${text.length} chars`);
+    if (process.env.VERIFY_MCP_DUMP) console.log(`\n----- ${check.label} -----\n${text}\n-----\n`);
+    // Recorded before the predicate runs so a later check can assert against this response.
+    seen.set(check.label, text);
+    const verdict = check.expect(text);
+    record(check.label, verdict === true, verdict === true ? `${text.length} chars` : verdict);
   }
 }
 
+/**
+ * Wrong-but-well-formed responses, one per check.
+ *
+ * Each reads like a healthy answer — right headers, right footer, right vocabulary — and is wrong
+ * in the way the matching predicate is supposed to notice. `--self-test` asserts every predicate
+ * rejects its counterpart, which is what keeps this file honest: the previous predicates
+ * (`/prompts/i`, `text.length > 0`) accept every one of these.
+ *
+ * A check added without an entry here fails `--self-test`, so falsifiability is not optional.
+ */
+const WRONG_BUT_WELL_FORMED = {
+  'system_control status':
+    '✅ **System Status Overview**\n\n**Framework System**: ✅ Enabled (ATLANTIS)\n**Status**: healthy\n',
+  'resource_manager prompt list':
+    '📚 **Prompts** (117)\n\n**analysis**: action_plan, content_analysis\n\n_Use `detail:"full"`._',
+  // Same count as the peer catalogue, different ids — the shape a tool reading the wrong registry
+  // actually produces, and the one a count comparison cannot see.
+  'prompt_engine listprompts':
+    '📚 **Prompts** (2)\n\n**analysis**: action_plan, deep_research\n\n_Use `detail:"full"`._',
+  'system_control framework list':
+    '📋 **Available Frameworks**\n\n**C.A.G.E.E.R.F Framework** 🟢 ACTIVE\n**ReACT Framework** ⚪ Available\n',
+};
+
+/**
+ * Prove every predicate can fail before trusting any of them to pass. Runs offline — no server,
+ * no port, no build — so it is cheap enough to run alongside the real verification.
+ */
+function runSelfTest() {
+  console.log(
+    '\nverify:mcp self-test — every check must reject a wrong-but-well-formed response\n'
+  );
+  let failures = 0;
+
+  for (const check of TOOL_CHECKS) {
+    const fake = WRONG_BUT_WELL_FORMED[check.label];
+    if (fake === undefined) {
+      record(`${check.label} — has a counterexample`, false, 'no WRONG_BUT_WELL_FORMED entry');
+      failures += 1;
+      continue;
+    }
+    // Seed the healthy catalogue so cross-checks fail on the fake, not on a missing peer.
+    seen.set(
+      'resource_manager prompt list',
+      '📚 **Prompts** (2)\n\n**analysis**: action_plan, content_analysis\n'
+    );
+    const verdict = check.expect(fake);
+    const rejected = verdict !== true;
+    record(`${check.label} — rejects wrong response`, rejected, rejected ? verdict : 'ACCEPTED IT');
+    if (!rejected) failures += 1;
+  }
+
+  seen.clear();
+  console.log(
+    failures === 0
+      ? `\nOK: all ${TOOL_CHECKS.length} checks are falsifiable\n`
+      : `\nFAILED: ${failures} check(s) cannot detect a wrong response\n`
+  );
+  process.exit(failures === 0 ? 0 : 1);
+}
+
 async function main() {
+  if (process.argv.includes('--self-test')) {
+    runSelfTest();
+    return;
+  }
+
   console.log('\nMCP surface verification (spawns a server from dist/ — no Claude Code restart)\n');
 
   const baseline = captureMutationBaseline();
