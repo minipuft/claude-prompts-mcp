@@ -6,6 +6,24 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, jest } from '@je
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { createResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
 
+/**
+ * Baseline comparison against the tracker's real surface.
+ *
+ * This file previously asserted a richer API than `compareBaseline` has ever exposed — `runId`,
+ * `runTimestamp`, `totalChanges` and a `changes[]` array — and passed `contentHash` per resource
+ * so that no file needed to exist on disk. None of that shipped: `git log -S runId` finds no
+ * commit touching the tracker, `compareBaseline` returns `{added, modified, removed}`, and it
+ * derives hashes by reading `filePath` itself. It also declared `methodology`, `style` and `tool`
+ * resources, while `TrackedResourceType` is `'prompt' | 'gate'`.
+ *
+ * The two cases below therefore could never have passed. They are rewritten against the real
+ * signature — real files on disk, real resource types — so the coverage is actual rather than
+ * aspirational. If run metadata is wanted later, it is a feature to implement in the tracker
+ * first, with the test following it.
+ *
+ * Classification: Integration (real SQLite engine, real filesystem, no mocked collaborators).
+ */
+
 const logger = {
   info: jest.fn() as jest.Mock,
   warn: jest.fn() as jest.Mock,
@@ -14,13 +32,29 @@ const logger = {
 };
 
 const TEST_DIR = path.join(process.cwd(), 'tests/tmp/resource-change-tracker-baseline');
+const RESOURCE_DIR = path.join(TEST_DIR, 'resources');
+
+/** Write a resource file and return the descriptor `compareBaseline` expects. */
+async function writeResource(
+  resourceType: 'prompt' | 'gate',
+  resourceId: string,
+  contents: string
+): Promise<{ resourceType: 'prompt' | 'gate'; resourceId: string; filePath: string }> {
+  const filePath = path.join(
+    RESOURCE_DIR,
+    `${resourceType}-${resourceId.replace(/\//g, '__')}.yaml`
+  );
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, contents, 'utf-8');
+  return { resourceType, resourceId, filePath };
+}
 
 describe('ResourceChangeTracker baseline comparison', () => {
   let dbManager: SqliteEngine;
 
   beforeAll(async () => {
     await fs.rm(TEST_DIR, { recursive: true, force: true });
-    await fs.mkdir(TEST_DIR, { recursive: true });
+    await fs.mkdir(RESOURCE_DIR, { recursive: true });
 
     dbManager = await SqliteEngine.getInstance(TEST_DIR, logger as any);
     await dbManager.initialize();
@@ -40,118 +74,77 @@ describe('ResourceChangeTracker baseline comparison', () => {
     logger.debug.mockClear();
     dbManager.run(`DELETE FROM kv_state WHERE tenant_id = 'default' AND key = 'resource_hashes'`);
     dbManager.run(`DELETE FROM resource_changes WHERE tenant_id = 'default'`);
+    await fs.rm(RESOURCE_DIR, { recursive: true, force: true });
+    await fs.mkdir(RESOURCE_DIR, { recursive: true });
   });
 
-  it('captures startup net-delta with run metadata and timestamps for all tracked resource types', async () => {
-    const tracker = createResourceChangeTracker(logger as any, { maxEntries: 1000 }, dbManager);
+  it('counts every tracked resource as added on first run, and nothing on an unchanged rerun', async () => {
+    const tracker = createResourceChangeTracker(logger as any, {
+      maxEntries: 1000,
+      serverRoot: TEST_DIR,
+    });
     await tracker.initialize();
 
-    const baseline = await tracker.compareBaseline([
-      {
-        resourceType: 'prompt',
-        resourceId: 'prompt-a',
-        filePath: '/virtual/prompts/prompt-a/prompt.yaml',
-        contentHash: 'hash-prompt-a',
-      },
-      {
-        resourceType: 'gate',
-        resourceId: 'gate-a',
-        filePath: '/virtual/gates/gate-a/gate.yaml',
-        contentHash: 'hash-gate-a',
-      },
-      {
-        resourceType: 'methodology',
-        resourceId: 'framework-a',
-        filePath: '/virtual/frameworks/framework-a/framework.yaml',
-        contentHash: 'hash-framework-a',
-      },
-      {
-        resourceType: 'style',
-        resourceId: 'style-a',
-        filePath: '/virtual/styles/style-a/style.yaml',
-        contentHash: 'hash-style-a',
-      },
-      {
-        resourceType: 'tool',
-        resourceId: 'prompt-a/tool-a',
-        filePath: '/virtual/prompts/category/prompt-a/tools/tool-a/tool.yaml',
-        contentHash: 'hash-tool-a',
-      },
-    ]);
+    const resources = [
+      await writeResource('prompt', 'prompt-a', 'name: prompt-a\n'),
+      await writeResource('gate', 'gate-a', 'id: gate-a\n'),
+    ];
 
-    expect(baseline.runId).toMatch(/^baseline-/);
-    expect(baseline.runTimestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    expect(baseline.added).toBe(5);
+    const baseline = await tracker.compareBaseline(resources);
+
+    expect(baseline.added).toBe(2);
     expect(baseline.modified).toBe(0);
     expect(baseline.removed).toBe(0);
-    expect(baseline.totalChanges).toBe(5);
-    expect(baseline.changes).toHaveLength(5);
-    expect(baseline.changes.every((change) => change.timestamp !== '')).toBe(true);
-    expect(baseline.changes.map((change) => change.resourceType)).toEqual([
-      'gate',
-      'methodology',
-      'prompt',
-      'style',
-      'tool',
-    ]);
 
-    const secondRun = await tracker.compareBaseline([
-      {
-        resourceType: 'prompt',
-        resourceId: 'prompt-a',
-        filePath: '/virtual/prompts/prompt-a/prompt.yaml',
-        contentHash: 'hash-prompt-a',
-      },
-      {
-        resourceType: 'gate',
-        resourceId: 'gate-a',
-        filePath: '/virtual/gates/gate-a/gate.yaml',
-        contentHash: 'hash-gate-a',
-      },
-      {
-        resourceType: 'methodology',
-        resourceId: 'framework-a',
-        filePath: '/virtual/frameworks/framework-a/framework.yaml',
-        contentHash: 'hash-framework-a',
-      },
-      {
-        resourceType: 'style',
-        resourceId: 'style-a',
-        filePath: '/virtual/styles/style-a/style.yaml',
-        contentHash: 'hash-style-a',
-      },
-      {
-        resourceType: 'tool',
-        resourceId: 'prompt-a/tool-a',
-        filePath: '/virtual/prompts/category/prompt-a/tools/tool-a/tool.yaml',
-        contentHash: 'hash-tool-a',
-      },
-    ]);
+    // Same content, same hashes — a rerun must be a no-op, which is what makes this usable at
+    // startup on every boot rather than only the first.
+    const secondRun = await tracker.compareBaseline(resources);
 
-    expect(secondRun.totalChanges).toBe(0);
-    expect(secondRun.changes).toHaveLength(0);
+    expect(secondRun.added).toBe(0);
+    expect(secondRun.modified).toBe(0);
+    expect(secondRun.removed).toBe(0);
   });
 
-  it('preserves full tool resource IDs when detecting removals from cached baseline', async () => {
-    const tracker = createResourceChangeTracker(logger as any, { maxEntries: 1000 }, dbManager);
+  it('detects a modification when a tracked file changes between runs', async () => {
+    const tracker = createResourceChangeTracker(logger as any, {
+      maxEntries: 1000,
+      serverRoot: TEST_DIR,
+    });
     await tracker.initialize();
 
-    await tracker.compareBaseline([
-      {
-        resourceType: 'tool',
-        resourceId: 'create_prompt/prompt_builder',
-        filePath: '/virtual/prompts/examples/create_prompt/tools/prompt_builder/tool.yaml',
-        contentHash: 'hash-tool-initial',
-      },
-    ]);
+    const resource = await writeResource('prompt', 'prompt-a', 'name: prompt-a\n');
+    await tracker.compareBaseline([resource]);
 
+    await fs.writeFile(resource.filePath, 'name: prompt-a\ndescription: edited\n', 'utf-8');
+    const rerun = await tracker.compareBaseline([resource]);
+
+    expect(rerun.modified).toBe(1);
+    expect(rerun.added).toBe(0);
+    expect(rerun.removed).toBe(0);
+  });
+
+  it('preserves a full resource ID containing a slash when detecting removals', async () => {
+    const tracker = createResourceChangeTracker(logger as any, {
+      maxEntries: 1000,
+      serverRoot: TEST_DIR,
+    });
+    await tracker.initialize();
+
+    // The cache key is `${resourceType}/${resourceId}`, so an id that itself contains '/' is the
+    // case where a naive split() truncates it. Categorised prompt ids have exactly this shape.
+    const resource = await writeResource('prompt', 'examples/create_prompt', 'name: create\n');
+    await tracker.compareBaseline([resource]);
+
+    await fs.rm(resource.filePath, { force: true });
     const removalRun = await tracker.compareBaseline([]);
 
     expect(removalRun.removed).toBe(1);
-    expect(removalRun.totalChanges).toBe(1);
-    expect(removalRun.changes).toHaveLength(1);
-    expect(removalRun.changes[0].operation).toBe('removed');
-    expect(removalRun.changes[0].resourceType).toBe('tool');
-    expect(removalRun.changes[0].resourceId).toBe('create_prompt/prompt_builder');
+
+    const changes = await tracker.getChanges({ limit: 10 });
+    const removal = changes.find((change) => change.operation === 'removed');
+
+    expect(removal).toBeDefined();
+    expect(removal?.resourceType).toBe('prompt');
+    expect(removal?.resourceId).toBe('examples/create_prompt');
   });
 });
