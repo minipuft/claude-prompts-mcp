@@ -1606,16 +1606,71 @@ most useful fact here and it is why E.2 exists.
 
 | ID  | Status | Step                                                                                                                                                                                                                                                                                                                                                                       | Files                                  | Depends | Verification                                             |
 | --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------- | -------------------------------------------------------- |
-| E.0 | ☐      | **Re-measure before editing** — every count in this plan that was checked was wrong. Confirm the hang still reproduces on the current tree and that the three sequences above still hold                                                                                                                                                                                   | (measurement only)                     | —       | Failure recorded with the sequence that triggers it      |
-| E.1 | ☐      | Isolate the mechanism. Leads, in order of suspicion: leaked handles (`test:unit` runs `--forceExit`, which masks them), port/socket exhaustion, orphaned child processes. Rule each in or out with evidence — do not fix on the first plausible story                                                                                                                      | `tests/e2e/helpers/http-mcp-client.ts` | E.0     | Named mechanism + the probe that proves it               |
-| E.2 | ☐      | **Decide whether to fix SSE or retire it.** MCP superseded SSE with streamable HTTP, and `verify:mcp` already proves the streamable-http path is healthy. If nothing ships depending on SSE, deleting the transport is a smaller change than debugging it — and removes a path the project would otherwise maintain forever. Answer with consumer evidence, not preference | `src/mcp/http/**`, `tests/e2e/**`      | E.1     | Verdict recorded with the consumer probe behind it       |
-| E.3 | ☐      | Apply the E.2 verdict — fix the mechanism, or remove the SSE transport and its tests in one commit (`cleanup-standards.md`: no deferred cleanup)                                                                                                                                                                                                                           | per E.2                                | E.2     | `test:all` exits 0                                       |
-| E.4 | ☐      | Close the loop in CI. The E2E step is already blocking, so a flake here is a red main; confirm it is genuinely stable rather than lucky                                                                                                                                                                                                                                    | `.github/workflows/ci.yml`             | E.3     | `npm run test:all` exits 0 across **3 consecutive** runs |
+| E.0 | ✓      | **Re-measure before editing** — every count in this plan that was checked was wrong. Confirm the hang still reproduces on the current tree and that the three sequences above still hold                                                                                                                                                                                   | (measurement only)                     | —       | Failure recorded with the sequence that triggers it      |
+| E.1 | ✓      | Isolate the mechanism. Leads, in order of suspicion: leaked handles (`test:unit` runs `--forceExit`, which masks them), port/socket exhaustion, orphaned child processes. Rule each in or out with evidence — do not fix on the first plausible story                                                                                                                      | `tests/e2e/helpers/http-mcp-client.ts` | E.0     | Named mechanism + the probe that proves it               |
+| E.2 | ✓      | **Decide whether to fix SSE or retire it.** MCP superseded SSE with streamable HTTP, and `verify:mcp` already proves the streamable-http path is healthy. If nothing ships depending on SSE, deleting the transport is a smaller change than debugging it — and removes a path the project would otherwise maintain forever. Answer with consumer evidence, not preference | `src/mcp/http/**`, `tests/e2e/**`      | E.1     | Verdict recorded with the consumer probe behind it       |
+| E.3 | ✓      | Apply the E.2 verdict — fix the mechanism, or remove the SSE transport and its tests in one commit (`cleanup-standards.md`: no deferred cleanup)                                                                                                                                                                                                                           | per E.2                                | E.2     | `test:all` exits 0                                       |
+| E.4 | ✓      | Close the loop in CI. The E2E step is already blocking, so a flake here is a red main; confirm it is genuinely stable rather than lucky                                                                                                                                                                                                                                    | `.github/workflows/ci.yml`             | E.3     | `npm run test:all` exits 0 across **3 consecutive** runs |
 
 **Gate**: `npm run test:all` exits 0 three times running, then `npm run validate:full`.
 
 > Do not let this tier reopen `test:integration`. That suite is green and stable at 350/350 across
 > 3 runs; if a change here reddens it, the change is wrong, not the suite.
+
+**Tier E2E outcome (E.0–E.3 closed; E.4 open — the gate does not pass, for an unrelated reason).**
+
+**E.0 falsified two of the three documented sequences.** Measured on the current tree: e2e alone
+passes; **`test:unit` → e2e now passes** (recorded as failing); `test:integration` → e2e fails
+(confirmed). Failing runs take ~19s against ~8s passing.
+
+**E.1 falsified this tier's headline claim.** "The defect is transport-specific, not spawn-specific"
+is wrong. A standalone SSE handshake — same transport, same `dist/`, outside jest — completed in
+**517ms immediately after `test:integration`**. SSE was healthy the whole time. The narrowing this
+tier was built on pointed at the wrong layer.
+
+The real mechanism, reproduced outside jest and deterministic:
+
+| Delay before a second SSE session | Result                                |
+| --------------------------------- | ------------------------------------- |
+| 0ms                               | no `endpoint` event, 10s timeout      |
+| 500ms / 3000ms                    | session established, request answered |
+
+Confirmed by the server's own log rather than by inference:
+`Error connecting to SSE transport: Error: Already connected to a transport.` One `mcpServer`
+instance holds one transport. `sendMcpRequestWithSse` opens a **new** `GET /mcp` per call, so the
+smoke test's `initialize` + `tools/list` were two independent sessions racing the first
+connection's teardown — and teardown speed tracks machine load, which is the whole "load-dependent
+hang." Streamable-http never showed it because a client reuses one session there.
+
+**E.2 verdict: fix, do not retire.** `server/src/smithery.yaml` ships `--transport=sse` as its
+deployment command, so SSE has a live consumer; deleting it would ship the defect to that path to
+make a test pass.
+
+**E.3, three defects:**
+
+1. _Test helper (primary)._ Added `sendMcpRequestsOverSseSession` — one stream, many messages, which
+   is how a real MCP client drives SSE — and moved the failing test onto it. Verified: a single
+   session serves `initialize` + `tools/list` in 879ms.
+2. _Server (real)._ A failed `connect()` left the stream open with no `endpoint` event, so the client
+   hung for its full timeout instead of failing. It now emits an SSE `error` event and closes.
+   Headers are already sent by then, so the previous `res.status(500)` could never apply.
+3. _Server (latent)._ `Date.now()` as connection id: two connections in the same millisecond shared a
+   key, and the first one's `close` handler deleted the second's transport. Now `randomUUID()`.
+
+A `retirePreviousSseSession()` step was written, measured, and **removed** — closing the old
+transport resets the shared server's initialize state, so the new session went silent. It traded one
+failure for a subtler one.
+
+**Verification.** e2e alone green; `test:integration` → e2e green (the sequence that reproduced it);
+typecheck 0, `lint:ratchet` 0 regressions, `validate:all` (21) exit 0.
+
+**E.4 remains open, and the gate fails — on a different defect.** `test:all` exits 1 on all three
+runs, at `tests/integration/gates/gate-shell-verify-review-feedback.test.ts › exposes response via
+env var when shell_response_env_var is set`. It is **not** caused by this tier's work: `git stash`ed
+to clean HEAD, rebuilt, and `test:unit` → `test:integration` reproduces it on unmodified code.
+`test:integration` alone is 350/350. Tier IT verified that suite **standalone**, so this ordering
+dependency was never in its scope. Tracked as Tier ORD below rather than fixed here — one tier, one
+defect.
 
 ### Tier V: does the validation surface still earn its runtime? Opened 2026-07-31.
 
@@ -1633,11 +1688,11 @@ it is the wrong last version if it is going to replace a manual review pass.
 
 | ID  | Status | Step                                                                                                                                                                                                                                                                       | Files                                      | Depends | Verification                                                                  |
 | --- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ------- | ----------------------------------------------------------------------------- |
-| V.0 | ☐      | Inventory all 20 members with **measured** wall-clock each, not estimated. Record what each one catches in one sentence                                                                                                                                                    | `server/package.json`, `server/scripts/**` | —       | Table of 20: name, runtime, what it catches                                   |
-| V.1 | ☐      | Per member, answer: can it still fail? Negative-verify by planting the violation it forbids. A guard that cannot be made to fail is either obsolete or broken — both are findings                                                                                          | `server/scripts/**`                        | V.0     | Each member either fails on a planted violation, or is marked obsolete/broken |
-| V.2 | ☐      | Apply V.1: delete obsolete members and their scripts in the same commit; repair broken ones. Allowlist entries whose retirement condition has come true go too                                                                                                             | `server/package.json`, `server/scripts/**` | V.1     | `validate:all` passes with the surviving members; no member is unfalsifiable  |
-| V.3 | ☐      | **Deepen `verify:mcp` from "answers" to "answers correctly."** Assert content, not shape — e.g. a known prompt id appears in the listing, the active framework matches `system_control status`, a known gate resolves. `TOOL_CHECKS` is a data table, so each is one entry | `server/scripts/verify-mcp-surface.mjs`    | —       | Planting a wrong-but-well-formed response fails the check                     |
-| V.4 | ☐      | Revisit `verify:mcp` placement once V.3 lands. It is deliberately outside `validate:all` (spawns a process, ~4s, binds a port). Decide if `validate:full` should host it, or if it stays a human/agent-invoked tool                                                        | `server/package.json`                      | V.3     | Placement recorded with the reason, either way                                |
+| V.0 | ✓      | Inventory all 20 members with **measured** wall-clock each, not estimated. Record what each one catches in one sentence                                                                                                                                                    | `server/package.json`, `server/scripts/**` | —       | Table of 20: name, runtime, what it catches                                   |
+| V.1 | ✓      | Per member, answer: can it still fail? Negative-verify by planting the violation it forbids. A guard that cannot be made to fail is either obsolete or broken — both are findings                                                                                          | `server/scripts/**`                        | V.0     | Each member either fails on a planted violation, or is marked obsolete/broken |
+| V.2 | ✓      | Apply V.1: delete obsolete members and their scripts in the same commit; repair broken ones. Allowlist entries whose retirement condition has come true go too                                                                                                             | `server/package.json`, `server/scripts/**` | V.1     | `validate:all` passes with the surviving members; no member is unfalsifiable  |
+| V.3 | ✓      | **Deepen `verify:mcp` from "answers" to "answers correctly."** Assert content, not shape — e.g. a known prompt id appears in the listing, the active framework matches `system_control status`, a known gate resolves. `TOOL_CHECKS` is a data table, so each is one entry | `server/scripts/verify-mcp-surface.mjs`    | —       | Planting a wrong-but-well-formed response fails the check                     |
+| V.4 | ✓      | Revisit `verify:mcp` placement once V.3 lands. It is deliberately outside `validate:all` (spawns a process, ~4s, binds a port). Decide if `validate:full` should host it, or if it stays a human/agent-invoked tool                                                        | `server/package.json`                      | V.3     | Placement recorded with the reason, either way                                |
 
 **Gate**: `validate:all` passes with every surviving member negative-verified, and `verify:mcp`
 fails on a plausible-but-wrong response.
@@ -1646,3 +1701,132 @@ fails on a plausible-but-wrong response.
 > guard nobody has tried to break is an assumption wearing a script's clothing. This sweep already
 > shipped one: `validate-no-methodology-vocab`'s blanket `tests/` exemption made it unable to catch
 > the 18 stale assertions it was written for, and that went unnoticed until the suite was repaired.
+
+**Tier V outcome.** V.1 was the row that mattered, exactly as written.
+
+**The member count was right** — 20, the first count in this plan to survive re-measurement. **The
+premise was wrong.** The tier opened on "20 members cost runtime on every pre-commit"; measured,
+the suite is 24.3s and `lint:ratchet` alone is 19.7s of it (81%). All fifteen `no-*` grep guards
+together cost ~1.7s. Guard _count_ was never the expense, so no member was deleted for cost.
+
+**19 of 20 were falsifiable.** Each was negative-verified by planting the violation it forbids —
+a compat-marked re-export shim, a desynced `manifest.json`, a dropped dependency, a schema-invalid
+`framework.yaml`, a doc naming a flag no parser parses, and so on. Two probes had to be re-run
+after landing out of scope (a loose `framework.yaml` where the validator reads only directories);
+both counted only once corrected.
+
+**One could not fail: `validate:metadata`.** `npm run build` is an esbuild _bundle_ — `dist/index.js`
+plus `.d.ts` declarations, no individual modules — so the script's probe for
+`dist/mcp/metadata/definitions/prompt-resource.js` never resolved and it took an early return on
+every run, printing `✅ Skipping action inventory verification (bundled mode)`. It had been inert
+since the build became a bundle. The skip also hid a second rot: two of the three source files it
+reads were renamed by the 5-layer migration and no longer exist. A guard that returns before
+reading anything cannot notice that what it reads is gone.
+
+Repaired rather than deleted — the intent (metadata must not drift from implementation) is live and
+this repo's contract rules depend on it. It now imports metadata from `src/` via tsx, has **no build
+dependency and no skip path**, and treats **a missing target as a failure**. Negative-verified twice:
+exit 1 on a handler case with no metadata entry, and exit 1 with a named path when its own target is
+moved. That second property is the one whose absence let this rot through two refactors.
+
+**`verify:mcp` (V.3) asserted shape, not content.** `/prompts/i` against the prompt listing and
+`text.length > 0` against the framework listing both pass on a server that has lost every prompt and
+every framework — the words survive in the header and footer. Replaced with content assertions
+derived from disk and cross-checked between tools: the active framework must exist on disk, the
+declared prompt count must equal the enumerated ids, `prompt_engine` and `resource_manager` must
+agree on the id _set_, and every framework directory must be listed with exactly one active. Ground
+truth is read at run time, never hardcoded — a literal id list would rot the same way
+`validate:metadata` just did.
+
+`--self-test` was added to prove those predicates can fail, and **caught a weakness in its own first
+run**: the cross-tool check compared counts, which two identically-degraded catalogues satisfy. Now
+it compares id sets. A check added without a counterexample entry fails the self-test, so
+falsifiability is not optional.
+
+**V.4 placement.** `verify:mcp` stays outside both suites: it needs a current `dist/`, and its
+freshness guard exits 1 on a stale build, so hosting it in `validate:all` would either force a build
+into every pre-commit or redden commits for a reason unrelated to the commit. The **self-test** is
+offline, needs no build or port, and runs in 22ms — it joins `validate:all` as its **21st** member,
+0.09% of the suite runtime.
+
+**Verification.** `validate:all` exit 0 with 21 members; `verify:mcp --self-test` 4/4 falsifiable;
+live `verify:mcp` 11/11; typecheck 0; `lint:ratchet` 0 regressions.
+
+### Tier ORD: `test:integration` passes alone and fails after `test:unit`. Opened 2026-07-31 from Tier E2E.
+
+Tier IT closed `test:integration` at 350/350 across 3 runs — **standalone**. `test:all` runs it after
+`test:unit`, and in that order one test fails, on all three runs, deterministically:
+
+`tests/integration/gates/gate-shell-verify-review-feedback.test.ts ›
+response injection (stdin / env) › exposes response via env var when shell_response_env_var is set`
+
+**Already ruled out.** Not caused by Tier E2E: stashed to clean HEAD, rebuilt, and the same order
+reproduces it on unmodified code. Not flake: 3/3 in the ordered run, 0/4 standalone. So it is state
+leaking across two separate jest **processes** — which is the interesting part, because separate
+processes should not be able to affect each other except through the filesystem, the environment, or
+a leftover child.
+
+| ID    | Status | Step                                                                                                                                                                                                                                           | Files                                         | Depends | Verification                                                     |
+| ----- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------- | ---------------------------------------------------------------- |
+| ORD.0 | ✓      | Reproduce at the smallest scope. Bisect `test:unit` to the suite (ideally the test) whose prior execution flips it — `--testPathPattern` halving, not guesswork                                                                                | (measurement only)                            | —       | The minimal `unit-suite → integration-test` pair that reproduces |
+| ORD.1 | ✓      | Name the channel. Only three can cross a process boundary: a file left on disk (`runtime-state/`, `tests/tmp/`), an env var exported into the shell, or a surviving child process. Rule each in or out with evidence                           | `tests/integration/gates/**`, `tests/unit/**` | ORD.0   | Named channel + the probe that proves it                         |
+| ORD.2 | ✓      | Fix the leak at its source, not by reordering. A test that only passes when it runs first is not isolated, and `--runInBand` ordering is not a fix — it is the thing that hid this                                                             | per ORD.1                                     | ORD.1   | The minimal pair from ORD.0 passes in both orders                |
+| ORD.3 | ✓      | Ask whether `test:unit`'s `--forceExit` is masking siblings. It suppresses the "open handles" report, which is exactly the diagnostic this class of defect needs. Removing it may surface more; decide with evidence whether to remove or keep | `server/package.json`                         | ORD.2   | Verdict recorded, with the open-handle output behind it          |
+| ORD.4 | ✓      | Close the Tier E2E gate that this blocked: `npm run test:all` exit 0 three times running                                                                                                                                                       | —                                             | ORD.2   | 3 consecutive green `test:all` runs                              |
+
+**Gate**: `npm run test:all` exits 0 three times running, then `npm run validate:full`.
+
+> The lesson this tier encodes: **"the suite is green" is scoped to how the suite was run.** Tier IT
+> proved `test:integration` green standalone and that was read as green everywhere. Verify a suite in
+> the order CI actually runs it, or the verification does not cover the case that breaks.
+
+**Tier ORD outcome. This tier's own premise was wrong, and the bisect is what proved it.**
+
+ORD.0 was written to find which unit suite polluted the integration run. It found none, because there
+was no pollution. The file passes alone (22/22) **and** after a full `test:unit` run; only the
+complete integration suite following a unit run reproduced it. The framing above — "state leaking
+across two separate jest processes", "only three channels can cross a process boundary" — was a
+plausible story built on the symptom, and it survived only until someone read the actual error:
+
+```
+write EPIPE
+> 389 |       proc.stdin?.write(stdin);
+      at src/shared/utils/process.ts:389:19
+      at ShellVerifyExecutor.execute
+```
+
+**A production defect, not a test-isolation defect.** The gate command was
+`printf "%s" "$AGENT_RESPONSE"` — it reads the env var and never drains stdin, so the child exits
+while `spawnProcess` is still writing to the pipe. Node emits EPIPE on the stdin stream; there was no
+`'error'` listener, so it became an unhandled error and took down the whole verification. It is a
+race between the write and the child's exit, which is why it only lost when a prior unit run had
+already loaded the machine — and why it read as test-order pollution for as long as nobody looked at
+the stack.
+
+The user-facing consequence is the part that matters: **any `shell_verify` gate whose command
+ignores stdin could fail at random**, reporting `write EPIPE` for a command that ran correctly.
+`printf`, `true`, and any script that only inspects env vars are all in that class.
+
+**Fix (ORD.2)**: an `'error'` listener on `proc.stdin` that treats `EPIPE`/`ERR_STREAM_DESTROYED` as
+the child legitimately declining to read, while any other pipe error still surfaces through `stderr`
+rather than being swallowed. The write is also guarded on `!destroyed`.
+
+**Regression test**: the race cannot be reproduced on demand by timing, so the test forces it —
+a 1MB stdin payload against `printf "done"`, which cannot complete before the child exits. Two
+corrections were needed to make it honest: it first also set `shell_response_env_var`, which fails
+the spawn for an unrelated reason (a single env var over ~128KB exceeds `MAX_ARG_STRLEN`), masking
+the very race it was pinning. Negative-verified both directions — `write EPIPE` with the fix
+reverted, green with it restored.
+
+**ORD.3 verdict: `--forceExit` removed from `test:unit`.** Measured, not assumed: the suite run with
+`--detectOpenHandles` and without `--forceExit` exits cleanly on its own (146 suites, 1732 tests, no
+open-handle report). The flag was masking nothing and suppressing the one diagnostic this class of
+defect needs.
+
+**Gate (ORD.4, which also closes E.4).** `npm run test:all` exit 0 **three consecutive runs** —
+1732 unit + 351 integration (350 + the new regression test) + 36 e2e — then `npm run validate:full`
+exit 0.
+
+> The lesson, restated after being demonstrated on this tier's own text: a plan row is a hypothesis,
+> not evidence. Three rows here were written around "test pollution" and the first measurement
+> dissolved all three. Read the stack trace before designing the bisect.
