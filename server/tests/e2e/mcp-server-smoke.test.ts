@@ -15,6 +15,7 @@ import {
   startServerWithHttp,
   waitForHealth,
   sendMcpRequestWithSse,
+  sendMcpRequestsOverSseSession,
   killServer,
   StreamableHttpMcpClient,
   httpPost,
@@ -298,23 +299,25 @@ describe('MCP Server Smoke Tests', () => {
       // Wait for health endpoint (server takes ~5s to initialize)
       await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-      // Initialize first
-      await sendMcpRequestWithSse(
+      // Initialize and list tools over ONE session. Sending these as two separate SSE calls opens
+      // two independent sessions, and the server attaches one transport at a time — so the second
+      // one only connects if the first connection's close has already propagated. That race is
+      // load-dependent, which is what made this test fail after `test:integration` and pass alone.
+      const [, result] = (await sendMcpRequestsOverSseSession(
         baseUrl,
-        'initialize',
-        {
-          protocolVersion: '2024-11-05',
-          capabilities: {},
-          clientInfo: { name: 'e2e-test', version: '1.0.0' },
-        },
-        1,
-        { timeout: 10000 }
-      );
-
-      // List tools
-      const result = (await sendMcpRequestWithSse(baseUrl, 'tools/list', {}, 2, {
-        timeout: 10000,
-      })) as { tools: Array<{ name: string }> };
+        [
+          {
+            method: 'initialize',
+            params: {
+              protocolVersion: '2024-11-05',
+              capabilities: {},
+              clientInfo: { name: 'e2e-test', version: '1.0.0' },
+            },
+          },
+          { method: 'tools/list' },
+        ],
+        { timeout: 15000 }
+      )) as [unknown, { tools: Array<{ name: string }> }];
 
       expect(Array.isArray(result.tools)).toBe(true);
 
