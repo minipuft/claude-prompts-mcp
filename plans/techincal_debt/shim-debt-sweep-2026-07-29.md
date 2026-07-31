@@ -1237,3 +1237,65 @@ examples          : chore(scripts): wire orphaned validate-no-* guards into vali
 
 The failure being corrected is trusting an unreconciled artifact — so the reconciliation itself
 never delegates.
+
+---
+
+### Tier 5: Contract-surface vocabulary + the guard. Gated on the pass 1-5 renames being committed.
+
+Passes 1-5 finished the **vocabulary** rename (1616 → 418 repo-wide). What remains is not
+vocabulary: every hit is a wire token, config key, or authoring-payload field, and each needs a
+coordinated change across `Contract → Generated → Types → Router → Manager → Service` with a
+back-compat fold. `.claude/rules/mcp-contracts.md` governs; **verify upstream before editing any
+contract**, which is the rule that already caught the `version`/`from_version` mismatch.
+
+Two precedents to copy rather than reinvent: `FrameworkSchema` folds `methodologyGates` →
+`frameworkGates`, and `GatePassCriteriaSchema` folds `methodology` → `framework`. Both are
+`.passthrough()` schemas where a dropped key fails **silently** — that class already shipped once
+as regression #3 and again as the near-miss in pass 5, so **every rename below ships with a fold
+and a negative-verified test**, not one or the other.
+
+| ID  | Status | Step                                                                                                                                                                                                                                           | Files                                                                                                                                                                                                             | Depends | Verification                                                                                                                                               |
+| --- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 5.0 | ☐      | **Re-measure. Do not trust the 418.** Recount per token repo-wide and reconcile against this table before editing — the pass-5 opening found 1418 where 569 was assumed                                                                        | (probe only)                                                                                                                                                                                                      | —       | Per-token counts recorded with the command used; any row here that disagrees is corrected first                                                            |
+| 5.1 | ☐      | `{METHODOLOGY}` → `{FRAMEWORK_TYPE}` prompt-template placeholder. Accept **both** spellings on read; `{FRAMEWORK_NAME}` already exists beside it and holds `framework.name`, so the new name must say _type_                                   | `src/engine/frameworks/prompt-guidance/service.ts` (~288, ~303)                                                                                                                                                   | 5.0     | Both spellings substitute correctly; `variablesUsed` lists the new name; test asserts a template using the old spelling still renders                      |
+| 5.2 | ☐      | `gates.methodologyGates` config key → `gates.frameworkGates`, folding the old key forward. **6 sites across 4 files** — `config-input-validator`, `config-operations`, `config-utils`, `infra/config`                                          | `src/cli-shared/config-input-validator.ts`, `src/cli-shared/config-operations.ts`, `src/mcp/tools/config-utils.ts`, `src/infra/config/index.ts`, `config.schema.json`                                             | 5.0     | Extend `tests/unit/infra/config/legacy-key-migration.test.ts`; a config.json with the old key still disables framework gates. **Negative-verify the fold** |
+| 5.3 | ☐      | `methodology_gates` / `methodology_elements` authoring-payload keys → `framework_gates` / `framework_elements`, accepting both on read. Touches the Python validator that scores drafts                                                        | `resources/prompts/examples/create_framework/**` (prompt.yaml, user-message.md, `tools/framework_builder/{schema.json,script.py,description.md}`), `framework-file-writer.ts`, `framework-lifecycle-processor.ts` | 5.0     | `cpm`/`resource_manager` create with **each** spelling produces an identical `framework.yaml`; completeness score unchanged for both                       |
+| 5.4 | ☐      | `methodology_id` MCP input param → `framework_id`; keep the old name as an accepted alias. `args.framework` already exists as the primary                                                                                                      | `tooling/contracts/system-control.json`, `src/mcp/tools/schemas/*.schema.ts`, `system-control/handlers/framework-action-handler.ts`                                                                               | 5.0     | `npm run generate:contracts` clean; `validate:contracts` 0; both param names route to the same handler                                                     |
+| 5.5 | ☐      | `inspect_methodology` MCP response label → `inspect_framework`. Response-only, no input parsing                                                                                                                                                | `system-control/handlers/framework-action-handler.ts`                                                                                                                                                             | 5.4     | Response label asserted in an integration test                                                                                                             |
+| 5.6 | ☐      | `methodology_compliance` gate `pass_criteria` value → `framework_compliance`, accepting both. **This one is enforced** (stage 09b phase guards), unlike its `inline_guidance` neighbours — a silent drop disables real enforcement             | `src/engine/gates/core/gate-schema.ts`, `gate-primitives.ts`, `resources/prompts/examples/create_gate/**`, `docs/guides/gates.md`, `docs/guides/phase-guards.md`                                                  | 5.0     | A gate using each spelling produces identical stage-09b behaviour; **negative-verify** by removing the fold and watching the old-spelling test fail        |
+| 5.7 | ☐      | Retire the two folds added in pass 5 (`FrameworkSchema.methodologyGates`, `GatePassCriteriaSchema.methodology`) **only** once no shipped or workspace resource uses the old spelling. A fold with no retirement condition is a parallel system | `framework-schema.ts`, `gate-schema.ts`                                                                                                                                                                           | 5.2-5.6 | `rg` across `resources/` returns zero old spellings; folds and their tests deleted together                                                                |
+| 5.8 | ☐      | **Write the guard — allowlist, not zero.** `scripts/validate-no-methodology-vocab.js` fails on any `methodolog*` outside an explicit token allowlist; register in `validate:all` (18th member)                                                 | `server/scripts/validate-no-methodology-vocab.js`, `server/package.json`                                                                                                                                          | 5.1-5.7 | Passes on a clean tree; **fails** when a `methodology` identifier is reintroduced; allowlist entries each carry a retirement condition                     |
+
+**Gate**: `npm run validate:all` green with the new guard registered; every fold has a
+negative-verified test; `resource_manager` create/update accepts both spellings for every renamed
+key; integration failure set compared with vocabulary normalised on both sides (a naive diff
+reports fake regressions when test descriptions rename).
+
+**Explicitly NOT in this tier**: `plans/` and `CHANGELOG.md` (the archived record),
+`scripts/rename-symbols.ts` (historical record of past renames), and the internal-only
+`'methodology'` literals that remain in test fixture data.
+
+---
+
+### Tier 6: Documented-but-nonexistent surface. A class, not an incident.
+
+Three separate instances turned up while finishing the rename, each found only because a rename
+walked past it: five dead env vars, five dead CLI flags, and a four-tier path "Resolution Priority"
+whose top two tiers do not exist. All were **user-facing**, all had been wrong for a long time, and
+none is detectable by `typecheck`, `lint`, or the test suite — the docs and the parser are simply
+never compared.
+
+| ID  | Status | Step                                                                                                                                                                                                                                 | Files                                                                  | Depends | Verification                                                                                              |
+| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| 6.0 | ☐      | Enumerate every CLI flag and `MCP_*` env var named anywhere in `docs/`, `README.md`, `server/README.md`, `CONTRIBUTING.md` and the platform manifests; diff against what `src/runtime/{cli,options}.ts` parses and what `src/` reads | (probe only)                                                           | —       | A table of documented-vs-parsed, with every mismatch classified as "remove from docs" or "implement"      |
+| 6.1 | ☐      | Apply the 6.0 verdicts. Name each removed option in place rather than deleting silently, so a user who copied it from an older revision can tell what happened                                                                       | per 6.0                                                                | 6.0     | `validate:readme` 0; no doc names an unparsed flag or unread env var                                      |
+| 6.2 | ☐      | **Automate it.** A `validate:documented-options` script that extracts flags/env vars from docs and fails when one is not parsed/read. This is the only member of the tier that prevents recurrence                                   | `server/scripts/validate-documented-options.js`, `server/package.json` | 6.1     | Fails when a fake `--nonexistent` is added to a doc; passes on a clean tree; registered in `validate:all` |
+
+**Gate**: `validate:all` green with 6.2 registered; introducing a fabricated flag into any doc
+fails CI.
+
+> **Why this deserves a tier rather than a bug entry.** The same defect shape recurred three times
+> in one session, and the first fix for it was itself incomplete — the README tables were corrected
+> while the config example, the command example and the troubleshooting line still told users to
+> use the dead options. Fixing the reference and leaving the instructions is the worse half of the
+> job. 6.2 is the part that matters; 6.0/6.1 are one-time cleanup.
