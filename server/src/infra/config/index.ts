@@ -74,7 +74,7 @@ const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
 const DEFAULT_GATES_CONFIG: GatesConfig = {
   enabled: true,
   definitionsDirectory: 'gates',
-  enableMethodologyGates: true,
+  enableFrameworkGates: true,
 };
 
 const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
@@ -295,8 +295,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     return {
       enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
       definitionsDirectory: gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
-      enableMethodologyGates:
-        gatesConfig.methodologyGates ?? DEFAULT_GATES_CONFIG.enableMethodologyGates,
+      // `methodologyGates` is the pre-rename config.json key. Folded here rather than at each
+      // consumer so only this function knows both spellings exist.
+      enableFrameworkGates:
+        gatesConfig.frameworkGates ??
+        gatesConfig.methodologyGates ??
+        DEFAULT_GATES_CONFIG.enableFrameworkGates,
     };
   }
 

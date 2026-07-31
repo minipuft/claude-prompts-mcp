@@ -151,7 +151,7 @@ IDE-friendly JSON Schemas for `phases.yaml` and `framework.yaml` are generated f
 npm run generate:schemas
 ```
 
-Output: `resources/schemas/phases.schema.json` and `resources/schemas/methodology.schema.json`
+Output: `resources/schemas/phases.schema.json` and `resources/schemas/framework.schema.json`
 
 These enable autocomplete and inline validation in editors that support YAML Language Server.
 

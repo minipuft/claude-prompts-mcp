@@ -12,6 +12,7 @@
  */
 
 import { FrameworkRegistry, createFrameworkRegistry } from './definitions/index.js';
+import { substituteTemplateVariables } from './prompt-guidance/template-variables.js';
 import {
   FrameworkDefinition,
   FrameworkExecutionContext,
@@ -672,11 +673,17 @@ Apply this framework systematically to ensure comprehensive and structured respo
    * Generate framework-specific system prompt
    */
   private generateSystemPrompt(framework: FrameworkDefinition, prompt: ConvertedPrompt): string {
-    let systemPrompt = framework.systemPromptTemplate;
-
-    systemPrompt = systemPrompt.replace(/\{PROMPT_NAME\}/g, prompt.name || 'Prompt');
-    systemPrompt = systemPrompt.replace(/\{PROMPT_CATEGORY\}/g, prompt.category || 'general');
-    systemPrompt = systemPrompt.replace(/\{FRAMEWORK_NAME\}/g, framework.name);
+    // Shares the substituter with PromptGuidanceService. Before extraction this path handled
+    // only three of the five placeholders, so a template using `{FRAMEWORK_TYPE}` or
+    // `{PROMPT_TYPE}` rendered the literal braces through here while rendering correctly
+    // through the guidance service.
+    let systemPrompt = substituteTemplateVariables(framework.systemPromptTemplate, {
+      promptName: prompt.name || 'Prompt',
+      promptCategory: prompt.category || 'general',
+      frameworkName: framework.name,
+      frameworkType: framework.type,
+      promptType: prompt.chainSteps?.length ? 'chain' : 'single',
+    });
 
     const guide = this.getFrameworkGuide(framework.id);
     if (guide) {

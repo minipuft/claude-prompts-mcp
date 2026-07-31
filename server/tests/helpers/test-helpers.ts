@@ -198,7 +198,7 @@ export class MockConfigManager {
   getFrameworksConfig() {
     return {
       enableSystemPromptInjection: true,
-      enableMethodologyGates: false,
+      enableFrameworkGates: false,
       enableDynamicToolDescriptions: false,
     };
   }

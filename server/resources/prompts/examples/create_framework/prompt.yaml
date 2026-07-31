@@ -48,7 +48,7 @@ arguments:
     type: array
     description: 'Array of phase objects [{id, name, description}]'
     required: false
-  - name: methodology_gates
+  - name: framework_gates
     type: array
     description: Quality gates with validationCriteria
     required: false

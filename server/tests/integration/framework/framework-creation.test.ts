@@ -12,7 +12,7 @@
  *
  * Classification: Integration (multiple real modules, mock I/O only)
  *
- * Note: The manager now requires methodology_gates for validation to pass.
+ * Note: The manager now requires framework_gates for validation to pass.
  * Frameworks without all required fields will fail validation.
  */
 
@@ -193,7 +193,7 @@ describe('Framework Creation Integration', () => {
         name: 'No Phases Framework',
         system_prompt_guidance: 'Apply this framework.',
         // Missing: phases
-        // Missing: methodology_gates
+        // Missing: framework_gates
       };
 
       // Act
@@ -205,7 +205,7 @@ describe('Framework Creation Integration', () => {
       expect(text).toContain('phases is required');
     });
 
-    test('rejects framework missing methodology_gates', async () => {
+    test('rejects framework missing framework_gates', async () => {
       // Arrange: Framework with phases but no gates
       const input: FrameworkManagerInput = {
         action: 'create',
@@ -216,7 +216,7 @@ describe('Framework Creation Integration', () => {
           { id: 'phase1', name: 'Phase 1', description: 'First phase' },
           { id: 'phase2', name: 'Phase 2', description: 'Second phase' },
         ],
-        // Missing: methodology_gates
+        // Missing: framework_gates
       };
 
       // Act
@@ -225,7 +225,7 @@ describe('Framework Creation Integration', () => {
       // Assert: Validation failure
       expect(response.isError).toBe(true);
       const text = (response.content[0] as { text: string }).text;
-      expect(text).toContain('methodology_gates is required');
+      expect(text).toContain('framework_gates is required');
     });
 
     test('creates valid framework with all required fields', async () => {
@@ -239,7 +239,7 @@ describe('Framework Creation Integration', () => {
           { id: 'phase1', name: 'Phase 1', description: 'First phase' },
           { id: 'phase2', name: 'Phase 2', description: 'Second phase' },
         ],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'phase1_gate',
             name: 'Phase 1 Gate',
@@ -274,7 +274,7 @@ describe('Framework Creation Integration', () => {
           { id: 'phase1', name: 'Phase 1', description: 'First' },
           { id: 'phase2', name: 'Phase 2', description: 'Second' },
         ],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'gate1',
             name: 'Gate 1',
@@ -307,7 +307,7 @@ describe('Framework Creation Integration', () => {
           { id: 'phase1', name: 'Phase 1', description: 'First' },
           { id: 'phase2', name: 'Phase 2', description: 'Second' },
         ],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'gate1',
             name: 'Gate 1',
@@ -317,7 +317,7 @@ describe('Framework Creation Integration', () => {
             validationCriteria: ['Check 1'],
           },
         ],
-        methodology_elements: {
+        framework_elements: {
           // +10%
           requiredSections: ['Phase 1', 'Phase 2'],
         },
@@ -356,7 +356,7 @@ describe('Framework Creation Integration', () => {
           { id: 'p1', name: 'Phase 1', description: 'First' },
           { id: 'p2', name: 'Phase 2', description: 'Second' },
         ],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -398,7 +398,7 @@ describe('Framework Creation Integration', () => {
       const writtenData = mockFileService.getWrittenData('preservation-test');
       expect(writtenData).toBeDefined();
       expect(writtenData?.phases).toHaveLength(2);
-      expect(writtenData?.methodology_gates).toHaveLength(1);
+      expect(writtenData?.framework_gates).toHaveLength(1);
       expect(writtenData?.processing_steps).toHaveLength(1);
       expect(writtenData?.execution_steps).toHaveLength(1);
       expect(writtenData?.quality_indicators).toHaveProperty('p1');
@@ -434,7 +434,7 @@ describe('Framework Creation Integration', () => {
           { id: 'p1', name: 'Phase 1', description: 'First' },
           { id: 'p2', name: 'Phase 2', description: 'Second' },
         ],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'gate1',
             name: 'Gate 1',
@@ -457,7 +457,7 @@ describe('Framework Creation Integration', () => {
           { id: 'p1', name: 'Phase 1', description: 'First' },
           { id: 'p2', name: 'Phase 2', description: 'Second' },
         ],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'gate1',
             name: 'Gate 1',
@@ -489,7 +489,7 @@ describe('Framework Creation Integration', () => {
           { id: 'p1', name: 'Phase 1', description: 'First' },
           { id: 'p2', name: 'Phase 2', description: 'Second' },
         ],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'gate1',
             name: 'Gate 1',

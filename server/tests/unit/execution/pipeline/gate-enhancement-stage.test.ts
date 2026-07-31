@@ -89,7 +89,7 @@ const createLogger = (): Logger => ({
 const baseGatesConfig = {
   enabled: true,
   definitionsDirectory: 'gates',
-  enableMethodologyGates: true,
+  enableFrameworkGates: true,
 };
 
 const createGateService = (): GateService => {
@@ -230,7 +230,7 @@ describe('GateEnhancementStage', () => {
     const stage = createStage({
       gateService,
       gateLoader: mockGateLoader,
-      gatesConfigProvider: () => ({ ...baseGatesConfig, enableMethodologyGates: false }),
+      gatesConfigProvider: () => ({ ...baseGatesConfig, enableFrameworkGates: false }),
     });
 
     const context = new ExecutionContext({ command: '>>demo' });

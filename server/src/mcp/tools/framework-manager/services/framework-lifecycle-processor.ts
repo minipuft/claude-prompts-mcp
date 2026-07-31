@@ -4,6 +4,8 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { foldDeprecatedAuthoringKeys } from './framework-authoring-keys.js';
+
 import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { ToolResponse } from '../../../../shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
@@ -20,8 +22,11 @@ const OPTIONAL_FRAMEWORK_FIELDS = [
   'gates',
   'tool_descriptions',
   // Advanced framework fields
+  'framework_gates',
+  // Pre-rename spellings, still forwarded so older clients keep working.
   'methodology_gates',
   'template_suggestions',
+  'framework_elements',
   'methodology_elements',
   'argument_suggestions',
   'judge_prompt',
@@ -429,6 +434,7 @@ export class FrameworkLifecycleProcessor {
         (target as unknown as Record<string, unknown>)[field] = value;
       }
     }
+    foldDeprecatedAuthoringKeys(target);
   }
 
   private success(text: string): ToolResponse {

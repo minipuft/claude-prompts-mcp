@@ -99,7 +99,7 @@ them in any order or in parallel; tests must not pin an order between them.
 | `%clean` / `%framework` modifier       | the entire set                                                                               | **100** — the caller's own instruction, so it binds everything       |
 | `exclude` list (prompt, then category) | the named IDs                                                                                | **60** — author preference, so it cannot veto the caller (80/90/100) |
 | Framework nesting                      | every gate with `gate_type: 'framework'`, when the input resolved to "no framework injected" | **100** — a coherence invariant, see (c)                             |
-| Global `enableMethodologyGates: false` | framework gates, server-wide                                                                 | **100** — operator configuration                                     |
+| Global `enableFrameworkGates: false`   | framework gates, server-wide                                                                 | **100** — operator configuration                                     |
 
 **Each veto declares the highest source rank it binds.** This is the one place where Stage 1's
 ranking becomes subtractive, and it is deliberate: a veto whose scope is unstated defaults to
@@ -293,7 +293,7 @@ Two cautions taken from the same sources:
   parsing, enforcement-mode resolution and retry limits — not selection. The nesting rule belongs
   where the gate set and the injection decision are both in hand: `execution-planner.ts`
   (`applyModifierOverrides`) and `gate-enhancement-service.ts`, which already receives
-  `methodologyGates` as a parameter. Retarget 2.4 before implementing it.
+  `enableFrameworkGates` as a parameter. Retarget 2.4 before implementing it.
 - Delete the two dead `CategoryExtractor` methods and resolve `enhancedGateConfiguration` (new plan
   rows under T2).
 - `docs/guides/injection-control.md:77` needs its `%lean` line narrowed to "keeps non-framework

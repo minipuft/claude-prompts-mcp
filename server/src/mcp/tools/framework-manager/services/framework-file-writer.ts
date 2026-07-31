@@ -227,13 +227,15 @@ export class FrameworkFileWriter {
     }
 
     // Map phases-related fields (may come from phases.yaml or framework.yaml)
-    // YAML uses camelCase (frameworkGates); methodologyGates is the pre-rename spelling and
-    // methodology_gates the snake_case authoring-payload key. Accept all three on read.
+    // YAML uses camelCase (frameworkGates); methodologyGates is the pre-rename YAML spelling and
+    // framework_gates the snake_case authoring-payload key (methodology_gates its pre-rename
+    // form). Accept all four on read.
     const phasesSource = phases ?? framework;
     const rawPhases = phasesSource['phases'];
     const rawFrameworkGates =
       framework['frameworkGates'] ??
       framework['methodologyGates'] ??
+      phasesSource['framework_gates'] ??
       phasesSource['methodology_gates'];
     const rawProcessingSteps = phasesSource['processingSteps'] ?? phasesSource['processing_steps'];
     const rawExecutionSteps = phasesSource['executionSteps'] ?? phasesSource['execution_steps'];
@@ -243,7 +245,9 @@ export class FrameworkFileWriter {
       phasesSource['templateEnhancements'] ?? phasesSource['template_enhancements'];
     const rawExecutionFlow = phasesSource['executionFlow'] ?? phasesSource['execution_flow'];
     const rawFrameworkElements =
-      framework['frameworkElements'] ?? phasesSource['methodology_elements'];
+      framework['frameworkElements'] ??
+      phasesSource['framework_elements'] ??
+      phasesSource['methodology_elements'];
     const rawArgumentSuggestions =
       framework['argumentSuggestions'] ?? phasesSource['argument_suggestions'];
     const rawTemplateSuggestions =
@@ -253,8 +257,8 @@ export class FrameworkFileWriter {
       data.phases = rawPhases as NonNullable<FrameworkCreationData['phases']>;
     }
     if (Array.isArray(rawFrameworkGates)) {
-      data.methodology_gates = rawFrameworkGates as NonNullable<
-        FrameworkCreationData['methodology_gates']
+      data.framework_gates = rawFrameworkGates as NonNullable<
+        FrameworkCreationData['framework_gates']
       >;
     }
     if (Array.isArray(rawProcessingSteps)) {
@@ -283,8 +287,8 @@ export class FrameworkFileWriter {
       >;
     }
     if (rawFrameworkElements !== undefined && rawFrameworkElements !== null) {
-      data.methodology_elements = rawFrameworkElements as NonNullable<
-        FrameworkCreationData['methodology_elements']
+      data.framework_elements = rawFrameworkElements as NonNullable<
+        FrameworkCreationData['framework_elements']
       >;
     }
     if (Array.isArray(rawArgumentSuggestions)) {
@@ -436,14 +440,14 @@ export class FrameworkFileWriter {
     }
 
     // Advanced framework fields (only if defined and non-empty)
-    if (data.methodology_gates !== undefined && data.methodology_gates.length > 0) {
-      yamlData['frameworkGates'] = data.methodology_gates;
+    if (data.framework_gates !== undefined && data.framework_gates.length > 0) {
+      yamlData['frameworkGates'] = data.framework_gates;
     }
     if (data.template_suggestions !== undefined && data.template_suggestions.length > 0) {
       yamlData['templateSuggestions'] = data.template_suggestions;
     }
-    if (data.methodology_elements !== undefined) {
-      yamlData['frameworkElements'] = data.methodology_elements;
+    if (data.framework_elements !== undefined) {
+      yamlData['frameworkElements'] = data.framework_elements;
     }
     if (data.argument_suggestions !== undefined && data.argument_suggestions.length > 0) {
       yamlData['argumentSuggestions'] = data.argument_suggestions;

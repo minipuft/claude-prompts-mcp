@@ -174,7 +174,7 @@ export class GateEnhancementService {
         modifiers: executionPlan.modifiers,
         promptInjection: prompt.injection,
       }),
-      frameworkGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
+      frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
       knownFrameworkGateIds: [...frameworkGateIds],
       inlineOperatorGateIds: inlineGateIds,
       clientSelectedGateIds: clientSelectedGates,
@@ -192,7 +192,7 @@ export class GateEnhancementService {
       frameworkGateIds
     );
 
-    if (gatesConfig !== undefined && !gatesConfig.enableMethodologyGates) {
+    if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
       const beforeCount = gateIds.length;
       gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
       if (beforeCount !== gateIds.length) {
@@ -325,7 +325,7 @@ export class GateEnhancementService {
           modifiers: step.executionPlan?.modifiers,
           promptInjection: prompt.injection,
         }),
-        frameworkGatesEnabled: gatesConfig?.enableMethodologyGates !== false,
+        frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
         knownFrameworkGateIds: [...frameworkGateIds],
         inlineOperatorGateIds: stepInlineGates,
         plannedGateIds: plannedGates,
@@ -344,7 +344,7 @@ export class GateEnhancementService {
         frameworkGateIds
       );
 
-      if (gatesConfig !== undefined && !gatesConfig.enableMethodologyGates) {
+      if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
         gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
       }
 
@@ -567,7 +567,7 @@ export class GateEnhancementService {
     activeFrameworkId: string | undefined,
     frameworkGateIds: Set<string>
   ): string[] {
-    if (!gatesConfig?.enableMethodologyGates || !activeFrameworkId) {
+    if (!gatesConfig?.enableFrameworkGates || !activeFrameworkId) {
       return gateIds;
     }
     const hasFrameworkGate = gateIds.some((gate) => frameworkGateIds.has(gate));

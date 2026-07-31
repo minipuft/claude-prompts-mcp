@@ -12,6 +12,8 @@ export const CONFIG_VALID_KEYS = [
   'logging.level',
   'logging.directory',
   'gates.mode',
+  'gates.frameworkGates',
+  /** @deprecated Pre-rename spelling of `gates.frameworkGates`; ConfigManager folds it forward. */
   'gates.methodologyGates',
   'execution.judge',
   'frameworks.mode',
@@ -168,6 +170,7 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
       return { valid: true, convertedValue: normalized, valueType: 'string' };
     }
 
+    case 'gates.frameworkGates':
     case 'gates.methodologyGates':
     case 'gates.enabled':
     case 'gates.enforcePendingVerdict':

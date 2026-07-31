@@ -268,7 +268,7 @@ export interface GatesConfig {
   /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
   definitionsDirectory?: string;
   /** Enable framework-specific gates (auto-added based on active framework) */
-  enableMethodologyGates?: boolean;
+  enableFrameworkGates?: boolean;
   /**
    * Execute a prompt's `inline_gate_definitions` instead of only displaying them.
    *

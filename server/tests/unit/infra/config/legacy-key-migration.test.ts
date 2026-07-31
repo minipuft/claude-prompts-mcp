@@ -1,7 +1,7 @@
 /**
  * Legacy config key migration.
  *
- * The framework -> framework vocabulary sweep renamed two config sections. Both migrations
+ * The methodology -> framework vocabulary sweep renamed two config sections and one key. All
  * fail SILENTLY when absent: the old key is read as undefined and the default takes over, so a
  * user who had deliberately turned something off finds it back on with no error emitted. These
  * tests pin the adoption because `tsc` cannot see it — the shape is only bound at load time.
@@ -82,6 +82,69 @@ describe('legacy config key migration', () => {
       ).toBeUndefined();
 
       await cleanup();
+    });
+  });
+
+  // NEGATIVE-VERIFY TARGET (plan row 5.2): delete the `gatesConfig.methodologyGates ??` term in
+  // ConfigLoader.getGatesConfig and the deliberate-disable case below must fail. Without the fold
+  // an operator who set the old key to false silently gets framework gates back on, because the
+  // default is true.
+  describe('gates.methodologyGates -> gates.frameworkGates', () => {
+    it('carries a deliberate disable across the rename', async () => {
+      const { manager, cleanup } = await loadConfigFrom({
+        gates: { enabled: true, methodologyGates: false },
+      });
+
+      expect(manager.getGatesConfig().enableFrameworkGates).toBe(false);
+
+      await cleanup();
+    });
+
+    it('reads the canonical key', async () => {
+      const { manager, cleanup } = await loadConfigFrom({
+        gates: { enabled: true, frameworkGates: false },
+      });
+
+      expect(manager.getGatesConfig().enableFrameworkGates).toBe(false);
+
+      await cleanup();
+    });
+
+    it('prefers the canonical key when both are present', async () => {
+      const { manager, cleanup } = await loadConfigFrom({
+        gates: { enabled: true, frameworkGates: true, methodologyGates: false },
+      });
+
+      expect(manager.getGatesConfig().enableFrameworkGates).toBe(true);
+
+      await cleanup();
+    });
+
+    it('defaults to enabled when neither key is present', async () => {
+      const { manager, cleanup } = await loadConfigFrom({ gates: { enabled: true } });
+
+      expect(manager.getGatesConfig().enableFrameworkGates).toBe(true);
+
+      await cleanup();
+    });
+  });
+
+  // Guards the defect found while renaming: `persistFrameworkConfig` wrote key paths that
+  // `validateConfigInput` rejects as unknown, and it returns on first failure — so
+  // `system_control` framework enable/disable with persist:true wrote nothing at all.
+  describe('persistFrameworkConfig key paths', () => {
+    it('names only keys the config validator accepts', async () => {
+      const { CONFIG_VALID_KEYS, validateConfigInput } =
+        await import('../../../../src/cli-shared/config-input-validator.js');
+
+      for (const key of [
+        'frameworks.enabled',
+        'frameworks.dynamicToolDescriptions',
+        'gates.frameworkGates',
+      ]) {
+        expect(CONFIG_VALID_KEYS).toContain(key);
+        expect(validateConfigInput(key, 'false')).toMatchObject({ valid: true });
+      }
     });
   });
 });

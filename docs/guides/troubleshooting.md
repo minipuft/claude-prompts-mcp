@@ -168,7 +168,7 @@ system_control(action: "framework", operation: "switch", framework: "CAGEERF")
 **Fix**:
 
 1. Add gates explicitly: `gates: ["code-quality"]` or `:: 'criteria'`
-2. Check `gates.methodologyGates: true` in config
+2. Check `gates.frameworkGates: true` in config
 3. Verify gate activation rules match your prompt category
 
 ### Gate Keeps Failing

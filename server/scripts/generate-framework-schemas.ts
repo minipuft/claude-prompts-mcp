@@ -34,10 +34,10 @@ frameworkJsonSchema['description'] =
   'Schema for framework.yaml — defines a framework with gates, guidance, and tool overlays.';
 
 writeFileSync(
-  join(SCHEMAS_DIR, 'methodology.schema.json'),
+  join(SCHEMAS_DIR, 'framework.schema.json'),
   JSON.stringify(frameworkJsonSchema, null, 2) + '\n'
 );
-console.log('  ✓ methodology.schema.json');
+console.log('  ✓ framework.schema.json');
 
 // Generate phases.yaml schema
 const phasesJsonSchema = zodToJsonSchema(PhasesFileSchema, {

@@ -5,8 +5,8 @@
  * incomplete frameworks and provides focused error guidance.
  *
  * Validation tiers (80% threshold):
- * - REQUIRED: system_prompt_guidance (30%), phases (30%), methodology_gates (20%)
- * - RECOMMENDED: methodology_elements (10%), template_suggestions (5%), description (5%)
+ * - REQUIRED: system_prompt_guidance (30%), phases (30%), framework_gates (20%)
+ * - RECOMMENDED: framework_elements (10%), template_suggestions (5%), description (5%)
  *
  * Classification: Unit (single class, mocked dependencies)
  */
@@ -59,21 +59,21 @@ describe('Framework Validation', () => {
       expect(result.score).toBe(30); // Only system_prompt_guidance counted
     });
 
-    test('missing methodology_gates blocks with error (when phases present)', () => {
+    test('missing framework_gates blocks with error (when phases present)', () => {
       const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
         framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [], // Empty - invalid
+        framework_gates: [], // Empty - invalid
       };
 
       const result = validationService.validate(data);
 
       expect(result.valid).toBe(false);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain('methodology_gates');
+      expect(result.errors[0]).toContain('framework_gates');
       expect(result.score).toBe(60); // system_prompt_guidance + phases
     });
 
@@ -84,7 +84,7 @@ describe('Framework Validation', () => {
         framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -149,7 +149,7 @@ describe('Framework Validation', () => {
         framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -173,7 +173,7 @@ describe('Framework Validation', () => {
         description: 'A description',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -183,7 +183,7 @@ describe('Framework Validation', () => {
             validationCriteria: ['Criterion 1'],
           },
         ],
-        methodology_elements: {
+        framework_elements: {
           requiredSections: ['Section 1'],
           sectionDescriptions: { 'Section 1': 'Description' },
         },
@@ -237,7 +237,7 @@ describe('Framework Validation', () => {
         framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -276,7 +276,7 @@ describe('Framework Validation', () => {
         framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -286,14 +286,14 @@ describe('Framework Validation', () => {
             validationCriteria: ['Criterion 1'],
           },
         ],
-        // Missing: methodology_elements, template_suggestions, description
+        // Missing: framework_elements, template_suggestions, description
       };
 
       const result = validationService.validate(data);
 
       expect(result.valid).toBe(true);
       expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings.some((w) => w.includes('methodology_elements'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('framework_elements'))).toBe(true);
       expect(result.warnings.some((w) => w.includes('template_suggestions'))).toBe(true);
       expect(result.warnings.some((w) => w.includes('description'))).toBe(true);
     });
@@ -306,7 +306,7 @@ describe('Framework Validation', () => {
         description: 'A description',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -316,7 +316,7 @@ describe('Framework Validation', () => {
             validationCriteria: ['Criterion 1'],
           },
         ],
-        methodology_elements: {
+        framework_elements: {
           requiredSections: ['Section 1'],
           sectionDescriptions: { 'Section 1': 'Description' },
         },
@@ -361,7 +361,7 @@ describe('Framework Validation', () => {
         framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -388,7 +388,7 @@ describe('Framework Validation', () => {
         description: 'A description',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -398,7 +398,7 @@ describe('Framework Validation', () => {
             validationCriteria: ['Criterion 1'],
           },
         ],
-        methodology_elements: {
+        framework_elements: {
           requiredSections: ['Section 1'],
           sectionDescriptions: { 'Section 1': 'Description' },
         },
@@ -443,7 +443,7 @@ describe('Framework Validation', () => {
         description: '  ',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
@@ -502,7 +502,7 @@ describe('Framework Validation', () => {
         framework: 'TEST',
         system_prompt_guidance: '', // Missing 1
         phases: [], // Missing 2
-        methodology_gates: [], // Missing 3
+        framework_gates: [], // Missing 3
       };
 
       const result = validationService.validate(data);
@@ -513,7 +513,7 @@ describe('Framework Validation', () => {
       expect(result.errors[0]).toContain('system_prompt_guidance');
     });
 
-    test('error progression: system_prompt_guidance -> phases -> methodology_gates', () => {
+    test('error progression: system_prompt_guidance -> phases -> framework_gates', () => {
       // Step 1: Missing system_prompt_guidance
       let data: FrameworkCreationData = {
         id: 'test',
@@ -529,15 +529,15 @@ describe('Framework Validation', () => {
       result = validationService.validate(data);
       expect(result.errors[0]).toContain('phases');
 
-      // Step 3: Fix phases, now missing methodology_gates
+      // Step 3: Fix phases, now missing framework_gates
       data = { ...data, phases: [{ id: 'p1', name: 'P1', description: 'D' }] };
       result = validationService.validate(data);
-      expect(result.errors[0]).toContain('methodology_gates');
+      expect(result.errors[0]).toContain('framework_gates');
 
-      // Step 4: Fix methodology_gates, now valid
+      // Step 4: Fix framework_gates, now valid
       data = {
         ...data,
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'G1',

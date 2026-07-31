@@ -230,7 +230,7 @@ export function generateDefaultConfig(): Record<string, unknown> {
     },
     gates: {
       mode: 'on',
-      methodologyGates: true,
+      frameworkGates: true,
     },
     logging: {
       level: 'info',
@@ -432,6 +432,7 @@ function getKeyTypeInfo(key: string): {
   // Booleans
   const boolKeys = [
     'gates.enabled',
+    'gates.frameworkGates',
     'gates.methodologyGates',
     'gates.enforcePendingVerdict',
     'execution.judge',

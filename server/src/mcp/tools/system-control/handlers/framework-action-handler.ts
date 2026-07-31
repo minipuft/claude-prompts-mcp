@@ -28,9 +28,7 @@ export class FrameworkActionHandler extends ActionHandler {
           reason: args.reason,
         });
       case 'inspect':
-        return await this.inspectFramework({
-          methodology_id: args.methodology_id || args.framework,
-        });
+        return await this.inspectFramework({ framework: args.framework });
       case 'list_frameworks':
         return await this.listFrameworksAction({
           show_details: args.show_details,
@@ -135,17 +133,17 @@ export class FrameworkActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'list_frameworks');
   }
 
-  private async inspectFramework(args: { methodology_id?: string }): Promise<ToolResponse> {
-    const frameworkId = args.methodology_id?.toLowerCase();
+  private async inspectFramework(args: { framework?: string }): Promise<ToolResponse> {
+    const frameworkId = args.framework?.toLowerCase();
     const runtimeLoader = getDefaultRuntimeLoader();
 
     if (!frameworkId) {
       const available = runtimeLoader.discoverFrameworks();
       return this.createMinimalSystemResponse(
         `📋 **Available Frameworks**\n\n` +
-          `Use \`operation:"inspect" methodology_id:"<id>"\` to inspect a specific framework.\n\n` +
+          `Use \`operation:"inspect" framework:"<id>"\` to inspect a specific framework.\n\n` +
           `Available: ${available.join(', ')}`,
-        'inspect_methodology'
+        'inspect_framework'
       );
     }
 
@@ -156,7 +154,7 @@ export class FrameworkActionHandler extends ActionHandler {
       return this.createMinimalSystemResponse(
         `❌ **Framework Not Found**: \`${frameworkId}\`\n\n` +
           `Available frameworks: ${available.join(', ')}`,
-        'inspect_methodology'
+        'inspect_framework'
       );
     }
 
@@ -213,7 +211,7 @@ export class FrameworkActionHandler extends ActionHandler {
 
     response += `💡 Use \`action:"framework" operation:"switch" framework:"${definition.id}"\` to activate this framework.`;
 
-    return this.createMinimalSystemResponse(response, 'inspect_methodology');
+    return this.createMinimalSystemResponse(response, 'inspect_framework');
   }
 
   private async listFrameworksAction(args: { show_details?: boolean }): Promise<ToolResponse> {
@@ -253,7 +251,7 @@ export class FrameworkActionHandler extends ActionHandler {
       response += `\n💡 Use \`show_details:true\` for more information.`;
     }
 
-    response += `\n🔍 Use \`operation:"inspect" methodology_id:"<id>"\` for full details.`;
+    response += `\n🔍 Use \`operation:"inspect" framework:"<id>"\` for full details.`;
 
     return this.createMinimalSystemResponse(response, 'list_frameworks');
   }

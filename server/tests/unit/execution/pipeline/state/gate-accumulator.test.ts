@@ -224,9 +224,9 @@ describe('GateAccumulator', () => {
       expect(categoryGates).toContain('gate-1');
       expect(categoryGates).toContain('gate-2');
 
-      const methodologyGates = accumulator.getBySource('framework-guide');
-      expect(methodologyGates).toHaveLength(1);
-      expect(methodologyGates).toContain('gate-3');
+      const frameworkGates = accumulator.getBySource('framework-guide');
+      expect(frameworkGates).toHaveLength(1);
+      expect(frameworkGates).toContain('gate-3');
     });
 
     test('getBySource returns empty array for unused source', () => {

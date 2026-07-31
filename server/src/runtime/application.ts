@@ -1145,7 +1145,7 @@ export class Application {
     const gatesConfig = this.configManager.getGatesConfig();
     const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
     const shouldEnable =
-      systemPromptEnabled || gatesConfig.enableMethodologyGates || config.dynamicToolDescriptions;
+      systemPromptEnabled || gatesConfig.enableFrameworkGates || config.dynamicToolDescriptions;
 
     if (!this.frameworkStateStore) {
       return;
@@ -1166,7 +1166,7 @@ export class Application {
     if (!systemPromptEnabled) {
       disabled.push('system prompt injection');
     }
-    if (!gatesConfig.enableMethodologyGates) {
+    if (!gatesConfig.enableFrameworkGates) {
       disabled.push('framework gates');
     }
     if (!config.dynamicToolDescriptions) {

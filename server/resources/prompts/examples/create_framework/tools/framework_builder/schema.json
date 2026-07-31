@@ -81,7 +81,7 @@
       }
     },
 
-    "methodology_gates": {
+    "framework_gates": {
       "type": "array",
       "description": "Framework-specific quality gates with validation criteria",
       "items": {
@@ -158,7 +158,7 @@
       }
     },
 
-    "methodology_elements": {
+    "framework_elements": {
       "type": "object",
       "description": "Required and optional sections for framework compliance",
       "properties": {

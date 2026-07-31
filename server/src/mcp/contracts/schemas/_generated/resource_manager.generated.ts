@@ -281,7 +281,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'phases',
     type: 'array<object>',
     description:
-      '[Framework] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (methodology_gates, processing_steps, execution_steps, etc.) are also accepted.',
+      '[Framework] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (framework_gates, processing_steps, execution_steps, etc.) are also accepted.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

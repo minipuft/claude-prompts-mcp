@@ -336,14 +336,21 @@ export class ResourceManagerRouter {
     }
 
     // Advanced framework parameters (pass-through)
-    if (args.methodology_gates) {
-      frameworkArgs.methodology_gates = args.methodology_gates;
+    // The input schema is `.passthrough()`, so a pre-rename client key arrives intact but no
+    // typed consumer reads it. Fold here rather than downstream so only this boundary knows
+    // both spellings exist. NOTE: `framework_gates` here is a framework authoring payload
+    // (array of FrameworkGate). The identically-named key inside a *prompt's*
+    // `gate_configuration` is an unrelated boolean toggle — same token, different concept.
+    const frameworkGatesArg = args.framework_gates ?? args.methodology_gates;
+    if (frameworkGatesArg) {
+      frameworkArgs.framework_gates = frameworkGatesArg;
     }
     if (args.template_suggestions) {
       frameworkArgs.template_suggestions = args.template_suggestions;
     }
-    if (args.methodology_elements) {
-      frameworkArgs.methodology_elements = args.methodology_elements;
+    const frameworkElementsArg = args.framework_elements ?? args.methodology_elements;
+    if (frameworkElementsArg) {
+      frameworkArgs.framework_elements = frameworkElementsArg;
     }
     if (args.argument_suggestions) {
       frameworkArgs.argument_suggestions = args.argument_suggestions;

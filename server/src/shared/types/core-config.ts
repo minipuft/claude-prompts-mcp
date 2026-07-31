@@ -180,7 +180,7 @@ export interface GateSystemSettings {
   /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
   definitionsDirectory?: string;
   /** Enable framework-specific gates (auto-added based on active framework) */
-  enableMethodologyGates?: boolean;
+  enableFrameworkGates?: boolean;
 }
 
 /**
@@ -193,9 +193,14 @@ export interface GatesConfig {
   directory?: string;
   /** Enable/disable the gate subsystem entirely */
   enabled?: boolean;
-  /** Enable framework-specific quality gates */
-  enableMethodologyGates?: boolean;
-  /** New-style: framework gates */
+  /**
+   * Resolved internal spelling. `ConfigManager` folds the config.json key into this, so
+   * consumers read only this field and never the wire key below.
+   */
+  enableFrameworkGates?: boolean;
+  /** config.json key: enable framework-specific quality gates */
+  frameworkGates?: boolean;
+  /** @deprecated Pre-rename spelling of `frameworkGates`; folded forward by ConfigManager. */
   methodologyGates?: boolean;
   /** Judge evaluation defaults — gates with `evaluation.mode: 'judge'` use context-isolated review */
   evaluation?: {

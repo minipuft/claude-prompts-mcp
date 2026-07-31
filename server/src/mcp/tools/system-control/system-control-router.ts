@@ -222,10 +222,14 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       return '⚠️ Persistence skipped (config writer unavailable).';
     }
 
+    // Every key here must appear in CONFIG_VALID_KEYS — updateConfigValue rejects anything else
+    // as "Unknown configuration key". Two of the three previously listed did not
+    // (`frameworks.injection.systemPrompt.enabled` and `gates.enableMethodologyGates`), and the
+    // loop returns on first failure, so persistence aborted before writing anything.
     const keys = [
-      'frameworks.injection.systemPrompt.enabled',
+      'frameworks.enabled',
       'frameworks.dynamicToolDescriptions',
-      'gates.enableMethodologyGates',
+      'gates.frameworkGates',
     ];
 
     try {

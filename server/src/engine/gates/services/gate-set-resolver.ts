@@ -60,7 +60,7 @@ export interface GateResolutionInput {
   /** Whether to auto-assign category gates (rank 20). Defaults to true. */
   readonly autoAssignCategoryGates?: boolean | undefined;
   /**
-   * Operator-level switch (`gatesConfig.enableMethodologyGates`). `false` withholds framework
+   * Operator-level switch (`gatesConfig.enableFrameworkGates`). `false` withholds framework
    * gates server-wide and binds every rank — it is operator configuration, not a preference.
    * Defaults to enabled.
    */

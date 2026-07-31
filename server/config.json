@@ -20,7 +20,7 @@
     "evaluation": {
       "defaultMode": "self"
     },
-    "methodologyGates": true,
+    "frameworkGates": true,
     "mode": "on"
   },
   "hooks": {

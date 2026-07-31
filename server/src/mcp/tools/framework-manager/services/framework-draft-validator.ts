@@ -10,7 +10,7 @@ export class FrameworkDraftValidator {
    * Required fields (80% threshold):
    * - system_prompt_guidance (core LLM guidance)
    * - phases (framework structure)
-   * - methodology_gates (quality validation)
+   * - framework_gates (quality validation)
    *
    * Returns structured errors for focused user guidance.
    */
@@ -20,14 +20,14 @@ export class FrameworkDraftValidator {
 
     // Check required fields one at a time for focused feedback
     const hasPhases = Array.isArray(data.phases) && data.phases.length > 0;
-    const hasGates = Array.isArray(data.methodology_gates) && data.methodology_gates.length > 0;
+    const hasGates = Array.isArray(data.framework_gates) && data.framework_gates.length > 0;
 
     if (!data.system_prompt_guidance?.trim()) {
       errors.push('system_prompt_guidance is required - defines core LLM guidance');
     } else if (!hasPhases) {
       errors.push('phases is required - defines framework structure');
     } else if (!hasGates) {
-      errors.push('methodology_gates is required - enables quality validation');
+      errors.push('framework_gates is required - enables quality validation');
     }
 
     // Calculate score
@@ -35,7 +35,7 @@ export class FrameworkDraftValidator {
     if (data.system_prompt_guidance?.trim()) score += 30;
     if (hasPhases) score += 30;
     if (hasGates) score += 20;
-    if (data.methodology_elements !== undefined) score += 10;
+    if (data.framework_elements !== undefined) score += 10;
     if (data.template_suggestions !== undefined && data.template_suggestions.length > 0) {
       score += 5;
     }
@@ -43,8 +43,8 @@ export class FrameworkDraftValidator {
 
     // RECOMMENDED fields - only warn if passed required checks
     if (errors.length === 0) {
-      if (data.methodology_elements === undefined) {
-        warnings.push('Add methodology_elements for structured prompt guidance');
+      if (data.framework_elements === undefined) {
+        warnings.push('Add framework_elements for structured prompt guidance');
       }
       if (data.template_suggestions === undefined || data.template_suggestions.length === 0) {
         warnings.push('Add template_suggestions for system/user prompt hints');
@@ -87,8 +87,8 @@ export class FrameworkDraftValidator {
         null,
         2
       )}\n\`\`\``;
-    } else if (validation.errors[0]?.includes('methodology_gates')) {
-      message += `**Example methodology_gates:**\n\`\`\`json\n${JSON.stringify(
+    } else if (validation.errors[0]?.includes('framework_gates')) {
+      message += `**Example framework_gates:**\n\`\`\`json\n${JSON.stringify(
         [
           {
             id: 'analysis-complete',

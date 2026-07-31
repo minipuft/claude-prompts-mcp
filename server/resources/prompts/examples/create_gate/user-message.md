@@ -220,13 +220,13 @@ activation:
 
 ### Pass Criteria Types
 
-| Type                     | Fields                                                                                       | Enforcement                                                                                             |
-| ------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `inline_guidance`        | min_length, max_length, required_patterns, forbidden_patterns, regex_patterns, keyword_count | **Display only** — rendered to agent as self-assessment checklist. NOT auto-enforced against output.    |
-| `llm_self_check`         | prompt_template, pass_threshold                                                              | **Reserved** — runner not yet implemented                                                               |
-| `methodology_compliance` | framework, min_compliance_score, quality_indicators                                          | **Enforced** by framework phase guards (stage 09b) — section presence + min_length + forbidden_terms    |
-| `shell_verify`           | shell_command, shell_timeout, shell_stdin_source, shell_response_env_var                     | **Enforced** — runs shell command, exit 0 = pass. Supports response injection for content verification. |
-| `script_tool`            | script_tool_id, script_tool_input, script_tool_timeout                                       | **Enforced** — runs registered script with JSON via stdin, parses structured pass/fail                  |
+| Type                   | Fields                                                                                       | Enforcement                                                                                                      |
+| ---------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `inline_guidance`      | min_length, max_length, required_patterns, forbidden_patterns, regex_patterns, keyword_count | **Display only** — rendered to agent as self-assessment checklist. NOT auto-enforced against output.             |
+| `llm_self_check`       | prompt_template, pass_threshold                                                              | **Reserved** — runner not yet implemented                                                                        |
+| `framework_compliance` | framework, min_compliance_score, quality_indicators                                          | **Declarative** — GateValidator auto-passes it. Stage 09b enforces phase guards from `phases.yaml` independently |
+| `shell_verify`         | shell_command, shell_timeout, shell_stdin_source, shell_response_env_var                     | **Enforced** — runs shell command, exit 0 = pass. Supports response injection for content verification.          |
+| `script_tool`          | script_tool_id, script_tool_input, script_tool_timeout                                       | **Enforced** — runs registered script with JSON via stdin, parses structured pass/fail                           |
 
 ### Retry Configuration
 

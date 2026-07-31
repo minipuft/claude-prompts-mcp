@@ -7,8 +7,8 @@ Uses only Python stdlib for maximum portability.
 
 Scoring System (5 Tiers = 100%):
 - Tier 1: Foundation (30%) - metadata, system guidance, phases
-- Tier 2: Quality Validation (20%) - methodology_gates with criteria, gates.include
-- Tier 3: Authoring Support (25%) - methodology_elements, argument_suggestions, template_suggestions
+- Tier 2: Quality Validation (20%) - framework_gates with criteria, gates.include
+- Tier 3: Authoring Support (25%) - framework_elements, argument_suggestions, template_suggestions
 - Tier 4: Execution (15%) - processing_steps, execution_steps
 - Tier 5: Advanced (10%) - tool_descriptions, quality_indicators, execution_flow, judge_prompt
 
@@ -89,11 +89,12 @@ def validate_tier2_quality(data: dict[str, Any]) -> tuple[int, list[str]]:
     missing = []
 
     # Framework Gates (15%)
-    gates = data.get('methodology_gates', [])
+    # `methodology_gates` is the pre-rename spelling; drafts written before the rename still score.
+    gates = data.get('framework_gates', data.get('methodology_gates', []))
     if not isinstance(gates, list):
-        missing.append("[Tier 2 - Gates] methodology_gates must be an array")
+        missing.append("[Tier 2 - Gates] framework_gates must be an array")
     elif len(gates) < 2:
-        missing.append(f"[Tier 2 - Gates] Need ≥2 methodology_gates (have {len(gates)})")
+        missing.append(f"[Tier 2 - Gates] Need ≥2 framework_gates (have {len(gates)})")
     else:
         # Minimum count (5%)
         score += 5
@@ -129,9 +130,9 @@ def validate_tier3_authoring(data: dict[str, Any]) -> tuple[int, list[str]]:
     missing = []
 
     # Framework Elements (10%)
-    elements = data.get('methodology_elements', {})
+    elements = data.get('framework_elements', data.get('methodology_elements', {}))
     if not isinstance(elements, dict) or not elements:
-        missing.append("[Tier 3 - Elements] Missing methodology_elements")
+        missing.append("[Tier 3 - Elements] Missing framework_elements")
     else:
         required_sections = elements.get('requiredSections', [])
         section_descriptions = elements.get('sectionDescriptions', {})
@@ -339,8 +340,8 @@ def validate_phase_consistency(data: dict[str, Any]) -> tuple[list[str], list[st
     phase_names = {p.get("name") for p in phases if p.get("name")}
     valid_references = phase_ids | phase_names
 
-    # Check methodology_gates reference valid phases
-    for gate in data.get("methodology_gates", []):
+    # Check framework_gates reference valid phases
+    for gate in data.get("framework_gates", data.get("methodology_gates", [])):
         area = gate.get("frameworkArea")
         if area and area not in valid_references:
             errors.append(
@@ -488,9 +489,9 @@ def build_resource_manager_params(data: dict[str, Any]) -> dict[str, Any]:
         "enabled",
         "description",
         "gates",
-        "methodology_gates",
+        "framework_gates",
         "template_suggestions",
-        "methodology_elements",
+        "framework_elements",
         "argument_suggestions",
         "processing_steps",
         "execution_steps",
@@ -513,7 +514,7 @@ def build_summary(data: dict[str, Any]) -> dict[str, Any]:
     """Build summary of framework contents."""
     return {
         "phases": len(data.get("phases", [])),
-        "methodology_gates": len(data.get("methodology_gates", [])),
+        "framework_gates": len(data.get("framework_gates", data.get("methodology_gates", []))),
         "processing_steps": len(data.get("processing_steps", [])),
         "execution_steps": len(data.get("execution_steps", [])),
         "quality_indicator_phases": len(data.get("quality_indicators", {})),

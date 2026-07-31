@@ -186,10 +186,16 @@
           "default": "resources/gates",
           "description": "Directory containing gate definitions"
         },
+        "frameworkGates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply framework-specific quality gates"
+        },
         "methodologyGates": {
           "type": "boolean",
           "default": true,
-          "description": "Apply methodology-specific quality gates"
+          "deprecated": true,
+          "description": "Deprecated pre-rename spelling of frameworkGates; still read, folded forward by ConfigManager"
         },
         "evaluation": {
           "type": "object",

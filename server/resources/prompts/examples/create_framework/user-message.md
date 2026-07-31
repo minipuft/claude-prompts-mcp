@@ -22,7 +22,7 @@ You are a framework architect specializing in framework design for the Claude Pr
 - **ID:** `{{ tool_framework_builder.auto_execute.params.id }}`
 - **Name:** {{ tool_framework_builder.auto_execute.params.name }}
 - **Phases:** {{ tool_framework_builder.summary.phases }}
-- **Framework Gates:** {{ tool_framework_builder.summary.methodology_gates }}
+- **Framework Gates:** {{ tool_framework_builder.summary.framework_gates }}
 - **Processing Steps:** {{ tool_framework_builder.summary.processing_steps }}
 - **Execution Steps:** {{ tool_framework_builder.summary.execution_steps }}
 - **Quality Indicator Phases:** {{ tool_framework_builder.summary.quality_indicator_phases }}
@@ -306,9 +306,9 @@ qualityIndicators:
 | `system_prompt_guidance` | string | Yes      | Multiline guidance with **Phase**: format |
 | `phases`                 | array  | Yes      | Phase definitions (min 2)                 |
 | `gates`                  | object | No       | `{include: string[], exclude?: string[]}` |
-| `methodology_gates`      | array  | No       | Quality gates with validationCriteria     |
+| `framework_gates`        | array  | No       | Quality gates with validationCriteria     |
 | `template_suggestions`   | array  | No       | Prompt enhancement hints                  |
-| `methodology_elements`   | object | No       | Required/optional sections                |
+| `framework_elements`     | object | No       | Required/optional sections                |
 | `argument_suggestions`   | array  | No       | Suggested arguments                       |
 | `judge_prompt`           | string | No       | Judge prompt content for %judge modifier  |
 
@@ -353,7 +353,7 @@ Based on **{{name}}** with concept "{{concept}}":
 
 1. **Design phases** ({% if phase_count %}{{phase_count}}{% else %}5-7{% endif %} phases) forming a coherent framework
 2. **Write system_prompt_guidance** with `**PhaseName**: description` format
-3. **Define methodology_gates** with validationCriteria for each phase
+3. **Define framework_gates** with validationCriteria for each phase
 4. **Create processing_steps** with order, required, frameworkBasis, marker, and assertions
 5. **Create execution_steps** with dependencies and expected_output
 6. **Add assertions** to required processing steps: `marker` for section detection + `assertions` for deterministic checks (required, min_length, contains_any, forbids)
@@ -374,7 +374,7 @@ prompt_engine(
     "name": "Your Framework Name",
     "system_prompt_guidance": "Apply the framework...\n\n**Phase1**: Description\n**Phase2**: Description",
     "phases": [...],
-    "methodology_gates": [...],
+    "framework_gates": [...],
     "processing_steps": [...],
     "execution_steps": [...],
     ... other optional fields
@@ -402,16 +402,16 @@ Framework creation requires 100% score. All 5 tiers must be complete.
 
 ### Tier 2: Quality Validation (20%)
 
-| Field               | Type   | Requirement                                           |
-| ------------------- | ------ | ----------------------------------------------------- |
-| `methodology_gates` | array  | ≥2 gates, each with ≥2 `validationCriteria`           |
-| `gates`             | object | `{include: ["framework-compliance"]}` with ≥1 gate ID |
+| Field             | Type   | Requirement                                           |
+| ----------------- | ------ | ----------------------------------------------------- |
+| `framework_gates` | array  | ≥2 gates, each with ≥2 `validationCriteria`           |
+| `gates`           | object | `{include: ["framework-compliance"]}` with ≥1 gate ID |
 
 ### Tier 3: Authoring Support (25%)
 
 | Field                  | Type   | Requirement                                     |
 | ---------------------- | ------ | ----------------------------------------------- |
-| `methodology_elements` | object | `requiredSections` ≥2, `sectionDescriptions` ≥3 |
+| `framework_elements`   | object | `requiredSections` ≥2, `sectionDescriptions` ≥3 |
 | `argument_suggestions` | array  | ≥2 args with `frameworkReason`                  |
 | `template_suggestions` | array  | ≥1 with `frameworkJustification`                |
 
@@ -447,7 +447,7 @@ Framework creation requires 100% score. All 5 tiers must be complete.
   "gates": {
     "include": ["framework-compliance"]
   },
-  "methodology_gates": [
+  "framework_gates": [
     {
       "id": "phase_1_quality",
       "name": "Phase 1 Quality",
@@ -509,7 +509,7 @@ Framework creation requires 100% score. All 5 tiers must be complete.
       "impact": "high"
     }
   ],
-  "methodology_elements": {
+  "framework_elements": {
     "requiredSections": ["Phase1", "Phase2"],
     "optionalSections": ["Phase3"],
     "sectionDescriptions": {
@@ -552,7 +552,7 @@ Framework creation requires 100% score. All 5 tiers must be complete.
 
 - Phase IDs: snake_case (e.g., `context_establishment`)
 - System prompt guidance: Use `**PhaseName**: description` format
-- methodology_gates: One per major phase with `validationCriteria` array
+- framework_gates: One per major phase with `validationCriteria` array
 - processing_steps: Ordered with `frameworkBasis` linking to phase
 - processing_steps: Include `marker` + `assertions` for deterministic phase verification (at least on required phases)
 - execution_steps: With `dependencies` array (empty for first step)

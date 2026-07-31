@@ -10,6 +10,7 @@
 import { Logger } from '../../../infra/logging/index.js';
 import { FrameworkManager } from '../framework-manager.js';
 import { TemplateEnhancer, createTemplateEnhancer } from './template-enhancer.js';
+import { TEMPLATE_VARIABLE_NAMES, substituteTemplateVariables } from './template-variables.js';
 import {
   FrameworkDefinition,
   FrameworkGuide,
@@ -281,12 +282,13 @@ export class PromptGuidanceService {
     }
 
     // Apply simple variable substitution
-    enhancedPromptText = enhancedPromptText
-      .replace(/\{PROMPT_NAME\}/g, prompt.name || 'Prompt')
-      .replace(/\{PROMPT_CATEGORY\}/g, prompt.category || 'general')
-      .replace(/\{FRAMEWORK_NAME\}/g, framework.name)
-      .replace(/\{METHODOLOGY\}/g, framework.type)
-      .replace(/\{PROMPT_TYPE\}/g, prompt.chainSteps?.length ? 'chain' : 'single');
+    enhancedPromptText = substituteTemplateVariables(enhancedPromptText, {
+      promptName: prompt.name || 'Prompt',
+      promptCategory: prompt.category || 'general',
+      frameworkName: framework.name,
+      frameworkType: framework.type,
+      promptType: prompt.chainSteps?.length ? 'chain' : 'single',
+    });
 
     return {
       originalPrompt: prompt.userMessageTemplate || '',
@@ -296,13 +298,7 @@ export class PromptGuidanceService {
       metadata: {
         injectionTime: new Date(),
         injectionMethod: 'unified',
-        variablesUsed: [
-          'PROMPT_NAME',
-          'PROMPT_CATEGORY',
-          'FRAMEWORK_NAME',
-          'METHODOLOGY',
-          'PROMPT_TYPE',
-        ],
+        variablesUsed: [...TEMPLATE_VARIABLE_NAMES],
         confidence: 1.0,
         processingTimeMs: Date.now() - startTime,
         validationPassed: true,

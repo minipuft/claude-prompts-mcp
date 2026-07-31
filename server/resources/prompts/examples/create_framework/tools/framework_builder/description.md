@@ -22,12 +22,12 @@ A complete framework definition matching the CAGEERF quality standard:
 | `name`                   | Yes      | Human-readable name                       |
 | `system_prompt_guidance` | Yes      | Multiline guidance with **Phase**: format |
 | `phases`                 | Yes      | Array of phase definitions (min 2)        |
-| `methodology_gates`      | No       | Quality gates with validation criteria    |
+| `framework_gates`        | No       | Quality gates with validation criteria    |
 | `processing_steps`       | No       | Ordered framework processing steps        |
 | `execution_steps`        | No       | Steps with dependency graph               |
 | `quality_indicators`     | No       | Keywords/patterns per phase               |
 | `template_suggestions`   | No       | Prompt enhancement suggestions            |
-| `methodology_elements`   | No       | Required/optional sections                |
+| `framework_elements`     | No       | Required/optional sections                |
 | `argument_suggestions`   | No       | Suggested prompt arguments                |
 
 ## Output
@@ -47,7 +47,7 @@ A complete framework definition matching the CAGEERF quality standard:
   "warnings": [],
   "summary": {
     "phases": 6,
-    "methodology_gates": 4,
+    "framework_gates": 4,
     "processing_steps": 6,
     "execution_steps": 6,
     "quality_indicator_phases": 4
