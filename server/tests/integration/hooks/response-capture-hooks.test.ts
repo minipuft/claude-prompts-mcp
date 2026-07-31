@@ -15,8 +15,10 @@ import {
 } from '../../../src/infra/observability/notifications/index.js';
 import { noopLogger } from '../../../src/infra/logging/index.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/08-response-capture-stage.js';
+import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
+import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/index.js';
-import type { ChainSessionService } from '../../../src/modules/chains/types.js';
+import type { ChainSessionService } from '../../../src/shared/types/chain-session.js';
 import type { McpToolRequest } from '../../../src/shared/types/index.js';
 
 describe('ResponseCaptureStage Hook Emission', () => {
@@ -50,7 +52,15 @@ describe('ResponseCaptureStage Hook Emission', () => {
       getChainContext: jest.fn(),
     } as unknown as jest.Mocked<ChainSessionService>;
 
-    stage = new StepResponseCaptureStage(mockChainSessionStore, noopLogger);
+    // Real collaborators: gate events are emitted by GateVerdictProcessor, not by the stage, so
+    // a mocked processor would make these assertions vacuous. The session store stays mocked —
+    // it is the I/O boundary.
+    stage = new StepResponseCaptureStage(
+      new GateVerdictProcessor(mockChainSessionStore, noopLogger),
+      new StepCaptureService(mockChainSessionStore, noopLogger),
+      mockChainSessionStore,
+      noopLogger
+    );
   });
 
   afterEach(() => {
@@ -118,7 +128,10 @@ describe('ResponseCaptureStage Hook Emission', () => {
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
     mockChainSessionStore.getPendingGateReview.mockReturnValue({
+      combinedPrompt: 'Review against code-quality.',
       gateIds: ['code-quality'],
+      prompts: [],
+      createdAt: 1_700_000_000_000,
       attemptCount: 2,
       maxAttempts: 2,
     });
@@ -171,7 +184,10 @@ describe('ResponseCaptureStage Hook Emission', () => {
     } as any);
     mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
     mockChainSessionStore.getPendingGateReview.mockReturnValue({
+      combinedPrompt: 'Review against code-quality.',
       gateIds: ['code-quality'],
+      prompts: [],
+      createdAt: 1_700_000_000_000,
       attemptCount: 2,
       maxAttempts: 2,
     });

@@ -132,7 +132,7 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
 
       expect(result.added).toBe(1);
-      const meth = indexer.getResource('methodology', 'cageerf');
+      const meth = indexer.getResource('framework', 'cageerf');
       expect(meth).not.toBeNull();
       expect(meth!.name).toBe('CAGEERF');
     });

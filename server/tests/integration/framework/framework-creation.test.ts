@@ -148,7 +148,10 @@ const createMockFileService = () => {
         return {
           id,
           name,
-          framework: typeof raw['methodology'] === 'string' ? raw['methodology'] : id.toUpperCase(),
+          // Mirrors FrameworkFileWriter.toFrameworkCreationData: the source key is `type` and
+          // the destination field is `type`. This read `raw['methodology']` into a `framework`
+          // field — wrong on both counts, and `type` is required by FrameworkCreationData.
+          type: typeof raw['type'] === 'string' ? raw['type'] : id.toUpperCase(),
           system_prompt_guidance: systemGuidance,
           ...raw, // Include all other fields
         } as FrameworkCreationData;
@@ -180,8 +183,15 @@ describe('Framework Creation Integration', () => {
       configManager,
     });
 
-    // Override file service with mock
-    (manager as unknown as { fileService: typeof mockFileService }).fileService = mockFileService;
+    // Override file service with mock.
+    //
+    // The seam is `ctx.fileService`, not `manager.fileService`. FrameworkToolHandler builds a
+    // shared FrameworkResourceContext and hands the same object to every processor, which read
+    // `this.ctx.fileService` at call time — so replacing it here reaches all of them. Assigning
+    // to `manager.fileService` (as this did) created a property nobody reads, and every write
+    // went to the real filesystem via the mock config's serverRoot: `EACCES ... mkdir '/test'`.
+    (manager as unknown as { ctx: { fileService: typeof mockFileService } }).ctx.fileService =
+      mockFileService;
   });
 
   describe('Validation Requirements', () => {

@@ -575,17 +575,19 @@ Do not treat the table above as a rot baseline until step IT.0 re-measures it.
 
 #### Proposed steps (unscheduled)
 
-| ID   | Status | Step                                                                                                                                                         | Files                                                                                                                           | Depends                         | Verification                                                                     |
-| ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------- |
-| IT.0 | ☐      | **Re-measure against a clean HEAD.** Use `git worktree add` to a temp dir — NOT `git stash`, which is destructive with a concurrent session sharing the tree | (worktree)                                                                                                                      | tree quiet                      | Failure set at HEAD recorded; each of the 8 classified pre-existing vs in-flight |
-| IT.1 | ☐      | Fix the 2 constructor-signature drifts — pass `serverRoot` / `logger` in test setup                                                                          | `tests/integration/database/resource-change-tracker-baseline.test.ts`, `tests/integration/hooks/response-capture-hooks.test.ts` | IT.0                            | Both suites green                                                                |
-| IT.2 | ☐      | Reconcile `SCHEMA_VERSION` — determine whether 15 or 16 is correct from `sqlite-engine.ts`, fix the wrong side                                               | `tests/integration/database/sqlite-backend.test.ts` or `src/infra/database/sqlite-engine.ts`                                    | IT.0                            | Suite green; version asserted once, not in two places                            |
-| IT.3 | ☐      | Add `getSessionByChainIdentifier` to the chain-session mock (or switch to the real store)                                                                    | `tests/integration/resources/resource-registration.test.ts`                                                                     | IT.0                            | Suite green                                                                      |
-| IT.4 | ☐      | **Fix the mock boundary escape** — a real `mkdir '/test'` must never be reachable from a test                                                                | `tests/integration/framework/methodology-creation.test.ts`                                                                      | IT.0                            | Suite green; no filesystem write outside the temp dir                            |
-| IT.5 | ☐      | Diagnose `history()` → `null` root cause; 6 failures share it                                                                                                | `tests/integration/versioning/version-history-workflow.test.ts`                                                                 | IT.0                            | Suite green                                                                      |
-| IT.6 | ☐      | Resolve section-handling drift — likely downstream of concurrent prompt-loader work; re-check AFTER that lands                                               | `tests/integration/skills-sync/pull-command.test.ts`                                                                            | IT.0, concurrent work committed | Suite green                                                                      |
-| IT.7 | ☐      | De-flake the timing assertion — replace the wall-clock `< 1500ms` bound with a deterministic signal, or widen it with a documented rationale                 | `tests/integration/gates/shell-verification-flow.test.ts`                                                                       | IT.0                            | 10 consecutive runs green                                                        |
-| IT.8 | ☐      | **Retire the CI debt**: delete `continue-on-error` from the Integration step and move it above E2E                                                           | `.github/workflows/ci.yml`                                                                                                      | IT.1-IT.7                       | `npm run test:integration` exits 0; CI blocks on integration failures            |
+| ID    | Status | Step                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Files                                                                                                                           | Depends                         | Verification                                                                 |
+| ----- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------- |
+| IT.0  | ✓      | **DONE — see "IT.0 outcome" below.** Re-measured at clean HEAD `0e76c03a` and against a pre-sweep worktree at `f4524632`. Failure sets byte-identical: **10 suites / 31 tests**, all pre-existing                                                                                                                                                                                                                                                                                                                | (worktree)                                                                                                                      | tree quiet                      | **DONE** — 4 of 9 row premises falsified; 4 failing suites had no row at all |
+| IT.1  | ✓      | **DONE.** `resource-change-tracker-baseline` was not a 2-line ctor fix — see IT.0 outcome. `response-capture-hooks` needed the 4-arg ctor with **real** `GateVerdictProcessor`/`StepCaptureService` (a mocked processor makes the emission assertions vacuous), plus 3 missing `PendingGateReview` fields                                                                                                                                                                                                        | `tests/integration/database/resource-change-tracker-baseline.test.ts`, `tests/integration/hooks/response-capture-hooks.test.ts` | IT.0                            | **DONE** — both suites green, 6 tests                                        |
+| IT.2  | ⊘      | **OBSOLETE — premise false.** `SCHEMA_VERSION = 16` (`sqlite-engine.ts:41`) and the test asserts `toBe(16)`; they already agree. Suite green at HEAD _and_ at the pre-sweep base, so the 15-vs-16 disagreement the row describes was fixed before this tier opened                                                                                                                                                                                                                                               | `tests/integration/database/sqlite-backend.test.ts`                                                                             | IT.0                            | **N/A** — nothing to reconcile                                               |
+| IT.3  | ✓      | **DONE — 3 causes, not 1.** (a) framework resources register as `'framework'`/`'frameworks'`, not `'methodology'`; (b) the mock lacked `getSessionByChainIdentifier`, and the item resource resolves by **chain** id, so the lookup key is `chain-abc` not `session-123`; (c) list entries are named by `chainId` — `observability-resources.ts:103` does this deliberately. A fixture said `type: 'methodology'` while its assertion said `**Type:** framework`; neither matched shipped data (`type: CAGEERF`) | `tests/integration/resources/resource-registration.test.ts`                                                                     | IT.0                            | Suite green                                                                  |
+| IT.4  | ✓      | **DONE — one root behind all 6.** The seam moved: `FrameworkToolHandler` builds a shared `FrameworkResourceContext` and the processors read `this.ctx.fileService`. The test assigned to `manager.fileService` — a property nobody reads — so every write reached the real filesystem via the mock config's `/test` serverRoot. Retargeting the override at `ctx.fileService` fixed all six                                                                                                                      | `tests/integration/framework/methodology-creation.test.ts`                                                                      | IT.0                            | Suite green; no filesystem write outside the temp dir                        |
+| IT.5  | ✓      | **DONE — 8 failures, not 6; storage migration, not a null bug.** Versioning moved from sidecar files to SQLite: `loadHistory(resourceDir)` is now `loadHistory(resourceType, resourceId)` and `saveVersion` lost its `resourceDir` parameter, so every argument in the test harness was shifted by one and the service had no `DatabasePort` at all. Harness rewired to current signatures + a real `SqliteEngine`; 26 dead directory references removed                                                         | `tests/integration/versioning/version-history-workflow.test.ts`                                                                 | IT.0                            | Suite green                                                                  |
+| IT.6  | ✓      | **DONE — the test asserted superseded behaviour, and production is right.** Pull now refuses to write any section whose canonical content contains Nunjucks control flow (`service.ts`), because reverse-compiling a rendered skill over a template destroys the template. The test asserted the old lossy contract ("the conditional IS lost"). Rewritten to assert preservation **and** that the skip is reported — a silent refusal would leave the author believing the edit landed                          | `tests/integration/skills-sync/pull-command.test.ts`                                                                            | IT.0, concurrent work committed | Suite green                                                                  |
+| IT.7  | ✓      | **DONE — and the row was nearly closed as obsolete by mistake.** The suite passed 3 straight full-suite runs, then failed the 4th at `duration 2101ms` vs `< 1500`. Fix: compare against the command's own runtime (`sleep 5`, bound `< 4000`) so the assertion answers "was it killed early?" rather than measuring process-group cleanup latency; `timedOut`/`exitCode` already carry the deterministic proof                                                                                                  | `tests/integration/gates/shell-verification-flow.test.ts`                                                                       | IT.0                            | **DONE** — 10 consecutive runs green (16 including the confirmation batch)   |
+| IT.9  | ✓      | **DONE — 4 failing suites had no row.** `resource-indexer`, `resource-indexer-live`, `startup-bootstrap`, `resource-manager-workflow` asserted the pre-rename vocabulary (`queryByType('methodology')`, `resource_type: "methodology"`) against production that correctly says `framework`. **Fixed** — 6 call sites, all 4 suites green (41 tests). Row stays ☐ only for its guard half: see IT.10                                                                                                              | `tests/integration/database/*.test.ts`, `tests/integration/mcp-tools/resource-manager-workflow.test.ts`                         | IT.0                            | **Tests DONE**; guard pending                                                |
+| IT.10 | ✓      | **DONE — narrowed the 5.8 guard's blanket test exemption.** `validate-no-methodology-vocab.js:62` is `{ file: 'tests/', match: 'methodolog' }`, exempting the entire test tree. That is why 18 stale `methodology` hits in `tests/integration` survived a guard written to prevent exactly this, and its stated retirement condition ("same commit as the fold each one guards") is unverifiable because the entry names no fold. Replace with per-file entries scoped to the folds they actually pin            | `server/scripts/validate-no-methodology-vocab.js`                                                                               | IT.9                            | Guard fails when a stale `methodology` assertion is reintroduced in `tests/` |
+| IT.8  | ✓      | **DONE.** Retirement condition met (integration green 3/3 locally). `continue-on-error` deleted, the step already precedes E2E, and the debt rationale was replaced rather than left as a stale breadcrumb. `ci.yml` parses                                                                                                                                                                                                                                                                                      | `.github/workflows/ci.yml`                                                                                                      | IT.1-IT.7                       | `npm run test:integration` exits 0; CI blocks on integration failures        |
 
 **Gate**: `npm run test:integration` exits 0 across 3 consecutive runs (proves de-flaked, not just
 passing once), then `npm run validate:full`.
@@ -593,6 +595,106 @@ passing once), then `npm run validate:full`.
 > IT.8 is the step that makes this tier terminal. Without it, `continue-on-error` becomes a
 > permanent parallel path — precisely the anti-pattern `cleanup-standards.md` warns about
 > ("a gate you cannot retire is a bug"). The retirement condition is written into `ci.yml` itself.
+
+#### IT.0 outcome — re-measurement (2026-07-31)
+
+**The "32 failures, unstable set" figure this tier was scheduled against was wrong**, and the way
+it was wrong matters more than the number. Two `test:integration` runs at clean HEAD `0e76c03a`
+produced **10 suites / 31 tests** failing of 349, with byte-identical failure sets _and_ identical
+suite order. The suite is deterministic.
+
+The instability came from conflating two commands. The two tests observed "swapping" live
+elsewhere: `MCP Server Smoke Tests` is in `tests/e2e/` and is not part of `test:integration` at
+all, and `gate-shell-verify-review-feedback` is integration but passes. The variance was real but
+it belongs to **e2e**, which this tier's gate does not cover.
+
+**Pre-existing vs sweep-induced.** A worktree at `f4524632` (pre-sweep) produced the _same 31
+failures_. This sweep introduced none and fixed none.
+
+Row premises against measurement — **4 of 9 falsified**, bringing the plan's running total of
+falsified counts to ten:
+
+| Row  | Plan premise                         | Measured                                                | Verdict            |
+| ---- | ------------------------------------ | ------------------------------------------------------- | ------------------ |
+| IT.1 | 2 constructor drifts                 | confirmed, but one is far deeper (below)                | holds, understated |
+| IT.2 | `sqlite-backend` asserts 16, gets 15 | `SCHEMA_VERSION = 16`, suite green at HEAD **and** base | **obsolete**       |
+| IT.3 | 1 missing mock method                | 6 failures, ≥2 distinct causes                          | incomplete         |
+| IT.4 | `methodology-creation`, 1 failure    | file is `framework-creation.test.ts`, 6 failures        | stale name + count |
+| IT.5 | 6 cascading from `history()` null    | 8 failures                                              | count wrong        |
+| IT.6 | recheck after concurrent work        | that work landed; 1 failure stands                      | holds, dep stale   |
+| IT.7 | `< 1500ms` flake                     | green 3 runs, failed the 4th at 2101ms                  | **active** flake   |
+
+**Two findings the plan did not contain.**
+
+_Four failing suites had no row_ (now IT.9) — same defect class as the rest: tests asserting
+pre-rename vocabulary. `IndexedResourceType` is `'prompt' | 'gate' | 'framework' | 'style' |
+'tool'`, so `queryByType('methodology')` asked for a type that no longer exists and correctly
+returned zero.
+
+_The 5.8 guard has a hole that is why this survived_ (now IT.10). Its allowlist carries
+`{ file: 'tests/', match: 'methodolog' }` — a blanket exemption for the whole test tree, covering
+all 18 stale hits. An exemption whose retirement condition cannot be checked is the shape
+`cleanup-standards.md` warns about, and it was written two commits earlier in this same sweep.
+
+**Two rows were not what they claimed.**
+
+`resource-change-tracker-baseline` (IT.1) was not a missing `serverRoot` argument. Underneath that
+error the test asserted `runId`, `runTimestamp`, `totalChanges` and a `changes[]` array, passed a
+per-resource `contentHash` so no file need exist, and declared `methodology`/`style`/`tool`
+resources — while `compareBaseline` returns `{added, modified, removed}`, reads `filePath` from
+disk itself, and `TrackedResourceType` is `'prompt' | 'gate'`. `git log -S runId` finds no commit
+touching the tracker: **that API never existed**, so those two cases could never have passed. They
+were rewritten against the real signature. Doing so surfaced a **genuine production defect**:
+`compareBaseline`'s removal branch destructured `cacheKey.split('/')`, truncating any resourceId
+containing a slash (a categorised prompt, a tool under its parent). Fixed with a first-separator
+split and negative-verified — reverting the fix fails exactly that test and no other.
+
+IT.7 was nearly closed as obsolete on three green runs. It took a fourth to catch it. The lesson is
+the one this plan keeps relearning: a single observation of a passing test is not evidence it
+passes.
+
+It then took a second correction. Ten green runs **in isolation** did not settle it, because the
+flake is load-dependent and the full suite is where the load is: back in `test:integration` a
+_different_ test in the same file failed at 2122ms — `respects explicit timeout option`, asserting
+`duration < 2000` against a 2000ms timeout. Same defect shape, and its bound was redundant on top
+of being flaky: `timedOut` falsy already proves the command finished inside its timeout. Both
+timing assertions are now either structural or deleted.
+
+**Tier state after IT.0/1/7/9: 31 → 21 failures, 10 → 4 suites, and the failure count is stable at
+21 across 5 consecutive full-suite runs** (previously it oscillated 21/22). `test:unit` 1732 green,
+`typecheck` clean, `validate:all` 20 members green, `lint:ratchet` no regressions.
+
+#### Tier IT outcome — all rows closed
+
+`npm run test:integration`: **32/32 suites, 350/350 tests, exit 0 across 3 consecutive runs** — the
+tier's Gate. From 31 failures / 10 suites at IT.0. `typecheck` clean, `test:unit` 1732 green,
+`validate:all` 20 members green, `lint:ratchet` no regressions, `ci.yml` parses.
+
+Every row's premise was wrong in the same direction — the plan understated. IT.3 had three causes,
+not one; IT.4 had one root behind six failures, not the six the count implied; IT.5 was a
+**storage migration** (sidecar files → SQLite, every harness argument shifted by one, no
+`DatabasePort` at all), not a null-return bug; IT.6's test asserted a contract production had
+deliberately replaced with a safer one. Counting failures never predicted the work.
+
+**Two production defects were found by repairing tests**, which is the argument for repairing them
+rather than deleting them: the `cacheKey.split('/')` id truncation (IT.1), and — in the other
+direction — IT.6, where the _test_ was wrong and production's protective skip was correct.
+
+#### Known-remaining: `test:all` is not green, and it is not this tier's scope
+
+`npm run validate:full` runs `test:all`, which includes **e2e**. One e2e test —
+`MCP Server Smoke Tests › server registers expected MCP tools via HTTP` — hangs its SSE handshake
+whenever e2e runs after _any_ substantial Jest run in the same shell. Measured: e2e alone **passes
+4/4**; `test:unit` → e2e **fails**; `test:integration` → e2e **fails**.
+
+This is the variance IT.0 identified and correctly scoped out of this tier, and it predates the
+sweep. It is **not** slowness: raising the internal bound 10s → 30s and Jest's 20s → 60s moved the
+error three times and then exhausted the full 30s, which falsifies the timeout hypothesis. Those
+timeout edits were **reverted** — a bound raised on a wrong diagnosis only makes the suite fail
+slower. Diagnosing the hang (leaked handles — `test:unit` runs `--forceExit` — ports, or spawn
+contention) is its own piece of work and belongs in its own row, not smuggled into this one.
+
+CI impact is unchanged by IT.8: the E2E step was already blocking and had no `continue-on-error`.
 
 ### Tier 1: Delete probe-confirmed zero-consumer code.
 

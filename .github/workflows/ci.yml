@@ -204,16 +204,11 @@ jobs:
 
       # Integration tests were run by NO automated job before 2026-07-29 — not by
       # test:ci, not by pre-push, not by npm-publish — and rotted unnoticed to
-      # 8 failing suites / 25 failing tests out of 349.
-      #
-      # continue-on-error is deliberate DEBT, not a permanent arrangement. It exists
-      # so the rot is visible in CI while it is being repaired.
-      # RETIREMENT CONDITION: when `npm run test:integration` is green locally,
-      # delete `continue-on-error` and move this step above "E2E tests".
-      # Tracked in plans/techincal_debt/shim-debt-sweep-2026-07-29.md.
-      - name: Integration tests (non-blocking — see retirement condition above)
+      # 10 failing suites / 31 failing tests out of 349. They were made non-blocking
+      # so the rot stayed visible while it was repaired; that debt is now paid and the
+      # `continue-on-error` escape hatch is gone. Blocking is what keeps it paid.
+      - name: Integration tests
         run: npm run test:integration
-        continue-on-error: true
         timeout-minutes: 15
 
       - name: E2E tests

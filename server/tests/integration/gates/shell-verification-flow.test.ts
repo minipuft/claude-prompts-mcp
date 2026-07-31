@@ -252,24 +252,29 @@ describe('Shell Verification Flow Integration', () => {
     });
 
     test('enforces timeout and kills process group', async () => {
-      // Use a short timeout (1 second) with a long-running command (3 seconds)
+      // 1s timeout against a command that would take 5s if left alone. The wide gap is what
+      // makes the timing assertion below meaningful without being flaky.
       const startTime = Date.now();
       const result = await executor.execute({
-        command: 'sleep 3',
-        timeout: 1000, // 1 second
+        command: 'sleep 5',
+        timeout: 1000,
       });
       const duration = Date.now() - startTime;
 
-      // Should timeout and fail
+      // The deterministic proof that the timeout fired — these do not depend on wall clock.
       expect(result.passed).toBe(false);
       expect(result.timedOut).toBe(true);
       expect(result.exitCode).toBe(-1);
 
-      // Duration should be close to timeout, not the full command duration
-      // Allow up to 500ms grace for process cleanup
-      expect(duration).toBeLessThan(1500);
+      // The timing check answers only one question: was the process actually killed early, or
+      // did the executor wait for natural completion and label the result timed-out afterwards?
+      // So it is compared against the command's own 5s runtime, not against timeout + a cleanup
+      // grace. The previous bound was `< 1500` (timeout + 500ms), which made process-group
+      // cleanup latency part of the assertion: it was observed failing at 2101ms on a loaded
+      // machine roughly one run in three while the executor was behaving correctly.
       expect(duration).toBeGreaterThanOrEqual(1000);
-    });
+      expect(duration).toBeLessThan(4000);
+    }, 15000);
 
     test('respects explicit timeout option', async () => {
       // Use explicit 2 second timeout with 1 second command - should complete
@@ -282,7 +287,13 @@ describe('Shell Verification Flow Integration', () => {
 
       expect(result.passed).toBe(true);
       expect(result.timedOut).toBeFalsy();
-      expect(duration).toBeLessThan(2000);
+
+      // No wall-clock bound here. `timedOut` being falsy already proves the command finished
+      // inside its 2s timeout — that IS the behaviour under test, asserted deterministically.
+      // The previous `duration < 2000` re-checked the same thing through a measurement that also
+      // includes process spawn and teardown outside the executor's control, and was observed
+      // failing at 2122ms under full-suite load while the executor behaved correctly.
+      expect(duration).toBeGreaterThanOrEqual(1000);
     });
   });
 

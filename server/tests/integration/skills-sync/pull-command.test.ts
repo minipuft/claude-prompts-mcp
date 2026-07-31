@@ -27,12 +27,14 @@ function createTempDir(): string {
   return mkdtempSync(path.join(os.tmpdir(), 'skills-pull-'));
 }
 
-function silentOutput(): SkillsSyncOutput & { logs: string[] } {
+function silentOutput(): SkillsSyncOutput & { logs: string[]; warns: string[] } {
   const logs: string[] = [];
+  const warns: string[] = [];
   return {
     logs,
+    warns,
     log: (...args: unknown[]) => logs.push(args.map(String).join(' ')),
-    warn: () => {},
+    warn: (...args: unknown[]) => warns.push(args.map(String).join(' ')),
     error: () => {},
   };
 }
@@ -342,7 +344,7 @@ describe('Pull Command Integration', () => {
     expect(sysContent).toBe('Original content.');
   });
 
-  it('section-aware: only edited section changes, others preserved', async () => {
+  it('section-aware: refuses to pull over canonical Nunjucks control flow, and says so', async () => {
     const systemMsg = [
       '{% if format %}',
       'Output in {{format}}.',
@@ -393,14 +395,26 @@ describe('Pull Command Integration', () => {
     expect(sysContent).toContain('{% if format %}');
     expect(sysContent).toContain('{% endif %}');
 
-    // user-message.md should be updated (only the edited section)
+    // user-message.md is ALSO left unchanged, and that is the point of this case.
+    //
+    // This test previously asserted the edit was applied and noted "the Nunjucks conditional IS
+    // lost ... accepting lossy reverse compilation for that section". Pull no longer works that
+    // way: `service.ts` refuses to write any section whose canonical content contains Nunjucks
+    // control flow, because reverse-compiling a rendered skill back over a template destroys the
+    // template logic. It skips the write and tells the author to edit the canonical file instead.
     const userContent = await readFile(
       path.join(serverRoot, 'resources', 'prompts', 'test', 'mixed-edit', 'user-message.md'),
       'utf-8'
     );
-    expect(userContent).toContain('Analyze deeply: {{input}}');
-    // The Nunjucks conditional in user message IS lost because user edited that section
-    // This is expected: editing a section = accepting lossy reverse compilation for that section
+    expect(userContent).toContain('{% if context %}');
+    expect(userContent).toContain('Process: {{input}}');
+    expect(userContent).not.toContain('Analyze deeply:');
+
+    // The skip must be reported — a silent refusal would leave the author believing the edit landed.
+    const skipWarning = pullOut.warns.find((w) => w.includes('SKIPPED'));
+    expect(skipWarning).toBeDefined();
+    expect(skipWarning).toContain('userMessage');
+    expect(skipWarning).toContain('mixed-edit');
   });
 
   it('preview mode shows diff without writing', async () => {

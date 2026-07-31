@@ -58,8 +58,38 @@ const ALLOWLIST = [
   { file: 'framework_builder/script.py', match: 'methodology_' },
   { file: 'resources/schemas/framework.schema.json', match: 'methodologyGates' },
 
-  // --- Tests that pin the folds above. RETIREMENT: same commit as the fold each one guards.
-  { file: 'tests/', match: 'methodolog' },
+  // --- Tests that pin the folds above, scoped one entry per test file so each names the fold it
+  // --- actually guards.
+  // ---
+  // --- This was a single blanket `{ file: 'tests/', match: 'methodolog' }`. That exempted the
+  // --- whole test tree, so 18 stale `methodology` assertions in tests/integration survived a
+  // --- guard written to prevent exactly them — four suites were failing against production that
+  // --- had correctly renamed. Its retirement condition ("same commit as the fold each one
+  // --- guards") could not be checked, because the entry named no fold. An exemption you cannot
+  // --- retire is the defect this file exists to catch, so it does not get to keep one.
+  { file: 'tests/unit/infra/config/legacy-key-migration.test.ts', match: 'methodolog' },
+  { file: 'tests/unit/gates/pass-criteria-framework-fold.test.ts', match: 'methodolog' },
+  {
+    file: 'tests/unit/mcp-tools/framework-manager/authoring-key-fold.test.ts',
+    match: 'methodolog',
+  },
+  {
+    file: 'tests/unit/mcp-tools/system-control/framework-action-handler.test.ts',
+    match: 'methodolog',
+  },
+  { file: 'tests/unit/frameworks/template-variable-substitution.test.ts', match: 'methodolog' },
+  { file: 'tests/unit/frameworks/framework-gates-field.test.ts', match: 'methodolog' },
+  { file: 'tests/unit/versioning/version-history-service.test.ts', match: 'methodolog' },
+
+  // --- Prose recording what a rewritten test used to assert, so the next reader does not
+  // --- "restore" it. Each is a comment, not an assertion — verify by re-reading the line.
+  // --- RETIREMENT: when the note stops being useful, delete note and entry together.
+  {
+    file: 'tests/integration/database/resource-change-tracker-baseline.test.ts',
+    match: 'methodolog',
+  },
+  { file: 'tests/integration/framework/framework-creation.test.ts', match: 'methodolog' },
+  { file: 'tests/integration/resources/resource-registration.test.ts', match: 'methodolog' },
 
   // --- Prose explaining what was renamed and why. RETIREMENT: when the fold it documents goes.
   { file: 'resources/gates/framework-compliance/gate.yaml', match: 'methodology' },

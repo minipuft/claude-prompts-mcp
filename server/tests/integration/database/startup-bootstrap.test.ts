@@ -51,7 +51,7 @@ describe('Startup Bootstrap — ResourceIndexer wiring', () => {
     // Verify all resource types are indexed
     const prompts = indexer.queryByType('prompt');
     const gates = indexer.queryByType('gate');
-    const frameworks = indexer.queryByType('methodology');
+    const frameworks = indexer.queryByType('framework');
     const styles = indexer.queryByType('style');
 
     expect(prompts.length).toBeGreaterThan(0);

@@ -48,7 +48,7 @@ const frameworkBuilderTool: LoadedScriptTool = {
       name: { type: 'string' },
       framework: { type: 'string' },
     },
-    required: ['name', 'methodology'],
+    required: ['name', 'framework'],
   },
   toolDir: '/prompts/framework-authoring/create_framework/tools/framework_builder',
   absoluteScriptPath:

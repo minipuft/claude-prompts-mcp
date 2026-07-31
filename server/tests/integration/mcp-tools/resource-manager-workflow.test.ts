@@ -472,7 +472,7 @@ describe('Resource Manager Workflow Integration', () => {
       );
       expect(promptSwitch.isError).toBe(true);
       expect((promptSwitch.content[0] as { text: string }).text).toContain(
-        'only valid for resource_type: "methodology"'
+        'only valid for resource_type: "framework"'
       );
       expect(promptResourceHandler.handleAction).not.toHaveBeenCalled();
 
