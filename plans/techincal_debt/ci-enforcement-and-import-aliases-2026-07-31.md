@@ -160,6 +160,28 @@ pyrefly failure on `81bf665e` reached CI despite a clean local push — and `val
 run pyrefly either, so "full validation green" did not predict CI. Decide which gate is the
 contract and make the others strict subsets of it.
 
+### F5b — The hooks do not meet the repo's own always-loaded hook standard — **High**
+
+`~/.claude/rules/ci-release.md` § Required Hooks is always-loaded context, so it is the declared
+standard for this repo. Two of its three hooks do not match.
+
+| Hook         | `ci-release.md` requires                                | Actually runs                                                                                        | Gap          |
+| ------------ | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------ |
+| `pre-commit` | lint-staged + **typecheck** + generated-file protection | `generate:contracts` · `lint:staged` · `validate:python` · `lint:ratchet`                            | no typecheck |
+| `pre-push`   | typecheck + lint:ratchet + test + **build**             | `typecheck` · `lint:ratchet` · `validate:python` · `test:ci` · `validate:arch` · `validate:versions` | no build     |
+| `commit-msg` | `npx --no -- commitlint --edit "$1"`                    | matches                                                                                              | —            |
+
+> Probe: `grep -c typecheck .husky/pre-commit` → 0; `grep -c "run build" .husky/pre-push` → 0.
+
+The missing `build` is the sharper one. As of 2026-07-31 `Build` is a **required status check**
+(F1), so a push can pass every local gate and still fail a check that blocks the merge. This is the
+same "no gate is a superset" problem as F5, but measured against the written standard rather than
+against the other gates.
+
+Decide per hook whether the standard or the hook is wrong — `pre-commit` running a full typecheck
+may not fit the rule's own `<10s` budget, in which case the rule should say so rather than the hook
+silently diverging.
+
 ### F6 — Unpinned tool installs make CI non-reproducible — **High**
 
 > Probe: `rg -Nn "pip install|npm install -g|uses: .*@(main|master)" .github/workflows/`
@@ -249,6 +271,8 @@ published Node version is in the test matrix.
 | 2.3 | Define one canonical gate and make the others documented subsets; record the decision in `CLAUDE.md`                    | F5     | ☐      |
 | 2.4 | Resolve `downstream-sync` `continue-on-error` — remove it, or comment what evidence retires it                          | F8     | ☐      |
 | 2.5 | `pre-push` step renumbering; `commit-msg` mode → 755; decide on `sed -i` portability                                    | F9     | ☐      |
+| 2.6 | Add `build` to `pre-push` — it gates a required status check and is absent                                              | F5b    | ☐      |
+| 2.7 | Reconcile `pre-commit` against the rule's typecheck requirement: add it, or amend `ci-release.md` and say why           | F5b    | ☐      |
 
 **Exit**: every hook step is falsifiable — each one can be made to fail by an input it claims to
 check. Verify the way `verify:mcp:self-test` does, by feeding each a wrong-but-well-formed input.
@@ -316,6 +340,19 @@ specifier rewriting.
    run full CI?
 3. **Canonical gate (F5)** — is `validate:full` the contract that CI and pre-push must both be
    subsets of, or is CI the contract?
-4. **`/release` skill** — it is marked `disable-model-invocation`, so its contents were not
-   consulted for this plan. Run `/release` before Tier 1 so its guidance can be checked against
-   F1–F8; `ci-release.md` was the only rule available.
+4. **`/release` skill access** — audited 2026-07-31; the flag is **correct, not too restrictive.**
+   `disable-model-invocation: true` appears on exactly 2 of 51 skills — `release` and `validate` —
+   and `release` is built as an executor (`context: fork`, `agent: general-purpose`,
+   `argument-hint: <patch|minor|major> [--dry-run]`). A model must not be able to self-trigger an
+   npm publish, a tag, or a version bump. Keep the flag.
+
+   The real cost is **content coupling**: the skill holds both the executable procedure (must stay
+   gated) and the setup templates / workflow examples that `ci-release.md` explicitly defers to it
+   for — and the flag hides both. That is why this plan was written against `ci-release.md` alone.
+   Two ways out, neither of which touches the flag: (a) accept it and have the operator run
+   `/release` when its reference half is needed, or (b) split the reference half into a
+   model-invocable skill, leaving `/release` purely executable. Prefer (b) if this recurs; (a) is
+   fine if it does not. Either way, run `/release` once before Tier 1 to check F1–F10 against it —
+   the standards half is the only input to this plan that was unavailable.
+
+   The audit did produce one concrete alignment defect from the rule that _was_ readable — F5b.
