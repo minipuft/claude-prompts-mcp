@@ -62,7 +62,7 @@ Claude: prompt_engine(command:">>code_review")  # Updated version runs instantly
 
 **Problem**: Claude's reasoning varies. Sometimes thorough, sometimes it skips steps. You want methodical thinking every time.
 
-**Solution**: Frameworks inject a thinking methodology into the system prompt. Claude follows defined reasoning phases. Each framework auto-applies quality gates for its phases.
+**Solution**: Frameworks inject a structured thinking method into the system prompt. Claude follows defined reasoning phases. Each framework auto-applies quality gates for its phases.
 
 ```text
 prompt_engine(command: "@CAGEERF Review this architecture")
@@ -145,7 +145,7 @@ prompt_engine(command: "@CAGEERF >>analysis :: 'cite sources'")
 prompt_engine(command: "research --> analyze --> summarize")
 ```
 
-### `resource_manager` — Unified CRUD for prompts, gates, and methodologies
+### `resource_manager` — Unified CRUD for prompts, gates, and frameworks
 
 ```bash
 resource_manager(resource_type: "prompt", action: "list")
@@ -170,13 +170,13 @@ system_control(action: "analytics")
 
 ## Syntax Reference
 
-| Symbol | Name          | What It Does                    |
-| :----: | :------------ | :------------------------------ |
-|  `>>`  | **Prompt**    | Execute template by ID          |
-| `-->`  | **Chain**     | Pipe output to next step        |
-|  `@`   | **Framework** | Inject methodology + auto-gates |
-|  `::`  | **Gate**      | Add quality criteria            |
-|  `%`   | **Modifier**  | Control execution mode          |
+| Symbol | Name          | What It Does                  |
+| :----: | :------------ | :---------------------------- |
+|  `>>`  | **Prompt**    | Execute template by ID        |
+| `-->`  | **Chain**     | Pipe output to next step      |
+|  `@`   | **Framework** | Inject framework + auto-gates |
+|  `::`  | **Gate**      | Add quality criteria          |
+|  `%`   | **Modifier**  | Control execution mode        |
 
 **Modifiers**: `%clean` (skip all injection), `%lean` (gates only), `%guided` (force injection), `%judge` (auto-select resources)
 
@@ -255,7 +255,7 @@ my-workspace/
 │               ├── schema.json  # Input validation schema
 │               └── script.py    # Validation logic
 ├── config.json               # Server settings (optional)
-├── methodologies/            # Custom thinking frameworks (optional)
+├── frameworks/               # Custom thinking frameworks (optional)
 └── gates/                    # Custom quality gates (optional)
 ```
 
@@ -410,11 +410,6 @@ npx claude-prompts --startup-test --verbose
 | `-h`, `--help`            | Show help and exit                                                               |
 | `--init /path`            | Initialize a new workspace with starters                                         |
 | `--workspace /path`       | Base directory for all user assets                                               |
-| `--prompts /path`         | Direct path to a prompts directory                                               |
-| `--methodologies /path`   | Custom methodologies directory                                                   |
-| `--gates /path`           | Custom gates directory                                                           |
-| `--scripts /path`         | Custom scripts directory                                                         |
-| `--styles /path`          | Custom styles directory                                                          |
 | `--config /path`          | Custom server config.json                                                        |
 | `--workspace-id VALUE`    | Launch default workspace scope                                                   |
 | `--organization-id VALUE` | Launch default organization scope                                                |
