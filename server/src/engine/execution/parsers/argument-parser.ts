@@ -15,16 +15,17 @@
  */
 
 import { ArgumentSchemaValidator } from './argument-schema.js';
-import { Logger } from '../../../infra/logging/index.js';
+
+import type { PromptArgument } from '#shared/types/index.js';
+import type { ConvertedPrompt, ValidationResult } from '../types.js';
+
+import { Logger } from '#infra/logging/index.js';
 import {
   ArgumentValidationError,
   parseQuotedValue,
   safeJsonParse,
   validateJsonArguments,
-} from '../../../shared/utils/index.js';
-
-import type { PromptArgument } from '../../../shared/types/index.js';
-import type { ConvertedPrompt, ValidationResult } from '../types.js';
+} from '#shared/utils/index.js';
 
 type PromptDefinition = Pick<ConvertedPrompt, 'id' | 'arguments'>;
 

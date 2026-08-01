@@ -1,7 +1,7 @@
 // @lifecycle canonical - Applies framework guidance to prompts.
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import type {
   FrameworkExecutionContext,

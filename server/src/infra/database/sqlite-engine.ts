@@ -26,7 +26,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import type { DatabasePort } from '../../shared/types/persistence.js';
+import type { DatabasePort } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
 
 /**

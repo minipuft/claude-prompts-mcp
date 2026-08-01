@@ -4,7 +4,7 @@
  * Maintains lightweight conversation history for tooling and diagnostics.
  */
 
-import type { Logger, ConversationHistoryItem } from '../../shared/types/index.js';
+import type { Logger, ConversationHistoryItem } from '#shared/types/index.js';
 
 export class ConversationStore {
   private readonly logger: Logger;

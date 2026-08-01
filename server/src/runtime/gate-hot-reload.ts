@@ -1,9 +1,10 @@
 // @lifecycle canonical - Builds gate hot-reload config for the hot-reload manager.
-import { createGateHotReloadRegistration } from '../engine/gates/hot-reload/index.js';
 
-import type { GateManager } from '../engine/gates/gate-manager.js';
-import type { Logger } from '../infra/logging/index.js';
-import type { AuxiliaryReloadConfig } from '../modules/hot-reload/hot-reload-observer.js';
+import type { GateManager } from '#engine/gates/gate-manager.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { AuxiliaryReloadConfig } from '#modules/hot-reload/hot-reload-observer.js';
+
+import { createGateHotReloadRegistration } from '#engine/gates/hot-reload/index.js';
 
 /**
  * Build gate auxiliary reload configuration for HotReloadObserver.

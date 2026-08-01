@@ -7,12 +7,13 @@
 import { z } from 'zod';
 
 import { buildLauncherMessages } from './launcher-envelope.js';
-import { type ConfigManager, type Logger } from '../../shared/types/index.js';
-import { isChainPrompt } from '../../shared/utils/chainUtils.js';
 import { ConversationStore } from '../text-refs/conversation.js';
 
-import type { ConvertedPrompt } from '../../engine/execution/types.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import { type ConfigManager, type Logger } from '#shared/types/index.js';
+import { isChainPrompt } from '#shared/utils/chainUtils.js';
 // TemplateProcessor functionality consolidated into UnifiedPromptProcessor
 
 /**
@@ -40,7 +41,7 @@ export class PromptRegistry {
     args: Record<string, string>,
     specialContext: Record<string, string> = {}
   ): Promise<string> {
-    const { processTemplate } = await import('../../shared/utils/jsonUtils.js');
+    const { processTemplate } = await import('#shared/utils/jsonUtils.js');
     return processTemplate(template, args, specialContext);
   }
 

@@ -46,4 +46,4 @@ export {
   type SqliteStateStoreConfig,
   type StateStoreOptions,
 } from './stores/index.js';
-export type { DatabasePort } from '../../shared/types/persistence.js';
+export type { DatabasePort } from '#shared/types/persistence.js';

@@ -17,4 +17,4 @@ export {
   INJECTION_TYPES,
   MODIFIER_EFFECTS,
   RESOLUTION_PRIORITY,
-} from '../../../../../shared/types/injection.js';
+} from '#shared/types/injection.js';

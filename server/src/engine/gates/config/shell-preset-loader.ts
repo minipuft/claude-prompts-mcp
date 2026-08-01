@@ -17,7 +17,7 @@ import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-import { loadYamlFileSync } from '../../../shared/utils/yaml/index.js';
+import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

@@ -8,21 +8,22 @@ import { existsSync, readdirSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { OperationResult, PromptResourceDependencies } from '../core/types.js';
+
+import type { ConfigManager, Logger } from '#shared/types/index.js';
+import type { ToolDefinitionInput } from '../../core/types.js';
+
 import {
   findYamlPromptInCategory,
   hasYamlPromptsInCategory,
   deleteYamlPrompt,
-} from '../../../../../modules/prompts/category-maintenance.js';
+} from '#modules/prompts/category-maintenance.js';
 import {
   ResourceMutationTransaction,
   ResourceVerificationService,
-} from '../../../../../modules/resources/services/index.js';
-import { safeWriteFile } from '../../../../../shared/utils/file-transactions.js';
-import { serializeYaml } from '../../../../../shared/utils/yaml/yaml-parser.js';
-import { OperationResult, PromptResourceDependencies } from '../core/types.js';
-
-import type { ConfigManager, Logger } from '../../../../../shared/types/index.js';
-import type { ToolDefinitionInput } from '../../core/types.js';
+} from '#modules/resources/services/index.js';
+import { safeWriteFile } from '#shared/utils/file-transactions.js';
+import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 export interface FileOperationsDependencies extends Pick<
   PromptResourceDependencies,

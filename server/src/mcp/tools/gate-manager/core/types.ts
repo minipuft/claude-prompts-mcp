@@ -3,8 +3,8 @@
  * Gate Manager Types
  */
 
-import type { GateManager } from '../../../../engine/gates/gate-manager.js';
-import type { ConfigManager, Logger } from '../../../../shared/types/index.js';
+import type { GateManager } from '#engine/gates/gate-manager.js';
+import type { ConfigManager, Logger } from '#shared/types/index.js';
 
 /**
  * Gate manager action identifiers

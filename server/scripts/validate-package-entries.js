@@ -69,15 +69,45 @@ function findViolations(pkg, compilerOptions, distExists, fileExists) {
     ['types', pkg.types && `./${pkg.types.replace(/^\.\//, '')}`],
     ['exports["."].types', pkg.exports?.['.']?.types],
   ];
+  const declaresTypes = declared.some(([, value]) => Boolean(value));
+  const emitsDeclarations = compilerOptions.declaration === true;
 
-  for (const [label, value] of declared) {
-    if (!value) {
-      violations.push(`${label} is not declared; consumers get no types.`);
-    } else if (value !== expected) {
+  // This package ships a binary, not a library — no `types`, no declaration emit. Both
+  // halves must agree: advertising types nothing emits is the original bug, and emitting
+  // 405 declarations nothing advertises is the dead weight that hid it.
+  if (declaresTypes !== emitsDeclarations) {
+    violations.push(
+      declaresTypes
+        ? 'package.json advertises a types entry but tsconfig does not set `declaration: true`, ' +
+            'so nothing emits it. Either drop the types entry or turn declaration emit back on.'
+        : 'tsconfig sets `declaration: true` but package.json advertises no types entry, so the ' +
+            'emitted declarations are unreachable. Either declare `types` or drop the emit.'
+    );
+  }
+
+  // Only meaningful when the package claims to be consumable as a library.
+  if (declaresTypes) {
+    for (const [label, value] of declared) {
+      if (!value) {
+        violations.push(`${label} is missing while its counterpart is declared; they must agree.`);
+      } else if (value !== expected) {
+        violations.push(
+          `${label} is ${JSON.stringify(value)} but tsc emits to ${JSON.stringify(expected)} ` +
+            `(rootDir ${JSON.stringify(rootDir)}, outDir ${JSON.stringify(outDir)}). ` +
+            `The advertised path does not exist, so the package ships no reachable types.`
+        );
+      }
+    }
+  }
+
+  // Every subpath in package.json "imports" must point at a directory that exists —
+  // a dangling entry fails at resolution time in whichever tool hits it first.
+  for (const [subpath, target] of Object.entries(pkg.imports ?? {})) {
+    if (typeof target !== 'string') continue;
+    const dir = target.replace(/^\.\//, '').replace(/\/\*$/, '');
+    if (!fileExists(dir)) {
       violations.push(
-        `${label} is ${JSON.stringify(value)} but tsc emits to ${JSON.stringify(expected)} ` +
-          `(rootDir ${JSON.stringify(rootDir)}, outDir ${JSON.stringify(outDir)}). ` +
-          `The advertised path does not exist, so the package ships no reachable types.`
+        `imports["${subpath}"] points at ${JSON.stringify(target)}, whose directory does not exist.`
       );
     }
   }
@@ -99,33 +129,49 @@ function findViolations(pkg, compilerOptions, distExists, fileExists) {
   return violations;
 }
 
-const OK_TSCONFIG = { rootDir: './src', outDir: 'dist' };
-const OK_PKG = {
+/** The library shape: declares types AND emits them. */
+const LIB_TSCONFIG = { rootDir: './src', outDir: 'dist', declaration: true };
+const LIB_PKG = {
   types: 'dist/index.d.ts',
   exports: { '.': { types: './dist/index.d.ts' } },
 };
+
+/** The binary shape this package actually ships: no types, no declaration emit. */
+const BIN_TSCONFIG = { rootDir: './src', outDir: 'dist' };
+const BIN_PKG = { exports: { '.': { import: './dist/index.js' } } };
 
 /** Each case must produce at least one violation, or the rule it exercises is inert. */
 const SELF_TEST_CASES = [
   {
     rule: 'missing rootDir is rejected',
-    pkg: OK_PKG,
-    tsconfig: { outDir: 'dist' },
+    pkg: LIB_PKG,
+    tsconfig: { outDir: 'dist', declaration: true },
   },
   {
     rule: 'the original bug is rejected (types at dist/index.d.ts, emit at dist/src/)',
-    pkg: OK_PKG,
-    tsconfig: { rootDir: '.', outDir: 'dist' },
+    pkg: LIB_PKG,
+    tsconfig: { rootDir: '.', outDir: 'dist', declaration: true },
   },
   {
-    rule: 'a missing types field is rejected',
-    pkg: { exports: { '.': { types: './dist/index.d.ts' } } },
-    tsconfig: OK_TSCONFIG,
+    rule: 'advertising types with no declaration emit is rejected',
+    pkg: LIB_PKG,
+    tsconfig: BIN_TSCONFIG,
+  },
+  {
+    rule: 'emitting declarations nothing advertises is rejected',
+    pkg: BIN_PKG,
+    tsconfig: LIB_TSCONFIG,
   },
   {
     rule: 'types and exports disagreeing is rejected',
     pkg: { types: 'dist/index.d.ts', exports: { '.': { types: './dist/main.d.ts' } } },
-    tsconfig: OK_TSCONFIG,
+    tsconfig: LIB_TSCONFIG,
+  },
+  {
+    rule: 'a dangling imports subpath is rejected',
+    pkg: { ...BIN_PKG, imports: { '#gone/*': './src/gone/*' } },
+    tsconfig: BIN_TSCONFIG,
+    fileExists: () => false,
   },
 ];
 
@@ -133,19 +179,24 @@ function runSelfTest() {
   console.log('\nvalidate:package-entries self-test — every rule must reject a wrong input\n');
 
   let failures = 0;
-  for (const { rule, pkg, tsconfig } of SELF_TEST_CASES) {
-    const rejected = findViolations(pkg, tsconfig, false, () => true).length > 0;
+  for (const { rule, pkg, tsconfig, fileExists } of SELF_TEST_CASES) {
+    const rejected = findViolations(pkg, tsconfig, false, fileExists ?? (() => true)).length > 0;
     console.log(`  ${rejected ? 'ok  ' : 'FAIL'}  ${rule}`);
     if (!rejected) failures += 1;
   }
 
-  const cleanOk = findViolations(OK_PKG, OK_TSCONFIG, false, () => true).length === 0;
-  console.log(`  ${cleanOk ? 'ok  ' : 'FAIL'}  a correct package is accepted`);
-  if (!cleanOk) failures += 1;
+  for (const [shape, pkg, tsconfig] of [
+    ['binary', BIN_PKG, BIN_TSCONFIG],
+    ['library', LIB_PKG, LIB_TSCONFIG],
+  ]) {
+    const ok = findViolations(pkg, tsconfig, false, () => true).length === 0;
+    console.log(`  ${ok ? 'ok  ' : 'FAIL'}  a correct ${shape} package is accepted`);
+    if (!ok) failures += 1;
+  }
 
   console.log(
     failures === 0
-      ? `\nOK: all ${SELF_TEST_CASES.length + 1} rules are falsifiable\n`
+      ? `\nOK: all ${SELF_TEST_CASES.length + 2} rules are falsifiable\n`
       : `\nFAILED: ${failures} rule(s) cannot detect a wrong input\n`
   );
   process.exit(failures === 0 ? 0 : 1);

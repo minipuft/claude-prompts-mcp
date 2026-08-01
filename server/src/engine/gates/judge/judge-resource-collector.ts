@@ -1,6 +1,6 @@
 // @lifecycle canonical - Collects available resources (styles, frameworks, gates) for judge selection.
-import type { Logger } from '../../../infra/logging/index.js';
-import type { StyleManagerPort } from '../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { StyleManagerPort } from '#shared/types/index.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
 import type { GateDefinitionProvider } from '../../gates/core/gate-loader.js';
 import type { LightweightGateDefinition } from '../../gates/types.js';

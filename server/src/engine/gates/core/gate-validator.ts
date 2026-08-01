@@ -22,7 +22,6 @@
  * - Retry hints generation
  */
 
-import { Logger } from '../../../infra/logging/index.js';
 import { getShellPreset } from '../config/index.js';
 import { getDefaultShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 
@@ -36,6 +35,8 @@ import type {
   ValidationContext,
   GatePassCriteria,
 } from '../types.js';
+
+import { Logger } from '#infra/logging/index.js';
 
 /**
  * Gate validation statistics
@@ -384,7 +385,7 @@ export class GateValidator {
     this.logger.debug(`[SCRIPT GATE] Executing script tool verification: ${toolId}`);
 
     try {
-      const { executeProcess } = await import('../../../shared/utils/process.js');
+      const { executeProcess } = await import('#shared/utils/process.js');
 
       const result = await executeProcess({
         command: toolId,

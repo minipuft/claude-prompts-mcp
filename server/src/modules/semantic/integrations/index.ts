@@ -6,9 +6,10 @@
  * Handles LLM clients for content analysis
  */
 
-import { type Logger, SemanticAnalysisConfig } from '../../../shared/types/index.js';
 import { ContentAnalyzer, createContentAnalyzer } from '../configurable-semantic-analyzer.js';
 import { LLMClientFactory, loadLLMConfigFromEnv } from './llm-clients.js';
+
+import { type Logger, SemanticAnalysisConfig } from '#shared/types/index.js';
 
 /**
  * Integration factory for content analyzer

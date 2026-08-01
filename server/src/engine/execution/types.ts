@@ -6,7 +6,7 @@
  * This includes execution strategies, converted prompts, contexts, and chain execution.
  */
 
-import type { TemporaryGateInput } from '../../shared/types/execution.js';
+import type { TemporaryGateInput } from '#shared/types/execution.js';
 import type {
   ChainStep,
   ExecutionModifier,
@@ -17,7 +17,7 @@ import type {
   LoadedScriptTool,
   PromptArgument,
   PromptInjectionConfig,
-} from '../../shared/types/index.js';
+} from '#shared/types/index.js';
 
 // Re-exported for engine/ consumers. `CustomCheck`, `GateScope`, `GateSpecification` and
 // `ChainStep` were re-exported here too and had ZERO consumers via this path — dropped
@@ -344,4 +344,4 @@ export interface TemporaryGateDefinition {
 // `GateReviewPrompt` is defined in shared/types/chain-execution.ts and re-exported for the three
 // engine/ consumers that import it from here. `GateReviewExecutionContext` was re-exported
 // alongside it with ZERO consumers via this path — dropped 2026-07-29.
-export type { GateReviewPrompt } from '../../shared/types/chain-execution.js';
+export type { GateReviewPrompt } from '#shared/types/chain-execution.js';

@@ -12,7 +12,7 @@
  * - {{script:analyzer key='value'}}     - Pass inline arguments
  */
 
-import type { ScriptExecutionResult } from '../../../shared/types/index.js';
+import type { ScriptExecutionResult } from '#shared/types/index.js';
 
 /**
  * Detected script reference in a template.

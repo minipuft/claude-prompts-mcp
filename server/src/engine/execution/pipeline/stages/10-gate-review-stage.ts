@@ -4,9 +4,9 @@ import { runGateShellVerifications } from '../../../gates/services/gate-shell-ve
 import { formatGateShellVerifySection } from '../../../gates/shell/shell-verify-message-formatter.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { GatesConfig } from '../../../../shared/types/core-config.js';
-import type { ChainSessionService } from '../../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { GatesConfig } from '#shared/types/core-config.js';
+import type { ChainSessionService } from '#shared/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';

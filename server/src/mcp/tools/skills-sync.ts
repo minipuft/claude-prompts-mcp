@@ -4,15 +4,15 @@ import { format } from 'node:util';
 
 import yaml from 'js-yaml';
 
+import type { DatabasePort, Logger, ToolResponse } from '#shared/types/index.js';
+
 import {
   getSkillsSyncConfigPath,
   listSupportedSkillsSyncClients,
   runSkillsSyncCommand,
   type ResourceType,
   type SkillsSyncOutput,
-} from '../../modules/skills-sync/service.js';
-
-import type { DatabasePort, Logger, ToolResponse } from '../../shared/types/index.js';
+} from '#modules/skills-sync/service.js';
 
 const SKILLS_SYNC_ACTIONS = ['status', 'export', 'sync', 'diff', 'pull', 'clone'] as const;
 type SkillsSyncAction = (typeof SKILLS_SYNC_ACTIONS)[number];

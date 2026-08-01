@@ -53,16 +53,17 @@ export {
 // Legacy parsing methods are preserved through deprecated redirects in consolidated-prompt-engine.ts
 
 // Re-export for convenience
-export type { PromptData } from '../../../shared/types/index.js';
-export type { PromptArgument } from '../../../shared/types/index.js';
+export type { PromptData } from '#shared/types/index.js';
+export type { PromptArgument } from '#shared/types/index.js';
 export type { ConvertedPrompt } from '../types.js';
 
 export type { ValidationResult, ValidationError, ValidationWarning } from '../types.js';
 
 import { ArgumentParser, createArgumentParser } from './argument-parser.js';
 import { UnifiedCommandParser, createUnifiedCommandParser } from './command-parser.js';
-import { Logger } from '../../../infra/logging/index.js';
 import { ContextResolver, createContextResolver } from '../context/context-resolver.js';
+
+import { Logger } from '#infra/logging/index.js';
 
 /**
  * Complete parsing system with all components

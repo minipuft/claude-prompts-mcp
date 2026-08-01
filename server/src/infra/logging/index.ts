@@ -6,12 +6,13 @@
 
 import { appendFile, writeFile } from 'node:fs/promises';
 
-import { LogLevel, TransportType } from '../../shared/types/index.js';
+import type { Logger } from '#shared/types/index.js';
+
+import { LogLevel, TransportType } from '#shared/types/index.js';
 
 // Logger interface is defined in shared/types/ (Layer 0) for cross-layer access.
 // Re-exported here for backward compatibility.
-export type { Logger } from '../../shared/types/index.js';
-import type { Logger } from '../../shared/types/index.js';
+export type { Logger } from '#shared/types/index.js';
 
 /**
  * Log entry for the in-memory ring buffer (exposed via MCP resources)

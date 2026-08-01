@@ -21,8 +21,8 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from './types.js';
 
+import type { Logger } from '#infra/logging/index.js';
 import type { PendingShellVerification, VerifyActiveState } from './types.js';
-import type { Logger } from '../../../infra/logging/index.js';
 
 /**
  * Configuration for the state store.

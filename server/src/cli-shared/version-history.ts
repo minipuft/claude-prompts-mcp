@@ -15,7 +15,7 @@ import type {
   SaveVersionResult,
   RollbackResult,
   SaveVersionOptions,
-} from '../modules/versioning/types.js';
+} from '#modules/versioning/types.js';
 
 const DEFAULT_MAX_VERSIONS = 50;
 

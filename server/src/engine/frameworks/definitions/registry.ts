@@ -12,8 +12,9 @@ import {
   RuntimeFrameworkLoader,
   type RuntimeFrameworkLoaderConfig,
 } from './runtime-framework-loader.js';
-import { Logger } from '../../../infra/logging/index.js';
 import { FrameworkGuide } from '../types/index.js';
+
+import { Logger } from '#infra/logging/index.js';
 
 // Data-driven framework system (YAML-only)
 

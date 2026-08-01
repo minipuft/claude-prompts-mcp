@@ -15,9 +15,10 @@ import {
   type SymbolicExecutionPlan,
   type SymbolicOperator,
 } from './types/operator-types.js';
-import { Logger } from '../../../infra/logging/index.js';
-import { ValidationError } from '../../../shared/utils/index.js';
 import { SHELL_VERIFY_DEFAULT_TIMEOUT } from '../../gates/constants.js';
+
+import { Logger } from '#infra/logging/index.js';
+import { ValidationError } from '#shared/utils/index.js';
 
 /**
  * Parser responsible for detecting and structuring symbolic command operators.

@@ -1,7 +1,7 @@
 // @lifecycle canonical - Client-specific delegation rendering strategies.
+import type { DelegationProfile } from '#shared/types/core-config.js';
+import type { RequestClientProfile } from '#shared/types/request-identity.js';
 import type { DelegationPayload } from './types.js';
-import type { DelegationProfile } from '../../../shared/types/core-config.js';
-import type { RequestClientProfile } from '../../../shared/types/request-identity.js';
 
 /** Client-specific rendering strategy for delegation CTAs. */
 export interface DelegationStrategy {

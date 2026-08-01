@@ -1,10 +1,10 @@
 // @lifecycle canonical - Records gate usage metrics for analytics.
-import type { GateValidationResult as ServiceGateValidationResult } from './gate-service-interface.js';
 import type {
   MetricsCollector,
   GateUsageMetric,
   GateValidationResult as MetricGateValidationResult,
-} from '../../../shared/types/index.js';
+} from '#shared/types/index.js';
+import type { GateValidationResult as ServiceGateValidationResult } from './gate-service-interface.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 
 /**

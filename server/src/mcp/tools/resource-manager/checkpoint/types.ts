@@ -6,7 +6,7 @@
  * Provides git-based checkpoint/rollback functionality for safe verification.
  */
 
-import type { ConfigManager, Logger } from '../../../../shared/types/index.js';
+import type { ConfigManager, Logger } from '#shared/types/index.js';
 
 /**
  * Checkpoint actions - simplified compared to other resource types

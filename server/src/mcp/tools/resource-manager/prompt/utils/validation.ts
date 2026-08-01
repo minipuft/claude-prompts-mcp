@@ -3,12 +3,13 @@
  * Field validation and error handling utilities
  */
 
-import { ValidationError } from '../../../../../shared/utils/index.js';
 import { promptResourceMetadata } from '../../../../metadata/definitions/prompt-resource.js';
 import { ValidationContext } from '../core/types.js';
 
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
 import type { ToolDefinitionInput } from '../../core/types.js';
+
+import { ValidationError } from '#shared/utils/index.js';
 
 /**
  * Maps MCP parameter names (snake_case) to internal promptData field names (camelCase).

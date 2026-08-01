@@ -10,7 +10,7 @@
 
 import { EXCLUDED_ATTRIBUTES, SAFE_BUSINESS_ATTRIBUTES } from './types.js';
 
-import type { TelemetryAttributePolicy } from '../../../shared/types/index.js';
+import type { TelemetryAttributePolicy } from '#shared/types/index.js';
 import type { Attributes, AttributeValue } from '@opentelemetry/api';
 
 // ===== Pure Functions =====

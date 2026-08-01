@@ -1,9 +1,10 @@
 // @lifecycle canonical - Handler for framework management operations.
 
-import { getDefaultRuntimeLoader } from '../../../../engine/frameworks/definitions/index.js';
 import { ActionHandler } from '../core/action-handler-base.js';
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
+
+import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/index.js';
 
 export class FrameworkActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {

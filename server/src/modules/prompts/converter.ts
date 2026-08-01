@@ -7,15 +7,16 @@
 import * as path from 'node:path';
 
 import { PromptLoader } from './loader.js';
-import { isChainPrompt } from '../../shared/utils/chainUtils.js';
 import {
   ScriptToolDefinitionLoader,
   createScriptToolDefinitionLoader,
 } from '../automation/core/script-definition-loader.js';
 
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { PromptArgument, Logger } from '#shared/types/index.js';
 import type { PromptData } from './types.js';
-import type { ConvertedPrompt } from '../../engine/execution/types.js';
-import type { PromptArgument, Logger } from '../../shared/types/index.js';
+
+import { isChainPrompt } from '#shared/utils/chainUtils.js';
 
 /**
  * Resolve the registerWithMcp value using the priority chain:

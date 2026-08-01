@@ -17,7 +17,7 @@
  * @see plans/script-tools-implementation.md for the full implementation plan
  */
 
-import type { Logger } from '../../../shared/types/index.js';
+import type { Logger } from '#shared/types/index.js';
 import type { HotReloadEvent } from '../../hot-reload/hot-reload-observer.js';
 import type { ScriptToolDefinitionLoader } from '../core/script-definition-loader.js';
 

@@ -2,7 +2,7 @@
 import { inlineDefinitionCarriers } from '../../../gates/services/gate-enhancement-service.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
 import type { TemporaryGateRegistrar } from '../../../gates/services/temporary-gate-registrar.js';
 import type { GatesConfig } from '../../../gates/types.js';

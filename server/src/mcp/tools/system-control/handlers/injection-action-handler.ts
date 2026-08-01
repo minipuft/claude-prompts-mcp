@@ -1,5 +1,9 @@
 // @lifecycle canonical - Handler for injection control operations.
 
+import { ActionHandler } from '../core/action-handler-base.js';
+
+import type { ToolResponse } from '#shared/types/index.js';
+
 import {
   INJECTION_TYPES,
   INJECTION_TYPE_DESCRIPTIONS,
@@ -8,10 +12,7 @@ import {
   getSessionOverrideResolver,
   initSessionOverrideResolver,
   type InjectionType,
-} from '../../../../engine/execution/pipeline/decisions/injection/index.js';
-import { ActionHandler } from '../core/action-handler-base.js';
-
-import type { ToolResponse } from '../../../../shared/types/index.js';
+} from '#engine/execution/pipeline/decisions/injection/index.js';
 
 export class InjectionActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {

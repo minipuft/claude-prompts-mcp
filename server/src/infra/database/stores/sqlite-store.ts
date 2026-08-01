@@ -17,15 +17,11 @@
  * - Table schema is defined in SqliteEngine's embedded schema
  */
 
-import { resolveContinuityScopeId } from '../../../shared/utils/request-identity-scope.js';
-
+import type { DatabasePort, StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 import type { SqliteStateStoreConfig } from './interface.js';
-import type {
-  DatabasePort,
-  StateStore,
-  StateStoreOptions,
-} from '../../../shared/types/persistence.js';
 import type { Logger } from '../../logging/index.js';
+
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 const DEFAULT_SCOPE_ID = 'default';
 

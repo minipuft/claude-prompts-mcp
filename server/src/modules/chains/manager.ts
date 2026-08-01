@@ -11,8 +11,6 @@
  */
 
 import { DirectChainRunRegistry, type ChainRunRegistry } from './run-registry.js';
-import { isTerminalRunStatus } from '../../shared/types/chain-session.js';
-import { resolveContinuityScopeId } from '../../shared/utils/request-identity-scope.js';
 import { ArgumentHistoryTracker, TextReferenceStore } from '../text-refs/index.js';
 
 import type {
@@ -24,7 +22,7 @@ import type {
   PendingShellVerificationSnapshot,
   StepMetadata,
   GateReviewPrompt,
-} from '../../shared/types/chain-execution.js';
+} from '#shared/types/chain-execution.js';
 import type {
   ChainSession,
   ChainSessionLookupOptions,
@@ -34,9 +32,12 @@ import type {
   ParsedCommandSnapshot,
   PersistedChainRunRegistry,
   SessionBlueprint,
-} from '../../shared/types/chain-session.js';
-import type { Logger } from '../../shared/types/index.js';
-import type { DatabasePort, StateStoreOptions } from '../../shared/types/persistence.js';
+} from '#shared/types/chain-session.js';
+import type { Logger } from '#shared/types/index.js';
+import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
+
+import { isTerminalRunStatus } from '#shared/types/chain-session.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 /**
  * Derive the sticky lifecycle value a milestone implies. `rendered` and `responded` are both
@@ -2076,7 +2077,7 @@ export type {
   ChainSessionService,
   ChainSessionSummary,
   SessionBlueprint,
-} from '../../shared/types/chain-session.js';
+} from '#shared/types/chain-session.js';
 
 /**
  * Create and configure a chain session store

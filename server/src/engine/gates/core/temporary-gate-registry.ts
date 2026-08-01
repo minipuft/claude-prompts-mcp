@@ -6,9 +6,9 @@
  * Provides automatic cleanup, scope management, and integration with existing gate systems.
  */
 
-import { Logger } from '../../../infra/logging/index.js';
-
 import type { GateDefinition, GatePassCriteria, LightweightGateDefinition } from '../types.js';
+
+import { Logger } from '#infra/logging/index.js';
 
 /**
  * Temporary gate definition with lifecycle management

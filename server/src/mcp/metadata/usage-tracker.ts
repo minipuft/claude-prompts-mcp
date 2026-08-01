@@ -3,4 +3,4 @@ export {
   recordActionInvocation,
   recordParameterIssue,
   getActionUsageSnapshot,
-} from '../../shared/utils/usage-tracker.js';
+} from '#shared/utils/usage-tracker.js';

@@ -28,9 +28,9 @@ import {
 } from '../../../gates/shell/index.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { PendingShellVerificationSnapshot } from '../../../../shared/types/chain-execution.js';
-import type { ChainSessionService } from '../../../../shared/types/chain-session.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { PendingShellVerificationSnapshot } from '#shared/types/chain-execution.js';
+import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 /**

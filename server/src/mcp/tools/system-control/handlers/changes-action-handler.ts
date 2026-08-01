@@ -1,13 +1,10 @@
 // @lifecycle canonical - Handler for resource change tracking operations.
 
-import { getResourceChangeTracker } from '../../../../runtime/resource-change-tracking.js';
 import { ActionHandler } from '../core/action-handler-base.js';
 
-import type {
-  ToolResponse,
-  ChangeSource,
-  TrackedResourceType,
-} from '../../../../shared/types/index.js';
+import type { ToolResponse, ChangeSource, TrackedResourceType } from '#shared/types/index.js';
+
+import { getResourceChangeTracker } from '#runtime/resource-change-tracking.js';
 
 export class ChangesActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {

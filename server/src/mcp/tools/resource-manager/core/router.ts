@@ -7,9 +7,8 @@
  */
 
 import { PROMPT_ONLY_ACTIONS, FRAMEWORK_ONLY_ACTIONS, CHECKPOINT_ONLY_ACTIONS } from './types.js';
-import { resolveRequestIdentity } from '../../../../shared/utils/request-identity-resolver.js';
-import { resolveContinuityScopeId } from '../../../../shared/utils/request-identity-scope.js';
 
+import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type {
   ResourceManagerInput,
   ResourceManagerDependencies,
@@ -18,7 +17,6 @@ import type {
   ResourceAction,
   ActionValidationResult,
 } from './types.js';
-import type { Logger, ToolResponse } from '../../../../shared/types/index.js';
 import type { PromptResourceActionId } from '../../../metadata/definitions/prompt-resource.js';
 import type {
   FrameworkManagerActionId,
@@ -29,6 +27,9 @@ import type { GateManagerActionId, GateManagerInput } from '../../gate-manager/c
 import type { GateToolHandler } from '../../gate-manager/index.js';
 import type { CheckpointToolHandler } from '../checkpoint/index.js';
 import type { CheckpointManagerInput, CheckpointAction } from '../checkpoint/types.js';
+
+import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 /**
  * ResourceManagerRouter routes requests to the appropriate handler

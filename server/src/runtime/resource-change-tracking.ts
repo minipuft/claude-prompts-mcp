@@ -8,18 +8,18 @@
 
 import * as path from 'node:path';
 
-import { ConfigLoader } from '../infra/config/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type {
+  AuxiliaryReloadConfig,
+  HotReloadEvent,
+} from '#modules/hot-reload/hot-reload-observer.js';
+
+import { ConfigLoader } from '#infra/config/index.js';
 import {
   createResourceChangeTracker,
   ResourceChangeTracker,
   TrackedResourceType,
-} from '../infra/observability/tracking/index.js';
-
-import type { Logger } from '../infra/logging/index.js';
-import type {
-  AuxiliaryReloadConfig,
-  HotReloadEvent,
-} from '../modules/hot-reload/hot-reload-observer.js';
+} from '#infra/observability/tracking/index.js';
 
 /**
  * Singleton tracker instance for the application

@@ -3,9 +3,9 @@
  * Framework Manager Types
  */
 
-import type { FrameworkManager } from '../../../../engine/frameworks/framework-manager.js';
-import type { FrameworkStateStore } from '../../../../engine/frameworks/framework-state-store.js';
-import type { ConfigManager, Logger } from '../../../../shared/types/index.js';
+import type { FrameworkManager } from '#engine/frameworks/framework-manager.js';
+import type { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import type { ConfigManager, Logger } from '#shared/types/index.js';
 
 /**
  * Framework manager action identifiers

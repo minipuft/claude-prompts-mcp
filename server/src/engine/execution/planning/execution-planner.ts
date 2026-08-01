@@ -3,8 +3,8 @@ import { CategoryExtractor } from './category-extractor.js';
 import { GateSetResolver } from '../../gates/services/gate-set-resolver.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 
-import type { Logger } from '../../../infra/logging/index.js';
-import type { ContentAnalysisResult, ContentAnalyzerPort } from '../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ContentAnalysisResult, ContentAnalyzerPort } from '#shared/types/index.js';
 import type { FrameworkManager } from '../../frameworks/framework-manager.js';
 import type { GateDefinitionProvider } from '../../gates/core/gate-loader.js';
 import type { GateManager } from '../../gates/gate-manager.js';
@@ -19,7 +19,7 @@ import type {
 } from '../types.js';
 
 type GateOverrideOptions = {
-  gates?: import('../../../shared/types/execution.js').GateSpecification[];
+  gates?: import('#shared/types/execution.js').GateSpecification[];
 };
 
 export interface ExecutionPlannerOptions {

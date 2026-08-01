@@ -1,6 +1,6 @@
 // @lifecycle canonical - Persists chain run registry data via SQLite.
-import type { PersistedChainRunRegistry } from '../../shared/types/chain-session.js';
-import type { DatabasePort, StateStoreOptions } from '../../shared/types/persistence.js';
+import type { PersistedChainRunRegistry } from '#shared/types/chain-session.js';
+import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
 export interface ChainRunRegistry {
   ensureInitialized(): Promise<void>;

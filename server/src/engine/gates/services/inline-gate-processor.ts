@@ -3,9 +3,9 @@ import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guid
 import { loadShellPresets } from '../config/index.js';
 import { SHELL_VERIFY_DEFAULTS } from '../constants.js';
 
+import type { Logger } from '#infra/logging/index.js';
+import type { GateScope } from '#shared/types/execution.js';
 import type { GateReferenceResolver, GateReferenceResolution } from './gate-reference-resolver.js';
-import type { Logger } from '../../../infra/logging/index.js';
-import type { GateScope } from '../../../shared/types/execution.js';
 import type { ExecutionContext, ParsedCommand } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';

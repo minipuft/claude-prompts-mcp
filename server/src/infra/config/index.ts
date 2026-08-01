@@ -42,7 +42,7 @@ import {
   type InjectionConfig,
   type ConfigManager,
   type GatesConfig,
-} from '../../shared/types/index.js';
+} from '#shared/types/index.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
 

@@ -3,11 +3,12 @@
  * Semantic analysis and classification engine
  */
 
-import { ContentAnalyzer } from '../../../../../modules/semantic/configurable-semantic-analyzer.js';
-import { type Logger } from '../../../../../shared/types/index.js';
 import { PromptClassification, AnalysisResult, PromptResourceDependencies } from '../core/types.js';
 
-import type { ConvertedPrompt } from '../../../../../engine/execution/types.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+
+import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { type Logger } from '#shared/types/index.js';
 
 /**
  * Prompt analysis engine for semantic classification and intelligence feedback

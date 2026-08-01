@@ -8,10 +8,11 @@
 import { ZodError } from 'zod';
 
 import { mcpToolRequestSchema } from './schemas.js';
-import { CHAIN_ID_PATTERN, recordParameterIssue } from '../../../shared/utils/index.js';
 import { isValidGateVerdict } from '../../gates/core/gate-verdict-contract.js';
 
-import type { McpToolRequest } from '../../../shared/types/execution.js';
+import type { McpToolRequest } from '#shared/types/execution.js';
+
+import { CHAIN_ID_PATTERN, recordParameterIssue } from '#shared/utils/index.js';
 
 /**
  * Validator for McpToolRequest with comprehensive error handling

@@ -1,7 +1,7 @@
 // @lifecycle canonical - Creates execution plans and resolves dependencies.
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ExecutionPlanner } from '../../planning/execution-planner.js';
 import type { ExecutionPlan } from '../../types.js';

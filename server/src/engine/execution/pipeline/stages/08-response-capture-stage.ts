@@ -1,8 +1,8 @@
 // @lifecycle canonical - Captures model responses and lifecycle decisions.
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { ChainSessionService } from '../../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ChainSessionService } from '#shared/types/index.js';
 import type { GateVerdictProcessor } from '../../../gates/services/gate-verdict-processor.js';
 import type { StepCaptureService } from '../../capture/step-capture-service.js';
 import type { ExecutionContext, SessionContext } from '../../context/index.js';

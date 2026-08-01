@@ -6,7 +6,6 @@
  */
 
 import { GateDefinitionLoader, type GateDefinitionLoaderConfig } from './gate-definition-loader.js';
-import { Logger } from '../../../infra/logging/index.js';
 import { isGateActiveForContext } from '../utils/gate-activation.js';
 
 import type {
@@ -15,6 +14,8 @@ import type {
   GateActivationResult,
 } from '../types.js';
 import type { TemporaryGateRegistry } from './temporary-gate-registry.js';
+
+import { Logger } from '#infra/logging/index.js';
 
 /**
  * Minimal provider contract for loading gate definitions.

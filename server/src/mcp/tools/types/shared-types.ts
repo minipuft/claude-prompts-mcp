@@ -9,7 +9,7 @@
  */
 
 // Import consolidated error handling types
-import { ErrorContext, ValidationResult } from '../../../shared/utils/errorHandling.js';
+import { ErrorContext, ValidationResult } from '#shared/utils/errorHandling.js';
 
 /**
  * MCP Tool callback extra parameter

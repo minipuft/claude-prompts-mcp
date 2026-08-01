@@ -8,7 +8,7 @@
 
 import { access, copyFile, readFile, writeFile } from 'node:fs/promises';
 
-import { type ConfigManager, type Logger, Config } from '../../shared/types/index.js';
+import { type ConfigManager, type Logger, Config } from '#shared/types/index.js';
 
 export const CONFIG_VALID_KEYS = [
   'server.name',

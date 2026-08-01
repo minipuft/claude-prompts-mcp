@@ -1,7 +1,7 @@
 // @lifecycle canonical - Captures step results (placeholder or real) in chain sessions.
 
-import type { Logger } from '../../../infra/logging/index.js';
-import type { ChainSession, ChainSessionService } from '../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../context/index.js';
 
 const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';

@@ -10,7 +10,6 @@
  */
 
 import * as esbuild from 'esbuild';
-import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -87,14 +86,8 @@ var __dirname = __pathDirname(__filename);`,
     'process.env.BUILD_TIME': JSON.stringify(new Date().toISOString()),
   },
 
-  // Path aliases matching tsconfig.json paths
-  alias: {
-    '@shared': './src/shared',
-    '@infra': './src/infra',
-    '@engine': './src/engine',
-    '@modules': './src/modules',
-    '@mcp': './src/mcp',
-  },
+  // No `alias` block. Subpath imports are declared once in package.json "imports", which
+  // esbuild resolves natively — no second copy of the map to drift out of sync.
 
   // Enable tree-shaking
   treeShaking: true,
@@ -166,12 +159,11 @@ async function build() {
         console.log(`\nSkipping cpm CLI: ${CLI_ENTRY} not present (expected in the Docker build).`);
       }
 
-      // Generate type declarations (consumed via package.json "types" field)
-      console.log('Generating type declarations...');
-      execSync('npx tsc --emitDeclarationOnly --declaration --outDir dist', {
-        stdio: 'inherit',
-        cwd: __dirname,
-      });
+      // No declaration emit. This package ships a server binary and Python hooks, not a
+      // library — nothing imports it, so the 405 .d.ts files this produced were read by
+      // no one, and the "types" entry backing them pointed at a path that did not exist.
+      // Restore this step alongside a real consumer, together with package.json "types"
+      // and a smoke test that typechecks against `npm pack` output.
 
       console.log(`\nBuild complete: dist/index.js${builtCli ? ', dist/cpm.js' : ''}`);
     }

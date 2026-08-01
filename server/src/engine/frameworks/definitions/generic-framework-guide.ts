@@ -41,8 +41,8 @@ import {
   convertProcessingSteps,
 } from '../utils/template-enhancer.js';
 
+import type { ContentAnalysisResult } from '#shared/types/index.js';
 import type { FrameworkResourceDefinition } from './framework-definition-types.js';
-import type { ContentAnalysisResult } from '../../../shared/types/index.js';
 import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
 
 /**

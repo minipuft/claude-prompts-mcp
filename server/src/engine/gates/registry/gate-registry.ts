@@ -15,7 +15,6 @@
  */
 
 import { createGenericGateGuide } from './generic-gate-guide.js';
-import { Logger } from '../../../infra/logging/index.js';
 import {
   GateDefinitionLoader,
   type GateDefinitionLoaderConfig,
@@ -28,6 +27,8 @@ import type {
   GateGuideEntry,
   GateRegistryStats,
 } from '../types/index.js';
+
+import { Logger } from '#infra/logging/index.js';
 
 /**
  * Gate registry configuration

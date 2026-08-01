@@ -15,8 +15,6 @@
 import { tokenizeCommand } from './command-tokenizer.js';
 import { normalizeSymbolicPrefixes } from './parser-utils.js';
 import { SymbolicCommandParser, createSymbolicCommandParser } from './symbolic-operator-parser.js';
-import { Logger } from '../../../infra/logging/index.js';
-import { PromptError, ValidationError, safeJsonParse } from '../../../shared/utils/index.js';
 
 import type { TokenizedCommand } from './command-tokenizer.js';
 import type { ConvertedPrompt, ExecutionModifier, ExecutionModifiers } from '../types.js';
@@ -26,6 +24,9 @@ import type {
   SymbolicCommandParseResult,
   SymbolicExecutionPlan,
 } from './types/operator-types.js';
+
+import { Logger } from '#infra/logging/index.js';
+import { PromptError, ValidationError, safeJsonParse } from '#shared/utils/index.js';
 
 export type CommandParseResult = CommandParseResultBase<
   OperatorDetectionResult,

@@ -5,8 +5,7 @@ import { trace, SpanStatusCode, context as otelContext } from '@opentelemetry/ap
 
 import { ExecutionContext } from '../context/index.js';
 
-import type { PipelineStage } from './stage.js';
-import type { Logger } from '../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type {
   MetricsCollector,
   PipelineStageType,
@@ -18,7 +17,8 @@ import type {
   ToolResponse,
   HookRegistryPort,
   PipelineHookContext,
-} from '../../../shared/types/index.js';
+} from '#shared/types/index.js';
+import type { PipelineStage } from './stage.js';
 import type { Span } from '@opentelemetry/api';
 
 /**

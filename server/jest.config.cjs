@@ -44,11 +44,17 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'mjs'],
   // Handle ES module imports properly - map .js imports to TypeScript files and preserve ES modules
   moduleNameMapper: {
-    '^@shared/(.*)$': '<rootDir>/src/shared/$1',
-    '^@infra/(.*)$': '<rootDir>/src/infra/$1',
-    '^@engine/(.*)$': '<rootDir>/src/engine/$1',
-    '^@modules/(.*)$': '<rootDir>/src/modules/$1',
-    '^@mcp/(.*)$': '<rootDir>/src/mcp/$1',
+    // Subpath imports (package.json "imports"). Jest resolves the `imports` field, but the
+    // mapped target keeps the NodeNext `.js` extension while the file on disk is `.ts` —
+    // the same reason the relative-import rule below exists. Mapping here strips both the
+    // prefix and the extension in one step.
+    '^#shared/(.*)\\.js$': '<rootDir>/src/shared/$1',
+    '^#infra/(.*)\\.js$': '<rootDir>/src/infra/$1',
+    '^#engine/(.*)\\.js$': '<rootDir>/src/engine/$1',
+    '^#modules/(.*)\\.js$': '<rootDir>/src/modules/$1',
+    '^#mcp/(.*)\\.js$': '<rootDir>/src/mcp/$1',
+    '^#runtime/(.*)\\.js$': '<rootDir>/src/runtime/$1',
+    '^#cli-shared/(.*)\\.js$': '<rootDir>/src/cli-shared/$1',
     '^(?:\\.{1,2}/)+dist/(.*)\\.js$': '<rootDir>/src/$1',
     '^(\\.{1,2}/.*)\\.js$': '$1',
     // node:sqlite is a native Node.js built-in (>=22); shim for Jest's module resolver

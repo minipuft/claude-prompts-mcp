@@ -34,7 +34,7 @@ export {
   type PromptYaml,
   type PromptYamlValidationResult,
   type PromptSchemaValidationResult,
-} from '../modules/prompts/prompt-schema.js';
+} from '#modules/prompts/prompt-schema.js';
 
 // ── Gate schemas (pure Zod) ──────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ export {
   type GateRetryConfigYaml,
   type GateDefinitionYaml,
   type GateSchemaValidationResult,
-} from '../engine/gates/core/gate-schema.js';
+} from '#engine/gates/core/gate-schema.js';
 
 // ── Framework schemas (pure Zod) ──────────────────────────────────────────
 
@@ -63,7 +63,7 @@ export {
   type TemplateSuggestion,
   type FrameworkYaml,
   type FrameworkSchemaValidationResult,
-} from '../engine/frameworks/definitions/framework-schema.js';
+} from '#engine/frameworks/definitions/framework-schema.js';
 
 // ── Style schemas (pure Zod) ────────────────────────────────────────────────
 
@@ -75,7 +75,7 @@ export {
   type StyleActivationYaml,
   type StyleDefinitionYaml,
   type StyleSchemaValidationResult,
-} from '../modules/formatting/core/style-schema.js';
+} from '#modules/formatting/core/style-schema.js';
 
 // ── YAML utilities (js-yaml + node:fs only) ─────────────────────────────────
 
@@ -97,7 +97,7 @@ export {
   type YamlParseResult,
   type YamlFileLoadOptions,
   type YamlFileLoadResult,
-} from '../shared/utils/yaml/index.js';
+} from '#shared/utils/yaml/index.js';
 
 // ── Versioning types (pure interfaces) ───────────────────────────────────────
 
@@ -107,7 +107,7 @@ export type {
   SaveVersionResult,
   RollbackResult,
   SaveVersionOptions,
-} from '../modules/versioning/types.js';
+} from '#modules/versioning/types.js';
 
 // ── Version history (standalone, node:fs only) ──────────────────────────────
 

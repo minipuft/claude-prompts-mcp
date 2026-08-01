@@ -9,16 +9,17 @@
  * - GateVersioningProcessor: history, rollback, compare
  */
 
-import { VersionHistoryService } from '../../../../modules/versioning/index.js';
 import { ObjectDiffGenerator } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import { GateDiscoveryProcessor } from '../services/gate-discovery-processor.js';
 import { GateFileWriter } from '../services/gate-file-writer.js';
 import { GateLifecycleProcessor } from '../services/gate-lifecycle-processor.js';
 import { GateVersioningProcessor } from '../services/gate-versioning-processor.js';
 
+import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from './context.js';
 import type { GateManagerInput, GateManagerDependencies } from './types.js';
-import type { ToolResponse } from '../../../../shared/types/index.js';
+
+import { VersionHistoryService } from '#modules/versioning/index.js';
 
 export class GateToolHandler {
   private readonly lifecycle: GateLifecycleProcessor;
@@ -52,7 +53,7 @@ export class GateToolHandler {
     deps.logger.debug('GateToolHandler initialized');
   }
 
-  setDatabasePort(db: import('../../../../shared/types/persistence.js').DatabasePort): void {
+  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
     this.versionHistoryService.setDatabasePort(db);
   }
 

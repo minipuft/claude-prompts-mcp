@@ -2,9 +2,9 @@
 import { CompositionalGateService } from './compositional-gate-service.js';
 import { SemanticGateService } from './semantic-gate-service.js';
 
+import type { Logger } from '#infra/logging/index.js';
+import type { ConfigManager } from '#shared/types/index.js';
 import type { GateServiceConfig, GateService } from './gate-service-interface.js';
-import type { Logger } from '../../../infra/logging/index.js';
-import type { ConfigManager } from '../../../shared/types/index.js';
 import type { GateValidator } from '../core/gate-validator.js';
 import type { GateGuidanceRenderer } from '../guidance/GateGuidanceRenderer.js';
 

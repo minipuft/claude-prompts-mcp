@@ -1,8 +1,8 @@
 // @lifecycle canonical - Cleans up formatting artifacts before returning output.
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { ChainSessionService, SessionBlueprint } from '../../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ChainSessionService, SessionBlueprint } from '#shared/types/index.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { ExecutionContext } from '../../context/index.js';
 

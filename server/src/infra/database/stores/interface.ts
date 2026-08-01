@@ -6,7 +6,7 @@
  * and re-exported here for backward compatibility. SqliteStateStoreConfig is infra-specific.
  */
 
-export type { StateStoreOptions, StateStore } from '../../../shared/types/persistence.js';
+export type { StateStoreOptions, StateStore } from '#shared/types/persistence.js';
 
 /**
  * Options for creating a SQLite-based state store

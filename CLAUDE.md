@@ -122,6 +122,29 @@ system_control → SystemControl Router → 10 action handlers
 
 State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. `SCHEMA_VERSION` bump triggers drop-and-recreate; no migration code since `state.db` is ephemeral.
 
+## Public API Contract (what a major version protects)
+
+**Declared surface over "anything that feels significant"; consumer-observable over internal.**
+
+Semver is defined relative to a declared API. Without one, every incidental change reads as
+breaking and major versions inflate until they carry no information.
+
+| In the contract -- break it, bump major | Not in the contract -- change freely |
+|------------------------------------------|----------------------------------------|
+| MCP tool surface: `prompt_engine`, `resource_manager`, `system_control` names, parameters, and response shape | Internal TypeScript exports, including `src/index.ts` |
+| CLI surface: `claude-prompts` and `cpm` commands and flags | `package.json` packaging fields (`types`, `exports`, `files`) |
+| Resource formats: prompt/gate/methodology YAML schema, `config.json` | `src/` layer structure, module layout, import style |
+| Python hook contract consumed by downstream plugins | Which files land in the published tarball |
+| Symbolic command language (`>>`, `==>`) | Build tooling, validation scripts, CI |
+
+**This package is a binary distribution** -- an MCP server, the `cpm` CLI, and Python hooks.
+It publishes no library API: `src/index.ts` exports only `startServer`, `gracefulShutdown`,
+`getApplicationHealth`, `getDetailedDiagnostics` (server lifecycle). Consumers run it; they do not
+import it. Adding a library surface is a deliberate act -- restore `types`, `exports["."].types`,
+`declaration: true` and `src` in `files` together, which `validate:package-entries` enforces.
+
+-> `CONTRIBUTING.md` §Breaking Changes for how to mark one.
+
 ## Key Constraints
 
 - **MCP Contract Dev**: Verify upstream first (`grep -rn "paramName" src/mcp-tools/*/core/manager.ts`). Layer alignment: Contract -> Generated -> Types -> Router -> Manager -> Service must agree.

@@ -1,5 +1,7 @@
 // @lifecycle canonical - Core service for managing resource version history
 
+import type { VersioningConfig, Logger } from '#shared/types/index.js';
+import type { DatabasePort } from '#shared/types/persistence.js';
 import type {
   VersionEntry,
   HistoryFile,
@@ -7,8 +9,6 @@ import type {
   RollbackResult,
   SaveVersionOptions,
 } from './types.js';
-import type { VersioningConfig, Logger } from '../../shared/types/index.js';
-import type { DatabasePort } from '../../shared/types/persistence.js';
 
 type ResourceType = 'prompt' | 'gate' | 'framework';
 

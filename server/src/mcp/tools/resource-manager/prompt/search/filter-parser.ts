@@ -6,7 +6,7 @@
 import { SmartFilters } from '../core/types.js';
 import { validateFilterSyntax } from '../utils/validation.js';
 
-import type { Logger } from '../../../../../shared/types/index.js';
+import type { Logger } from '#shared/types/index.js';
 
 /**
  * Filter parsing engine for intelligent prompt discovery

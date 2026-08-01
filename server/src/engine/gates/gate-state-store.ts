@@ -8,12 +8,12 @@
 
 import { EventEmitter } from 'events';
 
-import { SqliteEngine } from '../../infra/database/sqlite-engine.js';
-import { SqliteStateStore } from '../../infra/database/stores/sqlite-store.js';
-import { Logger } from '../../infra/logging/index.js';
-import { resolveContinuityScopeId } from '../../shared/utils/request-identity-scope.js';
+import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 
-import type { StateStoreOptions } from '../../infra/database/stores/interface.js';
+import { SqliteEngine } from '#infra/database/sqlite-engine.js';
+import { SqliteStateStore } from '#infra/database/stores/sqlite-store.js';
+import { Logger } from '#infra/logging/index.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 /**
  * Gate system state interface

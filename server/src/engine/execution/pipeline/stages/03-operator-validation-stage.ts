@@ -1,7 +1,7 @@
 // @lifecycle canonical - Validates operator metadata and arguments.
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { FrameworkValidator } from '../../../frameworks/framework-validator.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainStepPrompt } from '../../operators/types.js';

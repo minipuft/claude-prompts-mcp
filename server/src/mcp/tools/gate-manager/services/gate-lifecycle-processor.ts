@@ -3,11 +3,11 @@ import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { logMcpToolChange } from '../../../../runtime/resource-change-tracking.js';
-
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
+
+import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
 
 export class GateLifecycleProcessor {
   constructor(private readonly ctx: GateResourceContext) {}

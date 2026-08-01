@@ -13,9 +13,9 @@
  * - Context caching for performance
  */
 
-import { Logger } from '../../../infra/logging/index.js';
+import type { PromptArgument } from '#shared/types/index.js';
 
-import type { PromptArgument } from '../../../shared/types/index.js';
+import { Logger } from '#infra/logging/index.js';
 
 /**
  * Context source types

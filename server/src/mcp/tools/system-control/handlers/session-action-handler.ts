@@ -2,7 +2,7 @@
 
 import { ActionHandler } from '../core/action-handler-base.js';
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 
 export class SessionActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {

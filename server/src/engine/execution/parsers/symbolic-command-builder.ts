@@ -1,16 +1,17 @@
 // @lifecycle canonical - Builds ParsedCommand structures from symbolic operator parse results.
-import { PromptError } from '../../../shared/utils/index.js';
 
+import type { Logger } from '#infra/logging/index.js';
 import type {
   ExecutionContext as ArgumentExecutionContext,
   ArgumentParser,
 } from './argument-parser.js';
-import type { Logger } from '../../../infra/logging/index.js';
 import type { ShellVerifyGate } from '../../gates/shell/types.js';
 import type { ParsedCommand } from '../context/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 import type { ConvertedPrompt } from '../types.js';
 import type { SymbolicCommandParseResult } from './types/operator-types.js';
+
+import { PromptError } from '#shared/utils/index.js';
 
 type ParsedArgumentsResult = {
   processedArgs: Record<string, any>;

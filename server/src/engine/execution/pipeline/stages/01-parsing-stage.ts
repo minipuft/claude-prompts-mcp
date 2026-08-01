@@ -1,8 +1,7 @@
 // @lifecycle canonical - Parses incoming commands into structured operators.
-import { PromptError } from '../../../../shared/utils/index.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 // ChainSessionService no longer needed — blueprint resolution delegated to ChainBlueprintResolver
 import type { ExecutionContext, ParsedCommand } from '../../context/index.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
@@ -15,6 +14,8 @@ import type { UnifiedCommandParser } from '../../parsers/command-parser.js';
 import type { SymbolicCommandBuilder } from '../../parsers/symbolic-command-builder.js';
 import type { SymbolicCommandParseResult } from '../../parsers/types/operator-types.js';
 import type { ConvertedPrompt } from '../../types.js';
+
+import { PromptError } from '#shared/utils/index.js';
 
 /**
  * Provider function to get all converted prompts.

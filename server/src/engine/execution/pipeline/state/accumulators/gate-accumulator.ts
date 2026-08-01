@@ -2,7 +2,7 @@
 
 import { GATE_SOURCE_PRIORITY } from '../types.js';
 
-import type { Logger } from '../../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { GateEntry, GateSource, GateSourceCounts } from '../types.js';
 
 /**

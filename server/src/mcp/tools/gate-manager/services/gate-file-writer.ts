@@ -2,15 +2,15 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import type { ConfigManager, Logger } from '#shared/types/index.js';
+import type { GateCreationData } from '../core/types.js';
+
 import {
   ResourceMutationTransaction,
   ResourceVerificationService,
   type ResourceVerificationFailurePayload,
-} from '../../../../modules/resources/services/index.js';
-import { serializeYaml } from '../../../../shared/utils/yaml/yaml-parser.js';
-
-import type { ConfigManager, Logger } from '../../../../shared/types/index.js';
-import type { GateCreationData } from '../core/types.js';
+} from '#modules/resources/services/index.js';
+import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 export interface GateFileWriterDependencies {
   logger: Logger;

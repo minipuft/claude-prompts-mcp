@@ -6,10 +6,10 @@
  * validation capabilities with clear separation of concerns.
  */
 
-import { LightweightGateSystem } from '../../../../engine/gates/core/index.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { Logger } from '#shared/types/index.js';
 
-import type { ConvertedPrompt } from '../../../../engine/execution/types.js';
-import type { Logger } from '../../../../shared/types/index.js';
+import { LightweightGateSystem } from '#engine/gates/core/index.js';
 
 const noopLogger: Logger = {
   info: () => {},

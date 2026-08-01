@@ -9,9 +9,9 @@
  * - Modern: DYNAMIC injection of Markdown resources loaded by PromptAssetManager.
  */
 
-import { Logger } from '../../../infra/logging/index.js';
-
 import type { ConvertedPrompt } from '../../execution/types.js';
+
+import { Logger } from '#infra/logging/index.js';
 
 /**
  * Template enhancement configuration

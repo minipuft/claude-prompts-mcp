@@ -25,10 +25,11 @@ import {
   loadYamlPrompt as loadYamlPromptFn,
   loadAllYamlPrompts as loadAllYamlPromptsFn,
 } from './yaml-prompt-loader.js';
-import { type Logger } from '../../shared/types/index.js';
-import { loadYamlFileSync } from '../../shared/utils/yaml/index.js';
 
 import type { Category, CategoryPromptsResult, PromptData } from './types.js';
+
+import { type Logger } from '#shared/types/index.js';
+import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // Re-export types from yaml-prompt-loader for backward compatibility
 export type { LoadedPromptFile } from './yaml-prompt-loader.js';
