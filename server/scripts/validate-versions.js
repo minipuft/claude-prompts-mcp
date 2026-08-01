@@ -106,7 +106,10 @@ const assertMarketplaceSource = (source) => {
   if (!source || source.source !== 'url') {
     throw new Error('Marketplace source must use url source');
   }
-  if (source.url !== 'https://github.com/minipuft/claude-prompts-mcp.git') {
+  // The repo was renamed claude-prompts-mcp -> claude-prompts. Assert the real name,
+  // not the rename redirect: a redirect the marketplace silently depends on breaks the
+  // day the old name is reclaimed, and this check is the only thing that would notice.
+  if (source.url !== 'https://github.com/minipuft/claude-prompts.git') {
     throw new Error(`Marketplace source url mismatch: ${source.url}`);
   }
   if (source.ref !== 'dist') {
