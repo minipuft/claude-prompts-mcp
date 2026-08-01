@@ -156,7 +156,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
+    "@eslint/js": "^10.0.0",
     "@types/diff": "^8.0.0",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
@@ -165,7 +165,7 @@
     "@types/nunjucks": "^3.2.6",
     "dependency-cruiser": "^17.3.6",
     "esbuild": "^0.27.2",
-    "eslint": "^9.39.2",
+    "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-prettier": "^5.5.5",
