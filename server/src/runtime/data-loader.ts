@@ -7,7 +7,7 @@
 import { access, readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ConfigLoader } from '#infra/config/index.js';

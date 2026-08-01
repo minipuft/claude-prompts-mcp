@@ -29,7 +29,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 /** Injected tool loader — avoids direct import from modules layer. */
 export type ToolLoaderFn = (promptDir: string, promptId: string) => LoadedScriptTool[];

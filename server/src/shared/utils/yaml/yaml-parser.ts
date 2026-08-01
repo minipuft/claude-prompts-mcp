@@ -6,7 +6,11 @@
  * Designed to be reusable across frameworks and future prompt YAML support.
  */
 
-import yaml from 'js-yaml';
+// js-yaml 5 is ESM-only and publishes no default export, so the namespace form is
+// the only one that resolves. `import yaml from 'js-yaml'` type-checks under this
+// repo's `allowSyntheticDefaultImports` but fails at module instantiation — see the
+// note above `parseYaml` below.
+import * as yaml from 'js-yaml';
 
 /**
  * Options for YAML parsing
@@ -14,12 +18,8 @@ import yaml from 'js-yaml';
 export interface YamlParseOptions {
   /** Filename for error messages */
   filename?: string;
-  /** Custom schema (default: DEFAULT_SCHEMA) */
+  /** Custom schema (default: js-yaml's CORE_SCHEMA) */
   schema?: yaml.Schema;
-  /** Allow duplicate keys in objects */
-  allowDuplicateKeys?: boolean;
-  /** Emit warnings via callback */
-  onWarning?: (warning: yaml.YAMLException) => void;
 }
 
 /**
@@ -50,8 +50,6 @@ export interface YamlParseResult<T> {
   data?: T;
   /** Error details (undefined if succeeded) */
   error?: YamlParseError;
-  /** Non-fatal warnings encountered */
-  warnings?: string[];
 }
 
 /**
@@ -75,52 +73,38 @@ export interface YamlParseResult<T> {
  * ```
  */
 export function parseYaml<T>(content: string, options?: YamlParseOptions): YamlParseResult<T> {
-  const warnings: string[] = [];
-
   try {
-    const data = yaml.load(content, {
-      schema: options?.schema ?? yaml.DEFAULT_SCHEMA,
-      filename: options?.filename,
-      onWarning: (warning) => {
-        warnings.push(warning.message);
-        options?.onWarning?.(warning);
-      },
-    }) as T;
-
-    const result: YamlParseResult<T> = {
-      success: true,
-      data,
-    };
-
-    if (warnings.length > 0) {
-      result.warnings = warnings;
+    const loadOptions: Parameters<typeof yaml.load>[1] = { filename: options?.filename };
+    if (options?.schema) {
+      loadOptions.schema = options.schema;
     }
 
-    return result;
+    const data = yaml.load(content, loadOptions) as T;
+
+    return { success: true, data };
   } catch (error) {
     if (error instanceof yaml.YAMLException) {
       const errorDetails: YamlParseError = {
         message: error.message,
-        line: error.mark?.line,
-        column: error.mark?.column,
-        snippet: error.mark?.snippet,
         cause: error,
       };
 
+      // js-yaml 5 types mark positions as `string | null`; our contract is
+      // `| undefined`, so a null mark is normalised rather than widened.
+      if (error.mark?.line !== undefined) {
+        errorDetails.line = error.mark.line;
+      }
+      if (error.mark?.column !== undefined) {
+        errorDetails.column = error.mark.column;
+      }
+      if (error.mark?.snippet) {
+        errorDetails.snippet = error.mark.snippet;
+      }
       if (options?.filename) {
         errorDetails.filename = options.filename;
       }
 
-      const errorResult: YamlParseResult<T> = {
-        success: false,
-        error: errorDetails,
-      };
-
-      if (warnings.length > 0) {
-        errorResult.warnings = warnings;
-      }
-
-      return errorResult;
+      return { success: false, error: errorDetails };
     }
 
     // Handle unexpected errors
@@ -135,16 +119,7 @@ export function parseYaml<T>(content: string, options?: YamlParseOptions): YamlP
       errorDetails.cause = error;
     }
 
-    const errorResult: YamlParseResult<T> = {
-      success: false,
-      error: errorDetails,
-    };
-
-    if (warnings.length > 0) {
-      errorResult.warnings = warnings;
-    }
-
-    return errorResult;
+    return { success: false, error: errorDetails };
   }
 }
 

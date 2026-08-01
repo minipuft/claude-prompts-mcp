@@ -1,7 +1,7 @@
 // @lifecycle canonical - skills-sync registration config persistence helpers.
 import { readFile, writeFile } from 'node:fs/promises';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 export type RegistrationScope = 'user' | 'project';
 

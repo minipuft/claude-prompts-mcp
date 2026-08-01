@@ -2,7 +2,7 @@
 import { readFile } from 'node:fs/promises';
 import { format } from 'node:util';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 import type { DatabasePort, Logger, ToolResponse } from '#shared/types/index.js';
 
