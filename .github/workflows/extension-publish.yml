@@ -162,8 +162,11 @@ jobs:
           mkdir -p "$STAGING_DIR/server"
           cp -r .claude-plugin "$STAGING_DIR/"
           cp .mcp.json "$STAGING_DIR/"
-          cp -r skills "$STAGING_DIR/" 2>/dev/null || true
-          cp -r hooks "$STAGING_DIR/" 2>/dev/null || true
+          # No `|| true` on these: hooks/ and agents/ are runtime components of the
+          # plugin, not optional extras. A silenced copy is how `skills/` kept being
+          # staged for months after the directory was deleted, with nothing failing.
+          cp -r hooks "$STAGING_DIR/"
+          cp -r agents "$STAGING_DIR/"
           cp -r server/dist "$STAGING_DIR/server/"
           cp -r server/resources "$STAGING_DIR/server/"
           cp server/config.json "$STAGING_DIR/server/"
@@ -181,6 +184,11 @@ jobs:
           test -d "$VERIFY_DIR/server/resources"
           test -f "$VERIFY_DIR/.mcp.json"
           test -f "$VERIFY_DIR/.claude-plugin/plugin.json"
+          # chain-executor backs the `==>` delegation operator: response-assembler.ts
+          # and chain-operator-executor.ts both default agentType to 'chain-executor',
+          # so a dist branch without it breaks delegated chains for every installer.
+          test -f "$VERIFY_DIR/hooks/hooks.json"
+          test -f "$VERIFY_DIR/agents/chain-executor.md"
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@v7
@@ -478,9 +486,9 @@ jobs:
           cp -r .claude-plugin .plugin-staging/
           cp .mcp.json .plugin-staging/
 
-          # Copy skills and hooks
-          cp -r skills .plugin-staging/ 2>/dev/null || true
-          cp -r hooks .plugin-staging/ 2>/dev/null || true
+          # Copy hooks and agents. No `|| true` — see the dist staging step above.
+          cp -r hooks .plugin-staging/
+          cp -r agents .plugin-staging/
 
           # Copy server (bundled - no node_modules needed)
           mkdir -p .plugin-staging/server
@@ -492,6 +500,8 @@ jobs:
           test -f .plugin-staging/server/dist/index.js
           test -f .plugin-staging/server/config.json
           test -d .plugin-staging/server/resources
+          test -f .plugin-staging/hooks/hooks.json
+          test -f .plugin-staging/agents/chain-executor.md
 
           # Create archive
           cd .plugin-staging
