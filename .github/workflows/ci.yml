@@ -68,6 +68,12 @@ jobs:
         working-directory: .
         run: pip install ruff==0.15.5 pyrefly==1.1.1 --quiet
 
+      # The seven `validate:no-*` recurrence guards shell out to ripgrep, which the
+      # GitHub runner image does not ship. This was latent until validate:all started
+      # running in CI below — the guards exited 127 (`rg: not found`), not 0.
+      - name: Install ripgrep
+        run: sudo apt-get install -y --no-install-recommends ripgrep
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -103,6 +109,12 @@ jobs:
 
       - name: Install dependencies (root workspaces)
         run: npm ci --prefer-offline --no-audit
+
+      # cli/tsconfig.json maps @cli-shared/* into server/src, so typechecking the CLI
+      # pulls in server sources that import zod. Those resolve from server/node_modules,
+      # which the root workspace install does not provide.
+      - name: Install server dependencies (CLI typechecks against server sources)
+        run: npm ci --prefix server --prefer-offline --no-audit
 
       - name: Typecheck
         run: npm -w cli run typecheck

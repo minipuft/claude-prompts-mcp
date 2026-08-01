@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 // The `cpm` CLI ships as a second bin of this package (package.json "bin").
 // Its build config lives with its source in cli/ and is imported rather than
 // duplicated here, so the two entry points cannot drift.
-import { buildCli } from '../cli/esbuild.config.mjs';
+import { createCliBuildOptions, checkCliBundleSize } from '../cli/esbuild.config.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
@@ -135,8 +135,17 @@ async function build() {
 
       // Second bin: the cpm CLI, bundled from cli/src with the shared config.
       // Emitted into dist/ so package.json "files": ["dist"] ships it.
+      //
+      // Only the options object crosses the package boundary — this file runs them
+      // through its OWN esbuild. cli/ imports resolve from cli/node_modules upward,
+      // which CI's Build job (server-only `npm ci`) does not install.
       console.log('\nBuilding cpm CLI...');
-      await buildCli({ outfile: join(__dirname, 'dist', 'cpm.js'), minify: isProduction });
+      const cliOptions = createCliBuildOptions({
+        outfile: join(__dirname, 'dist', 'cpm.js'),
+        minify: isProduction,
+      });
+      await esbuild.build(cliOptions);
+      checkCliBundleSize(cliOptions.outfile);
 
       // Generate type declarations (consumed via package.json "types" field)
       console.log('Generating type declarations...');

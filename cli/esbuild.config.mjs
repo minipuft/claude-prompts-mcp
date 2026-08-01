@@ -14,7 +14,6 @@
  *   npm --prefix server run build # bundled    -> server/dist/cpm.js
  */
 
-import * as esbuild from 'esbuild';
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,20 +100,30 @@ const require = __createRequire(import.meta.url);`,
  * @param {{ outfile?: string, minify?: boolean }} [overrides]
  * @returns {Promise<string>} absolute path to the emitted bundle
  */
-export async function buildCli(overrides = {}) {
-  const options = createCliBuildOptions(overrides);
-  await esbuild.build(options);
-
-  const bytes = statSync(options.outfile).size;
+export function checkCliBundleSize(outfile) {
+  const bytes = statSync(outfile).size;
   const sizeKB = (bytes / 1024).toFixed(1);
-  console.log(`  cpm bundle: ${sizeKB} KB -> ${options.outfile}`);
+  console.log(`  cpm bundle: ${sizeKB} KB -> ${outfile}`);
 
   if (bytes > BUNDLE_BUDGET_BYTES) {
     throw new Error(
       `cpm bundle exceeds ${BUNDLE_BUDGET_BYTES / 1024}KB budget (${sizeKB} KB)`,
     );
   }
+  return bytes;
+}
 
+export async function buildCli(overrides = {}) {
+  // esbuild is imported lazily, not at module scope. `server/esbuild.config.mjs`
+  // imports createCliBuildOptions() from this file, and a bare `esbuild` specifier
+  // resolves from THIS file's directory upward — cli/node_modules, then the repo root.
+  // CI's Build job installs only server/node_modules, so a top-level import made
+  // `npm --prefix server run build` fail with ERR_MODULE_NOT_FOUND. Options are pure
+  // data and cross the package boundary safely; the bundler does not.
+  const esbuild = await import('esbuild');
+  const options = createCliBuildOptions(overrides);
+  await esbuild.build(options);
+  checkCliBundleSize(options.outfile);
   return options.outfile;
 }
 
