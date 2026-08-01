@@ -10,18 +10,20 @@ cannot enforce guards that do not exist there, and #150 already modifies `ci.yml
 **Consequence**: this branch's PR shows #150's commits until #150 lands, and must merge after it.
 **Work type**: bug_fix (Tier 1–2), refactor (Tier 3, deferred)
 **Status**: **Tiers 1 and 2 complete** (2026-07-31, both gates passed). 1.4 held at ◐ by design
-until this branch merges. Tier 3 deferred.
+until this branch merges. **Tier 3: 3.1 spike done — `#` confirmed**; it surfaced and fixed an
+unrelated packaging bug (`rootDir`). The 611-import codemod (3.2–3.6) stays deferred.
 
 | Measure                                           | Before            | Now       | Target |
 | ------------------------------------------------- | ----------------- | --------- | ------ |
-| `validate:all` members enforced in CI             | **5/21**          | **23/23** | all    |
+| `validate:all` members enforced in CI             | **5/21**          | **26/26** | all    |
 | Recurrence guards (`validate:no-*`) run in CI     | **0/8**           | **8/8**   | 8/8    |
 | Unpinned tool installs in workflows               | **2**             | **0**     | 0      |
 | Node version CI tests vs. Node version shipped    | 22.x/24           | 22.x+24   | same   |
 | Dead steps in `.husky/pre-push`                   | **1**             | **0**     | 0      |
 | PR classes that can never satisfy required checks | **1** (docs-only) | **0**     | 0      |
 
-`validate:all` grew 21 → 23 in Tier 1 (`validate:required-contexts` plus its self-test). It also
+`validate:all` grew 21 → 26 across the three tiers (`validate:required-contexts`,
+`validate:format`, `validate:package-entries`, plus two self-tests). It also
 **exited 1 on committed HEAD** when Tier 1 started — `validate:documented-options` flagged npm's
 own `--prefix` as an undocumented flag of ours. Nothing caught it because nothing ran it. That is
 F2 demonstrating itself, not a side issue.
