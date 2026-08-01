@@ -430,15 +430,48 @@ not rewrite `paths` aliases on emit**, and `esbuild.config.mjs` shells out to
 `"types": "dist/index.d.ts"` — so `@`-aliases would land unresolvable in published declarations.
 `#`-specifiers survive emit because Node resolves them at runtime.
 
-**Unverified.** This must be proven by converting ~10 files, running `npm run build`, and reading
-`dist/**/*.d.ts` before committing to the approach. If it fails, the fallback is to delete the three
-dead alias configs rather than carry them.
+### 3.1 spike result — **`#` confirmed, 2026-07-31**
+
+Ran end to end: added an `imports` map, converted 3 files across `infra`/`engine`/`mcp`, built,
+packed with `npm pack`, extracted the tarball into a fresh consumer and typechecked it.
+
+| Stage                         | Result                                                                                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tsc --noEmit`                | **0** — but only after `rootDir` was set; see below                                                                                         |
+| esbuild bundle                | **0** — resolves `imports` natively, no alias config needed                                                                                 |
+| `tsc --emitDeclarationOnly`   | **0**, and `#` specifiers survive **verbatim** into the emitted `.d.ts`                                                                     |
+| consumer typecheck vs tarball | **0** `Cannot find module '#…'`. It resolved `#infra/logging/index.js` and `#shared/core/resource-manager/index.js` from the packed package |
+
+The consumer probe reports 34 unrelated errors — missing `zod`/`express`/`@types/node`, because
+the probe installs no dependencies. None concern subpath resolution.
+
+**The spike surfaced a live packaging bug, unrelated to imports but blocking them.** `rootDir` was
+unset, so tsc inferred the common source root as the package directory and emitted
+`dist/src/index.d.ts`, while `types` and `exports["."].types` both advertised `./dist/index.d.ts`
+— a path that did not exist. The package shipped **405 declaration files and no reachable entry**,
+so every TypeScript consumer silently got none of them. The build exited 0 throughout; nothing
+imported the package the way a consumer does.
+
+The same missing `rootDir` is what made `#` fail: `TS2210: The project root is ambiguous, but is
+required to resolve import map entry … Supply the rootDir compiler option`. One line fixes both.
+
+**Landed now** (independent of the rest of Tier 3): `rootDir: "./src"`, plus
+`validate:package-entries` — a `validate:all` member that recomputes where tsc will emit the entry
+and fails when `types` / `exports["."].types` disagree. Its own self-test caught the first draft
+being unable to detect the original bug, because the expected path was computed without using
+`rootDir`. 5/5 rules falsifiable; removing `rootDir` from the real tsconfig flips it to exit 1.
+
+**Still open before the codemod (3.2–3.6):** the shipped `imports` map pointed at `./src/*`, so a
+consumer resolving `#shared/…` is sent into our published TypeScript source rather than our
+declarations. It typechecks — `files` ships `src` — but it drags consumers through source instead
+of `.d.ts`. Decide the condition map (`types` → `./dist/*`, `default` → `./src/*`, or ship only
+dist) **before** rewriting 611 imports, because the answer determines what the codemod writes.
 
 ### Sketch
 
 | #   | Step                                                                                                                                                        | Status |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 3.1 | Spike: 10 files, build, inspect emitted `.d.ts`. Decides `#` vs `@` vs abandon                                                                              | ☐      |
+| 3.1 | Spike: 10 files, build, inspect emitted `.d.ts`. Decides `#` vs `@` vs abandon                                                                              | ✓      |
 | 3.2 | Declare `imports` in `server/package.json`; extend to `runtime/` and `cli-shared/`, which the current map omits                                             | ☐      |
 | 3.3 | ts-morph codemod over the **611 cross-layer imports only** — resolve each specifier, rewrite only on layer crossing. Leave the 501 `./` and 388 `../` alone | ☐      |
 | 3.4 | ESLint `no-restricted-imports` banning `../../*` — without this the sweep decays                                                                            | ☐      |
