@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1](https://github.com/minipuft/claude-prompts/compare/v3.0.0...v3.0.1) (2026-08-01)
+
+
+### Fixed
+
+* **ci:** ship agents/ in the plugin distribution and assert it ([#160](https://github.com/minipuft/claude-prompts/issues/160)) ([1341e08](https://github.com/minipuft/claude-prompts/commit/1341e08e7abe40013069c5f008d56bebc5496668))
+
+
+### Changed
+
+* **server:** migrate cross-layer imports to package.json subpath imports ([901081a](https://github.com/minipuft/claude-prompts/commit/901081a144d9c79f5a5a4808f3bbd50d90cf4e65))
+* **server:** subpath imports + declared public API contract ([b05a181](https://github.com/minipuft/claude-prompts/commit/b05a1815b9e13292fa97c8b03877435a412bd9fb))
+
+
+### Documentation
+
+* declare the public API contract that major versions protect ([02f937f](https://github.com/minipuft/claude-prompts/commit/02f937f65ad52a919c415fce2b04eeb22a58894b))
+
 ## [3.0.0](https://github.com/minipuft/claude-prompts/compare/v2.1.0...v3.0.0) (2026-08-01)
 
 ### Added
