@@ -179,7 +179,7 @@
     "ts-morph": "^27.0.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "8.53.0",
+    "typescript-eslint": "8.65.0",
     "zod-to-json-schema": "^3.25.1"
   }
 }
