@@ -136,7 +136,7 @@ Push to main
 ### Setup
 
 ```bash
-# GitHub PAT (fine-grained, repo: claude-prompts-mcp)
+# GitHub PAT (fine-grained, repo: claude-prompts)
 # Permissions: Contents, Pull requests, Actions (read/write)
 gh secret set RELEASE_PLEASE_TOKEN
 

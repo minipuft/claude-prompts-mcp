@@ -4,9 +4,6 @@
 			"path": ".."
 		},
 		{
-			"path": "../../claude-prompts-plugin"
-		},
-		{
 			"path": "../../minipuft-plugins"
 		},
 		{
