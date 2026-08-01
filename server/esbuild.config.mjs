@@ -18,10 +18,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // The `cpm` CLI ships as a second bin of this package (package.json "bin"). Its build
 // config lives with its source in cli/ and is imported rather than duplicated here, so
-// the two entry points cannot drift. The import is DYNAMIC and guarded: a static import
-// is resolved before any code in this module runs, so it would throw in the Docker build
-// (context is server/, copied to /app, leaving ../cli unresolvable) before any existence
-// check could execute.
+// the two entry points cannot drift. The import stays DYNAMIC because a static one is
+// resolved before any code in this module runs, which would turn a missing cli/ into an
+// unattributable module-resolution error instead of the message below.
 const CLI_CONFIG = join(__dirname, '..', 'cli', 'esbuild.config.mjs');
 const CLI_ENTRY = join(__dirname, '..', 'cli', 'src', 'index.ts');
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
@@ -137,27 +136,28 @@ async function build() {
       // through its OWN esbuild. cli/ imports resolve from cli/node_modules upward,
       // which CI's Build job (server-only `npm ci`) does not install.
       //
-      // Skipped when cli/ is absent from the tree. The Docker build uses `server/` as
-      // its context and copies it to /app, so `../cli` resolves to `/cli` and does not
-      // exist — and the image runs the MCP server, which has no use for cpm. The npm
-      // publish path DOES need it, because package.json declares a `cpm` bin; that is
-      // asserted in npm-publish.yml rather than left to this skip.
-      let builtCli = false;
-      if (existsSync(CLI_ENTRY) && existsSync(CLI_CONFIG)) {
-        console.log('\nBuilding cpm CLI...');
-        const { createCliBuildOptions, checkCliBundleSize } = await import(
-          pathToFileURL(CLI_CONFIG).href
+      // Required, not optional. This used to fall back to a skip because the Docker
+      // build used `server/` as its context, leaving `../cli` unresolvable — that image
+      // no longer exists, and every remaining consumer (npm publish, plugin-dist,
+      // desktop-extension) builds from a full checkout. package.json declares a `cpm`
+      // bin, so a silent skip would publish a manifest pointing at nothing.
+      if (!existsSync(CLI_ENTRY) || !existsSync(CLI_CONFIG)) {
+        throw new Error(
+          `cpm CLI sources not found (${CLI_ENTRY}). package.json declares a "cpm" bin, ` +
+            `so this build cannot produce a publishable package. Build from a full checkout.`,
         );
-        const cliOptions = createCliBuildOptions({
-          outfile: join(__dirname, 'dist', 'cpm.js'),
-          minify: isProduction,
-        });
-        await esbuild.build(cliOptions);
-        checkCliBundleSize(cliOptions.outfile);
-        builtCli = true;
-      } else {
-        console.log(`\nSkipping cpm CLI: ${CLI_ENTRY} not present (expected in the Docker build).`);
       }
+
+      console.log('\nBuilding cpm CLI...');
+      const { createCliBuildOptions, checkCliBundleSize } = await import(
+        pathToFileURL(CLI_CONFIG).href
+      );
+      const cliOptions = createCliBuildOptions({
+        outfile: join(__dirname, 'dist', 'cpm.js'),
+        minify: isProduction,
+      });
+      await esbuild.build(cliOptions);
+      checkCliBundleSize(cliOptions.outfile);
 
       // No declaration emit. This package ships a server binary and Python hooks, not a
       // library — nothing imports it, so the 405 .d.ts files this produced were read by
@@ -165,7 +165,7 @@ async function build() {
       // Restore this step alongside a real consumer, together with package.json "types"
       // and a smoke test that typechecks against `npm pack` output.
 
-      console.log(`\nBuild complete: dist/index.js${builtCli ? ', dist/cpm.js' : ''}`);
+      console.log('\nBuild complete: dist/index.js, dist/cpm.js');
     }
   } catch (error) {
     console.error('Build failed:', error);

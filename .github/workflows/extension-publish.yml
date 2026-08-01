@@ -250,8 +250,14 @@ jobs:
 
   # Sync version to all downstream repos — centralized, no downstream config needed
   sync-downstream:
+    # workflow_dispatch included deliberately. Every other job here already accepts both
+    # triggers; this one did not, so the documented manual-recovery path could rebuild and
+    # republish everything EXCEPT the job that most often needs re-running. When the v3.0.0
+    # and v3.0.1 syncs failed on a downstream token permission, re-dispatching reported
+    # success while silently skipping the sync — a green run that fixed nothing.
     if: >-
-      github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      || github.event_name == 'workflow_dispatch'
     needs: publish-dist
     runs-on: ubuntu-latest
     strategy:

@@ -39,10 +39,9 @@
 
   // Package file detection: no `enabledManagers` allowlist on purpose.
   // This config was inert until 2026-07-31, so its `["npm"]` allowlist had never
-  // taken effect. Activating it as written would have silently dropped the
-  // `dockerfile` manager (server/src/Dockerfile base images) and `nodenv`
-  // (.node-version, the SSOT every workflow now resolves Node from).
-  // Auto-detection is what has actually been running; keep it.
+  // taken effect. Activating it as written would have silently dropped the `nodenv`
+  // manager (.node-version, the SSOT every workflow now resolves Node from) and the
+  // `github-actions` manager. Auto-detection is what has actually been running; keep it.
   packageRules: [
     {
       description: "Security updates - immediate and auto-merge",

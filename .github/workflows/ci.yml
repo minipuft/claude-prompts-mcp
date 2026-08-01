@@ -176,7 +176,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # 24 is what actually ships: every publish path (npm, docker, extension) reads
+      # 24 is what actually ships: every publish path (npm, extension) reads
       # .node-version, which is 24. Testing only 22.x meant a Node-24-specific regression
       # passed CI and shipped. 22.x stays because engines.node is ">=22.0.0".
       matrix:
