@@ -69,10 +69,6 @@ pids/
 # MCP Server Specific
 admin-ui/
 server/cache/
-# Track graph sources (.dot) but ignore generated assets
-server/graphs/*
-!server/graphs/*.dot
-
 # Version history sidecar files (now stored in SQLite)
 **/.history.json
 

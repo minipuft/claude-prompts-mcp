@@ -9,8 +9,8 @@ more work is finalized for that release. Stacking is required, not preferred: `o
 cannot enforce guards that do not exist there, and #150 already modifies `ci.yml`.
 **Consequence**: this branch's PR shows #150's commits until #150 lands, and must merge after it.
 **Work type**: bug_fix (Tier 1–2), refactor (Tier 3, deferred)
-**Status**: **Tier 1 complete** (2026-07-31, gate passed — see Tier 1 Gate verdict). 1.4 held at ◐
-by design until this branch merges. Tier 2 open. Tier 3 deferred.
+**Status**: **Tiers 1 and 2 complete** (2026-07-31, both gates passed). 1.4 held at ◐ by design
+until this branch merges. Tier 3 deferred.
 
 | Measure                                           | Before            | Now       | Target |
 | ------------------------------------------------- | ----------------- | --------- | ------ |
@@ -18,7 +18,7 @@ by design until this branch merges. Tier 2 open. Tier 3 deferred.
 | Recurrence guards (`validate:no-*`) run in CI     | **0/8**           | **8/8**   | 8/8    |
 | Unpinned tool installs in workflows               | **2**             | **0**     | 0      |
 | Node version CI tests vs. Node version shipped    | 22.x/24           | 22.x+24   | same   |
-| Dead steps in `.husky/pre-push`                   | **1**             | 1         | 0 (T2) |
+| Dead steps in `.husky/pre-push`                   | **1**             | **0**     | 0      |
 | PR classes that can never satisfy required checks | **1** (docs-only) | **0**     | 0      |
 
 `validate:all` grew 21 → 23 in Tier 1 (`validate:required-contexts` plus its self-test). It also
@@ -334,18 +334,68 @@ satisfiable by the workflows in the tree.
 
 ## Tier 2 — Husky and gate coherence
 
-| #   | Step                                                                                                                    | Closes | Status |
-| --- | ----------------------------------------------------------------------------------------------------------------------- | ------ | ------ |
-| 2.1 | `pre-push`: grep `$PUSHED_FILES` instead of `git diff --cached` for `.dot` changes; prove it fires by touching a `.dot` | F4     | ☐      |
-| 2.2 | Add pyrefly to `validate:python` so pre-push, `validate:full`, and CI agree on the Python gate                          | F5     | ☐      |
-| 2.3 | Define one canonical gate and make the others documented subsets; record the decision in `CLAUDE.md`                    | F5     | ☐      |
-| 2.4 | Resolve `downstream-sync` `continue-on-error` — remove it, or comment what evidence retires it                          | F8     | ☐      |
-| 2.5 | `pre-push` step renumbering; `commit-msg` mode → 755; decide on `sed -i` portability                                    | F9     | ☐      |
-| 2.6 | Add `build` to `pre-push` — it gates a required status check and is absent                                              | F5b    | ☐      |
-| 2.7 | Reconcile `pre-commit` against the rule's typecheck requirement: add it, or amend `ci-release.md` and say why           | F5b    | ☐      |
+| #   | Step                                                                                                          | Closes | Status |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | ------ |
+| 2.1 | ~~grep `$PUSHED_FILES` for `.dot` changes~~ → **deleted the whole graph pipeline** (see Deviations)           | F4     | ✓      |
+| 2.2 | Add pyrefly to `validate:python` so pre-push, `validate:full`, and CI agree on the Python gate                | F5     | ✓      |
+| 2.3 | Define one canonical gate and make the others documented subsets; record the decision in `CLAUDE.md`          | F5     | ✓      |
+| 2.4 | Resolve `downstream-sync` `continue-on-error` — remove it, or comment what evidence retires it                | F8     | ✓      |
+| 2.5 | `pre-push` step renumbering; `commit-msg` mode → 755; decide on `sed -i` portability                          | F9     | ✓      |
+| 2.6 | Add `build` to `pre-push` — it gates a required status check and is absent                                    | F5b    | ✓      |
+| 2.7 | Reconcile `pre-commit` against the rule's typecheck requirement: add it, or amend `ci-release.md` and say why | F5b    | ✓      |
 
 **Exit**: every hook step is falsifiable — each one can be made to fail by an input it claims to
 check. Verify the way `verify:mcp:self-test` does, by feeding each a wrong-but-well-formed input.
+
+### Gate verdict — PASS (executed 2026-07-31)
+
+| Claim                                   | Proof                                                                                                                          |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `commit-msg` strips all three trailers  | Fed a message with all three + a body → body and subject survive, trailers and trailing blanks gone, exit **0**                |
+| `commit-msg` still rejects bad subjects | Fed `just some words` → exit **1**                                                                                             |
+| pyrefly now gates `validate:python`     | Added `hooks/lib/__tier2_probe.py` with a `bad-assignment` + `bad-argument-type` ruff cannot see → exit **1**; removed → **0** |
+| `pre-commit` typecheck can fail         | Staged a `.ts` file with `const wrong: number = 'not a number'` → hook exit **2** on `TS2322`                                  |
+| `build` works as pre-push step 8        | `npm run build` exit **0**                                                                                                     |
+| Graph pipeline left nothing dangling    | `rg "graphs:render\|graphs:validate\|render-graphs\|server/graphs"` → no hits outside this plan file                           |
+
+Tier-wide: `typecheck` 0 · `validate:all` 0 · `test:ci` 0 (146 suites / 1732 tests) · `build` 0 ·
+`sh -n` clean on all three hooks.
+
+### Deviations
+
+1. **2.1 — deleted the graph pipeline instead of fixing the grep.** F4 said the `--cached` grep
+   made the step inert. It is worse than that: **there are no `.dot` files anywhere in the repo.**
+   Commit `8a547d91` deleted all eight sources and said so explicitly — _"deleted rather than
+   renamed: last touched 2026-01-07, they describe a `src/frameworks/` layout that stopped
+   existing at the 5-layer migration, nothing references them, and no script regenerates them."_
+   Fixing the grep would make a dead step correctly detect files that can never exist. Removed the
+   `pre-push` block, `graphs:render`/`graphs:validate`, `scripts/render-graphs.sh`, the `.gitignore`
+   stanza preserving `.dot` sources, and ~3 MB of orphaned `.svg`/`.json` outputs of the deleted
+   inputs. This is the same same-PR-cleanup miss the plan is about: the sweep deleted the inputs
+   and left the machinery.
+
+2. **2.7 resolved as "add it", not "amend the rule".** `ci-release.md` budgets `pre-commit` at
+   `<10s`. Measured `typecheck` at **4.1s** wall clock, so the budget holds and the hook was simply
+   missing a step. No rule change needed.
+
+3. **2.5 — `Claude-Session:` is now stripped too.** F9 asked whether leaking it was intended.
+   `git log --format=%B -200 | grep -c '^Claude-Session:'` → **7** already in history. The hook
+   strips the other two assistant trailers, so leaving this one was an oversight, not a policy.
+   `sed -i` replaced with a temp-file pipeline (GNU takes `-i` bare, BSD requires `-i ''`; the
+   forms are mutually incompatible). Mode `711` → `755`.
+
+4. **2.3 surfaced a gap the plan did not list.** Making `pre-push` a strict subset of CI required
+   checking each step has a CI counterpart — and **`prettier --check` does not.** CI runs no format
+   check, so a formatting regression in repo-level JSON/MD/YAML can merge. Adding one to
+   `validate:all` is blocked: **27 of 103** repo-level text files do not currently satisfy Prettier,
+   so the check would be red on arrival. Recorded in `CLAUDE.md` as the single named exception to
+   the subset contract, with the condition that retires it, rather than asserting a subset property
+   that is not true. Formatting those 27 belongs in its own commit.
+
+5. **CI's standalone pyrefly step removed.** Once `validate:python` runs pyrefly and `validate:all`
+   runs `validate:python`, the separate step was a second definition of the same gate — the exact
+   shape 2.3 exists to eliminate. Also dropped `hooks/lib/_generated` from `pyrefly.toml`'s
+   `search_path`; the directory does not exist and pyrefly warned on every run.
 
 ## Tier 3 — `#` subpath imports — **DEFERRED**
 

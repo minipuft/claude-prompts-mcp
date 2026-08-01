@@ -2,6 +2,11 @@
 
 set -eu
 
+# This hook is a STRICT SUBSET of the CI `Lint & Validate` + `Build` jobs — every step
+# here also runs there. That direction is the contract (CLAUDE.md § Validation Gates):
+# a green pre-push must never be able to disagree with CI. Adding a step CI does not
+# run breaks the subset property, and so does dropping one CI depends on.
+
 SERVER_DIR=server
 
 if UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null); then
@@ -13,15 +18,15 @@ fi
 echo "🔍 Running pre-push validation..."
 echo ""
 
-echo "1/6 Type checking..."
+echo "1/8 Type checking..."
 npm --prefix "$SERVER_DIR" run typecheck || { echo "❌ Type checking failed"; exit 1; }
 
 echo ""
-echo "2/6 Linting..."
+echo "2/8 Linting..."
 npm --prefix "$SERVER_DIR" run lint:ratchet || { echo "❌ Lint ratchet failed (new violations introduced)"; exit 1; }
 
 echo ""
-echo "3/6 Format checking..."
+echo "3/8 Format checking..."
 ROOT_FORMATTABLE=$(printf '%s\n' "$PUSHED_FILES" | grep -v '^server/' | grep -E '\.(json|md|ya?ml)$' || true)
 if [ -n "$ROOT_FORMATTABLE" ]; then
   printf '%s\n' "$ROOT_FORMATTABLE" | xargs npx --prefix "$SERVER_DIR" prettier --check
@@ -30,7 +35,7 @@ else
 fi
 
 echo ""
-echo "3b/6 Python hook validation..."
+echo "4/8 Python hook validation..."
 HOOK_CHANGES=$(printf '%s\n' "$PUSHED_FILES" | grep '^hooks/' || true)
 if [ -n "$HOOK_CHANGES" ]; then
   npm --prefix "$SERVER_DIR" run validate:python || { echo "❌ Python hook validation failed"; exit 1; }
@@ -39,26 +44,22 @@ else
 fi
 
 echo ""
-echo "4/6 Running tests..."
+echo "5/8 Running tests..."
 npm --prefix "$SERVER_DIR" run test:ci || { echo "❌ Tests failed"; exit 1; }
 
 echo ""
-echo "5/6 Dependency validation..."
+echo "6/8 Dependency validation..."
 npm --prefix "$SERVER_DIR" run validate:arch || { echo "❌ Dependency validation failed"; exit 1; }
 
 echo ""
-echo "6/6 Version consistency check..."
+echo "7/8 Version consistency check..."
 npm --prefix "$SERVER_DIR" run validate:versions || { echo "❌ Version mismatch across manifests"; exit 1; }
 
-# Optional: render and validate graphs only when .dot sources changed
-CHANGED_DOTS=$(git diff --name-only --cached | grep '^server/graphs/.*\.dot$' || true)
-if [ -n "$CHANGED_DOTS" ]; then
-  echo ""
-  echo "Graphs changed; rendering diagrams..."
-  (cd .. && npm run graphs:render && npm run graphs:validate) || {
-    echo "⚠️ Graph rendering failed or Graphviz missing; skipping"
-  }
-fi
+# `Build` is a required status check on main. Without this step a push can pass every
+# local gate and still be blocked by a check the developer had no way to run locally.
+echo ""
+echo "8/8 Build..."
+npm --prefix "$SERVER_DIR" run build || { echo "❌ Build failed"; exit 1; }
 
 echo ""
 echo "✅ All pre-push validation passed!"

@@ -77,3 +77,8 @@ fi
 
 # Run lint ratchet check (allow existing violations, block new ones)
 npm --prefix "$SERVER_DIR" run -s lint:ratchet
+
+# Typecheck. `ci-release.md` § Required Hooks lists this for pre-commit under a <10s
+# budget; it was absent. Measured at 4.1s wall clock on this repo, so the budget holds
+# and the hook was simply missing a step rather than the rule being unrealistic.
+npm --prefix "$SERVER_DIR" run -s typecheck

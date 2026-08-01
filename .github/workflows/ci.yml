@@ -77,12 +77,12 @@ jobs:
       # `ChainSessionManager` or `StepState` merged green.
       # Members already covered elsewhere were removed from this job rather than run twice:
       # lint:ratchet, validate:contracts, validate:metadata, validate:versions, validate:arch.
+      # Includes the Python gate: `validate:python` runs ruff check, ruff format --check
+      # and pyrefly. There is no separate pyrefly step here on purpose — when pyrefly ran
+      # only in CI, a clean local push could still fail it, which is how the 0.55 -> 1.1.1
+      # breakage reached main.
       - name: Validate (full suite)
         run: npm run validate:all
-
-      - name: Typecheck Python hooks (Pyrefly)
-        working-directory: .
-        run: pyrefly check --baseline hooks/.pyrefly-baseline.json
 
   # The cpm CLI ships as the `cpm` bin of the claude-prompts npm package and
   # bundles server/src/cli-shared, so a server-side change can break it without

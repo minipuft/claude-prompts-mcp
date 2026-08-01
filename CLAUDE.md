@@ -10,6 +10,30 @@
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
 5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries.
 
+## Validation Gates (one contract, two subsets)
+
+**CI is the contract; every other gate is a documented strict subset of it.**
+
+The three gates once ran three different suites with no subset relation, so a green
+`pre-push` did not predict CI and `validate:full` did not either -- that is how a pyrefly
+failure reached `main` from a clean local push.
+
+| Gate | Runs | Relation |
+|------|------|----------|
+| CI `Lint & Validate` + `Build` | typecheck · `validate:all` (23) · build · tests | **The contract** |
+| `.husky/pre-push` | typecheck · lint:ratchet · prettier · validate:python · test:ci · validate:arch · validate:versions · build | strict subset -- every step also runs in CI |
+| `.husky/pre-commit` | contract regen · generated-file guard · lint:staged · validate:python\* · lint:ratchet · typecheck | strict subset, `<10s` budget |
+
+**Adding a step to a hook that CI does not run breaks the contract** -- add it to
+`validate:all` first, which CI runs whole. Removing a step CI depends on breaks it too.
+\* conditional on `hooks/` changes.
+
+**One known exception**: `pre-push` step 3 runs `prettier --check` on repo-level
+JSON/MD/YAML and CI has no counterpart, so a formatting regression in those files may
+merge. Closing it means adding a format check to `validate:all`, which is blocked on
+27 of 103 repo-level text files not currently satisfying Prettier. **Retires when**
+those 27 are formatted in a dedicated commit -- then add the check and delete this note.
+
 ## Documentation Map
 
 | Topic | Doc |

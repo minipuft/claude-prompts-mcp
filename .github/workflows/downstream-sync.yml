@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version-file: '.node-version'
+          node-version-file: ".node-version"
           cache: npm
           cache-dependency-path: server/package-lock.json
 
@@ -30,6 +30,16 @@ jobs:
         working-directory: server
         run: npm ci
 
+      # Report-only, deliberately. This workflow reacts to an already-published release;
+      # failing it cannot un-publish anything, and a red X here would only train people to
+      # ignore the run. The Summary step below surfaces `steps.validate.outcome` so the
+      # result is still visible.
+      #
+      # What retires this `continue-on-error` (cleanup-standards: a gate you cannot retire
+      # is a bug): move the same check into a step that runs BEFORE publish — in
+      # npm-publish.yml or the Build job — where failing it prevents the bad artifact
+      # rather than reporting on it. At that point this step is redundant and gets deleted
+      # outright rather than made blocking.
       - name: Validate distribution versions
         id: validate
         working-directory: server
