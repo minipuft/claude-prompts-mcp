@@ -1,6 +1,6 @@
 // @lifecycle canonical - Type definitions for gate enforcement authority.
 
-import type { PendingGateReview } from '../../../../../shared/types/chain-execution.js';
+import type { PendingGateReview } from '#shared/types/chain-execution.js';
 import type { GateVerdictSource } from '../../../../gates/core/gate-verdict-contract.js';
 
 export type {

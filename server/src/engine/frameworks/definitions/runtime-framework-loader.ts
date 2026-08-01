@@ -21,13 +21,14 @@ import {
   validateFrameworkSchema,
   type FrameworkSchemaValidationResult,
 } from './framework-schema.js';
+
+import type { FrameworkResourceDefinition } from './framework-definition-types.js';
+
 import {
   loadYamlFileSync,
   discoverYamlDirectories,
   discoverNestedYamlDirectories,
-} from '../../../shared/utils/yaml/index.js';
-
-import type { FrameworkResourceDefinition } from './framework-definition-types.js';
+} from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

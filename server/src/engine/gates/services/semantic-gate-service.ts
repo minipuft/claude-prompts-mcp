@@ -1,13 +1,13 @@
 // @lifecycle migrating - Semantic scoring service still aligning with new guardrails.
 import { CompositionalGateService } from './compositional-gate-service.js';
 
+import type { Logger } from '#infra/logging/index.js';
 import type {
   GateService,
   GateEnhancementResult,
   GateServiceConfig,
   GateValidationResult,
 } from './gate-service-interface.js';
-import type { Logger } from '../../../infra/logging/index.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
 import type { GateContext } from '../core/gate-definitions.js';
 import type { GateValidator } from '../core/gate-validator.js';

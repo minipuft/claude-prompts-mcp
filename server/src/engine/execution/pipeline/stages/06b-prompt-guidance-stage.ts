@@ -1,8 +1,8 @@
 // @lifecycle canonical - Injects prompt guidance metadata into the execution context.
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { StyleManagerPort } from '../../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { StyleManagerPort } from '#shared/types/index.js';
 import type {
   PromptGuidanceService,
   ServicePromptGuidanceResult,

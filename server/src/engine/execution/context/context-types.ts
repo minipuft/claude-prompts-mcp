@@ -7,7 +7,7 @@
  * circular dependencies.
  */
 
-import type { PendingGateReview } from '../../../shared/types/chain-execution.js';
+import type { PendingGateReview } from '#shared/types/chain-execution.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 import type { CommandParseResult } from '../parsers/command-parser.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';

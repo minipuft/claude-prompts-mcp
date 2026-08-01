@@ -1,9 +1,10 @@
 // @lifecycle canonical - Builds framework hot-reload config for the hot-reload manager.
-import { createFrameworkHotReloadRegistration } from '../engine/frameworks/definitions/index.js';
 
-import type { Logger } from '../infra/logging/index.js';
-import type { McpToolRouter } from '../mcp/tools/index.js';
-import type { AuxiliaryReloadConfig } from '../modules/hot-reload/hot-reload-observer.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { McpToolRouter } from '#mcp/tools/index.js';
+import type { AuxiliaryReloadConfig } from '#modules/hot-reload/hot-reload-observer.js';
+
+import { createFrameworkHotReloadRegistration } from '#engine/frameworks/definitions/index.js';
 
 export function buildFrameworkAuxiliaryReloadConfig(
   logger: Logger,

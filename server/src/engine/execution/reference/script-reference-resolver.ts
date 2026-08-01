@@ -26,18 +26,18 @@ import {
 } from './script-reference-errors.js';
 import { DEFAULT_SCRIPT_RESOLUTION_OPTIONS } from './script-reference-types.js';
 
+import type { Logger } from '#infra/logging/index.js';
+import type {
+  ScriptExecutorPort,
+  LoadedScriptTool,
+  ScriptExecutionResult,
+} from '#shared/types/index.js';
 import type {
   DetectedScriptReference,
   ScriptPreResolveResult,
   ScriptResolutionDiagnostics,
   ScriptResolutionOptions,
 } from './script-reference-types.js';
-import type { Logger } from '../../../infra/logging/index.js';
-import type {
-  ScriptExecutorPort,
-  LoadedScriptTool,
-  ScriptExecutionResult,
-} from '../../../shared/types/index.js';
 
 /**
  * Regex pattern to match {{script:id}}, {{script:id.field}}, {{script:id args}} references.

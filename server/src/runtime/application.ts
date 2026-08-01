@@ -23,28 +23,29 @@ import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-chan
 import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
 import { startServerWithManagers } from './startup-server.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
-import { FrameworkStateStore } from '../engine/frameworks/framework-state-store.js';
-import { GateManager } from '../engine/gates/gate-manager.js';
-import { ConfigLoader } from '../infra/config/index.js';
-import { HookRegistry } from '../infra/hooks/index.js';
-import { EnhancedLogger, Logger } from '../infra/logging/index.js';
-import { McpNotificationEmitter } from '../infra/observability/notifications/index.js';
-import { PromptAssetManager } from '../modules/prompts/index.js';
-import { reloadPromptData } from '../modules/prompts/prompt-refresh-service.js';
-import { registerResources, notifyResourcesChanged } from '../modules/resources/index.js';
-import { ConversationStore, createConversationStore } from '../modules/text-refs/conversation.js';
-import { TextReferenceStore } from '../modules/text-refs/index.js';
-import { ResolvedFrameworkConfig, TransportMode } from '../shared/types/index.js';
-import { ServiceOrchestrator } from '../shared/utils/service-orchestrator.js';
 
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { ServerLifecycle, TransportRouter } from '#infra/http/index.js';
+import type { ApiRouter } from '#mcp/http/api.js';
+import type { McpToolRouter } from '#mcp/tools/index.js';
+import type { ToolDescriptionLoader } from '#mcp/tools/tool-description-loader.js';
+import type { HotReloadEvent } from '#modules/hot-reload/hot-reload-observer.js';
+import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { PathResolver } from './paths.js';
-import type { ConvertedPrompt } from '../engine/execution/types.js';
-import type { ServerLifecycle, TransportRouter } from '../infra/http/index.js';
-import type { ApiRouter } from '../mcp/http/api.js';
-import type { McpToolRouter } from '../mcp/tools/index.js';
-import type { ToolDescriptionLoader } from '../mcp/tools/tool-description-loader.js';
-import type { HotReloadEvent } from '../modules/hot-reload/hot-reload-observer.js';
-import type { Category, PromptData } from '../modules/prompts/types.js';
+
+import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import { GateManager } from '#engine/gates/gate-manager.js';
+import { ConfigLoader } from '#infra/config/index.js';
+import { HookRegistry } from '#infra/hooks/index.js';
+import { EnhancedLogger, Logger } from '#infra/logging/index.js';
+import { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
+import { PromptAssetManager } from '#modules/prompts/index.js';
+import { reloadPromptData } from '#modules/prompts/prompt-refresh-service.js';
+import { registerResources, notifyResourcesChanged } from '#modules/resources/index.js';
+import { ConversationStore, createConversationStore } from '#modules/text-refs/conversation.js';
+import { TextReferenceStore } from '#modules/text-refs/index.js';
+import { ResolvedFrameworkConfig, TransportMode } from '#shared/types/index.js';
+import { ServiceOrchestrator } from '#shared/utils/service-orchestrator.js';
 
 /**
  * Application Runtime class
@@ -253,7 +254,7 @@ export class Application {
     // The emitter has canSend() guard that checks typeof notification === 'function'
     this.notificationEmitter.setServer(
       this
-        .mcpServer as unknown as import('../infra/observability/notifications/index.js').McpNotificationServer
+        .mcpServer as unknown as import('#infra/observability/notifications/index.js').McpNotificationServer
     );
     this.debugLog('HookRegistry and McpNotificationEmitter initialized');
 
@@ -744,10 +745,10 @@ export class Application {
       // Step 3.5: Re-sync resource index for hook consumption
       if (this.serverRoot) {
         try {
-          const { SqliteEngine } = await import('../infra/database/sqlite-engine.js');
-          const { createResourceIndexer } = await import('../infra/database/resource-indexer.js');
+          const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+          const { createResourceIndexer } = await import('#infra/database/resource-indexer.js');
           const { ScriptToolDefinitionLoader } =
-            await import('../modules/automation/core/script-definition-loader.js');
+            await import('#modules/automation/core/script-definition-loader.js');
           const dbManager = await SqliteEngine.getInstance(this.serverRoot, this.logger);
           await dbManager.initialize();
           const resourcesDir =

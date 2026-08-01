@@ -4,7 +4,7 @@ import {
   type ResourceVerificationIssue,
   type ResourceVerificationResult,
   type ResourceVerificationType,
-} from '../modules/resources/services/resource-verification-service.js';
+} from '#modules/resources/services/resource-verification-service.js';
 
 export type ResourceValidationType = Exclude<ResourceVerificationType, 'tools'>;
 export type ResourceValidationIssue = ResourceVerificationIssue;

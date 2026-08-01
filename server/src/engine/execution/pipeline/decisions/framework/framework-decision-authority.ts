@@ -1,6 +1,6 @@
 // @lifecycle canonical - Single source of truth for framework application decisions.
 
-import type { Logger } from '../../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { FrameworkDecision } from '../types.js';
 
 /**

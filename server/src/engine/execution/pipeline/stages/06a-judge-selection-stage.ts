@@ -1,8 +1,8 @@
 // @lifecycle canonical - Implements two-phase client-driven judge selection for resource enhancement.
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { ConfigManager } from '../../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ConfigManager } from '#shared/types/index.js';
 import type { JudgeMenuFormatter } from '../../../gates/judge/judge-menu-formatter.js';
 import type { JudgeResourceCollector } from '../../../gates/judge/judge-resource-collector.js';
 import type { ExecutionContext } from '../../context/index.js';

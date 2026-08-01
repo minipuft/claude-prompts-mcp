@@ -9,7 +9,6 @@
  * - Integration layer coordinates between systems WITHOUT interference
  */
 
-import { Logger } from '../../../infra/logging/index.js';
 import { FrameworkManager } from '../framework-manager.js';
 import { FrameworkStateStore } from '../framework-state-store.js';
 import { PromptGuidanceService } from '../prompt-guidance/service.js';
@@ -25,8 +24,10 @@ import {
   IntegratedAnalysisResult,
 } from '../types/index.js';
 
-import type { ContentAnalyzerPort, ContentAnalysisResult } from '../../../shared/types/index.js';
+import type { ContentAnalyzerPort, ContentAnalysisResult } from '#shared/types/index.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
+
+import { Logger } from '#infra/logging/index.js';
 
 /**
  * Integration types are sourced from the semantic integration type module

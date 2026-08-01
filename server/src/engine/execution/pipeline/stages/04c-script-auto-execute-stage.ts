@@ -20,8 +20,8 @@
 
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 /**

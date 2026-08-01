@@ -3,15 +3,15 @@
  * Shared types and interfaces for prompt resource services.
  */
 
-import { FrameworkManager } from '../../../../../engine/frameworks/framework-manager.js';
-import { FrameworkStateStore } from '../../../../../engine/frameworks/framework-state-store.js';
-import { ContentAnalyzer } from '../../../../../modules/semantic/configurable-semantic-analyzer.js';
-import { type Logger, ToolResponse, ConfigManager } from '../../../../../shared/types/index.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { PromptData, Category } from '#modules/prompts/types.js';
 
-import type { ConvertedPrompt } from '../../../../../engine/execution/types.js';
-import type { PromptData, Category } from '../../../../../modules/prompts/types.js';
+import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
+import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { type Logger, ToolResponse, ConfigManager } from '#shared/types/index.js';
 
-export type { CategoryResult } from '../../../../../modules/prompts/category-maintenance.js';
+export type { CategoryResult } from '#modules/prompts/category-maintenance.js';
 
 export interface PromptClassification {
   executionType: 'single' | 'chain';

@@ -21,8 +21,8 @@ import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { AttributePolicyEnforcer } from './attribute-policy.js';
 import { TRACE_EVENTS } from './types.js';
 
+import type { Logger } from '#shared/types/index.js';
 import type { TelemetryRuntime } from './types.js';
-import type { Logger } from '../../../shared/types/index.js';
 import type {
   HookExecutionContext,
   GateEvaluationResult,

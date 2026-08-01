@@ -2,11 +2,11 @@
 import { GateSetResolver } from './gate-set-resolver.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
 
+import type { Logger } from '#infra/logging/index.js';
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
 import type { GateResolutionInput } from './gate-set-resolver.js';
 import type { RegisteredGateResult } from './temporary-gate-registrar.js';
-import type { Logger } from '../../../infra/logging/index.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
 import type { FrameworkDecisionInput } from '../../execution/pipeline/decisions/index.js';

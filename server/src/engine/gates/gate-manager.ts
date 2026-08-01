@@ -12,8 +12,6 @@
  */
 
 import { GateRegistry, createGateRegistry, type GateRegistryConfig } from './registry/index.js';
-import { Logger } from '../../infra/logging/index.js';
-import { BaseResourceHandler } from '../../shared/core/resource-manager/index.js';
 
 import type { GateStateStore } from './gate-state-store.js';
 import type {
@@ -25,6 +23,9 @@ import type {
   GateRegistryStats,
 } from './types/index.js';
 import type { IGateManager } from './types.js';
+
+import { Logger } from '#infra/logging/index.js';
+import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
 
 /**
  * Configuration for GateManager

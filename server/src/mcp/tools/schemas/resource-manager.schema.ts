@@ -8,7 +8,7 @@
 
 import { z } from 'zod';
 
-import { ChainStepSchema } from '../../../modules/prompts/prompt-schema.js';
+import { ChainStepSchema } from '#modules/prompts/prompt-schema.js';
 
 // ---------------------------------------------------------------------------
 // Schema

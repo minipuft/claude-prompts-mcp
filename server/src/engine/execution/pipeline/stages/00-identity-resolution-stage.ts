@@ -1,14 +1,15 @@
 // @lifecycle canonical - Resolves request identity from MCP SDK extra payload.
-import { resolveRequestIdentityContext } from '../../../../shared/utils/request-identity-resolver.js';
-import { resolveContinuityScopeId } from '../../../../shared/utils/request-identity-scope.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type {
   RequestClientProfileHint,
   RequestIdentityResolverOptions,
-} from '../../../../shared/utils/request-identity-resolver.js';
+} from '#shared/utils/request-identity-resolver.js';
 import type { ExecutionContext } from '../../context/index.js';
+
+import { resolveRequestIdentityContext } from '#shared/utils/request-identity-resolver.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (value == null || typeof value !== 'object' || Array.isArray(value)) {

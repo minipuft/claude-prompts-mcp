@@ -34,7 +34,6 @@ import {
   type ScriptToolSchemaValidationResult,
   type ScriptToolYaml,
 } from './script-schema.js';
-import { loadYamlFileSync } from '../../../shared/utils/yaml/index.js';
 import { DEFAULT_EXECUTION_CONFIG } from '../types.js';
 
 import type {
@@ -44,6 +43,8 @@ import type {
   JSONSchemaDefinition,
   ExecutionConfig,
 } from '../types.js';
+
+import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // Re-export validation types
 export type { ScriptToolSchemaValidationResult } from './script-schema.js';

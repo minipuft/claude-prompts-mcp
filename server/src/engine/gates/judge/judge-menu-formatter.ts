@@ -1,7 +1,7 @@
 // @lifecycle canonical - Formats resource menus and judge responses for Claude.
+import type { Logger } from '#infra/logging/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { ResourceMenu } from './judge-resource-collector.js';
-import type { Logger } from '../../../infra/logging/index.js';
-import type { ToolResponse } from '../../../shared/types/index.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 
 /** Narrow type for framework judge prompt data — avoids frameworks/ import. */

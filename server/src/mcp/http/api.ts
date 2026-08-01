@@ -10,13 +10,14 @@ import path from 'path';
 
 import express, { Request, Response } from 'express';
 
-import { PromptAssetManager } from '../../modules/prompts/index.js';
-import { reloadPromptData as reloadPromptDataFromDisk } from '../../modules/prompts/prompt-refresh-service.js';
 import { McpToolRouter } from '../tools/index.js';
 
-import type { Category, PromptData } from '../../modules/prompts/types.js';
-import type { ConfigManager, Logger, ToolResponse } from '../../shared/types/index.js';
+import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { ConfigManager, Logger, ToolResponse } from '#shared/types/index.js';
 import type { ResourceManagerInput } from '../tools/resource-manager/core/types.js';
+
+import { PromptAssetManager } from '#modules/prompts/index.js';
+import { reloadPromptData as reloadPromptDataFromDisk } from '#modules/prompts/prompt-refresh-service.js';
 
 /**
  * API Manager class

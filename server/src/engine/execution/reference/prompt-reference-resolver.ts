@@ -20,8 +20,15 @@ import {
   ScriptExecutionError,
 } from './errors.js';
 import { DEFAULT_RESOLUTION_OPTIONS } from './types.js';
-import { processTemplate } from '../../../shared/utils/jsonUtils.js';
 
+import type { Logger } from '#infra/logging/index.js';
+import type {
+  ScriptExecutorPort,
+  ToolDetectionServicePort,
+  LoadedScriptTool,
+  ScriptExecutionResult,
+  ToolDetectionMatch,
+} from '#shared/types/index.js';
 import type {
   DetectedReference,
   PreResolveResult,
@@ -29,15 +36,9 @@ import type {
   ReferenceResolutionResult,
   ResolutionDiagnostics,
 } from './types.js';
-import type { Logger } from '../../../infra/logging/index.js';
-import type {
-  ScriptExecutorPort,
-  ToolDetectionServicePort,
-  LoadedScriptTool,
-  ScriptExecutionResult,
-  ToolDetectionMatch,
-} from '../../../shared/types/index.js';
 import type { ConvertedPrompt } from '../types.js';
+
+import { processTemplate } from '#shared/utils/jsonUtils.js';
 
 /**
  * Regex pattern to match {{ref:prompt_id}} references.

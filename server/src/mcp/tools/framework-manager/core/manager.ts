@@ -11,7 +11,6 @@
  * - FrameworkFileWriter: file I/O with merge support
  */
 
-import { VersionHistoryService } from '../../../../modules/versioning/index.js';
 import { ObjectDiffGenerator } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import { FrameworkDiscoveryProcessor } from '../services/framework-discovery-processor.js';
 import { FrameworkDraftValidator } from '../services/framework-draft-validator.js';
@@ -19,10 +18,12 @@ import { FrameworkFileWriter } from '../services/framework-file-writer.js';
 import { FrameworkLifecycleProcessor } from '../services/framework-lifecycle-processor.js';
 import { FrameworkVersioningProcessor } from '../services/framework-versioning-processor.js';
 
+import type { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkResourceContext } from './context.js';
 import type { FrameworkManagerInput, FrameworkManagerDependencies } from './types.js';
-import type { FrameworkStateStore } from '../../../../engine/frameworks/framework-state-store.js';
-import type { ToolResponse } from '../../../../shared/types/index.js';
+
+import { VersionHistoryService } from '#modules/versioning/index.js';
 
 export class FrameworkToolHandler {
   private readonly ctx: FrameworkResourceContext;
@@ -58,7 +59,7 @@ export class FrameworkToolHandler {
     deps.logger.debug('FrameworkToolHandler initialized');
   }
 
-  setDatabasePort(db: import('../../../../shared/types/persistence.js').DatabasePort): void {
+  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
     this.ctx.versionHistoryService.setDatabasePort(db);
   }
 

@@ -13,7 +13,7 @@ import type {
   GateValidationInfo,
   ToolResponse,
   ResponseFormatterPort,
-} from '../../../../shared/types/index.js';
+} from '#shared/types/index.js';
 
 const fallbackLogger: Logger = {
   info: () => {},

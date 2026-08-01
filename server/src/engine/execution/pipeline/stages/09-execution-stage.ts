@@ -1,16 +1,17 @@
 // @lifecycle canonical - Runs operator executors and orchestrates outputs.
-import { processTemplateWithRefs } from '../../../../shared/utils/jsonUtils.js';
 import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { ExecutionRecordStore } from '../../../../modules/chains/execution-record-store.js';
-import type { ChainSessionService } from '../../../../shared/types/index.js';
-import type { ScriptReferenceResolverPort } from '../../../../shared/utils/jsonUtils.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
+import type { ChainSessionService } from '#shared/types/index.js';
+import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 import type { ChainStepRenderResult } from '../../operators/types.js';
 import type { PromptReferenceResolver } from '../../reference/prompt-reference-resolver.js';
+
+import { processTemplateWithRefs } from '#shared/utils/jsonUtils.js';
 
 /**
  * Pipeline Stage 9: Step Execution

@@ -4,12 +4,12 @@ import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/09b-phase-guard-verification-stage.js';
 
+import type { GateReviewPrompt } from '#shared/types/chain-execution.js';
+import type { RequestClientProfile } from '#shared/types/request-identity.js';
 import type {
   ChainFormattingContext,
   SinglePromptFormattingContext,
 } from './formatting-context.js';
-import type { GateReviewPrompt } from '../../../shared/types/chain-execution.js';
-import type { RequestClientProfile } from '../../../shared/types/request-identity.js';
 import type { ExecutionContext } from '../context/index.js';
 import type { DelegationPayload, ExecutionEnvelope, RenderingHints } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';

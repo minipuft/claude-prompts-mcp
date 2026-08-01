@@ -23,4 +23,4 @@ export type {
   PromptInjectionRule,
   ResolvedInjectionConfig,
   StepInjectionConfig,
-} from '../../../../../shared/types/injection.js';
+} from '#shared/types/injection.js';

@@ -2,7 +2,7 @@
 
 import { GATE_SOURCE_PRIORITY } from '../../execution/pipeline/state/types.js';
 
-import type { Logger } from '../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { GateSource } from '../../execution/pipeline/state/types.js';
 import type { GateConfigurationInfo } from '../../execution/planning/category-extractor.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../../execution/types.js';

@@ -25,4 +25,4 @@ export {
   type ToolMatchReason,
   type ToolPendingConfirmation,
   type TriggerType,
-} from '../../shared/types/automation.js';
+} from '#shared/types/automation.js';

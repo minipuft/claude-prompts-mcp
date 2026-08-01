@@ -1,12 +1,13 @@
 // @lifecycle canonical - Normalizes incoming execution requests before parsing.
-import { serializeOptionValue } from '../../../../shared/utils/index.js';
 import { McpToolRequestValidator } from '../../validation/request-validator.js';
 import { detectToolRoutingCommand } from '../routing/tool-routing.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { ChainSessionRouterPort, ToolResponse } from '../../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ChainSessionRouterPort, ToolResponse } from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
+
+import { serializeOptionValue } from '#shared/utils/index.js';
 
 type ToolRouter = (
   targetTool: string,

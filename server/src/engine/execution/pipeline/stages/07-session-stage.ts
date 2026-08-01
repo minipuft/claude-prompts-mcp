@@ -3,12 +3,8 @@ import { randomUUID } from 'crypto';
 
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type {
-  ChainSession,
-  ChainSessionService,
-  SessionBlueprint,
-} from '../../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ChainSession, ChainSessionService, SessionBlueprint } from '#shared/types/index.js';
 import type { ExecutionContext, ParsedCommand, SessionContext } from '../../context/index.js';
 import type { ExecutionPlan } from '../../types.js';
 import type { CreateReviewOptions } from '../decisions/gates/gate-enforcement-types.js';

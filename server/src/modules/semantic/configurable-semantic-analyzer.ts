@@ -13,16 +13,13 @@
  * - LLM infrastructure is preserved for future intelligent analysis
  */
 
-import { ConvertedPrompt } from '../../engine/execution/types.js';
-import { BUILTIN_FRAMEWORK_TYPES } from '../../engine/frameworks/types/framework-types.js';
 import { SemanticAnalysisConfig } from '../../types.js';
 
+import type { ContentAnalysisResult, ContentAnalyzerPort, Logger } from '#shared/types/index.js';
 import type { LLMClient } from './types.js';
-import type {
-  ContentAnalysisResult,
-  ContentAnalyzerPort,
-  Logger,
-} from '../../shared/types/index.js';
+
+import { ConvertedPrompt } from '#engine/execution/types.js';
+import { BUILTIN_FRAMEWORK_TYPES } from '#engine/frameworks/types/framework-types.js';
 
 // Configuration constants
 const CACHE_ANALYSIS = true;
@@ -371,7 +368,7 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
   }
 }
 
-export type { ContentAnalysisResult } from '../../shared/types/index.js';
+export type { ContentAnalysisResult } from '#shared/types/index.js';
 export type { LLMClient } from './types.js';
 
 /**

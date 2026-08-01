@@ -11,7 +11,7 @@ import {
 } from '../decisions/injection/index.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 type InjectionConfigProvider = () => InjectionConfig;

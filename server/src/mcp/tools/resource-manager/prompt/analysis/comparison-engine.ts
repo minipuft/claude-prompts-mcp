@@ -5,7 +5,7 @@
 
 import { PromptClassification } from '../core/types.js';
 
-import type { Logger } from '../../../../../shared/types/index.js';
+import type { Logger } from '#shared/types/index.js';
 
 /**
  * Comparison result interface

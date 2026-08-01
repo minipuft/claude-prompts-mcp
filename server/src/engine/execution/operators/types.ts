@@ -1,5 +1,5 @@
 // @lifecycle canonical - Type definitions for chain operator execution
-import type { PendingGateReview } from '../../../shared/types/chain-execution.js';
+import type { PendingGateReview } from '#shared/types/chain-execution.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { ConvertedPrompt, ExecutionPlan } from '../types.js';
 

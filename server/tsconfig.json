@@ -17,23 +17,20 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "outDir": "dist",
-    // Without rootDir, tsc infers the common source root as the package directory, so
-    // src/index.ts emitted to dist/src/index.d.ts while package.json advertised
-    // "types": "dist/index.d.ts" — a path that did not exist. The package shipped 405
-    // declaration files and no reachable entry, so TS consumers got none of them.
-    // It is also what TS2210 requires before a package.json "imports" map can resolve.
+    // Required before a package.json "imports" map can resolve: without it tsc reports
+    // TS2210 "the project root is ambiguous". It also pins the emit layout rather than
+    // letting tsc infer it from whichever files happen to be included.
     "rootDir": "./src",
     "sourceMap": true,
-    "declaration": true,
-    "resolveJsonModule": true,
-    "baseUrl": ".",
-    "paths": {
-      "@shared/*": ["src/shared/*"],
-      "@infra/*": ["src/infra/*"],
-      "@engine/*": ["src/engine/*"],
-      "@modules/*": ["src/modules/*"],
-      "@mcp/*": ["src/mcp/*"]
-    }
+    // No `declaration`. This package ships a server binary and Python hooks, not a
+    // library: nothing imports it (`.mcpbignore` excludes server/src from the extension,
+    // manifest.json points at dist/index.js, and neither downstream plugin has a single
+    // `import ... from 'claude-prompts'`). Emitting 405 unread .d.ts files on every build
+    // is what created the broken "types" entry this replaced.
+    "resolveJsonModule": true
+    // No `paths`. Subpath imports are declared once in package.json "imports", which
+    // tsc, esbuild, Jest and Node all resolve natively — instead of the same map
+    // maintained in tsconfig, esbuild.config.mjs and jest.config.cjs.
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]

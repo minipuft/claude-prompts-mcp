@@ -10,15 +10,15 @@
  * base description loading and event management.
  */
 
+import type { FrameworkToolDescriptions } from '#engine/frameworks/types/index.js';
+import type { StyleToolDescriptionYaml } from '#modules/formatting/core/style-schema.js';
+import type { Logger, ToolDescription, ToolDescriptionsConfig } from '#shared/types/index.js';
+
 import {
   getDefaultRuntimeLoader,
   createGenericGuide,
-} from '../../engine/frameworks/definitions/index.js';
-import { getDefaultStyleDefinitionLoader } from '../../modules/formatting/core/style-definition-loader.js';
-
-import type { FrameworkToolDescriptions } from '../../engine/frameworks/types/index.js';
-import type { StyleToolDescriptionYaml } from '../../modules/formatting/core/style-schema.js';
-import type { Logger, ToolDescription, ToolDescriptionsConfig } from '../../shared/types/index.js';
+} from '#engine/frameworks/definitions/index.js';
+import { getDefaultStyleDefinitionLoader } from '#modules/formatting/core/style-definition-loader.js';
 
 /**
  * Normalize framework keys for consistent lookup (case-insensitive)

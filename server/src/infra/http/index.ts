@@ -10,7 +10,7 @@ import { ConfigLoader } from '../config/index.js';
 import { Logger } from '../logging/index.js';
 import { TransportRouter, createTransportRouter, TransportType } from './transport/index.js';
 
-import type { ApiRouterPort } from '../../shared/types/index.js';
+import type { ApiRouterPort } from '#shared/types/index.js';
 import type { Application } from 'express';
 
 // Re-export transport types and utilities for external consumers

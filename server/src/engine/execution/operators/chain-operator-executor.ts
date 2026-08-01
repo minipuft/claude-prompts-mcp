@@ -1,10 +1,11 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
-import { Logger } from '../../../infra/logging/index.js';
-import { processTemplate, processTemplateWithRefs } from '../../../shared/utils/jsonUtils.js';
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
 import { DEFAULT_GATE_RETRY_CONFIG } from '../../gates/constants.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 
+import type { PendingGateReview } from '#shared/types/chain-execution.js';
+import type { RequestClientProfile } from '#shared/types/request-identity.js';
+import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
 import type {
   ChainStepExecutionInput,
   ChainStepPrompt,
@@ -12,13 +13,13 @@ import type {
   GateReviewInput,
   NormalStepInput,
 } from './types.js';
-import type { PendingGateReview } from '../../../shared/types/chain-execution.js';
-import type { RequestClientProfile } from '../../../shared/types/request-identity.js';
-import type { ScriptReferenceResolverPort } from '../../../shared/utils/jsonUtils.js';
 import type { DelegationPayload, RenderingHints } from '../delegation/types.js';
 import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 import type { PromptReferenceResolver } from '../reference/index.js';
 import type { ConvertedPrompt } from '../types.js';
+
+import { Logger } from '#infra/logging/index.js';
+import { processTemplate, processTemplateWithRefs } from '#shared/utils/jsonUtils.js';
 
 /**
  * Type guard for gate review input

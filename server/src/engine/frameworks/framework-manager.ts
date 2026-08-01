@@ -20,10 +20,11 @@ import {
   FrameworkSelectionCriteria,
   FrameworkGuide,
 } from './types/index.js';
-import { Logger } from '../../infra/logging/index.js';
-import { BaseResourceHandler } from '../../shared/core/resource-manager/index.js';
 
 import type { ConvertedPrompt } from '../execution/types.js';
+
+import { Logger } from '#infra/logging/index.js';
+import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
 
 /**
  * Framework switch request (matches FrameworkStateStore interface)

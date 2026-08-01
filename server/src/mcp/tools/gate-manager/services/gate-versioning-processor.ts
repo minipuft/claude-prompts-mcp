@@ -1,6 +1,6 @@
 // @lifecycle canonical - Gate versioning operations: history, rollback, compare.
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
 

@@ -6,7 +6,7 @@
  * into the DelegationRenderer. They are client-agnostic — the strategy
  * maps them to client-specific output.
  */
-import type { RequestClientProfile } from '../../../shared/types/request-identity.js';
+import type { RequestClientProfile } from '#shared/types/request-identity.js';
 
 /** Semantic delegation data (client-agnostic). */
 export interface DelegationPayload {

@@ -24,11 +24,12 @@ import {
   type GateSchemaValidationResult,
   type GateDefinitionYaml,
 } from './gate-schema.js';
+
 import {
   loadYamlFileSync,
   discoverYamlDirectories,
   discoverNestedYamlDirectories,
-} from '../../../shared/utils/yaml/index.js';
+} from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

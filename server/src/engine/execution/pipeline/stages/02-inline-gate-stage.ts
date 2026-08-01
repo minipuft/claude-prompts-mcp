@@ -1,7 +1,7 @@
 // @lifecycle canonical - Evaluates inline gates before heavy execution work.
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { InlineGateProcessor } from '../../../gates/services/inline-gate-processor.js';
 import type { ExecutionContext } from '../../context/index.js';
 

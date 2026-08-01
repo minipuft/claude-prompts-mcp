@@ -24,7 +24,7 @@
 
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type {
   ToolTriggerFilterPort,
   ScriptExecutorPort,
@@ -33,7 +33,7 @@ import type {
   ScriptExecutionRequest,
   ScriptExecutionResult,
   ToolDetectionMatch,
-} from '../../../../shared/types/index.js';
+} from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 /**

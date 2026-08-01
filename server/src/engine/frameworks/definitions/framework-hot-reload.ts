@@ -9,9 +9,9 @@
 import { createGenericGuide } from './generic-framework-guide.js';
 import { RuntimeFrameworkLoader } from './runtime-framework-loader.js';
 
+import type { Logger } from '#infra/logging/index.js';
+import type { HotReloadEvent } from '#shared/types/index.js';
 import type { FrameworkRegistry } from './registry.js';
-import type { Logger } from '../../../infra/logging/index.js';
-import type { HotReloadEvent } from '../../../shared/types/index.js';
 
 /**
  * Configuration for FrameworkHotReloadCoordinator

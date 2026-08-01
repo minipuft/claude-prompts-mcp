@@ -9,11 +9,7 @@
  * when they declare an outputSchema, as required by MCP protocol.
  */
 
-import type {
-  GateValidationInfo,
-  McpErrorCode,
-  ToolResponse,
-} from '../../../shared/types/index.js';
+import type { GateValidationInfo, McpErrorCode, ToolResponse } from '#shared/types/index.js';
 import type { ErrorContext } from '../types/shared-types.js';
 
 /**

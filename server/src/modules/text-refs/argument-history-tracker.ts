@@ -14,8 +14,8 @@
  */
 import { ArgumentHistoryEntry, ReviewContext, PersistedArgumentHistory } from './types.js';
 
-import type { Logger } from '../../shared/types/index.js';
-import type { DatabasePort } from '../../shared/types/persistence.js';
+import type { Logger } from '#shared/types/index.js';
+import type { DatabasePort } from '#shared/types/persistence.js';
 
 const DEFAULT_STATE: PersistedArgumentHistory = {
   version: '1.0.0',

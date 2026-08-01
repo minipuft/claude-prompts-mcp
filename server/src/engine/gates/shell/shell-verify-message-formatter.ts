@@ -9,9 +9,9 @@
  * Extracted from ShellVerificationStage to maintain orchestration layer limits.
  */
 
-import { resolveSignalName, resolveSignalDescription } from '../../../shared/utils/process.js';
-
 import type { ShellVerifyResult, PendingShellVerification } from './types.js';
+
+import { resolveSignalName, resolveSignalDescription } from '#shared/utils/process.js';
 
 /**
  * Gate-level shell verification result.

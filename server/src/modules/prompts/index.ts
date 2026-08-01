@@ -16,7 +16,6 @@ import { PromptConverter } from './converter.js';
 import { PromptLoader } from './loader.js';
 import { discoverPromptDirectories, buildWatchTargets } from './prompt-watch-setup.js';
 import { PromptRegistry } from './registry.js';
-import { type ConfigManager, type Logger } from '../../shared/types/index.js';
 import {
   HotReloadObserver,
   createHotReloadObserver,
@@ -26,9 +25,11 @@ import {
 import { ConversationStore } from '../text-refs/conversation.js';
 import { TextReferenceStore } from '../text-refs/index.js';
 
+import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { Category, CategoryPromptsResult, PromptData } from './types.js';
-import type { ConvertedPrompt } from '../../engine/execution/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import { type ConfigManager, type Logger } from '#shared/types/index.js';
 
 /**
  * Main Prompt Asset Manager class that coordinates all prompt operations

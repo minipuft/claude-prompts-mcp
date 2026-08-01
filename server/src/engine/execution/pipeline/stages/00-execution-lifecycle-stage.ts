@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { CleanupHandler } from '../../context/internal-state.js';

@@ -1,6 +1,6 @@
 // @lifecycle canonical - Evaluates conditional injection rules.
 
-import type { Logger } from '../../../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type {
   InjectionCondition,
   InjectionConditionWhen,

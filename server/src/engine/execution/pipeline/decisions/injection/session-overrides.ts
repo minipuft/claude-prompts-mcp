@@ -1,12 +1,12 @@
 // @lifecycle canonical - Runtime session overrides for injection control.
 
+import type { Logger } from '#infra/logging/index.js';
 import type {
   InjectionRuntimeOverride,
   InjectionSessionState,
   InjectionTarget,
   InjectionType,
 } from './types.js';
-import type { Logger } from '../../../../../infra/logging/index.js';
 
 /**
  * Manages runtime session overrides for injection control.

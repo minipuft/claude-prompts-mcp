@@ -1,10 +1,10 @@
 // @lifecycle canonical - Aggregates gate evaluations across configured services.
+import type { Logger } from '#infra/logging/index.js';
 import type {
   GateService,
   GateEnhancementResult,
   GateServiceConfig,
 } from './gate-service-interface.js';
-import type { Logger } from '../../../infra/logging/index.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
 import type { GateContext } from '../core/gate-definitions.js';
 import type { GateGuidanceRenderer } from '../guidance/GateGuidanceRenderer.js';

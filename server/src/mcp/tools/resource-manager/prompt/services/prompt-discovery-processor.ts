@@ -1,6 +1,5 @@
 // @lifecycle canonical - Prompt discovery and analysis operations.
 
-import { ToolResponse } from '../../../../../shared/types/index.js';
 import { promptResourceMetadata } from '../../../../metadata/definitions/prompt-resource.js';
 import { GateAnalyzer } from '../analysis/gate-analyzer.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
@@ -10,6 +9,8 @@ import { PromptMatcher } from '../search/prompt-matcher.js';
 import { validateChainStepReferences, validateRequiredFields } from '../utils/validation.js';
 
 import type { PromptResourceActionId } from '../../../../metadata/definitions/prompt-resource.js';
+
+import { ToolResponse } from '#shared/types/index.js';
 
 const PROMPT_RESOURCE_ACTIONS = promptResourceMetadata.data.actions;
 

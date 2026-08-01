@@ -8,6 +8,7 @@ import {
 } from './constants.js';
 import { ConditionEvaluator, HierarchyResolver } from './internal/index.js';
 
+import type { Logger } from '#infra/logging/index.js';
 import type {
   ExecutionContextType,
   InjectionConfig,
@@ -19,7 +20,6 @@ import type {
   InjectionTarget,
   InjectionType,
 } from './types.js';
-import type { Logger } from '../../../../../infra/logging/index.js';
 
 /**
  * Single source of truth for all injection decisions.

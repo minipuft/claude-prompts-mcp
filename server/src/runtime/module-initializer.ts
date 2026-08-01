@@ -10,37 +10,38 @@ import {
   initializeResourceChangeTracker,
   compareResourceBaseline,
 } from './resource-change-tracking.js';
-import { getDefaultRuntimeLoader } from '../engine/frameworks/definitions/runtime-framework-loader.js';
-import {
-  createFrameworkStateStore,
-  FrameworkStateStore,
-} from '../engine/frameworks/framework-state-store.js';
-import { createGateManager, GateManager } from '../engine/gates/gate-manager.js';
-import { createMetricsCollector } from '../infra/observability/metrics/index.js';
-import { ResourceChangeTracker } from '../infra/observability/tracking/index.js';
-import { createMcpToolsManager, McpToolRouter } from '../mcp/tools/index.js';
-import {
-  createToolDescriptionLoader,
-  ToolDescriptionLoader,
-} from '../mcp/tools/tool-description-loader.js';
-import { getDefaultStyleDefinitionLoader } from '../modules/formatting/core/style-definition-loader.js';
-import { isChainPrompt } from '../shared/utils/chainUtils.js';
 
-import type { RuntimeLaunchOptions } from './options.js';
-import type { PathResolver } from './paths.js';
-import type { ConvertedPrompt } from '../engine/execution/types.js';
-import type { ConfigLoader } from '../infra/config/index.js';
-import type { Logger } from '../infra/logging/index.js';
-import type { PromptAssetManager } from '../modules/prompts/index.js';
-import type { Category, PromptData } from '../modules/prompts/types.js';
-import type { ConversationStore } from '../modules/text-refs/conversation.js';
-import type { TextReferenceStore } from '../modules/text-refs/index.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { ConfigLoader } from '#infra/config/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { PromptAssetManager } from '#modules/prompts/index.js';
+import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { ConversationStore } from '#modules/text-refs/conversation.js';
+import type { TextReferenceStore } from '#modules/text-refs/index.js';
 import type {
   ResolvedFrameworkConfig,
   HookRegistryPort,
   McpNotificationEmitterPort,
-} from '../shared/types/index.js';
+} from '#shared/types/index.js';
+import type { RuntimeLaunchOptions } from './options.js';
+import type { PathResolver } from './paths.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/runtime-framework-loader.js';
+import {
+  createFrameworkStateStore,
+  FrameworkStateStore,
+} from '#engine/frameworks/framework-state-store.js';
+import { createGateManager, GateManager } from '#engine/gates/gate-manager.js';
+import { createMetricsCollector } from '#infra/observability/metrics/index.js';
+import { ResourceChangeTracker } from '#infra/observability/tracking/index.js';
+import { createMcpToolsManager, McpToolRouter } from '#mcp/tools/index.js';
+import {
+  createToolDescriptionLoader,
+  ToolDescriptionLoader,
+} from '#mcp/tools/tool-description-loader.js';
+import { getDefaultStyleDefinitionLoader } from '#modules/formatting/core/style-definition-loader.js';
+import { isChainPrompt } from '#shared/utils/chainUtils.js';
 
 export interface ModuleInitCallbacks {
   fullServerRefresh: () => Promise<void>;
@@ -209,7 +210,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // Wire DatabasePort early so sub-handlers have it before first use
   if (serverRoot !== undefined && serverRoot !== '') {
     try {
-      const { SqliteEngine } = await import('../infra/database/sqlite-engine.js');
+      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
       const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
       await dbManager.initialize();
       mcpToolsManager.setDatabasePort(dbManager);
@@ -248,10 +249,10 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // Index resources to SQLite for hook consumption (prompt-suggest, etc.)
   if (serverRoot !== undefined && serverRoot !== '') {
     try {
-      const { SqliteEngine } = await import('../infra/database/sqlite-engine.js');
-      const { createResourceIndexer } = await import('../infra/database/resource-indexer.js');
+      const { SqliteEngine } = await import('#infra/database/sqlite-engine.js');
+      const { createResourceIndexer } = await import('#infra/database/resource-indexer.js');
       const { ScriptToolDefinitionLoader } =
-        await import('../modules/automation/core/script-definition-loader.js');
+        await import('#modules/automation/core/script-definition-loader.js');
       const dbManager = await SqliteEngine.getInstance(serverRoot, logger);
       await dbManager.initialize();
       const resourcesDir = pathResolver?.getResourcesPath() ?? path.join(serverRoot, 'resources');

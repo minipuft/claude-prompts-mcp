@@ -7,11 +7,11 @@
  * across parsing, execution, and state-management components. All lookups are
  * delegated to the FrameworkManager to ensure a single source of truth.
  */
-import { Logger } from '../../infra/logging/index.js';
-import { ValidationError, type ErrorContext } from '../../shared/utils/errorHandling.js';
-
 import type { FrameworkManager } from './framework-manager.js';
 import type { FrameworkDefinition } from './types/index.js';
+
+import { Logger } from '#infra/logging/index.js';
+import { ValidationError, type ErrorContext } from '#shared/utils/errorHandling.js';
 
 export interface FrameworkValidationOptions {
   /** Reject disabled frameworks when true */

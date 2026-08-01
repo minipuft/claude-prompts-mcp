@@ -20,17 +20,18 @@ import {
   preloadStyleDescriptions,
   buildActiveConfig,
 } from './tool-description-overlays.js';
-import { FrameworkStateStore } from '../../engine/frameworks/framework-state-store.js';
 
-import type { FrameworkToolDescriptions } from '../../engine/frameworks/types/index.js';
-import type { StyleToolDescriptionYaml } from '../../modules/formatting/core/style-schema.js';
+import type { FrameworkToolDescriptions } from '#engine/frameworks/types/index.js';
+import type { StyleToolDescriptionYaml } from '#modules/formatting/core/style-schema.js';
 import type {
   ConfigManager,
   Logger,
   ToolDescription,
   ToolDescriptionsConfig,
   ResolvedFrameworkConfig,
-} from '../../shared/types/index.js';
+} from '#shared/types/index.js';
+
+import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 
 /**
  * @deprecated Emergency fallback only - do not edit.

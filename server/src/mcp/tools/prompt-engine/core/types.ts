@@ -10,8 +10,8 @@
  * and are re-exported here for backward compatibility within the mcp/ layer.
  */
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
-import type { ConvertedPrompt } from '../../../../engine/execution/types.js';
+import type { ToolResponse } from '#shared/types/index.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
 // Re-export cross-cutting types from shared/ (canonical location)
 export {
   type StepMetadata,
@@ -21,9 +21,9 @@ export {
   type PendingGateReview,
   type FormatterExecutionContext,
   type ChainState,
-} from '../../../../shared/types/chain-execution.js';
+} from '#shared/types/chain-execution.js';
 
-import type { FormatterExecutionContext } from '../../../../shared/types/chain-execution.js';
+import type { FormatterExecutionContext } from '#shared/types/chain-execution.js';
 
 /**
  * Chain step execution context

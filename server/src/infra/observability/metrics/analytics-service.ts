@@ -9,6 +9,8 @@
 
 import { EventEmitter } from 'events';
 
+import { Logger } from '../../logging/index.js';
+
 import {
   type MetricsCollector,
   type ExecutionData,
@@ -24,8 +26,7 @@ import {
   type PipelineStageMetric,
   type CommandExecutionMetric,
   type CommandExecutionMode,
-} from '../../../shared/types/metrics.js';
-import { Logger } from '../../logging/index.js';
+} from '#shared/types/metrics.js';
 
 /**
  * Centralized Metrics Collector

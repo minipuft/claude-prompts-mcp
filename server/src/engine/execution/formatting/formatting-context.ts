@@ -1,5 +1,5 @@
 // @lifecycle canonical - Type guards and discriminated union for formatting contexts.
-import type { FormatterExecutionContext } from '../../../shared/types/chain-execution.js';
+import type { FormatterExecutionContext } from '#shared/types/chain-execution.js';
 import type { SessionContext } from '../context/index.js';
 
 /**

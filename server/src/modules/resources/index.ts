@@ -28,8 +28,8 @@ import { registerGateResources } from './handlers/gate-resources.js';
 import { registerObservabilityResources } from './handlers/observability-resources.js';
 import { registerPromptResources } from './handlers/prompt-resources.js';
 
+import type { Logger } from '#shared/types/index.js';
 import type { ResourceDependencies } from './types.js';
-import type { Logger } from '../../shared/types/index.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 export { RESOURCE_URI_PATTERNS, ResourceNotFoundError } from './types.js';

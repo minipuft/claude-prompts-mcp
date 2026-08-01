@@ -15,12 +15,12 @@
 
 import * as path from 'node:path';
 
-import { StepCaptureService } from '../../../../engine/execution/capture/step-capture-service.js';
-import { ResponseAssembler } from '../../../../engine/execution/formatting/response-assembler.js';
-import {
-  ChainBlueprintResolver,
-  SymbolicCommandBuilder,
-} from '../../../../engine/execution/parsers/index.js';
+import type { GateService } from '#engine/gates/services/gate-service-interface.js';
+import type { PipelineDependencies } from './pipeline-dependencies.js';
+
+import { StepCaptureService } from '#engine/execution/capture/step-capture-service.js';
+import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
+import { ChainBlueprintResolver, SymbolicCommandBuilder } from '#engine/execution/parsers/index.js';
 import {
   // Core pipeline
   PromptExecutionPipeline,
@@ -52,29 +52,26 @@ import {
   GateReviewStage,
   ResponseFormattingStage,
   PostFormattingCleanupStage,
-} from '../../../../engine/execution/pipeline/index.js';
-import { getDefaultRuntimeLoader } from '../../../../engine/frameworks/definitions/index.js';
+} from '#engine/execution/pipeline/index.js';
+import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/index.js';
 import {
   JudgeMenuFormatter,
   type FrameworkJudgePromptProvider,
-} from '../../../../engine/gates/judge/judge-menu-formatter.js';
-import { JudgeResourceCollector } from '../../../../engine/gates/judge/judge-resource-collector.js';
-import { GateEnhancementService } from '../../../../engine/gates/services/gate-enhancement-service.js';
-import { GateMetricsRecorder } from '../../../../engine/gates/services/gate-metrics-recorder.js';
-import { GateServiceFactory } from '../../../../engine/gates/services/gate-service-factory.js';
-import { GateVerdictProcessor } from '../../../../engine/gates/services/gate-verdict-processor.js';
-import { InlineGateProcessor } from '../../../../engine/gates/services/inline-gate-processor.js';
-import { TemporaryGateRegistrar } from '../../../../engine/gates/services/temporary-gate-registrar.js';
+} from '#engine/gates/judge/judge-menu-formatter.js';
+import { JudgeResourceCollector } from '#engine/gates/judge/judge-resource-collector.js';
+import { GateEnhancementService } from '#engine/gates/services/gate-enhancement-service.js';
+import { GateMetricsRecorder } from '#engine/gates/services/gate-metrics-recorder.js';
+import { GateServiceFactory } from '#engine/gates/services/gate-service-factory.js';
+import { GateVerdictProcessor } from '#engine/gates/services/gate-verdict-processor.js';
+import { InlineGateProcessor } from '#engine/gates/services/inline-gate-processor.js';
+import { TemporaryGateRegistrar } from '#engine/gates/services/temporary-gate-registrar.js';
 import {
   createShellVerifyExecutor,
   createVerifyActiveStateStore,
-} from '../../../../engine/gates/shell/index.js';
-import { createToolDetectionService } from '../../../../modules/automation/detection/tool-detection-service.js';
-import { createScriptExecutor } from '../../../../modules/automation/execution/script-executor.js';
-import { createToolTriggerFilter } from '../../../../modules/automation/execution/tool-trigger-filter.js';
-
-import type { PipelineDependencies } from './pipeline-dependencies.js';
-import type { GateService } from '../../../../engine/gates/services/gate-service-interface.js';
+} from '#engine/gates/shell/index.js';
+import { createToolDetectionService } from '#modules/automation/detection/tool-detection-service.js';
+import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
+import { createToolTriggerFilter } from '#modules/automation/execution/tool-trigger-filter.js';
 
 /**
  * Factory that constructs and wires the PromptExecutionPipeline.

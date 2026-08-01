@@ -33,11 +33,12 @@ import yaml from 'js-yaml';
 
 /** Injected tool loader — avoids direct import from modules layer. */
 export type ToolLoaderFn = (promptDir: string, promptId: string) => LoadedScriptTool[];
-import { computeContentHash } from '../../shared/utils/hash.js';
 
-import type { JSONSchemaDefinition, LoadedScriptTool } from '../../shared/types/automation.js';
-import type { DatabasePort, ToolIndexEntry } from '../../shared/types/persistence.js';
+import type { JSONSchemaDefinition, LoadedScriptTool } from '#shared/types/automation.js';
+import type { DatabasePort, ToolIndexEntry } from '#shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
+
+import { computeContentHash } from '#shared/utils/hash.js';
 
 /**
  * Resource types supported by the indexer
@@ -62,7 +63,7 @@ export interface IndexedResource {
 
 // ToolIndexEntry SSOT is in shared/types/persistence.ts (cross-layer contract).
 
-export type { ToolIndexEntry } from '../../shared/types/persistence.js';
+export type { ToolIndexEntry } from '#shared/types/persistence.js';
 
 /**
  * Sync result statistics

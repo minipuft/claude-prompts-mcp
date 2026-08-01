@@ -15,7 +15,7 @@ import express, { Request, Response } from 'express';
 import { ConfigLoader } from '../../config/index.js';
 import { Logger } from '../../logging/index.js';
 
-import type { TransportMode } from '../../../shared/types/index.js';
+import type { TransportMode } from '#shared/types/index.js';
 
 /**
  * Transport types supported by the server
