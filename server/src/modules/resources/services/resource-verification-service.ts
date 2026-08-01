@@ -1,12 +1,12 @@
 // @lifecycle canonical - Canonical resource schema verification service for CLI and MCP write paths.
-import { validateMethodologySchema } from '../../../engine/frameworks/methodology/methodology-schema.js';
+import { validateFrameworkSchema } from '../../../engine/frameworks/definitions/framework-schema.js';
 import { validateGateSchema } from '../../../engine/gates/core/gate-schema.js';
 import { validateScriptToolSchema } from '../../../modules/automation/core/script-schema.js';
 import { validateStyleSchema } from '../../../modules/formatting/core/style-schema.js';
 import { validatePromptYaml } from '../../../modules/prompts/prompt-schema.js';
 import { loadYamlFileSync } from '../../../shared/utils/yaml/index.js';
 
-export type ResourceVerificationType = 'prompts' | 'gates' | 'methodologies' | 'styles' | 'tools';
+export type ResourceVerificationType = 'prompts' | 'gates' | 'frameworks' | 'styles' | 'tools';
 
 export interface ResourceVerificationIssue {
   code: string;
@@ -180,8 +180,8 @@ export class ResourceVerificationService {
         return validatePromptYaml(data, expectedId);
       case 'gates':
         return validateGateSchema(data, expectedId);
-      case 'methodologies':
-        return validateMethodologySchema(data, expectedId);
+      case 'frameworks':
+        return validateFrameworkSchema(data, expectedId);
       case 'styles':
         return validateStyleSchema(data, expectedId);
       case 'tools':

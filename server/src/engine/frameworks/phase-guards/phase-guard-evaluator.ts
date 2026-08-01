@@ -1,8 +1,8 @@
-// @lifecycle canonical - Evaluates methodology phase guards against model output.
+// @lifecycle canonical - Evaluates framework phase guards against model output.
 /**
  * Phase Guard Evaluator
  *
- * Pure-function service that evaluates LLM output against methodology phase guards.
+ * Pure-function service that evaluates LLM output against framework phase guards.
  * Zero external dependencies. Takes output text + phase definitions, returns structured results.
  */
 
@@ -13,7 +13,7 @@ import type {
   PhaseGuardEvaluationResult,
   PhaseGuardResult,
 } from './types.js';
-import type { ProcessingStep } from '../types/methodology-types.js';
+import type { ProcessingStep } from '../types/framework-types.js';
 
 /**
  * Evaluate LLM output against all phase guards.
@@ -22,7 +22,7 @@ import type { ProcessingStep } from '../types/methodology-types.js';
  * Phases without guards are silently skipped.
  *
  * @param output - Full LLM output text
- * @param phases - Processing steps from methodology (may include steps without guards)
+ * @param phases - Processing steps from framework (may include steps without guards)
  * @returns Structured evaluation result with per-phase details and concatenated feedback
  */
 export function evaluatePhaseGuards(

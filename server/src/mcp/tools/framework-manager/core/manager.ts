@@ -2,22 +2,22 @@
 /**
  * Framework Tool Handler
  *
- * Thin routing layer for methodology lifecycle management.
+ * Thin routing layer for framework lifecycle management.
  * Domain logic delegated to services:
  * - FrameworkLifecycleProcessor: create, update, delete, reload, switch
  * - FrameworkDiscoveryProcessor: list, inspect
  * - FrameworkVersioningProcessor: history, rollback, compare
- * - MethodologyValidator: scoring, error/success formatting
- * - MethodologyFileWriter: file I/O with merge support
+ * - FrameworkDraftValidator: scoring, error/success formatting
+ * - FrameworkFileWriter: file I/O with merge support
  */
 
 import { VersionHistoryService } from '../../../../modules/versioning/index.js';
 import { ObjectDiffGenerator } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
 import { FrameworkDiscoveryProcessor } from '../services/framework-discovery-processor.js';
+import { FrameworkDraftValidator } from '../services/framework-draft-validator.js';
+import { FrameworkFileWriter } from '../services/framework-file-writer.js';
 import { FrameworkLifecycleProcessor } from '../services/framework-lifecycle-processor.js';
 import { FrameworkVersioningProcessor } from '../services/framework-versioning-processor.js';
-import { MethodologyFileWriter } from '../services/methodology-file-writer.js';
-import { MethodologyValidator } from '../services/methodology-validator.js';
 
 import type { FrameworkResourceContext } from './context.js';
 import type { FrameworkManagerInput, FrameworkManagerDependencies } from './types.js';
@@ -31,14 +31,14 @@ export class FrameworkToolHandler {
   private readonly versioning: FrameworkVersioningProcessor;
 
   constructor(deps: FrameworkManagerDependencies) {
-    const validationService = new MethodologyValidator();
+    const validationService = new FrameworkDraftValidator();
 
     this.ctx = {
       logger: deps.logger,
       frameworkManager: deps.frameworkManager,
       frameworkStateStore: deps.frameworkStateStore,
       configManager: deps.configManager,
-      fileService: new MethodologyFileWriter({
+      fileService: new FrameworkFileWriter({
         logger: deps.logger,
         configManager: deps.configManager,
       }),

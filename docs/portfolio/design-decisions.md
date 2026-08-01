@@ -1,6 +1,5 @@
 # Architecture & Design Decisions
 
-
 Key architectural choices and trade-offs behind the Claude Prompts MCP Server. Read this to understand _why_ things are built this way.
 
 ---
@@ -21,31 +20,32 @@ The system is an **unopinionated engine for composability**:
 
 ### Runtime: Node.js & TypeScript
 
-| Aspect | Decision | Rationale |
-|--------|----------|-----------|
-| **Runtime** | Node.js (v18+) | I/O-bound workload (file watching, hot-reload). Mature `fs` ecosystem. |
-| **Language** | TypeScript (strict mode) | Enables contract-driven development. Zod schemas bridge deterministic runtime ↔ probabilistic LLM. |
-| **Module System** | ESM | Modern, tree-shakeable, better tooling support. |
+| Aspect            | Decision                 | Rationale                                                                                          |
+| ----------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| **Runtime**       | Node.js (v18+)           | I/O-bound workload (file watching, hot-reload). Mature `fs` ecosystem.                             |
+| **Language**      | TypeScript (strict mode) | Enables contract-driven development. Zod schemas bridge deterministic runtime ↔ probabilistic LLM. |
+| **Module System** | ESM                      | Modern, tree-shakeable, better tooling support.                                                    |
 
 ### Transport: STDIO, SSE & Streamable HTTP
 
-| Transport | Protocol | Use Case | Status |
-|-----------|----------|----------|--------|
-| **STDIO** | Line-based JSON | Claude Desktop, Cursor, CLI tools. Server feels like a local extension. | Active |
-| **Streamable HTTP** | HTTP POST/GET with SSE streams | Web dashboards, remote APIs. One `/mcp` endpoint. | **Recommended** |
-| **SSE** | HTTP Server-Sent Events | Legacy integrations. | Deprecated |
+| Transport           | Protocol                       | Use Case                                                                | Status          |
+| ------------------- | ------------------------------ | ----------------------------------------------------------------------- | --------------- |
+| **STDIO**           | Line-based JSON                | Claude Desktop, Cursor, CLI tools. Server feels like a local extension. | Active          |
+| **Streamable HTTP** | HTTP POST/GET with SSE streams | Web dashboards, remote APIs. One `/mcp` endpoint.                       | **Recommended** |
+| **SSE**             | HTTP Server-Sent Events        | Legacy integrations.                                                    | Deprecated      |
 
 Transport auto-detects at startup. For HTTP, use Streamable HTTP—SSE is deprecated.
 
 ### Data Storage: File-Based Persistence (Intentional)
 
-| Aspect | Decision | Trade-off |
-|--------|----------|-----------|
-| **Storage** | JSON files + Markdown templates | _Pro_: Zero-dependency deployment. Git-versionable prompts. <br>_Con_: Parsing overhead at scale. |
-| **State** | `runtime-state/*.json` | Sessions survive STDIO process restarts. |
-| **Hot-Reload** | File watchers with debouncing | Changes propagate without server restart. |
+| Aspect         | Decision                        | Trade-off                                                                                         |
+| -------------- | ------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Storage**    | JSON files + Markdown templates | _Pro_: Zero-dependency deployment. Git-versionable prompts. <br>_Con_: Parsing overhead at scale. |
+| **State**      | `runtime-state/*.json`          | Sessions survive STDIO process restarts.                                                          |
+| **Hot-Reload** | File watchers with debouncing   | Changes propagate without server restart.                                                         |
 
 **Why file-based?**
+
 - `git clone && npm start` — no database setup
 - Version prompts alongside code
 - Human-readable: debug by reading files, not SQL queries
@@ -74,6 +74,7 @@ Request → Normalize → Parse → Plan → Enhance → Execute → Format → 
 **Why Not Middleware?**
 
 Traditional middleware (like Express) uses `next()` callbacks. Our pipeline uses explicit stage registration with controlled execution order. This provides:
+
 - Predictable ordering (stage 1 always runs before stage 2)
 - Type-safe context passing between stages
 - Early exit when response is ready
@@ -82,11 +83,11 @@ Traditional middleware (like Express) uses `next()` callbacks. Our pipeline uses
 
 We expose **3 MCP tools** instead of 20+ specialized tools:
 
-| Tool | Purpose |
-|------|---------|
-| `prompt_engine` | Execute prompts and chains |
-| `resource_manager` | CRUD for prompts, gates, methodologies |
-| `system_control` | Status, framework switching, analytics |
+| Tool               | Purpose                                |
+| ------------------ | -------------------------------------- |
+| `prompt_engine`    | Execute prompts and chains             |
+| `resource_manager` | CRUD for prompts, gates, frameworks    |
+| `system_control`   | Status, framework switching, analytics |
 
 **Why Consolidation?**
 
@@ -119,13 +120,13 @@ We implemented a custom parser for symbolic commands:
 >>analysis --> >>summary :: "strict" @CAGEERF #analytical
 ```
 
-| Operator | Purpose | Example |
-|----------|---------|---------|
-| `>>` | Prompt reference | `>>my_prompt` |
-| `-->` | Chain steps | `>>a --> >>b --> >>c` |
-| `::` | Inline gate | `>>prompt :: "validate citations"` |
-| `@` | Framework override | `>>prompt @CAGEERF` |
-| `#` | Style override | `#analytical >>report` |
+| Operator | Purpose            | Example                            |
+| -------- | ------------------ | ---------------------------------- |
+| `>>`     | Prompt reference   | `>>my_prompt`                      |
+| `-->`    | Chain steps        | `>>a --> >>b --> >>c`              |
+| `::`     | Inline gate        | `>>prompt :: "validate citations"` |
+| `@`      | Framework override | `>>prompt @CAGEERF`                |
+| `#`      | Style override     | `#analytical >>report`             |
 
 **Why a DSL?**
 
@@ -139,7 +140,7 @@ Instead of expecting users to memorize `resource_manager` parameters, we provide
 
 - `>>create_gate` — Guided gate creation
 - `>>create_prompt` — Prompt/chain authoring
-- `>>create_methodology` — Framework authoring
+- `>>create_framework` — Framework authoring
 
 **Two-Phase UX**:
 
@@ -156,11 +157,11 @@ Users don't read documentation—they explore interactively. The prompts teach t
 
 ### Ephemeral vs Persistent State
 
-| Type | Lifecycle | Storage | Use Case |
-|------|-----------|---------|----------|
-| **Ephemeral** | Dies after request | `ExecutionContext` | Pipeline state, intermediate results |
-| **Session** | Survives session requests | `chain-sessions.json` | Chain step progress, gate reviews |
-| **Global** | Survives restarts | `runtime-state/*.json` | Framework selection, system config |
+| Type          | Lifecycle                 | Storage                | Use Case                             |
+| ------------- | ------------------------- | ---------------------- | ------------------------------------ |
+| **Ephemeral** | Dies after request        | `ExecutionContext`     | Pipeline state, intermediate results |
+| **Session**   | Survives session requests | `chain-sessions.json`  | Chain step progress, gate reviews    |
+| **Global**    | Survives restarts         | `runtime-state/*.json` | Framework selection, system config   |
 
 **Key Insight**: The most common state bug is storing cross-request state in `ExecutionContext`. Use session managers for persistence.
 
@@ -168,11 +169,11 @@ Users don't read documentation—they explore interactively. The prompts teach t
 
 Three components prevent distributed state bugs:
 
-| Component | Purpose | Anti-Pattern Prevented |
-|-----------|---------|------------------------|
-| `GateAccumulator` | Priority-based gate deduplication | Duplicate gates from multiple sources |
-| `DiagnosticAccumulator` | Audit trail across stages | Lost diagnostics in async flows |
-| `FrameworkDecisionAuthority` | Single framework resolution | Multiple stages making conflicting framework decisions |
+| Component                    | Purpose                           | Anti-Pattern Prevented                                 |
+| ---------------------------- | --------------------------------- | ------------------------------------------------------ |
+| `GateAccumulator`            | Priority-based gate deduplication | Duplicate gates from multiple sources                  |
+| `DiagnosticAccumulator`      | Audit trail across stages         | Lost diagnostics in async flows                        |
+| `FrameworkDecisionAuthority` | Single framework resolution       | Multiple stages making conflicting framework decisions |
 
 ---
 
@@ -180,13 +181,13 @@ Three components prevent distributed state bugs:
 
 ### What Hot-Reloads
 
-| Resource | Watch Location | Manager |
-|----------|----------------|---------|
-| Prompts | `server/prompts/**/*.md` | FileObserver → PromptAssetManager |
-| Gates | `server/resources/gates/*/gate.yaml` | GateHotReloadCoordinator |
-| Styles | `server/resources/styles/*/style.yaml` | StyleHotReloadCoordinator |
-| Methodologies | `server/resources/methodologies/*/*.yaml` | MethodologyHotReload |
-| Tool Descriptions | `_generated/tool-descriptions.contracts.json` | ToolDescriptionLoader |
+| Resource          | Watch Location                                | Manager                           |
+| ----------------- | --------------------------------------------- | --------------------------------- |
+| Prompts           | `server/prompts/**/*.md`                      | FileObserver → PromptAssetManager |
+| Gates             | `server/resources/gates/*/gate.yaml`          | GateHotReloadCoordinator          |
+| Styles            | `server/resources/styles/*/style.yaml`        | StyleHotReloadCoordinator         |
+| Frameworks        | `server/resources/frameworks/*/*.yaml`        | FrameworkHotReload                |
+| Tool Descriptions | `_generated/tool-descriptions.contracts.json` | ToolDescriptionLoader             |
 
 ### Hot-Reload Strategy
 
@@ -201,11 +202,11 @@ Three components prevent distributed state bugs:
 
 ### Injection Types
 
-| Type | Content | Default Frequency |
-|------|---------|-------------------|
-| `system-prompt` | Methodology guidance (CAGEERF, ReACT) | Every 2 chain steps |
-| `gate-guidance` | Quality validation criteria | Every step |
-| `style-guidance` | Response formatting | First step only |
+| Type             | Content                             | Default Frequency   |
+| ---------------- | ----------------------------------- | ------------------- |
+| `system-prompt`  | Framework guidance (CAGEERF, ReACT) | Every 2 chain steps |
+| `gate-guidance`  | Quality validation criteria         | Every step          |
+| `style-guidance` | Response formatting                 | First step only     |
 
 ### 7-Level Resolution Hierarchy
 
@@ -216,6 +217,7 @@ Modifier → Runtime Override → Step Config → Chain Config → Category Conf
 **Why Hierarchical?**
 
 Different granularities need different defaults:
+
 - Quick ad-hoc prompt: Use global defaults
 - Specific chain step: Override for that step
 - Entire category: Set category-wide config
@@ -237,15 +239,15 @@ server/resources/gates/
 
 ### Gate Sources (Priority Order)
 
-| Priority | Source | Example |
-|----------|--------|---------|
-| 100 | Inline operator (`::`) | `>>prompt :: "validate citations"` |
-| 90 | Client selection | `gates: ["research-quality"]` |
-| 80 | Temporary request | Request-scoped gates |
-| 60 | Prompt config | Gates in prompt metadata |
-| 50 | Chain-level | Gates for entire chain |
-| 40 | Methodology | Framework-specific gates |
-| 20 | Registry auto | Default gates |
+| Priority | Source                 | Example                            |
+| -------- | ---------------------- | ---------------------------------- |
+| 100      | Inline operator (`::`) | `>>prompt :: "validate citations"` |
+| 90       | Client selection       | `gates: ["research-quality"]`      |
+| 80       | Temporary request      | Request-scoped gates               |
+| 60       | Prompt config          | Gates in prompt metadata           |
+| 50       | Chain-level            | Gates for entire chain             |
+| 40       | Framework              | Framework-specific gates           |
+| 20       | Registry auto          | Default gates                      |
 
 **Why Priority-Based?**
 
@@ -257,21 +259,21 @@ User intent should override defaults. Higher-priority sources (inline, client) r
 
 ### Layered Error Handling
 
-| Layer | Responsibility |
-|-------|----------------|
-| **Services** | Throw on failure (no swallowing) |
-| **Stages** | Propagate errors (don't catch) |
-| **Pipeline** | Catch, log, format response |
-| **Transport** | Format MCP error response |
+| Layer         | Responsibility                   |
+| ------------- | -------------------------------- |
+| **Services**  | Throw on failure (no swallowing) |
+| **Stages**    | Propagate errors (don't catch)   |
+| **Pipeline**  | Catch, log, format response      |
+| **Transport** | Format MCP error response        |
 
 ### Key Principle: No Silent Failures
 
 ```typescript
 // WRONG: Swallow and log
-await persist().catch(e => log(e));  // Caller thinks it succeeded!
+await persist().catch((e) => log(e)); // Caller thinks it succeeded!
 
 // RIGHT: Let errors propagate
-await persist();  // Throws on failure
+await persist(); // Throws on failure
 ```
 
 State operations that fail silently cause in-memory/file state divergence—bugs that are nearly impossible to reproduce.
@@ -282,11 +284,11 @@ State operations that fail silently cause in-memory/file state divergence—bugs
 
 ### Test Pyramid
 
-| Layer | Purpose | Location |
-|-------|---------|----------|
-| Unit | Edge cases, complex logic | `tests/unit/` |
-| Integration | Module boundaries | `tests/integration/` |
-| E2E | Full MCP transport | `tests/e2e/` |
+| Layer       | Purpose                   | Location             |
+| ----------- | ------------------------- | -------------------- |
+| Unit        | Edge cases, complex logic | `tests/unit/`        |
+| Integration | Module boundaries         | `tests/integration/` |
+| E2E         | Full MCP transport        | `tests/e2e/`         |
 
 ### Integration-First Approach
 
@@ -304,12 +306,12 @@ Unit tests with mocked dependencies can pass while real integration fails. Integ
 
 ## 10. Performance Targets
 
-| Operation | Target | Actual |
-|-----------|--------|--------|
-| Server startup | <3s | ~2s |
-| Tool response | <500ms | ~200-400ms |
-| Hot-reload | <100ms | ~50ms |
-| Framework switch | <100ms | ~20ms |
+| Operation        | Target | Actual     |
+| ---------------- | ------ | ---------- |
+| Server startup   | <3s    | ~2s        |
+| Tool response    | <500ms | ~200-400ms |
+| Hot-reload       | <100ms | ~50ms      |
+| Framework switch | <100ms | ~20ms      |
 
 ### Memory Management
 
@@ -329,4 +331,4 @@ This codebase balances **strict software engineering patterns** (pipelines, cont
 3. **Safety**: Validation at boundaries, graceful degradation on errors
 4. **Evolvability**: Internal structure changes without breaking external API
 
-The architecture enables experimentation (try different methodologies, gates, styles) while maintaining the guard rails that make production use safe.
+The architecture enables experimentation (try different frameworks, gates, styles) while maintaining the guard rails that make production use safe.

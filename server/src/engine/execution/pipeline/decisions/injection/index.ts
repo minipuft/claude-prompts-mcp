@@ -36,9 +36,15 @@ export type {
   InjectionType,
   InjectionTypeConfig,
   InjectionTypeRuleConfig,
+  PromptInjectionConfig,
+  PromptInjectionRule,
   ResolvedInjectionConfig,
   StepInjectionConfig,
 } from './types.js';
+
+// Pre-injection projection consumed by gate resolution (ADR 0001 nesting veto)
+export { isFrameworkInjected } from './framework-injection.js';
+export type { FrameworkInjectionSignals } from './framework-injection.js';
 
 // Constants
 export {

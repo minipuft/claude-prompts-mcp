@@ -51,7 +51,7 @@ export class StatusActionHandler extends ActionHandler {
 
     if (!isFrameworkEnabled && health.activeFramework) {
       response += `⚠️ **Notice**: ${health.activeFramework} is selected but framework injection is disabled.\n`;
-      response += `Prompts will execute without methodology guidance.\n`;
+      response += `Prompts will execute without framework guidance.\n`;
       response += `Use \`system_control framework enable\` to activate framework injection.\n\n`;
     }
 
@@ -84,7 +84,7 @@ export class StatusActionHandler extends ActionHandler {
     const isFrameworkEnabled = health.frameworkSystemEnabled;
     const injectionStatus = isFrameworkEnabled ? 'Working' : 'Inactive';
     const frameworkStatusText = isFrameworkEnabled
-      ? `✅ Enabled - ${health.activeFramework} methodology active`
+      ? `✅ Enabled - ${health.activeFramework} framework active`
       : `🚫 Disabled - ${health.activeFramework} selected but not injecting`;
 
     response += `- Framework System: ${frameworkStatusText}\n`;
@@ -136,7 +136,7 @@ export class StatusActionHandler extends ActionHandler {
 
     if (!isFrameworkEnabled && health.activeFramework) {
       response += `\n⚠️ **Warning**: Framework system is disabled while ${health.activeFramework} is selected.\n`;
-      response += `This means prompts will NOT receive framework methodology guidance.\n`;
+      response += `This means prompts will NOT receive framework guidance.\n`;
       response += `To enable framework injection, use: \`system_control framework enable\`\n`;
     }
 

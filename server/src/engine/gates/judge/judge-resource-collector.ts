@@ -20,7 +20,7 @@ export interface ResourceMenu {
 type PromptsProvider = () => ConvertedPrompt[];
 
 /**
- * Provider for framework resources (derived from methodology definitions).
+ * Provider for framework resources (derived from framework definitions).
  */
 type FrameworkResourceProvider = () => Promise<ConvertedPrompt[]> | ConvertedPrompt[];
 

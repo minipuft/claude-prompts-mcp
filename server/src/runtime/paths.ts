@@ -15,7 +15,7 @@
  *
  * User Customization:
  * - Set MCP_RESOURCES_PATH to point to a directory with your custom resources
- * - The directory should contain subdirs: prompts/, gates/, methodologies/, etc.
+ * - The directory should contain subdirs: prompts/, gates/, frameworks/, etc.
  */
 
 import { existsSync } from 'fs';
@@ -51,7 +51,7 @@ export interface ResolvedPaths {
   resources: string;
   config: string;
   prompts: string;
-  methodologies: string;
+  frameworks: string;
   gates: string;
   scripts: string;
   styles: string;
@@ -226,18 +226,18 @@ export class PathResolver {
   }
 
   /**
-   * Get methodologies directory path
+   * Get frameworks directory path
    *
    * Priority:
-   *   1. ${resources}/methodologies/ (from MCP_RESOURCES_PATH or workspace)
-   *   2. ${workspace}/methodologies/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/methodologies/ (default)
+   *   1. ${resources}/frameworks/ (from MCP_RESOURCES_PATH or workspace)
+   *   2. ${workspace}/frameworks/ (legacy, if exists)
+   *   3. ${packageRoot}/resources/frameworks/ (default)
    */
-  getMethodologiesPath(): string {
-    if (this.cache.methodologies) return this.cache.methodologies;
-    const { resolved, source } = this.resolveResourceSubdir('methodologies');
-    this.cache.methodologies = resolved;
-    this.logResolution('methodologies', resolved, source);
+  getFrameworksPath(): string {
+    if (this.cache.frameworks) return this.cache.frameworks;
+    const { resolved, source } = this.resolveResourceSubdir('frameworks');
+    this.cache.frameworks = resolved;
+    this.logResolution('frameworks', resolved, source);
     return resolved;
   }
 
@@ -298,7 +298,7 @@ export class PathResolver {
       resources: this.getResourcesPath(),
       config: this.getConfigPath(),
       prompts: this.getPromptsPath(),
-      methodologies: this.getMethodologiesPath(),
+      frameworks: this.getFrameworksPath(),
       gates: this.getGatesPath(),
       scripts: this.getScriptsPath(),
       styles: this.getStylesPath(),
@@ -310,13 +310,13 @@ export class PathResolver {
    *
    * When MCP_WORKSPACE differs from package root, the workspace may contain
    * supplementary resources that overlay the shipped defaults. This is the
-   * reusable pattern for all resource types (gates, methodologies, styles, etc.).
+   * reusable pattern for all resource types (gates, frameworks, styles, etc.).
    *
    * Checks two conventions:
    *   - `${workspace}/${resourceType}/`           (e.g., ~/.claude/gates/)
    *   - `${workspace}/resources/${resourceType}/` (e.g., ~/.claude/resources/gates/)
    *
-   * @param resourceType - Resource subdirectory name (gates, methodologies, styles, scripts)
+   * @param resourceType - Resource subdirectory name (gates, frameworks, styles, scripts)
    * @param primaryDir - Primary resource dir to exclude from results (dedup)
    * @returns Existing workspace-relative directories not matching primary
    */

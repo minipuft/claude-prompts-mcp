@@ -16,14 +16,14 @@ export async function del(options: DeleteOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm delete <prompt|gate|methodology|style> <id> --force\n` +
+      `Usage: cpm delete <prompt|gate|framework|style> <id> --force\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
   }
 
   if (!options.id) {
-    console.error('Usage: cpm delete <prompt|gate|methodology|style> <id> --force\nResource ID is required.');
+    console.error('Usage: cpm delete <prompt|gate|framework|style> <id> --force\nResource ID is required.');
     return 1;
   }
 

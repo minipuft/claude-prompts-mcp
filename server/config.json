@@ -20,7 +20,7 @@
     "evaluation": {
       "defaultMode": "self"
     },
-    "methodologyGates": true,
+    "frameworkGates": true,
     "mode": "on"
   },
   "hooks": {
@@ -30,7 +30,7 @@
     "directory": "./logs",
     "level": "debug"
   },
-  "methodologies": {
+  "frameworks": {
     "dynamicToolDescriptions": true,
     "enabled": true,
     "systemPromptFrequency": 3,
@@ -54,7 +54,7 @@
       "enabled": true,
       "maxEntries": 500
     },
-    "methodologies": {
+    "frameworks": {
       "enabled": true
     },
     "observability": {

@@ -1,3 +1,5 @@
+<!-- maintainers: this README is governed by docs/portfolio/readme-charter.md — run `cd server && npm run validate:readme` before committing changes -->
+
 # Claude Prompts MCP Server
 
 <div align="center">
@@ -5,7 +7,7 @@
 <img src="assets/logo.png" alt="Claude Prompts MCP Server Logo" width="200" />
 
 [![npm version](https://img.shields.io/npm/v/claude-prompts.svg?style=for-the-badge&logo=npm&color=0066cc)](https://www.npmjs.com/package/claude-prompts)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-00ff88.svg?style=for-the-badge&logo=gnu)](https://www.gnu.org/licenses/agpl-3.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-00ff88.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 **An MCP workflow server.**
 
@@ -14,14 +16,6 @@ Orchestrate agentic workflows with a composable operator syntax.<br>
 Export as native skills.
 
 [Quick Start](#quick-start) · [What You Get](#what-you-get) · [Compose Workflows](#compose-workflows) · [Run Anywhere](#run-anywhere) · [Docs](#documentation)
-
-</div>
-
-<div align="center">
-
-<img src="assets/demos/hero-demo.gif" alt="Chain workflow with gate validation — prompt executes through hooks, gate catches missing field on first attempt then self-corrects" width="720" />
-
-<sub>Chain + gate validation in action (haiku model) — gates catch errors and guide self-correction, even on the cheapest model</sub>
 
 </div>
 
@@ -36,7 +30,41 @@ Export as native skills.
 | Manual prompt writing      | Versioned templates with hot-reload, rollback, and history                            |
 | Trust the output           | Validate output between steps — self-evaluation and shell commands                    |
 
+### Is this for me?
+
+- **Use this if** you write the same prompts repeatedly, run multi-step workflows, or want to share reusable prompts with a team.
+- **Skip if** your client's built-in `/commands` already handle what you need, or you're looking for a no-code prompt library.
+- **Works with** Claude Code, Claude Desktop, Cursor, OpenCode, Gemini CLI, Codex, Windsurf, and Zed. Plugin installers add hooks (chain tracking, gate enforcement, state preservation) for Claude Code, OpenCode, and Gemini CLI; other clients run MCP-only.
+
+### How to write a chain
+
+```
+>>review target:'src/auth/' @ReACT :: 'cite sources'
+  --> security_scan :: verify:"npm test"
+  ==> implementation
+```
+
+Read top-to-bottom:
+
+- `>>review target:'src/auth/'` runs the `review` prompt against your auth folder.
+- `@ReACT` overlays the ReACT reasoning framework on this step.
+- `:: 'cite sources'` adds a gate the AI must satisfy (cite sources, or retry).
+- `--> security_scan :: verify:"npm test"` chains to step 2, which must pass `npm test` before producing output.
+- `==> implementation` hands the final step off to a client-native agent (a subagent in Claude Code).
+
+Validation runs between steps, not only at the end. For the full operator set including `*`, `%`, and `#`, see the **Syntax Reference** details block near the bottom.
+
+<div align="center">
+
+<img src="assets/demos/hero-demo.gif" alt="Chain workflow with gate validation — prompt executes through hooks, gate catches missing field on first attempt then self-corrects" width="720" />
+
+<sub>Chain + gate validation in action (haiku model) — gates catch errors and guide self-correction, even on the cheapest model</sub>
+
+</div>
+
 ---
+
+<!-- diataxis: how-to -->
 
 ## Quick Start
 
@@ -68,8 +96,6 @@ Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
 
 </details>
 
-**Custom prompts**: Use `--init=~/my-prompts` to create a workspace with starter templates you own. Prompts created via `resource_manager` are saved to your active resources directory. See [Custom Resources](#custom-resources).
-
 ---
 
 ### Claude Desktop
@@ -80,7 +106,7 @@ Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
 2. Drag into Claude Desktop Settings → MCP Servers
 3. Done
 
-The `.mcpb` bundle is self-contained (~5MB) — no npm required.
+The `.mcpb` bundle is self-contained (~5MB); no npm required.
 
 **Option B: NPX** (auto-updates)
 
@@ -105,334 +131,62 @@ Restart Claude Desktop and test: `>>research_chain topic:'remote team policies'`
 ---
 
 <details>
-<summary><strong>VS Code / Copilot</strong></summary>
+<summary><strong>Other clients</strong>: VS Code · Cursor · OpenCode · Gemini CLI · Codex · Windsurf · Zed · From Source</summary>
+
+**One-click install**:
 
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=claude-prompts&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22claude-prompts%40latest%22%5D%7D&quality=stable)
-
-Click the badge above for one-click install, or add manually to `.vscode/mcp.json`:
-
-```json
-{
-  "servers": {
-    "claude-prompts": {
-      "command": "npx",
-      "args": ["-y", "claude-prompts@latest"]
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><strong>Cursor</strong></summary>
-
 [![Install in Cursor](https://img.shields.io/badge/Cursor-Install_Server-F14F21?style=flat-square&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=claude-prompts&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsImNsYXVkZS1wcm9tcHRzQGxhdGVzdCJdfQ==)
 
-Click the badge above for one-click install, or add manually to `~/.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "claude-prompts": {
-      "command": "npx",
-      "args": ["-y", "claude-prompts@latest", "--client=cursor"]
-    }
-  }
-}
-```
-
-</details>
-
-<details>
-<summary><strong>OpenCode</strong></summary>
-
-**Option A: Plugin install** (recommended — includes hooks)
+**Plugin installers** (recommended, adds hooks):
 
 ```bash
-npm install -g opencode-prompts
-opencode-prompts install
-```
+# OpenCode (full hooks)
+npm install -g opencode-prompts && opencode-prompts install
 
-The installer configures hooks (chain tracking, gate enforcement, state preservation), plugin registration, and MCP server. See [opencode-prompts](https://github.com/minipuft/opencode-prompts) for what hooks provide.
-
-**Option B: MCP server only** (manual config, no hooks)
-
-Add to `~/.config/opencode/opencode.json`:
-
-```json
-{
-  "mcp": {
-    "claude-prompts": {
-      "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "claude-prompts@latest",
-        "--transport=stdio",
-        "--client=opencode"
-      ]
-    }
-  }
-}
-```
-
-You'll have the three MCP tools but no chain tracking, gate enforcement, or state preservation across compactions. To load your own prompts, add an `environment` key — see [Custom Resources](#custom-resources).
-
-</details>
-
-<details>
-<summary><strong>Gemini CLI</strong></summary>
-
-**Option A: Extension install** (recommended — includes hooks)
-
-```bash
-# Enable hooks (first time only — skip if already enabled)
-echo '{"hooks": {"enabled": true}}' > ~/.gemini/settings.json
-
-# Install extension
+# Gemini CLI (partial hooks)
 gemini extensions install https://github.com/minipuft/gemini-prompts
 ```
 
-The extension registers the MCP server and adds hooks for `>>` syntax detection, chain tracking, and gate reminders. See [gemini-prompts](https://github.com/minipuft/gemini-prompts) for what hooks provide.
+**Manual config** for VS Code, Cursor, OpenCode (no hooks), Gemini CLI (no hooks), Codex, Windsurf, Zed: see [Client Integration Guide](docs/guides/client-integration.md) for per-client config locations, JSON examples, and `--client` preset matrix. [Client Capabilities Reference](docs/reference/client-capabilities.md) covers profile mapping and limits.
 
-**Option B: MCP server only** (manual config, no hooks)
-
-Add to `~/.gemini/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "claude-prompts": {
-      "command": "npx",
-      "args": ["-y", "claude-prompts@latest", "--client=gemini"]
-    }
-  }
-}
-```
-
-You'll have the three MCP tools but no `>>` syntax detection, chain tracking, or gate reminders. To load your own prompts, add an `env` key — see [Custom Resources](#custom-resources).
-
-</details>
-
-<details>
-<summary><strong>Other Clients</strong> (Codex, Windsurf, Zed)</summary>
-
-Add to your MCP config file with a `--client` preset for deterministic handoff guidance:
-
-| Client   | Config Location                           | Recommended `--client`  |
-| -------- | ----------------------------------------- | ----------------------- |
-| Codex    | `~/.codex/config.toml`                    | `codex`                 |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json`     | `cursor` (experimental) |
-| Zed      | `~/.config/zed/settings.json` → `mcp` key | `unknown`               |
-
-**JSON-based configs (Windsurf/Zed):**
-
-```json
-{
-  "mcpServers": {
-    "claude-prompts": {
-      "command": "npx",
-      "args": ["-y", "claude-prompts@latest", "--client=cursor"]
-    }
-  }
-}
-```
-
-**Codex (`~/.codex/config.toml`):**
-
-```toml
-[mcp_servers.claude_prompts]
-command = "npx"
-args = ["-y", "claude-prompts@latest", "--client=codex"]
-```
-
-Supported presets: `claude-code`, `codex`, `gemini`, `opencode`, `cursor`, `unknown`.
-
-For complete per-client setup and limitations:
-
-- [Client Integration Guide](docs/guides/client-integration.md)
-- [Client Capabilities Reference](docs/reference/client-capabilities.md)
-
-</details>
-
-<details>
-<summary><strong>From Source</strong> (developers only)</summary>
+**From source** (developers):
 
 ```bash
 git clone https://github.com/minipuft/claude-prompts.git
-cd claude-prompts/server
-npm install && npm run build && npm test
+cd claude-prompts/server && npm install && npm run build && npm test
 ```
 
-Point your MCP config to `server/dist/index.js`. The esbuild bundle is self-contained.
-
-**Transport options**: `--transport=stdio` (default), `--transport=streamable-http` (HTTP clients).
+Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` (default) or `--transport=streamable-http`.
 
 </details>
 
-### Custom Resources
-
-**Use your own prompts, gates, methodologies, and styles.** Two approaches depending on whether you want the bundled resources or not:
-
-**Option A: Own workspace** (recommended for full control)
-
-Create a workspace with starter templates, then point your MCP config to it:
-
-```bash
-npx -y claude-prompts@latest --init=~/my-prompts
-```
-
-This creates `~/my-prompts/resources/` with starter prompts you own. Set `MCP_WORKSPACE` or `MCP_RESOURCES_PATH` to use it. Prompts created via `resource_manager` are saved here. Your AI can update them through MCP — no manual editing needed.
-
-**Option B: Plugin install** (bundled resources + hooks)
-
-Plugin installs (Claude Code, OpenCode, Gemini) set `MCP_WORKSPACE` automatically and ship the bundled 90+ prompts, gates, and methodologies. Prompts created via `resource_manager` are saved to the plugin's resources directory.
-
-> [!IMPORTANT]
-> **`MCP_RESOURCES_PATH`** sets the base resources directory (replaces the package default).
-> **`MCP_WORKSPACE`** enables overlay — custom resources in your workspace are loaded **alongside** bundled ones. Prompts, gates, methodologies, and styles with the same ID as bundled ones take priority.
-
-<details>
-<summary><strong>Config examples per client</strong></summary>
-
-**Claude Desktop / VS Code / Cursor** (JSON with `env`):
-
-```json
-{
-  "mcpServers": {
-    "claude-prompts": {
-      "command": "npx",
-      "args": ["-y", "claude-prompts@latest"],
-      "env": {
-        "MCP_RESOURCES_PATH": "/path/to/your/resources"
-      }
-    }
-  }
-}
-```
-
-**OpenCode** (JSON with `environment`):
-
-```json
-{
-  "mcp": {
-    "claude-prompts": {
-      "type": "local",
-      "command": ["npx", "-y", "claude-prompts@latest", "--transport=stdio"],
-      "environment": {
-        "MCP_RESOURCES_PATH": "/path/to/your/resources"
-      }
-    }
-  }
-}
-```
-
-</details>
-
-See [CLI Configuration](docs/reference/mcp-tools.md#cli-configuration) for all env vars including fine-grained path overrides (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, etc.).
+**Custom resources**: `--init=~/my-prompts` scaffolds a workspace of prompts, gates, frameworks, and styles. Edit the starter templates (YAML schema), or have your AI author new ones via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing workspace if you already have one in the right shape. See [Custom Resources Guide](docs/guides/custom-resources.md).
 
 ---
 
-<details>
-<summary><strong>See the dashboard</strong> — system status overview</summary>
-
-<br>
-
-<img src="assets/demos/status-demo-3x.gif" alt="System status demo showing loaded prompts, gates, methodologies, and active configuration" width="720" />
-
-<sub>Loaded resources, active configuration, and server health at a glance</sub>
-
-</details>
-
----
+<!-- diataxis: reference -->
 
 ## What You Get
 
-Four resource types you author, version, and compose into workflows.
+Four primitives you author, version, and compose. The bundled set ships 90+ prompts across 11 categories. All hot-reloadable, all versioned with rollback.
 
-<details>
-<summary><strong>See the catalog</strong> — listing all available prompts</summary>
+| Primitive       | Symbol | What it is                                                                                                                                                                                                               | Example                                      |
+| --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| Prompt template | `>>`   | Versioned YAML with named arguments; hot-reload on save                                                                                                                                                                  | `>>code_review target:'src/auth/'`           |
+| Gate            | `::`   | Validation criterion the AI checks its own output against; blocking or advisory; can shell-verify                                                                                                                        | `:: 'cite sources'` · `:: verify:"npm test"` |
+| Framework       | `@`    | Reasoning framework that shapes how the AI works through the problem; plug in your own or use built-ins like `@ReACT`, `@5W1H`, or the project's own `@CAGEERF` scaffold ([Frameworks Guide](docs/guides/frameworks.md)) | `@ReACT` · `@your_framework`                 |
+| Style           | `#`    | Output formatting and tone                                                                                                                                                                                               | `#analytical` · `#concise`                   |
 
-<br>
-
-<img src="assets/demos/resource-list-demo.gif" alt="Listing all available prompts across 11 categories using the resource_manager tool" width="720" />
-
-<sub>90 prompts across 11 categories — all hot-reloadable and versionable</sub>
-
-</details>
-
-### Prompt Templates
-
-Versioned YAML with hot-reload. Edit a template, test it immediately — or ask your AI to update it through MCP.
-
-```
->>code_review target:'src/auth/' language:'typescript'
-```
-
-### Validation Rules (Gates)
-
-Criteria the AI checks its own output against. Blocking or advisory.
-
-```
-:: 'no false positives' :: 'cite sources with links'
-```
-
-Failed checks can retry automatically or pause for your decision.
-
-> [!TIP]
-> **Define your own checks.** See the [Gates Guide](docs/guides/gates.md) for blocking vs advisory rules, retry behavior, and shell verification.
-
-### Reasoning Guidance (Methodologies)
-
-Frameworks that shape how the AI thinks through a problem — not just what it outputs. 6 built-in, or create your own.
-
-```
-@CAGEERF    # Context → Analysis → Goals → Execution → Evaluation → Refinement
-@ReACT      # Reason → Act → Observe loops
-@5W1H       # Who, What, Where, When, Why, How
-```
-
-> [!TIP]
-> **Create your own framework.** See the [Methodologies Guide](docs/guides/methodologies.md) for built-in frameworks and custom authoring.
-
-### Styles
-
-Response formatting and tone.
-
-```
-#analytical    # Structured, evidence-based output
-#concise       # Brief, action-focused
-```
-
-All resources are hot-reloadable, versioned with rollback history, and managed through the `resource_manager` tool.
-
-> [!TIP]
-> **Ready to build your own?** Start with the [Prompt Authoring Tutorial](docs/tutorials/build-first-prompt.md).
+All four are managed through the `resource_manager` tool. Your AI creates, edits, versions, and rolls back resources through MCP; no file editing required. Failed gate checks can retry automatically or pause for your decision ([Gates Guide](docs/guides/gates.md)). Build your first primitive: [Prompt Authoring Tutorial](docs/tutorials/build-first-prompt.md).
 
 ---
 
+<!-- diataxis: how-to -->
+
 ## Compose Workflows
 
-The operator syntax wires resources together — chain steps, add validation inline, hand off steps to agents.
-
-```
->>review target:'src/auth/' @CAGEERF :: 'no false positives'
-  --> security_scan :: verify:"npm test"
-  --> recommendations :: 'actionable, with code'
-  ==> implementation
-```
-
-<details>
-<summary><strong>See the chain</strong> — phases completing back-to-back</summary>
-
-<br>
-
-<img src="assets/demos/hero-chain-demo.gif" alt="Chain phases 3-4 executing back-to-back, compounding reasoning across steps before rendering final output" width="720" />
-
-<sub>Phases compound reasoning across steps — each step builds on validated output from the previous one</sub>
-
-</details>
+The basic chain syntax is in [How to write a chain](#how-to-write-a-chain) at the top. Two patterns extend it. Chains also support conditional branching, context threading, and agent handoffs — see [Chains Lifecycle](docs/concepts/chains-lifecycle.md) and [MCP Tools Reference](docs/reference/mcp-tools.md).
 
 <details>
 <summary><strong>See the output</strong> — tech evaluation chain with context7 research</summary>
@@ -445,22 +199,9 @@ The operator syntax wires resources together — chain steps, add validation inl
 
 </details>
 
-What happened:
-
-1. Loaded the `review` template with arguments
-2. Injected CAGEERF reasoning guidance
-3. Added a validation rule (AI self-evaluates against it)
-4. Chained output to the next step
-5. Ran a shell command for ground-truth validation
-6. Handed the final step off to a client-native subagent
-
-> [!TIP]
-> Chains support conditional branching, context threading, and agent handoffs.
-> [Chains Lifecycle](docs/concepts/chains-lifecycle.md) · [MCP Tools Reference](docs/reference/mcp-tools.md)
-
 ### Verification Loops
 
-Ground-truth validation via shell commands — the AI keeps iterating until tests pass:
+Ground-truth validation via shell commands. The AI keeps iterating until tests pass:
 
 ```
 >>implement-feature :: verify:"npm test" loop:true
@@ -474,8 +215,7 @@ Implements, runs the test, reads failures, fixes, retries. Spawns a fresh contex
 | `:full`     | 5     | 5 min   | CI validation     |
 | `:extended` | 10    | 10 min  | Large test suites |
 
-> [!TIP]
-> **Autonomous test-fix cycles.** See [Ralph Loops](docs/guides/ralph-loops.md) for presets, timeout configuration, and context-rot prevention.
+For autonomous test-fix cycles with context-rot prevention: [Ralph Loops Guide](docs/guides/ralph-loops.md).
 
 ### Judge Mode
 
@@ -485,12 +225,11 @@ Let the AI pick the right resources for the task:
 %judge Help me refactor this authentication module
 ```
 
-Analyzes available templates, reasoning frameworks, validation rules, and styles — applies the best combination automatically.
-
-> [!TIP]
-> **How judge mode selects resources.** See [Judge Mode Guide](docs/guides/judge-mode.md) for scoring, overrides, and preview with `%judge`.
+Analyzes available templates, reasoning frameworks, validation rules, and styles, then applies the best combination automatically. For scoring and overrides see [Judge Mode Guide](docs/guides/judge-mode.md).
 
 ---
+
+<!-- diataxis: how-to -->
 
 ## Run Anywhere
 
@@ -509,50 +248,29 @@ registrations:
 npm run skills:export
 ```
 
-The `review` prompt becomes a `/review` Claude Code skill. `validate_work` becomes `/validate_work`. Same source, native experience — no MCP call required at runtime.
+The `review` prompt becomes a `/review` Claude Code skill. `validate_work` becomes `/validate_work`. Same source, native experience; no MCP call required at runtime.
 
-Compiles to Claude Code skills, Cursor rules, OpenCode commands, and more. `npm run skills:diff` flags when exports drift from source.
-
-<details>
-<summary><strong>See the export</strong> — dry-run compile + skill preview</summary>
-
-<br>
-
-<img src="assets/demos/skills-export-demo.gif" alt="Skills export dry-run compiling prompts to native skill files, then bat preview of the generated review skill with phases, gates, and arguments" width="720" />
-
-<sub>Dry-run compiles YAML templates into native client skills — review before writing</sub>
-
-</details>
-
-> [!TIP]
-> The [Skills Sync Guide](docs/guides/skills-sync.md) covers configuration, supported clients, and drift detection.
+Compiles to Claude Code skills, Cursor rules, OpenCode commands, and more. `npm run skills:diff` flags when exports drift from source. Configuration, supported clients, and drift detection: [Skills Sync Guide](docs/guides/skills-sync.md).
 
 ---
 
-### With Hooks
+<!-- diataxis: explanation -->
 
-Well-composed prompts carry their own structure. Hooks keep the experience consistent across models and long sessions.
+## With Hooks
 
-<details>
-<summary>What hooks do</summary>
+Without hooks, you're calling the three MCP tools explicitly (the LLM constructs each call). With hooks, the operators work in conversation: `>>`, `-->`, `==>`, `::` feel native rather than mediated, and workflow state survives across LLM turns and context compaction.
 
-Route operator syntax to the right tool automatically.
-Track workflow progress across steps and long sessions.
-Enforce validation rules and step handoffs between agents.
+What hooks unlock:
 
-| Behavior            | What happens                                         |
-| ------------------- | ---------------------------------------------------- |
-| Prompt routing      | `>>analyze` in conversation → correct MCP tool call  |
-| Chain continuity    | Injects step progress and continuation between steps |
-| Validation tracking | Tracks pass/fail verdicts across chain steps         |
-| Agent handoffs      | Routes `==>` steps to client-native subagents        |
-| Session persistence | Preserves workflow state through context compaction  |
+| Hook                                   | Unlocks                                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Auto-routing**                       | `>>analyze topic:'X'` in chat fires the right MCP tool call without you naming it                            |
+| **Chain continuity across compaction** | Multi-step chains preserve state when context compacts mid-execution; the chain doesn't restart from scratch |
+| **Cross-step verdict tracking**        | Gate pass/fail verdicts thread across all chain steps without the LLM re-deriving them                       |
+| **Native agent handoffs**              | `==>` routes to your client's subagent system automatically; no manual subagent invocation                   |
+| **Session persistence**                | Workflow state preserved when context compacts mid-chain                                                     |
 
-Hooks ship with the plugin install. Available for [Claude Code](.) (full), [OpenCode](https://github.com/minipuft/opencode-prompts) (full), [Gemini CLI](https://github.com/minipuft/gemini-prompts) (partial). Other clients: MCP tools only.
-
-→ [hooks/README.md](hooks/README.md)
-
-</details>
+Hooks ship with the plugin install. Full support on Claude Code (this repo) and [OpenCode](https://github.com/minipuft/opencode-prompts); partial on [Gemini CLI](https://github.com/minipuft/gemini-prompts). Other clients get the three MCP tools but no hook-driven behaviors. Detail: [hooks/README.md](hooks/README.md).
 
 ---
 
@@ -565,7 +283,7 @@ Hooks ship with the plugin install. Available for [Claude Code](.) (full), [Open
 | `-->`  | Chain     | Pipe to next step         | `step1 --> step2`      |
 | `==>`  | Handoff   | Route step to agent       | `step1 ==> agent_step` |
 |  `*`   | Repeat    | Run prompt N times        | `>>brainstorm * 5`     |
-|  `@`   | Framework | Inject reasoning guidance | `@CAGEERF`             |
+|  `@`   | Framework | Inject reasoning guidance | `@ReACT`               |
 |  `::`  | Gate      | Add validation criteria   | `:: 'cite sources'`    |
 |  `%`   | Modifier  | Toggle behavior           | `%clean`, `%judge`     |
 |  `#`   | Style     | Apply formatting          | `#analytical`          |
@@ -590,82 +308,35 @@ Hooks ship with the plugin install. Available for [Claude Code](.) (full), [Open
 | `resource_manager` | Create, update, version, and export resources  |
 | `system_control`   | Status, analytics, framework switching         |
 
-```
-prompt_engine(command:"@CAGEERF >>analysis topic:'AI safety'")
-resource_manager(resource_type:"prompt", action:"list")
-system_control(action:"status")
-```
+Most users invoke these via `>>` syntax in conversation; hooks construct the actual calls. For programmatic MCP clients calling tools directly, see [MCP Tools Reference](docs/reference/mcp-tools.md).
 
 </details>
 
 ---
 
+<!-- diataxis: explanation -->
+
 ## How It Works
 
-```mermaid
-%%{init: {'theme': 'neutral', 'themeVariables': {'background':'#0b1224','primaryColor':'#e2e8f0','primaryBorderColor':'#1f2937','primaryTextColor':'#0f172a','lineColor':'#94a3b8','fontFamily':'"DM Sans","Segoe UI",sans-serif','fontSize':'14px','edgeLabelBackground':'#0b1224'}}}%%
-flowchart TB
-    classDef actor fill:#0f172a,stroke:#cbd5e1,stroke-width:1.5px,color:#f8fafc;
-    classDef server fill:#111827,stroke:#fbbf24,stroke-width:1.8px,color:#f8fafc;
-    classDef process fill:#e2e8f0,stroke:#1f2937,stroke-width:1.6px,color:#0f172a;
-    classDef client fill:#f4d0ff,stroke:#a855f7,stroke-width:1.6px,color:#2e1065;
-    classDef clientbg fill:#1a0a24,stroke:#a855f7,stroke-width:1.8px,color:#f8fafc;
-    classDef decision fill:#fef3c7,stroke:#f59e0b,stroke-width:1.6px,color:#78350f;
+Command with operators → server parses and injects resources (framework, gates, style) → client executes the rendered prompt and self-evaluates against the gates → router decides: next step on pass, retry on fail, return on done.
 
-    linkStyle default stroke:#94a3b8,stroke-width:2px
-
-    User["1. User sends command"]:::actor
-    Example[">>analyze @CAGEERF :: 'cite sources'"]:::actor
-    User --> Example --> Parse
-
-    subgraph Server["MCP Server"]
-        direction TB
-        Parse["2. Parse operators"]:::process
-        Inject["3. Inject framework + gates"]:::process
-        Render["4. Render prompt"]:::process
-        Decide{"6. Route verdict"}:::decision
-        Parse --> Inject --> Render
-    end
-    Server:::server
-
-    subgraph Client["Claude (Client)"]
-        direction TB
-        Execute["5. Run prompt + check gates"]:::client
-    end
-    Client:::clientbg
-
-    Render -->|"Prompt with gate criteria"| Execute
-    Execute -->|"Verdict + output"| Decide
-
-    Decide -->|"PASS → render next step"| Render
-    Decide -->|"FAIL → render retry prompt"| Render
-    Decide -->|"Done"| Result["7. Return to user"]:::actor
-```
-
-Command with operators → server parses and injects resources → client executes and self-evaluates → route: next step (pass), retry (fail), or return result (done).
+Full request lifecycle, pipeline stages, and subsystem diagrams: [Architecture Overview](docs/architecture/overview.md).
 
 ---
+
+<!-- diataxis: reference -->
 
 ## Documentation
 
-| I want to...                                             | Go here                                                                |
-| -------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Build my first prompt                                    | [Prompt Authoring Tutorial](docs/tutorials/build-first-prompt.md)      |
-| Chain multi-step workflows                               | [Chains Lifecycle](docs/concepts/chains-lifecycle.md)                  |
-| Add validation to workflows                              | [Gates Guide](docs/guides/gates.md)                                    |
-| Use or create reasoning frameworks                       | [Methodologies Guide](docs/guides/methodologies.md)                    |
-| Use autonomous verification loops                        | [Ralph Loops](docs/guides/ralph-loops.md)                              |
-| Configure per-client MCP installs and `--client` presets | [Client Integration Guide](docs/guides/client-integration.md)          |
-| Compare client profile mapping and limitations           | [Client Capabilities Reference](docs/reference/client-capabilities.md) |
-| Export skills to other clients                           | [Skills Sync](docs/guides/skills-sync.md)                              |
-| Configure the server                                     | [CLI & Configuration](docs/guides/cli.md)                              |
-| Let the AI pick resources automatically                  | [Judge Mode Guide](docs/guides/judge-mode.md)                          |
-| Look up MCP tool parameters                              | [MCP Tools Reference](docs/reference/mcp-tools.md)                     |
-| Look up prompt YAML fields                               | [Prompt YAML Schema](docs/reference/prompt-yaml-schema.md)             |
-| Understand the architecture                              | [Architecture Overview](docs/architecture/overview.md)                 |
-| Fix common issues                                        | [Troubleshooting](docs/guides/troubleshooting.md)                      |
+Full docs index — organized by Diátaxis quadrant (tutorials, how-to, reference, concepts):
+
+→ **[docs/README.md](docs/README.md)**
+
+Quick jumps: [Build your first prompt](docs/tutorials/build-first-prompt.md) · [Chains lifecycle](docs/concepts/chains-lifecycle.md) · [MCP Tools reference](docs/reference/mcp-tools.md) · [Architecture overview](docs/architecture/overview.md) · [Troubleshooting](docs/guides/troubleshooting.md)
 
 ---
+
+<!-- diataxis: how-to -->
 
 ## Contributing
 
@@ -683,6 +354,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow details.
 
 ---
 
+<!-- diataxis: reference -->
+
 ## License
 
-[AGPL-3.0](LICENSE)
+[MIT](LICENSE)

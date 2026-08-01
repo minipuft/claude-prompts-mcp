@@ -27,7 +27,7 @@ export class StepExecutionStage extends BasePipelineStage {
 
   constructor(
     private readonly chainOperatorExecutor: ChainOperatorExecutor,
-    private readonly chainSessionManager: ChainSessionService,
+    private readonly chainSessionStore: ChainSessionService,
     logger: Logger,
     private readonly referenceResolver?: PromptReferenceResolver,
     private readonly scriptReferenceResolver?: ScriptReferenceResolverPort,
@@ -133,7 +133,7 @@ export class StepExecutionStage extends BasePipelineStage {
       this.handleError(new Error('Current step not found during execution'));
       return;
     }
-    const chainContextSnapshot = this.chainSessionManager.getChainContext(
+    const chainContextSnapshot = this.chainSessionStore.getChainContext(
       session.sessionId,
       context.getScopeOptions()
     );
@@ -303,8 +303,8 @@ export class StepExecutionStage extends BasePipelineStage {
    * Auto-execute results are exposed as {{tool_<id>_result}} in templates.
    *
    * For example:
-   * - A tool with id 'methodology_builder' would be available as {{tool_methodology_builder}}
-   * - Its auto-execute result would be available as {{tool_methodology_builder_result}}
+   * - A tool with id 'framework_builder' would be available as {{tool_framework_builder}}
+   * - Its auto-execute result would be available as {{tool_framework_builder_result}}
    */
   private buildTemplateArgs(context: ExecutionContext): Record<string, unknown> {
     const baseArgs = context.getPromptArgs();

@@ -202,6 +202,15 @@ jobs:
         run: npm run test:coverage
         timeout-minutes: 15
 
+      # Integration tests were run by NO automated job before 2026-07-29 — not by
+      # test:ci, not by pre-push, not by npm-publish — and rotted unnoticed to
+      # 10 failing suites / 31 failing tests out of 349. They were made non-blocking
+      # so the rot stayed visible while it was repaired; that debt is now paid and the
+      # `continue-on-error` escape hatch is gone. Blocking is what keeps it paid.
+      - name: Integration tests
+        run: npm run test:integration
+        timeout-minutes: 15
+
       - name: E2E tests
         run: npm run test:e2e
 

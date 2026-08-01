@@ -1,6 +1,6 @@
 # Claude Prompts MCP — Tutorial Video
 
-> *"We are all just liquid pretending to be solid."*
+> _"We are all just liquid pretending to be solid."_
 
 Animated tutorial video using [Remotion](https://remotion.dev/), powered by the **Liquescent** design system.
 
@@ -8,13 +8,13 @@ Animated tutorial video using [Remotion](https://remotion.dev/), powered by the 
 
 ## The Liquescent Philosophy
 
-**Liquescent** is not a theme—it is a **state of transition**. The viewer doesn't watch the product; they *dissolve into* it.
+**Liquescent** is not a theme—it is a **state of transition**. The viewer doesn't watch the product; they _dissolve into_ it.
 
 ### The Manifesto
 
 Every interface is a membrane—a permeable boundary between human intention and digital response. Traditional design treats this membrane as a wall. Liquescent dissolves that wall.
 
-The interface becomes a **living environment**. You don't *watch* it—you *inhabit* it. Every interaction sends ripples through a viscous medium. Every element exists in perpetual transformation.
+The interface becomes a **living environment**. You don't _watch_ it—you _inhabit_ it. Every interaction sends ripples through a viscous medium. Every element exists in perpetual transformation.
 
 ### The Three States
 
@@ -35,11 +35,11 @@ The interface becomes a **living environment**. You don't *watch* it—you *inha
 ╚═══════════════════════════════════════════════════════════════════╝
 ```
 
-| State | Color | Shape | Meaning |
-|-------|-------|-------|---------|
-| **Dormant** | Cyan | Pentagon | Quiet observation, latent potential, waiting |
-| **Awakening** | Amber | Octagon | User proximity, warming, edges softening |
-| **Liquescent** | Chartreuse | Circle | Full dissolution, no boundaries, completion |
+| State          | Color      | Shape    | Meaning                                      |
+| -------------- | ---------- | -------- | -------------------------------------------- |
+| **Dormant**    | Cyan       | Pentagon | Quiet observation, latent potential, waiting |
+| **Awakening**  | Amber      | Octagon  | User proximity, warming, edges softening     |
+| **Liquescent** | Chartreuse | Circle   | Full dissolution, no boundaries, completion  |
 
 ---
 
@@ -48,26 +48,31 @@ The interface becomes a **living environment**. You don't *watch* it—you *inha
 The video follows a 5-phase journey from interface to environment to perception dissolution:
 
 ### Phase 1: The Membrane Breathes
+
 - All surfaces pulse with organic rhythm (4-8 second cycles)
 - Breathing is **felt, not seen** — subtle, barely perceptible
 - 60 BPM at rest (resting heart rate)
 
 ### Phase 2: The Chain Reaction
+
 - Interactions trigger ripples that spread to siblings
 - teamLab-style "influence without boundaries"
 - One touch, infinite propagation
 
 ### Phase 3: The Ganzfeld
+
 - Depth cues dissolve at deep scroll (75%+)
 - Background and foreground merge
 - Inspired by **James Turrell's** light installations
 
 ### Phase 4: The Randomness
+
 - Perlin noise introduces organic variation
 - No two frames are mathematically identical
 - Per-element randomness creates life
 
 ### Phase 5: The Impossible Colors
+
 - P3 gamut at maximum chroma
 - Colors that exceed sRGB capability
 - `oklch(85% 0.37 195)` — electric beyond comprehension
@@ -76,14 +81,14 @@ The video follows a 5-phase journey from interface to environment to perception 
 
 ## Artistic Inspirations
 
-> *"Light is not a tool to enable vision but something to look at itself"* — James Turrell
+> _"Light is not a tool to enable vision but something to look at itself"_ — James Turrell
 
-| Artist | Philosophy | What Liquescent Channels |
-|--------|------------|--------------------------|
-| **James Turrell** | Light as medium, not illumination | The Ganzfeld Effect — environments where depth disappears |
-| **Olafur Eliasson** | Uses light, water, air to shift perception | Dichromatic effects, light splitting into wavelengths |
-| **teamLab** | "Artworks move, relate, influence without boundaries" | Interconnected animations that trigger chain reactions |
-| **Apple Liquid Glass** | Physically accurate lensing and refraction | Evolution of glassmorphism with caustics |
+| Artist                 | Philosophy                                            | What Liquescent Channels                                  |
+| ---------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| **James Turrell**      | Light as medium, not illumination                     | The Ganzfeld Effect — environments where depth disappears |
+| **Olafur Eliasson**    | Uses light, water, air to shift perception            | Dichromatic effects, light splitting into wavelengths     |
+| **teamLab**            | "Artworks move, relate, influence without boundaries" | Interconnected animations that trigger chain reactions    |
+| **Apple Liquid Glass** | Physically accurate lensing and refraction            | Evolution of glassmorphism with caustics                  |
 
 ---
 
@@ -124,14 +129,14 @@ Nature's most efficient angle for distributing elements — found in sunflowers,
 
 ```typescript
 const GOLDEN_ANGLE = 137.5; // degrees
-const PHI = 1.618;          // golden ratio
+const PHI = 1.618; // golden ratio
 ```
 
 ---
 
 ## Motion Philosophy
 
-> *"❌ Linear = mechanical, dead. ❌ Cubic-bezier = smooth but predictable. ✅ Spring physics = ALIVE."*
+> _"❌ Linear = mechanical, dead. ❌ Cubic-bezier = smooth but predictable. ✅ Spring physics = ALIVE."_
 
 ### The Unified Field Theory
 
@@ -143,17 +148,18 @@ effect = disturbance × decay(distance) × depth_modifier × (1 / viscosity)
 
 ### Spring Physics
 
-| Preset | Damping | Stiffness | Mass | Use Case |
-|--------|---------|-----------|------|----------|
-| `viscous` | 30 | 80 | 1.2 | Major state transitions |
-| `membrane` | 25 | 120 | 0.8 | Container animations |
-| `dissolution` | 40 | 60 | 1.5 | Exit animations, Ganzfeld |
-| `ripple` | 15 | 200 | 0.5 | Impact propagation |
-| `breath` | 20 | 60 | 1.0 | Idle animations |
+| Preset        | Damping | Stiffness | Mass | Use Case                  |
+| ------------- | ------- | --------- | ---- | ------------------------- |
+| `viscous`     | 30      | 80        | 1.2  | Major state transitions   |
+| `membrane`    | 25      | 120       | 0.8  | Container animations      |
+| `dissolution` | 40      | 60        | 1.5  | Exit animations, Ganzfeld |
+| `ripple`      | 15      | 200       | 0.5  | Impact propagation        |
+| `breath`      | 20      | 60        | 1.0  | Idle animations           |
 
 ### Breathing — Felt, Not Seen
 
 The breathing animation is **subtle**:
+
 - 4-second primary cycle + 7-second variation
 - 3% intensity range (0.97–1.0)
 - Multi-wave composition so no two cycles are identical
@@ -163,12 +169,12 @@ The breathing animation is **subtle**:
 
 ### Motion Patterns from Nature
 
-| Pattern | Natural Source | Implementation |
-|---------|----------------|----------------|
-| **Flocking** | Birds, fish schools | Staggered delays with phase offsets |
-| **Ripples** | Water droplets | Radial gradients with spring decay |
-| **Bioluminescence** | Deep sea creatures | Glow pulses with sin() timing |
-| **Breathing** | Living organisms | Scale + opacity with layered waves |
+| Pattern             | Natural Source      | Implementation                      |
+| ------------------- | ------------------- | ----------------------------------- |
+| **Flocking**        | Birds, fish schools | Staggered delays with phase offsets |
+| **Ripples**         | Water droplets      | Radial gradients with spring decay  |
+| **Bioluminescence** | Deep sea creatures  | Glow pulses with sin() timing       |
+| **Breathing**       | Living organisms    | Scale + opacity with layered waves  |
 
 ---
 
@@ -202,7 +208,7 @@ Prevent value overshoot in interpolations:
 
 ```typescript
 const value = interpolate(frame, [0, 100], [0, 1], {
-  extrapolateRight: 'clamp',
+  extrapolateRight: "clamp",
 });
 ```
 
@@ -229,7 +235,7 @@ remotion/
 │   │   └── domain/             # Business components
 │   │       ├── LiquescentTerminal.tsx
 │   │       ├── ValidationMembrane.tsx
-│   │       └── MethodologyField.tsx
+│   │       └── FrameworkField.tsx
 │   ├── design-system/          # Tokens, physics, types
 │   │   ├── tokens/
 │   │   │   ├── colors.ts       # OKLCH palette
@@ -270,14 +276,14 @@ npx remotion render src/index.ts Tutorial --output=out/test.mp4 --frames=0-240
 
 ## Video Sections
 
-| Section | Time | Content | State Progression |
-|---------|------|---------|-------------------|
-| Introduction | 0:00-0:08 | What is Claude Prompts MCP | dormant |
-| Basic Usage | 0:08-0:25 | `>>prompt` execution | dormant → awakening |
-| Chains | 0:25-0:45 | `-->` sequential workflows | awakening |
-| Frameworks | 0:45-1:00 | `@CAGEERF` methodology | awakening → liquescent |
-| Gates | 1:00-1:15 | `::` quality validation | liquescent |
-| Combined | 1:15-1:30 | Full example | liquescent (Ganzfeld) |
+| Section      | Time      | Content                    | State Progression      |
+| ------------ | --------- | -------------------------- | ---------------------- |
+| Introduction | 0:00-0:08 | What is Claude Prompts MCP | dormant                |
+| Basic Usage  | 0:08-0:25 | `>>prompt` execution       | dormant → awakening    |
+| Chains       | 0:25-0:45 | `-->` sequential workflows | awakening              |
+| Frameworks   | 0:45-1:00 | `@CAGEERF` framework       | awakening → liquescent |
+| Gates        | 1:00-1:15 | `::` quality validation    | liquescent             |
+| Combined     | 1:15-1:30 | Full example               | liquescent (Ganzfeld)  |
 
 See [SCRIPT.md](SCRIPT.md) for detailed timing, terminal content, and visual cues.
 
@@ -300,7 +306,7 @@ See [SCRIPT.md](SCRIPT.md) for detailed timing, terminal content, and visual cue
 - **Snap instantly** — Everything moves through viscous resistance
 - **Use flat hex colors** — Always oklch() with proper tokens
 - **Add external light** — No bright backgrounds or sunlight metaphors
-- **Over-use chartreuse** — It's the *final* state, not decoration
+- **Over-use chartreuse** — It's the _final_ state, not decoration
 - **Create sharp edges** — Corners soften; shapes flow
 - **Make breathing visible** — If you can see it pulsing, it's too strong
 - **Use CSS transitions** — They don't render in video output
@@ -309,7 +315,7 @@ See [SCRIPT.md](SCRIPT.md) for detailed timing, terminal content, and visual cue
 
 ## The Closing Thought
 
-> *"The interface doesn't contain you. It doesn't display to you. It envelops. Like warm fog that knows your name."*
+> _"The interface doesn't contain you. It doesn't display to you. It envelops. Like warm fog that knows your name."_
 
 Liquescent is not finished. It cannot be finished. By definition, it is always in the process of becoming something else.
 

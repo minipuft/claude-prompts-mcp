@@ -19,6 +19,8 @@ export type {
   InjectionType,
   InjectionTypeConfig,
   InjectionTypeRuleConfig,
+  PromptInjectionConfig,
+  PromptInjectionRule,
   ResolvedInjectionConfig,
   StepInjectionConfig,
 } from '../../../../../shared/types/injection.js';

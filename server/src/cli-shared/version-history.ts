@@ -19,7 +19,7 @@ import type {
 
 const DEFAULT_MAX_VERSIONS = 50;
 
-type ResourceType = 'prompt' | 'gate' | 'methodology' | 'style';
+type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 
 interface ResourceRef {
   resourceType: ResourceType;
@@ -341,8 +341,8 @@ function resolveResourceRef(resourceDir: string): ResourceRef | null {
   if (segments.includes('gates')) {
     return { resourceType: 'gate', resourceId: id };
   }
-  if (segments.includes('methodologies')) {
-    return { resourceType: 'methodology', resourceId: id };
+  if (segments.includes('frameworks')) {
+    return { resourceType: 'framework', resourceId: id };
   }
   if (segments.includes('styles')) {
     return { resourceType: 'style', resourceId: id };

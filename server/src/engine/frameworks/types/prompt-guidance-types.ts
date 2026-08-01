@@ -3,26 +3,26 @@
  * Prompt Guidance Type Definitions
  *
  * Contains all types related to prompt enhancement, system prompt injection,
- * and methodology-driven template processing. These types support the prompt
- * guidance system that enhances MCP prompts with methodology-specific improvements.
+ * and framework-driven template processing. These types support the prompt
+ * guidance system that enhances MCP prompts with framework-specific improvements.
  */
 
 import type {
   FrameworkDefinition,
-  MethodologyEnhancement,
+  FrameworkEnhancement,
   ProcessingGuidance,
-} from './methodology-types.js';
+} from './framework-types.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
 
 /**
  * System prompt injection configuration
  */
 export interface SystemPromptInjectionConfig {
-  /** Whether to inject methodology guidance into system prompts */
+  /** Whether to inject framework guidance into system prompts */
   enabled: boolean;
   /** Priority of injection (higher values override lower) */
   priority: number;
-  /** Template for injecting methodology guidance */
+  /** Template for injecting framework guidance */
   injectionTemplate: string;
   /** Variables available for injection template */
   availableVariables: string[];
@@ -34,9 +34,9 @@ export interface SystemPromptInjectionConfig {
 export interface SystemPromptInjectionResult {
   /** Original system prompt before injection */
   originalPrompt: string;
-  /** Enhanced system prompt with methodology guidance */
+  /** Enhanced system prompt with framework guidance */
   enhancedPrompt: string;
-  /** Methodology guidance that was injected */
+  /** Framework guidance that was injected */
   injectedGuidance: string;
   /** Framework that provided the guidance */
   sourceFramework: FrameworkDefinition;
@@ -57,7 +57,7 @@ export interface SystemPromptInjectionResult {
 }
 
 /**
- * Methodology tracking state
+ * Framework tracking state
  */
 /**
  * Prompt guidance configuration
@@ -65,8 +65,8 @@ export interface SystemPromptInjectionResult {
 export interface PromptGuidanceConfig {
   /** System prompt injection configuration */
   systemPromptInjection: SystemPromptInjectionConfig;
-  /** Methodology tracking configuration */
-  methodologyTracking: {
+  /** Framework tracking configuration */
+  frameworkTracking: {
     enabled: boolean;
     persistState: boolean;
     trackSwitches: boolean;
@@ -84,12 +84,12 @@ export interface PromptGuidanceResult {
   enhancedPrompt: ConvertedPrompt;
   /** System prompt injection result */
   systemPromptInjection: SystemPromptInjectionResult | null;
-  /** Applied methodology enhancement */
-  methodologyEnhancement: MethodologyEnhancement | null;
+  /** Applied framework enhancement */
+  frameworkEnhancement: FrameworkEnhancement | null;
   /** Guidance metadata */
   metadata: {
     guidanceTime: Date;
-    activeMethodology: string;
+    activeFrameworkType: string;
     totalEnhancements: number;
     confidenceScore: number;
     processingTime: number;
@@ -106,8 +106,8 @@ export interface PromptGuidanceAnalytics {
   successRate: number;
   /** Average enhancement confidence */
   averageConfidence: number;
-  /** Methodology usage distribution */
-  methodologyUsage: Record<
+  /** Framework usage distribution */
+  frameworkUsage: Record<
     string,
     {
       count: number;
@@ -144,51 +144,15 @@ export interface FrameworkStateInfo {
 }
 
 /**
- * Methodology state information
+ * Framework system health information ()
  */
-export interface MethodologyState {
-  /** Currently active methodology */
-  activeMethodology: string;
-  /** Previous methodology (for switch tracking) */
-  previousMethodology: string | null;
-  /** When the current methodology was activated */
-  switchedAt: Date;
-  /** Reason for the current methodology selection */
-  switchReason: string;
-  /** Whether methodology system is healthy */
-  isHealthy: boolean;
-  /** Whether methodology system is enabled */
-  methodologySystemEnabled: boolean;
-  /** Methodology switching metrics */
-  switchingMetrics: {
-    switchCount: number;
-    averageResponseTime: number;
-    errorCount: number;
-  };
-}
-
-/**
- * Methodology switch request ()
- */
-export interface MethodologySwitchRequest {
-  /** Target methodology to switch to */
-  targetMethodology: string;
-  /** Reason for the switch */
-  reason?: string;
-  /** Additional criteria for the switch */
-  criteria?: Record<string, any>;
-}
-
-/**
- * Methodology system health information ()
- */
-export interface MethodologyHealth {
+export interface FrameworkHealth {
   /** System health status */
   status: 'healthy' | 'degraded' | 'error';
-  /** Currently active methodology */
-  activeMethodology: string;
-  /** Whether methodology system is enabled */
-  methodologySystemEnabled: boolean;
+  /** Currently active framework */
+  activeFrameworkType: string;
+  /** Whether framework system is enabled */
+  frameworkSystemEnabled: boolean;
   /** Last switch time */
   lastSwitchTime: Date | null;
   /** Switching performance metrics */
@@ -203,23 +167,7 @@ export interface MethodologyHealth {
 }
 
 /**
- * Persisted methodology state for disk storage ()
- */
-export interface PersistedMethodologyState {
-  /** State format version */
-  version: string;
-  /** Whether methodology system is enabled */
-  methodologySystemEnabled: boolean;
-  /** Currently active methodology */
-  activeMethodology: string;
-  /** Last switch timestamp as ISO string */
-  lastSwitchedAt: string;
-  /** Reason for current state */
-  switchReason: string;
-}
-
-/**
- * Template processing guidance from methodology guides.
+ * Template processing guidance from framework guides.
  * Alias to ProcessingGuidance to keep a single source of truth.
  */
 export type TemplateProcessingGuidance = ProcessingGuidance;

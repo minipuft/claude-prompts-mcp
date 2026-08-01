@@ -143,16 +143,16 @@ export class GateManagerProvider implements GateDefinitionProvider {
     };
   }
 
-  async isMethodologyGate(gateId: string): Promise<boolean> {
+  async isFrameworkGate(gateId: string): Promise<boolean> {
     const gate = await this.loadGate(gateId);
     return gate?.gate_type === 'framework';
   }
 
-  isMethodologyGateCached(gateId: string): boolean {
-    return false; // registry does not expose cache state; defer to isMethodologyGate for accuracy
+  isFrameworkGateCached(gateId: string): boolean {
+    return false; // registry does not expose cache state; defer to isFrameworkGate for accuracy
   }
 
-  async getMethodologyGateIds(): Promise<string[]> {
+  async getFrameworkGateIds(): Promise<string[]> {
     const gates = await this.listAvailableGateDefinitions();
     return gates.filter((g) => g.gate_type === 'framework').map((g) => g.id);
   }

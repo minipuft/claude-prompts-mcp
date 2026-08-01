@@ -17,12 +17,14 @@ export const CONFIG_VALID_KEYS = [
   'logging.level',
   'logging.directory',
   'gates.enabled',
+  'gates.frameworkGates',
+  // Pre-rename spelling, still accepted.
   'gates.methodologyGates',
   'execution.judge',
-  'methodologies.enabled',
-  'methodologies.dynamicToolDescriptions',
-  'methodologies.systemPromptFrequency',
-  'methodologies.styleGuidance',
+  'frameworks.enabled',
+  'frameworks.dynamicToolDescriptions',
+  'frameworks.systemPromptFrequency',
+  'frameworks.styleGuidance',
   'verification.inContextAttempts',
   'verification.isolation.enabled',
   'verification.isolation.maxBudget',
@@ -86,11 +88,12 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
     }
 
     case 'gates.enabled':
+    case 'gates.frameworkGates':
     case 'gates.methodologyGates':
     case 'execution.judge':
-    case 'methodologies.enabled':
-    case 'methodologies.dynamicToolDescriptions':
-    case 'methodologies.styleGuidance':
+    case 'frameworks.enabled':
+    case 'frameworks.dynamicToolDescriptions':
+    case 'frameworks.styleGuidance':
     case 'verification.isolation.enabled': {
       const boolValue = value.trim().toLowerCase();
       if (!['true', 'false'].includes(boolValue)) {
@@ -106,7 +109,7 @@ export function validateConfigInput(key: string, value: string): ConfigInputVali
       };
     }
 
-    case 'methodologies.systemPromptFrequency': {
+    case 'frameworks.systemPromptFrequency': {
       const freq = parseInt(value, 10);
       if (isNaN(freq) || freq < 1 || freq > 100) {
         return {

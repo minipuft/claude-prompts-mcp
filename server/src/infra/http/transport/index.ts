@@ -136,8 +136,10 @@ export class TransportRouter {
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no'); // Issues with certain proxies
 
-      // Create a unique ID for this connection
-      const connectionId = Date.now().toString();
+      // `Date.now()` was the connection id, so two connections opening in the same millisecond
+      // shared one key: the second overwrote the first in the map, and the first one's `close`
+      // handler then deleted the second's transport.
+      const connectionId = randomUUID();
 
       // Create a new transport for this connection
       const sseTransport = new SSEServerTransport('/messages', res);
@@ -158,7 +160,12 @@ export class TransportRouter {
       } catch (error) {
         this.logger.error('Error connecting to SSE transport:', error);
         this.sseTransports.delete(connectionId);
-        res.status(500).end();
+        // Headers are already sent, so `res.status(500)` cannot apply. Emit an SSE error event and
+        // close the stream: a client that fails immediately can be diagnosed, one that hangs for
+        // its full timeout cannot.
+        const detail = error instanceof Error ? error.message : String(error);
+        res.write(`event: error\ndata: ${JSON.stringify({ message: detail })}\n\n`);
+        res.end();
       }
     });
 

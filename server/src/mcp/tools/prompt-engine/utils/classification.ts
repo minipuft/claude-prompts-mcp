@@ -183,7 +183,7 @@ export class PromptClassifier {
   private suggestFramework(convertedPrompt: ConvertedPrompt): string | undefined {
     const content = convertedPrompt.userMessageTemplate.toLowerCase();
 
-    // Look for methodology keywords
+    // Look for framework keywords
     if (content.includes('context') && content.includes('analysis') && content.includes('goal')) {
       return 'CAGEERF';
     }

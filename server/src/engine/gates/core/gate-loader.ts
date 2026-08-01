@@ -35,9 +35,9 @@ export interface GateDefinitionProvider {
     context: { promptCategory?: string; framework?: string; explicitRequest?: boolean }
   ): boolean;
   getStatistics(): { cachedGates: number; totalLoads: number; lastAccess: Date | null };
-  isMethodologyGate(gateId: string): Promise<boolean>;
-  isMethodologyGateCached(gateId: string): boolean;
-  getMethodologyGateIds(): Promise<string[]>;
+  isFrameworkGate(gateId: string): Promise<boolean>;
+  isFrameworkGateCached(gateId: string): boolean;
+  getFrameworkGateIds(): Promise<string[]>;
 }
 
 /**
@@ -247,36 +247,36 @@ export class GateLoader implements GateDefinitionProvider {
   }
 
   /**
-   * Check if a gate is a methodology/framework gate by loading and inspecting its definition.
-   * Framework gates have gate_type === 'framework' and are filtered when methodology gates are disabled.
+   * Check if a gate is a framework gate by loading and inspecting its definition.
+   * Framework gates have gate_type === 'framework' and are filtered when framework gates are disabled.
    *
    * @param gateId - Gate identifier to check
    * @returns true if gate has gate_type === 'framework', false otherwise
    */
-  async isMethodologyGate(gateId: string): Promise<boolean> {
+  async isFrameworkGate(gateId: string): Promise<boolean> {
     const gate = await this.loadGate(gateId);
     return gate?.gate_type === 'framework';
   }
 
   /**
-   * Check if a gate ID is a methodology gate using cached data only (synchronous).
-   * Returns false if gate is not in cache - use isMethodologyGate for definitive check.
+   * Check if a gate ID is a framework gate using cached data only (synchronous).
+   * Returns false if gate is not in cache - use isFrameworkGate for definitive check.
    *
    * @param gateId - Gate identifier to check
    * @returns true if cached gate has gate_type === 'framework', false otherwise
    */
-  isMethodologyGateCached(gateId: string): boolean {
+  isFrameworkGateCached(gateId: string): boolean {
     const cached = this.gateCache.get(gateId) ?? this.gateCache.get(gateId.toLowerCase());
     return cached?.gate_type === 'framework';
   }
 
   /**
-   * Get all methodology gate IDs from loaded definitions.
+   * Get all framework gate IDs from loaded definitions.
    * Scans the definitions directory and returns IDs of gates with gate_type === 'framework'.
    *
-   * @returns Array of methodology gate IDs
+   * @returns Array of framework gate IDs
    */
-  async getMethodologyGateIds(): Promise<string[]> {
+  async getFrameworkGateIds(): Promise<string[]> {
     const allGates = this.definitionLoader.loadAllGates();
     return Array.from(allGates.values())
       .filter((gate) => gate.gate_type === 'framework')

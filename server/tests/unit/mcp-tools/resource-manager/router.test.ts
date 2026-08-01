@@ -99,9 +99,9 @@ describe('ResourceManagerRouter', () => {
       expect(result.isError).toBeFalsy();
     });
 
-    test('routes methodology resources to framework handler', async () => {
+    test('routes framework resources to framework handler', async () => {
       const args: ResourceManagerInput = {
-        resource_type: 'methodology',
+        resource_type: 'framework',
         action: 'list',
       };
 
@@ -115,7 +115,7 @@ describe('ResourceManagerRouter', () => {
   });
 
   describe('action validation', () => {
-    test('rejects switch action for non-methodology resources', async () => {
+    test('rejects switch action for non-framework resources', async () => {
       const args: ResourceManagerInput = {
         resource_type: 'prompt',
         action: 'switch',
@@ -125,7 +125,7 @@ describe('ResourceManagerRouter', () => {
 
       expect(result.isError).toBe(true);
       expect((result.content[0] as { text: string }).text).toContain(
-        'only valid for resource_type: "methodology"'
+        'only valid for resource_type: "framework"'
       );
       expect(mockPromptResourceHandler.handleAction).not.toHaveBeenCalled();
     });
@@ -145,9 +145,9 @@ describe('ResourceManagerRouter', () => {
       expect(mockGateManager.handleAction).not.toHaveBeenCalled();
     });
 
-    test('rejects analyze_gates action for methodology resources', async () => {
+    test('rejects analyze_gates action for framework resources', async () => {
       const args: ResourceManagerInput = {
-        resource_type: 'methodology',
+        resource_type: 'framework',
         action: 'analyze_gates',
       };
 
@@ -174,9 +174,9 @@ describe('ResourceManagerRouter', () => {
       );
     });
 
-    test('allows switch action for methodology resources', async () => {
+    test('allows switch action for framework resources', async () => {
       const args: ResourceManagerInput = {
-        resource_type: 'methodology',
+        resource_type: 'framework',
         action: 'switch',
         id: 'cageerf',
       };
@@ -206,7 +206,7 @@ describe('ResourceManagerRouter', () => {
       const resourceTypes: ResourceManagerInput['resource_type'][] = [
         'prompt',
         'gate',
-        'methodology',
+        'framework',
       ];
 
       for (const resource_type of resourceTypes) {
@@ -229,7 +229,7 @@ describe('ResourceManagerRouter', () => {
       const resourceTypes: ResourceManagerInput['resource_type'][] = [
         'prompt',
         'gate',
-        'methodology',
+        'framework',
       ];
 
       for (const resource_type of resourceTypes) {
@@ -250,7 +250,7 @@ describe('ResourceManagerRouter', () => {
       const resourceTypes: ResourceManagerInput['resource_type'][] = [
         'prompt',
         'gate',
-        'methodology',
+        'framework',
       ];
 
       for (const resource_type of resourceTypes) {
@@ -319,9 +319,9 @@ describe('ResourceManagerRouter', () => {
       );
     });
 
-    test('transforms methodology parameters correctly', async () => {
+    test('transforms framework parameters correctly', async () => {
       const args: ResourceManagerInput = {
-        resource_type: 'methodology',
+        resource_type: 'framework',
         action: 'switch',
         id: 'react',
         persist: true,

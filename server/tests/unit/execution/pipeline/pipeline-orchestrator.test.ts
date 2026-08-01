@@ -205,14 +205,14 @@ describe('PromptExecutionPipeline orchestration', () => {
     const frameworkStage = {
       name: 'FrameworkResolution',
       execute: jest.fn(async (context: ExecutionContext) => {
-        context.frameworkContext = { methodology: 'CAGEERF' } as any;
+        context.frameworkContext = { framework: 'CAGEERF' } as any;
       }),
     };
 
     const responseFormattingStage = createStage('ResponseFormatting', (context) => {
       context.setResponse({
         content: [
-          { type: 'text', text: `framework:${context.frameworkContext?.methodology ?? 'none'}` },
+          { type: 'text', text: `framework:${context.frameworkContext?.framework ?? 'none'}` },
         ],
       });
     });

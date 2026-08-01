@@ -33,9 +33,9 @@ function createProvider(gates: Record<string, LightweightGateDefinition>): GateD
     clearCache: jest.fn(),
     isGateActive: jest.fn(),
     getStatistics: jest.fn(),
-    isMethodologyGate: jest.fn(),
-    isMethodologyGateCached: jest.fn(),
-    getMethodologyGateIds: jest.fn(),
+    isFrameworkGate: jest.fn(),
+    isFrameworkGateCached: jest.fn(),
+    getFrameworkGateIds: jest.fn(),
   } as unknown as GateDefinitionProvider;
 }
 
@@ -562,6 +562,43 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
       expect(results).toHaveLength(1);
       expect(results[0]?.passed).toBe(true);
       expect(results[0]?.stdout).toBe(agentResponse);
+    });
+
+    test('a command that never reads stdin still passes when the response is larger than the pipe buffer', async () => {
+      const provider = createProvider({
+        'ignores-stdin': {
+          id: 'ignores-stdin',
+          name: 'Ignores Stdin Gate',
+          type: 'validation',
+          description: 'Command reads only the env var and exits without draining stdin',
+          pass_criteria: [
+            {
+              type: 'shell_verify',
+              // Never reads stdin — prints and exits, closing the pipe under the pending write.
+              // Deliberately no `shell_response_env_var`: a payload this size exceeds the per-var
+              // environment limit (~128KB on Linux) and would fail the spawn for an unrelated
+              // reason, masking the stdin race this test exists to pin.
+              shell_command: 'printf "done"',
+              shell_stdin_source: 'agent_response',
+              shell_timeout: 5000,
+            },
+          ],
+        },
+      });
+
+      // Larger than a pipe buffer (64KB on Linux), so the write cannot complete before the child
+      // exits. That turns the EPIPE race into a certainty instead of something that only loses
+      // under load — the sibling env-var test above failed exactly this way after `test:unit`,
+      // reported as `write EPIPE` from a command that had run correctly.
+      const agentResponse = 'x'.repeat(1_000_000);
+
+      const results = await runGateShellVerifications(['ignores-stdin'], provider, {
+        agentResponse,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.passed).toBe(true);
+      expect(results[0]?.stdout).toBe('done');
     });
 
     test('script can parse stdin claims and verify against ground truth', async () => {

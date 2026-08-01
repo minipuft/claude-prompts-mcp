@@ -10,7 +10,7 @@
  * - notifications/gate/failed - Gate evaluation failed
  * - notifications/gate/response_blocked - Response blocked due to gate failure
  * - notifications/gate/retry_exhausted - All retry attempts exhausted
- * - notifications/framework/changed - Active framework/methodology changed
+ * - notifications/framework/changed - Active framework changed
  * - notifications/chain/step_complete - Chain step completed
  * - notifications/chain/complete - Entire chain completed
  * - notifications/chain/failed - Chain failed with error

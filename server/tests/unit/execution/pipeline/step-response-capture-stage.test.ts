@@ -4,7 +4,6 @@ import { ExecutionContext } from '../../../../src/engine/execution/context/execu
 import { StepCaptureService } from '../../../../src/engine/execution/capture/step-capture-service.js';
 import { StepResponseCaptureStage } from '../../../../src/engine/execution/pipeline/stages/08-response-capture-stage.js';
 import { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
-import { StepState } from '../../../../src/shared/types/chain-execution.js';
 
 import type { ChainSessionService } from '../../../../src/modules/chains/types.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
@@ -136,7 +135,7 @@ describe('StepResponseCaptureStage', () => {
     const { manager, getSession, recordGateReviewOutcome, updateSessionState, getStepState } =
       createSessionManager();
     recordGateReviewOutcome.mockResolvedValue('pending');
-    getStepState.mockReturnValue({ state: StepState.COMPLETED, isPlaceholder: true });
+    getStepState.mockReturnValue({ state: 'completed', isPlaceholder: true });
     const stage = createStage(manager);
 
     getSession.mockReturnValue({
@@ -244,7 +243,7 @@ describe('StepResponseCaptureStage', () => {
         state: { currentStep: 3, totalSteps: 3 },
       });
     getStepState.mockReturnValue({
-      state: StepState.COMPLETED,
+      state: 'completed',
       isPlaceholder: true,
     });
 

@@ -2,6 +2,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { RequestNormalizationStage } from '../../../../src/engine/execution/pipeline/stages/00-request-normalization-stage.js';
+import { parseQuotedValue } from '../../../../src/shared/utils/index.js';
 
 const createLogger = () => ({
   info: jest.fn(),
@@ -154,6 +155,77 @@ describe('RequestNormalizationStage', () => {
 
     expect(context.response).toBeUndefined(); // Should NOT error
     expect(context.state.normalization.completed).toBe(true);
+  });
+
+  // Regression: MCP option values were baked into the command string wrapped in
+  // UNESCAPED single quotes, so any value containing an apostrophe was truncated
+  // at that apostrophe and the trailing prose was re-parsed into arguments the
+  // prompt never declared. Serializer and decoder now share one escape convention.
+  describe('option baking preserves values containing quote characters', () => {
+    const bakeAndRecover = async (value: string) => {
+      const stage = new RequestNormalizationStage(null, null, createLogger());
+      const context = new ExecutionContext({
+        command: '>>demo',
+        options: { theme: value, mode: 'refine' },
+      });
+
+      await stage.execute(context);
+
+      const baked = context.state.normalization.normalizedCommand as string;
+      const recovered: Record<string, string> = {};
+      const pairs =
+        baked.match(
+          /([\w-]+)\s*[=:]\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^\s"']+(?:\s+(?![\w-]+\s*[=:])[^\s"']*)*))/g
+        ) || [];
+      for (const pair of pairs) {
+        const match = pair.match(
+          /([\w-]+)\s*[=:]\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(.*))/
+        );
+        if (!match?.[1]) continue;
+        recovered[match[1]] =
+          match[2] !== undefined
+            ? parseQuotedValue(match[2])
+            : match[3] !== undefined
+              ? parseQuotedValue(match[3])
+              : (match[4] ?? '');
+      }
+      return { baked, recovered };
+    };
+
+    test('value containing an apostrophe survives byte-identical', async () => {
+      const value = "the creed line 'the void is composition' is failing";
+      const { recovered } = await bakeAndRecover(value);
+
+      expect(recovered.theme).toBe(value);
+      expect(Object.keys(recovered).sort()).toEqual(['mode', 'theme']);
+    });
+
+    test('value containing a double quote survives byte-identical', async () => {
+      const value = 'he said "go" loudly';
+      const { recovered } = await bakeAndRecover(value);
+
+      expect(recovered.theme).toBe(value);
+      expect(Object.keys(recovered).sort()).toEqual(['mode', 'theme']);
+    });
+
+    test('value containing both quote characters survives byte-identical', async () => {
+      const value = 'it\'s a "test" value';
+      const { recovered } = await bakeAndRecover(value);
+
+      expect(recovered.theme).toBe(value);
+      expect(Object.keys(recovered).sort()).toEqual(['mode', 'theme']);
+    });
+
+    // The corruption that is worse than truncation: prose after the apostrophe was
+    // re-scanned for `key:` pairs, so "Target: dark ground." became an argument.
+    test('colon-bearing prose after an apostrophe does not inject a phantom argument', async () => {
+      const value = 'haze lifted the ground. Target: dark ground, no ambient.';
+      const { recovered } = await bakeAndRecover(value);
+
+      expect(recovered.theme).toBe(value);
+      expect(recovered).not.toHaveProperty('Target');
+      expect(Object.keys(recovered).sort()).toEqual(['mode', 'theme']);
+    });
   });
 
   test('error message explains both execution and resume modes clearly', async () => {

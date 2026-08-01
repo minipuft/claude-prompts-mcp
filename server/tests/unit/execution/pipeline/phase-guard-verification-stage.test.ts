@@ -10,7 +10,7 @@ import {
 import type { PhaseGuardsConfig } from '../../../../src/shared/types/core-config.js';
 import type { ChainSessionService } from '../../../../src/shared/types/chain-session.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
-import type { MethodologyGuide } from '../../../../src/engine/frameworks/types/methodology-types.js';
+import type { FrameworkGuide } from '../../../../src/engine/frameworks/types/framework-types.js';
 
 const createLogger = (): Logger => ({
   info: jest.fn(),
@@ -42,25 +42,23 @@ function withSession(ctx: ExecutionContext, sessionId = 'session-1'): ExecutionC
 
 const defaultConfig: PhaseGuardsConfig = { mode: 'enforce', maxRetries: 2 };
 
-function createMockGuide(steps: Array<Record<string, unknown>>): MethodologyGuide {
+function createMockGuide(steps: Array<Record<string, unknown>>): FrameworkGuide {
   return {
-    enhanceWithMethodology: jest.fn().mockReturnValue({
+    enhanceWithFramework: jest.fn().mockReturnValue({
       processingEnhancements: steps,
     }),
     guidePromptCreation: jest.fn(),
     guideTemplateProcessing: jest.fn(),
     guideExecutionSteps: jest.fn(),
-    validateMethodologyCompliance: jest.fn(),
+    validateFrameworkCompliance: jest.fn(),
     getToolDescriptions: jest.fn(),
     renderPhaseGuardOverlay: jest.fn(),
-  } as unknown as MethodologyGuide;
+  } as unknown as FrameworkGuide;
 }
 
-function createRegistry(guide?: MethodologyGuide) {
+function createRegistry(guide?: FrameworkGuide) {
   return {
-    getMethodologyGuide: jest
-      .fn<(id: string) => MethodologyGuide | undefined>()
-      .mockReturnValue(guide),
+    getFrameworkGuide: jest.fn<(id: string) => FrameworkGuide | undefined>().mockReturnValue(guide),
   };
 }
 
@@ -472,10 +470,10 @@ describe('PhaseGuardVerificationStage', () => {
     expect(sessionStore.setPendingGateReview).not.toHaveBeenCalled();
   });
 
-  test('skips when methodology guide returns undefined', async () => {
+  test('skips when framework guide returns undefined', async () => {
     const registry = {
-      getMethodologyGuide: jest
-        .fn<(id: string) => MethodologyGuide | undefined>()
+      getFrameworkGuide: jest
+        .fn<(id: string) => FrameworkGuide | undefined>()
         .mockReturnValue(undefined),
     };
     const stage = createPhaseGuardVerificationStage(
@@ -588,8 +586,10 @@ describe('PhaseGuardVerificationStage', () => {
 
     const review = (sessionStore.setPendingGateReview as jest.Mock).mock.calls[0][1] as any;
     expect(review.retryHints).toHaveLength(2);
-    expect(review.retryHints[0]).toContain('## context');
-    expect(review.retryHints[1]).toContain('## analysis');
+    // Hints must name the configured SECTION_HEADER ("## Context"), NOT the phase id ("context").
+    // The old code did `## ${id}` → "## context", a header the splitter never matched → loop.
+    expect(review.retryHints[0]).toContain('## Context');
+    expect(review.retryHints[1]).toContain('## Analysis');
     expect(review.metadata.failedPhases).toEqual(expect.arrayContaining(['context', 'analysis']));
   });
 });

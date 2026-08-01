@@ -15,6 +15,7 @@ import {
   startServerWithHttp,
   waitForHealth,
   sendMcpRequestWithSse,
+  sendMcpRequestsOverSseSession,
   killServer,
   StreamableHttpMcpClient,
   httpPost,
@@ -143,124 +144,112 @@ describe('MCP Server Smoke Tests', () => {
   });
 
   describe('Server Startup', () => {
-    it(
-      'server starts without immediate crash',
-      async () => {
-        serverProcess = spawnServer();
+    it('server starts without immediate crash', async () => {
+      serverProcess = spawnServer();
 
-        // Wait for process to either crash or stay running
-        const result = await Promise.race([
-          // Success: process stays alive for 1 second
-          new Promise<'running'>((resolve) => setTimeout(() => resolve('running'), 1000)),
-          // Failure: process exits with error
-          new Promise<'crashed'>((resolve, reject) => {
-            serverProcess!.on('exit', (code) => {
-              if (code !== null && code !== 0) {
-                reject(new Error(`Server crashed with exit code ${code}`));
-              }
-            });
-            serverProcess!.on('error', (err) => reject(err));
-          }),
-        ]);
+      // Wait for process to either crash or stay running
+      const result = await Promise.race([
+        // Success: process stays alive for 1 second
+        new Promise<'running'>((resolve) => setTimeout(() => resolve('running'), 1000)),
+        // Failure: process exits with error
+        new Promise<'crashed'>((resolve, reject) => {
+          serverProcess!.on('exit', (code) => {
+            if (code !== null && code !== 0) {
+              reject(new Error(`Server crashed with exit code ${code}`));
+            }
+          });
+          serverProcess!.on('error', (err) => reject(err));
+        }),
+      ]);
 
-        expect(result).toBe('running');
-      },
-      5000
-    );
+      expect(result).toBe('running');
+    }, 5000);
 
     // TODO: Jest ESM mode has issues with spawned process stdio capture
     // The server responds correctly when tested manually (see npm run start:test)
     // Skip for now until we can debug the Jest/ESM/spawn interaction
-    it.skip(
-      'server responds to MCP initialize request',
-      async () => {
-        serverProcess = spawnServer();
+    it.skip('server responds to MCP initialize request', async () => {
+      serverProcess = spawnServer();
 
-        // Give server time to fully initialize (it has multiple startup phases)
-        await new Promise((r) => setTimeout(r, 2000));
+      // Give server time to fully initialize (it has multiple startup phases)
+      await new Promise((r) => setTimeout(r, 2000));
 
-        const result = await sendRequest(
-          serverProcess,
-          {
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'initialize',
-            params: {
-              protocolVersion: '2024-11-05',
-              capabilities: {},
-              clientInfo: { name: 'e2e-test', version: '1.0.0' },
-            },
+      const result = await sendRequest(
+        serverProcess,
+        {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2024-11-05',
+            capabilities: {},
+            clientInfo: { name: 'e2e-test', version: '1.0.0' },
           },
-          1
-        );
+        },
+        1
+      );
 
-        expect(result).toHaveProperty('protocolVersion');
-        expect(result).toHaveProperty('serverInfo');
-        expect((result as { serverInfo: { name: string } }).serverInfo).toHaveProperty('name');
-      },
-      10000
-    );
+      expect(result).toHaveProperty('protocolVersion');
+      expect(result).toHaveProperty('serverInfo');
+      expect((result as { serverInfo: { name: string } }).serverInfo).toHaveProperty('name');
+    }, 10000);
   });
 
   describe('Expected Tools Registration (STDIO - skipped)', () => {
     // TODO: Jest ESM mode has issues with spawned process stdio capture
     // The server responds correctly when tested manually (see npm run start:test)
     // Skip for now - covered by HTTP transport tests below
-    it.skip(
-      'server registers expected MCP tools via STDIO',
-      async () => {
-        serverProcess = spawnServer();
+    it.skip('server registers expected MCP tools via STDIO', async () => {
+      serverProcess = spawnServer();
 
-        // Give server time to fully initialize (it has multiple startup phases)
-        await new Promise((r) => setTimeout(r, 2000));
+      // Give server time to fully initialize (it has multiple startup phases)
+      await new Promise((r) => setTimeout(r, 2000));
 
-        // Initialize first
-        await sendRequest(
-          serverProcess,
-          {
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'initialize',
-            params: {
-              protocolVersion: '2024-11-05',
-              capabilities: {},
-              clientInfo: { name: 'e2e-test', version: '1.0.0' },
-            },
+      // Initialize first
+      await sendRequest(
+        serverProcess,
+        {
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2024-11-05',
+            capabilities: {},
+            clientInfo: { name: 'e2e-test', version: '1.0.0' },
           },
-          1
-        );
+        },
+        1
+      );
 
-        // Send initialized notification
-        serverProcess.stdin?.write(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'notifications/initialized',
-          }) + '\n'
-        );
+      // Send initialized notification
+      serverProcess.stdin?.write(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'notifications/initialized',
+        }) + '\n'
+      );
 
-        await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 100));
 
-        // List tools
-        const result = (await sendRequest(
-          serverProcess,
-          {
-            jsonrpc: '2.0',
-            id: 2,
-            method: 'tools/list',
-            params: {},
-          },
-          2
-        )) as { tools: Array<{ name: string }> };
+      // List tools
+      const result = (await sendRequest(
+        serverProcess,
+        {
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/list',
+          params: {},
+        },
+        2
+      )) as { tools: Array<{ name: string }> };
 
-        expect(Array.isArray(result.tools)).toBe(true);
+      expect(Array.isArray(result.tools)).toBe(true);
 
-        const toolNames = result.tools.map((t) => t.name);
-        expect(toolNames).toContain('prompt_engine');
-        expect(toolNames).toContain('resource_manager');
-        expect(toolNames).toContain('system_control');
-      },
-      15000
-    );
+      const toolNames = result.tools.map((t) => t.name);
+      expect(toolNames).toContain('prompt_engine');
+      expect(toolNames).toContain('resource_manager');
+      expect(toolNames).toContain('system_control');
+    }, 15000);
   });
 
   /**
@@ -270,83 +259,73 @@ describe('MCP Server Smoke Tests', () => {
    * Jest/ESM/spawn stdio capture issues.
    */
   describe('MCP Protocol via HTTP Transport', () => {
-    it(
-      'server responds to MCP initialize request via HTTP',
-      async () => {
-        // Get available port
-        httpServerPort = await getAvailablePort();
-        const baseUrl = `http://localhost:${httpServerPort}`;
+    it('server responds to MCP initialize request via HTTP', async () => {
+      // Get available port
+      httpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${httpServerPort}`;
 
-        // Start server with SSE transport
-        httpServerProcess = startServerWithHttp(httpServerPort, { debug: true });
+      // Start server with SSE transport
+      httpServerProcess = startServerWithHttp(httpServerPort, { debug: true });
 
-        // Wait for health endpoint (server takes ~5s to initialize)
-        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+      // Wait for health endpoint (server takes ~5s to initialize)
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-        // Send initialize request via SSE
-        const result = await sendMcpRequestWithSse(
-          baseUrl,
-          'initialize',
+      // Send initialize request via SSE
+      const result = await sendMcpRequestWithSse(
+        baseUrl,
+        'initialize',
+        {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'e2e-test', version: '1.0.0' },
+        },
+        1,
+        { timeout: 10000 }
+      );
+
+      expect(result).toHaveProperty('protocolVersion');
+      expect(result).toHaveProperty('serverInfo');
+      expect((result as { serverInfo: { name: string } }).serverInfo).toHaveProperty('name');
+    }, 20000);
+
+    it('server registers expected MCP tools via HTTP', async () => {
+      // Get available port
+      httpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${httpServerPort}`;
+
+      // Start server with SSE transport
+      httpServerProcess = startServerWithHttp(httpServerPort, { debug: true });
+
+      // Wait for health endpoint (server takes ~5s to initialize)
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+
+      // Initialize and list tools over ONE session. Sending these as two separate SSE calls opens
+      // two independent sessions, and the server attaches one transport at a time — so the second
+      // one only connects if the first connection's close has already propagated. That race is
+      // load-dependent, which is what made this test fail after `test:integration` and pass alone.
+      const [, result] = (await sendMcpRequestsOverSseSession(
+        baseUrl,
+        [
           {
-            protocolVersion: '2024-11-05',
-            capabilities: {},
-            clientInfo: { name: 'e2e-test', version: '1.0.0' },
+            method: 'initialize',
+            params: {
+              protocolVersion: '2024-11-05',
+              capabilities: {},
+              clientInfo: { name: 'e2e-test', version: '1.0.0' },
+            },
           },
-          1,
-          { timeout: 10000 }
-        );
+          { method: 'tools/list' },
+        ],
+        { timeout: 15000 }
+      )) as [unknown, { tools: Array<{ name: string }> }];
 
-        expect(result).toHaveProperty('protocolVersion');
-        expect(result).toHaveProperty('serverInfo');
-        expect((result as { serverInfo: { name: string } }).serverInfo).toHaveProperty('name');
-      },
-      20000
-    );
+      expect(Array.isArray(result.tools)).toBe(true);
 
-    it(
-      'server registers expected MCP tools via HTTP',
-      async () => {
-        // Get available port
-        httpServerPort = await getAvailablePort();
-        const baseUrl = `http://localhost:${httpServerPort}`;
-
-        // Start server with SSE transport
-        httpServerProcess = startServerWithHttp(httpServerPort, { debug: true });
-
-        // Wait for health endpoint (server takes ~5s to initialize)
-        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
-
-        // Initialize first
-        await sendMcpRequestWithSse(
-          baseUrl,
-          'initialize',
-          {
-            protocolVersion: '2024-11-05',
-            capabilities: {},
-            clientInfo: { name: 'e2e-test', version: '1.0.0' },
-          },
-          1,
-          { timeout: 10000 }
-        );
-
-        // List tools
-        const result = (await sendMcpRequestWithSse(
-          baseUrl,
-          'tools/list',
-          {},
-          2,
-          { timeout: 10000 }
-        )) as { tools: Array<{ name: string }> };
-
-        expect(Array.isArray(result.tools)).toBe(true);
-
-        const toolNames = result.tools.map((t) => t.name);
-        expect(toolNames).toContain('prompt_engine');
-        expect(toolNames).toContain('resource_manager');
-        expect(toolNames).toContain('system_control');
-      },
-      20000
-    );
+      const toolNames = result.tools.map((t) => t.name);
+      expect(toolNames).toContain('prompt_engine');
+      expect(toolNames).toContain('resource_manager');
+      expect(toolNames).toContain('system_control');
+    }, 20000);
   });
 
   /**
@@ -358,213 +337,187 @@ describe('MCP Server Smoke Tests', () => {
    * - Stateful session mode with session ID generator
    */
   describe('MCP Protocol via Streamable HTTP Transport', () => {
-    it(
-      'server starts with streamable-http transport',
-      async () => {
-        // Get available port
-        streamableHttpServerPort = await getAvailablePort();
-        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+    it('server starts with streamable-http transport', async () => {
+      // Get available port
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
 
-        // Start server with streamable-http transport
-        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
-          transport: 'streamable-http',
-          debug: true,
-        });
+      // Start server with streamable-http transport
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
 
-        // Wait for health endpoint (server takes ~5s to initialize)
-        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+      // Wait for health endpoint (server takes ~5s to initialize)
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-        // Server started successfully
-        expect(streamableHttpServerProcess.killed).toBe(false);
-      },
-      20000
-    );
+      // Server started successfully
+      expect(streamableHttpServerProcess.killed).toBe(false);
+    }, 20000);
 
-    it(
-      'server responds to MCP initialize request via Streamable HTTP',
-      async () => {
-        // Get available port
-        streamableHttpServerPort = await getAvailablePort();
-        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+    it('server responds to MCP initialize request via Streamable HTTP', async () => {
+      // Get available port
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
 
-        // Start server with streamable-http transport
-        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
-          transport: 'streamable-http',
-          debug: true,
-        });
+      // Start server with streamable-http transport
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
 
-        // Wait for health endpoint (server takes ~5s to initialize)
-        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+      // Wait for health endpoint (server takes ~5s to initialize)
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-        // Create Streamable HTTP client and initialize
-        const client = new StreamableHttpMcpClient(baseUrl);
-        const { sessionId, capabilities } = await client.initialize();
+      // Create Streamable HTTP client and initialize
+      const client = new StreamableHttpMcpClient(baseUrl);
+      const { sessionId, capabilities } = await client.initialize();
 
-        // Should have a session ID
-        expect(sessionId).toBeTruthy();
-        expect(typeof sessionId).toBe('string');
+      // Should have a session ID
+      expect(sessionId).toBeTruthy();
+      expect(typeof sessionId).toBe('string');
 
-        // Should have MCP capabilities
-        expect(capabilities).toHaveProperty('protocolVersion');
-        expect(capabilities).toHaveProperty('serverInfo');
-        expect((capabilities as { serverInfo: { name: string } }).serverInfo).toHaveProperty(
-          'name'
-        );
+      // Should have MCP capabilities
+      expect(capabilities).toHaveProperty('protocolVersion');
+      expect(capabilities).toHaveProperty('serverInfo');
+      expect((capabilities as { serverInfo: { name: string } }).serverInfo).toHaveProperty('name');
 
-        await client.close();
-      },
-      20000
-    );
+      await client.close();
+    }, 20000);
 
-    it(
-      'server registers expected MCP tools via Streamable HTTP',
-      async () => {
-        // Get available port
-        streamableHttpServerPort = await getAvailablePort();
-        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+    it('server registers expected MCP tools via Streamable HTTP', async () => {
+      // Get available port
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
 
-        // Start server with streamable-http transport
-        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
-          transport: 'streamable-http',
-          debug: true,
-        });
+      // Start server with streamable-http transport
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
 
-        // Wait for health endpoint (server takes ~5s to initialize)
-        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+      // Wait for health endpoint (server takes ~5s to initialize)
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-        // Create client and initialize
-        const client = new StreamableHttpMcpClient(baseUrl);
-        await client.initialize();
+      // Create client and initialize
+      const client = new StreamableHttpMcpClient(baseUrl);
+      await client.initialize();
 
-        // List tools
-        const result = (await client.request('tools/list', {}, 2)) as {
-          tools: Array<{ name: string }>;
-        };
+      // List tools
+      const result = (await client.request('tools/list', {}, 2)) as {
+        tools: Array<{ name: string }>;
+      };
 
-        expect(Array.isArray(result.tools)).toBe(true);
+      expect(Array.isArray(result.tools)).toBe(true);
 
-        const toolNames = result.tools.map((t) => t.name);
-        expect(toolNames).toContain('prompt_engine');
-        expect(toolNames).toContain('resource_manager');
-        expect(toolNames).toContain('system_control');
+      const toolNames = result.tools.map((t) => t.name);
+      expect(toolNames).toContain('prompt_engine');
+      expect(toolNames).toContain('resource_manager');
+      expect(toolNames).toContain('system_control');
 
-        await client.close();
-      },
-      20000
-    );
+      await client.close();
+    }, 20000);
 
-    it(
-      'session returns unique session ID via Streamable HTTP',
-      async () => {
-        // Get available port
-        streamableHttpServerPort = await getAvailablePort();
-        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+    it('session returns unique session ID via Streamable HTTP', async () => {
+      // Get available port
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
 
-        // Start server with streamable-http transport
-        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
-          transport: 'streamable-http',
-          debug: true,
-        });
+      // Start server with streamable-http transport
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
 
-        // Wait for health endpoint (server initialization takes time)
-        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+      // Wait for health endpoint (server initialization takes time)
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-        // Create client and verify session ID is returned
-        const client = new StreamableHttpMcpClient(baseUrl);
-        const { sessionId } = await client.initialize();
+      // Create client and verify session ID is returned
+      const client = new StreamableHttpMcpClient(baseUrl);
+      const { sessionId } = await client.initialize();
 
-        // Session ID should be a valid UUID format
-        expect(sessionId).toBeTruthy();
-        expect(typeof sessionId).toBe('string');
-        expect(sessionId.length).toBeGreaterThan(0);
+      // Session ID should be a valid UUID format
+      expect(sessionId).toBeTruthy();
+      expect(typeof sessionId).toBe('string');
+      expect(sessionId.length).toBeGreaterThan(0);
 
-        // Verify client can make requests with the session
-        const result = (await client.request('tools/list', {}, 2)) as {
-          tools: Array<{ name: string }>;
-        };
-        expect(Array.isArray(result.tools)).toBe(true);
+      // Verify client can make requests with the session
+      const result = (await client.request('tools/list', {}, 2)) as {
+        tools: Array<{ name: string }>;
+      };
+      expect(Array.isArray(result.tools)).toBe(true);
 
-        await client.close();
-      },
-      25000
-    );
+      await client.close();
+    }, 25000);
 
     /**
      * MCP Spec Compliance: 400 Bad Request without session ID
      * Per spec: "Servers that require a session ID SHOULD respond to requests
      * without an Mcp-Session-Id header (other than initialization) with HTTP 400"
      */
-    it(
-      'returns 400 Bad Request for non-init request without session ID',
-      async () => {
-        streamableHttpServerPort = await getAvailablePort();
-        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+    it('returns 400 Bad Request for non-init request without session ID', async () => {
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
 
-        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
-          transport: 'streamable-http',
-          debug: true,
-        });
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
 
-        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-        // Send a tools/list request WITHOUT session ID (not an init request)
-        const request = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/list',
-          params: {},
-        };
+      // Send a tools/list request WITHOUT session ID (not an init request)
+      const request = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/list',
+        params: {},
+      };
 
-        const response = await httpPost(`${baseUrl}/mcp`, request, {
-          Accept: 'application/json, text/event-stream',
-        });
+      const response = await httpPost(`${baseUrl}/mcp`, request, {
+        Accept: 'application/json, text/event-stream',
+      });
 
-        // Should return 400 Bad Request per MCP spec
-        expect(response.status).toBe(400);
-        const body = JSON.parse(response.body);
-        expect(body.error).toBeDefined();
-        expect(body.error.message).toContain('session');
-      },
-      20000
-    );
+      // Should return 400 Bad Request per MCP spec
+      expect(response.status).toBe(400);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBeDefined();
+      expect(body.error.message).toContain('session');
+    }, 20000);
 
     /**
      * MCP Spec Compliance: 404 for invalid session ID
      * When a session ID is provided but not found, return 404
      */
-    it(
-      'returns 404 for invalid session ID',
-      async () => {
-        streamableHttpServerPort = await getAvailablePort();
-        const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+    it('returns 404 for invalid session ID', async () => {
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
 
-        streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
-          transport: 'streamable-http',
-          debug: true,
-        });
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
 
-        await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
 
-        // Send a request with a fake session ID
-        const request = {
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/list',
-          params: {},
-        };
+      // Send a request with a fake session ID
+      const request = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/list',
+        params: {},
+      };
 
-        const response = await httpPost(`${baseUrl}/mcp`, request, {
-          'mcp-session-id': 'invalid-session-id-12345',
-          Accept: 'application/json, text/event-stream',
-        });
+      const response = await httpPost(`${baseUrl}/mcp`, request, {
+        'mcp-session-id': 'invalid-session-id-12345',
+        Accept: 'application/json, text/event-stream',
+      });
 
-        // Should return 404 Not Found for invalid session
-        expect(response.status).toBe(404);
-        const body = JSON.parse(response.body);
-        expect(body.error).toBeDefined();
-        expect(body.error.message).toContain('Session not found');
-      },
-      20000
-    );
+      // Should return 404 Not Found for invalid session
+      expect(response.status).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBeDefined();
+      expect(body.error.message).toContain('Session not found');
+    }, 20000);
   });
 });

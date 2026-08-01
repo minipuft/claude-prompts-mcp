@@ -2,7 +2,7 @@
 
 import type { ToolResponse } from '../../../../shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
-import type { FrameworkManagerInput, MethodologyCreationData } from '../core/types.js';
+import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
 export class FrameworkVersioningProcessor {
   constructor(private readonly ctx: FrameworkResourceContext) {}
@@ -11,19 +11,19 @@ export class FrameworkVersioningProcessor {
     const { id, limit } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for history action');
+      return this.error('Framework ID is required for history action');
     }
 
     const framework = this.ctx.frameworkManager.getFramework(id);
     if (framework === undefined) {
-      return this.error(`Methodology '${id}' not found`);
+      return this.error(`Framework '${id}' not found`);
     }
 
-    const history = await this.ctx.versionHistoryService.loadHistory('methodology', id);
+    const history = await this.ctx.versionHistoryService.loadHistory('framework', id);
 
     if (!history || history.versions.length === 0) {
       return this.success(
-        `No version history for methodology '${id}'\n\n` +
+        `No version history for framework '${id}'\n\n` +
           `Version history is created automatically when updates are made.`
       );
     }
@@ -36,7 +36,7 @@ export class FrameworkVersioningProcessor {
     const { id, version, confirm } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for rollback action');
+      return this.error('Framework ID is required for rollback action');
     }
     if (version === undefined) {
       return this.error('Version number is required for rollback action');
@@ -44,33 +44,33 @@ export class FrameworkVersioningProcessor {
     if (confirm !== true) {
       return this.error(
         `⚠️ Rollback requires confirmation.\n\n` +
-          `To rollback methodology '${id}' to version ${version}, set confirm: true`
+          `To rollback framework '${id}' to version ${version}, set confirm: true`
       );
     }
 
     const existingFramework = this.ctx.frameworkManager.getFramework(id);
     if (existingFramework === undefined) {
-      return this.error(`Methodology '${id}' not found`);
+      return this.error(`Framework '${id}' not found`);
     }
 
     // Load existing data to capture current state
-    const existingData = await this.ctx.fileService.loadExistingMethodology(id);
+    const existingData = await this.ctx.fileService.loadExistingFramework(id);
     if (existingData === null) {
-      return this.error(`Failed to load current methodology state`);
+      return this.error(`Failed to load current framework state`);
     }
 
     // Capture current state
     const currentState: Record<string, unknown> = {
-      id: existingData.methodology['id'],
-      name: existingData.methodology['name'],
-      type: existingData.methodology['type'],
-      description: existingData.methodology['description'],
-      enabled: existingData.methodology['enabled'],
+      id: existingData.framework['id'],
+      name: existingData.framework['name'],
+      type: existingData.framework['type'],
+      description: existingData.framework['description'],
+      enabled: existingData.framework['enabled'],
     };
 
     // Perform rollback
     const result = await this.ctx.versionHistoryService.rollback(
-      'methodology',
+      'framework',
       id,
       version,
       currentState
@@ -85,23 +85,18 @@ export class FrameworkVersioningProcessor {
       return this.error('Rollback failed: No snapshot found in target version');
     }
 
-    // Rebuild methodology data from snapshot
-    const methodologyData: Partial<MethodologyCreationData> & { id: string; methodology: string } =
-      {
-        id,
-        name: String(snapshot['name'] ?? existingFramework.name),
-        methodology: String(snapshot['type'] ?? existingData.methodology['type'] ?? ''),
-        type: String(snapshot['type'] ?? existingData.methodology['type']),
-        description: String(snapshot['description'] ?? existingData.methodology['description']),
-        enabled: (snapshot['enabled'] as boolean) ?? existingData.methodology['enabled'],
-        system_prompt_guidance: existingData.systemPrompt ?? '',
-      };
+    // Rebuild framework data from snapshot
+    const frameworkData: Partial<FrameworkCreationData> & { id: string } = {
+      id,
+      name: String(snapshot['name'] ?? existingFramework.name),
+      type: String(snapshot['type'] ?? existingData.framework['type']),
+      description: String(snapshot['description'] ?? existingData.framework['description']),
+      enabled: (snapshot['enabled'] as boolean) ?? existingData.framework['enabled'],
+      system_prompt_guidance: existingData.systemPrompt ?? '',
+    };
 
-    // Write restored methodology files
-    const writeResult = await this.ctx.fileService.writeMethodologyFiles(
-      methodologyData,
-      existingData
-    );
+    // Write restored framework files
+    const writeResult = await this.ctx.fileService.writeFrameworkFiles(frameworkData, existingData);
     if (!writeResult.success) {
       return this.error(`Rollback write failed: ${writeResult.error}`);
     }
@@ -110,7 +105,7 @@ export class FrameworkVersioningProcessor {
     await this.ctx.onRefresh?.();
 
     return this.success(
-      `✅ Methodology '${id}' rolled back to version ${version}\n\n` +
+      `✅ Framework '${id}' rolled back to version ${version}\n\n` +
         `📜 Current state saved as version ${result.saved_version}\n` +
         `🔄 Framework registry reloaded`
     );
@@ -120,7 +115,7 @@ export class FrameworkVersioningProcessor {
     const { id, from_version, to_version } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for compare action');
+      return this.error('Framework ID is required for compare action');
     }
     if (from_version === undefined || to_version === undefined) {
       return this.error('Both from_version and to_version are required for compare action');
@@ -128,11 +123,11 @@ export class FrameworkVersioningProcessor {
 
     const framework = this.ctx.frameworkManager.getFramework(id);
     if (framework === undefined) {
-      return this.error(`Methodology '${id}' not found`);
+      return this.error(`Framework '${id}' not found`);
     }
 
     const result = await this.ctx.versionHistoryService.compareVersions(
-      'methodology',
+      'framework',
       id,
       from_version,
       to_version
@@ -145,7 +140,7 @@ export class FrameworkVersioningProcessor {
     const diffResult = this.ctx.textDiffService.generateObjectDiff(
       result.from!.snapshot,
       result.to!.snapshot,
-      `${id}/methodology.yaml`
+      `${id}/framework.yaml`
     );
 
     let response =

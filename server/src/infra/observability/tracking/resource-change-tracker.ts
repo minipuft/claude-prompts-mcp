@@ -417,7 +417,13 @@ export class ResourceChangeTracker {
     // Check for removed resources
     for (const [cacheKey, _hash] of this.hashCache) {
       if (!currentKeys.has(cacheKey)) {
-        const [resourceType, resourceId] = cacheKey.split('/') as [TrackedResourceType, string];
+        // Split on the FIRST separator only. The cache key is `${resourceType}/${resourceId}` and
+        // a resourceId may itself contain '/' (a categorised prompt, a tool under its parent), so
+        // a plain split() truncates the id at its first segment and reports a removal for a
+        // resource that was never tracked under that name.
+        const separatorIndex = cacheKey.indexOf('/');
+        const resourceType = cacheKey.slice(0, separatorIndex) as TrackedResourceType;
+        const resourceId = cacheKey.slice(separatorIndex + 1);
         await this.logChange({
           source: 'external',
           operation: 'removed',

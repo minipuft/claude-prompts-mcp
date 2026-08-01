@@ -231,7 +231,7 @@ export class PromptAssetManager {
     promptsConfigPath: string,
     onReloadCallback?: (event: PromptHotReloadEvent) => Promise<void>,
     options?: {
-      methodologyHotReload?: {
+      frameworkHotReload?: {
         handler: (event: PromptHotReloadEvent) => Promise<void>;
         directories?: string[];
       };
@@ -255,9 +255,9 @@ export class PromptAssetManager {
       });
     }
 
-    // Register methodology-specific reload callback (keeps manager generic)
-    if (options?.methodologyHotReload?.handler) {
-      this.hotReloadObserver.setMethodologyReloadCallback(options.methodologyHotReload.handler);
+    // Register framework-specific reload callback (keeps manager generic)
+    if (options?.frameworkHotReload?.handler) {
+      this.hotReloadObserver.setFrameworkReloadCallback(options.frameworkHotReload.handler);
     }
 
     if (options?.auxiliaryReloads) {
@@ -271,7 +271,7 @@ export class PromptAssetManager {
     const categoryDirs = await discoverPromptDirectories(promptsDir, this.loader, this.logger);
 
     const watchTargets = buildWatchTargets(promptsDir, categoryDirs, {
-      methodologyDirectories: options?.methodologyHotReload?.directories,
+      frameworkDirectories: options?.frameworkHotReload?.directories,
       auxiliaryDirectories: options?.auxiliaryReloads?.map((r) => r.directories),
     });
 

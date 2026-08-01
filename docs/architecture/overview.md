@@ -7,7 +7,7 @@ How a prompt goes from what you type to a structured, validated response — and
 **You'll learn**
 
 - How a request flows: Client → Transport → Pipeline → Response
-- Where validation rules (gates), reasoning guidance (methodologies), and formatting (styles) get applied
+- Where validation rules (gates), reasoning guidance (frameworks), and formatting (styles) get applied
 - Which files to inspect when debugging or extending
 
 **Prerequisites**: Server running (see [README Quick Start](../README.md#quick-start)).
@@ -97,7 +97,7 @@ flowchart LR
 ├─────┼───────────┼───────────┼──────────┼───────────┼────────────┤
 │     │           │           │          │           │  Persistence│
 │     ▼           ▼           ▼          ▼           ▼             │
-│ prompts/    methodologies/  gates/    styles/    runtime-state/  │
+│ prompts/    frameworks/  gates/    styles/    runtime-state/  │
 │ *.md,json   */method.yaml  */gate.yaml */style.yaml  state.db    │
 │             */phases.yaml  */guidance  */guidance   (SQLite)     │
 └─────────────────────────────────────────────────────────────────┘
@@ -178,8 +178,8 @@ server/src/
 │   ├── planning/               # Execution planner
 │   └── reference/              # Reference resolution
 ├── prompts/                    # Prompt registry + hot-reload
-├── frameworks/                 # Methodology system
-│   ├── methodology/            # YAML loaders, validation
+├── frameworks/                 # Framework system
+│   ├── framework/            # YAML loaders, validation
 │   └── framework-manager.ts    # Stateless orchestrator
 ├── gates/                      # Quality validation
 │   ├── core/                   # GateLoader, validators
@@ -202,9 +202,9 @@ server/src/
 ├── mcp-contracts/schemas/      # Generated Zod schemas
 └── action-metadata/            # Action definitions and telemetry
 server/resources/               # Hot-reloaded resource definitions
-├── methodologies/              # Methodology definitions
-│   └── {methodology-id}/
-│       ├── methodology.yaml    # Configuration
+├── frameworks/              # Framework definitions
+│   └── {framework-id}/
+│       ├── framework.yaml    # Configuration
 │       ├── phases.yaml         # Phase definitions
 │       └── system-prompt.md    # Injected guidance
 ├── gates/                      # Gate definitions
@@ -223,7 +223,7 @@ server/resources/               # Hot-reloaded resource definitions
 | --------------------- | --------------------------------------------------------------------- |
 | Add new prompt        | `server/prompts/[category]/` - create `.md` + update `prompts.json`   |
 | Modify pipeline stage | `server/src/execution/pipeline/stages/`                               |
-| Add methodology       | `server/resources/methodologies/{id}/` - create YAML + MD files       |
+| Add framework         | `server/resources/frameworks/{id}/` - create YAML + MD files          |
 | Add/modify gate       | `server/resources/gates/{id}/` - create `gate.yaml` + `guidance.md`   |
 | Add/modify style      | `server/resources/styles/{id}/` - create `style.yaml` + `guidance.md` |
 | Debug session issues  | `server/src/chain-session/` + `runtime-state/state.db`                |
@@ -279,14 +279,14 @@ The pipeline registers stages in this order (from `prompt-execution-pipeline.ts`
 │12. FrameworkResolution       Resolve active framework               │
 │13. SessionManagement         Chain/session lifecycle                │
 │14. InjectionControl          Control framework injection per-step   │
-│15. PromptGuidance            Inject methodology guidance            │
+│15. PromptGuidance            Inject framework guidance            │
 ├─────────────────────────────────────────────────────────────────────┤
 │                        EXECUTE & FORMAT                             │
 ├─────────────────────────────────────────────────────────────────────┤
 │16. ResponseCapture           Capture previous step results          │
 │17. ShellVerification*        Run shell commands to validate work    │
 │18. StepExecution             Execute prompts with Nunjucks          │
-│19. AssertionVerification*    Check methodology phase assertions     │
+│19. AssertionVerification*    Check framework phase assertions     │
 │20. GateReview                Validate gate verdicts (PASS/FAIL)     │
 │21. ResponseFormatting        Assemble response + usage CTA          │
 │22. PostFormattingCleanup     Clean up temporary state               │
@@ -373,7 +373,7 @@ The server exposes **3 MCP tools** to clients but internally uses **5 specialize
 | Tool               | Purpose                                       | Internal Target                                                                  |
 | ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
 | `prompt_engine`    | Execute prompts and chains                    | PromptExecutor → PipelineBuilder → PromptExecutionPipeline                       |
-| `resource_manager` | CRUD for prompts, gates, methodologies        | Router → Handler → Processors (lifecycle/discovery/versioning per resource type) |
+| `resource_manager` | CRUD for prompts, gates, frameworks           | Router → Handler → Processors (lifecycle/discovery/versioning per resource type) |
 | `system_control`   | System status, framework switching, analytics | SystemControl router → 10 specialized action handlers                            |
 
 ### Why This Design?
@@ -414,7 +414,7 @@ In addition to tools, the server exposes **MCP Resources** for token-efficient r
 
 | Category      | Resources                                          | Purpose                                                     |
 | ------------- | -------------------------------------------------- | ----------------------------------------------------------- |
-| Content       | `prompt/`, `gate/`, `methodology/`                 | Discover and inspect templates/configs                      |
+| Content       | `prompt/`, `gate/`, `framework/`                   | Discover and inspect templates/configs                      |
 | Observability | `session/`, `metrics/pipeline`, `telemetry/status` | Monitor active chains, system health, and telemetry runtime |
 
 **Token Efficiency**: Resources are 4-30x more efficient than tool-based operations. Metrics reduced from ~15KB (raw samples) to ~500 bytes (lean aggregates).
@@ -446,10 +446,10 @@ Prevents duplicate gates by tracking source priority:
 ```typescript
 // Priority order (higher wins):
 // inline-operator (100) > client-selection (90) > temporary-request (80) >
-// prompt-config (60) > chain-level (50) > methodology (40) > registry-auto (20)
+// prompt-config (60) > chain-level (50) > framework (40) > registry-auto (20)
 
 context.gates.add("research-quality", "registry-auto");
-context.gates.addAll(methodologyGates, "methodology");
+context.gates.addAll(frameworkGates, "framework-guide");
 const finalGates = context.gates.getAll(); // Deduplicated
 ```
 
@@ -497,7 +497,7 @@ Assertions (structural, deterministic) and LLM quality gates (subjective) check 
 
 **Double-injection guard**: `metadata.assertionContext` is checked before injecting. If already present (e.g., retry cycle), the summary is not prepended again.
 
-**Authority model**: `sessionContext.pendingReview` is a fast-path signal (present = render review screen). Stage 10 always re-fetches from `chainSessionManager.getPendingGateReview()` before rendering, making the manager the authoritative source.
+**Authority model**: `sessionContext.pendingReview` is a fast-path signal (present = render review screen). Stage 10 always re-fetches from `chainSessionStore.getPendingGateReview()` before rendering, making the manager the authoritative source.
 
 **Escalation source tracking**: When retry limits are exceeded, `context.state.gates.escalationSource` indicates whether the escalation originated from `'gate-review'` (Stage 08) or `'shell-verify'` (Stage 08b). Both stages write to the shared `retryLimitExceeded` / `awaitingUserChoice` flags sequentially.
 
@@ -511,7 +511,7 @@ Pipeline stages are thin orchestrators (~60-210 lines). Domain logic lives in se
 
 | Service                  | Location          | Purpose                                                            | Stage                 |
 | ------------------------ | ----------------- | ------------------------------------------------------------------ | --------------------- |
-| `GateEnhancementService` | `gates/services/` | Gate selection, methodology coordination, prompt enhancement       | 05 GateEnhancement    |
+| `GateEnhancementService` | `gates/services/` | Gate selection, framework coordination, prompt enhancement         | 05 GateEnhancement    |
 | `TemporaryGateRegistrar` | `gates/services/` | Inline/temp gate normalization and registration                    | 05 GateEnhancement    |
 | `GateMetricsRecorder`    | `gates/services/` | Gate usage analytics                                               | 05 GateEnhancement    |
 | `GateVerdictProcessor`   | `gates/services/` | Verdict parsing, gate action handling, deferred verdicts           | 08 ResponseCapture    |
@@ -544,11 +544,11 @@ Understanding which state survives across MCP requests is critical for cross-req
 
 ### State Lifecycle
 
-| Category               | Lifecycle                        | Storage                | Access                       |
-| ---------------------- | -------------------------------- | ---------------------- | ---------------------------- |
-| **Ephemeral**          | Dies after each request          | `ExecutionContext`     | `context.state.*`            |
-| **Session-Persistent** | Survives across session requests | `ChainSessionManager`  | `chainSessionManager.get*()` |
-| **Global-Persistent**  | Survives server restarts         | `runtime-state/*.json` | State managers               |
+| Category               | Lifecycle                        | Storage                | Access                     |
+| ---------------------- | -------------------------------- | ---------------------- | -------------------------- |
+| **Ephemeral**          | Dies after each request          | `ExecutionContext`     | `context.state.*`          |
+| **Session-Persistent** | Survives across session requests | `ChainSessionStore`    | `chainSessionStore.get*()` |
+| **Global-Persistent**  | Survives server restarts         | `runtime-state/*.json` | State managers             |
 
 ### Ephemeral State (Per-Request)
 
@@ -570,10 +570,10 @@ Survives across requests for the same session:
 
 ```typescript
 // CORRECT: Persists to SQLite chain_sessions table
-await chainSessionManager.setPendingGateReview(sessionId, review);
+await chainSessionStore.setPendingGateReview(sessionId, review);
 
 // Next request: Works!
-const review = chainSessionManager.getPendingGateReview(sessionId);
+const review = chainSessionStore.getPendingGateReview(sessionId);
 ```
 
 ### Global-Persistent State
@@ -603,8 +603,8 @@ Set ephemeral flag                 Ephemeral flag is undefined
 context.state.X = true                 │
     │                                  ▼
     ▼                              Read from session manager
-Save to session manager            chainSessionManager.get*(sessionId)
-chainSessionManager.set*(...)          │
+Save to session manager            chainSessionStore.get*(sessionId)
+chainSessionStore.set*(...)          │
     │                                  ▼
     ▼                              State available!
 Response sent
@@ -619,24 +619,24 @@ context.state.gates.retryLimitExceeded = true; // Lost!
 
 // WRONG: Mixing ephemeral and persistent reads
 const fromContext = context.state.gates.enforcementMode; // Ephemeral
-const fromSession = chainSessionManager.getPendingGateReview(sessionId); // Persistent
+const fromSession = chainSessionStore.getPendingGateReview(sessionId); // Persistent
 // These may be out of sync!
 
 // CORRECT: Single source of truth
-const isExceeded = chainSessionManager.isRetryLimitExceeded(sessionId); // Always persistent
+const isExceeded = chainSessionStore.isRetryLimitExceeded(sessionId); // Always persistent
 ```
 
 ---
 
 ## Write-Path Coherence
 
-Resources (prompts, gates, methodologies, styles) can be written by multiple systems. This section documents how writes from different sources converge to a consistent state.
+Resources (prompts, gates, frameworks, styles) can be written by multiple systems. This section documents how writes from different sources converge to a consistent state.
 
 ### Write Paths
 
 | Writer                      | Resources                          | Transactional                 | Validated       | Versioned      |
 | --------------------------- | ---------------------------------- | ----------------------------- | --------------- | -------------- |
-| `resource_manager` MCP tool | Prompts, gates, methodologies      | `ResourceMutationTransaction` | Schema-verified | Auto-versioned |
+| `resource_manager` MCP tool | Prompts, gates, frameworks         | `ResourceMutationTransaction` | Schema-verified | Auto-versioned |
 | HTTP API (`api.ts`)         | Categories (directory creation)    | No                            | No              | No             |
 | CLI (`cli-shared/`)         | All types (scaffold, rename, move) | Rollback on failure           | Schema-verified | No             |
 
@@ -664,12 +664,12 @@ MCP notification sent to clients
 
 ### Watched Directories
 
-| Resource      | Directory Source                           | Registration                                         |
-| ------------- | ------------------------------------------ | ---------------------------------------------------- |
-| Prompts       | `getPromptsDirectory()` + category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`     |
-| Gates         | `getGatesDirectory()`                      | `createGateHotReloadRegistration()` auxiliary reload |
-| Methodologies | `runtimeLoader.getMethodologiesDir()`      | `methodology-hot-reload.ts` auxiliary reload         |
-| Styles        | `loader.getStylesDir()`                    | `style-hot-reload.ts` auxiliary reload               |
+| Resource   | Directory Source                           | Registration                                         |
+| ---------- | ------------------------------------------ | ---------------------------------------------------- |
+| Prompts    | `getPromptsDirectory()` + category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`     |
+| Gates      | `getGatesDirectory()`                      | `createGateHotReloadRegistration()` auxiliary reload |
+| Frameworks | `runtimeLoader.getFrameworksDir()`         | `framework-hot-reload.ts` auxiliary reload           |
+| Styles     | `loader.getStylesDir()`                    | `style-hot-reload.ts` auxiliary reload               |
 
 ### Limitations
 
@@ -735,11 +735,11 @@ graph TB
 
 ### Injection Types
 
-| Type             | Injects                                            | Default Frequency (Chains) |
-| ---------------- | -------------------------------------------------- | -------------------------- |
-| `system-prompt`  | Framework methodology (CAGEERF phases, ReACT loop) | Every 2 steps              |
-| `gate-guidance`  | Quality validation criteria                        | Every step                 |
-| `style-guidance` | Response formatting hints                          | First step only            |
+| Type             | Injects                                | Default Frequency (Chains) |
+| ---------------- | -------------------------------------- | -------------------------- |
+| `system-prompt`  | Framework (CAGEERF phases, ReACT loop) | Every 2 steps              |
+| `gate-guidance`  | Quality validation criteria            | Every step                 |
+| `style-guidance` | Response formatting hints              | First step only            |
 
 ### Resolution Hierarchy
 
@@ -797,7 +797,7 @@ Transport auto-detects at startup. All modes share the same message handling.
 
 ### Frameworks (`src/frameworks/`)
 
-- **Manager**: Stateless orchestration, loads definitions from methodology registry
+- **Manager**: Stateless orchestration, loads definitions from framework registry
 - **State Store**: Persists active framework to SQLite `framework_state` table
 - **Guides**: CAGEERF, ReACT, 5W1H, SCAMPER, FOCUS, Liquescent implementations
 
@@ -842,7 +842,7 @@ See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for 
 | ---------------- | --------- | ---------------------- |
 | Server startup   | <3s       | 4-phase initialization |
 | Tool response    | <500ms    | Most operations        |
-| Framework switch | <100ms    | Methodology change     |
+| Framework switch | <100ms    | Framework change       |
 | Template render  | <50ms     | Complex Nunjucks       |
 | Chain step       | 100-500ms | Depends on complexity  |
 

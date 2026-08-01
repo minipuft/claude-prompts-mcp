@@ -2,7 +2,7 @@
 /**
  * MCP Resources Module
  *
- * Provides token-efficient read-only access to prompts, gates, methodologies,
+ * Provides token-efficient read-only access to prompts, gates, frameworks,
  * and observability data via MCP Resources protocol (resources/list, resources/read).
  *
  * Architecture:
@@ -11,7 +11,7 @@
  * │   │                                                             │
  * │   ├── registerPromptResources()      → resource://prompt/...    │
  * │   ├── registerGateResources()        → resource://gate/...      │
- * │   ├── registerMethodologyResources() → resource://methodology/..│
+ * │   ├── registerFrameworkResources() → resource://framework/..│
  * │   └── registerObservabilityResources()                          │
  * │       ├── Sessions                   → resource://session/...   │
  * │       └── Metrics                    → resource://metrics/...   │
@@ -23,8 +23,8 @@
  * @module resources
  */
 
+import { registerFrameworkResources } from './handlers/framework-resources.js';
 import { registerGateResources } from './handlers/gate-resources.js';
-import { registerMethodologyResources } from './handlers/methodology-resources.js';
 import { registerObservabilityResources } from './handlers/observability-resources.js';
 import { registerPromptResources } from './handlers/prompt-resources.js';
 
@@ -35,7 +35,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 export { RESOURCE_URI_PATTERNS, ResourceNotFoundError } from './types.js';
 export type {
   GateResourceMetadata,
-  MethodologyResourceMetadata,
+  FrameworkResourceMetadata,
   PromptResourceMetadata,
   ResourceContent,
   ResourceDependencies,
@@ -54,7 +54,7 @@ export type {
  * Respects granular config flags in dependencies.resourcesConfig:
  * - prompts.enabled: Enable prompt resources
  * - gates.enabled: Enable gate resources
- * - methodologies.enabled: Enable methodology resources
+ * - frameworks.enabled: Enable framework resources
  * - observability.enabled: Enable observability resources (sessions + metrics)
  * - logs.enabled: Enable logs resources
  *
@@ -89,21 +89,21 @@ export function registerResources(server: McpServer, dependencies: ResourceDepen
     logger.warn('[Resources] GateManager not available, skipping gate resources');
   }
 
-  // Methodologies
-  const methodologiesEnabled = cfg.methodologies?.enabled !== false;
-  if (methodologiesEnabled && dependencies.frameworkManager !== undefined) {
-    registerMethodologyResources(server, dependencies);
-    logger.debug('[Resources] Methodology resources registered');
-  } else if (!methodologiesEnabled) {
-    logger.debug('[Resources] Methodology resources disabled by config');
+  // Frameworks
+  const frameworksEnabled = cfg.frameworks?.enabled !== false;
+  if (frameworksEnabled && dependencies.frameworkManager !== undefined) {
+    registerFrameworkResources(server, dependencies);
+    logger.debug('[Resources] Framework resources registered');
+  } else if (!frameworksEnabled) {
+    logger.debug('[Resources] Framework resources disabled by config');
   } else {
-    logger.warn('[Resources] FrameworkManager not available, skipping methodology resources');
+    logger.warn('[Resources] FrameworkManager not available, skipping framework resources');
   }
 
   // Observability (sessions + metrics)
   const observabilityEnabled = cfg.observability?.enabled !== false;
   const hasObservabilityDeps =
-    dependencies.chainSessionManager !== undefined || dependencies.metricsCollector !== undefined;
+    dependencies.chainSessionStore !== undefined || dependencies.metricsCollector !== undefined;
 
   if (observabilityEnabled && hasObservabilityDeps) {
     registerObservabilityResources(server, dependencies);

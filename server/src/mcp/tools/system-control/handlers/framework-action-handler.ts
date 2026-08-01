@@ -1,6 +1,6 @@
 // @lifecycle canonical - Handler for framework management operations.
 
-import { getDefaultRuntimeLoader } from '../../../../engine/frameworks/methodology/index.js';
+import { getDefaultRuntimeLoader } from '../../../../engine/frameworks/definitions/index.js';
 import { ActionHandler } from '../core/action-handler-base.js';
 
 import type { ToolResponse } from '../../../../shared/types/index.js';
@@ -28,16 +28,14 @@ export class FrameworkActionHandler extends ActionHandler {
           reason: args.reason,
         });
       case 'inspect':
-        return await this.inspectMethodology({
-          methodology_id: args.methodology_id || args.framework,
-        });
-      case 'list_methodologies':
-        return await this.listMethodologiesAction({
+        return await this.inspectFramework({ framework: args.framework });
+      case 'list_frameworks':
+        return await this.listFrameworksAction({
           show_details: args.show_details,
         });
       default:
         throw new Error(
-          `Unknown framework operation: ${operation}. Valid operations: switch, list, enable, disable, inspect, list_methodologies`
+          `Unknown framework operation: ${operation}. Valid operations: switch, list, enable, disable, inspect, list_frameworks`
         );
     }
   }
@@ -69,7 +67,7 @@ export class FrameworkActionHandler extends ActionHandler {
     response += `**Description**: ${framework.description}\n`;
     response += `**Type**: ${framework.type}\n\n`;
     response += `**Guidelines**: ${framework.executionGuidelines.join(' • ')}\n\n`;
-    response += `✅ All future prompt executions will now use the ${framework.id} methodology.`;
+    response += `✅ All future prompt executions will now use the ${framework.id} framework.`;
 
     return this.createMinimalSystemResponse(response, 'switch_framework');
   }
@@ -84,14 +82,14 @@ export class FrameworkActionHandler extends ActionHandler {
     const activeFramework = currentState?.activeFramework || 'CAGEERF';
 
     const runtimeLoader = getDefaultRuntimeLoader();
-    const methodologyIds = runtimeLoader.discoverMethodologies();
+    const frameworkIds = runtimeLoader.discoverFrameworks();
 
     let response = `📋 **Available Frameworks**\n\n`;
 
     frameworks.forEach((framework: any) => {
       const isActive = framework.id.toUpperCase() === activeFramework.toUpperCase();
       const status = isActive ? '🟢 ACTIVE' : '⚪ Available';
-      const methodologyDef = runtimeLoader.loadMethodology(framework.id.toLowerCase());
+      const frameworkDef = runtimeLoader.loadFramework(framework.id.toLowerCase());
 
       response += `**${framework.name}** ${status}\n`;
 
@@ -99,15 +97,15 @@ export class FrameworkActionHandler extends ActionHandler {
         response += `   📝 ${framework.description}\n`;
         response += `   🎯 Type: ${framework.type}\n`;
 
-        if (methodologyDef) {
-          if (methodologyDef.methodologyGates?.length) {
-            response += `   🚧 Methodology Gates: ${methodologyDef.methodologyGates.length}\n`;
+        if (frameworkDef) {
+          if (frameworkDef.frameworkGates?.length) {
+            response += `   🚧 Framework Gates: ${frameworkDef.frameworkGates.length}\n`;
           }
-          if (methodologyDef.phases?.processingSteps?.length) {
-            response += `   📊 Processing Steps: ${methodologyDef.phases.processingSteps.length}\n`;
+          if (frameworkDef.phases?.processingSteps?.length) {
+            response += `   📊 Processing Steps: ${frameworkDef.phases.processingSteps.length}\n`;
           }
-          if (methodologyDef.phases?.qualityIndicators) {
-            const indicatorCount = Object.keys(methodologyDef.phases.qualityIndicators).length;
+          if (frameworkDef.phases?.qualityIndicators) {
+            const indicatorCount = Object.keys(frameworkDef.phases.qualityIndicators).length;
             response += `   ✅ Quality Indicators: ${indicatorCount} categories\n`;
           }
         }
@@ -125,9 +123,9 @@ export class FrameworkActionHandler extends ActionHandler {
       response += `\n💡 Use 'show_details: true' for more information about each framework.\n`;
     }
 
-    if (methodologyIds.length > 0) {
-      response += `\n📦 Data-driven methodologies: ${methodologyIds.length} available`;
-      response += `\n🔍 Use \`operation:"list_methodologies"\` for methodology-specific details`;
+    if (frameworkIds.length > 0) {
+      response += `\n📦 Data-driven frameworks: ${frameworkIds.length} available`;
+      response += `\n🔍 Use \`operation:"list_frameworks"\` for framework-specific details`;
     }
 
     response += `\n🔄 Switch frameworks using: action="framework", operation="switch", framework="<name>"`;
@@ -135,35 +133,35 @@ export class FrameworkActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'list_frameworks');
   }
 
-  private async inspectMethodology(args: { methodology_id?: string }): Promise<ToolResponse> {
-    const methodologyId = args.methodology_id?.toLowerCase();
+  private async inspectFramework(args: { framework?: string }): Promise<ToolResponse> {
+    const frameworkId = args.framework?.toLowerCase();
     const runtimeLoader = getDefaultRuntimeLoader();
 
-    if (!methodologyId) {
-      const available = runtimeLoader.discoverMethodologies();
+    if (!frameworkId) {
+      const available = runtimeLoader.discoverFrameworks();
       return this.createMinimalSystemResponse(
-        `📋 **Available Methodologies**\n\n` +
-          `Use \`operation:"inspect" methodology_id:"<id>"\` to inspect a specific methodology.\n\n` +
+        `📋 **Available Frameworks**\n\n` +
+          `Use \`operation:"inspect" framework:"<id>"\` to inspect a specific framework.\n\n` +
           `Available: ${available.join(', ')}`,
-        'inspect_methodology'
+        'inspect_framework'
       );
     }
 
-    const definition = runtimeLoader.loadMethodology(methodologyId);
+    const definition = runtimeLoader.loadFramework(frameworkId);
 
     if (!definition) {
-      const available = runtimeLoader.discoverMethodologies();
+      const available = runtimeLoader.discoverFrameworks();
       return this.createMinimalSystemResponse(
-        `❌ **Methodology Not Found**: \`${methodologyId}\`\n\n` +
-          `Available methodologies: ${available.join(', ')}`,
-        'inspect_methodology'
+        `❌ **Framework Not Found**: \`${frameworkId}\`\n\n` +
+          `Available frameworks: ${available.join(', ')}`,
+        'inspect_framework'
       );
     }
 
-    let response = `🔍 **Methodology: ${definition.name}**\n\n`;
+    let response = `🔍 **Framework: ${definition.name}**\n\n`;
     response += `**ID**: ${definition.id}\n`;
     response += `**Version**: ${definition.version || '1.0.0'}\n`;
-    response += `**Type**: ${definition.type || definition.methodology}\n`;
+    response += `**Type**: ${definition.type}\n`;
     response += `**Status**: ${definition.enabled !== false ? '✅ Enabled' : '❌ Disabled'}\n\n`;
 
     if (definition.systemPromptGuidance) {
@@ -175,19 +173,19 @@ export class FrameworkActionHandler extends ActionHandler {
     if (definition.gates?.include?.length) {
       response += `**Included Gates**: ${definition.gates.include.join(', ')}\n`;
     }
-    if (definition.methodologyGates?.length) {
-      response += `**Methodology Gates** (${definition.methodologyGates.length}):\n`;
-      definition.methodologyGates.slice(0, 3).forEach((gate: any) => {
+    if (definition.frameworkGates?.length) {
+      response += `**Framework Gates** (${definition.frameworkGates.length}):\n`;
+      definition.frameworkGates.slice(0, 3).forEach((gate: any) => {
         response += `  • ${gate.name} (${gate.priority || 'medium'})\n`;
       });
-      if (definition.methodologyGates.length > 3) {
-        response += `  ... and ${definition.methodologyGates.length - 3} more\n`;
+      if (definition.frameworkGates.length > 3) {
+        response += `  ... and ${definition.frameworkGates.length - 3} more\n`;
       }
       response += '\n';
     }
 
-    if (definition.methodologyElements?.requiredSections?.length) {
-      response += `**Required Sections**: ${definition.methodologyElements.requiredSections.join(
+    if (definition.frameworkElements?.requiredSections?.length) {
+      response += `**Required Sections**: ${definition.frameworkElements.requiredSections.join(
         ', '
       )}\n\n`;
     }
@@ -211,36 +209,36 @@ export class FrameworkActionHandler extends ActionHandler {
       )}\n\n`;
     }
 
-    response += `💡 Use \`action:"framework" operation:"switch" framework:"${definition.id}"\` to activate this methodology.`;
+    response += `💡 Use \`action:"framework" operation:"switch" framework:"${definition.id}"\` to activate this framework.`;
 
-    return this.createMinimalSystemResponse(response, 'inspect_methodology');
+    return this.createMinimalSystemResponse(response, 'inspect_framework');
   }
 
-  private async listMethodologiesAction(args: { show_details?: boolean }): Promise<ToolResponse> {
+  private async listFrameworksAction(args: { show_details?: boolean }): Promise<ToolResponse> {
     const runtimeLoader = getDefaultRuntimeLoader();
-    const methodologyIds = runtimeLoader.discoverMethodologies();
+    const frameworkIds = runtimeLoader.discoverFrameworks();
 
-    if (methodologyIds.length === 0) {
+    if (frameworkIds.length === 0) {
       return this.createMinimalSystemResponse(
-        `📋 **No Methodologies Found**\n\n` +
-          `Ensure YAML files exist in \`resources/methodologies/<id>/methodology.yaml\`.`,
-        'list_methodologies'
+        `📋 **No Frameworks Found**\n\n` +
+          `Ensure YAML files exist in \`resources/frameworks/<id>/framework.yaml\`.`,
+        'list_frameworks'
       );
     }
 
-    let response = `📋 **Available Methodologies** (${methodologyIds.length})\n\n`;
+    let response = `📋 **Available Frameworks** (${frameworkIds.length})\n\n`;
 
-    for (const id of methodologyIds) {
-      const definition = runtimeLoader.loadMethodology(id);
+    for (const id of frameworkIds) {
+      const definition = runtimeLoader.loadFramework(id);
       if (!definition) continue;
 
       const status = definition.enabled !== false ? '✅' : '⚪';
       response += `${status} **${definition.name}** (\`${definition.id}\`)\n`;
 
       if (args.show_details) {
-        response += `   Type: ${definition.type || definition.methodology}\n`;
-        if (definition.methodologyGates?.length) {
-          response += `   Gates: ${definition.methodologyGates.length} methodology-specific\n`;
+        response += `   Type: ${definition.type}\n`;
+        if (definition.frameworkGates?.length) {
+          response += `   Gates: ${definition.frameworkGates.length} framework-specific\n`;
         }
         if (definition.phases?.processingSteps?.length) {
           response += `   Processing Steps: ${definition.phases.processingSteps.length}\n`;
@@ -253,9 +251,9 @@ export class FrameworkActionHandler extends ActionHandler {
       response += `\n💡 Use \`show_details:true\` for more information.`;
     }
 
-    response += `\n🔍 Use \`operation:"inspect" methodology_id:"<id>"\` for full details.`;
+    response += `\n🔍 Use \`operation:"inspect" framework:"<id>"\` for full details.`;
 
-    return this.createMinimalSystemResponse(response, 'list_methodologies');
+    return this.createMinimalSystemResponse(response, 'list_frameworks');
   }
 
   private async enableFrameworkSystem(args: {

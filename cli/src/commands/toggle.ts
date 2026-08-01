@@ -17,18 +17,18 @@ interface ToggleOptions {
 export async function toggle(options: ToggleOptions): Promise<number> {
   const type = options.type ? TYPE_MAP[options.type] : undefined;
 
-  if (!type || (type !== 'methodologies' && type !== 'styles')) {
+  if (!type || (type !== 'frameworks' && type !== 'styles')) {
     console.error(
-      `Usage: cpm toggle <methodology|style> <id>\n` +
+      `Usage: cpm toggle <framework|style> <id>\n` +
         (options.type
-          ? `Only methodologies and styles have an 'enabled' field.`
+          ? `Only frameworks and styles have an 'enabled' field.`
           : 'Resource type is required.'),
     );
     return 1;
   }
 
   if (!options.id) {
-    console.error('Usage: cpm toggle <methodology|style> <id>\nResource ID is required.');
+    console.error('Usage: cpm toggle <framework|style> <id>\nResource ID is required.');
     return 1;
   }
 
@@ -69,14 +69,14 @@ export async function toggle(options: ToggleOptions): Promise<number> {
   } else {
     console.log(`Toggled ${singularName(type)} '${options.id}': enabled ${result.previousValue} -> ${result.newValue}`);
     // Advisory: if all resources of this type are now disabled, hint at config
-    if (result.newValue === false && type === 'methodologies') {
+    if (result.newValue === false && type === 'frameworks') {
       printAllDisabledAdvisory(workspace, type);
     }
   }
   return 0;
 }
 
-function printAllDisabledAdvisory(workspace: string, type: 'methodologies' | 'styles'): void {
+function printAllDisabledAdvisory(workspace: string, type: 'frameworks' | 'styles'): void {
   try {
     const baseDir = resolveResourceDir(workspace, type);
     const typeConfig = TYPE_CONFIG[type];
@@ -93,7 +93,7 @@ function printAllDisabledAdvisory(workspace: string, type: 'methodologies' | 'st
     }
 
     if (!anyEnabled && resources.length > 0) {
-      const configKeyMap: Record<string, string> = { methodologies: 'methodologies.mode' };
+      const configKeyMap: Record<string, string> = { frameworks: 'frameworks.mode' };
       const configKey = configKeyMap[type];
       if (!configKey) return;
 

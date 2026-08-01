@@ -50,7 +50,7 @@ function classifyGate(gate) {
 
   // PR review gates
   if (cats.includes('pr-review')) return 'PR Review';
-  // Framework methodology
+  // Framework
   if (hasFramework || gate.gate_type === 'framework') return 'Framework';
   // Planning / workflow
   if (cats.includes('planning') && !cats.includes('code')) return 'Planning';
@@ -114,7 +114,7 @@ function renderIndex(gates) {
     '',
     `${gates.length} gates across ${Object.keys(grouped).length} groups.`,
     '',
-    'For the full enforcement-mode taxonomy (`inline_guidance` / `llm_self_check` / `methodology_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).',
+    'For the full enforcement-mode taxonomy (`inline_guidance` / `llm_self_check` / `framework_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).',
     '',
     '> **Note:** Gate types `content_check` and `pattern_check` were renamed to `inline_guidance` — neither had a runtime enforcement path; both rendered guidance text only. Gates using the old names should migrate.',
     '',

@@ -171,7 +171,7 @@ export class GateGuidanceRenderer {
    * Check if gate should be activated for current context
    *
    * Framework gates (gate_type: "framework") bypass category checks and activate
-   * based on framework context alone. This ensures framework methodology guidance
+   * based on framework context alone. This ensures framework guidance
    * applies universally across all categories.
    */
   private isGateActive(

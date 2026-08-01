@@ -3,27 +3,27 @@
  * Step Generator
  *
  * Generic utility for generating processing and execution steps from
- * methodology definitions. Works with phase and step data from YAML/JSON
+ * framework definitions. Works with phase and step data from YAML/JSON
  * to create step sequences and enhancements.
  */
 
 import type { ContentAnalysisResult } from '../../../shared/types/index.js';
-import type { PhaseGuard } from '../methodology/methodology-schema.js';
+import type { PhaseGuard } from '../definitions/framework-schema.js';
 import type {
   ProcessingGuidance,
   StepGuidance,
   ProcessingStep,
   ExecutionStep,
-} from '../types/methodology-types.js';
+} from '../types/framework-types.js';
 
 /**
- * Execution step definition from methodology YAML
+ * Execution step definition from framework YAML
  */
 export interface ExecutionStepDefinition {
   id: string;
   name: string;
   action: string;
-  methodologyPhase: string;
+  frameworkPhase: string;
   dependencies: string[];
   expected_output: string;
 }
@@ -57,13 +57,13 @@ export interface ExecutionTypeEnhancements {
 }
 
 /**
- * Processing step definition from methodology YAML
+ * Processing step definition from framework YAML
  */
 export interface ProcessingStepDefinition {
   id: string;
   name: string;
   description: string;
-  methodologyBasis: string;
+  frameworkBasis: string;
   order: number;
   required: boolean;
   /** Section header for detection (e.g., "## Context") */
@@ -73,7 +73,7 @@ export interface ProcessingStepDefinition {
 }
 
 /**
- * Phases definition from methodology YAML
+ * Phases definition from framework YAML
  */
 export interface PhasesDefinition {
   processingSteps?: ProcessingStepDefinition[];
@@ -95,7 +95,7 @@ export function generateProcessingSteps(steps: ProcessingStepDefinition[]): Proc
       id: step.id,
       name: step.name,
       description: step.description,
-      methodologyBasis: step.methodologyBasis,
+      frameworkBasis: step.frameworkBasis,
       order: step.order,
       required: step.required,
       ...(step.section_header && { section_header: step.section_header }),
@@ -113,7 +113,7 @@ export function generateExecutionSteps(steps: ExecutionStepDefinition[]): Execut
     id: step.id,
     name: step.name,
     action: step.action,
-    methodologyPhase: step.methodologyPhase,
+    frameworkPhase: step.frameworkPhase,
     dependencies: step.dependencies || [],
     expected_output: step.expected_output,
   }));
@@ -164,7 +164,7 @@ export function createStepGuidance(
   phases: PhasesDefinition,
   semanticAnalysis?: ContentAnalysisResult
 ): StepGuidance {
-  // #todo: Expose executionSteps via a “methodology_steps” toolcall (akin to %judge) so the client LLM can request structured steps for the user query; currently guidance-only.
+  // #todo: Expose executionSteps via a “framework_steps” toolcall (akin to %judge) so the client LLM can request structured steps for the user query; currently guidance-only.
   const executionSteps = phases.executionSteps ? generateExecutionSteps(phases.executionSteps) : [];
 
   const stepEnhancements: Record<string, string[]> = {};

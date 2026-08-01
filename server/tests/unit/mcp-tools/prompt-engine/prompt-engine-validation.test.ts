@@ -80,8 +80,8 @@ const mockMcpServer = {
 
 const mockFrameworkManager = {
   generateExecutionContext: jest.fn().mockReturnValue({
-    selectedFramework: { methodology: 'CAGEERF', name: 'CAGEERF' },
-    systemPrompt: 'Use the CAGEERF methodology',
+    selectedFramework: { framework: 'CAGEERF', name: 'CAGEERF' },
+    systemPrompt: 'Use the CAGEERF framework',
   }),
   listFrameworks: jest.fn().mockReturnValue([]),
 } as any;
@@ -89,7 +89,7 @@ const mockFrameworkManager = {
 const mockFrameworkStateStore = {
   isFrameworkSystemEnabled: jest.fn().mockReturnValue(false),
   getActiveFramework: jest.fn().mockReturnValue({
-    methodology: 'CAGEERF',
+    framework: 'CAGEERF',
     name: 'CAGEERF',
   }),
   shutdown: jest.fn(),

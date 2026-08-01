@@ -374,14 +374,14 @@ describe('MCP Resources Registration Integration', () => {
     });
   });
 
-  describe('Methodology Resource Handlers', () => {
+  describe('Framework Resource Handlers', () => {
     const testFrameworks = [
       {
         id: 'CAGEERF',
         name: 'CAGEERF Framework',
-        description: 'Context, Analysis, Goals, Execution, Evaluation, Refinement methodology',
-        type: 'methodology',
-        systemPromptTemplate: 'Apply the CAGEERF methodology systematically...',
+        description: 'Context, Analysis, Goals, Execution, Evaluation, Refinement framework',
+        type: 'CAGEERF',
+        systemPromptTemplate: 'Apply the CAGEERF framework systematically...',
         executionGuidelines: ['Start with context', 'Analyze thoroughly', 'Set clear goals'],
         priority: 100,
         enabled: true,
@@ -390,7 +390,7 @@ describe('MCP Resources Registration Integration', () => {
         id: 'ReACT',
         name: 'ReACT Framework',
         description: 'Reason, Act, Observe loop for problem solving',
-        type: 'methodology',
+        type: 'ReACT',
         systemPromptTemplate: 'Use the ReACT loop...',
         executionGuidelines: ['Reason first', 'Take action', 'Observe results'],
         priority: 90,
@@ -411,37 +411,37 @@ describe('MCP Resources Registration Integration', () => {
       registerResources(mockMcpServer as never, dependencies);
     });
 
-    test('registers methodology resources when frameworkManager is provided', () => {
-      expect(registeredResources.has('methodologies')).toBe(true);
-      expect(registeredResources.has('methodology')).toBe(true);
-      expect(registeredResources.has('methodology-system-prompt')).toBe(true);
+    test('registers framework resources when frameworkManager is provided', () => {
+      expect(registeredResources.has('frameworks')).toBe(true);
+      expect(registeredResources.has('framework')).toBe(true);
+      expect(registeredResources.has('framework-system-prompt')).toBe(true);
     });
 
-    test('methodologies list handler returns all methodologies with metadata', async () => {
-      const handler = registeredResources.get('methodologies')?.readHandler;
+    test('frameworks list handler returns all frameworks with metadata', async () => {
+      const handler = registeredResources.get('frameworks')?.readHandler;
       expect(handler).toBeDefined();
 
       const result = (await handler!(
-        new URL(`resource://${RESOURCE_URI_PATTERNS.METHODOLOGY_LIST}`),
+        new URL(`resource://${RESOURCE_URI_PATTERNS.FRAMEWORK_LIST}`),
         {}
       )) as { contents: Array<{ text: string; mimeType: string }> };
 
       expect(result.contents).toHaveLength(1);
       expect(result.contents[0].mimeType).toBe('text/plain');
 
-      // New compact format: "Methodologies (N):\nid: name [disabled]"
+      // New compact format: "Frameworks (N):\nid: name [disabled]"
       const text = result.contents[0].text;
-      expect(text).toContain('Methodologies (2):');
+      expect(text).toContain('Frameworks (2):');
       expect(text).toContain('CAGEERF: CAGEERF Framework');
       expect(text).toContain('ReACT: ReACT Framework [disabled]');
     });
 
-    test('individual methodology handler returns full content', async () => {
-      const handler = registeredResources.get('methodology')?.readHandler;
+    test('individual framework handler returns full content', async () => {
+      const handler = registeredResources.get('framework')?.readHandler;
       expect(handler).toBeDefined();
 
       const result = (await handler!(
-        new URL(`resource://${RESOURCE_URI_PATTERNS.METHODOLOGY_ITEM.replace('{id}', 'CAGEERF')}`),
+        new URL(`resource://${RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM.replace('{id}', 'CAGEERF')}`),
         { id: 'CAGEERF' }
       )) as { contents: Array<{ text: string; mimeType: string }> };
 
@@ -451,7 +451,10 @@ describe('MCP Resources Registration Integration', () => {
       const content = result.contents[0].text;
       expect(content).toContain('# CAGEERF Framework');
       expect(content).toContain('**ID:** `CAGEERF`');
-      expect(content).toContain('**Type:** methodology');
+      // `type` is the framework's own identity, as shipped in resources/frameworks/*/framework.yaml
+      // (`type: CAGEERF`, `type: SCAMPER`, …) — not a category word. The fixture said
+      // 'methodology' and this assertion said 'framework'; neither matched the real data shape.
+      expect(content).toContain('**Type:** CAGEERF');
       expect(content).toContain('**Priority:** 100');
       expect(content).toContain('**Enabled:** Yes');
       expect(content).toContain('## Execution Guidelines');
@@ -459,32 +462,32 @@ describe('MCP Resources Registration Integration', () => {
       expect(content).toContain('## System Prompt Template');
     });
 
-    test('methodology system prompt handler returns raw template only', async () => {
-      const handler = registeredResources.get('methodology-system-prompt')?.readHandler;
+    test('framework system prompt handler returns raw template only', async () => {
+      const handler = registeredResources.get('framework-system-prompt')?.readHandler;
       expect(handler).toBeDefined();
 
       const result = (await handler!(
         new URL(
-          `resource://${RESOURCE_URI_PATTERNS.METHODOLOGY_SYSTEM_PROMPT.replace('{id}', 'CAGEERF')}`
+          `resource://${RESOURCE_URI_PATTERNS.FRAMEWORK_SYSTEM_PROMPT.replace('{id}', 'CAGEERF')}`
         ),
         { id: 'CAGEERF' }
       )) as { contents: Array<{ text: string }> };
 
       expect(result.contents).toHaveLength(1);
-      expect(result.contents[0].text).toBe('Apply the CAGEERF methodology systematically...');
+      expect(result.contents[0].text).toBe('Apply the CAGEERF framework systematically...');
     });
 
-    test('methodology handler throws for non-existent methodology', async () => {
-      const handler = registeredResources.get('methodology')?.readHandler;
+    test('framework handler throws for non-existent framework', async () => {
+      const handler = registeredResources.get('framework')?.readHandler;
 
       await expect(
         handler!(
           new URL(
-            `resource://${RESOURCE_URI_PATTERNS.METHODOLOGY_ITEM.replace('{id}', 'non-existent')}`
+            `resource://${RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM.replace('{id}', 'non-existent')}`
           ),
           { id: 'non-existent' }
         )
-      ).rejects.toThrow('Methodology not found: non-existent');
+      ).rejects.toThrow('Framework not found: non-existent');
     });
   });
 
@@ -552,10 +555,14 @@ describe('MCP Resources Registration Integration', () => {
     beforeEach(() => {
       const dependencies: ResourceDependencies = {
         logger: mockLogger,
-        chainSessionManager: {
+        chainSessionStore: {
           listActiveSessions: (limit?: number) => testSessions.slice(0, limit),
           getSession: (sessionId: string) =>
             sessionId === 'session-123' ? testSessionDetails : undefined,
+          // The session item resource resolves by chain identifier (the user-facing id), which is
+          // what `observability-resources.ts` calls. Keyed on chainId, not sessionId.
+          getSessionByChainIdentifier: (chainId: string) =>
+            chainId === 'chain-abc' ? testSessionDetails : undefined,
           getSessionStats: () => testSessionStats,
         },
         metricsCollector: {
@@ -566,7 +573,7 @@ describe('MCP Resources Registration Integration', () => {
       registerResources(mockMcpServer as never, dependencies);
     });
 
-    test('registers session resources when chainSessionManager is provided', () => {
+    test('registers session resources when chainSessionStore is provided', () => {
       expect(registeredResources.has('sessions')).toBe(true);
       expect(registeredResources.has('session')).toBe(true);
     });
@@ -588,7 +595,7 @@ describe('MCP Resources Registration Integration', () => {
       const parsed = JSON.parse(result.contents[0].text);
 
       expect(parsed).toHaveLength(2);
-      expect(parsed[0].name).toBe('session-123');
+      expect(parsed[0].name).toBe('chain-abc');
       expect(parsed[0].chainId).toBe('chain-abc');
       expect(parsed[0].currentStep).toBe(2);
       expect(parsed[0].totalSteps).toBe(5);
@@ -602,9 +609,9 @@ describe('MCP Resources Registration Integration', () => {
 
       const result = (await handler!(
         new URL(
-          `resource://${RESOURCE_URI_PATTERNS.SESSION_ITEM.replace('{chainId}', 'session-123')}`
+          `resource://${RESOURCE_URI_PATTERNS.SESSION_ITEM.replace('{chainId}', 'chain-abc')}`
         ),
-        { chainId: 'session-123' }
+        { chainId: 'chain-abc' }
       )) as { contents: Array<{ text: string; mimeType: string }> };
 
       expect(result.contents).toHaveLength(1);
@@ -668,11 +675,11 @@ describe('MCP Resources Registration Integration', () => {
       expect(RESOURCE_URI_PATTERNS.GATE_GUIDANCE).toBe('resource://gate/{id}/guidance');
     });
 
-    test('methodology patterns include full URI scheme', () => {
-      expect(RESOURCE_URI_PATTERNS.METHODOLOGY_LIST).toBe('resource://methodology/');
-      expect(RESOURCE_URI_PATTERNS.METHODOLOGY_ITEM).toBe('resource://methodology/{id}');
-      expect(RESOURCE_URI_PATTERNS.METHODOLOGY_SYSTEM_PROMPT).toBe(
-        'resource://methodology/{id}/system-prompt'
+    test('framework patterns include full URI scheme', () => {
+      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_LIST).toBe('resource://framework/');
+      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_ITEM).toBe('resource://framework/{id}');
+      expect(RESOURCE_URI_PATTERNS.FRAMEWORK_SYSTEM_PROMPT).toBe(
+        'resource://framework/{id}/system-prompt'
       );
     });
 

@@ -1,6 +1,6 @@
 // @lifecycle canonical - Framework discovery operations: list, inspect.
 
-import type { MethodologyValidator } from './methodology-validator.js';
+import type { FrameworkDraftValidator } from './framework-draft-validator.js';
 import type { ToolResponse } from '../../../../shared/types/index.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput } from '../core/types.js';
@@ -8,7 +8,7 @@ import type { FrameworkManagerInput } from '../core/types.js';
 export class FrameworkDiscoveryProcessor {
   constructor(
     private readonly ctx: FrameworkResourceContext,
-    private readonly validationService: MethodologyValidator
+    private readonly validationService: FrameworkDraftValidator
   ) {}
 
   async handleList(args: FrameworkManagerInput): Promise<ToolResponse> {
@@ -19,8 +19,8 @@ export class FrameworkDiscoveryProcessor {
 
     if (frameworks.length === 0) {
       return this.success(
-        `📋 No methodologies found${enabled_only ? ' (enabled only)' : ''}\n\n` +
-          `Use resource_manager(resource_type:"methodology", action:"create", ...) to add a new methodology.`
+        `📋 No frameworks found${enabled_only ? ' (enabled only)' : ''}\n\n` +
+          `Use resource_manager(resource_type:"framework", action:"create", ...) to add a new framework.`
       );
     }
 
@@ -38,7 +38,7 @@ export class FrameworkDiscoveryProcessor {
         : '\n📍 No active framework';
 
     return this.success(
-      `📋 Methodologies (${frameworks.length} total)\n\n` + `${frameworkList}\n` + `${activeInfo}`
+      `📋 Frameworks (${frameworks.length} total)\n\n` + `${frameworkList}\n` + `${activeInfo}`
     );
   }
 
@@ -46,24 +46,24 @@ export class FrameworkDiscoveryProcessor {
     const { id } = args;
 
     if (id === undefined || id === '') {
-      return this.error('Methodology ID is required for inspect action');
+      return this.error('Framework ID is required for inspect action');
     }
 
     const framework = this.ctx.frameworkManager.getFramework(id);
 
     if (framework === undefined) {
-      return this.error(`Methodology '${id}' not found`);
+      return this.error(`Framework '${id}' not found`);
     }
 
     const isActive = this.ctx.frameworkStateStore?.getActiveFramework()?.id === framework.id;
     const activeStatus = isActive ? 'Active' : 'Inactive';
 
-    // Load methodology data from disk to calculate validation score
+    // Load framework data from disk to calculate validation score
     let validationInfo = '';
     try {
-      const existingData = await this.ctx.fileService.loadExistingMethodology(id);
+      const existingData = await this.ctx.fileService.loadExistingFramework(id);
       if (existingData !== null) {
-        const creationData = this.ctx.fileService.toMethodologyCreationData(id, existingData);
+        const creationData = this.ctx.fileService.toFrameworkCreationData(id, existingData);
         if (creationData !== null) {
           const validation = this.validationService.validate(creationData);
           validationInfo = `\n\n**Quality:** ${validation.score}% (${validation.level})`;
@@ -76,11 +76,11 @@ export class FrameworkDiscoveryProcessor {
         }
       }
     } catch (error) {
-      this.ctx.logger.debug(`Could not load methodology data for validation: ${id}`, { error });
+      this.ctx.logger.debug(`Could not load framework data for validation: ${id}`, { error });
     }
 
     return this.success(
-      `Methodology: ${framework.name}\n\n` +
+      `Framework: ${framework.name}\n\n` +
         `Details:\n` +
         `  ID: ${framework.id}\n` +
         `  Type: ${framework.type}\n` +

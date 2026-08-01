@@ -24,7 +24,7 @@ import {
   type PipelineStageMetric,
   type CommandExecutionMetric,
   type CommandExecutionMode,
-} from './types.js';
+} from '../../../shared/types/metrics.js';
 import { Logger } from '../../logging/index.js';
 
 /**

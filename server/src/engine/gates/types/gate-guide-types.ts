@@ -3,10 +3,10 @@
  * Gate Guide Type Definitions
  *
  * Contains the GateGuide interface and related types for the registry-based
- * gate system architecture. This mirrors the MethodologyGuide pattern from
+ * gate system architecture. This mirrors the FrameworkGuide pattern from
  * the framework system while being tailored for gate-specific functionality.
  *
- * Key differences from MethodologyGuide:
+ * Key differences from FrameworkGuide:
  * - No dynamic tool descriptions (gates don't modify MCP tool descriptions)
  * - No judge prompt system (gate selection remains activation-rule based)
  * - Simpler interface focused on guidance and validation
@@ -101,7 +101,7 @@ export interface GateDefinitionYaml {
   enforcementMode?: GateEnforcementMode;
   /**
    * Gate type classification for dynamic identification.
-   * - 'framework': Methodology-related gates, filtered when frameworks disabled
+   * - 'framework': Framework-related gates, filtered when frameworks disabled
    * - 'category': Category-based gates (code, documentation, etc.)
    * - 'custom': User-defined custom gates
    */
@@ -146,7 +146,7 @@ export interface GateDefinitionYaml {
 /**
  * Core interface for gate guides in the registry-based system.
  *
- * This interface mirrors MethodologyGuide's pattern but is tailored for gates:
+ * This interface mirrors FrameworkGuide's pattern but is tailored for gates:
  * - No getToolDescriptions() - gates don't modify MCP tool descriptions
  * - No getJudgePrompt() - gate selection uses activation rules, not LLM selection
  * - Focus on guidance rendering and validation

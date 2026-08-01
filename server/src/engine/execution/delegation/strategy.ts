@@ -75,23 +75,6 @@ export function getHandoffProfileStatus(
   return DELEGATION_PROFILE_DESCRIPTORS[profile].status;
 }
 
-/** @deprecated Prefer handoff terminology helpers. */
-export function getDelegationFooterPrefix(delegationProfile?: DelegationProfile): string {
-  return getHandoffFooterPrefix(delegationProfile);
-}
-
-/** @deprecated Prefer handoff terminology helpers. */
-export function getDelegationFooterInstruction(delegationProfile?: DelegationProfile): string {
-  return getHandoffFooterInstruction(delegationProfile);
-}
-
-/** @deprecated Prefer handoff terminology helpers. */
-export function getDelegationProfileStatus(
-  delegationProfile?: DelegationProfile
-): DelegationStrategyStatus {
-  return getHandoffProfileStatus(delegationProfile);
-}
-
 /** Default strategy for Claude Code (Task tool, Claude model names). */
 export class ClaudeCodeStrategy implements DelegationStrategy {
   readonly clientId = 'claude-code';

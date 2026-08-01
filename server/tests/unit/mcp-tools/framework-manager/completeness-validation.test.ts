@@ -1,36 +1,36 @@
 /**
- * Methodology Validation Unit Tests
+ * Framework Validation Unit Tests
  *
- * Tests the validateMethodology logic which blocks creation of
- * incomplete methodologies and provides focused error guidance.
+ * Tests the validateFramework logic which blocks creation of
+ * incomplete frameworks and provides focused error guidance.
  *
  * Validation tiers (80% threshold):
- * - REQUIRED: system_prompt_guidance (30%), phases (30%), methodology_gates (20%)
- * - RECOMMENDED: methodology_elements (10%), template_suggestions (5%), description (5%)
+ * - REQUIRED: system_prompt_guidance (30%), phases (30%), framework_gates (20%)
+ * - RECOMMENDED: framework_elements (10%), template_suggestions (5%), description (5%)
  *
  * Classification: Unit (single class, mocked dependencies)
  */
 
 import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 
-import type { MethodologyCreationData } from '../../../../src/mcp/tools/framework-manager/core/types.js';
+import type { FrameworkCreationData } from '../../../../src/mcp/tools/framework-manager/core/types.js';
 
-import { MethodologyValidator } from '../../../../src/mcp/tools/framework-manager/services/methodology-validator.js';
+import { FrameworkDraftValidator } from '../../../../src/mcp/tools/framework-manager/services/framework-draft-validator.js';
 
-describe('Methodology Validation', () => {
-  let validationService: MethodologyValidator;
+describe('Framework Validation', () => {
+  let validationService: FrameworkDraftValidator;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    validationService = new MethodologyValidator();
+    validationService = new FrameworkDraftValidator();
   });
 
   describe('Required Fields - Blocking Validation', () => {
     test('missing system_prompt_guidance blocks with error', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '', // Empty - invalid
       };
 
@@ -43,10 +43,10 @@ describe('Methodology Validation', () => {
     });
 
     test('missing phases blocks with error (when system_prompt_guidance present)', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [], // Empty - invalid
       };
@@ -59,37 +59,37 @@ describe('Methodology Validation', () => {
       expect(result.score).toBe(30); // Only system_prompt_guidance counted
     });
 
-    test('missing methodology_gates blocks with error (when phases present)', () => {
-      const data: MethodologyCreationData = {
+    test('missing framework_gates blocks with error (when phases present)', () => {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [], // Empty - invalid
+        framework_gates: [], // Empty - invalid
       };
 
       const result = validationService.validate(data);
 
       expect(result.valid).toBe(false);
       expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]).toContain('methodology_gates');
+      expect(result.errors[0]).toContain('framework_gates');
       expect(result.score).toBe(60); // system_prompt_guidance + phases
     });
 
     test('all required fields present passes validation', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
             description: 'Gate desc',
-            methodologyArea: 'phase1',
+            frameworkArea: 'phase1',
             priority: 'high',
             validationCriteria: ['Criterion 1'],
           },
@@ -106,10 +106,10 @@ describe('Methodology Validation', () => {
 
   describe('Score Calculation', () => {
     test('score 0% with no valid fields', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '', // Invalid
       };
 
@@ -118,10 +118,10 @@ describe('Methodology Validation', () => {
     });
 
     test('score 30% with only system_prompt_guidance', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
       };
 
@@ -130,10 +130,10 @@ describe('Methodology Validation', () => {
     });
 
     test('score 60% with system_prompt_guidance + phases', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
       };
@@ -143,18 +143,18 @@ describe('Methodology Validation', () => {
     });
 
     test('score 80% with all required fields', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
             description: 'Gate desc',
-            methodologyArea: 'phase1',
+            frameworkArea: 'phase1',
             priority: 'high',
             validationCriteria: ['Criterion 1'],
           },
@@ -166,24 +166,24 @@ describe('Methodology Validation', () => {
     });
 
     test('score 100% with all fields', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         description: 'A description',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
             description: 'Gate desc',
-            methodologyArea: 'phase1',
+            frameworkArea: 'phase1',
             priority: 'high',
             validationCriteria: ['Criterion 1'],
           },
         ],
-        methodology_elements: {
+        framework_elements: {
           requiredSections: ['Section 1'],
           sectionDescriptions: { 'Section 1': 'Description' },
         },
@@ -193,7 +193,7 @@ describe('Methodology Validation', () => {
             type: 'addition',
             description: 'Add header',
             content: 'Content',
-            methodologyJustification: 'Reason',
+            frameworkJustification: 'Reason',
             impact: 'high',
           },
         ],
@@ -206,10 +206,10 @@ describe('Methodology Validation', () => {
 
   describe('Quality Levels', () => {
     test('score < 50 yields INCOMPLETE level', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance', // 30%
       };
 
@@ -218,10 +218,10 @@ describe('Methodology Validation', () => {
     });
 
     test('score 50-79 yields STANDARD level', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }], // 60%
       };
@@ -231,18 +231,18 @@ describe('Methodology Validation', () => {
     });
 
     test('score >= 80 yields FULL level', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
             description: 'Gate desc',
-            methodologyArea: 'phase1',
+            frameworkArea: 'phase1',
             priority: 'high',
             validationCriteria: ['Criterion 1'],
           },
@@ -256,10 +256,10 @@ describe('Methodology Validation', () => {
 
   describe('Warnings for Recommended Fields', () => {
     test('no warnings when validation fails (errors take priority)', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '', // Invalid - will have error
       };
 
@@ -270,53 +270,53 @@ describe('Methodology Validation', () => {
     });
 
     test('generates warnings for missing recommended fields when valid', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
             description: 'Gate desc',
-            methodologyArea: 'phase1',
+            frameworkArea: 'phase1',
             priority: 'high',
             validationCriteria: ['Criterion 1'],
           },
         ],
-        // Missing: methodology_elements, template_suggestions, description
+        // Missing: framework_elements, template_suggestions, description
       };
 
       const result = validationService.validate(data);
 
       expect(result.valid).toBe(true);
       expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings.some((w) => w.includes('methodology_elements'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('framework_elements'))).toBe(true);
       expect(result.warnings.some((w) => w.includes('template_suggestions'))).toBe(true);
       expect(result.warnings.some((w) => w.includes('description'))).toBe(true);
     });
 
     test('no warnings when all recommended fields present', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         description: 'A description',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
             description: 'Gate desc',
-            methodologyArea: 'phase1',
+            frameworkArea: 'phase1',
             priority: 'high',
             validationCriteria: ['Criterion 1'],
           },
         ],
-        methodology_elements: {
+        framework_elements: {
           requiredSections: ['Section 1'],
           sectionDescriptions: { 'Section 1': 'Description' },
         },
@@ -326,7 +326,7 @@ describe('Methodology Validation', () => {
             type: 'addition',
             description: 'Add header',
             content: 'Content',
-            methodologyJustification: 'Reason',
+            frameworkJustification: 'Reason',
             impact: 'high',
           },
         ],
@@ -341,10 +341,10 @@ describe('Methodology Validation', () => {
 
   describe('nextStep Guidance', () => {
     test('nextStep shows first error when invalid', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '',
       };
 
@@ -355,18 +355,18 @@ describe('Methodology Validation', () => {
     });
 
     test('nextStep shows first warning when valid but incomplete', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
             description: 'Gate desc',
-            methodologyArea: 'phase1',
+            frameworkArea: 'phase1',
             priority: 'high',
             validationCriteria: ['Criterion 1'],
           },
@@ -381,24 +381,24 @@ describe('Methodology Validation', () => {
     });
 
     test('nextStep is undefined when fully complete', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         description: 'A description',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
             description: 'Gate desc',
-            methodologyArea: 'phase1',
+            frameworkArea: 'phase1',
             priority: 'high',
             validationCriteria: ['Criterion 1'],
           },
         ],
-        methodology_elements: {
+        framework_elements: {
           requiredSections: ['Section 1'],
           sectionDescriptions: { 'Section 1': 'Description' },
         },
@@ -408,7 +408,7 @@ describe('Methodology Validation', () => {
             type: 'addition',
             description: 'Add header',
             content: 'Content',
-            methodologyJustification: 'Reason',
+            frameworkJustification: 'Reason',
             impact: 'high',
           },
         ],
@@ -422,10 +422,10 @@ describe('Methodology Validation', () => {
 
   describe('Edge Cases', () => {
     test('whitespace-only system_prompt_guidance treated as empty', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '   \n\t  ',
       };
 
@@ -436,19 +436,19 @@ describe('Methodology Validation', () => {
     });
 
     test('whitespace-only description treated as empty', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         description: '  ',
         system_prompt_guidance: 'Valid guidance',
         phases: [{ id: 'p1', name: 'Phase 1', description: 'Desc' }],
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'Gate 1',
             description: 'Gate desc',
-            methodologyArea: 'phase1',
+            frameworkArea: 'phase1',
             priority: 'high',
             validationCriteria: ['Criterion 1'],
           },
@@ -464,10 +464,10 @@ describe('Methodology Validation', () => {
     });
 
     test('undefined phases treated as missing', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         // phases undefined
       };
@@ -479,10 +479,10 @@ describe('Methodology Validation', () => {
     });
 
     test('empty array phases treated as missing', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: 'Valid guidance',
         phases: [],
       };
@@ -496,13 +496,13 @@ describe('Methodology Validation', () => {
 
   describe('Focused Error Reporting', () => {
     test('only one error at a time for focused guidance', () => {
-      const data: MethodologyCreationData = {
+      const data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '', // Missing 1
         phases: [], // Missing 2
-        methodology_gates: [], // Missing 3
+        framework_gates: [], // Missing 3
       };
 
       const result = validationService.validate(data);
@@ -513,12 +513,12 @@ describe('Methodology Validation', () => {
       expect(result.errors[0]).toContain('system_prompt_guidance');
     });
 
-    test('error progression: system_prompt_guidance -> phases -> methodology_gates', () => {
+    test('error progression: system_prompt_guidance -> phases -> framework_gates', () => {
       // Step 1: Missing system_prompt_guidance
-      let data: MethodologyCreationData = {
+      let data: FrameworkCreationData = {
         id: 'test',
         name: 'Test',
-        methodology: 'TEST',
+        framework: 'TEST',
         system_prompt_guidance: '',
       };
       let result = validationService.validate(data);
@@ -529,20 +529,20 @@ describe('Methodology Validation', () => {
       result = validationService.validate(data);
       expect(result.errors[0]).toContain('phases');
 
-      // Step 3: Fix phases, now missing methodology_gates
+      // Step 3: Fix phases, now missing framework_gates
       data = { ...data, phases: [{ id: 'p1', name: 'P1', description: 'D' }] };
       result = validationService.validate(data);
-      expect(result.errors[0]).toContain('methodology_gates');
+      expect(result.errors[0]).toContain('framework_gates');
 
-      // Step 4: Fix methodology_gates, now valid
+      // Step 4: Fix framework_gates, now valid
       data = {
         ...data,
-        methodology_gates: [
+        framework_gates: [
           {
             id: 'g1',
             name: 'G1',
             description: 'D',
-            methodologyArea: 'p1',
+            frameworkArea: 'p1',
             priority: 'high',
             validationCriteria: ['C1'],
           },

@@ -10,9 +10,10 @@
 import { Logger } from '../../../infra/logging/index.js';
 import { FrameworkManager } from '../framework-manager.js';
 import { TemplateEnhancer, createTemplateEnhancer } from './template-enhancer.js';
+import { TEMPLATE_VARIABLE_NAMES, substituteTemplateVariables } from './template-variables.js';
 import {
   FrameworkDefinition,
-  MethodologyGuide,
+  FrameworkGuide,
   ProcessingGuidance,
   StepGuidance,
   SystemPromptInjectionResult,
@@ -28,7 +29,6 @@ export interface PromptGuidanceServiceConfig {
   templateEnhancement: {
     enabled: boolean;
     enhancementLevel: 'minimal' | 'moderate' | 'comprehensive';
-    enableArgumentSuggestions: boolean;
     enableStructureOptimization: boolean;
   };
 }
@@ -42,7 +42,7 @@ export interface PromptGuidanceResult {
   systemPromptInjection?: SystemPromptInjectionResult;
   templateProcessingGuidance?: ProcessingGuidance;
   executionStepGuidance?: StepGuidance;
-  activeMethodology: string;
+  activeFrameworkType: string;
   guidanceApplied: boolean;
   processingTimeMs: number;
   metadata: {
@@ -80,7 +80,6 @@ export class PromptGuidanceService {
       templateEnhancement: {
         enabled: true,
         enhancementLevel: 'moderate',
-        enableArgumentSuggestions: true,
         enableStructureOptimization: true,
       },
       ...config,
@@ -130,21 +129,21 @@ export class PromptGuidanceService {
 
     try {
       const activeFramework = await this.getActiveFramework(options.frameworkOverride);
-      const methodologyGuide = await this.getMethodologyGuide(activeFramework.type);
+      const frameworkGuide = await this.getFrameworkGuide(activeFramework.type);
 
-      // Surface methodology guidance (read-only hints)
-      const processingGuidance = methodologyGuide.guideTemplateProcessing(
+      // Surface framework guidance (read-only hints)
+      const processingGuidance = frameworkGuide.guideTemplateProcessing(
         prompt.userMessageTemplate ?? '',
         'single'
       );
-      const stepGuidance = methodologyGuide.guideExecutionSteps(
+      const stepGuidance = frameworkGuide.guideExecutionSteps(
         prompt,
         options.semanticAnalysis ?? ({} as ContentAnalysisResult)
       );
 
       const result: PromptGuidanceResult = {
         originalPrompt: prompt,
-        activeMethodology: activeFramework.type,
+        activeFrameworkType: activeFramework.type,
         templateProcessingGuidance: processingGuidance,
         executionStepGuidance: stepGuidance,
         guidanceApplied: false,
@@ -173,10 +172,10 @@ export class PromptGuidanceService {
         options.includeSystemPromptInjection !== false
       ) {
         try {
-          const injectionResult = this.injectMethodologyGuidance(
+          const injectionResult = this.injectFrameworkGuidance(
             prompt,
             activeFramework,
-            methodologyGuide
+            frameworkGuide
           );
 
           result.systemPromptInjection = injectionResult;
@@ -241,7 +240,7 @@ export class PromptGuidanceService {
 
       return {
         originalPrompt: prompt,
-        activeMethodology: 'CAGEERF',
+        activeFrameworkType: 'CAGEERF',
         guidanceApplied: false,
         processingTimeMs: Date.now() - startTime,
         metadata: {
@@ -254,18 +253,18 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Inject methodology guidance into system prompt (inlined from SystemPromptInjector)
+   * Inject framework guidance into system prompt (inlined from SystemPromptInjector)
    *
-   * Simple implementation: get guidance from methodology guide, combine with template.
+   * Simple implementation: get guidance from framework guide, combine with template.
    */
-  private injectMethodologyGuidance(
+  private injectFrameworkGuidance(
     prompt: ConvertedPrompt,
     framework: FrameworkDefinition,
-    guide: MethodologyGuide
+    guide: FrameworkGuide
   ): SystemPromptInjectionResult {
     const startTime = Date.now();
 
-    // Get guidance from methodology guide
+    // Get guidance from framework guide
     const guidance = guide.getSystemPromptGuidance({
       promptName: prompt.name,
       promptCategory: prompt.category,
@@ -276,19 +275,20 @@ export class PromptGuidanceService {
     const template = framework.systemPromptTemplate;
     let enhancedPromptText: string;
 
-    if (template.includes('{METHODOLOGY_GUIDANCE}')) {
-      enhancedPromptText = template.replace('{METHODOLOGY_GUIDANCE}', guidance);
+    if (template.includes('{FRAMEWORK_GUIDANCE}')) {
+      enhancedPromptText = template.replace('{FRAMEWORK_GUIDANCE}', guidance);
     } else {
-      enhancedPromptText = `${template}\n\n## ${framework.type} Methodology\n\n${guidance}`;
+      enhancedPromptText = `${template}\n\n## ${framework.type} Framework\n\n${guidance}`;
     }
 
     // Apply simple variable substitution
-    enhancedPromptText = enhancedPromptText
-      .replace(/\{PROMPT_NAME\}/g, prompt.name || 'Prompt')
-      .replace(/\{PROMPT_CATEGORY\}/g, prompt.category || 'general')
-      .replace(/\{FRAMEWORK_NAME\}/g, framework.name)
-      .replace(/\{METHODOLOGY\}/g, framework.type)
-      .replace(/\{PROMPT_TYPE\}/g, prompt.chainSteps?.length ? 'chain' : 'single');
+    enhancedPromptText = substituteTemplateVariables(enhancedPromptText, {
+      promptName: prompt.name || 'Prompt',
+      promptCategory: prompt.category || 'general',
+      frameworkName: framework.name,
+      frameworkType: framework.type,
+      promptType: prompt.chainSteps?.length ? 'chain' : 'single',
+    });
 
     return {
       originalPrompt: prompt.userMessageTemplate || '',
@@ -298,13 +298,7 @@ export class PromptGuidanceService {
       metadata: {
         injectionTime: new Date(),
         injectionMethod: 'unified',
-        variablesUsed: [
-          'PROMPT_NAME',
-          'PROMPT_CATEGORY',
-          'FRAMEWORK_NAME',
-          'METHODOLOGY',
-          'PROMPT_TYPE',
-        ],
+        variablesUsed: [...TEMPLATE_VARIABLE_NAMES],
         confidence: 1.0,
         processingTimeMs: Date.now() - startTime,
         validationPassed: true,
@@ -377,27 +371,27 @@ export class PromptGuidanceService {
       throw new Error('FrameworkManager not set');
     }
 
-    const targetMethodology = frameworkOverride || this.frameworkManager.selectFramework().type;
+    const targetFramework = frameworkOverride || this.frameworkManager.selectFramework().type;
 
-    const framework = this.frameworkManager.getFramework(targetMethodology);
+    const framework = this.frameworkManager.getFramework(targetFramework);
     if (!framework) {
-      throw new Error(`Framework ${targetMethodology} not found`);
+      throw new Error(`Framework ${targetFramework} not found`);
     }
 
     return framework;
   }
 
   /**
-   * Get methodology guide for framework
+   * Get framework guide for framework
    */
-  private async getMethodologyGuide(methodology: string): Promise<MethodologyGuide> {
+  private async getFrameworkGuide(framework: string): Promise<FrameworkGuide> {
     if (!this.frameworkManager) {
       throw new Error('FrameworkManager not set');
     }
 
-    const guide = this.frameworkManager.getMethodologyGuide(methodology);
+    const guide = this.frameworkManager.getFrameworkGuide(framework);
     if (!guide) {
-      throw new Error(`Methodology guide for ${methodology} not found`);
+      throw new Error(`Framework guide for ${framework} not found`);
     }
 
     return guide;

@@ -4,14 +4,14 @@ import type { Logger } from '../../../infra/logging/index.js';
 import type { ToolResponse } from '../../../shared/types/index.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 
-/** Narrow type for methodology judge prompt data — avoids frameworks/ import. */
+/** Narrow type for framework judge prompt data — avoids frameworks/ import. */
 export interface JudgePromptData {
   systemMessage?: string;
   userMessageTemplate?: string;
 }
 
-/** Provider that resolves a methodology's judge prompt by framework ID. */
-export type MethodologyJudgePromptProvider = (frameworkId: string) => JudgePromptData | undefined;
+/** Provider that resolves a framework's judge prompt by framework ID. */
+export type FrameworkJudgePromptProvider = (frameworkId: string) => JudgePromptData | undefined;
 
 /**
  * Context about operators already specified in the command.
@@ -34,7 +34,7 @@ export interface OperatorContext {
 export class JudgeMenuFormatter {
   constructor(
     private readonly logger: Logger,
-    private readonly judgePromptProvider?: MethodologyJudgePromptProvider | null
+    private readonly judgePromptProvider?: FrameworkJudgePromptProvider | null
   ) {}
 
   /**
@@ -50,7 +50,7 @@ export class JudgeMenuFormatter {
 
     const frameworkInstructions = operatorContext.hasFrameworkOperator
       ? ''
-      : `1. **Framework** (optional): Select a methodology framework if the task requires structured reasoning
+      : `1. **Framework** (optional): Select a framework if the task requires structured reasoning
    - CAGEERF: Complex analysis requiring Context → Analysis → Goals → Execution → Evaluation → Refinement
    - ReACT: Tasks requiring interleaved Reasoning and Acting
    - 5W1H: Investigative tasks (Who, What, When, Where, Why, How)
@@ -58,14 +58,14 @@ export class JudgeMenuFormatter {
 
 `;
 
-    const methodologyJudgePrompt = this.getActiveMethodologyJudgePrompt(context);
+    const frameworkJudgePrompt = this.getActiveFrameworkJudgePrompt(context);
 
-    const introLines = methodologyJudgePrompt
+    const introLines = frameworkJudgePrompt
       ? [
-          methodologyJudgePrompt.systemMessage ?? '',
+          frameworkJudgePrompt.systemMessage ?? '',
           '',
-          '### Methodology-Specific Instructions',
-          methodologyJudgePrompt.userMessageTemplate ?? '',
+          '### Framework-Specific Instructions',
+          frameworkJudgePrompt.userMessageTemplate ?? '',
           '',
         ]
       : [
@@ -124,7 +124,7 @@ export class JudgeMenuFormatter {
       '```',
       '',
       '**Notes:**',
-      '- Use `@Framework` to set methodology, `::` for gates, and `#id` for response style (e.g., `#analytical`).',
+      '- Use `@Framework` to set framework, `::` for gates, and `#id` for response style (e.g., `#analytical`).',
       '- Use `%judge` only for the judge phase; follow-up calls should rely on inline operators.',
     ];
 
@@ -185,7 +185,7 @@ export class JudgeMenuFormatter {
     }
 
     if (!operatorContext.hasFrameworkOperator && resources.frameworks.length > 0) {
-      sections.push('\n#### Methodology Frameworks');
+      sections.push('\n#### Framework Frameworks');
       sections.push(
         resources.frameworks.map((r) => `- **${r.id}**: ${r.description || r.name}`).join('\n')
       );
@@ -243,8 +243,8 @@ export class JudgeMenuFormatter {
     return clean.trim();
   }
 
-  private getActiveMethodologyJudgePrompt(context: ExecutionContext): JudgePromptData | undefined {
-    const frameworkId = context.frameworkContext?.selectedFramework?.methodology;
+  private getActiveFrameworkJudgePrompt(context: ExecutionContext): JudgePromptData | undefined {
+    const frameworkId = context.frameworkContext?.selectedFramework?.type;
     if (!frameworkId || !this.judgePromptProvider) {
       return undefined;
     }
@@ -252,7 +252,7 @@ export class JudgeMenuFormatter {
     try {
       return this.judgePromptProvider(frameworkId.toLowerCase());
     } catch (error) {
-      this.logger.warn('[JudgeMenuFormatter] Failed to load methodology judge prompt', {
+      this.logger.warn('[JudgeMenuFormatter] Failed to load framework judge prompt', {
         frameworkId,
         error,
       });

@@ -123,4 +123,32 @@ describe('splitBySectionHeaders', () => {
     expect(result.get('## Context')!.content).toBe('');
     expect(result.get('## Analysis')!.content).toBe('Analysis content.');
   });
+
+  // Tolerant header matching (hardening 2026-06-22): the model rarely reproduces the exact
+  // configured header string. Heading level, trailing colon, and bold wrapping must still match,
+  // so a correct-but-not-byte-identical header isn't reported "missing" → no unsatisfiable loop.
+  it('matches a different heading level (### vs ##)', () => {
+    const result = splitBySectionHeaders('### Context\nContent here.', ['## Context']);
+    expect(result.get('## Context')!.content).toBe('Content here.');
+  });
+
+  it('matches a header with a trailing colon', () => {
+    const result = splitBySectionHeaders('## Context:\nContent here.', ['## Context']);
+    expect(result.get('## Context')!.content).toBe('Content here.');
+  });
+
+  it('matches a bold-wrapped header', () => {
+    const result = splitBySectionHeaders('## **Context**\nContent here.', ['## Context']);
+    expect(result.get('## Context')!.content).toBe('Content here.');
+  });
+
+  it('matches a header that combines variants (### **Context:**)', () => {
+    const result = splitBySectionHeaders('### **Context:**\nContent here.', ['## Context']);
+    expect(result.get('## Context')!.content).toBe('Content here.');
+  });
+
+  it('does NOT match prose that merely contains the header word', () => {
+    const result = splitBySectionHeaders('Context of the work is broad.\nMore.', ['## Context']);
+    expect(result.has('## Context')).toBe(false);
+  });
 });

@@ -14,10 +14,10 @@ import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
 
 /**
- * Creates a mock GateLoader that returns specified methodology gate IDs.
+ * Creates a mock GateLoader that returns specified framework gate IDs.
  */
 const createMockGateLoader = (
-  methodologyGateIds: string[] = ['framework-compliance', 'research-quality', 'technical-accuracy']
+  frameworkGateIds: string[] = ['framework-compliance', 'research-quality', 'technical-accuracy']
 ): GateLoader =>
   ({
     loadGate: jest.fn(),
@@ -28,19 +28,20 @@ const createMockGateLoader = (
     clearCache: jest.fn(),
     isGateActive: jest.fn(),
     getStatistics: jest.fn(),
-    isMethodologyGate: jest
+    isFrameworkGate: jest
       .fn()
-      .mockImplementation((gateId: string) => Promise.resolve(methodologyGateIds.includes(gateId))),
-    isMethodologyGateCached: jest
+      .mockImplementation((gateId: string) => Promise.resolve(frameworkGateIds.includes(gateId))),
+    isFrameworkGateCached: jest
       .fn()
-      .mockImplementation((gateId: string) => methodologyGateIds.includes(gateId)),
-    getMethodologyGateIds: jest.fn().mockResolvedValue(methodologyGateIds),
+      .mockImplementation((gateId: string) => frameworkGateIds.includes(gateId)),
+    getFrameworkGateIds: jest.fn().mockResolvedValue(frameworkGateIds),
     setTemporaryGateRegistry: jest.fn(),
   }) as unknown as GateLoader;
 
 /**
  * Creates a mock GateManager that returns gates based on category.
- * Mirrors the old hardcoded getCategoryGates() behavior for test compatibility.
+ * The mapping below is fixed test data, not a mirror of any production table — real activation
+ * is YAML-declared and covered by tests/integration/gates/gate-category-selection.test.ts.
  */
 const createMockGateManager = (): GateManager => {
   const categoryGateMapping: Record<string, string[]> = {
@@ -88,7 +89,7 @@ const createLogger = (): Logger => ({
 const baseGatesConfig = {
   enabled: true,
   definitionsDirectory: 'gates',
-  enableMethodologyGates: true,
+  enableFrameworkGates: true,
 };
 
 const createGateService = (): GateService => {
@@ -223,13 +224,13 @@ describe('GateEnhancementStage', () => {
     expect(context.gateInstructions).toContain('Guidance:');
   });
 
-  test('filters methodology gates when disabled in framework config', async () => {
+  test('filters framework gates when disabled in framework config', async () => {
     const gateService = createGateService();
     const mockGateLoader = createMockGateLoader();
     const stage = createStage({
       gateService,
       gateLoader: mockGateLoader,
-      gatesConfigProvider: () => ({ ...baseGatesConfig, enableMethodologyGates: false }),
+      gatesConfigProvider: () => ({ ...baseGatesConfig, enableFrameworkGates: false }),
     });
 
     const context = new ExecutionContext({ command: '>>demo' });

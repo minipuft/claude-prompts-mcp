@@ -55,7 +55,7 @@ export class ObjectDiffGenerator {
   private static readonly DEFAULT_MAX_LINES = 50;
 
   /**
-   * Generate a unified diff between two generic objects (gates, methodologies, etc.).
+   * Generate a unified diff between two generic objects (gates, frameworks, etc.).
    *
    * @param before - Previous state (null for new resources)
    * @param after - New state

@@ -1,10 +1,10 @@
-// @lifecycle canonical - Shared types and patterns for resource loaders (gates, methodologies, prompts)
+// @lifecycle canonical - Shared types and patterns for resource loaders (gates, frameworks, prompts)
 /**
  * Resource Loader Types
  *
  * Defines common interfaces and patterns shared across resource loaders:
  * - GateDefinitionLoader
- * - RuntimeMethodologyLoader
+ * - RuntimeFrameworkLoader
  * - PromptLoader
  *
  * This module provides type-level unification without forcing inheritance,
@@ -41,7 +41,7 @@ export interface BaseLoaderConfig {
 export interface YamlLoaderConfig extends BaseLoaderConfig {
   /** Override default resource directory */
   resourceDir?: string;
-  /** Entry file name (e.g., 'gate.yaml', 'methodology.yaml') */
+  /** Entry file name (e.g., 'gate.yaml', 'framework.yaml') */
   entryFileName?: string;
 }
 
@@ -105,7 +105,7 @@ export interface ResourceValidationResultWithData<T> extends ResourceValidationR
 /**
  * Common interface for resource loaders
  *
- * Each loader (gates, methodologies, prompts) should implement
+ * Each loader (gates, frameworks, prompts) should implement
  * this interface for consistency.
  *
  * @template T - The type of definition being loaded
@@ -316,7 +316,7 @@ export interface RegistryEntry<T> {
  * Provides a common pattern for:
  * - PromptRegistry (prompts)
  * - GateRegistry (gates)
- * - MethodologyRegistry (frameworks)
+ * - FrameworkRegistry (frameworks)
  *
  * @template T - The type of item being managed
  * @template TStats - The statistics type

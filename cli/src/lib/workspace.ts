@@ -34,7 +34,7 @@ export function resolveWorkspace(explicit?: string): string {
  */
 export function resolveResourceDir(
   workspace: string,
-  type: 'prompts' | 'gates' | 'methodologies' | 'styles',
+  type: 'prompts' | 'gates' | 'frameworks' | 'styles',
 ): string {
   const resourcesPath = resolve(workspace, 'resources', type);
   if (existsSync(resourcesPath)) return resourcesPath;
@@ -146,7 +146,7 @@ export interface ReferenceHit {
  */
 export function scanReferences(workspace: string, targetId: string): ReferenceHit[] {
   const hits: ReferenceHit[] = [];
-  const allTypes: ResourceType[] = ['prompts', 'gates', 'methodologies', 'styles'];
+  const allTypes: ResourceType[] = ['prompts', 'gates', 'frameworks', 'styles'];
 
   for (const type of allTypes) {
     const config = TYPE_CONFIG[type];

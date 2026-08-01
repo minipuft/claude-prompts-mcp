@@ -5,7 +5,7 @@
  */
 
 import { ToolDetectionService } from '../../src/modules/automation/detection/tool-detection-service.js';
-import { ExecutionModeService } from '../../src/modules/automation/execution/execution-mode-service.js';
+import { ToolTriggerFilter } from '../../src/modules/automation/execution/tool-trigger-filter.js';
 import { DEFAULT_EXECUTION_CONFIG } from '../../src/modules/automation/types.js';
 import type { LoadedScriptTool, ExecutionConfig } from '../../src/modules/automation/types.js';
 
@@ -36,31 +36,31 @@ const wordCountTool: LoadedScriptTool = {
   },
 };
 
-const methodologyBuilderTool: LoadedScriptTool = {
-  id: 'methodology_builder',
-  name: 'Methodology Builder',
-  description: 'Validates methodology definitions',
+const frameworkBuilderTool: LoadedScriptTool = {
+  id: 'framework_builder',
+  name: 'Framework Builder',
+  description: 'Validates framework definitions',
   scriptPath: 'script.py',
   runtime: 'python',
   inputSchema: {
     type: 'object',
     properties: {
       name: { type: 'string' },
-      methodology: { type: 'string' },
+      framework: { type: 'string' },
     },
-    required: ['name', 'methodology'],
+    required: ['name', 'framework'],
   },
-  toolDir: '/prompts/framework-authoring/create_methodology/tools/methodology_builder',
+  toolDir: '/prompts/framework-authoring/create_framework/tools/framework_builder',
   absoluteScriptPath:
-    '/prompts/framework-authoring/create_methodology/tools/methodology_builder/script.py',
-  promptId: 'create_methodology',
-  descriptionContent: 'Builds methodologies',
+    '/prompts/framework-authoring/create_framework/tools/framework_builder/script.py',
+  promptId: 'create_framework',
+  descriptionContent: 'Builds frameworks',
   enabled: true,
   execution: {
     mode: 'confirm',
     trigger: 'parameter_match',
     confidence: 0.85,
-    confirmMessage: 'Create new methodology with the provided configuration?',
+    confirmMessage: 'Create new framework with the provided configuration?',
   },
 };
 
@@ -77,7 +77,7 @@ const manualTool: LoadedScriptTool = {
 
 function runTests() {
   const detectionService = new ToolDetectionService({ debug: true, minConfidence: 0.7 });
-  const modeService = new ExecutionModeService({ debug: true });
+  const modeService = new ToolTriggerFilter({ debug: true });
 
   console.log('\n' + '='.repeat(70));
   console.log('SCRIPT-TOOLS EXECUTION MODE TESTS');
@@ -94,11 +94,7 @@ function runTests() {
     console.log('  Mode:', test1Matches[0].recommendedMode);
     console.log('  Explicit:', test1Matches[0].explicitRequest);
 
-    const filterResult = modeService.filterByExecutionMode(
-      test1Matches,
-      [wordCountTool],
-      'test_prompt'
-    );
+    const filterResult = modeService.filterByTrigger(test1Matches, [wordCountTool], 'test_prompt');
     console.log('Filter result:');
     console.log('  Ready for execution:', filterResult.readyForExecution.length);
     console.log('  Requires confirmation:', filterResult.requiresConfirmation);
@@ -120,22 +116,20 @@ function runTests() {
 
   // ===== TEST 3: Confirm mode - pending confirmation =====
   console.log('\n--- TEST 3: Confirm mode (should require confirmation) ---');
-  const test3Matches = detectionService.detectTools(
-    '',
-    { name: 'TestMethod', methodology: 'TEST' },
-    [methodologyBuilderTool]
-  );
-  console.log('Args: { name: "TestMethod", methodology: "TEST" }');
+  const test3Matches = detectionService.detectTools('', { name: 'TestMethod', framework: 'TEST' }, [
+    frameworkBuilderTool,
+  ]);
+  console.log('Args: { name: "TestMethod", framework: "TEST" }');
   console.log('Matches:', test3Matches.length);
   if (test3Matches.length > 0) {
     console.log('  Tool:', test3Matches[0].toolId);
     console.log('  Confidence:', test3Matches[0].confidence);
     console.log('  Mode:', test3Matches[0].recommendedMode);
 
-    const filterResult = modeService.filterByExecutionMode(
+    const filterResult = modeService.filterByTrigger(
       test3Matches,
-      [methodologyBuilderTool],
-      'create_methodology'
+      [frameworkBuilderTool],
+      'create_framework'
     );
     console.log('Filter result:');
     console.log('  Ready for execution:', filterResult.readyForExecution.length);
@@ -144,7 +138,7 @@ function runTests() {
 
     if (filterResult.requiresConfirmation) {
       console.log('Confirmation message:', filterResult.pendingConfirmation[0]?.message);
-      const response = modeService.buildConfirmationResponse(filterResult, 'create_methodology');
+      const response = modeService.buildConfirmationResponse(filterResult, 'create_framework');
       console.log('Resume command:', response.resumeCommand);
       console.log('✅ PASS - Tool requires confirmation as expected');
     } else {
@@ -160,22 +154,20 @@ function runTests() {
     '',
     {
       name: 'TestMethod',
-      methodology: 'TEST',
-      'tool:methodology_builder': true, // Explicit request
+      framework: 'TEST',
+      'tool:framework_builder': true, // Explicit request
     },
-    [methodologyBuilderTool]
+    [frameworkBuilderTool]
   );
-  console.log(
-    'Args: { name: "TestMethod", methodology: "TEST", "tool:methodology_builder": true }'
-  );
+  console.log('Args: { name: "TestMethod", framework: "TEST", "tool:framework_builder": true }');
   console.log('Matches:', test4Matches.length);
   if (test4Matches.length > 0) {
     console.log('  Explicit:', test4Matches[0].explicitRequest);
 
-    const filterResult = modeService.filterByExecutionMode(
+    const filterResult = modeService.filterByTrigger(
       test4Matches,
-      [methodologyBuilderTool],
-      'create_methodology'
+      [frameworkBuilderTool],
+      'create_framework'
     );
     console.log('Filter result:');
     console.log('  Ready for execution:', filterResult.readyForExecution.length);
@@ -214,11 +206,7 @@ function runTests() {
   if (test6Matches.length > 0) {
     console.log('  Explicit:', test6Matches[0].explicitRequest);
 
-    const filterResult = modeService.filterByExecutionMode(
-      test6Matches,
-      [manualTool],
-      'test_prompt'
-    );
+    const filterResult = modeService.filterByTrigger(test6Matches, [manualTool], 'test_prompt');
     console.log('Filter result:');
     console.log('  Ready for execution:', filterResult.readyForExecution.length);
     console.log('  Skipped manual:', filterResult.skippedManual.length);

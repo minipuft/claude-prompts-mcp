@@ -7,10 +7,10 @@
  * CORE TOOLS:
  * - prompt_engine: Universal execution engine with framework integration
  * - system_control: Framework and system management with analytics
- * - resource_manager: Unified CRUD for prompts, gates, and methodologies
+ * - resource_manager: Unified CRUD for prompts, gates, and frameworks
  *
  * ARCHITECTURE:
- * - Framework-aware tool descriptions that change based on active methodology
+ * - Framework-aware tool descriptions that change based on active framework
  * - Single source of truth for each functional area
  * - Integrated ToolDescriptionLoader for dynamic descriptions
  * - Improved maintainability and clear separation of concerns
@@ -51,7 +51,7 @@ import {
 } from '../../engine/gates/core/gate-verdict-contract.js';
 import { GateStateStore, createGateStateStore } from '../../engine/gates/gate-state-store.js';
 import { PromptAssetManager } from '../../modules/prompts/index.js';
-// Gate evaluator removed - now using Framework methodology validation
+// Gate evaluator removed - now using Framework validation
 import { createContentAnalyzer } from '../../modules/semantic/configurable-semantic-analyzer.js';
 import { createSemanticIntegrationFactory } from '../../modules/semantic/integrations/index.js';
 import { ConversationStore } from '../../modules/text-refs/conversation.js';
@@ -70,7 +70,7 @@ import type { FrameworkManagerDependencies } from './framework-manager/core/type
 import type { ResourceManagerInput } from './resource-manager/core/types.js';
 import type { ConvertedPrompt } from '../../engine/execution/types.js';
 import type { GateManager } from '../../engine/gates/gate-manager.js';
-import type { ChainSessionManager } from '../../modules/chains/manager.js';
+import type { ChainSessionStore } from '../../modules/chains/manager.js';
 import type { Category, PromptData } from '../../modules/prompts/types.js';
 import type { GateSpecification } from '../../shared/types/execution.js';
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
@@ -112,7 +112,7 @@ export class McpToolRouter {
   private semanticAnalyzer!: ReturnType<typeof createContentAnalyzer>;
   private frameworkStateStore?: FrameworkStateStore;
   private frameworkManager?: FrameworkManager;
-  // ChainSessionManager is owned by PromptExecutor, accessed via getter
+  // ChainSessionStore is owned by PromptExecutor, accessed via getter
   // REMOVED: chainOrchestrator - modular chain system removed
   private conversationStore: ConversationStore;
   private textReferenceStore: TextReferenceStore;
@@ -177,7 +177,7 @@ export class McpToolRouter {
     this.logger.info(`Semantic analyzer initialized (mode: ${analyzerMode})`);
 
     // Initialize consolidated tools
-    // Note: ChainSessionManager is created inside PromptExecutor and exposed via getter
+    // Note: ChainSessionStore is created inside PromptExecutor and exposed via getter
     this.promptExecutor = createPromptExecutor(
       this.logger,
       this.mcpServer,
@@ -211,7 +211,7 @@ export class McpToolRouter {
     // Set managers in system control
     this.systemControl.setGateStateStore(this.gateStateStore);
     // ChainSessionStore is owned by promptExecutor (definite at this point)
-    this.systemControl.setChainSessionManager(this.promptExecutor.getChainSessionManager());
+    this.systemControl.setChainSessionStore(this.promptExecutor.getChainSessionStore());
     this.systemControl.setGateGuidanceRenderer(this.promptExecutor.getGateGuidanceRenderer());
 
     // Initialize gate manager tool
@@ -263,8 +263,7 @@ export class McpToolRouter {
 
     this.promptExecutor.setToolDescriptionLoader(manager);
     this.promptExecutor.setAnalyticsService(this.analyticsService);
-    // prompt resource service does not require tool description manager
-    this.systemControl.setToolDescriptionLoader?.(manager);
+    // prompt resource service and system_control do not consume tool descriptions
     this.systemControl.setAnalyticsService(this.analyticsService);
     // Core tools integrated with framework-aware descriptions
 
@@ -485,7 +484,7 @@ export class McpToolRouter {
   }
 
   /**
-   * Expose the framework manager for runtime integrations (e.g., methodology hot reload).
+   * Expose the framework manager for runtime integrations (e.g., framework hot reload).
    */
   getFrameworkManager(): FrameworkManager | undefined {
     return this.frameworkManager;
@@ -495,8 +494,8 @@ export class McpToolRouter {
    * Get chain session manager for MCP resource access.
    * Delegates to PromptExecutor which owns the canonical instance.
    */
-  getChainSessionManager(): ChainSessionManager | undefined {
-    return this.promptExecutor.getChainSessionManager() as ChainSessionManager | undefined;
+  getChainSessionStore(): ChainSessionStore | undefined {
+    return this.promptExecutor.getChainSessionStore() as ChainSessionStore | undefined;
   }
 
   /**
@@ -534,12 +533,12 @@ export class McpToolRouter {
     // Get current framework state for dynamic descriptions
     const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled() ?? false;
     const activeFramework = this.frameworkStateStore?.getActiveFramework();
-    const activeMethodology = activeFramework?.type ?? activeFramework?.id;
+    const activeFrameworkType = activeFramework?.type ?? activeFramework?.id;
 
     this.logger.info(`🔧 Registering tools with framework-aware descriptions:`);
     this.logger.info(`   Framework enabled: ${frameworkEnabled}`);
     this.logger.info(`   Active framework: ${activeFramework?.id ?? 'none'}`);
-    this.logger.info(`   Active methodology: ${activeMethodology ?? 'none'}`);
+    this.logger.info(`   Active framework: ${activeFrameworkType ?? 'none'}`);
     this.logger.info(
       `   Tool description manager: ${
         this.toolDescriptionLoader != null ? 'available' : 'not available'
@@ -554,8 +553,8 @@ export class McpToolRouter {
         this.toolDescriptionLoader?.getDescription(
           'prompt_engine',
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? '';
 
       const getPromptEngineParamDescription = (paramName: string, fallback: string) =>
@@ -563,14 +562,14 @@ export class McpToolRouter {
           'prompt_engine',
           paramName,
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? fallback;
 
       // Log which description source is being used for transparency
       if (this.toolDescriptionLoader != null) {
         this.logger.info(
-          `   prompt_engine: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
+          `   prompt_engine: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, framework: ${activeFrameworkType})`
         );
       } else {
         this.logger.info(
@@ -578,7 +577,7 @@ export class McpToolRouter {
         );
       }
 
-      // Build schema with methodology-aware parameter descriptions
+      // Build schema with framework-aware parameter descriptions
       const promptEngineSchema = buildPromptEngineSchema(
         isValidGateVerdict,
         GATE_VERDICT_VALIDATION_MESSAGE,
@@ -729,14 +728,14 @@ export class McpToolRouter {
         this.toolDescriptionLoader?.getDescription(
           'system_control',
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? '';
 
       // Log which description source is being used for transparency
       if (this.toolDescriptionLoader != null) {
         this.logger.info(
-          `   system_control: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, methodology: ${activeMethodology})`
+          `   system_control: Using ToolDescriptionLoader (framework: ${frameworkEnabled}, framework: ${activeFrameworkType})`
         );
       } else {
         this.logger.info(
@@ -749,11 +748,11 @@ export class McpToolRouter {
           'system_control',
           paramName,
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? fallback;
 
-      // Build schema with methodology-aware parameter descriptions
+      // Build schema with framework-aware parameter descriptions
       const systemControlSchema = buildSystemControlSchema(getSystemControlParamDescription);
 
       this.mcpServer.registerTool(
@@ -802,15 +801,15 @@ export class McpToolRouter {
       throw error;
     }
 
-    // Register resource_manager tool (unified router for prompts, gates, methodologies)
+    // Register resource_manager tool (unified router for prompts, gates, frameworks)
     try {
       // Description loaded from tool-descriptions.contracts.json via ToolDescriptionLoader
       const resourceManagerDescription =
         this.toolDescriptionLoader?.getDescription(
           'resource_manager',
           frameworkEnabled,
-          activeMethodology,
-          { applyMethodologyOverride: true }
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
         ) ?? '';
 
       this.mcpServer.registerTool(
@@ -818,7 +817,7 @@ export class McpToolRouter {
         {
           title: 'Resource Manager',
           description: resourceManagerDescription,
-          // Hand-written schema — includes .passthrough() for advanced methodology fields
+          // Hand-written schema — includes .passthrough() for advanced framework fields
           inputSchema: resourceManagerInputSchema,
         },
         async (args: ResourceManagerSchemaInput, extra: unknown) => {
@@ -831,7 +830,7 @@ export class McpToolRouter {
               };
             }
             // Cast to ResourceManagerInput - the generated schema uses .passthrough() so advanced
-            // methodology fields flow through, but router expects the more specific local type
+            // framework fields flow through, but router expects the more specific local type
             const toolResponse = await router.handleAction(
               args as ResourceManagerInput,
               (this.enrichExtraWithClientInfo(extra) ?? {}) as Record<string, unknown>
@@ -875,7 +874,7 @@ export class McpToolRouter {
       'Available MCP Tools:',
       '🎯 prompt_engine - Execute prompts with frameworks and gates',
       '⚙️ system_control - System administration and status',
-      '📦 resource_manager - Unified CRUD for prompts, gates, and methodologies',
+      '📦 resource_manager - Unified CRUD for prompts, gates, and frameworks',
     ].join('\n   ');
 
     this.logger.info(toolSummary);

@@ -4207,8 +4207,10 @@ var ArgumentValidationSchema = external_exports.object({
   /** Maximum length for strings */
   maxLength: external_exports.number().int().positive().optional(),
   /**
-   * @deprecated Removed in v3.0.0 - LLM handles semantic variation better than strict enums.
-   * This field is parsed but ignored by the validation system.
+   * @deprecated Enforcement was dropped in v3.0.0 — the LLM handles semantic variation
+   * (e.g. "urgent" vs "high") better than a strict enum. The field itself was not removed:
+   * it is still accepted here and carried through yaml-prompt-loader.ts, but
+   * argument-schema.ts deliberately never applies it.
    */
   allowedValues: external_exports.array(external_exports.union([external_exports.string(), external_exports.number(), external_exports.boolean()])).optional()
 }).partial();
@@ -4236,7 +4238,9 @@ var ChainStepSchema = external_exports.object({
   /** Name this step's output for downstream steps */
   outputMapping: external_exports.record(external_exports.string()).optional(),
   /** Number of retry attempts on failure (default: 0) */
-  retries: external_exports.number().int().nonnegative().optional()
+  retries: external_exports.number().int().nonnegative().optional(),
+  /** Client-agnostic capability hint for delegation model selection */
+  subagentModel: external_exports.enum(["heavy", "standard", "fast"]).optional()
 });
 var PromptGateConfigurationSchema = external_exports.object({
   /** Gate IDs to include */
@@ -4262,6 +4266,25 @@ var PromptGateConfigurationSchema = external_exports.object({
     }).passthrough()
   ).optional()
 }).partial();
+var PromptInjectionRuleSchema = external_exports.object({
+  /** Whether this injection type is enabled for this prompt */
+  enabled: external_exports.boolean().optional(),
+  /** How often to inject during chain execution */
+  frequency: external_exports.object({
+    mode: external_exports.enum(["every", "first-only", "never"]),
+    interval: external_exports.number().int().positive().optional()
+  }).optional(),
+  /** Which execution contexts receive the injection */
+  target: external_exports.enum(["steps", "gates", "both"]).optional()
+}).strict();
+var PromptInjectionConfigSchema = external_exports.object({
+  /** Framework system prompt injection */
+  "system-prompt": PromptInjectionRuleSchema.optional(),
+  /** Quality gate guidance injection */
+  "gate-guidance": PromptInjectionRuleSchema.optional(),
+  /** Response style guidance injection */
+  "style-guidance": PromptInjectionRuleSchema.optional()
+}).strict();
 var CategorySchema = external_exports.object({
   /** Unique identifier for the category */
   id: external_exports.string().min(1, "Category ID is required"),
@@ -4270,7 +4293,9 @@ var CategorySchema = external_exports.object({
   /** Description of the category */
   description: external_exports.string().min(1, "Category description is required"),
   /** MCP registration default for prompts in this category */
-  registerWithMcp: external_exports.boolean().optional()
+  registerWithMcp: external_exports.boolean().optional(),
+  /** Native MCP prompt behavior default for prompts in this category: 'expand' or 'launch' */
+  mcpPromptMode: external_exports.enum(["expand", "launch"]).optional()
 });
 var PromptDataSchema = external_exports.object({
   // Required core fields
@@ -4289,27 +4314,26 @@ var PromptDataSchema = external_exports.object({
   arguments: external_exports.array(PromptArgumentSchema).default([]),
   /** Gate configuration for validation */
   gateConfiguration: PromptGateConfigurationSchema.optional(),
+  /** Prompt-level injection control (resolved between step and chain config) */
+  injection: PromptInjectionConfigSchema.optional(),
   /** Chain steps for chain-type prompts */
   chainSteps: external_exports.array(ChainStepSchema).optional(),
   /** Whether to register this prompt with MCP */
   registerWithMcp: external_exports.boolean().optional(),
+  /** Native MCP prompt behavior: 'expand' (plain text) or 'launch' (route through prompt_engine) */
+  mcpPromptMode: external_exports.enum(["expand", "launch"]).optional(),
   /** Script tool IDs declared by this prompt (references tools/{id}/ directories) */
-  tools: external_exports.array(external_exports.string().min(1)).optional()
+  tools: external_exports.array(external_exports.string().min(1)).optional(),
+  /** Client-agnostic capability hint for delegation model selection */
+  subagentModel: external_exports.enum(["heavy", "standard", "fast"]).optional()
 }).passthrough();
-var PromptsFileSchema = external_exports.object({
-  /** Array of prompt definitions */
-  prompts: external_exports.array(PromptDataSchema)
-});
-var PromptsConfigSchema = external_exports.object({
-  /** Available categories for organizing prompts */
-  categories: external_exports.array(CategorySchema),
-  /** Paths to prompts.json files to import */
-  imports: external_exports.array(external_exports.string())
-});
 var PromptYamlSchema = external_exports.object({
   // Required core fields
-  /** Unique identifier for the prompt (must match directory name) */
-  id: external_exports.string().min(1, "Prompt ID is required"),
+  /** Unique identifier for the prompt (must match directory name). Convention: lowercase with underscores. */
+  id: external_exports.string().min(1, "Prompt ID is required").regex(
+    /^[a-zA-Z][a-zA-Z0-9_-]*$/,
+    "Prompt ID must start with a letter and contain only alphanumeric characters, underscores, or hyphens"
+  ),
   /** Human-readable name */
   name: external_exports.string().min(1, "Prompt name is required"),
   /** Category this prompt belongs to (auto-derived from directory if omitted) */
@@ -4332,15 +4356,23 @@ var PromptYamlSchema = external_exports.object({
   // Gate configuration
   /** Gate configuration for validation */
   gateConfiguration: PromptGateConfigurationSchema.optional(),
+  // Injection control
+  /** Prompt-level injection control (resolved between step and chain config) */
+  injection: PromptInjectionConfigSchema.optional(),
   // Chain steps (for chain-type prompts)
   /** Chain steps for multi-step execution */
   chainSteps: external_exports.array(ChainStepSchema).optional(),
   // MCP registration
   /** Whether to register this prompt with MCP (default: true) */
   registerWithMcp: external_exports.boolean().optional(),
+  /** Native MCP prompt behavior: 'expand' (plain text) or 'launch' (route through prompt_engine). Default: 'expand' */
+  mcpPromptMode: external_exports.enum(["expand", "launch"]).optional(),
   // Script tools
   /** Script tool IDs declared by this prompt (references tools/{id}/ directories) */
-  tools: external_exports.array(external_exports.string().min(1)).optional()
+  tools: external_exports.array(external_exports.string().min(1)).optional(),
+  // Delegation
+  /** Client-agnostic capability hint for delegation model selection */
+  subagentModel: external_exports.enum(["heavy", "standard", "fast"]).optional()
 }).passthrough().refine(
   (data) => {
     const hasTemplate = data.userMessageTemplate !== void 0 && data.userMessageTemplate !== "" || data.userMessageTemplateFile !== void 0 && data.userMessageTemplateFile !== "";
@@ -4407,20 +4439,37 @@ __name(validatePromptYaml, "validatePromptYaml");
 
 // ../server/src/engine/gates/core/gate-schema.ts
 var GatePassCriteriaSchema = external_exports.object({
-  /** Type of check to perform */
+  /**
+   * Type of check to perform.
+   *
+   * Enforcement modes (what each type actually does at runtime):
+   * - `inline_guidance`: rendered as agent-facing guidance text for
+   *   self-assessment. NOT auto-enforced against output. Replaces the
+   *   previously-named `content_check` and `pattern_check` (which were
+   *   intentionally skipped by GateValidator — see gate-validator.ts).
+   * - `llm_self_check`: type declared, runner not yet implemented. Reserved.
+   * - `methodology_compliance`: enforced by framework phase guards
+   *   (stage 09b) — checks section presence + min_length + forbidden_terms
+   *   per active framework's `phases.yaml`.
+   * - `shell_verify`: runs `shell_command`, exit 0 = pass. Hard enforcement.
+   *   Supports `shell_stdin_source: 'agent_response'` for response-content
+   *   verification against ground truth.
+   * - `script_tool`: runs a registered script tool with JSON input via stdin,
+   *   parses structured pass/fail return.
+   */
   type: external_exports.enum([
-    "content_check",
+    "inline_guidance",
     "llm_self_check",
-    "pattern_check",
     "methodology_compliance",
-    "shell_verify"
+    "shell_verify",
+    "script_tool"
   ]),
   // Content check options
   min_length: external_exports.number().int().nonnegative().optional(),
   max_length: external_exports.number().int().positive().optional(),
   required_patterns: external_exports.array(external_exports.string()).optional(),
   forbidden_patterns: external_exports.array(external_exports.string()).optional(),
-  // Methodology compliance options
+  // Framework compliance options
   methodology: external_exports.string().optional(),
   min_compliance_score: external_exports.number().min(0).max(1).optional(),
   severity: external_exports.enum(["warn", "fail"]).optional(),
@@ -4448,7 +4497,29 @@ var GatePassCriteriaSchema = external_exports.object({
   /** Maximum verification attempts before escalation (default: 5) */
   shell_max_attempts: external_exports.number().int().positive().optional(),
   /** Preset for shell verification (:fast, :full, :extended) */
-  shell_preset: external_exports.enum(["fast", "full", "extended"]).optional()
+  shell_preset: external_exports.enum(["fast", "full", "extended"]).optional(),
+  /**
+   * Inject agent response into the shell command. When set to 'agent_response',
+   * the current execution context's user_response is piped to stdin (truncated
+   * to SHELL_VERIFY_MAX_RESPONSE_BYTES). Scripts parse claims from stdin and
+   * verify against ground truth (e.g., file existence, line counts, symbols).
+   */
+  shell_stdin_source: external_exports.enum(["agent_response"]).optional(),
+  /**
+   * Optional env var name to receive the agent response (alternative to stdin).
+   * When set together with `shell_stdin_source: 'agent_response'`, the response
+   * is also exported as this env var so scripts can re-read it without buffering.
+   */
+  shell_response_env_var: external_exports.string().optional(),
+  // Script tool verification options (structured JSON pass/fail)
+  /** Script or command to execute for verification */
+  script_tool_id: external_exports.string().optional(),
+  /** JSON input sent via stdin to the script */
+  script_tool_input: external_exports.record(external_exports.unknown()).optional(),
+  /** Timeout in milliseconds for script execution (default: 30000) */
+  script_tool_timeout: external_exports.number().int().positive().optional(),
+  /** Working directory for script execution */
+  script_tool_working_dir: external_exports.string().optional()
 }).passthrough();
 var GateActivationSchema = external_exports.object({
   /** Prompt categories that trigger this gate */
@@ -4485,7 +4556,7 @@ var GateDefinitionSchema = external_exports.object({
   enforcementMode: external_exports.enum(["blocking", "advisory", "informational"]).optional(),
   /**
    * Gate type classification for dynamic identification.
-   * - 'framework': Methodology-related gates, filtered when frameworks disabled
+   * - 'framework': Framework-related gates, filtered when frameworks disabled
    * - 'category': Category-based gates (code, documentation, etc.)
    * - 'custom': User-defined custom gates
    */
@@ -4543,12 +4614,12 @@ function validateGateSchema(data, expectedId) {
 }
 __name(validateGateSchema, "validateGateSchema");
 
-// ../server/src/engine/frameworks/methodology/methodology-schema.ts
-var MethodologyGateSchema = external_exports.object({
+// ../server/src/engine/frameworks/definitions/framework-schema.ts
+var FrameworkGateSchema = external_exports.object({
   id: external_exports.string().min(1),
   name: external_exports.string().min(1),
   description: external_exports.string().optional(),
-  methodologyArea: external_exports.string().optional(),
+  frameworkArea: external_exports.string().optional(),
   priority: external_exports.enum(["critical", "high", "medium", "low"]).optional(),
   validationCriteria: external_exports.array(external_exports.string()).optional(),
   criteria: external_exports.array(external_exports.string()).optional(),
@@ -4561,34 +4632,34 @@ var TemplateSuggestionSchema = external_exports.object({
   // Description of the suggestion
   content: external_exports.string().optional(),
   // Suggested content to add
-  methodologyJustification: external_exports.string().optional(),
-  // Why this aligns with methodology
+  frameworkJustification: external_exports.string().optional(),
+  // Why this aligns with framework
   impact: external_exports.enum(["high", "medium", "low"]).optional()
 });
-var PhaseAssertionSchema = external_exports.object({
+var PhaseGuardSchema = external_exports.object({
   required: external_exports.boolean().optional(),
   min_length: external_exports.number().int().positive().optional(),
   max_length: external_exports.number().int().positive().optional(),
   contains_any: external_exports.array(external_exports.string().min(1)).optional(),
   contains_all: external_exports.array(external_exports.string().min(1)).optional(),
   matches_pattern: external_exports.string().optional(),
-  forbids: external_exports.array(external_exports.string().min(1)).optional()
+  forbidden_terms: external_exports.array(external_exports.string().min(1)).optional()
 });
 var ProcessingStepSchema = external_exports.object({
   id: external_exports.string().min(1),
   name: external_exports.string().min(1),
   description: external_exports.string().min(1),
-  methodologyBasis: external_exports.string().min(1),
+  frameworkBasis: external_exports.string().min(1),
   order: external_exports.number().int().positive(),
   required: external_exports.boolean(),
-  marker: external_exports.string().optional(),
-  assertions: PhaseAssertionSchema.optional()
+  section_header: external_exports.string().optional(),
+  guards: PhaseGuardSchema.optional()
 });
 var ExecutionStepSchema = external_exports.object({
   id: external_exports.string().min(1),
   name: external_exports.string().min(1),
   action: external_exports.string().min(1),
-  methodologyPhase: external_exports.string().min(1),
+  frameworkPhase: external_exports.string().min(1),
   dependencies: external_exports.array(external_exports.string()).default([]),
   expected_output: external_exports.string().min(1)
 });
@@ -4608,11 +4679,13 @@ var PhasesFileSchema = external_exports.object({
   qualityIndicators: external_exports.record(external_exports.unknown()).optional(),
   executionTypeEnhancements: external_exports.record(external_exports.unknown()).optional()
 }).passthrough();
-var MethodologySchema = external_exports.object({
+var FrameworkSchema = external_exports.object({
   // Required core fields
   id: external_exports.string().min(1),
   name: external_exports.string().min(1),
-  methodology: external_exports.string().min(1),
+  // Framework type discriminator. Replaced the legacy `framework:` field, which was
+  // removed once every definition carried `type:` — it duplicated this value verbatim.
+  type: external_exports.string().min(1),
   version: external_exports.string().regex(/^\d+\.\d+\.\d+/, "Must be semver format (e.g., 1.0.0)"),
   enabled: external_exports.boolean(),
   // Optional description
@@ -4622,7 +4695,9 @@ var MethodologySchema = external_exports.object({
     include: external_exports.array(external_exports.string()).optional(),
     exclude: external_exports.array(external_exports.string()).optional()
   }).optional(),
-  methodologyGates: external_exports.array(MethodologyGateSchema).optional(),
+  frameworkGates: external_exports.array(FrameworkGateSchema).optional(),
+  /** @deprecated Pre-rename spelling of `frameworkGates`; folded in by the preprocess below. */
+  methodologyGates: external_exports.array(FrameworkGateSchema).optional(),
   // File references (validated separately for existence)
   phasesFile: external_exports.string().optional(),
   judgePromptFile: external_exports.string().optional(),
@@ -4630,11 +4705,16 @@ var MethodologySchema = external_exports.object({
   systemPromptGuidance: external_exports.string().optional(),
   toolDescriptions: external_exports.record(external_exports.unknown()).optional(),
   templateSuggestions: external_exports.array(TemplateSuggestionSchema).optional()
-}).passthrough();
-function validateMethodologySchema(data, expectedId) {
+}).passthrough().transform((data) => {
+  if (data.frameworkGates === void 0 && data.methodologyGates !== void 0) {
+    return { ...data, frameworkGates: data.methodologyGates };
+  }
+  return data;
+});
+function validateFrameworkSchema(data, expectedId) {
   const errors = [];
   const warnings = [];
-  const result = MethodologySchema.safeParse(data);
+  const result = FrameworkSchema.safeParse(data);
   if (!result.success) {
     for (const issue of result.error.issues) {
       errors.push(`${issue.path.join(".")}: ${issue.message}`);
@@ -4657,9 +4737,17 @@ function validateMethodologySchema(data, expectedId) {
     warnings
   };
 }
-__name(validateMethodologySchema, "validateMethodologySchema");
+__name(validateFrameworkSchema, "validateFrameworkSchema");
 
 // ../server/src/modules/formatting/core/style-schema.ts
+var StyleToolDescriptionSchema = external_exports.object({
+  /** Override tool description text */
+  description: external_exports.string().optional(),
+  /** Override individual parameter descriptions */
+  parameters: external_exports.record(external_exports.string()).optional(),
+  /** Response format guidance woven into tool description */
+  responseFormat: external_exports.string().optional()
+});
 var StyleActivationSchema = external_exports.object({
   /** Prompt categories that trigger this style */
   prompt_categories: external_exports.array(external_exports.string()).optional(),
@@ -4694,7 +4782,10 @@ var StyleDefinitionSchema = external_exports.object({
   activation: StyleActivationSchema.optional(),
   // Framework compatibility
   /** Which frameworks this style works well with */
-  compatibleFrameworks: external_exports.array(external_exports.string()).optional()
+  compatibleFrameworks: external_exports.array(external_exports.string()).optional(),
+  // Tool description overlays
+  /** Per-tool description overlays when this style is active */
+  toolDescriptions: external_exports.record(StyleToolDescriptionSchema).optional()
 }).passthrough();
 function validateStyleSchema(data, expectedId) {
   const errors = [];
@@ -4726,7 +4817,7 @@ function validateStyleSchema(data, expectedId) {
 }
 __name(validateStyleSchema, "validateStyleSchema");
 
-// ../node_modules/js-yaml/dist/js-yaml.mjs
+// ../server/node_modules/js-yaml/dist/js-yaml.mjs
 function isNothing(subject) {
   return typeof subject === "undefined" || subject === null;
 }
@@ -7846,8 +7937,8 @@ function resolveResourceRef(resourceDir) {
   if (segments.includes("gates")) {
     return { resourceType: "gate", resourceId: id };
   }
-  if (segments.includes("methodologies")) {
-    return { resourceType: "methodology", resourceId: id };
+  if (segments.includes("frameworks")) {
+    return { resourceType: "framework", resourceId: id };
   }
   if (segments.includes("styles")) {
     return { resourceType: "style", resourceId: id };
@@ -8268,8 +8359,8 @@ ${warningLines.join("\n")}`);
         return validatePromptYaml(data, expectedId);
       case "gates":
         return validateGateSchema(data, expectedId);
-      case "methodologies":
-        return validateMethodologySchema(data, expectedId);
+      case "frameworks":
+        return validateFrameworkSchema(data, expectedId);
       case "styles":
         return validateStyleSchema(data, expectedId);
       case "tools":
@@ -8291,7 +8382,7 @@ __name(formatValidationIssues, "formatValidationIssues");
 
 // ../server/src/cli-shared/resource-scaffold.ts
 function promptYaml(id, opts) {
-  const desc = opts.description || `${opts.name ?? id} prompt`;
+  const desc = opts.description ?? `${opts.name ?? id} prompt`;
   return [
     `id: ${id}`,
     `name: ${opts.name ?? id}`,
@@ -8340,7 +8431,7 @@ function promptYaml(id, opts) {
 }
 __name(promptYaml, "promptYaml");
 function gateYaml(id, opts) {
-  const desc = opts.description || `${opts.name ?? id} validation gate`;
+  const desc = opts.description ?? `${opts.name ?? id} validation gate`;
   return [
     `id: ${id}`,
     `name: ${opts.name ?? id}`,
@@ -8350,7 +8441,7 @@ function gateYaml(id, opts) {
     `guidanceFile: guidance.md`,
     "",
     "pass_criteria:",
-    "  - type: content_check",
+    "  - type: inline_guidance",
     "    min_length: 50",
     "",
     "# --- Activation Rules (uncomment to scope when this gate triggers) ---",
@@ -8368,7 +8459,7 @@ function gateYaml(id, opts) {
     "",
     "# --- Advanced Pass Criteria Examples ---",
     "# pass_criteria:",
-    "#   - type: pattern_check",
+    "#   - type: inline_guidance",
     "#     required_patterns:",
     "#       - '## Summary'",
     "#     keyword_count:",
@@ -8379,13 +8470,13 @@ function gateYaml(id, opts) {
   ].join("\n");
 }
 __name(gateYaml, "gateYaml");
-function methodologyYaml(id, opts) {
+function frameworkYaml(id, opts) {
   const name = opts.name ?? id;
-  const desc = opts.description || `${name} methodology`;
+  const desc = opts.description ?? `${name} methodology`;
   return [
     `id: ${id}`,
     `name: ${name}`,
-    `methodology: ${id.toUpperCase().replace(/-/g, "_")}`,
+    `type: ${id.toUpperCase().replace(/-/g, "_")}`,
     `version: 1.0.0`,
     `description: >-`,
     `  ${desc}`,
@@ -8404,20 +8495,20 @@ function methodologyYaml(id, opts) {
     "#     - framework-compliance",
     "",
     "# --- Methodology-Specific Gates (uncomment to define) ---",
-    "# methodologyGates:",
+    "# frameworkGates:",
     "#   - id: phase_completeness",
     "#     name: Phase Completeness",
     "#     description: Verify all methodology phases are addressed",
-    "#     methodologyArea: Core",
+    "#     frameworkArea: Core",
     "#     priority: high",
     "#     validationCriteria:",
     "#       - All required phases present",
     ""
   ].join("\n");
 }
-__name(methodologyYaml, "methodologyYaml");
+__name(frameworkYaml, "frameworkYaml");
 function styleYaml(id, opts) {
-  const desc = opts.description || `${opts.name ?? id} response style`;
+  const desc = opts.description ?? `${opts.name ?? id} response style`;
   return [
     `id: ${id}`,
     `name: ${opts.name ?? id}`,
@@ -8447,13 +8538,13 @@ __name(styleYaml, "styleYaml");
 var YAML_GENERATORS = {
   prompts: promptYaml,
   gates: gateYaml,
-  methodologies: methodologyYaml,
+  frameworks: frameworkYaml,
   styles: styleYaml
 };
 var ENTRY_FILES = {
   prompts: "prompt.yaml",
   gates: "gate.yaml",
-  methodologies: "methodology.yaml",
+  frameworks: "framework.yaml",
   styles: "style.yaml"
 };
 var COMPANION_FILES = {
@@ -8465,7 +8556,7 @@ var COMPANION_FILES = {
     name: "guidance.md",
     content: "## Validation Criteria\n\n- Criterion one\n- Criterion two\n\n## Common Failures\n\n- Failure pattern\n"
   },
-  methodologies: {
+  frameworks: {
     name: "system-prompt.md",
     content: "Apply the methodology systematically, ensuring thorough coverage of each phase.\n"
   },
@@ -8486,52 +8577,72 @@ function cleanupEmptyPromptCategory(resourceDir) {
 }
 __name(cleanupEmptyPromptCategory, "cleanupEmptyPromptCategory");
 function resourceExists(baseDir, type2, id, category) {
-  if (type2 === "prompts" && category) {
+  if (type2 === "prompts" && category !== void 0 && category !== "") {
     return existsSync3(join3(baseDir, category, id, ENTRY_FILES[type2]));
   }
   return existsSync3(join3(baseDir, id, ENTRY_FILES[type2]));
 }
 __name(resourceExists, "resourceExists");
+function resolveResourceDir(baseDir, type2, id, category) {
+  if (type2 === "prompts") {
+    return join3(baseDir, category ?? "general", id);
+  }
+  return join3(baseDir, id);
+}
+__name(resolveResourceDir, "resolveResourceDir");
 function createResourceDir(baseDir, type2, id, opts = {}) {
+  const resourceDir = resolveResourceDir(baseDir, type2, id, opts.category);
+  const dirExistedBefore = existsSync3(resourceDir);
+  if (existsSync3(join3(resourceDir, ENTRY_FILES[type2]))) {
+    return { success: false, error: `Resource '${id}' already exists at ${resourceDir}` };
+  }
   try {
-    let resourceDir;
-    if (type2 === "prompts") {
-      const category = opts.category ?? "general";
-      resourceDir = join3(baseDir, category, id);
-    } else {
-      resourceDir = join3(baseDir, id);
-    }
-    if (existsSync3(join3(resourceDir, ENTRY_FILES[type2]))) {
-      return { success: false, error: `Resource '${id}' already exists at ${resourceDir}` };
-    }
-    mkdirSync(resourceDir, { recursive: true });
-    const yamlContent = YAML_GENERATORS[type2](id, opts);
-    const entryPath = join3(resourceDir, ENTRY_FILES[type2]);
-    writeFileSync(entryPath, yamlContent, "utf8");
-    const companion = COMPANION_FILES[type2];
-    writeFileSync(join3(resourceDir, companion.name), companion.content, "utf8");
-    if (opts.validate !== false) {
-      const validation = validateResourceFile(type2, id, entryPath);
-      if (!validation.valid) {
-        const rollback2 = deleteResourceDir(resourceDir);
-        if (type2 === "prompts") {
-          cleanupEmptyPromptCategory(resourceDir);
-        }
-        return {
-          success: false,
-          validation,
-          rolledBack: rollback2.success,
-          error: rollback2.success ? "Created resource failed validation; rolled back." : `Created resource failed validation; rollback failed: ${rollback2.error ?? "unknown rollback error"}`
-        };
-      }
-    }
-    return { success: true, path: resourceDir };
+    writeResourceFiles(resourceDir, type2, id, opts);
+    return validateAndFinalize(resourceDir, type2, id, dirExistedBefore, opts.validate !== false);
   } catch (error) {
+    cleanupCreatedDir(resourceDir, dirExistedBefore, type2);
     const message = error instanceof Error ? error.message : String(error);
-    return { success: false, error: message };
+    return { success: false, error: message, rolledBack: true };
   }
 }
 __name(createResourceDir, "createResourceDir");
+function writeResourceFiles(resourceDir, type2, id, opts) {
+  mkdirSync(resourceDir, { recursive: true });
+  const yamlContent = YAML_GENERATORS[type2](id, opts);
+  writeFileSync(join3(resourceDir, ENTRY_FILES[type2]), yamlContent, "utf8");
+  const companion = COMPANION_FILES[type2];
+  writeFileSync(join3(resourceDir, companion.name), companion.content, "utf8");
+}
+__name(writeResourceFiles, "writeResourceFiles");
+function validateAndFinalize(resourceDir, type2, id, dirExistedBefore, shouldValidate) {
+  if (!shouldValidate) {
+    return { success: true, path: resourceDir };
+  }
+  const entryPath = join3(resourceDir, ENTRY_FILES[type2]);
+  const validation = validateResourceFile(type2, id, entryPath);
+  if (validation.valid) {
+    return { success: true, path: resourceDir };
+  }
+  const rollback2 = cleanupCreatedDir(resourceDir, dirExistedBefore, type2);
+  return {
+    success: false,
+    validation,
+    rolledBack: rollback2.success,
+    error: rollback2.success ? "Created resource failed validation; rolled back." : `Created resource failed validation; rollback failed: ${rollback2.error ?? "unknown"}`
+  };
+}
+__name(validateAndFinalize, "validateAndFinalize");
+function cleanupCreatedDir(resourceDir, dirExistedBefore, type2) {
+  if (dirExistedBefore || !existsSync3(resourceDir)) {
+    return { success: true };
+  }
+  const result = deleteResourceDir(resourceDir);
+  if (type2 === "prompts") {
+    cleanupEmptyPromptCategory(resourceDir);
+  }
+  return result;
+}
+__name(cleanupCreatedDir, "cleanupCreatedDir");
 function deleteResourceDir(resourceDir) {
   try {
     if (!existsSync3(resourceDir)) {
@@ -8770,15 +8881,15 @@ var CONFIG_VALID_KEYS = [
   "gates.mode",
   "gates.methodologyGates",
   "execution.judge",
-  "methodologies.mode",
-  "methodologies.dynamicToolDescriptions",
-  "methodologies.systemPromptFrequency",
-  "methodologies.styleGuidance",
+  "frameworks.mode",
+  "frameworks.dynamicToolDescriptions",
+  "frameworks.systemPromptFrequency",
+  "frameworks.styleGuidance",
   "resources.mode",
   "resources.prompts.mode",
   "resources.prompts.defaultRegistration",
   "resources.gates.mode",
-  "resources.methodologies.mode",
+  "resources.frameworks.mode",
   "resources.observability.mode",
   "resources.observability.sessions",
   "resources.observability.metrics",
@@ -8788,6 +8899,10 @@ var CONFIG_VALID_KEYS = [
   "identity.mode",
   "identity.launchDefaults.organizationId",
   "identity.launchDefaults.workspaceId",
+  "identity.launchDefaults.clientFamily",
+  "identity.launchDefaults.clientId",
+  "identity.launchDefaults.clientVersion",
+  "identity.launchDefaults.delegationProfile",
   "identity.allowPerRequestOverride",
   "verification.inContextAttempts",
   "verification.isolation.mode",
@@ -8803,30 +8918,39 @@ var CONFIG_VALID_KEYS = [
   "gates.directory",
   "gates.enforcePendingVerdict",
   "hooks.expandedOutput",
-  "assertions.mode",
-  "assertions.maxRetries",
+  "phaseGuards.mode",
+  "phaseGuards.maxRetries",
   "advanced.sessions.timeoutMinutes",
   "advanced.sessions.reviewTimeoutMinutes",
   "advanced.sessions.cleanupIntervalMinutes",
   "gates.enabled",
-  "methodologies.enabled",
+  "frameworks.enabled",
   "prompts.registerWithMcp",
   "resources.registerWithMcp",
   "resources.prompts.enabled",
   "resources.gates.enabled",
-  "resources.methodologies.enabled",
+  "resources.frameworks.enabled",
   "resources.observability.enabled",
   "resources.logs.enabled",
   "verification.isolation.enabled",
   "verification.isolation.maxBudget",
   "verification.isolation.permissionMode",
   "versioning.enabled",
-  "versioning.autoVersion"
+  "versioning.autoVersion",
+  "telemetry.enabled",
+  "telemetry.mode",
+  "telemetry.exporterEndpoint",
+  "telemetry.samplingRate",
+  "telemetry.attributePolicy.businessContext",
+  "telemetry.attributePolicy.rawCommands",
+  "telemetry.attributePolicy.rawResponses"
 ];
 var CONFIG_RESTART_REQUIRED_KEYS = [
   "server.port",
   "server.transport",
-  "analysis.semanticAnalysis.llmIntegration.mode"
+  "analysis.semanticAnalysis.llmIntegration.mode",
+  "telemetry.mode",
+  "telemetry.exporterEndpoint"
 ];
 function validateConfigInput(key, value) {
   switch (key) {
@@ -8863,11 +8987,11 @@ function validateConfigInput(key, value) {
       return { valid: true, convertedValue: normalized, valueType: "string" };
     }
     case "gates.mode":
-    case "methodologies.mode":
+    case "frameworks.mode":
     case "resources.mode":
     case "resources.prompts.mode":
     case "resources.gates.mode":
-    case "resources.methodologies.mode":
+    case "resources.frameworks.mode":
     case "resources.observability.mode":
     case "resources.logs.mode":
     case "verification.isolation.mode":
@@ -8899,15 +9023,15 @@ function validateConfigInput(key, value) {
     case "gates.enabled":
     case "gates.enforcePendingVerdict":
     case "execution.judge":
-    case "methodologies.enabled":
-    case "methodologies.dynamicToolDescriptions":
-    case "methodologies.styleGuidance":
+    case "frameworks.enabled":
+    case "frameworks.dynamicToolDescriptions":
+    case "frameworks.styleGuidance":
     case "prompts.registerWithMcp":
     case "resources.registerWithMcp":
     case "resources.prompts.defaultRegistration":
     case "resources.prompts.enabled":
     case "resources.gates.enabled":
-    case "resources.methodologies.enabled":
+    case "resources.frameworks.enabled":
     case "resources.observability.enabled":
     case "resources.observability.sessions":
     case "resources.observability.metrics":
@@ -8931,7 +9055,9 @@ function validateConfigInput(key, value) {
       };
     }
     case "identity.launchDefaults.organizationId":
-    case "identity.launchDefaults.workspaceId": {
+    case "identity.launchDefaults.workspaceId":
+    case "identity.launchDefaults.clientId":
+    case "identity.launchDefaults.clientVersion": {
       const trimmed = value.trim();
       if (trimmed.length === 0) {
         return {
@@ -8941,7 +9067,34 @@ function validateConfigInput(key, value) {
       }
       return { valid: true, convertedValue: trimmed, valueType: "string" };
     }
-    case "methodologies.systemPromptFrequency": {
+    case "identity.launchDefaults.clientFamily": {
+      const normalized = value.trim().toLowerCase();
+      if (!["claude-code", "codex", "gemini", "opencode", "cursor", "unknown"].includes(normalized)) {
+        return {
+          valid: false,
+          error: "Client family must be 'claude-code', 'codex', 'gemini', 'opencode', 'cursor', or 'unknown'"
+        };
+      }
+      return { valid: true, convertedValue: normalized, valueType: "string" };
+    }
+    case "identity.launchDefaults.delegationProfile": {
+      const normalized = value.trim().toLowerCase();
+      if (![
+        "task_tool_v1",
+        "spawn_agent_v1",
+        "gemini_subagent_v1",
+        "opencode_agent_v1",
+        "cursor_agent_v1",
+        "neutral_v1"
+      ].includes(normalized)) {
+        return {
+          valid: false,
+          error: "Delegation profile must be 'task_tool_v1', 'spawn_agent_v1', 'gemini_subagent_v1', 'opencode_agent_v1', 'cursor_agent_v1', or 'neutral_v1'"
+        };
+      }
+      return { valid: true, convertedValue: normalized, valueType: "string" };
+    }
+    case "frameworks.systemPromptFrequency": {
       const freq = parseInt(value, 10);
       if (isNaN(freq) || freq < 1 || freq > 100) {
         return {
@@ -9090,17 +9243,17 @@ function validateConfigInput(key, value) {
       }
       return { valid: true, convertedValue: trimmed, valueType: "string" };
     }
-    case "assertions.mode": {
+    case "phaseGuards.mode": {
       const normalized = value.trim().toLowerCase();
-      if (!["bounce-back", "advisory", "off"].includes(normalized)) {
+      if (!["enforce", "warn", "off"].includes(normalized)) {
         return {
           valid: false,
-          error: "Assertions mode must be 'bounce-back', 'advisory', or 'off'"
+          error: "Phase guards mode must be 'enforce', 'warn', or 'off'"
         };
       }
       return { valid: true, convertedValue: normalized, valueType: "string" };
     }
-    case "assertions.maxRetries": {
+    case "phaseGuards.maxRetries": {
       const retries = parseInt(value, 10);
       if (isNaN(retries) || retries < 0 || retries > 5) {
         return {
@@ -9109,6 +9262,53 @@ function validateConfigInput(key, value) {
         };
       }
       return { valid: true, convertedValue: retries, valueType: "number" };
+    }
+    case "telemetry.enabled":
+    case "telemetry.attributePolicy.businessContext":
+    case "telemetry.attributePolicy.rawCommands":
+    case "telemetry.attributePolicy.rawResponses": {
+      const telBoolValue = value.trim().toLowerCase();
+      if (!["true", "false"].includes(telBoolValue)) {
+        return {
+          valid: false,
+          error: "Value must be 'true' or 'false'"
+        };
+      }
+      return {
+        valid: true,
+        convertedValue: telBoolValue === "true",
+        valueType: "boolean"
+      };
+    }
+    case "telemetry.mode": {
+      const telMode = value.trim().toLowerCase();
+      if (!["off", "traces", "full"].includes(telMode)) {
+        return {
+          valid: false,
+          error: "Telemetry mode must be 'off', 'traces', or 'full'"
+        };
+      }
+      return { valid: true, convertedValue: telMode, valueType: "string" };
+    }
+    case "telemetry.exporterEndpoint": {
+      const endpoint = value.trim();
+      if (endpoint.length === 0) {
+        return {
+          valid: false,
+          error: "Exporter endpoint cannot be empty"
+        };
+      }
+      return { valid: true, convertedValue: endpoint, valueType: "string" };
+    }
+    case "telemetry.samplingRate": {
+      const rate = parseFloat(value);
+      if (isNaN(rate) || rate < 0 || rate > 1) {
+        return {
+          valid: false,
+          error: "Sampling rate must be a number between 0.0 and 1.0"
+        };
+      }
+      return { valid: true, convertedValue: rate, valueType: "number" };
     }
     case "advanced.sessions.timeoutMinutes":
     case "advanced.sessions.reviewTimeoutMinutes":
@@ -9132,7 +9332,15 @@ function validateConfigInput(key, value) {
 __name(validateConfigInput, "validateConfigInput");
 
 // ../server/src/cli-shared/config-operations.ts
-import { copyFileSync, existsSync as existsSync5, mkdirSync as mkdirSync3, readFileSync as readFileSync3, renameSync as renameSync2, unlinkSync, writeFileSync as writeFileSync3 } from "node:fs";
+import {
+  copyFileSync,
+  existsSync as existsSync5,
+  mkdirSync as mkdirSync3,
+  readFileSync as readFileSync3,
+  renameSync as renameSync2,
+  unlinkSync,
+  writeFileSync as writeFileSync3
+} from "node:fs";
 import { dirname as dirname4, join as join5, resolve } from "node:path";
 function resolveConfigPath(workspace) {
   return join5(resolve(workspace), "config.json");
@@ -9250,7 +9458,7 @@ function generateDefaultConfig() {
       transport: "stdio",
       port: 9090
     },
-    methodologies: {
+    frameworks: {
       mode: "on",
       dynamicToolDescriptions: true,
       systemPromptFrequency: 3,
@@ -9364,18 +9572,24 @@ function getConfigKeyInfo() {
 }
 __name(getConfigKeyInfo, "getConfigKeyInfo");
 function getKeyTypeInfo(key) {
-  if (key.endsWith(".mode") && !key.includes("identity") && !key.includes("versioning") && !key.includes("assertions")) {
+  if (key.endsWith(".mode") && !key.includes("identity") && !key.includes("versioning") && !key.includes("phaseGuards")) {
     return { type: "string", description: "'on' or 'off'" };
   }
-  if (key === "identity.mode") return { type: "string", description: "'permissive', 'strict', or 'locked'" };
-  if (key === "versioning.mode") return { type: "string", description: "'off', 'manual', or 'auto'" };
-  if (key === "server.transport") return { type: "string", description: "'stdio', 'streamable-http', 'sse', or 'both'" };
+  if (key === "identity.mode")
+    return { type: "string", description: "'permissive', 'strict', or 'locked'" };
+  if (key === "versioning.mode")
+    return { type: "string", description: "'off', 'manual', or 'auto'" };
+  if (key === "server.transport")
+    return { type: "string", description: "'stdio', 'streamable-http', 'sse', or 'both'" };
   if (key === "server.port") return { type: "number", description: "1024-65535" };
-  if (key === "methodologies.systemPromptFrequency") return { type: "number", description: "1-100" };
+  if (key === "frameworks.systemPromptFrequency") return { type: "number", description: "1-100" };
   if (key === "verification.inContextAttempts") return { type: "number", description: "1-10" };
-  if (key === "verification.isolation.timeout") return { type: "number", description: "30-3600 seconds" };
-  if (key === "verification.isolation.maxBudget") return { type: "number", description: ">= 0.01 USD" };
-  if (key === "verification.isolation.permissionMode") return { type: "string", description: "'delegate', 'ask', or 'deny'" };
+  if (key === "verification.isolation.timeout")
+    return { type: "number", description: "30-3600 seconds" };
+  if (key === "verification.isolation.maxBudget")
+    return { type: "number", description: ">= 0.01 USD" };
+  if (key === "verification.isolation.permissionMode")
+    return { type: "string", description: "'delegate', 'ask', or 'deny'" };
   if (key === "versioning.maxVersions") return { type: "number", description: "1-500" };
   if (key === "resources.logs.maxEntries") return { type: "number", description: "50-5000" };
   if (key.endsWith(".maxTokens")) return { type: "number", description: "1-4000" };
@@ -9383,30 +9597,38 @@ function getKeyTypeInfo(key) {
   if (key === "logging.level" || key === "resources.logs.defaultLevel") {
     return { type: "string", description: "'debug', 'info', 'warn', or 'error'" };
   }
-  if (key === "assertions.mode") return { type: "string", description: "'bounce-back', 'advisory', or 'off'" };
-  if (key === "assertions.maxRetries") return { type: "number", description: "0-5" };
-  if (key.startsWith("advanced.sessions.")) return { type: "number", description: "1-10080 minutes" };
-  if (key === "prompts.directory" || key === "gates.directory") return { type: "string", description: "relative directory path" };
+  if (key === "phaseGuards.mode")
+    return { type: "string", description: "'enforce', 'warn', or 'off'" };
+  if (key === "phaseGuards.maxRetries") return { type: "number", description: "0-5" };
+  if (key.startsWith("advanced.sessions."))
+    return { type: "number", description: "1-10080 minutes" };
+  if (key === "prompts.directory" || key === "gates.directory")
+    return { type: "string", description: "relative directory path" };
   if (key === "server.name") return { type: "string", description: "server display name" };
-  if (key === "logging.directory") return { type: "string", description: "relative directory path" };
-  if (key === "identity.launchDefaults.organizationId") return { type: "string", description: "organization identifier" };
-  if (key === "identity.launchDefaults.workspaceId") return { type: "string", description: "workspace identifier" };
-  if (key === "analysis.semanticAnalysis.llmIntegration.endpoint") return { type: "string", description: "API endpoint URL (or empty)" };
-  if (key === "analysis.semanticAnalysis.llmIntegration.model") return { type: "string", description: "model name" };
+  if (key === "logging.directory")
+    return { type: "string", description: "relative directory path" };
+  if (key === "identity.launchDefaults.organizationId")
+    return { type: "string", description: "organization identifier" };
+  if (key === "identity.launchDefaults.workspaceId")
+    return { type: "string", description: "workspace identifier" };
+  if (key === "analysis.semanticAnalysis.llmIntegration.endpoint")
+    return { type: "string", description: "API endpoint URL (or empty)" };
+  if (key === "analysis.semanticAnalysis.llmIntegration.model")
+    return { type: "string", description: "model name" };
   const boolKeys = [
     "gates.enabled",
     "gates.methodologyGates",
     "gates.enforcePendingVerdict",
     "execution.judge",
-    "methodologies.enabled",
-    "methodologies.dynamicToolDescriptions",
-    "methodologies.styleGuidance",
+    "frameworks.enabled",
+    "frameworks.dynamicToolDescriptions",
+    "frameworks.styleGuidance",
     "prompts.registerWithMcp",
     "resources.registerWithMcp",
     "resources.prompts.defaultRegistration",
     "resources.prompts.enabled",
     "resources.gates.enabled",
-    "resources.methodologies.enabled",
+    "resources.frameworks.enabled",
     "resources.observability.enabled",
     "resources.observability.sessions",
     "resources.observability.metrics",
@@ -9565,21 +9787,21 @@ var TYPE_MAP = {
   prompts: "prompts",
   gate: "gates",
   gates: "gates",
-  methodology: "methodologies",
-  methodologies: "methodologies",
+  framework: "frameworks",
+  frameworks: "frameworks",
   style: "styles",
   styles: "styles"
 };
 var TYPE_CONFIG = {
   prompts: { entryFile: "prompt.yaml", nested: true },
   gates: { entryFile: "gate.yaml", nested: false },
-  methodologies: { entryFile: "methodology.yaml", nested: false },
+  frameworks: { entryFile: "framework.yaml", nested: false },
   styles: { entryFile: "style.yaml", nested: false }
 };
 var SINGULAR = {
   prompts: "prompt",
   gates: "gate",
-  methodologies: "methodology",
+  frameworks: "framework",
   styles: "style"
 };
 function singularName(type2) {
@@ -9601,7 +9823,7 @@ function resolveWorkspace(explicit) {
   return resolved;
 }
 __name(resolveWorkspace, "resolveWorkspace");
-function resolveResourceDir(workspace, type2) {
+function resolveResourceDir2(workspace, type2) {
   const resourcesPath = resolve3(workspace, "resources", type2);
   if (existsSync7(resourcesPath)) return resourcesPath;
   const directPath = resolve3(workspace, type2);
@@ -9612,7 +9834,7 @@ function resolveResourceDir(workspace, type2) {
   Tried: ${directPath}`
   );
 }
-__name(resolveResourceDir, "resolveResourceDir");
+__name(resolveResourceDir2, "resolveResourceDir");
 function discoverResourcePaths(baseDir, entryFile, nested) {
   if (!existsSync7(baseDir)) return [];
   const results = [];
@@ -9647,7 +9869,7 @@ __name(discoverResourcePaths, "discoverResourcePaths");
 function findResource(workspace, type2, id) {
   let baseDir;
   try {
-    baseDir = resolveResourceDir(workspace, type2);
+    baseDir = resolveResourceDir2(workspace, type2);
   } catch {
     return null;
   }
@@ -9658,12 +9880,12 @@ function findResource(workspace, type2, id) {
 __name(findResource, "findResource");
 function scanReferences(workspace, targetId) {
   const hits = [];
-  const allTypes = ["prompts", "gates", "methodologies", "styles"];
+  const allTypes = ["prompts", "gates", "frameworks", "styles"];
   for (const type2 of allTypes) {
     const config2 = TYPE_CONFIG[type2];
     let baseDir;
     try {
-      baseDir = resolveResourceDir(workspace, type2);
+      baseDir = resolveResourceDir2(workspace, type2);
     } catch {
       continue;
     }
@@ -9774,7 +9996,7 @@ async function validate(options) {
   for (const type2 of types2) {
     let baseDir;
     try {
-      baseDir = resolveResourceDir(workspace, type2);
+      baseDir = resolveResourceDir2(workspace, type2);
     } catch {
       continue;
     }
@@ -9851,13 +10073,13 @@ function detectDuplicateIds(results) {
 }
 __name(detectDuplicateIds, "detectDuplicateIds");
 function resolveTypes(flags) {
-  if (flags.all || !flags.prompts && !flags.gates && !flags.methodologies && !flags.styles) {
-    return ["prompts", "gates", "methodologies", "styles"];
+  if (flags.all || !flags.prompts && !flags.gates && !flags.frameworks && !flags.styles) {
+    return ["prompts", "gates", "frameworks", "styles"];
   }
   const types2 = [];
   if (flags.prompts) types2.push("prompts");
   if (flags.gates) types2.push("gates");
-  if (flags.methodologies) types2.push("methodologies");
+  if (flags.frameworks) types2.push("frameworks");
   if (flags.styles) types2.push("styles");
   return types2;
 }
@@ -9869,7 +10091,7 @@ async function list(options) {
   const type2 = options.type ? TYPE_MAP[options.type] : void 0;
   if (!type2) {
     console.error(
-      `Usage: cpm list <prompts|gates|methodologies|styles>
+      `Usage: cpm list <prompts|gates|frameworks|styles>
 ` + (options.type ? `Unknown type: ${options.type}` : "Resource type is required.")
     );
     return 1;
@@ -9877,7 +10099,7 @@ async function list(options) {
   const workspace = resolveWorkspace(options.workspace);
   let baseDir;
   try {
-    baseDir = resolveResourceDir(workspace, type2);
+    baseDir = resolveResourceDir2(workspace, type2);
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     return 1;
@@ -9919,19 +10141,19 @@ async function inspect(options) {
   const resolvedType = options.type ? TYPE_MAP[options.type] : void 0;
   if (!resolvedType) {
     console.error(
-      `Usage: cpm inspect <prompt|gate|methodology|style> <id>
+      `Usage: cpm inspect <prompt|gate|framework|style> <id>
 ` + (options.type ? `Unknown type: ${options.type}` : "Resource type is required.")
     );
     return 1;
   }
   if (!options.id) {
-    console.error("Usage: cpm inspect <prompt|gate|methodology|style> <id>\nResource ID is required.");
+    console.error("Usage: cpm inspect <prompt|gate|framework|style> <id>\nResource ID is required.");
     return 1;
   }
   const workspace = resolveWorkspace(options.workspace);
   let baseDir;
   try {
-    baseDir = resolveResourceDir(workspace, resolvedType);
+    baseDir = resolveResourceDir2(workspace, resolvedType);
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
     return 1;
@@ -10002,7 +10224,7 @@ async function init(options) {
   const result = initWorkspace(targetPath);
   if (result.success && !options.noValidate) {
     const workspacePath = resolve4(targetPath);
-    const promptsDir = resolveResourceDir(workspacePath, "prompts");
+    const promptsDir = resolveResourceDir2(workspacePath, "prompts");
     const promptEntries = discoverResourcePaths(promptsDir, "prompt.yaml", true);
     for (const prompt of promptEntries) {
       const validation = validateResourceFile(
@@ -10046,19 +10268,19 @@ async function create(options) {
   const type2 = options.type ? TYPE_MAP[options.type] : void 0;
   if (!type2) {
     console.error(
-      `Usage: cpm create <prompt|gate|methodology|style> <id> [options]
+      `Usage: cpm create <prompt|gate|framework|style> <id> [options]
 ` + (options.type ? `Unknown type: ${options.type}` : "Resource type is required.")
     );
     return 1;
   }
   if (!options.id) {
-    console.error("Usage: cpm create <prompt|gate|methodology|style> <id> [options]\nResource ID is required.");
+    console.error("Usage: cpm create <prompt|gate|framework|style> <id> [options]\nResource ID is required.");
     return 1;
   }
   const workspace = resolveWorkspace(options.workspace);
   let baseDir;
   try {
-    baseDir = resolveResourceDir(workspace, type2);
+    baseDir = resolveResourceDir2(workspace, type2);
   } catch {
     const { resolve: resolve5 } = await import("node:path");
     const { mkdirSync: mkdirSync5 } = await import("node:fs");
@@ -10109,7 +10331,7 @@ __name(create, "create");
 function printSubsystemAdvisory(workspace, type2) {
   const configKeyMap = {
     gates: "gates.mode",
-    methodologies: "methodologies.mode"
+    frameworks: "frameworks.mode"
   };
   const configKey = configKeyMap[type2];
   if (!configKey) return;
@@ -10129,13 +10351,13 @@ async function del(options) {
   const type2 = options.type ? TYPE_MAP[options.type] : void 0;
   if (!type2) {
     console.error(
-      `Usage: cpm delete <prompt|gate|methodology|style> <id> --force
+      `Usage: cpm delete <prompt|gate|framework|style> <id> --force
 ` + (options.type ? `Unknown type: ${options.type}` : "Resource type is required.")
     );
     return 1;
   }
   if (!options.id) {
-    console.error("Usage: cpm delete <prompt|gate|methodology|style> <id> --force\nResource ID is required.");
+    console.error("Usage: cpm delete <prompt|gate|framework|style> <id> --force\nResource ID is required.");
     return 1;
   }
   const workspace = resolveWorkspace(options.workspace);
@@ -10191,13 +10413,13 @@ async function history(options) {
   const type2 = options.type ? TYPE_MAP[options.type] : void 0;
   if (!type2) {
     console.error(
-      `Usage: cpm history <prompt|gate|methodology|style> <id>
+      `Usage: cpm history <prompt|gate|framework|style> <id>
 ` + (options.type ? `Unknown type: ${options.type}` : "Resource type is required.")
     );
     return 1;
   }
   if (!options.id) {
-    console.error("Usage: cpm history <prompt|gate|methodology|style> <id>\nResource ID is required.");
+    console.error("Usage: cpm history <prompt|gate|framework|style> <id>\nResource ID is required.");
     return 1;
   }
   const workspace = resolveWorkspace(options.workspace);
@@ -10230,14 +10452,14 @@ async function compare(options) {
   const type2 = options.type ? TYPE_MAP[options.type] : void 0;
   if (!type2) {
     console.error(
-      `Usage: cpm compare <prompt|gate|methodology|style> <id> <from> <to>
+      `Usage: cpm compare <prompt|gate|framework|style> <id> <from> <to>
 ` + (options.type ? `Unknown type: ${options.type}` : "Resource type is required.")
     );
     return 1;
   }
   if (!options.id || !options.from || !options.to) {
     console.error(
-      "Usage: cpm compare <prompt|gate|methodology|style> <id> <from> <to>\nResource ID and both version numbers are required."
+      "Usage: cpm compare <prompt|gate|framework|style> <id> <from> <to>\nResource ID and both version numbers are required."
     );
     return 1;
   }
@@ -10293,14 +10515,14 @@ async function rollback(options) {
   const type2 = options.type ? TYPE_MAP[options.type] : void 0;
   if (!type2) {
     console.error(
-      `Usage: cpm rollback <prompt|gate|methodology|style> <id> <version>
+      `Usage: cpm rollback <prompt|gate|framework|style> <id> <version>
 ` + (options.type ? `Unknown type: ${options.type}` : "Resource type is required.")
     );
     return 1;
   }
   if (!options.id || !options.version) {
     console.error(
-      "Usage: cpm rollback <prompt|gate|methodology|style> <id> <version>\nResource ID and target version are required."
+      "Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\nResource ID and target version are required."
     );
     return 1;
   }
@@ -10356,14 +10578,14 @@ async function rename(options) {
   const type2 = options.type ? TYPE_MAP[options.type] : void 0;
   if (!type2) {
     console.error(
-      `Usage: cpm rename <prompt|gate|methodology|style> <old-id> <new-id>
+      `Usage: cpm rename <prompt|gate|framework|style> <old-id> <new-id>
 ` + (options.type ? `Unknown type: ${options.type}` : "Resource type is required.")
     );
     return 1;
   }
   if (!options.oldId || !options.newId) {
     console.error(
-      "Usage: cpm rename <prompt|gate|methodology|style> <old-id> <new-id>\nBoth old and new IDs are required."
+      "Usage: cpm rename <prompt|gate|framework|style> <old-id> <new-id>\nBoth old and new IDs are required."
     );
     return 1;
   }
@@ -10447,7 +10669,7 @@ async function move(options) {
   const content = readFileSync5(yamlPath, "utf8");
   const catMatch = /^category:\s*(.+)$/m.exec(content);
   const oldCategory = catMatch?.[1]?.trim() ?? "unknown";
-  const promptsBaseDir = resolveResourceDir(workspace, "prompts");
+  const promptsBaseDir = resolveResourceDir2(workspace, "prompts");
   const mutation = runValidatedMutation({
     resourceType: "prompts",
     resourceId: options.id,
@@ -10484,15 +10706,15 @@ import { readFileSync as readFileSync6 } from "node:fs";
 import { join as join14 } from "node:path";
 async function toggle(options) {
   const type2 = options.type ? TYPE_MAP[options.type] : void 0;
-  if (!type2 || type2 !== "methodologies" && type2 !== "styles") {
+  if (!type2 || type2 !== "frameworks" && type2 !== "styles") {
     console.error(
-      `Usage: cpm toggle <methodology|style> <id>
-` + (options.type ? `Only methodologies and styles have an 'enabled' field.` : "Resource type is required.")
+      `Usage: cpm toggle <framework|style> <id>
+` + (options.type ? `Only frameworks and styles have an 'enabled' field.` : "Resource type is required.")
     );
     return 1;
   }
   if (!options.id) {
-    console.error("Usage: cpm toggle <methodology|style> <id>\nResource ID is required.");
+    console.error("Usage: cpm toggle <framework|style> <id>\nResource ID is required.");
     return 1;
   }
   const workspace = resolveWorkspace(options.workspace);
@@ -10527,7 +10749,7 @@ async function toggle(options) {
     output({ id: options.id, type: singularName(type2), previousValue: result.previousValue, newValue: result.newValue }, { json: true });
   } else {
     console.log(`Toggled ${singularName(type2)} '${options.id}': enabled ${result.previousValue} -> ${result.newValue}`);
-    if (result.newValue === false && type2 === "methodologies") {
+    if (result.newValue === false && type2 === "frameworks") {
       printAllDisabledAdvisory(workspace, type2);
     }
   }
@@ -10536,7 +10758,7 @@ async function toggle(options) {
 __name(toggle, "toggle");
 function printAllDisabledAdvisory(workspace, type2) {
   try {
-    const baseDir = resolveResourceDir(workspace, type2);
+    const baseDir = resolveResourceDir2(workspace, type2);
     const typeConfig = TYPE_CONFIG[type2];
     const resources = discoverResourcePaths(baseDir, typeConfig.entryFile, typeConfig.nested);
     let anyEnabled = false;
@@ -10548,7 +10770,7 @@ function printAllDisabledAdvisory(workspace, type2) {
       }
     }
     if (!anyEnabled && resources.length > 0) {
-      const configKeyMap = { methodologies: "methodologies.mode" };
+      const configKeyMap = { frameworks: "frameworks.mode" };
       const configKey = configKeyMap[type2];
       if (!configKey) return;
       const configResult = readConfig(workspace);
@@ -10622,7 +10844,7 @@ __name(linkGateCmd, "linkGateCmd");
 var CLI_ACTIONS = [
   {
     id: "validate",
-    command: "cpm validate [--prompts|--gates|--methodologies|--styles|--all]",
+    command: "cpm validate [--prompts|--gates|--frameworks|--styles|--all]",
     category: "discovery",
     description: "Validate workspace resources against Zod schemas",
     keywords: ["check", "verify", "lint", "schema", "valid"]
@@ -10706,9 +10928,9 @@ var CLI_ACTIONS = [
   },
   {
     id: "toggle",
-    command: "cpm toggle <methodology|style> <id>",
+    command: "cpm toggle <framework|style> <id>",
     category: "lifecycle",
-    description: "Toggle enabled state for a methodology or style",
+    description: "Toggle enabled state for a framework or style",
     keywords: ["toggle", "enable", "disable", "activate", "switch"]
   },
   {
@@ -11005,11 +11227,11 @@ __name(configKeys, "configKeys");
 // src/commands/enable-disable.ts
 var SUBSYSTEM_MAP = {
   gates: ["gates.mode", "Quality gates"],
-  methodologies: ["methodologies.mode", "Framework methodologies"],
+  frameworks: ["frameworks.mode", "Framework system"],
   resources: ["resources.mode", "MCP resource registration"],
   "resources.prompts": ["resources.prompts.mode", "Prompt resources"],
   "resources.gates": ["resources.gates.mode", "Gate resources"],
-  "resources.methodologies": ["resources.methodologies.mode", "Methodology resources"],
+  "resources.frameworks": ["resources.frameworks.mode", "Framework resources"],
   "resources.observability": ["resources.observability.mode", "Observability resources"],
   "resources.logs": ["resources.logs.mode", "Log resources"],
   verification: ["verification.isolation.mode", "Verification isolation"],
@@ -11123,7 +11345,7 @@ function parseCliArgs(args = process.argv.slice(2)) {
       // validate flags
       prompts: { type: "boolean" },
       gates: { type: "boolean" },
-      methodologies: { type: "boolean" },
+      frameworks: { type: "boolean" },
       styles: { type: "boolean" },
       config: { type: "boolean" },
       all: { type: "boolean" },
@@ -11158,7 +11380,7 @@ function parseCliArgs(args = process.argv.slice(2)) {
     flags: {
       prompts: values.prompts,
       gates: values.gates,
-      methodologies: values.methodologies,
+      frameworks: values.frameworks,
       styles: values.styles,
       config: values.config,
       all: values.all,
@@ -11182,7 +11404,7 @@ Usage: cpm validate [options]
 Options:
       --prompts           Validate prompts only
       --gates             Validate gates only
-      --methodologies     Validate methodologies only
+      --frameworks     Validate frameworks only
       --styles            Validate styles only
       --config            Also validate config.json
       --all               Validate all types + config.json
@@ -11195,9 +11417,9 @@ Examples:
   cpm validate --config -w server`,
   list: `cpm list - List resources by type
 
-Usage: cpm list <prompts|gates|methodologies|styles> [options]
+Usage: cpm list <prompts|gates|frameworks|styles> [options]
 
-Accepts singular or plural type names (prompt/prompts, gate/gates, methodology/methodologies, style/styles).
+Accepts singular or plural type names (prompt/prompts, gate/gates, framework/frameworks, style/styles).
 
 Options:
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
@@ -11206,12 +11428,12 @@ Options:
 Examples:
   cpm list prompts --workspace server
   cpm list gates --json
-  cpm list methodology -w ./my-workspace`,
+  cpm list framework -w ./my-workspace`,
   inspect: `cpm inspect - Inspect a specific resource
 
 Usage: cpm inspect <type> <id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Options:
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
@@ -11220,7 +11442,7 @@ Options:
 Examples:
   cpm inspect prompt action_plan --workspace server
   cpm inspect gate code-quality --json
-  cpm inspect methodology cageerf -w server`,
+  cpm inspect framework cageerf -w server`,
   init: `cpm init - Initialize a new workspace
 
 Usage: cpm init [path] [options]
@@ -11239,7 +11461,7 @@ Examples:
 
 Usage: cpm create <type> <id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Creates a resource directory with template YAML and companion file.
 Prompts are grouped by category (default: general).
@@ -11255,12 +11477,12 @@ Options:
 Examples:
   cpm create prompt my-analysis --name "My Analysis" --description "Analyze code"
   cpm create gate code-review --name "Code Review" -w server
-  cpm create methodology my-method --category tools`,
+  cpm create framework my-method --category tools`,
   delete: `cpm delete - Delete a resource
 
 Usage: cpm delete <type> <id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Removes the resource directory and its version history.
 Requires --force to confirm deletion.
@@ -11277,7 +11499,7 @@ Examples:
 
 Usage: cpm history <type> <id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Displays the SQLite-backed version log for a resource.
 
@@ -11293,7 +11515,7 @@ Examples:
 
 Usage: cpm compare <type> <id> <from> <to> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Shows differences between two version snapshots from SQLite history.
 
@@ -11308,7 +11530,7 @@ Examples:
 
 Usage: cpm rollback <type> <id> <version> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Saves current state as a new version, then restores the target version.
 
@@ -11324,7 +11546,7 @@ Examples:
 
 Usage: cpm rename <type> <old-id> <new-id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Renames the resource directory and updates the id field in YAML.
 Warns about cross-references that may need manual updating.
@@ -11353,10 +11575,10 @@ Examples:
   cpm move prompt helper --category development --json`,
   toggle: `cpm toggle - Toggle enabled state
 
-Usage: cpm toggle <methodology|style> <id> [options]
+Usage: cpm toggle <framework|style> <id> [options]
 
 Flips the 'enabled' field between true and false.
-Only methodologies and styles have an enabled field.
+Only frameworks and styles have an enabled field.
 
 Options:
       --no-validate       Skip post-toggle schema validation
@@ -11364,7 +11586,7 @@ Options:
       --json              JSON output
 
 Examples:
-  cpm toggle methodology cageerf -w server
+  cpm toggle framework cageerf -w server
   cpm toggle style analytical --json`,
   "link-gate": `cpm link-gate - Link or unlink a gate to a prompt
 
@@ -11405,11 +11627,11 @@ Shorthand for 'cpm config set <key> on'.
 
 Subsystems:
   gates                     Quality gates (gates.mode)
-  methodologies             Framework methodologies (methodologies.mode)
+  frameworks             Framework system (frameworks.mode)
   resources                 MCP resource registration (resources.mode)
   resources.prompts         Prompt resources (resources.prompts.mode)
   resources.gates           Gate resources (resources.gates.mode)
-  resources.methodologies   Methodology resources (resources.methodologies.mode)
+  resources.frameworks   Framework resources (resources.frameworks.mode)
   resources.observability   Observability resources (resources.observability.mode)
   resources.logs            Log resources (resources.logs.mode)
   verification              Verification isolation (verification.isolation.mode)
@@ -11422,7 +11644,7 @@ Options:
 Examples:
   cpm enable gates
   cpm enable resources -w server
-  cpm disable methodologies --json`,
+  cpm disable frameworks --json`,
   disable: `cpm disable - Disable a subsystem
 
 Usage: cpm disable <subsystem> [options]
@@ -11457,7 +11679,7 @@ Options:
 Examples:
   cpm config list -w server
   cpm config get gates.mode
-  cpm config set methodologies.mode on
+  cpm config set frameworks.mode on
   cpm config set server.port 8080 --json
   cpm config validate -w server
   cpm config reset --force
@@ -11473,7 +11695,7 @@ function printHelp(command) {
 Usage: cpm <command> [options]
 
 Commands:
-  validate   Validate workspace resources (prompts, gates, methodologies, styles)
+  validate   Validate workspace resources (prompts, gates, frameworks, styles)
   list       List resources by type
   inspect    Inspect a specific resource
   init       Initialize a new workspace with starter prompts
@@ -11484,7 +11706,7 @@ Commands:
   rollback   Restore a previous resource version
   rename     Rename a resource (directory + YAML id)
   move       Move a prompt to a different category
-  toggle     Toggle enabled state (methodologies, styles)
+  toggle     Toggle enabled state (frameworks, styles)
   link-gate  Link or unlink a gate to a prompt
   guide      Command discovery and help
   config     Manage workspace configuration (config.json)
@@ -11538,7 +11760,7 @@ async function run(args) {
         flags: {
           prompts: parsed.flags["prompts"],
           gates: parsed.flags["gates"],
-          methodologies: parsed.flags["methodologies"],
+          frameworks: parsed.flags["frameworks"],
           styles: parsed.flags["styles"],
           config: parsed.flags["config"],
           all: parsed.flags["all"]

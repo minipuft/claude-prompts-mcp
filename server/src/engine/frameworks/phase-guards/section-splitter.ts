@@ -37,14 +37,20 @@ export function splitBySectionHeaders(
   const result = new Map<string, OutputSection>();
   const lines = output.split('\n');
 
-  // Find the line index where each section header starts (case-insensitive match)
+  // Find the line index where each section header starts. Tolerant match: the line is
+  // compared to the configured header after normalizing away heading level (#/##/###),
+  // surrounding bold/italic markers, trailing punctuation/colon, case, and whitespace — so
+  // `## Dissolve`, `### Dissolve`, `## Dissolve:`, and `## **Dissolve**` all match a
+  // configured `## Dissolve`. Exact full-line equality previously missed every such variant,
+  // which (paired with a retry hint naming the wrong header) produced an unsatisfiable loop.
   const headerPositions: Array<{ header: string; lineIndex: number }> = [];
 
   for (const header of sectionHeaders) {
-    const headerLower = header.toLowerCase().trim();
+    const target = normalizeHeaderText(header);
+    if (!target) continue; // a header that normalizes to empty can't be matched safely
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (line?.toLowerCase().trim() === headerLower) {
+      if (line !== undefined && normalizeHeaderText(line) === target) {
         headerPositions.push({ header, lineIndex: i });
         break; // First match per header
       }
@@ -70,4 +76,21 @@ export function splitBySectionHeaders(
   }
 
   return result;
+}
+
+/**
+ * Normalize a markdown header (or a candidate line) for tolerant comparison: strips the ATX
+ * heading level (`#`..`######`), surrounding bold/italic asterisks, trailing punctuation/
+ * colon, and outer whitespace, then lowercases. So a configured `## Dissolve` matches a line
+ * written as `## Dissolve`, `### Dissolve`, `## Dissolve:`, or `## **Dissolve**`. Core text
+ * must still match exactly (no substring/prose over-matching: "dissolve the constraints"
+ * normalizes to "dissolve the constraints" ≠ "dissolve").
+ */
+function normalizeHeaderText(s: string): string {
+  return s
+    .replace(/^\s*#{1,6}\s*/, '') // leading ATX heading markers
+    .replace(/\*/g, '') // bold/italic markers (anywhere — headers carry no meaningful '*')
+    .replace(/[:：.,;\s–—-]+$/u, '') // trailing colon / punctuation / dashes / ws (after '*' removal)
+    .trim()
+    .toLowerCase();
 }

@@ -1,8 +1,8 @@
-// @lifecycle canonical - Methodology and style overlay resolution for tool descriptions.
+// @lifecycle canonical - Framework and style overlay resolution for tool descriptions.
 /**
  * Tool Description Overlays
  *
- * Pure functions for preloading methodology/style descriptions and building
+ * Pure functions for preloading framework/style descriptions and building
  * overlay-applied tool description configs. No class state — all dependencies
  * passed as parameters.
  *
@@ -13,19 +13,19 @@
 import {
   getDefaultRuntimeLoader,
   createGenericGuide,
-} from '../../engine/frameworks/methodology/index.js';
+} from '../../engine/frameworks/definitions/index.js';
 import { getDefaultStyleDefinitionLoader } from '../../modules/formatting/core/style-definition-loader.js';
 
-import type { MethodologyToolDescriptions } from '../../engine/frameworks/types/index.js';
+import type { FrameworkToolDescriptions } from '../../engine/frameworks/types/index.js';
 import type { StyleToolDescriptionYaml } from '../../modules/formatting/core/style-schema.js';
 import type { Logger, ToolDescription, ToolDescriptionsConfig } from '../../shared/types/index.js';
 
 /**
- * Normalize methodology keys for consistent lookup (case-insensitive)
+ * Normalize framework keys for consistent lookup (case-insensitive)
  */
-export function normalizeMethodologyKey(methodology?: string): string | undefined {
-  if (!methodology) return undefined;
-  return methodology.trim().toUpperCase();
+export function normalizeFrameworkKey(framework?: string): string | undefined {
+  if (!framework) return undefined;
+  return framework.trim().toUpperCase();
 }
 
 /**
@@ -41,8 +41,8 @@ export function cloneToolDescription(description: ToolDescription): ToolDescript
   if (description.frameworkAware) {
     const frameworkAware = { ...description.frameworkAware };
 
-    if (description.frameworkAware.methodologies) {
-      frameworkAware.methodologies = { ...description.frameworkAware.methodologies };
+    if (description.frameworkAware.frameworks) {
+      frameworkAware.frameworks = { ...description.frameworkAware.frameworks };
     }
     if (description.frameworkAware.parametersEnabled) {
       frameworkAware.parametersEnabled = { ...description.frameworkAware.parametersEnabled };
@@ -50,9 +50,9 @@ export function cloneToolDescription(description: ToolDescription): ToolDescript
     if (description.frameworkAware.parametersDisabled) {
       frameworkAware.parametersDisabled = { ...description.frameworkAware.parametersDisabled };
     }
-    if (description.frameworkAware.methodologyParameters) {
-      frameworkAware.methodologyParameters = {
-        ...description.frameworkAware.methodologyParameters,
+    if (description.frameworkAware.frameworkParameters) {
+      frameworkAware.frameworkParameters = {
+        ...description.frameworkAware.frameworkParameters,
       };
     }
 
@@ -63,40 +63,42 @@ export function cloneToolDescription(description: ToolDescription): ToolDescript
 }
 
 /**
- * Pre-load all methodology tool descriptions from YAML definitions.
- * Returns a Map keyed by normalized methodology/framework ID.
+ * Pre-load all framework tool descriptions from YAML definitions.
+ * Returns a Map keyed by normalized framework ID.
  */
-export function preloadMethodologyDescriptions(
+export function preloadFrameworkDescriptions(
   logger: Logger
-): Map<string, MethodologyToolDescriptions> {
-  const result = new Map<string, MethodologyToolDescriptions>();
+): Map<string, FrameworkToolDescriptions> {
+  const result = new Map<string, FrameworkToolDescriptions>();
 
   try {
     const loader = getDefaultRuntimeLoader();
-    const methodologyIds = loader.discoverMethodologies();
+    const frameworkIds = loader.discoverFrameworks();
 
-    for (const id of methodologyIds) {
-      const definition = loader.loadMethodology(id);
+    for (const id of frameworkIds) {
+      const definition = loader.loadFramework(id);
       if (!definition) continue;
 
       const guide = createGenericGuide(definition);
       const descriptions = guide.getToolDescriptions?.() || {};
-      const methodologyKey = normalizeMethodologyKey(guide.type);
-      const frameworkKey = normalizeMethodologyKey(guide.frameworkId);
+      // Each guide is registered under BOTH its type and its id, so a later lookup succeeds
+      // whichever of the two the caller happens to hold.
+      const typeKey = normalizeFrameworkKey(guide.type);
+      const idKey = normalizeFrameworkKey(guide.frameworkId);
 
-      if (methodologyKey) {
-        result.set(methodologyKey, descriptions);
+      if (typeKey) {
+        result.set(typeKey, descriptions);
       }
 
-      if (frameworkKey) {
-        result.set(frameworkKey, descriptions);
+      if (idKey) {
+        result.set(idKey, descriptions);
       }
     }
 
-    logger.info(`Pre-loaded tool descriptions for ${result.size} methodologies from YAML (SOT)`);
+    logger.info(`Pre-loaded tool descriptions for ${result.size} frameworks from YAML (SOT)`);
   } catch (error) {
     logger.error(
-      `Failed to pre-load methodology descriptions: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to pre-load framework descriptions: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 
@@ -145,46 +147,45 @@ export function weaveResponseFormat(description: string, responseFormat: string)
 }
 
 /**
- * Build active tool description config by applying methodology overlays to base config.
+ * Build active tool description config by applying framework overlays to base config.
  */
 export function buildActiveConfig(
   baseConfig: ToolDescriptionsConfig,
   activeContext: {
     activeFramework?: string;
-    activeMethodology?: string;
+    activeFrameworkType?: string;
     frameworkSystemEnabled?: boolean;
   },
-  methodologyDescriptions: Map<string, MethodologyToolDescriptions>,
+  frameworkDescriptions: Map<string, FrameworkToolDescriptions>,
   dynamicDescriptionsEnabled: boolean
 ): ToolDescriptionsConfig {
-  const methodologyKey = normalizeMethodologyKey(
-    activeContext.activeMethodology ?? activeContext.activeFramework
+  const frameworkKey = normalizeFrameworkKey(
+    activeContext.activeFrameworkType ?? activeContext.activeFramework
   );
 
   const tools: Record<string, ToolDescription> = {};
   for (const [name, description] of Object.entries(baseConfig.tools)) {
     const baseDescription = cloneToolDescription(description);
 
-    if (dynamicDescriptionsEnabled && methodologyKey) {
-      const methodologyDescs = methodologyDescriptions.get(methodologyKey);
-      const methodologyTool =
-        methodologyDescs?.[name as keyof MethodologyToolDescriptions] || undefined;
+    if (dynamicDescriptionsEnabled && frameworkKey) {
+      const frameworkDescs = frameworkDescriptions.get(frameworkKey);
+      const frameworkTool = frameworkDescs?.[name as keyof FrameworkToolDescriptions] || undefined;
 
-      if (methodologyTool?.description) {
-        baseDescription.description = methodologyTool.description;
+      if (frameworkTool?.description) {
+        baseDescription.description = frameworkTool.description;
       }
 
-      if (methodologyTool?.parameters) {
+      if (frameworkTool?.parameters) {
         baseDescription.parameters = {
           ...baseDescription.parameters,
-          ...methodologyTool.parameters,
+          ...frameworkTool.parameters,
         };
       }
 
-      if (methodologyTool?.responseFormat) {
+      if (frameworkTool?.responseFormat) {
         baseDescription.description = weaveResponseFormat(
           baseDescription.description,
-          methodologyTool.responseFormat
+          frameworkTool.responseFormat
         );
       }
     }
@@ -202,8 +203,8 @@ export function buildActiveConfig(
   if (activeContext.activeFramework) {
     generatedConfig.activeFramework = activeContext.activeFramework;
   }
-  if (activeContext.activeMethodology) {
-    generatedConfig.activeMethodology = activeContext.activeMethodology;
+  if (activeContext.activeFrameworkType) {
+    generatedConfig.activeFrameworkType = activeContext.activeFrameworkType;
   }
 
   return generatedConfig;

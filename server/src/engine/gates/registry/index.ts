@@ -3,7 +3,7 @@
  * Gate Registry Module
  *
  * Provides registry-based lifecycle management for gate guides,
- * mirroring the framework system's MethodologyRegistry pattern.
+ * mirroring the framework system's FrameworkRegistry pattern.
  */
 
 // Gate Registry - Lifecycle management

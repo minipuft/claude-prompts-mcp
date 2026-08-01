@@ -26,7 +26,7 @@ abstract class BaseLLMClient implements LLMClient {
     text: string;
     task: string;
     categories: string[];
-    methodologies: string[];
+    frameworks: string[];
   }): Promise<{
     executionType: string;
     confidence: number;
@@ -42,7 +42,7 @@ abstract class BaseLLMClient implements LLMClient {
     text: string;
     task: string;
     categories: string[];
-    methodologies: string[];
+    frameworks: string[];
   }): string {
     return `${request.task}
 
@@ -52,13 +52,13 @@ ${request.text}
 """
 
 Available Execution Types: ${request.categories.join(', ')}
-Available Methodologies: ${request.methodologies.join(', ')}
+Available Frameworks: ${request.frameworks.join(', ')}
 
 Please analyze this prompt and return:
 1. executionType: One of [${request.categories.join(', ')}]
 2. confidence: Number between 0 and 1
 3. reasoning: Array of strings explaining your analysis
-4. recommendedFramework: One of [${request.methodologies.join(', ')}] or "none"
+4. recommendedFramework: One of [${request.frameworks.join(', ')}] or "none"
 5. complexity: One of ["low", "medium", "high"]
 
 Respond in JSON format only.`;
@@ -107,7 +107,7 @@ export class OpenAIClient extends BaseLLMClient {
     text: string;
     task: string;
     categories: string[];
-    methodologies: string[];
+    frameworks: string[];
   }): Promise<{
     executionType: string;
     confidence: number;
@@ -177,7 +177,7 @@ export class AnthropicClient extends BaseLLMClient {
     text: string;
     task: string;
     categories: string[];
-    methodologies: string[];
+    frameworks: string[];
   }): Promise<{
     executionType: string;
     confidence: number;
@@ -243,7 +243,7 @@ export class CustomClient extends BaseLLMClient {
     text: string;
     task: string;
     categories: string[];
-    methodologies: string[];
+    frameworks: string[];
   }): Promise<{
     executionType: string;
     confidence: number;
@@ -361,7 +361,7 @@ export class LLMClientFactory {
         text: 'Analyze this simple test prompt with two arguments: {{input}} and {{context}}',
         task: 'Test classification',
         categories: ['prompt', 'template'],
-        methodologies: ['CAGEERF', 'none'],
+        frameworks: ['CAGEERF', 'none'],
       });
 
       // Basic validation that we got a valid response

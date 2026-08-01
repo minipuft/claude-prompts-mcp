@@ -34,12 +34,14 @@ You are executing a delegated step in a multi-step chain workflow managed by the
 
 If your task prompt includes an `## Execution Context` section:
 
-### Framework Methodology
-- Follow the methodology described (e.g., CAGEERF phases)
+### Framework Framework
+
+- Follow the framework described (e.g., CAGEERF phases)
 - Apply the framework's approach to your step execution
-- Structure your work according to the methodology's phases
+- Structure your work according to the framework's phases
 
 ### Quality Gates
+
 - Evaluate your output against each gate criterion BEFORE responding
 - **MANDATORY**: End your response with a gate verdict:
   `GATE_REVIEW: PASS — [brief rationale]` or `GATE_REVIEW: FAIL — [what didn't meet criteria]`

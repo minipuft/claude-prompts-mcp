@@ -5,7 +5,7 @@
  * Contains interfaces and types used by the prompt engine system,
  * including chain execution, formatting, and classification types.
  *
- * Cross-cutting types (StepState, StepMetadata, ChainState, PendingGateReview,
+ * Cross-cutting types (StepMilestone, StepMetadata, ChainState, PendingGateReview,
  * FormatterExecutionContext, GateReviewHistoryEntry) live in shared/types/chain-execution.ts
  * and are re-exported here for backward compatibility within the mcp/ layer.
  */
@@ -14,7 +14,6 @@ import type { ToolResponse } from '../../../../shared/types/index.js';
 import type { ConvertedPrompt } from '../../../../engine/execution/types.js';
 // Re-export cross-cutting types from shared/ (canonical location)
 export {
-  StepState,
   type StepMetadata,
   type GateReviewHistoryEntry,
   type GateReviewExecutionContext,

@@ -112,8 +112,8 @@ export function validateLightweightGateDefinition(
       if (criteria.forbidden_patterns) {
         normalized.forbidden_patterns = criteria.forbidden_patterns;
       }
-      if (criteria.methodology) {
-        normalized.methodology = criteria.methodology;
+      if (criteria.framework) {
+        normalized.framework = criteria.framework;
       }
       if (criteria.min_compliance_score !== undefined) {
         normalized.min_compliance_score = criteria.min_compliance_score;

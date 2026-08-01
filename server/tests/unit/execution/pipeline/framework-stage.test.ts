@@ -6,7 +6,7 @@ import { FrameworkResolutionStage } from '../../../../src/engine/execution/pipel
 import type { FrameworkManager } from '../../../../src/engine/frameworks/framework-manager.js';
 import type {
   FrameworkExecutionContext,
-  FrameworkMethodology,
+  FrameworkSelection,
 } from '../../../../src/engine/frameworks/types/index.js';
 import type { GateLoader } from '../../../../src/engine/gates/core/gate-loader.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
@@ -19,11 +19,9 @@ const createLogger = () => ({
 });
 
 /**
- * Creates a mock GateLoader that returns specified methodology gate IDs.
+ * Creates a mock GateLoader that returns specified framework gate IDs.
  */
-const createMockGateLoader = (
-  methodologyGateIds: string[] = ['framework-compliance']
-): GateLoader =>
+const createMockGateLoader = (frameworkGateIds: string[] = ['framework-compliance']): GateLoader =>
   ({
     loadGate: jest.fn(),
     loadGates: jest.fn(),
@@ -33,13 +31,13 @@ const createMockGateLoader = (
     clearCache: jest.fn(),
     isGateActive: jest.fn(),
     getStatistics: jest.fn(),
-    isMethodologyGate: jest
+    isFrameworkGate: jest
       .fn()
-      .mockImplementation((gateId: string) => Promise.resolve(methodologyGateIds.includes(gateId))),
-    isMethodologyGateCached: jest
+      .mockImplementation((gateId: string) => Promise.resolve(frameworkGateIds.includes(gateId))),
+    isFrameworkGateCached: jest
       .fn()
-      .mockImplementation((gateId: string) => methodologyGateIds.includes(gateId)),
-    getMethodologyGateIds: jest.fn().mockResolvedValue(methodologyGateIds),
+      .mockImplementation((gateId: string) => frameworkGateIds.includes(gateId)),
+    getFrameworkGateIds: jest.fn().mockResolvedValue(frameworkGateIds),
     setTemporaryGateRegistry: jest.fn(),
   }) as unknown as GateLoader;
 
@@ -53,10 +51,10 @@ const createConvertedPrompt = (overrides: Partial<ConvertedPrompt> = {}): Conver
   ...overrides,
 });
 
-const createFrameworkContext = (methodology: FrameworkMethodology): FrameworkExecutionContext => ({
+const createFrameworkContext = (framework: FrameworkSelection): FrameworkExecutionContext => ({
   category: 'analysis',
-  systemPrompt: `Use ${methodology}`,
-  selectedFramework: { name: methodology, methodology },
+  systemPrompt: `Use ${framework}`,
+  selectedFramework: { name: framework, framework },
 });
 
 describe('FrameworkResolutionStage', () => {
@@ -138,7 +136,7 @@ describe('FrameworkResolutionStage', () => {
     expect(context.frameworkContext).toBe(frameworkContext);
   });
 
-  test('applies frameworks to chain steps that require methodology gates', async () => {
+  test('applies frameworks to chain steps that require framework gates', async () => {
     const context = new ExecutionContext({ command: '>>chain' } as any);
     const stepOnePrompt = createConvertedPrompt({ id: 'first' });
     const stepTwoPrompt = createConvertedPrompt({ id: 'second' });

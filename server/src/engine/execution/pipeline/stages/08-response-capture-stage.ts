@@ -22,7 +22,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
   constructor(
     private readonly verdictProcessor: GateVerdictProcessor,
     private readonly stepCaptureService: StepCaptureService,
-    private readonly chainSessionManager: ChainSessionService,
+    private readonly chainSessionStore: ChainSessionService,
     logger: Logger
   ) {
     super(logger);
@@ -49,7 +49,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     }
 
     const scopeOptions = context.getScopeOptions();
-    const session = this.chainSessionManager.getSession(sessionId, scopeOptions);
+    const session = this.chainSessionStore.getSession(sessionId, scopeOptions);
     if (session === undefined) {
       this.logExit({ skipped: 'Session not found' });
       return;
@@ -61,7 +61,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     this.alignSessionContext(context, sessionContext, session, currentStepAtStart);
 
     // Refresh chain variables for downstream template rendering
-    context.state.session.chainContext = this.chainSessionManager.getChainContext(
+    context.state.session.chainContext = this.chainSessionStore.getChainContext(
       sessionId,
       scopeOptions
     );
@@ -78,7 +78,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     const isRetryLimitExceeded =
       authority !== undefined
         ? authority.isRetryLimitExceeded(sessionId)
-        : this.chainSessionManager.isRetryLimitExceeded(sessionId);
+        : this.chainSessionStore.isRetryLimitExceeded(sessionId);
 
     if (gateAction !== undefined && isRetryLimitExceeded) {
       const earlyExit = await this.verdictProcessor.handleGateAction(
@@ -111,7 +111,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     // Re-fetch session in case deferred verdict changed state
     const sessionAfterDeferred =
-      this.chainSessionManager.getSession(sessionId, scopeOptions) ?? session;
+      this.chainSessionStore.getSession(sessionId, scopeOptions) ?? session;
     const pendingResult = await this.verdictProcessor.processPendingReviewVerdict(
       context,
       sessionAfterDeferred,
@@ -126,8 +126,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     }
 
     // Capture step result (placeholder or real response)
-    const sessionForCapture =
-      this.chainSessionManager.getSession(sessionId, scopeOptions) ?? session;
+    const sessionForCapture = this.chainSessionStore.getSession(sessionId, scopeOptions) ?? session;
     await this.stepCaptureService.captureStep(
       context,
       sessionId,

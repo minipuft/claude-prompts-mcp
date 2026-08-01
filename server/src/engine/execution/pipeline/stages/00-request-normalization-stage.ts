@@ -1,4 +1,5 @@
 // @lifecycle canonical - Normalizes incoming execution requests before parsing.
+import { serializeOptionValue } from '../../../../shared/utils/index.js';
 import { McpToolRequestValidator } from '../../validation/request-validator.js';
 import { detectToolRoutingCommand } from '../routing/tool-routing.js';
 import { BasePipelineStage } from '../stage.js';
@@ -213,7 +214,7 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
       // Skip keys already present as inline args (key= or key:)
       if (new RegExp(`\\b${key}\\s*[=:]`).test(command)) continue;
       if (value === undefined || value === null) continue;
-      const serialized = typeof value === 'string' ? `'${value}'` : String(value);
+      const serialized = serializeOptionValue(value);
       parts.push(`${key}:${serialized}`);
     }
     return parts.join(' ');

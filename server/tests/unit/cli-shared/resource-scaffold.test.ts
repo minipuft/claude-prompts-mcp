@@ -90,18 +90,18 @@ describe('resource-scaffold', () => {
       expect(existsSync(join(result.path!, 'guidance.md'))).toBe(true);
     });
 
-    it('creates methodology directory with YAML and system-prompt', () => {
-      const result = createResourceDir(tempDir, 'methodologies', 'my-method', {
+    it('creates framework directory with YAML and system-prompt', () => {
+      const result = createResourceDir(tempDir, 'frameworks', 'my-method', {
         name: 'My Method',
         description: 'A custom method',
       });
 
       expect(result.success).toBe(true);
 
-      const content = readFileSync(join(result.path!, 'methodology.yaml'), 'utf8');
+      const content = readFileSync(join(result.path!, 'framework.yaml'), 'utf8');
       expect(content).toContain('id: my-method');
       expect(content).toContain('name: My Method');
-      expect(content).toContain('methodology: MY_METHOD');
+      expect(content).toContain('type: MY_METHOD');
       expect(content).toContain('version: 1.0.0');
       expect(content).toContain('enabled: false');
 
@@ -128,7 +128,7 @@ describe('resource-scaffold', () => {
     it('generates companion files with starter content', () => {
       const prompt = createResourceDir(tempDir, 'prompts', 'starter-p');
       const gate = createResourceDir(join(tempDir, '2'), 'gates', 'starter-g');
-      const method = createResourceDir(join(tempDir, '3'), 'methodologies', 'starter-m');
+      const method = createResourceDir(join(tempDir, '3'), 'frameworks', 'starter-m');
       const style = createResourceDir(join(tempDir, '4'), 'styles', 'starter-s');
 
       const promptContent = readFileSync(join(prompt.path!, 'user-message.md'), 'utf8');

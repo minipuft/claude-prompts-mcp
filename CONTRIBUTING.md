@@ -43,7 +43,7 @@ repo/
 │   ├── src/            # TypeScript sources
 │   ├── dist/           # Compiled runtime (SSOT for behavior)
 │   ├── prompts/        # Prompt registry and markdown templates
-│   ├── resources/      # Gates, methodologies, styles
+│   ├── resources/      # Gates, frameworks, styles
 │   ├── config.json     # Runtime configuration
 │   └── package.json    # Scripts + dependencies
 ├── docs/               # Canonical documentation (Diataxis)
@@ -74,19 +74,25 @@ repo/
 
 </details>
 
+## Documentation Standards
+
+Root-level `README.md` is governed by the [README Charter](docs/portfolio/readme-charter.md) — audience, voice rules, line budgets, Diátaxis section markers, and forbidden-word list. README PRs run `npm run validate:readme` and answer the charter block in the PR template.
+
+Docs under `docs/` follow the Diátaxis split documented in [docs/README.md](docs/README.md): tutorials (learning), how-to (problem-solving), reference (lookup), concepts (understanding).
+
 ## How to Contribute
 
 ### Contribution Types
 
 Choose the path that matches your change:
 
-| I want to...                  | Path                                                    | Key docs                                                        |
-| ----------------------------- | ------------------------------------------------------- | --------------------------------------------------------------- |
-| Fix a bug or add a feature    | [Code changes](#code-changes)                           | [Architecture](docs/architecture/overview.md)                   |
-| Create or edit a prompt/chain | [Prompt contributions](#prompt--chain-contributions)    | [Build Your First Prompt](docs/tutorials/build-first-prompt.md) |
-| Add or modify a quality gate  | [Gate contributions](#gate-contributions)               | [Gates Guide](docs/guides/gates.md)                             |
-| Add or modify a methodology   | [Methodology contributions](#methodology-contributions) | [Methodologies Guide](docs/guides/methodologies.md)             |
-| Improve documentation         | [Documentation](#documentation)                         | [Docs Index](docs/README.md)                                    |
+| I want to...                  | Path                                                 | Key docs                                                        |
+| ----------------------------- | ---------------------------------------------------- | --------------------------------------------------------------- |
+| Fix a bug or add a feature    | [Code changes](#code-changes)                        | [Architecture](docs/architecture/overview.md)                   |
+| Create or edit a prompt/chain | [Prompt contributions](#prompt--chain-contributions) | [Build Your First Prompt](docs/tutorials/build-first-prompt.md) |
+| Add or modify a quality gate  | [Gate contributions](#gate-contributions)            | [Gates Guide](docs/guides/gates.md)                             |
+| Add or modify a framework     | [Framework contributions](#framework-contributions)  | [Frameworks Guide](docs/guides/frameworks.md)                   |
+| Improve documentation         | [Documentation](#documentation)                      | [Docs Index](docs/README.md)                                    |
 
 ### Code Changes
 
@@ -115,11 +121,11 @@ All prompt/chain changes flow through MCP tools -- never edit files under `serve
 - See [Quality Gates](docs/concepts/quality-gates.md) for precedence and verification types
 - Update [Gates Guide](docs/guides/gates.md) when behavior changes
 
-### Methodology Contributions
+### Framework Contributions
 
-- Add methodology definitions under `server/resources/methodologies/{id}/`
-- Follow the structure: `methodology.yaml` + `phases.yaml` + optional `system-prompt.md` and `judge-prompt.md`
-- See [Methodologies Guide](docs/guides/methodologies.md) for configuration
+- Add framework definitions under `server/resources/frameworks/{id}/`
+- Follow the structure: `framework.yaml` + `phases.yaml` + optional `system-prompt.md` and `judge-prompt.md`
+- See [Frameworks Guide](docs/guides/frameworks.md) for configuration
 
 ### Documentation
 
@@ -277,7 +283,7 @@ When modifying pipeline stages (`server/src/engine/execution/pipeline/stages/`),
 ```typescript
 // Correct: accumulator with source tracking
 context.gates.add("research-quality", "registry-auto");
-context.gates.addAll(methodologyGates, "methodology");
+context.gates.addAll(frameworkGates, "framework-guide");
 const finalGates = context.gates.getAll();
 ```
 

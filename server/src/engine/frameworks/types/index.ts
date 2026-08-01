@@ -1,4 +1,4 @@
-// @lifecycle canonical - Barrel exports for framework and methodology type contracts.
+// @lifecycle canonical - Barrel exports for framework and framework type contracts.
 /**
  * Framework Types Index
  *
@@ -7,37 +7,34 @@
  * and provides a single source of truth for framework types.
  */
 
-// Methodology guide types
+// Framework guide types
 export type {
   ArgumentGuidance,
   ExecutionStep,
   FrameworkDefinition,
   FrameworkExecutionContext,
-  FrameworkMethodology,
+  FrameworkSelection,
   FrameworkSelectionCriteria,
   FrameworkType,
-  MethodologyGuide,
-  MethodologyEnhancement,
-  MethodologyToolDescription,
-  MethodologyToolDescriptions,
-  MethodologyValidation,
+  FrameworkGuide,
+  FrameworkEnhancement,
+  FrameworkToolDescription,
+  FrameworkToolDescriptions,
+  FrameworkValidation,
   ProcessingGuidance,
   ProcessingStep,
   PromptCreationGuidance,
   QualityGate,
   StepGuidance,
   TemplateEnhancement,
-} from './methodology-types.js';
+} from './framework-types.js';
 
-export { BaseMethodologyGuide } from './methodology-types.js';
+export { BaseFrameworkGuide } from './framework-types.js';
 
 // Prompt guidance types
 export type {
   FrameworkStateInfo,
-  MethodologyHealth,
-  MethodologyState,
-  MethodologySwitchRequest,
-  PersistedMethodologyState,
+  FrameworkHealth,
   PromptGuidanceAnalytics,
   PromptGuidanceConfig,
   PromptGuidanceResult,

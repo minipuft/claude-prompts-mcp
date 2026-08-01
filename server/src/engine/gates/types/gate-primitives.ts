@@ -45,14 +45,15 @@ export interface GatePassCriteria {
    * - `inline_guidance`: agent-facing self-assessment text (replaces former
    *   `content_check` and `pattern_check`; both were inert at runtime)
    * - `llm_self_check`: reserved, runner not yet implemented
-   * - `methodology_compliance`: enforced by phase guards (stage 09b)
+   * - `framework_compliance`: declarative only — GateValidator auto-passes it.
+   *   Stage 09b enforces phase guards from `phases.yaml`, not from this value.
    * - `shell_verify`: exit-code ground truth (supports response injection)
    * - `script_tool`: registered script with JSON stdin
    */
   type:
     | 'inline_guidance'
     | 'llm_self_check'
-    | 'methodology_compliance'
+    | 'framework_compliance'
     | 'shell_verify'
     | 'script_tool';
 
@@ -62,8 +63,8 @@ export interface GatePassCriteria {
   required_patterns?: string[];
   forbidden_patterns?: string[];
 
-  // Methodology compliance options
-  methodology?: string;
+  // Framework compliance options
+  framework?: string;
   min_compliance_score?: number;
   severity?: 'warn' | 'fail';
   quality_indicators?: Record<

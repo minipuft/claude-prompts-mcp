@@ -1,7 +1,7 @@
 # Claude Prompts MCP Server
 
 [![npm version](https://img.shields.io/npm/v/claude-prompts.svg)](https://www.npmjs.com/package/claude-prompts)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.18-brightgreen.svg)](https://nodejs.org/)
 
 MCP server for prompt management, thinking frameworks, and quality gates. Hot-reloads prompts, injects structured reasoning, enforces output validation—all through MCP tools Claude can call directly.
@@ -62,7 +62,7 @@ Claude: prompt_engine(command:">>code_review")  # Updated version runs instantly
 
 **Problem**: Claude's reasoning varies. Sometimes thorough, sometimes it skips steps. You want methodical thinking every time.
 
-**Solution**: Frameworks inject a thinking methodology into the system prompt. Claude follows defined reasoning phases. Each framework auto-applies quality gates for its phases.
+**Solution**: Frameworks inject a structured thinking method into the system prompt. Claude follows defined reasoning phases. Each framework auto-applies quality gates for its phases.
 
 ```text
 prompt_engine(command: "@CAGEERF Review this architecture")
@@ -145,7 +145,7 @@ prompt_engine(command: "@CAGEERF >>analysis :: 'cite sources'")
 prompt_engine(command: "research --> analyze --> summarize")
 ```
 
-### `resource_manager` — Unified CRUD for prompts, gates, and methodologies
+### `resource_manager` — Unified CRUD for prompts, gates, and frameworks
 
 ```bash
 resource_manager(resource_type: "prompt", action: "list")
@@ -170,13 +170,13 @@ system_control(action: "analytics")
 
 ## Syntax Reference
 
-| Symbol | Name          | What It Does                    |
-| :----: | :------------ | :------------------------------ |
-|  `>>`  | **Prompt**    | Execute template by ID          |
-| `-->`  | **Chain**     | Pipe output to next step        |
-|  `@`   | **Framework** | Inject methodology + auto-gates |
-|  `::`  | **Gate**      | Add quality criteria            |
-|  `%`   | **Modifier**  | Control execution mode          |
+| Symbol | Name          | What It Does                  |
+| :----: | :------------ | :---------------------------- |
+|  `>>`  | **Prompt**    | Execute template by ID        |
+| `-->`  | **Chain**     | Pipe output to next step      |
+|  `@`   | **Framework** | Inject framework + auto-gates |
+|  `::`  | **Gate**      | Add quality criteria          |
+|  `%`   | **Modifier**  | Control execution mode        |
 
 **Modifiers**: `%clean` (skip all injection), `%lean` (gates only), `%guided` (force injection), `%judge` (auto-select resources)
 
@@ -255,7 +255,7 @@ my-workspace/
 │               ├── schema.json  # Input validation schema
 │               └── script.py    # Validation logic
 ├── config.json               # Server settings (optional)
-├── methodologies/            # Custom thinking frameworks (optional)
+├── frameworks/               # Custom thinking frameworks (optional)
 └── gates/                    # Custom quality gates (optional)
 ```
 
@@ -328,7 +328,7 @@ This repo uses a Release PR flow to ensure the npm package version and changelog
       "command": "npx",
       "args": ["-y", "claude-prompts@latest", "--client", "claude-code"],
       "env": {
-        "MCP_PROMPTS_PATH": "/home/user/projects/my-app/prompts"
+        "MCP_WORKSPACE": "/home/user/projects/my-app"
       }
     }
   }
@@ -363,16 +363,17 @@ Supported presets:
 
 ### Environment Variables
 
-| Variable                 | Purpose                                         | Example                          |
-| ------------------------ | ----------------------------------------------- | -------------------------------- |
-| `MCP_WORKSPACE`          | Base directory containing prompts/, config.json | `/home/user/my-prompts`          |
-| `MCP_PROMPTS_PATH`       | Direct path to a prompts directory              | `/path/to/prompts`               |
-| `MCP_METHODOLOGIES_PATH` | Custom methodologies directory                  | `/path/to/methodologies`         |
-| `MCP_GATES_PATH`         | Custom gates directory                          | `/path/to/gates`                 |
-| `MCP_SCRIPTS_PATH`       | Custom scripts directory                        | `/path/to/scripts`               |
-| `MCP_STYLES_PATH`        | Custom styles directory                         | `/path/to/styles`                |
-| `MCP_CONFIG_PATH`        | Custom server config.json                       | `/path/to/config.json`           |
-| `LOG_LEVEL`              | Logging verbosity                               | `debug`, `info`, `warn`, `error` |
+| Variable             | Purpose                                                      | Example                          |
+| -------------------- | ------------------------------------------------------------ | -------------------------------- |
+| `MCP_WORKSPACE`      | Base directory containing prompts/, config.json              | `/home/user/my-prompts`          |
+| `MCP_RESOURCES_PATH` | Resources base override (frameworks, gates, styles, scripts) | `/path/to/resources`             |
+| `MCP_CONFIG_PATH`    | Custom server config.json                                    | `/path/to/config.json`           |
+| `LOG_LEVEL`          | Logging verbosity                                            | `debug`, `info`, `warn`, `error` |
+
+Per-resource-type path overrides (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_STYLES_PATH`,
+`MCP_SCRIPTS_PATH`, and the former `MCP_METHODOLOGIES_PATH`) were documented here but are not read
+anywhere in the server. Point `MCP_RESOURCES_PATH` at a resources directory instead; workspace
+resources overlay the bundled ones.
 
 **Resolution priority:** CLI flags > Environment variables > Workspace subdirectory > Package defaults
 
@@ -386,8 +387,8 @@ All flags accept both `--flag=value` and `--flag value` formats.
 # Use a workspace
 npx claude-prompts --workspace /path/to/workspace
 
-# Override specific paths
-npx claude-prompts --prompts /path/to/prompts
+# Override where resources are loaded from
+npx claude-prompts --workspace /path/to/workspace --config /path/to/config.json
 
 # Select transport
 npx claude-prompts --transport sse
@@ -409,11 +410,6 @@ npx claude-prompts --startup-test --verbose
 | `-h`, `--help`            | Show help and exit                                                               |
 | `--init /path`            | Initialize a new workspace with starters                                         |
 | `--workspace /path`       | Base directory for all user assets                                               |
-| `--prompts /path`         | Direct path to a prompts directory                                               |
-| `--methodologies /path`   | Custom methodologies directory                                                   |
-| `--gates /path`           | Custom gates directory                                                           |
-| `--scripts /path`         | Custom scripts directory                                                         |
-| `--styles /path`          | Custom styles directory                                                          |
 | `--config /path`          | Custom server config.json                                                        |
 | `--workspace-id VALUE`    | Launch default workspace scope                                                   |
 | `--organization-id VALUE` | Launch default organization scope                                                |
@@ -435,10 +431,10 @@ npx claude-prompts --startup-test --verbose
 - Check `MCP_WORKSPACE` points to a directory containing `prompts/`
 - Run `npx claude-prompts --startup-test --verbose` to see resolved paths
 
-**"Methodology not found"**
+**"Framework not found"**
 
-- Custom methodologies need `methodology.yaml` in each subdirectory
-- Use `MCP_METHODOLOGIES_PATH` to point to your methodologies folder
+- Custom frameworks need `framework.yaml` in each subdirectory of `resources/frameworks/`
+- Use `MCP_RESOURCES_PATH` to point at the resources directory that contains them
 
 **"Permission denied"**
 
@@ -446,7 +442,7 @@ npx claude-prompts --startup-test --verbose
 
 **Changes not appearing**
 
-- Confirm you're editing files under your configured `MCP_WORKSPACE` / `MCP_PROMPTS_PATH`
+- Confirm you're editing files under your configured `MCP_WORKSPACE` / `MCP_RESOURCES_PATH`
 - If needed, restart Claude Desktop (most clients restart MCP servers on reconnect)
 
 ---
@@ -492,4 +488,4 @@ Config: `skills-sync.yaml` (git-ignored, personal). See [Skills Sync Guide](docs
 
 ## License
 
-[AGPL-3.0](../LICENSE)
+[MIT](../LICENSE)

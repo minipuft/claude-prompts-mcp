@@ -26,12 +26,12 @@ import {
   SemanticAnalysisConfig,
   LLMIntegrationConfig,
   LoggingConfig,
-  FrameworksConfig,
+  ResolvedFrameworkConfig,
   ExecutionConfig,
   ChainSessionConfig,
   TransportMode,
   VersioningConfig,
-  MethodologiesConfig,
+  FrameworkSettings,
   VerificationConfig,
   AdvancedConfig,
   ResourcesConfig,
@@ -62,7 +62,7 @@ const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   },
 };
 
-const DEFAULT_FRAMEWORKS_CONFIG: FrameworksConfig = {
+const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
   dynamicToolDescriptions: true,
   injection: {
     systemPrompt: { enabled: true, frequency: 2, target: 'steps' },
@@ -74,7 +74,7 @@ const DEFAULT_FRAMEWORKS_CONFIG: FrameworksConfig = {
 const DEFAULT_GATES_CONFIG: GatesConfig = {
   enabled: true,
   definitionsDirectory: 'gates',
-  enableMethodologyGates: true,
+  enableFrameworkGates: true,
 };
 
 const DEFAULT_CHAIN_SESSION_CONFIG: ChainSessionConfig = {
@@ -91,7 +91,7 @@ const DEFAULT_RESOURCES_CONFIG: ResourcesConfig = {
   registerWithMcp: false, // Disabled by default - tools provide more efficient discovery
   prompts: { enabled: true },
   gates: { enabled: true },
-  methodologies: { enabled: true },
+  frameworks: { enabled: true },
   observability: {
     enabled: true,
     sessions: true,
@@ -136,7 +136,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   private fileWatcher: FSWatcher | undefined;
   private watching: boolean = false;
   private reloadDebounceTimer: NodeJS.Timeout | undefined;
-  private frameworksConfigCache: FrameworksConfig;
+  private frameworksConfigCache: ResolvedFrameworkConfig;
 
   constructor(configPath: string) {
     super();
@@ -259,10 +259,10 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
   /**
    * Get frameworks configuration (includes injection settings)
-   * Reads from methodologies config section
+   * Reads from frameworks config section
    */
-  getFrameworksConfig(): FrameworksConfig {
-    const m = this.config.methodologies;
+  getFrameworksConfig(): ResolvedFrameworkConfig {
+    const m = this.config.frameworks;
     const def = DEFAULT_FRAMEWORKS_CONFIG.injection!;
     return {
       dynamicToolDescriptions:
@@ -295,8 +295,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     return {
       enabled: gatesConfig.enabled ?? DEFAULT_GATES_CONFIG.enabled,
       definitionsDirectory: gatesConfig.directory ?? DEFAULT_GATES_CONFIG.definitionsDirectory,
-      enableMethodologyGates:
-        gatesConfig.methodologyGates ?? DEFAULT_GATES_CONFIG.enableMethodologyGates,
+      // `methodologyGates` is the pre-rename config.json key. Folded here rather than at each
+      // consumer so only this function knows both spellings exist.
+      enableFrameworkGates:
+        gatesConfig.frameworkGates ??
+        gatesConfig.methodologyGates ??
+        DEFAULT_GATES_CONFIG.enableFrameworkGates,
     };
   }
 
@@ -360,8 +364,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       gates: {
         enabled: cfg.gates?.enabled ?? def.gates?.enabled ?? true,
       },
-      methodologies: {
-        enabled: cfg.methodologies?.enabled ?? def.methodologies?.enabled ?? true,
+      frameworks: {
+        enabled: cfg.frameworks?.enabled ?? def.frameworks?.enabled ?? true,
       },
       observability: {
         enabled: cfg.observability?.enabled ?? def.observability?.enabled ?? true,
@@ -552,9 +556,30 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       this.config.transport = DEFAULT_TRANSPORT_MODE;
     }
 
-    // Ensure methodologies config exists (new-style)
-    if (!this.config.methodologies) {
-      this.config.methodologies = {
+    // Adopt the legacy `methodologies:` section if a pre-rename config.json still carries it,
+    // then drop it so only one key remains. Values are identical — this was a rename, not a
+    // schema change — so adoption is lossless and no user edit is required.
+    const legacySection = (this.config as { methodologies?: FrameworkSettings }).methodologies;
+    if (legacySection && !this.config.frameworks) {
+      this.config.frameworks = legacySection;
+    }
+    delete (this.config as { methodologies?: unknown }).methodologies;
+
+    // Same rename one level down: `resources.methodologies` -> `resources.frameworks`. Without
+    // this the old key is read as undefined and silently falls back to the default, so a user who
+    // had deliberately disabled framework resources would find them re-enabled with no error.
+    const legacyResources = this.config.resources as
+      | (ResourcesConfig & { methodologies?: { enabled?: boolean } })
+      | undefined;
+    if (legacyResources?.methodologies && !legacyResources.frameworks) {
+      legacyResources.frameworks = legacyResources.methodologies;
+    }
+    if (legacyResources) {
+      delete legacyResources.methodologies;
+    }
+
+    if (!this.config.frameworks) {
+      this.config.frameworks = {
         enabled: true,
         dynamicToolDescriptions: DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
         systemPromptFrequency: DEFAULT_FRAMEWORKS_CONFIG.injection?.systemPrompt?.frequency ?? 2,
@@ -714,7 +739,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     this.emit('configChanged', this.getConfig());
   }
 
-  private emitConfigChange(previousFrameworks: FrameworksConfig): void {
+  private emitConfigChange(previousFrameworks: ResolvedFrameworkConfig): void {
     const currentFrameworks = this.getFrameworksConfig();
     const frameworksChanged = this.haveFrameworkConfigsChanged(
       previousFrameworks,
@@ -726,7 +751,10 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     }
   }
 
-  private haveFrameworkConfigsChanged(a: FrameworksConfig, b: FrameworksConfig): boolean {
+  private haveFrameworkConfigsChanged(
+    a: ResolvedFrameworkConfig,
+    b: ResolvedFrameworkConfig
+  ): boolean {
     return (
       a.dynamicToolDescriptions !== b.dynamicToolDescriptions ||
       a.injection?.systemPrompt?.enabled !== b.injection?.systemPrompt?.enabled ||

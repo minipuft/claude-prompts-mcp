@@ -5,6 +5,7 @@ import {
   type InjectionConfig,
   type InjectionType,
   type InjectionRuntimeOverride,
+  type PromptInjectionConfig,
   getSessionOverrideResolver,
   isSessionOverrideResolverInitialized,
 } from '../decisions/injection/index.js';
@@ -24,7 +25,7 @@ type InjectionConfigProvider = () => InjectionConfig;
  *
  * Key improvements over the old system:
  * - Clear boolean semantics: inject=true means INJECT, inject=false means SKIP
- * - Hierarchical configuration: Global → Category → Chain → Step
+ * - Hierarchical configuration: Global → Category → Chain → Prompt → Step
  * - Multiple injection types controlled separately
  * - Conditional injection based on gate status, step type, etc.
  * - Runtime overrides via system_control
@@ -138,6 +139,11 @@ export class InjectionControlStage extends BasePipelineStage {
       input.promptId = promptId;
     }
 
+    const promptInjection = this.getPromptInjection(context);
+    if (promptInjection !== undefined) {
+      input.promptInjection = promptInjection;
+    }
+
     const modifiers = context.executionPlan?.modifiers;
     if (modifiers) {
       input.modifiers = modifiers;
@@ -211,6 +217,23 @@ export class InjectionControlStage extends BasePipelineStage {
     }
 
     return undefined;
+  }
+
+  /**
+   * Get the prompt's own injection block from the context.
+   *
+   * For a chain, the block is read from the step currently executing rather than the chain's
+   * entry prompt: each step is a different prompt, and a step's own declaration is what the
+   * prompt tier is meant to express. Mirrors how `getStepType` indexes the step list.
+   */
+  private getPromptInjection(context: ExecutionContext): PromptInjectionConfig | undefined {
+    if (context.hasChainCommand()) {
+      const currentStep = context.sessionContext?.currentStep ?? 1;
+      const step = context.parsedCommand.steps[currentStep - 1];
+      return step?.convertedPrompt?.injection;
+    }
+
+    return context.parsedCommand?.convertedPrompt?.injection;
   }
 
   /**

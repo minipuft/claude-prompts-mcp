@@ -22,6 +22,8 @@ export interface Category {
   description: string;
   /** MCP registration default for prompts in this category. Default: true */
   registerWithMcp?: boolean;
+  /** Native MCP prompt behavior default for prompts in this category: 'expand' or 'launch'. Default: 'expand' */
+  mcpPromptMode?: 'expand' | 'launch';
 }
 
 // Re-export cross-layer types for backward compatibility.
@@ -50,9 +52,7 @@ export interface PromptFile {
 
 // PromptsFile and PromptsConfigFile removed — JSON prompts.json format deprecated.
 
-// PromptsConfig definition moved to shared/types/core-config.ts (canonical source).
-// Re-export for backward compatibility.
-export type { PromptsConfig } from '../../shared/types/core-config.js';
+// PromptsConfig is defined in shared/types/core-config.ts. Import it from there directly.
 
 /**
  * Prompt file content structure

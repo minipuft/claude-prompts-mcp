@@ -14,7 +14,7 @@
  */
 
 import { ConvertedPrompt } from '../../engine/execution/types.js';
-import { BUILTIN_FRAMEWORK_TYPES } from '../../engine/frameworks/types/methodology-types.js';
+import { BUILTIN_FRAMEWORK_TYPES } from '../../engine/frameworks/types/framework-types.js';
 import { SemanticAnalysisConfig } from '../../types.js';
 
 import type { LLMClient } from './types.js';
@@ -170,7 +170,7 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
       categories: ['single', 'prompt', 'template', 'chain'],
       // Use built-in frameworks for LLM classification guidance
       // Note: Custom frameworks are handled by FrameworkManager at runtime
-      methodologies: [...BUILTIN_FRAMEWORK_TYPES, 'none'],
+      frameworks: [...BUILTIN_FRAMEWORK_TYPES, 'none'],
     });
 
     const normalizedExecution = this.normalizeExecutionType(llmResult.executionType);
@@ -234,7 +234,7 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
       hasUserTemplate: Boolean(userTemplate.trim()),
       // These are set to false since we removed structural pattern detection
       hasStructuredReasoning: false,
-      hasMethodologyKeywords: false,
+      hasFrameworkKeywords: false,
       hasComplexAnalysis: false,
       advancedChainFeatures: undefined,
     };
@@ -338,7 +338,7 @@ export class ContentAnalyzer implements ContentAnalyzerPort {
         hasSystemMessage: Boolean(prompt.systemMessage),
         hasUserTemplate: Boolean(prompt.userMessageTemplate),
         hasStructuredReasoning: false,
-        hasMethodologyKeywords: false,
+        hasFrameworkKeywords: false,
         hasComplexAnalysis: false,
       },
 

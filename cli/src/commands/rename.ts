@@ -18,7 +18,7 @@ export async function rename(options: RenameOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm rename <prompt|gate|methodology|style> <old-id> <new-id>\n` +
+      `Usage: cpm rename <prompt|gate|framework|style> <old-id> <new-id>\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
@@ -26,7 +26,7 @@ export async function rename(options: RenameOptions): Promise<number> {
 
   if (!options.oldId || !options.newId) {
     console.error(
-      'Usage: cpm rename <prompt|gate|methodology|style> <old-id> <new-id>\nBoth old and new IDs are required.',
+      'Usage: cpm rename <prompt|gate|framework|style> <old-id> <new-id>\nBoth old and new IDs are required.',
     );
     return 1;
   }

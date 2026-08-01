@@ -16,7 +16,7 @@ interface CliAction {
 const CLI_ACTIONS: CliAction[] = [
   {
     id: 'validate',
-    command: 'cpm validate [--prompts|--gates|--methodologies|--styles|--all]',
+    command: 'cpm validate [--prompts|--gates|--frameworks|--styles|--all]',
     category: 'discovery',
     description: 'Validate workspace resources against Zod schemas',
     keywords: ['check', 'verify', 'lint', 'schema', 'valid'],
@@ -100,9 +100,9 @@ const CLI_ACTIONS: CliAction[] = [
   },
   {
     id: 'toggle',
-    command: 'cpm toggle <methodology|style> <id>',
+    command: 'cpm toggle <framework|style> <id>',
     category: 'lifecycle',
-    description: 'Toggle enabled state for a methodology or style',
+    description: 'Toggle enabled state for a framework or style',
     keywords: ['toggle', 'enable', 'disable', 'activate', 'switch'],
   },
   {

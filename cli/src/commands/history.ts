@@ -16,14 +16,14 @@ export async function history(options: HistoryOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm history <prompt|gate|methodology|style> <id>\n` +
+      `Usage: cpm history <prompt|gate|framework|style> <id>\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
   }
 
   if (!options.id) {
-    console.error('Usage: cpm history <prompt|gate|methodology|style> <id>\nResource ID is required.');
+    console.error('Usage: cpm history <prompt|gate|framework|style> <id>\nResource ID is required.');
     return 1;
   }
 

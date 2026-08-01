@@ -27,6 +27,10 @@ import { MockLogger } from '../../helpers/test-helpers.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 
 import type { VersioningConfig, HistoryFile } from '../../../src/modules/versioning/types.js';
+import { SqliteEngine } from '../../../src/infra/database/index.js';
+
+/** Subset of the resource-manager `ResourceType` union that this workflow versions. */
+type VersionedResourceType = 'prompt' | 'gate' | 'framework';
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 
@@ -55,19 +59,16 @@ class MockVersioningConfigProvider implements VersioningConfigProvider {
  */
 class SimulatedResourceManager {
   private versionHistoryService: VersionHistoryService;
-  private resourceDir: string;
-  private resourceType: 'prompt' | 'gate' | 'methodology';
+  private resourceType: VersionedResourceType;
   private resourceId: string;
   private currentState: Record<string, unknown>;
 
   constructor(deps: {
     versionHistoryService: VersionHistoryService;
-    resourceDir: string;
-    resourceType: 'prompt' | 'gate' | 'methodology';
+    resourceType: VersionedResourceType;
     resourceId: string;
   }) {
     this.versionHistoryService = deps.versionHistoryService;
-    this.resourceDir = deps.resourceDir;
     this.resourceType = deps.resourceType;
     this.resourceId = deps.resourceId;
     this.currentState = {};
@@ -78,7 +79,6 @@ class SimulatedResourceManager {
 
     // Save initial version
     await this.versionHistoryService.saveVersion(
-      this.resourceDir,
       this.resourceType,
       this.resourceId,
       this.currentState,
@@ -99,7 +99,6 @@ class SimulatedResourceManager {
       Object.keys(this.currentState).length > 0
     ) {
       await this.versionHistoryService.saveVersion(
-        this.resourceDir,
         this.resourceType,
         this.resourceId,
         this.currentState,
@@ -114,7 +113,10 @@ class SimulatedResourceManager {
   }
 
   async history(limit?: number): Promise<HistoryFile | null> {
-    const history = await this.versionHistoryService.loadHistory(this.resourceDir);
+    const history = await this.versionHistoryService.loadHistory(
+      this.resourceType,
+      this.resourceId
+    );
     if (!history) return null;
 
     if (limit && history.versions.length > limit) {
@@ -128,7 +130,6 @@ class SimulatedResourceManager {
     version: number
   ): Promise<{ success: boolean; restoredState?: Record<string, unknown> }> {
     const result = await this.versionHistoryService.rollback(
-      this.resourceDir,
       this.resourceType,
       this.resourceId,
       version,
@@ -145,7 +146,8 @@ class SimulatedResourceManager {
 
   async compare(fromVersion: number, toVersion: number) {
     const result = await this.versionHistoryService.compareVersions(
-      this.resourceDir,
+      this.resourceType,
+      this.resourceId,
       fromVersion,
       toVersion
     );
@@ -182,6 +184,7 @@ describe('Version History Workflow Integration', () => {
   let mockLogger: MockLogger;
   let mockConfigProvider: MockVersioningConfigProvider;
   let tempDir: string;
+  let dbManager: SqliteEngine;
 
   beforeEach(async () => {
     mockLogger = new MockLogger();
@@ -191,17 +194,22 @@ describe('Version History Workflow Integration', () => {
       auto_version: true,
     });
 
+    // Temp dir first: the SQLite engine is created inside it so teardown removes both.
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'version-workflow-test-'));
+
+    dbManager = await SqliteEngine.getInstance(tempDir, mockLogger as unknown as Logger);
+    await dbManager.initialize();
+
     versionHistoryService = new VersionHistoryService({
       logger: mockLogger as unknown as Logger,
       configManager: mockConfigProvider,
+      dbManager,
     });
-
-    // Create temp directory for test resources
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'version-workflow-test-'));
   });
 
   afterEach(async () => {
     try {
+      await dbManager.shutdown();
       await fs.rm(tempDir, { recursive: true, force: true });
     } catch {
       // Ignore cleanup errors
@@ -210,12 +218,8 @@ describe('Version History Workflow Integration', () => {
 
   describe('Complete CRUD → Version Lifecycle', () => {
     it('should track versions through create → update → update workflow', async () => {
-      const resourceDir = path.join(tempDir, 'prompts', 'my-prompt');
-      await fs.mkdir(resourceDir, { recursive: true });
-
       const manager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir,
         resourceType: 'prompt',
         resourceId: 'my-prompt',
       });
@@ -241,12 +245,8 @@ describe('Version History Workflow Integration', () => {
     });
 
     it('should allow skipping version on minor updates', async () => {
-      const resourceDir = path.join(tempDir, 'gates', 'quality');
-      await fs.mkdir(resourceDir, { recursive: true });
-
       const manager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir,
         resourceType: 'gate',
         resourceId: 'quality',
       });
@@ -264,12 +264,8 @@ describe('Version History Workflow Integration', () => {
 
   describe('History Retrieval with Limits', () => {
     it('should limit history results when requested', async () => {
-      const resourceDir = path.join(tempDir, 'prompts', 'versioned');
-      await fs.mkdir(resourceDir, { recursive: true });
-
       const manager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir,
         resourceType: 'prompt',
         resourceId: 'versioned',
       });
@@ -293,13 +289,9 @@ describe('Version History Workflow Integration', () => {
 
   describe('Rollback Workflow', () => {
     it('should rollback to previous version and restore state', async () => {
-      const resourceDir = path.join(tempDir, 'methodologies', 'custom');
-      await fs.mkdir(resourceDir, { recursive: true });
-
       const manager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir,
-        resourceType: 'methodology',
+        resourceType: 'framework',
         resourceId: 'custom',
       });
 
@@ -329,12 +321,8 @@ describe('Version History Workflow Integration', () => {
     });
 
     it('should fail rollback to non-existent version', async () => {
-      const resourceDir = path.join(tempDir, 'prompts', 'test');
-      await fs.mkdir(resourceDir, { recursive: true });
-
       const manager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir,
         resourceType: 'prompt',
         resourceId: 'test',
       });
@@ -348,12 +336,8 @@ describe('Version History Workflow Integration', () => {
 
   describe('Version Comparison', () => {
     it('should compare two versions and identify changes', async () => {
-      const resourceDir = path.join(tempDir, 'prompts', 'compare-test');
-      await fs.mkdir(resourceDir, { recursive: true });
-
       const manager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir,
         resourceType: 'prompt',
         resourceId: 'compare-test',
       });
@@ -373,12 +357,8 @@ describe('Version History Workflow Integration', () => {
     });
 
     it('should handle comparison with invalid version', async () => {
-      const resourceDir = path.join(tempDir, 'prompts', 'invalid');
-      await fs.mkdir(resourceDir, { recursive: true });
-
       const manager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir,
         resourceType: 'prompt',
         resourceId: 'invalid',
       });
@@ -393,12 +373,8 @@ describe('Version History Workflow Integration', () => {
 
   describe('Config Hot-Reload Behavior', () => {
     it('should respect config changes during session', async () => {
-      const resourceDir = path.join(tempDir, 'prompts', 'config-test');
-      await fs.mkdir(resourceDir, { recursive: true });
-
       const manager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir,
         resourceType: 'prompt',
         resourceId: 'config-test',
       });
@@ -429,15 +405,11 @@ describe('Version History Workflow Integration', () => {
     });
 
     it('should apply max_versions limit dynamically', async () => {
-      const resourceDir = path.join(tempDir, 'prompts', 'limit-test');
-      await fs.mkdir(resourceDir, { recursive: true });
-
       // Start with high limit
       mockConfigProvider.setConfig({ max_versions: 100 });
 
       const manager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir,
         resourceType: 'prompt',
         resourceId: 'limit-test',
       });
@@ -465,21 +437,14 @@ describe('Version History Workflow Integration', () => {
 
   describe('Cross-Resource Type Isolation', () => {
     it('should maintain separate version histories per resource', async () => {
-      const promptDir = path.join(tempDir, 'prompts', 'shared-name');
-      const gateDir = path.join(tempDir, 'gates', 'shared-name');
-      await fs.mkdir(promptDir, { recursive: true });
-      await fs.mkdir(gateDir, { recursive: true });
-
       const promptManager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir: promptDir,
         resourceType: 'prompt',
         resourceId: 'shared-name',
       });
 
       const gateManager = new SimulatedResourceManager({
         versionHistoryService,
-        resourceDir: gateDir,
         resourceType: 'gate',
         resourceId: 'shared-name',
       });

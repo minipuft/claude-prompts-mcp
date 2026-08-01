@@ -77,7 +77,7 @@ describe('ContentAnalyzer (minimal mode - LLM not configured)', () => {
     const result = await analyzer.analyzePrompt(
       createPrompt({
         id: 'complex',
-        userMessageTemplate: 'Analyze {{content}} with comprehensive methodology',
+        userMessageTemplate: 'Analyze {{content}} with comprehensive framework',
       })
     );
 

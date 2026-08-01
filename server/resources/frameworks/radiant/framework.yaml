@@ -1,0 +1,212 @@
+# RADIANT Framework Definition
+# CloudySky design-language framework — a persistent reminder of design goals, vision,
+# palette philosophy, motion, surfaces, constraints, and verification across every visual
+# idea and implementation. Source of truth (runtime-loaded; no build artifacts).
+
+id: radiant
+name: RADIANT Design Framework
+type: RADIANT
+version: 1.0.0
+enabled: true
+
+# System prompt guidance injected when framework is active
+systemPromptGuidance: |
+  Apply the RADIANT design framework to every CloudySky visual idea and implementation.
+  RADIANT is a persistent reminder of the design pillars, not a one-time gate — before
+  proposing or building anything, restate the pillars the idea must honor and check the
+  work against them.
+
+  **Reference the Vision**: Anchor the idea to CloudySky's north star — an album-adaptive atmosphere that recolors Spotify through its OWN design tokens rather than repainting content elements; atmospheric light over flat surface paint. The album supplies the pigments; the compose pass photographs the scene.
+  **Articulate Goals**: Name the specific design goals this idea serves and the feeling/mood it should evoke, each with an observable success criterion someone could confirm in the live client.
+  **Draw the Palette**: Honor the color philosophy — one chroma-unbounded OKLCH scene-linear master, album-sourced pigments, identity by LIGHT not pigment (survive dark albums via floored OKLCH light, not bg-ramp rank), display transforms applied LAST per target. No premature sRGB clamp, no hardcoded surface hex.
+  **Infuse Atmosphere & Motion**: Treat the scene as a linear-light radiance field synthesized additively in the float FBO. Audio drives MOTION and chroma, never luminance (luminance is reserved for legibility). Beat is a rock-in-pond ripple / small core pop, not a brightness term.
+  **Anchor to Surfaces**: Route bulk color through bridge.scss onto Spotify's Encore (--background-base, --text-base) and --spice-* tokens so the whole client recolors itself; reserve global.scss / dom-targets.scss selectors for effects, transparency, layering, and focal zones ONLY — never per-element or enumerated repaint.
+  **Navigate Constraints**: Respect Spicetify/CEF reality (Chrome 146, SDR-only surface — HDR is a host limit), performance budgets (per-frame vars drive transform/opacity only), and the single unified HDR/SDR OKLCH color-volume operator.
+  **Test in the Living Client**: Validate against color truth and the live CDP bridge — judge gradient/album color from colors() and diagnostics().hdr.gradientInputs, NEVER from --cs-* CSS tokens or paletteFallback. Name the tools/cdp tool used to confirm.
+
+  The Materials Creed (top of docs/DESIGN_BIBLE.md, eight numbered lines) is binding for
+  materials-era work: state the creed line the work serves, the line it most risks, and the
+  observable check that would catch the violation ("creed: n/a — no visual surface" when none applies).
+
+  Each pillar restates a design constraint that must remain visible across ideation and
+  implementation. Keep the album anchor and the intended feeling in view throughout.
+
+# Reference to phases file (inlined at load time)
+phasesFile: phases.yaml
+
+# Reference to judge prompt (inlined at load time)
+judgePromptFile: judge-prompt.md
+
+# Gate configurations
+gates:
+  include:
+    - framework-compliance
+
+# Framework-specific quality gates
+frameworkGates:
+  - id: vision_clarity
+    name: Vision Clarity
+    description: The idea is tied to CloudySky's atmospheric album-adaptive vision and honors recolor-through-tokens.
+    frameworkArea: ReferenceVision
+    priority: high
+    validationCriteria:
+      - Idea is explicitly tied to the album-adaptive atmospheric vision
+      - Recolor-through-Spotify-tokens (not per-element repaint) is honored
+      - The intended feeling/mood is named
+
+  - id: goals_observable
+    name: Goals Observable
+    description: Design goals are specific and have observable success criteria.
+    frameworkArea: ArticulateGoals
+    priority: high
+    validationCriteria:
+      - At least one specific design goal is stated
+      - Each goal has a success criterion observable in the live client
+
+  - id: palette_fidelity
+    name: Palette Fidelity
+    description: Color is reasoned in OKLCH scene-linear terms with no premature clamp.
+    frameworkArea: DrawPalette
+    priority: high
+    validationCriteria:
+      - Color is reasoned in OKLCH / scene-linear terms
+      - No premature sRGB clamp or hardcoded surface hex
+      - Identity-by-light (dark-album survivability) is considered
+
+  - id: motion_legibility
+    name: Motion Preserves Legibility
+    description: Audio reactivity is expressed as motion/chroma, not luminance.
+    frameworkArea: InfuseAtmosphereMotion
+    priority: high
+    validationCriteria:
+      - Audio reactivity drives motion/chroma, not luminance
+      - Beat is treated as a ripple/impulse, not a brightness pop
+      - Luminance is preserved for legibility
+
+  - id: surface_routing
+    name: Surface Routing Correctness
+    description: Bulk color flows through the bridge; selectors are reserved for effects.
+    frameworkArea: AnchorSurfaces
+    priority: high
+    validationCriteria:
+      - Bulk color is routed through bridge.scss onto Encore/spice tokens
+      - Effect/transparency selectors are not used for bulk recolor
+      - No enumerated content-element repaint
+
+  - id: constraint_fidelity
+    name: Constraint Fidelity
+    description: Spicetify/CEF limits, performance budgets, and the unified operator are respected.
+    frameworkArea: NavigateConstraints
+    priority: medium
+    validationCriteria:
+      - Spicetify/CEF limits acknowledged (Chrome 146, SDR-only surface)
+      - Performance budget considered (per-frame vars drive transform/opacity only)
+      - Unified HDR/SDR color-volume operator respected
+
+  - id: live_verification
+    name: Live Verification Plan
+    description: Verification uses color truth and the live CDP bridge, not CSS tokens.
+    frameworkArea: TestLivingClient
+    priority: high
+    validationCriteria:
+      - Verification plan uses color truth (colors() / gradientInputs)
+      - A specific tools/cdp tool is named for validation
+      - Color is not judged from --cs-* tokens or paletteFallback
+
+# Template enhancement suggestions
+templateSuggestions:
+  - section: system
+    type: addition
+    description: Prepend the RADIANT design pillars as a persistent reminder
+    content: |
+      Apply the RADIANT design framework: Reference the Vision, Articulate Goals, Draw the Palette, Infuse Atmosphere & Motion, Anchor to Surfaces, Navigate Constraints, Test in the Living Client.
+    frameworkJustification: Keeps CloudySky's design goals, vision, palette philosophy, and constraints in view across every idea so implementations stay on-philosophy.
+    impact: high
+
+  - section: user
+    type: structure
+    description: Anchor the idea to an album context and a named design intent
+    content: |
+      State the album_context and design_intent this idea is designed against, then address each RADIANT pillar in order.
+    frameworkJustification: Grounds palette and motion decisions in a concrete album and an observable goal, as Draw the Palette and Articulate Goals require.
+    impact: medium
+
+# Framework elements for prompt creation guidance
+frameworkElements:
+  requiredSections:
+    - Reference the Vision
+    - Articulate Goals
+    - Draw the Palette
+    - Infuse Atmosphere & Motion
+    - Anchor to Surfaces
+  optionalSections:
+    - Navigate Constraints
+    - Test in the Living Client
+  sectionDescriptions:
+    Reference the Vision: Restate CloudySky's album-adaptive atmospheric north star and how this idea recolors through Spotify's own tokens rather than repainting elements.
+    Articulate Goals: Name the specific design goals and the feeling/mood, each with an observable success criterion.
+    Draw the Palette: Reason color in OKLCH scene-linear terms — chroma-unbounded master, album-sourced, identity by light, display transform last.
+    Infuse Atmosphere & Motion: Describe how the radiance scene moves with audio (motion/chroma, never luminance) and how the beat reads as a ripple.
+    Anchor to Surfaces: Specify where color is routed — bridge onto Encore/spice tokens — and which effect/transparency/focal selectors are touched.
+    Navigate Constraints: Acknowledge Spicetify/CEF reality, performance budgets, and the unified HDR/SDR operator.
+    Test in the Living Client: Define how the result is verified via color truth and the live CDP bridge.
+
+# Argument suggestions for prompt creation
+argumentSuggestions:
+  - name: album_context
+    type: string
+    description: The reference album art / palette character the idea is designed against.
+    frameworkReason: Draw the Palette and Reference the Vision require an album anchor — identity-by-light survivability is judged against real cover characteristics.
+    examples:
+      - dark near-black cover
+      - highly chromatic green album
+      - monochrome grayscale art
+
+  - name: design_intent
+    type: string
+    description: The feeling/mood and specific design goal the idea should evoke.
+    frameworkReason: Articulate Goals requires a named intent with observable success criteria.
+    examples:
+      - calm atmospheric depth
+      - energetic beat-anticipating shimmer
+      - legible focal spotlight
+
+  - name: surface_scope
+    type: string
+    description: Which layer the idea touches — bridge tokens, atmospheric effect, focal zone, or canvas field.
+    frameworkReason: Anchor to Surfaces requires knowing whether bulk color (bridge) or effects/transparency (global/dom-targets) is in scope.
+    examples:
+      - bridge token recolor
+      - canvas radiance field
+      - focal-zone transparency
+
+# Tool description overlays when this framework is active
+toolDescriptions:
+  prompt_engine:
+    description: |
+      🌅 PROMPT ENGINE [RADIANT]: CloudySky design-language framework with ground-truth validation.
+
+      WHAT IT RETURNS: Prepared prompt + RADIANT pillar instructions (Reference the Vision → Articulate Goals → Draw the Palette → Infuse Atmosphere & Motion → Anchor to Surfaces → Navigate Constraints → Test in the Living Client).
+      WHAT YOU DO: Restate the pillars and check each visual idea/implementation against them.
+
+      SYNTAX:
+      - >>prompt_id key:"value"              # Run prompt with arguments
+      - >>step1 --> >>step2                  # Chain multiple steps
+      - @RADIANT >>prompt                    # Apply RADIANT framework
+      - :: verify:"npm test" :full           # Shell validation (5 attempts, 5min)
+
+      PRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)
+      MODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)
+    parameters:
+      command: 'Prompt ID or CloudySky visual idea to expand. Result includes RADIANT pillar guidance for you to apply.'
+  resource_manager:
+    description: |
+      🗂️ RESOURCE MANAGER [RADIANT]: Unified CRUD for prompts, gates, and frameworks. Use action:"guide" with your current RADIANT pillar for phase-appropriate recommendations.
+    parameters:
+      resource_type: "Type of resource: 'prompt', 'gate', or 'framework'"
+      action: "Use 'guide' with your current RADIANT pillar for phase-appropriate action recommendations."
+  system_control:
+    description: |
+      ⚙️ SYSTEM CONTROL [RADIANT]: System administration. Status shows the active RADIANT pillar context.
+    parameters:
+      action: "Use 'guide' with topic:'framework' for pillar-specific operation guidance."

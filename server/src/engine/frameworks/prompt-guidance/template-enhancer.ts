@@ -1,4 +1,4 @@
-// @lifecycle canonical - Enhances templates with methodology-specific guidance blocks.
+// @lifecycle canonical - Enhances templates with framework-specific guidance blocks.
 /**
  * Template Enhancer - Resource-Driven Implementation
  *
@@ -17,8 +17,8 @@ import type { ConvertedPrompt } from '../../execution/types.js';
  * Template enhancement configuration
  */
 export interface TemplateEnhancerConfig {
-  enableArgumentSuggestions: boolean; // Kept for compat
-  enableStructureOptimization: boolean; // Kept for compat
+  /** When set, prepends a `##` heading to templates that do not already start with one. */
+  enableStructureOptimization: boolean;
 }
 
 /**
@@ -33,7 +33,6 @@ export class TemplateEnhancer {
   constructor(logger: Logger, config?: Partial<TemplateEnhancerConfig>) {
     this.logger = logger;
     this.config = {
-      enableArgumentSuggestions: true,
       enableStructureOptimization: true,
       ...config,
     };
@@ -47,7 +46,7 @@ export class TemplateEnhancer {
     template: string,
     prompt: ConvertedPrompt,
     // Legacy args kept for interface compatibility but unused
-    _methodologyGuide?: any,
+    _frameworkGuide?: any,
     _framework?: any,
     _context?: any
   ): Promise<{

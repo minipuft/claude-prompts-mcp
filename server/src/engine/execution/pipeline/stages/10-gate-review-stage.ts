@@ -25,7 +25,7 @@ export class GateReviewStage extends BasePipelineStage {
 
   constructor(
     private readonly chainOperatorExecutor: ChainOperatorExecutor,
-    private readonly chainSessionManager: ChainSessionService,
+    private readonly chainSessionStore: ChainSessionService,
     private readonly gateDefinitionProvider: GateDefinitionProvider | null,
     logger: Logger,
     private readonly gatesConfigProvider?: GatesConfigProvider
@@ -48,7 +48,7 @@ export class GateReviewStage extends BasePipelineStage {
       return;
     }
 
-    const pendingReview = this.chainSessionManager.getPendingGateReview(sessionId);
+    const pendingReview = this.chainSessionStore.getPendingGateReview(sessionId);
     if (!pendingReview) {
       this.logExit({ skipped: 'Pending gate review missing from session manager' });
       return;
@@ -87,7 +87,7 @@ export class GateReviewStage extends BasePipelineStage {
           );
 
           if (allGatesCovered) {
-            await this.chainSessionManager.clearPendingGateReview(sessionId);
+            await this.chainSessionStore.clearPendingGateReview(sessionId);
 
             context.executionResults = {
               content: shellSection,
@@ -113,7 +113,7 @@ export class GateReviewStage extends BasePipelineStage {
         }
       }
 
-      const chainContext = this.chainSessionManager.getChainContext(
+      const chainContext = this.chainSessionStore.getChainContext(
         sessionId,
         context.getScopeOptions()
       );

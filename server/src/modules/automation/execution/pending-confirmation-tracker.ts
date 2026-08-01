@@ -57,10 +57,10 @@ const DEFAULT_EXPIRATION_MS = 5 * 60 * 1000;
  * const tracker = new PendingConfirmationTracker();
  *
  * // First call - record pending
- * tracker.recordPending('create_methodology', 'methodology_builder', inputs);
+ * tracker.recordPending('create_framework', 'framework_builder', inputs);
  *
  * // Second call - check and auto-approve
- * if (tracker.checkAndClearPending('create_methodology', 'methodology_builder', inputs)) {
+ * if (tracker.checkAndClearPending('create_framework', 'framework_builder', inputs)) {
  *   // Auto-approved! Execute the tool
  * }
  * ```

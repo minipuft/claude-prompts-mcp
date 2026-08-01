@@ -1,0 +1,8 @@
+id: test-method
+name: Test Method
+type: TEST_METHOD
+version: 1.0.0
+description: A test framework for CLI integration tests
+enabled: false
+systemPromptGuidance: |
+  Apply the test framework systematically.

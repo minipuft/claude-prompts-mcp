@@ -25,6 +25,7 @@
 | Telemetry & observability | `docs/guides/telemetry-observability.md` |
 | Troubleshooting | `docs/guides/troubleshooting.md` |
 | Contributing & PR process | `CONTRIBUTING.md` |
+| README charter (root README authoring rules) | `docs/portfolio/readme-charter.md` |
 | Release highlights | `CHANGELOG.md` |
 
 Read the relevant doc before editing. Update docs when behavior changes.
@@ -34,6 +35,7 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | Command | Purpose |
 |---------|---------|
 | `npm run build` | esbuild bundle -> `dist/index.js` |
+| `npm run verify:mcp` | Spawn a server from `dist/` and prove all 3 MCP tools answer — **use instead of restarting Claude Code to check a build**. Refuses to run against a stale `dist/` |
 | `npm run typecheck` | Strict TS type validation |
 | `npm test` | Full Jest suite |
 | `npm run lint:ratchet` | Fail if ESLint violations increased |
@@ -102,7 +104,7 @@ State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `ke
 - **Framework validity**: Always `frameworkManager.getFramework(id)` -- never hardcode framework lists.
 - **Consolidation over addition**: Enhance existing systems vs creating new ones.
 - **Pipeline state**: Use `context.gates`, `context.frameworkAuthority`, `context.diagnostics` -- never mutate arrays directly.
-- **Module organization**: <=7 files flat + barrel, >7 files use `internal/` subfolder.
+- **Module organization**: import the defining module directly. **Banned is the compat re-export shim** -- a file whose whole body is `export ... from` AND which carries a back-compat marker, giving a symbol a second import path so `rg` for the canonical one misses consumers (`validate:no-crosslayer-reexport` enforces exactly this). A markerless barrel is NOT banned and `src/` has ~60 of them; prefer direct imports anyway, because `validate:arch` expresses layer + cycle boundaries as **paths**, and a barrel spanning layers launders the real edge. Intra-layer barrels launder nothing -- judge by whether consumers cross a layer. A file that re-exports *and* defines something is not a barrel (`infra/logging/index.ts`). Dead-barrel detection is `npx knip`; `validate:arch` cannot see it (`no-orphans` needs no incoming AND no outgoing edges, and a re-export always has outgoing). Use `internal/` for a genuinely private region.
 - **Commit convention**: Conventional Commits enforced. Scopes: `server`, `runtime`, `pipeline`, `gates`, `frameworks`, `prompts`, `chains`, `styles`, `scripts`, `hooks`, `resources`, `mcp-tools`, `contracts`, `parsers`, `ci`, `deps`, `config`, `docs`, `tests`, `execution`.
 - **Environment**: `MCP_WORKSPACE` (primary — SSOT for all paths), `MCP_RESOURCES_PATH` (resources base override), `MCP_CONFIG_PATH` (config file override). Workspace resources overlay bundled ones.
 

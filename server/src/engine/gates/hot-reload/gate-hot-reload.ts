@@ -5,7 +5,7 @@
  * Handles the integration between file system watching and gate registry,
  * enabling hot reload of gate definitions when YAML files change.
  *
- * @see MethodologyHotReloadCoordinator for the pattern this follows
+ * @see FrameworkHotReloadCoordinator for the pattern this follows
  */
 
 import { GateDefinitionLoader } from '../core/gate-definition-loader.js';
@@ -247,8 +247,8 @@ export class GateHotReloadCoordinator {
           if (criteria.forbidden_patterns) {
             normalizedCriteria.forbidden_patterns = criteria.forbidden_patterns;
           }
-          if (criteria.methodology) {
-            normalizedCriteria.methodology = criteria.methodology;
+          if (criteria.framework) {
+            normalizedCriteria.framework = criteria.framework;
           }
           if (criteria.min_compliance_score !== undefined) {
             normalizedCriteria.min_compliance_score = criteria.min_compliance_score;

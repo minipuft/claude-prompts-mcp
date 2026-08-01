@@ -3,7 +3,7 @@
  * YAML Parser Utilities
  *
  * Provides type-safe YAML parsing with detailed error handling.
- * Designed to be reusable across methodologies and future prompt YAML support.
+ * Designed to be reusable across frameworks and future prompt YAML support.
  */
 
 import yaml from 'js-yaml';

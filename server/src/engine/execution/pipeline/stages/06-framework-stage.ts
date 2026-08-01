@@ -1,11 +1,11 @@
-// @lifecycle canonical - Applies framework methodology guidance to prompts.
+// @lifecycle canonical - Applies framework guidance to prompts.
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '../../../../infra/logging/index.js';
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import type {
   FrameworkExecutionContext,
-  FrameworkMethodology,
+  FrameworkSelection,
 } from '../../../frameworks/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { ExecutionContext } from '../../context/index.js';
@@ -17,21 +17,21 @@ type FrameworkEnabledProvider = () => boolean;
 /**
  * Pipeline Stage 6: Framework Resolution
  *
- * Injects methodology-specific system prompts and framework context,
+ * Injects framework-specific system prompts and framework context,
  * supporting both default framework and temporary overrides via symbolic operators (@).
  *
  * Dependencies: context.executionPlan, context.convertedPrompt
- * Output: context.frameworkContext (methodology, system prompts)
+ * Output: context.frameworkContext (framework, system prompts)
  * Can Early Exit: No
  */
 export class FrameworkResolutionStage extends BasePipelineStage {
   readonly name = 'FrameworkResolution';
 
   /**
-   * Request-scoped methodology gate IDs (set during execute, used synchronously within).
+   * Request-scoped framework gate IDs (set during execute, used synchronously within).
    * Reset to null after execute completes to prevent stale data across requests.
    */
-  private currentRequestMethodologyGates: Set<string> | null = null;
+  private currentRequestFrameworkGates: Set<string> | null = null;
 
   constructor(
     private readonly frameworkManager: FrameworkManager,
@@ -43,22 +43,22 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   }
 
   /**
-   * Load methodology gate IDs from GateLoader for the current request.
+   * Load framework gate IDs from GateLoader for the current request.
    * Returns fresh data each call - GateLoader handles hot-reload internally.
    */
-  private async loadMethodologyGateIds(): Promise<Set<string>> {
+  private async loadFrameworkGateIds(): Promise<Set<string>> {
     if (!this.gateLoader) {
       this.logger.debug(
-        '[FrameworkResolutionStage] No GateLoader available for methodology gate detection'
+        '[FrameworkResolutionStage] No GateLoader available for framework gate detection'
       );
       return new Set();
     }
 
     try {
-      const ids = await this.gateLoader.getMethodologyGateIds();
+      const ids = await this.gateLoader.getFrameworkGateIds();
       return new Set(ids);
     } catch (error) {
-      this.logger.warn('[FrameworkResolutionStage] Failed to load methodology gate IDs', { error });
+      this.logger.warn('[FrameworkResolutionStage] Failed to load framework gate IDs', { error });
       return new Set();
     }
   }
@@ -66,8 +66,8 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    // Load fresh methodology gate IDs for this request (prevents stale cache after hot-reload)
-    this.currentRequestMethodologyGates = await this.loadMethodologyGateIds();
+    // Load fresh framework gate IDs for this request (prevents stale cache after hot-reload)
+    this.currentRequestFrameworkGates = await this.loadFrameworkGateIds();
 
     if (context.state.session.isBlueprintRestored) {
       this.logExit({ skipped: 'Session blueprint restored' });
@@ -125,7 +125,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
         ? this.chainStepsRequireFramework(context)
         : false;
       const singleRequiresFramework = context.hasSinglePromptCommand()
-        ? this.hasMethodologyGate(context.parsedCommand.inlineGateIds)
+        ? this.hasFrameworkGate(context.parsedCommand.inlineGateIds)
         : false;
 
       const requiresFramework = Boolean(
@@ -143,7 +143,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       ? this.chainStepsRequireFramework(context)
       : false;
     const singleRequiresFramework = context.hasSinglePromptCommand()
-      ? this.hasMethodologyGate(context.parsedCommand.inlineGateIds)
+      ? this.hasFrameworkGate(context.parsedCommand.inlineGateIds)
       : false;
 
     const requiresFramework = Boolean(
@@ -330,11 +330,11 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       return true;
     }
 
-    if (this.hasMethodologyGate(step.executionPlan?.gates)) {
+    if (this.hasFrameworkGate(step.executionPlan?.gates)) {
       return true;
     }
 
-    if (this.hasMethodologyGate(step.inlineGateIds)) {
+    if (this.hasFrameworkGate(step.inlineGateIds)) {
       return true;
     }
 
@@ -342,17 +342,17 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   }
 
   /**
-   * Check if any gates in the array are methodology gates.
+   * Check if any gates in the array are framework gates.
    * Uses request-scoped data loaded at start of execute().
    */
-  private hasMethodologyGate(gates?: readonly string[] | null): boolean {
+  private hasFrameworkGate(gates?: readonly string[] | null): boolean {
     if (!Array.isArray(gates)) {
       return false;
     }
 
     return gates.some(
       (gateId) =>
-        Boolean(gateId) && (this.currentRequestMethodologyGates?.has(gateId as string) ?? false)
+        Boolean(gateId) && (this.currentRequestFrameworkGates?.has(gateId as string) ?? false)
     );
   }
 }

@@ -6,7 +6,7 @@
  * parameter validation — replaces the generated mcp-schemas.ts.
  *
  * The schema structure is fixed; parameter `.describe()` text is injected via
- * a resolver callback so methodology overlays can customize what the LLM sees.
+ * a resolver callback so framework overlays can customize what the LLM sees.
  */
 
 import { z } from 'zod';
@@ -64,7 +64,7 @@ export const gateSpecUnionSchema = z.union([
 
 /**
  * Callback that resolves parameter descriptions at registration time.
- * Allows methodology overlays to inject context-specific guidance.
+ * Allows framework overlays to inject context-specific guidance.
  */
 export type DescriptionResolver = (paramName: string, fallback: string) => string;
 
@@ -96,11 +96,11 @@ const PARAM_DEFAULTS = {
 // ---------------------------------------------------------------------------
 
 /**
- * Build the prompt_engine input schema with methodology-aware descriptions.
+ * Build the prompt_engine input schema with framework-aware descriptions.
  *
  * @param verdictValidator - `(v: string) => boolean` for gate_verdict format validation
  * @param verdictMessage - validation error message for gate_verdict
- * @param resolve - optional description resolver for methodology overlays
+ * @param resolve - optional description resolver for framework overlays
  */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types
 export function buildPromptEngineSchema(

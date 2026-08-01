@@ -32,14 +32,14 @@ RUN npm ci --omit=dev && \
 # Copy built artifacts from builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/resources/prompts ./prompts
-COPY --from=builder /app/resources/methodologies ./methodologies
+COPY --from=builder /app/resources/frameworks ./frameworks
 COPY --from=builder /app/resources/gates ./gates
 COPY --from=builder /app/resources/styles ./styles
 # Copy config and potentially other static assets if needed
 COPY --from=builder /app/config.json ./config.json
 
 # Create logs and runtime-state directories with correct permissions
-RUN mkdir -p logs runtime-state && chown -R node:node logs runtime-state dist prompts methodologies gates styles config.json
+RUN mkdir -p logs runtime-state && chown -R node:node logs runtime-state dist prompts frameworks gates styles config.json
 
 # Security: Run as non-root user
 USER node

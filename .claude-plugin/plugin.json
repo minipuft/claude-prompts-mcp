@@ -6,14 +6,7 @@
   },
   "homepage": "https://github.com/minipuft/claude-prompts",
   "repository": "https://github.com/minipuft/claude-prompts",
-  "license": "AGPL-3.0-only",
-  "keywords": [
-    "mcp",
-    "prompts",
-    "templates",
-    "gates",
-    "chains",
-    "workflows"
-  ],
+  "license": "MIT",
+  "keywords": ["mcp", "prompts", "templates", "gates", "chains", "workflows"],
   "version": "2.1.0"
 }

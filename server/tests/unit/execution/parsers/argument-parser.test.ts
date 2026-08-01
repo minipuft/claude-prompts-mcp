@@ -36,6 +36,65 @@ describe('ArgumentParser schema enforcement', () => {
   });
 });
 
+describe('ArgumentParser quoted-value escape handling', () => {
+  const createPrompt = (): ConvertedPrompt => ({
+    id: 'quote-test',
+    name: 'Quote Test',
+    description: '',
+    category: 'general',
+    userMessageTemplate: '{{theme}} {{mode}}',
+    arguments: [
+      { name: 'theme', required: false, type: 'string' },
+      { name: 'mode', required: false, type: 'string' },
+    ],
+  });
+
+  test('decodes escaped quotes inside a double-quoted value', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const command = `theme:${JSON.stringify('it\'s a "test" value')} mode:"refine"`;
+
+    const result = await parser.parseArguments(command, createPrompt(), {});
+
+    expect(result.processedArgs.theme).toBe('it\'s a "test" value');
+    expect(result.processedArgs.mode).toBe('refine');
+  });
+
+  test('does not emit arguments the prompt never declared', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const command = `theme:${JSON.stringify('ground lifted. Target: dark ground.')}`;
+
+    const result = await parser.parseArguments(command, createPrompt(), {});
+
+    expect(result.processedArgs.theme).toBe('ground lifted. Target: dark ground.');
+    expect(result.processedArgs).not.toHaveProperty('Target');
+  });
+
+  // Backwards-compat lock: commands written before the escape convention existed
+  // contain no backslashes and must parse exactly as they did previously.
+  test('legacy unescaped commands parse unchanged', async () => {
+    const parser = new ArgumentParser(createLogger());
+
+    const doubleQuoted = await parser.parseArguments(
+      'theme:"a plain value" mode:"refine"',
+      createPrompt(),
+      {}
+    );
+    expect(doubleQuoted.processedArgs.theme).toBe('a plain value');
+    expect(doubleQuoted.processedArgs.mode).toBe('refine');
+
+    const singleQuoted = await parser.parseArguments(
+      "theme:'a plain value' mode:'refine'",
+      createPrompt(),
+      {}
+    );
+    expect(singleQuoted.processedArgs.theme).toBe('a plain value');
+    expect(singleQuoted.processedArgs.mode).toBe('refine');
+
+    const unquoted = await parser.parseArguments('mode:refine', createPrompt(), {});
+    expect(unquoted.processedArgs.mode).toBe('refine');
+  });
+});
+
 describe('ArgumentParser multi-argument parsing', () => {
   const createMultiArgPrompt = (): ConvertedPrompt => ({
     id: 'multi-arg-test',

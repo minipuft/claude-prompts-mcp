@@ -11,11 +11,20 @@
  */
 
 import { DirectChainRunRegistry, type ChainRunRegistry } from './run-registry.js';
-import { StepState } from '../../shared/types/chain-execution.js';
 import { isTerminalRunStatus } from '../../shared/types/chain-session.js';
 import { resolveContinuityScopeId } from '../../shared/utils/request-identity-scope.js';
 import { ArgumentHistoryTracker, TextReferenceStore } from '../text-refs/index.js';
 
+import type {
+  StepLifecycle,
+  StepMilestone,
+  ChainRunStatus,
+  GateReviewHistoryEntry,
+  PendingGateReview,
+  PendingShellVerificationSnapshot,
+  StepMetadata,
+  GateReviewPrompt,
+} from '../../shared/types/chain-execution.js';
 import type {
   ChainSession,
   ChainSessionLookupOptions,
@@ -25,17 +34,24 @@ import type {
   ParsedCommandSnapshot,
   PersistedChainRunRegistry,
   SessionBlueprint,
-} from './types.js';
-import type {
-  ChainRunStatus,
-  GateReviewHistoryEntry,
-  PendingGateReview,
-  PendingShellVerificationSnapshot,
-  StepMetadata,
-  GateReviewPrompt,
-} from '../../shared/types/chain-execution.js';
+} from '../../shared/types/chain-session.js';
 import type { Logger } from '../../shared/types/index.js';
 import type { DatabasePort, StateStoreOptions } from '../../shared/types/persistence.js';
+
+/**
+ * Derive the sticky lifecycle value a milestone implies. `rendered` and `responded` are both
+ * progress *within* `working`; they are told apart by the substate timestamp, not by this value.
+ */
+function lifecycleForMilestone(milestone: StepMilestone): StepLifecycle {
+  switch (milestone) {
+    case 'pending':
+      return 'pending';
+    case 'completed':
+      return 'completed';
+    default:
+      return 'working';
+  }
+}
 
 /** Callback invoked when a session is cleared (cleanup or explicit). */
 export type SessionClearedCallback = (
@@ -49,9 +65,6 @@ export interface ChainSessionStoreOptions {
   reviewSessionTimeoutMs?: number;
   cleanupIntervalMs?: number;
 }
-
-/** @deprecated Use ChainSessionStoreOptions */
-export type ChainSessionManagerOptions = ChainSessionStoreOptions;
 
 const DEFAULT_SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_REVIEW_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
@@ -466,7 +479,7 @@ export class ChainSessionStore implements ChainSessionService {
   private persistSessionsAsync(context: string): void {
     this.saveSessions().catch((error) => {
       this.logger.warn(
-        `[ChainSessionManager] Failed to persist sessions (${context}): ${
+        `[ChainSessionStore] Failed to persist sessions (${context}): ${
           error instanceof Error ? error.message : String(error)
         }`
       );
@@ -558,7 +571,7 @@ export class ChainSessionStore implements ChainSessionService {
   setStepState(
     sessionId: string,
     stepNumber: number,
-    state: StepState,
+    milestone: StepMilestone,
     isPlaceholder: boolean = false
   ): boolean {
     const session = this.activeSessions.get(sessionId);
@@ -577,19 +590,19 @@ export class ChainSessionStore implements ChainSessionService {
     const now = Date.now();
 
     const metadata: StepMetadata = {
-      state,
+      state: lifecycleForMilestone(milestone),
       isPlaceholder,
       ...(existing?.renderedAt !== undefined
         ? { renderedAt: existing.renderedAt }
-        : state === StepState.RENDERED
+        : milestone === 'rendered'
           ? { renderedAt: now }
           : {}),
-      ...(state === StepState.RESPONSE_CAPTURED
+      ...(milestone === 'responded'
         ? { respondedAt: now }
         : existing?.respondedAt !== undefined
           ? { respondedAt: existing.respondedAt }
           : {}),
-      ...(state === StepState.COMPLETED
+      ...(milestone === 'completed'
         ? { completedAt: now }
         : existing?.completedAt !== undefined
           ? { completedAt: existing.completedAt }
@@ -599,7 +612,7 @@ export class ChainSessionStore implements ChainSessionService {
     session.state.stepStates.set(stepNumber, metadata);
 
     this.logger?.debug(
-      `[StepLifecycle] Step ${stepNumber} state set to ${state} (placeholder: ${isPlaceholder})`
+      `[StepLifecycle] Step ${stepNumber} milestone ${milestone} -> state ${metadata.state} (placeholder: ${isPlaceholder})`
     );
     return true;
   }
@@ -618,14 +631,14 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Transition step to a new state.
    *
-   * Enforces step-lifecycle stickiness: a step in StepState.COMPLETED (terminal)
+   * Enforces step-lifecycle stickiness: a step in terminal `completed`
    * cannot be overwritten. Re-asserting the same terminal state is a no-op
    * (returns true to keep callers idempotent).
    */
   async transitionStepState(
     sessionId: string,
     stepNumber: number,
-    newState: StepState,
+    newMilestone: StepMilestone,
     isPlaceholder: boolean = false
   ): Promise<boolean> {
     const session = this.activeSessions.get(sessionId);
@@ -640,19 +653,19 @@ export class ChainSessionStore implements ChainSessionService {
     const currentState = currentMetadata?.state;
 
     // Stickiness: refuse to overwrite a terminal step state with a different state.
-    if (currentState === StepState.COMPLETED && newState !== StepState.COMPLETED) {
+    if (currentState === 'completed' && newMilestone !== 'completed') {
       this.logger.warn(
-        `[StepLifecycle] Refusing to transition step ${stepNumber} from terminal ${currentState} to ${newState} (session ${sessionId})`
+        `[StepLifecycle] Refusing to transition step ${stepNumber} from terminal ${currentState} to ${newMilestone} (session ${sessionId})`
       );
       return false;
     }
 
     const fromLabel = currentState ?? 'NONE';
     this.logger.debug(
-      `[StepLifecycle] Transitioning step ${stepNumber} from ${fromLabel} to ${newState}`
+      `[StepLifecycle] Transitioning step ${stepNumber} from ${fromLabel} to ${newMilestone}`
     );
 
-    this.setStepState(sessionId, stepNumber, newState, isPlaceholder);
+    this.setStepState(sessionId, stepNumber, newMilestone, isPlaceholder);
 
     await this.saveSessions();
 
@@ -770,7 +783,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   isStepComplete(sessionId: string, stepNumber: number): boolean {
     const metadata = this.getStepState(sessionId, stepNumber);
-    return metadata?.state === StepState.COMPLETED && !metadata.isPlaceholder;
+    return metadata?.state === 'completed' && !metadata.isPlaceholder;
   }
 
   /**
@@ -800,10 +813,10 @@ export class ChainSessionStore implements ChainSessionService {
     const isPlaceholder = metadataRecord.isPlaceholder;
 
     // Determine the appropriate state based on whether this is a placeholder
-    const stepState = isPlaceholder ? StepState.RENDERED : StepState.RESPONSE_CAPTURED;
+    const milestone: StepMilestone = isPlaceholder ? 'rendered' : 'responded';
 
     // Update step state tracking
-    this.setStepState(sessionId, stepNumber, stepState, isPlaceholder);
+    this.setStepState(sessionId, stepNumber, milestone, isPlaceholder);
 
     // NOTE: Step advancement is now handled by advanceStep() which should be called
     // ONLY after gate validation passes (or if no gates are configured).
@@ -861,9 +874,9 @@ export class ChainSessionStore implements ChainSessionService {
 
     // Update step state: if we're replacing a placeholder with real content, transition to RESPONSE_CAPTURED
     if (!isPlaceholder) {
-      this.setStepState(sessionId, stepNumber, StepState.RESPONSE_CAPTURED, false);
+      this.setStepState(sessionId, stepNumber, 'responded', false);
       this.logger?.debug(
-        `[StepLifecycle] Step ${stepNumber} updated with real response, state transitioned to RESPONSE_CAPTURED`
+        `[StepLifecycle] Step ${stepNumber} updated with real response, state transitioned to responded`
       );
     }
 
@@ -904,7 +917,7 @@ export class ChainSessionStore implements ChainSessionService {
     const isPlaceholder = preservePlaceholder ? Boolean(existingMetadata?.isPlaceholder) : false;
 
     // Transition to COMPLETED state while respecting placeholder metadata when requested
-    this.setStepState(sessionId, stepNumber, StepState.COMPLETED, isPlaceholder);
+    this.setStepState(sessionId, stepNumber, 'completed', isPlaceholder);
 
     // NOTE: Step advancement is now handled by advanceStep() which should be called
     // ONLY after gate validation passes. This prevents the retry-skip bug.
@@ -1001,7 +1014,7 @@ export class ChainSessionStore implements ChainSessionService {
           },
         });
       } catch (error) {
-        this.logger?.error('[ChainSessionManager] Failed to track argument history entry', {
+        this.logger?.error('[ChainSessionStore] Failed to track argument history entry', {
           chainId: session.chainId,
           stepNumber,
           error,
@@ -1116,7 +1129,7 @@ export class ChainSessionStore implements ChainSessionService {
     if (!session) {
       if (this.logger) {
         this.logger.warn(
-          `[ChainSessionManager] Attempted to update blueprint for non-existent session: ${sessionId}`
+          `[ChainSessionStore] Attempted to update blueprint for non-existent session: ${sessionId}`
         );
       }
       return;
@@ -1226,7 +1239,7 @@ export class ChainSessionStore implements ChainSessionService {
     const session = this.activeSessions.get(sessionId);
     if (!session?.pendingGateReview) {
       this.logger?.debug?.(
-        `[ChainSessionManager] No pending gate review to reset for session: ${sessionId}`
+        `[ChainSessionStore] No pending gate review to reset for session: ${sessionId}`
       );
       return;
     }
@@ -1242,7 +1255,7 @@ export class ChainSessionStore implements ChainSessionService {
 
     await this.saveSessions();
 
-    this.logger?.info?.(`[ChainSessionManager] Reset retry count for session: ${sessionId}`);
+    this.logger?.info?.(`[ChainSessionStore] Reset retry count for session: ${sessionId}`);
   }
 
   async clearPendingGateReview(sessionId: string): Promise<void> {
@@ -1837,7 +1850,7 @@ export class ChainSessionStore implements ChainSessionService {
    * Prevents async handle leaks by finalizing all file operations
    */
   async cleanup(): Promise<void> {
-    this.logger.info('Shutting down ChainSessionManager...');
+    this.logger.info('Shutting down ChainSessionStore...');
 
     try {
       if (this.cleanupIntervalHandle !== undefined) {
@@ -1861,7 +1874,7 @@ export class ChainSessionStore implements ChainSessionService {
     this.runChainToBase.clear();
     this.logger.debug('In-memory session state cleared');
 
-    this.logger.info('ChainSessionManager cleanup complete');
+    this.logger.info('ChainSessionStore cleanup complete');
   }
 
   private isDormantSession(session?: ChainSession | null): boolean {
@@ -1874,13 +1887,13 @@ export class ChainSessionStore implements ChainSessionService {
     }
     if (isTerminalRunStatus(session.runStatus)) {
       this.logger.warn(
-        `[ChainSessionManager] Refusing to promote session ${session.sessionId} (${reason}): runStatus '${session.runStatus ?? 'unknown'}' is terminal`
+        `[ChainSessionStore] Refusing to promote session ${session.sessionId} (${reason}): runStatus '${session.runStatus ?? 'unknown'}' is terminal`
       );
       return;
     }
     session.lifecycle = 'canonical';
     this.logger?.debug?.(
-      `[ChainSessionManager] Promoted session ${session.sessionId} to canonical (${reason})`
+      `[ChainSessionStore] Promoted session ${session.sessionId} to canonical (${reason})`
     );
     this.persistSessionsAsync('lifecycle-promotion');
   }
@@ -2058,18 +2071,12 @@ export class ChainSessionStore implements ChainSessionService {
   }
 }
 
-/** @deprecated Use ChainSessionStore */
-export const ChainSessionManager = ChainSessionStore;
-/** @deprecated Use ChainSessionStore */
-// eslint-disable-next-line no-redeclare
-export type ChainSessionManager = ChainSessionStore;
-
 export type {
   ChainSession,
   ChainSessionService,
   ChainSessionSummary,
   SessionBlueprint,
-} from './types.js';
+} from '../../shared/types/chain-session.js';
 
 /**
  * Create and configure a chain session store
@@ -2091,6 +2098,3 @@ export function createChainSessionStore(
     argumentHistoryTracker
   );
 }
-
-/** @deprecated Use createChainSessionStore */
-export const createChainSessionManager = createChainSessionStore;

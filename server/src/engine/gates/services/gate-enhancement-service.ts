@@ -1,6 +1,10 @@
 // @lifecycle canonical - Core gate enhancement logic for prompt enrichment.
+import { GateSetResolver } from './gate-set-resolver.js';
+import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
+
 import type { GateMetricsRecorder } from './gate-metrics-recorder.js';
 import type { GateService } from './gate-service-interface.js';
+import type { GateResolutionInput } from './gate-set-resolver.js';
 import type { RegisteredGateResult } from './temporary-gate-registrar.js';
 import type { Logger } from '../../../infra/logging/index.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
@@ -14,8 +18,25 @@ import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
-import type { GateSelectionContext } from '../types/index.js';
 import type { GatesConfig } from '../types.js';
+
+/**
+ * Every prompt in this execution that may carry inline gate definitions.
+ *
+ * A chain yields one entry per step rather than just the entry prompt: each step is a distinct
+ * prompt with its own `gateConfiguration`, and a later step's definitions must already hold
+ * canonical ids by the time that step resolves against the cumulative accumulator.
+ *
+ * A free function rather than a stage helper — `architecture.md` keeps orchestration free of
+ * private helpers, and this is a pure projection with no dependencies.
+ */
+export function inlineDefinitionCarriers(
+  gateContext: SinglePromptGateContext | ChainStepGateContext
+): ReadonlyArray<ConvertedPrompt | undefined> {
+  return gateContext.type === 'chain'
+    ? gateContext.steps.map((step) => step.convertedPrompt)
+    : [gateContext.prompt];
+}
 
 /**
  * Discriminated union for gate enhancement contexts.
@@ -50,6 +71,17 @@ export class GateEnhancementService {
     private readonly logger: Logger
   ) {}
 
+  /**
+   * Single owner for gate-set resolution — ADR 0001. Do not resolve gates outside it.
+   *
+   * Built per call rather than in the constructor: `gateManagerProvider` is a provider precisely
+   * because the manager is wired after this service is constructed, so resolving it eagerly
+   * would capture `undefined` for the process lifetime. Construction is three assignments.
+   */
+  private buildGateSetResolver(): GateSetResolver {
+    return new GateSetResolver(this.logger, this.gateManagerProvider(), this.gateLoader);
+  }
+
   isAvailable(): boolean {
     return this.gateService !== null;
   }
@@ -62,19 +94,19 @@ export class GateEnhancementService {
   }
 
   /**
-   * Load methodology gate IDs from GateLoader for the current request.
+   * Load framework gate IDs from GateLoader for the current request.
    * Returns fresh data each call — GateLoader handles hot-reload internally.
    */
-  async loadMethodologyGateIds(): Promise<Set<string>> {
+  async loadFrameworkGateIds(): Promise<Set<string>> {
     if (!this.gateLoader) {
       return new Set();
     }
 
     try {
-      const ids = await this.gateLoader.getMethodologyGateIds();
+      const ids = await this.gateLoader.getFrameworkGateIds();
       return new Set(ids);
     } catch (error) {
-      this.logger.warn('[GateEnhancementService] Failed to load methodology gate IDs', { error });
+      this.logger.warn('[GateEnhancementService] Failed to load framework gate IDs', { error });
       return new Set();
     }
   }
@@ -119,7 +151,9 @@ export class GateEnhancementService {
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
     gatesConfig: GatesConfig | undefined,
-    methodologyGates: Set<string>
+    frameworkGateIds: Set<string>,
+    /** Canonical ids for this prompt's inline definitions, already registered by the caller. */
+    inlineDefinitionGateIds: readonly string[] = []
   ): Promise<void> {
     const executionPlan = context.executionPlan;
     if (executionPlan === undefined) {
@@ -129,37 +163,40 @@ export class GateEnhancementService {
     const { prompt, inlineGateIds } = gateContext;
     const clientSelectedGates = context.state.framework.clientSelectedGates ?? [];
 
-    this.addGatesToAccumulator(context, inlineGateIds, 'inline-operator');
-    this.addGatesToAccumulator(context, clientSelectedGates, 'client-selection');
-    this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
-    this.addGatesToAccumulator(context, executionPlan.gates, 'prompt-config');
-    this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'methodology');
-
     const activeFrameworkId = this.getActiveFrameworkId(context);
-    const selectionContext: GateSelectionContext = { enabledOnly: true };
-    if (prompt.category !== undefined) {
-      selectionContext.promptCategory = prompt.category;
-    }
-    if (activeFrameworkId !== undefined) {
-      selectionContext.framework = activeFrameworkId;
-    }
 
-    const registryGates = this.selectRegistryGates(selectionContext);
-    this.addRegistryGatesWithRetryConfig(context, registryGates);
+    await this.resolveIntoAccumulator(context, {
+      prompt,
+      category: prompt.category ?? '',
+      modifiers: executionPlan.modifiers,
+      frameworkId: activeFrameworkId,
+      frameworkInjected: isFrameworkInjected({
+        modifiers: executionPlan.modifiers,
+        promptInjection: prompt.injection,
+      }),
+      frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
+      knownFrameworkGateIds: [...frameworkGateIds],
+      inlineOperatorGateIds: inlineGateIds,
+      clientSelectedGateIds: clientSelectedGates,
+      callerGateIds: registeredGates.temporaryGateIds,
+      plannedGateIds: executionPlan.gates,
+      frameworkGateIds: registeredGates.canonicalGateIds,
+      inlineDefinitionGateIds,
+    });
 
     let gateIds = [...context.gates.getAll()];
-    gateIds = this.ensureDefaultMethodologyGate(
+    gateIds = this.ensureDefaultFrameworkGate(
       gateIds,
       gatesConfig,
       activeFrameworkId,
-      methodologyGates
+      frameworkGateIds
     );
 
-    if (gatesConfig !== undefined && !gatesConfig.enableMethodologyGates) {
+    if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
       const beforeCount = gateIds.length;
-      gateIds = gateIds.filter((gate) => !methodologyGates.has(gate));
+      gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
       if (beforeCount !== gateIds.length) {
-        context.diagnostics.info('GateEnhancement', 'Methodology gates filtered by config', {
+        context.diagnostics.info('GateEnhancement', 'Framework gates filtered by config', {
           filtered: beforeCount - gateIds.length,
           remaining: gateIds.length,
         });
@@ -236,7 +273,15 @@ export class GateEnhancementService {
     context: ExecutionContext,
     registeredGates: RegisteredGateResult,
     gatesConfig: GatesConfig | undefined,
-    methodologyGates: Set<string>
+    frameworkGateIds: Set<string>,
+    /**
+     * Canonical ids for every step's inline definitions, registered up front by the caller.
+     *
+     * Supplied as one flat list rather than per step because the chain accumulator is cumulative
+     * — step N already inherits steps 1..N-1 — so partitioning the ids per step would suppress
+     * nothing while adding a way to get the mapping wrong.
+     */
+    inlineDefinitionGateIds: readonly string[] = []
   ): Promise<void> {
     const gateService = this.requireGateService();
     const { steps } = gateContext;
@@ -245,7 +290,7 @@ export class GateEnhancementService {
     const clientSelectedGates = context.state.framework.clientSelectedGates ?? [];
     this.addGatesToAccumulator(context, clientSelectedGates, 'client-selection');
     this.addGatesToAccumulator(context, registeredGates.temporaryGateIds, 'temporary-request');
-    this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'methodology');
+    this.addGatesToAccumulator(context, registeredGates.canonicalGateIds, 'framework-guide');
 
     for (const step of steps) {
       const prompt = step.convertedPrompt;
@@ -269,33 +314,38 @@ export class GateEnhancementService {
       const activeFrameworkId = this.getActiveFrameworkId(context);
       const stepFrameworkId = step.frameworkContext?.selectedFramework?.id ?? activeFrameworkId;
 
-      const registrySelectionContext: GateSelectionContext = { enabledOnly: true };
-      if (prompt.category !== undefined && prompt.category.length > 0) {
-        registrySelectionContext.promptCategory = prompt.category;
-      }
-      if (stepFrameworkId !== undefined) {
-        registrySelectionContext.framework = stepFrameworkId;
-      }
+      await this.resolveIntoAccumulator(context, {
+        prompt,
+        category: prompt.category ?? '',
+        modifiers: step.executionPlan?.modifiers,
+        frameworkId: stepFrameworkId,
+        // Read from the step's own prompt, not the chain entry prompt: each step is a distinct
+        // prompt and may carry its own injection block.
+        frameworkInjected: isFrameworkInjected({
+          modifiers: step.executionPlan?.modifiers,
+          promptInjection: prompt.injection,
+        }),
+        frameworkGatesEnabled: gatesConfig?.enableFrameworkGates !== false,
+        knownFrameworkGateIds: [...frameworkGateIds],
+        inlineOperatorGateIds: stepInlineGates,
+        plannedGateIds: plannedGates,
+        inlineDefinitionGateIds,
+        // A step with no category must not pull in registry gates on a 'general' fallback.
+        autoAssignCategoryGates: prompt.category !== undefined && prompt.category.length > 0,
+      });
 
-      const registryGates =
-        registrySelectionContext.promptCategory !== undefined
-          ? this.selectRegistryGates(registrySelectionContext)
-          : [];
-
-      this.addGatesToAccumulator(context, stepInlineGates, 'inline-operator');
-      this.addGatesToAccumulator(context, plannedGates, 'prompt-config');
-      this.addRegistryGatesWithRetryConfig(context, registryGates);
-
+      // The accumulator is intentionally NOT reset between steps: step N inherits the gates
+      // accumulated by steps 1..N-1, which is the pre-existing chain contract.
       let gateIds = [...context.gates.getAll()];
-      gateIds = this.ensureDefaultMethodologyGate(
+      gateIds = this.ensureDefaultFrameworkGate(
         gateIds,
         gatesConfig,
         activeFrameworkId,
-        methodologyGates
+        frameworkGateIds
       );
 
-      if (gatesConfig !== undefined && !gatesConfig.enableMethodologyGates) {
-        gateIds = gateIds.filter((gate) => !methodologyGates.has(gate));
+      if (gatesConfig !== undefined && !gatesConfig.enableFrameworkGates) {
+        gateIds = gateIds.filter((gate) => !frameworkGateIds.has(gate));
       }
 
       gateIds = this.filterGatesByStepNumber(gateIds, step.stepNumber);
@@ -357,6 +407,38 @@ export class GateEnhancementService {
       throw new Error('Gate service not available');
     }
     return this.gateService;
+  }
+
+  /**
+   * Resolve a gate set through `GateSetResolver` (the single owner, ADR 0001) and record the
+   * result in the accumulator.
+   *
+   * The split of responsibility is deliberate: the resolver decides *which* ids survive, while
+   * this method owns *enrichment* — reading `retry_config` and `blockResponseOnFail` off the
+   * registry guide for `registry-auto` entries. Enrichment stayed here because it reaches into
+   * the gate registry for per-gate execution metadata, which is not a resolution concern.
+   */
+  private async resolveIntoAccumulator(
+    context: ExecutionContext,
+    input: GateResolutionInput
+  ): Promise<void> {
+    const resolution = await this.buildGateSetResolver().resolve(input);
+
+    const registryGateIds: string[] = [];
+    for (const gate of resolution.accepted) {
+      if (gate.source === 'registry-auto') {
+        registryGateIds.push(gate.id);
+      } else {
+        this.addGatesToAccumulator(context, [gate.id], gate.source);
+      }
+    }
+    this.addRegistryGatesWithRetryConfig(context, registryGateIds);
+
+    if (resolution.vetoed.size > 0) {
+      context.diagnostics.info('GateEnhancement', 'Gates removed by veto', {
+        vetoed: Object.fromEntries(resolution.vetoed),
+      });
+    }
   }
 
   private addGatesToAccumulator(
@@ -429,29 +511,6 @@ export class GateEnhancementService {
     }
   }
 
-  private selectRegistryGates(selectionContext: GateSelectionContext): string[] {
-    const gateManager = this.gateManagerProvider?.();
-    if (!gateManager) {
-      return [];
-    }
-
-    try {
-      const result = gateManager.selectGates(selectionContext);
-      this.logger.debug('[GateEnhancementService] Registry gate selection', {
-        category: selectionContext.promptCategory,
-        framework: selectionContext.framework,
-        selectedCount: result.selectedIds.length,
-        skippedCount: result.skippedIds.length,
-      });
-      return result.selectedIds;
-    } catch (error) {
-      this.logger.warn('[GateEnhancementService] Registry selection failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return [];
-    }
-  }
-
   private filterGatesByStepNumber(gateIds: string[], stepNumber: number): string[] {
     if (!this.temporaryGateRegistry) {
       return gateIds;
@@ -502,17 +561,17 @@ export class GateEnhancementService {
     return result;
   }
 
-  private ensureDefaultMethodologyGate(
+  private ensureDefaultFrameworkGate(
     gateIds: string[],
     gatesConfig: GatesConfig | undefined,
     activeFrameworkId: string | undefined,
-    methodologyGates: Set<string>
+    frameworkGateIds: Set<string>
   ): string[] {
-    if (!gatesConfig?.enableMethodologyGates || !activeFrameworkId) {
+    if (!gatesConfig?.enableFrameworkGates || !activeFrameworkId) {
       return gateIds;
     }
-    const hasMethodologyGate = gateIds.some((gate) => methodologyGates.has(gate));
-    if (hasMethodologyGate) {
+    const hasFrameworkGate = gateIds.some((gate) => frameworkGateIds.has(gate));
+    if (hasFrameworkGate) {
       return gateIds;
     }
     return [...gateIds, 'framework-compliance'];

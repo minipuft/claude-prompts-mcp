@@ -93,7 +93,7 @@ export interface PipelineInternalState {
     aborted?: boolean;
     /** Whether the chain has already advanced past the final step */
     chainComplete?: boolean;
-    /** Chain variables for template rendering (from ChainSessionManager) */
+    /** Chain variables for template rendering (from ChainSessionStore) */
     chainContext?: Record<string, unknown>;
   };
 
@@ -137,8 +137,8 @@ export interface PipelineInternalState {
     temporaryGateScopes?: Array<{ scope: string; scopeId: string }>;
     /** Validation results from the gate system */
     validationResults?: unknown[];
-    /** IDs of methodology-specific gates registered for this execution */
-    methodologyGateIds: string[];
+    /** IDs of framework-specific gates registered for this execution */
+    frameworkGateIds: string[];
     /** IDs of canonical gates that were resolved from temporary inputs */
     canonicalGateIdsFromTemporary: string[];
     /** IDs of inline gates registered during extraction */

@@ -3,7 +3,7 @@
  * Gate Registry
  *
  * Centralized registry for loading and managing gate guides.
- * Mirrors the MethodologyRegistry pattern from the framework system.
+ * Mirrors the FrameworkRegistry pattern from the framework system.
  *
  * Features:
  * - YAML-based loading via GateDefinitionLoader
@@ -11,7 +11,7 @@
  * - Registration metadata tracking
  * - Statistics and introspection
  *
- * @see MethodologyRegistry for the pattern this follows
+ * @see FrameworkRegistry for the pattern this follows
  */
 
 import { createGenericGateGuide } from './generic-gate-guide.js';

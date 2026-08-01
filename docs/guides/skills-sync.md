@@ -6,11 +6,11 @@ Define prompts once as YAML. Export as native skills to Claude Code, Cursor, Cod
 
 Each AI coding tool expects a different skill format. Your prompts live as YAML in `server/resources/` — the single source of truth. Skills Sync compiles them into each client's native format so you author once and distribute everywhere.
 
-| Problem | Solution | Result |
-|---------|----------|--------|
-| Prompts locked inside MCP server | `skills-sync export` compiles to native format | `/review` works as a Claude Code skill, Cursor rule, etc. |
-| Exported prompts duplicated in MCP | Auto-deregistration via exports list | Single source, no duplication |
-| Drift between source and exports | `skills-sync diff` with SHA-256 manifests | Know when skills are stale |
+| Problem                            | Solution                                       | Result                                                    |
+| ---------------------------------- | ---------------------------------------------- | --------------------------------------------------------- |
+| Prompts locked inside MCP server   | `skills-sync export` compiles to native format | `/review` works as a Claude Code skill, Cursor rule, etc. |
+| Exported prompts duplicated in MCP | Auto-deregistration via exports list           | Single source, no duplication                             |
+| Drift between source and exports   | `skills-sync diff` with SHA-256 manifests      | Know when skills are stale                                |
 
 ## Quick Start
 
@@ -56,27 +56,27 @@ Only prompts are exported as standalone skills. Format is `prompt:{category}/{id
 
 ```yaml
 exports:
-  - prompt:development/validate_work   # → resources/prompts/development/validate_work/
-  - prompt:development/review          # → resources/prompts/development/review/
+  - prompt:development/validate_work # → resources/prompts/development/validate_work/
+  - prompt:development/review # → resources/prompts/development/review/
 ```
 
 **Gate bundling**: Prompts that declare `gateConfiguration.include` in their `prompt.yaml` get referenced gates bundled into the skill directory as `gates/{id}/gate.yaml` + `guidance.md`, with an inline `## Quality Gates` criteria table in the SKILL.md.
 
 **Doc bundling**: Prompts with a `docs/` subdirectory get all `.md` files bundled into `docs/` in the exported skill directory. Use this for templates, reference material, and supporting documentation that supplements the main SKILL.md. Doc files are included in the content hash for drift detection.
 
-**Methodologies and styles** are MCP pipeline-injected context — they are not exported as skills. They operate at runtime through the prompt engine and framework system.
+**Frameworks and styles** are MCP pipeline-injected context — they are not exported as skills. They operate at runtime through the prompt engine and framework system.
 
 <details>
 <summary><strong>Built-in Client Defaults</strong></summary>
 
 The CLI knows how to target each client without configuration:
 
-| Client | Output Dir (user) | Output Dir (project) | Adapter |
-|--------|-------------------|---------------------|---------|
-| claude-code | `~/.claude/skills/` | `.claude/skills/` | Claude Code frontmatter |
-| cursor | `~/.cursor/skills/` | `.cursor/skills/` | Agent Skills (Cursor variant) |
-| codex | `~/.codex/skills/` | `agents/` | Agent Skills (standard) |
-| opencode | `~/.opencode/skills/` | `.opencode/skills/` | Agent Skills (strict subset) |
+| Client      | Output Dir (user)     | Output Dir (project) | Adapter                       |
+| ----------- | --------------------- | -------------------- | ----------------------------- |
+| claude-code | `~/.claude/skills/`   | `.claude/skills/`    | Claude Code frontmatter       |
+| cursor      | `~/.cursor/skills/`   | `.cursor/skills/`    | Agent Skills (Cursor variant) |
+| codex       | `~/.codex/skills/`    | `agents/`            | Agent Skills (standard)       |
+| opencode    | `~/.opencode/skills/` | `.opencode/skills/`  | Agent Skills (strict subset)  |
 
 Override any output directory via the `overrides` key in `skills-sync.yaml`.
 
@@ -143,11 +143,11 @@ Each export generates a manifest at `server/cache/skills-sync.{clientId}.json` c
 
 ## Commands
 
-| Command | NPM Script | Purpose |
-|---------|------------|---------|
+| Command  | NPM Script              | Purpose                                               |
+| -------- | ----------------------- | ----------------------------------------------------- |
 | `export` | `npm run skills:export` | Write skill packages to configured output directories |
-| `diff` | `npm run skills:diff` | Compare source against exported skills |
-| `pull` | `npm run skills:pull` | Generate `.patch` files for out-of-sync skills |
+| `diff`   | `npm run skills:diff`   | Compare source against exported skills                |
+| `pull`   | `npm run skills:pull`   | Generate `.patch` files for out-of-sync skills        |
 
 ## See Also
 

@@ -27,7 +27,7 @@ describe('HotReloadObserver auxiliary reloads', () => {
       type: 'changed',
       isPromptFile: false,
       isConfigFile: false,
-      isMethodologyFile: false,
+      isFrameworkFile: false,
       timestamp: Date.now(),
     };
 

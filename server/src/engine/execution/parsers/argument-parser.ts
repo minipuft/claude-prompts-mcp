@@ -18,6 +18,7 @@ import { ArgumentSchemaValidator } from './argument-schema.js';
 import { Logger } from '../../../infra/logging/index.js';
 import {
   ArgumentValidationError,
+  parseQuotedValue,
   safeJsonParse,
   validateJsonArguments,
 } from '../../../shared/utils/index.js';
@@ -242,28 +243,37 @@ export class ArgumentParser {
         const typeCoercions: Array<{ arg: string; from: string; to: string }> = [];
         const contextSources: Record<string, string> = {};
 
-        // Parse key=value and key:value pairs with proper quote handling
-        // Supports both = and : delimiters, and dashes in argument names
+        // Parse key=value and key:value pairs with proper quote handling.
+        // Supports both = and : delimiters, and dashes in argument names.
+        // The quoted alternatives accept backslash escapes so a value may contain
+        // its own quote character — see serializeOptionValue/parseQuotedValue.
+        // This regex and the per-pair one below encode the SAME grammar and must
+        // be changed together; they previously diverged, which truncated any
+        // value containing an apostrophe and injected phantom arguments.
         const pairs =
           rawArgs.match(
-            /([\w-]+)\s*[=:]\s*(?:"([^"]*)"|'([^']*)'|([^\s"']+(?:\s+(?![\w-]+\s*[=:])[^\s"']*)*))/g
+            /([\w-]+)\s*[=:]\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^\s"']+(?:\s+(?![\w-]+\s*[=:])[^\s"']*)*))/g
           ) || [];
 
         for (const pair of pairs) {
           // Support both = and : delimiters, dashes in argument names
-          const match = pair.match(/([\w-]+)\s*[=:]\s*(?:"([^"]*)"|'([^']*)'|(.*))/);
+          const match = pair.match(
+            /([\w-]+)\s*[=:]\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|(.*))/
+          );
           if (match) {
             const [, key, doubleQuoted, singleQuoted, unquoted] = match;
             // Skip if key is undefined (shouldn't happen given regex, but TypeScript needs certainty)
             if (!key) {
               continue;
             }
-            // Use the appropriate captured group - quoted strings take precedence
+            // Use the appropriate captured group - quoted strings take precedence.
+            // Quoted captures carry backslash escapes and must be decoded; the
+            // unquoted branch cannot contain escapes and is taken verbatim.
             const value =
               doubleQuoted !== undefined
-                ? doubleQuoted
+                ? parseQuotedValue(doubleQuoted)
                 : singleQuoted !== undefined
-                  ? singleQuoted
+                  ? parseQuotedValue(singleQuoted)
                   : (unquoted ?? '');
             const trimmedValue = value.trim();
 

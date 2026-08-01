@@ -1,0 +1,141 @@
+id: verify
+name: V.E.R.I.F.Y Resume Audit
+type: VERIFY
+enabled: true
+systemPromptGuidance: >-
+  Apply the V.E.R.I.F.Y framework systematically:
+
+
+  **Voice**: Load bio.md voice table and establish candidate register. Read
+  says/doesn
+phasesFile: phases.yaml
+gates:
+  include:
+    - framework-compliance
+toolDescriptions:
+  prompt_engine:
+    description: >-
+      PROMPT ENGINE [VERIFY]: Resume content validation with V.E.R.I.F.Y
+      framework: Voice authenticity, Evidence verification, Resonance mapping,
+      Inspect patterns, Field isolation, Yield presentation.
+    parameters:
+      command: Resume or application content audit prompt
+frameworkGates:
+  - id: voice_authenticity
+    name: Voice Authenticity
+    description: Content sounds like the candidate wrote it, not AI
+    frameworkArea: Voice Load
+    priority: high
+    validationCriteria:
+      - bio.md says/doesn't-say table consulted
+      - Sentence-level say-it-out-loud test applied (not word-level)
+      - Candidate register matches, mixes casual and formal naturally
+      - No corporate jargon the candidate would not use
+  - id: evidence_backing
+    name: Evidence Backing
+    description: Every claim verified against bio.md documented facts
+    frameworkArea: Evidence Check
+    priority: high
+    validationCriteria:
+      - Every skill claimed exists in bio.md Can Claim section
+      - No skill from Cannot Claim section appears
+      - Metrics match bio.md documented numbers
+      - Experience descriptions match documented scope (no overclaim)
+  - id: jd_resonance
+    name: JD Resonance
+    description: Content aligns with target job description requirements and values
+    frameworkArea: Resonance Map
+    priority: high
+    validationCriteria:
+      - Major JD requirements addressed in content
+      - JD values and culture signals reflected authentically
+      - Keywords placed naturally (not stuffed)
+      - Resume skills section targets 75%+ keyword match
+  - id: ai_detection_clean
+    name: AI Detection Clean
+    description: No AI-flaggable patterns in content
+    frameworkArea: Inspect Patterns
+    priority: high
+    validationCriteria:
+      - Zero em-dashes in prose
+      - No repeated gerund-after-comma structure across bullets
+      - No triple-noun lists
+      - across appears at most once in entire document
+      - Bullets lead with value or outcome not tool names
+      - Varied sentence structures across all content
+  - id: field_isolation_check
+    name: Field Isolation Check
+    description: Each section covers distinct ground without overlap
+    frameworkArea: Field Isolation
+    priority: medium
+    validationCriteria:
+      - Summary and bullets cover different achievements
+      - Application answers address distinct topics
+      - No content duplicated between resume and cover letter
+      - Each section adds unique value to the application
+templateSuggestions:
+  - section: system
+    type: addition
+    description: Add VERIFY framework enforcement to resume writing prompts
+    content: >-
+      Apply V.E.R.I.F.Y framework: Voice (bio.md register) then Evidence
+      (claimability gate) then Resonance (JD alignment) then Inspect (AI
+      detection) then Field Isolation (overlap prevention) then Yield (present
+      with gate tables)
+    frameworkJustification: >-
+      Ensures every piece of resume content passes all quality gates before
+      presentation to the user
+    impact: high
+frameworkElements:
+  requiredSections:
+    - Voice
+    - Evidence
+    - Resonance
+    - Inspect
+    - Isolation
+    - Yield
+  optionalSections: []
+  sectionDescriptions:
+    Voice: Load bio.md voice table and verify candidate register at sentence level
+    Evidence: >-
+      Verify every claim against bio.md documented facts, no undocumented claims
+      survive
+    Resonance: >-
+      Map content to JD requirements, values, and keywords, check coverage
+      completeness
+    Inspect: >-
+      Scan for AI detection patterns and voice violations: em-dashes, gerund
+      chains, triple-noun lists
+    Isolation: >-
+      Verify distinct coverage across all sections, no content overlap or
+      duplication
+    Yield: >-
+      Present changes with before/after, rationale, and per-section gate
+      validation tables
+argumentSuggestions:
+  - name: content_type
+    type: string
+    description: Type of content being audited
+    frameworkReason: >-
+      Resonance phase adjusts checks based on content type: keyword match rate
+      for resumes, coverage mapping for application answers
+    examples:
+      - resume
+      - cover-letter
+      - application-answers
+  - name: jd_source
+    type: string
+    description: Company and role for JD alignment
+    frameworkReason: Resonance phase requires JD context to map content against requirements
+    examples:
+      - ChowNow Customer Support
+      - Cursor Technical Support
+  - name: sections
+    type: string
+    description: Which sections to audit
+    frameworkReason: Field Isolation needs scope of overlap checking
+    examples:
+      - summary,bullets,skills
+      - q1,q2,q3,additional
+judgePromptFile: judge-prompt.md
+version: 1.0.0

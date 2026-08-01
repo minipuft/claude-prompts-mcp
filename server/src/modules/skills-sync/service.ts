@@ -100,7 +100,7 @@ function getConfigPath(): string {
 
 // ─── Section 1: Types ──────────────────────────────────────────────────────
 
-export type ResourceType = 'prompt' | 'gate' | 'methodology' | 'style';
+export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 
 interface IRArgument {
   name: string;
@@ -185,7 +185,7 @@ interface SkillIR {
   delegationAgent?: string;
 
   gateData: { type: string; passCriteria: unknown[]; activation?: unknown } | null;
-  methodologyData: {
+  frameworkData: {
     type: string;
     version: string;
     systemPromptGuidance: string;
@@ -263,7 +263,7 @@ interface GateYaml {
   retry_config?: unknown;
 }
 
-interface MethodologyYaml {
+interface FrameworkYaml {
   id: string;
   name: string;
   type?: string;
@@ -273,7 +273,7 @@ interface MethodologyYaml {
   systemPromptFile?: string;
   systemPromptGuidance?: string;
   gates?: unknown;
-  methodologyGates?: unknown;
+  frameworkGates?: unknown;
 }
 
 interface StyleYaml {
@@ -332,7 +332,7 @@ interface ClientResourceSelection {
 }
 
 /** Built-in defaults shared across adapters. */
-const SYNC_DEFAULTS = { license: 'AGPL-3.0-only', adapterVersion: '1.0.0' } as const;
+const SYNC_DEFAULTS = { license: 'MIT', adapterVersion: '1.0.0' } as const;
 
 /**
  * Hardcoded client registry — the CLI knows everything about each client.
@@ -416,7 +416,7 @@ const DEFAULT_OUTPUT: SkillsSyncOutput = {
 
 const VALID_COMMANDS = new Set(['export', 'sync', 'diff', 'patch', 'pull', 'clone', 'help']);
 const VALID_SCOPES = new Set(['user', 'project']);
-const VALID_RESOURCE_TYPES = new Set(['prompt', 'gate', 'methodology', 'style']);
+const VALID_RESOURCE_TYPES = new Set(['prompt', 'gate', 'framework', 'style']);
 
 export class SkillsSyncCommandError extends Error {
   constructor(
@@ -449,7 +449,7 @@ function validateSkillsSyncOptions(opts: SkillsSyncOptions): void {
 
   if (opts.resourceType != null && !VALID_RESOURCE_TYPES.has(opts.resourceType)) {
     throw usageError(
-      `Invalid resource type: ${opts.resourceType}. Expected one of: prompt, gate, methodology, style.`
+      `Invalid resource type: ${opts.resourceType}. Expected one of: prompt, gate, framework, style.`
     );
   }
 
@@ -981,7 +981,7 @@ async function loadPromptIR(
     delegation: data.delegation === true ? true : undefined,
     delegationAgent: data.delegationAgent ? data.delegationAgent : undefined,
     gateData: null,
-    methodologyData: null,
+    frameworkData: null,
     styleData: null,
     extensions: {},
     sourcePaths: [yamlPath],
@@ -1022,7 +1022,7 @@ async function loadGateIR(gateDir: string): Promise<SkillIR> {
       passCriteria: data.pass_criteria ?? [],
       activation: data.activation,
     },
-    methodologyData: null,
+    frameworkData: null,
     styleData: null,
     extensions: { retryConfig: data.retry_config },
     sourcePaths: [yamlPath],
@@ -1031,10 +1031,10 @@ async function loadGateIR(gateDir: string): Promise<SkillIR> {
   };
 }
 
-async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
-  const yamlPath = path.join(methDir, 'methodology.yaml');
+async function loadFrameworkIR(methDir: string): Promise<SkillIR> {
+  const yamlPath = path.join(methDir, 'framework.yaml');
   const raw = await readFile(yamlPath, 'utf-8');
-  const data = yaml.load(raw) as MethodologyYaml;
+  const data = yaml.load(raw) as FrameworkYaml;
 
   const phasesFile = data.phasesFile ?? 'phases.yaml';
   const phasesRaw = await readOptionalFile(path.join(methDir, phasesFile));
@@ -1047,15 +1047,15 @@ async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
 
   const guidance = data.systemPromptGuidance ?? sysPromptContent ?? '';
 
-  const sourceContentsMap: Record<string, string> = { 'methodology.yaml': raw };
+  const sourceContentsMap: Record<string, string> = { 'framework.yaml': raw };
   if (phasesRaw) sourceContentsMap[phasesFile] = phasesRaw;
   if (sysPromptFile && sysPromptContent) sourceContentsMap[sysPromptFile] = sysPromptContent;
 
   return {
     id: data.id,
     name: data.name,
-    description: `${data.name} methodology (${data.type})`,
-    resourceType: 'methodology',
+    description: `${data.name} framework (${data.type})`,
+    resourceType: 'framework',
     category: null,
     enabled: data.enabled ?? true,
     systemMessage: null,
@@ -1068,7 +1068,7 @@ async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
     chainStepContents: [],
     docFiles: [],
     gateData: null,
-    methodologyData: {
+    frameworkData: {
       type: data.type ?? '',
       version: data.version ?? '1.0.0',
       systemPromptGuidance: guidance,
@@ -1077,7 +1077,7 @@ async function loadMethodologyIR(methDir: string): Promise<SkillIR> {
     styleData: null,
     extensions: {
       gates: data.gates,
-      methodologyGates: data.methodologyGates,
+      frameworkGates: data.frameworkGates,
     },
     sourcePaths: [yamlPath],
     sourceHash: computeContentHash([raw, phasesRaw ?? '', guidance]),
@@ -1113,7 +1113,7 @@ async function loadStyleIR(styleDir: string): Promise<SkillIR> {
     chainStepContents: [],
     docFiles: [],
     gateData: null,
-    methodologyData: null,
+    frameworkData: null,
     styleData: {
       priority: data.priority ?? 0,
       enhancementMode: data.enhancementMode ?? 'prepend',
@@ -1186,22 +1186,22 @@ async function loadAllResources(
     }
   }
 
-  // Methodologies: resources/methodologies/{id}/methodology.yaml
-  if (!filters?.resourceType || filters.resourceType === 'methodology') {
-    const methBase = path.join(getResourcesDir(), 'methodologies');
+  // Frameworks: resources/frameworks/{id}/framework.yaml
+  if (!filters?.resourceType || filters.resourceType === 'framework') {
+    const methBase = path.join(getResourcesDir(), 'frameworks');
     try {
       const methDirs = await readdir(methBase, { withFileTypes: true });
       for (const md of methDirs) {
         if (!md.isDirectory()) continue;
         if (filters?.id && md.name !== filters.id) continue;
         try {
-          resources.push(await loadMethodologyIR(path.join(methBase, md.name)));
+          resources.push(await loadFrameworkIR(path.join(methBase, md.name)));
         } catch (e) {
-          output.error(`  skip methodology ${md.name}: ${(e as Error).message}`);
+          output.error(`  skip framework ${md.name}: ${(e as Error).message}`);
         }
       }
     } catch {
-      /* no methodologies dir */
+      /* no frameworks dir */
     }
   }
 
@@ -1314,7 +1314,7 @@ function outputSubDir(ir: SkillIR, duplicateIds?: Set<string>): string {
     }
     return ir.id;
   }
-  const plural = ir.resourceType === 'methodology' ? 'methodologies' : ir.resourceType + 's';
+  const plural = ir.resourceType === 'framework' ? 'frameworks' : ir.resourceType + 's';
   return `${plural}-${ir.id}`;
 }
 
@@ -1762,10 +1762,10 @@ function buildClaudeCodeSkill(ir: SkillIR, duplicateIds?: Set<string>): OutputFi
     body += '\n';
   }
 
-  // Methodology-specific: phase summary
-  if (ir.methodologyData && Array.isArray(ir.methodologyData.phases)) {
+  // Framework-specific: phase summary
+  if (ir.frameworkData && Array.isArray(ir.frameworkData.phases)) {
     body += `## Phases\n\n`;
-    const phases = ir.methodologyData.phases as Array<Record<string, unknown>>;
+    const phases = ir.frameworkData.phases as Array<Record<string, unknown>>;
     for (const phase of phases) {
       const pName = (phase['name'] as string) ?? (phase['id'] as string) ?? 'Phase';
       body += `### ${pName}\n\n${(phase['description'] as string) ?? ''}\n\n`;
@@ -1917,10 +1917,10 @@ function buildAgentSkillsSkill(
     body += '\n';
   }
 
-  // Methodology phases
-  if (ir.methodologyData && Array.isArray(ir.methodologyData.phases)) {
+  // Framework phases
+  if (ir.frameworkData && Array.isArray(ir.frameworkData.phases)) {
     body += `## Phases\n\n`;
-    const phases = ir.methodologyData.phases as Array<Record<string, unknown>>;
+    const phases = ir.frameworkData.phases as Array<Record<string, unknown>>;
     for (const phase of phases) {
       const pName = (phase['name'] as string) ?? (phase['id'] as string) ?? 'Phase';
       body += `### ${pName}\n\n${(phase['description'] as string) ?? ''}\n\n`;
@@ -1983,16 +1983,16 @@ function buildAgentSkillsSkill(
 
   // References (if client supports)
   if (config.capabilities.references) {
-    if (ir.methodologyData?.systemPromptGuidance) {
+    if (ir.frameworkData?.systemPromptGuidance) {
       files.push({
         relativePath: `${subDir}/references/system-prompt.md`,
-        content: ir.methodologyData.systemPromptGuidance,
+        content: ir.frameworkData.systemPromptGuidance,
       });
     }
-    if (ir.methodologyData?.phases && ir.methodologyData.phases.length > 0) {
+    if (ir.frameworkData?.phases && ir.frameworkData.phases.length > 0) {
       files.push({
         relativePath: `${subDir}/references/phases.md`,
-        content: `# Phases\n\n${yaml.dump(ir.methodologyData.phases, { lineWidth: 120 })}`,
+        content: `# Phases\n\n${yaml.dump(ir.frameworkData.phases, { lineWidth: 120 })}`,
       });
     }
   }
@@ -2991,8 +2991,8 @@ async function cloneCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): 
       ? 'prompts'
       : resourceType === 'gate'
         ? 'gates'
-        : resourceType === 'methodology'
-          ? 'methodologies'
+        : resourceType === 'framework'
+          ? 'frameworks'
           : 'styles';
   const targetDir =
     resourceType === 'prompt'
@@ -3065,16 +3065,16 @@ async function cloneCommand(opts: SkillsSyncOptions, output: SkillsSyncOutput): 
       ? 'prompts'
       : resourceType === 'gate'
         ? 'gates'
-        : resourceType === 'methodology'
-          ? 'methodologies'
+        : resourceType === 'framework'
+          ? 'frameworks'
           : 'styles';
   const yamlFileName =
     resourceType === 'prompt'
       ? 'prompt.yaml'
       : resourceType === 'gate'
         ? 'gate.yaml'
-        : resourceType === 'methodology'
-          ? 'methodology.yaml'
+        : resourceType === 'framework'
+          ? 'framework.yaml'
           : 'style.yaml';
 
   const mutationTargets = new Map<string, { path: string; kind: 'directory' }>();
@@ -3364,7 +3364,7 @@ Commands:
 Options:
   --client <id|all>           Target client (${Object.keys(CLIENT_REGISTRY).join(', ')}, all)
   --scope <user|project>      Output scope (default: user)
-  --resource-type <type>      Filter by type (prompt, gate, methodology, style)
+  --resource-type <type>      Filter by type (prompt, gate, framework, style)
   --id <resourceId>           Filter to single resource
   --prune                     For sync: delete stale managed skills (default)
   --no-prune                  For sync: skip stale managed skill deletion

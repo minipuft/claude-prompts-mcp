@@ -15,9 +15,11 @@ import * as path from 'node:path';
 
 import { validatePromptYaml, type PromptYaml } from './prompt-schema.js';
 import { type Logger, PromptArgument } from '../../shared/types/index.js';
+import { INJECTION_TYPES } from '../../shared/types/injection.js';
 import { loadYamlFileSync } from '../../shared/utils/yaml/index.js';
 
 import type { PromptData } from './types.js';
+import type { PromptInjectionConfig, PromptInjectionRule } from '../../shared/types/injection.js';
 
 // ============================================
 // Shared Types (used by both YAML and Markdown loading)
@@ -47,6 +49,7 @@ export interface LoadedPromptFile {
       context?: Record<string, any>;
     }>;
   };
+  injection?: PromptInjectionConfig;
   chainSteps?: Array<{
     promptId: string;
     stepName: string;
@@ -82,12 +85,134 @@ export interface YamlLoadContext {
 // Pure Functions (no state dependencies)
 // ============================================
 
+/** Where a dropped inline gate definition came from, for the warning message. */
+export interface InlineGateSource {
+  readonly logger?: Logger | undefined;
+  /** Prompt the definitions were declared in. Named in the warning so it can be found. */
+  readonly promptId?: string | undefined;
+}
+
+const INLINE_GATE_SCOPES = ['execution', 'session', 'chain', 'step'] as const;
+const INLINE_GATE_TYPES = ['validation', 'guidance'] as const;
+
+/**
+ * Fields that disqualify a definition, named so a warning can report them.
+ *
+ * Returns every problem rather than the first: an author fixing one field at a time from a
+ * warning that stops at the first failure needs as many load cycles as they have mistakes.
+ *
+ * Extracted from the loop as a pure function for two reasons — the loop needs the field names to
+ * report, and it measured cyclomatic 23 against a limit of 10 with the checks inlined.
+ */
+function findInlineGateFieldProblems(definition: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+
+  if (typeof definition['name'] !== 'string') {
+    problems.push('name (must be a string)');
+  }
+  if (!INLINE_GATE_TYPES.includes(definition['type'] as (typeof INLINE_GATE_TYPES)[number])) {
+    problems.push(`type (must be one of: ${INLINE_GATE_TYPES.join(', ')})`);
+  }
+  if (!INLINE_GATE_SCOPES.includes(definition['scope'] as (typeof INLINE_GATE_SCOPES)[number])) {
+    problems.push(`scope (must be one of: ${INLINE_GATE_SCOPES.join(', ')})`);
+  }
+  if (typeof definition['description'] !== 'string') {
+    problems.push('description (must be a string)');
+  }
+  if (typeof definition['guidance'] !== 'string') {
+    problems.push('guidance (must be a string)');
+  }
+
+  return problems;
+}
+
+/**
+ * Log one dropped inline gate definition.
+ *
+ * Silent when no logger is supplied, which keeps `normalizeInlineGateDefinitions` usable as a pure
+ * function from call sites that have no logger — the markdown parser being one. Those call sites
+ * lose the warning, not correctness.
+ */
+function warnInlineGateDropped(
+  origin: InlineGateSource,
+  gateLabel: string,
+  problems: readonly string[]
+): void {
+  origin.logger?.warn(
+    `[PromptLoader] Dropped inline gate definition '${gateLabel}'` +
+      `${origin.promptId === undefined ? '' : ` in prompt '${origin.promptId}'`}` +
+      `: ${problems.join('; ')}. The gate will not load.`
+  );
+}
+
+/**
+ * Assemble a validated definition into its typed shape.
+ *
+ * Assumes `findInlineGateFieldProblems` already returned empty for this object, which is what
+ * licenses the casts on the five required fields. Split from the loop so validation, reporting,
+ * and assembly are each readable on their own — inlined, the loop measured cyclomatic 23.
+ */
+function buildInlineGateDefinition(definition: Record<string, unknown>): InlineGateDefinition {
+  const inlineDefinition: InlineGateDefinition = {
+    name: definition['name'] as string,
+    type: definition['type'] as InlineGateDefinition['type'],
+    scope: definition['scope'] as InlineGateDefinition['scope'],
+    description: definition['description'] as string,
+    guidance: definition['guidance'] as string,
+    pass_criteria: Array.isArray(definition['pass_criteria']) ? definition['pass_criteria'] : [],
+  };
+
+  const id = definition['id'];
+  if (typeof id === 'string') {
+    inlineDefinition.id = id;
+  }
+
+  const expiresAt = definition['expires_at'];
+  if (typeof expiresAt === 'number') {
+    inlineDefinition.expires_at = expiresAt;
+  }
+
+  const source = definition['source'];
+  if (source === 'manual' || source === 'automatic' || source === 'analysis') {
+    inlineDefinition.source = source;
+  }
+
+  const context = definition['context'];
+  if (context !== null && context !== undefined && typeof context === 'object') {
+    inlineDefinition.context = context as Record<string, unknown>;
+  }
+
+  return inlineDefinition;
+}
+
+/** Best-effort label for a definition that failed validation — its own name may be the problem. */
+function describeInlineGate(definition: Record<string, unknown>, index: number): string {
+  const id = definition['id'];
+  if (typeof id === 'string' && id.length > 0) {
+    return id;
+  }
+  const name = definition['name'];
+  if (typeof name === 'string' && name.length > 0) {
+    return name;
+  }
+  return `#${index} (unnamed)`;
+}
+
 /**
  * Normalize raw inline gate definitions into typed array.
  * Shared between YAML and Markdown loading paths.
+ *
+ * Malformed definitions are dropped rather than failing the load, so a bad block degrades to the
+ * prompt loading without that gate instead of taking the prompt out of service. Each drop now
+ * logs a warning naming the prompt, the gate, and the offending fields — release N of ADR 0001's
+ * warn-then-arm migration, whose purpose is that an operator can see, one release before these
+ * definitions begin to execute, which of their workspace prompts would newly arm a gate.
  */
 export function normalizeInlineGateDefinitions(
-  definitions: unknown
+  definitions: unknown,
+  // Named `origin` rather than `source`: the loop below reads a `source` field off each
+  // definition, and shadowing it silently would be easy to misread later.
+  origin: InlineGateSource = {}
 ): InlineGateDefinitions | undefined {
   if (!Array.isArray(definitions)) {
     return undefined;
@@ -95,58 +220,25 @@ export function normalizeInlineGateDefinitions(
 
   const normalized: InlineGateDefinitions = [];
 
-  for (const rawDefinition of definitions) {
-    if (!rawDefinition || typeof rawDefinition !== 'object') {
+  for (const [index, rawDefinition] of definitions.entries()) {
+    if (
+      rawDefinition === null ||
+      rawDefinition === undefined ||
+      typeof rawDefinition !== 'object'
+    ) {
+      warnInlineGateDropped(origin, `#${index}`, ['definition (must be an object)']);
       continue;
     }
 
     const definition = rawDefinition as Record<string, unknown>;
-    const name = definition['name'];
-    const type = definition['type'];
-    const scope = definition['scope'];
-    const description = definition['description'];
-    const guidance = definition['guidance'];
 
-    if (
-      typeof name !== 'string' ||
-      (type !== 'validation' && type !== 'guidance') ||
-      (scope !== 'execution' && scope !== 'session' && scope !== 'chain' && scope !== 'step') ||
-      typeof description !== 'string' ||
-      typeof guidance !== 'string'
-    ) {
+    const problems = findInlineGateFieldProblems(definition);
+    if (problems.length > 0) {
+      warnInlineGateDropped(origin, describeInlineGate(definition, index), problems);
       continue;
     }
 
-    const inlineDefinition: InlineGateDefinition = {
-      name,
-      type,
-      scope,
-      description,
-      guidance,
-      pass_criteria: Array.isArray(definition['pass_criteria']) ? definition['pass_criteria'] : [],
-    };
-
-    const id = definition['id'];
-    if (typeof id === 'string') {
-      inlineDefinition.id = id;
-    }
-
-    const expiresAt = definition['expires_at'];
-    if (typeof expiresAt === 'number') {
-      inlineDefinition.expires_at = expiresAt;
-    }
-
-    const source = definition['source'];
-    if (source === 'manual' || source === 'automatic' || source === 'analysis') {
-      inlineDefinition.source = source;
-    }
-
-    const context = definition['context'];
-    if (context && typeof context === 'object') {
-      inlineDefinition.context = context as Record<string, unknown>;
-    }
-
-    normalized.push(inlineDefinition);
+    normalized.push(buildInlineGateDefinition(definition));
   }
 
   return normalized.length > 0 ? normalized : undefined;
@@ -290,7 +382,8 @@ function normalizeChainSteps(
  * Shared between yamlToPromptData (PromptData path) and loadYamlPrompt (LoadedPromptFile path).
  */
 function normalizeGateConfiguration(
-  config: PromptYaml['gateConfiguration']
+  config: PromptYaml['gateConfiguration'],
+  origin: InlineGateSource = {}
 ): PromptData['gateConfiguration'] | undefined {
   if (!config) return undefined;
   const normalized: NonNullable<PromptData['gateConfiguration']> = {};
@@ -298,9 +391,62 @@ function normalizeGateConfiguration(
   if (Array.isArray(config.exclude)) normalized.exclude = config.exclude;
   if (typeof config.framework_gates === 'boolean')
     normalized.framework_gates = config.framework_gates;
-  const inlineGateDefs = normalizeInlineGateDefinitions(config.inline_gate_definitions);
+  const inlineGateDefs = normalizeInlineGateDefinitions(config.inline_gate_definitions, origin);
   if (inlineGateDefs) normalized.inline_gate_definitions = inlineGateDefs;
   return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+/**
+ * Normalize a prompt-level injection block from validated YAML.
+ *
+ * Shared between yamlToPromptData (PromptData path) and loadYamlPrompt (LoadedPromptFile path),
+ * for the same reason `normalizeGateConfiguration` is: two call sites normalizing independently
+ * is how the two paths drift.
+ *
+ * An empty or all-empty block normalizes to `undefined` rather than `{}`, so "declared nothing"
+ * and "declared an empty block" resolve identically — the hierarchy treats a present-but-empty
+ * tier as a match, which would otherwise shadow the chain tier with no rules to apply.
+ */
+function normalizeInjectionConfig(
+  config: PromptYaml['injection']
+): PromptInjectionConfig | undefined {
+  if (config === undefined) return undefined;
+
+  const normalized: PromptInjectionConfig = {};
+  for (const injectionType of INJECTION_TYPES) {
+    const rule = normalizeInjectionRule(config[injectionType]);
+    if (rule !== undefined) normalized[injectionType] = rule;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+/** Normalize one injection type's rule; returns undefined when no field was declared. */
+function normalizeInjectionRule(
+  rule: NonNullable<PromptYaml['injection']>['system-prompt']
+): PromptInjectionRule | undefined {
+  if (rule === undefined) return undefined;
+
+  const normalized: PromptInjectionRule = {};
+  if (typeof rule.enabled === 'boolean') normalized.enabled = rule.enabled;
+  if (rule.frequency !== undefined) normalized.frequency = rule.frequency;
+  if (rule.target !== undefined) normalized.target = rule.target;
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+/**
+ * Attach a normalized injection block to loaded content, if the YAML declared one.
+ *
+ * The guard lives here rather than inline at the call site because `loadYamlPrompt` already
+ * measures a cyclomatic complexity of 31 against a limit of 10; adding a branch to it would
+ * make a function that is over budget slightly worse for no gain.
+ */
+function applyInjectionConfig(target: LoadedPromptFile, config: PromptYaml['injection']): void {
+  const normalized = normalizeInjectionConfig(config);
+  if (normalized !== undefined) {
+    target.injection = normalized;
+  }
 }
 
 /**
@@ -321,6 +467,9 @@ export function yamlToPromptData(yaml: PromptYaml, filePath?: string): PromptDat
     category,
     chainSteps: rawChainSteps,
     gateConfiguration: rawGateConfig,
+    // Destructured so the raw YAML shape does not reach PromptData through the passthrough
+    // spread below — it must arrive normalized or not at all.
+    injection: rawInjection,
     ...passthroughFields
   } = yaml;
 
@@ -331,6 +480,7 @@ export function yamlToPromptData(yaml: PromptYaml, filePath?: string): PromptDat
     arguments: normalizeArguments(rawArgs),
     chainSteps: normalizeChainSteps(rawChainSteps),
     gateConfiguration: normalizeGateConfiguration(rawGateConfig),
+    injection: normalizeInjectionConfig(rawInjection),
   };
 }
 
@@ -504,13 +654,24 @@ export function loadYamlPrompt(
     loadedContent.systemMessage = systemMessage;
   }
 
-  const normalizedGateConfig = normalizeGateConfiguration(yamlData.gateConfiguration);
+  // The logger is attached HERE and nowhere else on this path. `yamlToPromptData` below
+  // normalizes the same block a second time, so passing an origin to both would double every
+  // warning — and an operator using these warnings to count affected prompts (the whole point of
+  // ADR 0001's warn-then-arm release) would count each one twice. This site is also past the
+  // cache-hit early return, so a definition warns once per load from disk rather than once per
+  // prompt reuse.
+  const normalizedGateConfig = normalizeGateConfiguration(yamlData.gateConfiguration, {
+    logger: ctx.logger,
+    promptId,
+  });
   if (normalizedGateConfig) {
     // LoadedPromptFile.gateConfiguration has narrower inline_gate_definitions.type
     // ('validation' | 'guidance' vs string). Safe because normalizeInlineGateDefinitions
     // only emits these two values.
     loadedContent.gateConfiguration = normalizedGateConfig as LoadedPromptFile['gateConfiguration'];
   }
+
+  applyInjectionConfig(loadedContent, yamlData.injection);
 
   const normalizedChainSteps = normalizeChainSteps(yamlData.chainSteps);
   if (normalizedChainSteps) {

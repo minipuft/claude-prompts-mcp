@@ -7,9 +7,11 @@
 registrations:
   claude-code:
     user:
-      - prompt:development/review
-      - prompt:development/validate_work
+      # review + validate_work deregistered 2026-07-12: skill names collided with
+      # Claude Code built-ins (/review = PR review, /verify = end-to-end check).
+      # diagnose deregistered 2026-07-12: dispatch overlap with /debugging skill
+      # and built-in /code-review. All three remain available as MCP prompts:
+      # >>review, >>validate_work, >>diagnose.
       - prompt:development/dev_workflow
-      - prompt:general/diagnose
     project:
       - prompt:examples/reference_demo

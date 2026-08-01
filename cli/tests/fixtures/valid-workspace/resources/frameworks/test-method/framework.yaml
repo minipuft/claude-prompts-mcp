@@ -1,0 +1,6 @@
+id: test-method
+name: Test Framework
+type: TestMethod
+version: 1.0.0
+description: A test framework
+enabled: true

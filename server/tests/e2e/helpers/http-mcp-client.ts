@@ -398,6 +398,119 @@ export async function sendMcpRequestWithSse(
 }
 
 /**
+ * Send several MCP requests over ONE SSE session, in order.
+ *
+ * `sendMcpRequestWithSse` opens a fresh `GET /mcp` per call, and the server issues a new session
+ * per connection — so two of those calls are two independent sessions, not a conversation. The
+ * server attaches one transport to the shared MCP server at a time, so whether the second session
+ * can attach depends on whether the first connection's `close` has propagated yet. That is timing,
+ * and timing tracks machine load: measured green on an idle machine and red immediately after
+ * `test:integration`, which is why this read as a mysterious transport hang for so long.
+ *
+ * A real MCP client holds one stream open and sends many messages over it. This does the same, so
+ * an `initialize` followed by another request is one conversation rather than a race.
+ */
+export async function sendMcpRequestsOverSseSession(
+  baseUrl: string,
+  requests: Array<{ method: string; params?: Record<string, unknown> }>,
+  options: { timeout?: number } = {}
+): Promise<unknown[]> {
+  const timeout = options.timeout || 15000;
+
+  return new Promise((resolve, reject) => {
+    const results: unknown[] = [];
+    const pending = new Map<number, (message: Record<string, any>) => void>();
+    let settled = false;
+    let messagesEndpoint: string | null = null;
+    let currentEvent: string | null = null;
+    let buffer = '';
+
+    const finish = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      sseReq.destroy();
+      err ? reject(err) : resolve(results);
+    };
+
+    const timer = setTimeout(
+      () => finish(new Error(`MCP session timed out after ${timeout}ms`)),
+      timeout
+    );
+
+    /** Dispatch request `index` and wait for the matching id before sending the next. */
+    const sendNext = (index: number) => {
+      if (index >= requests.length) return finish();
+      const id = index + 1;
+      const { method, params = {} } = requests[index];
+
+      pending.set(id, (message) => {
+        if (message.error) {
+          return finish(new Error(message.error.message || JSON.stringify(message.error)));
+        }
+        results.push(message.result);
+        sendNext(index + 1);
+      });
+
+      const postUrl = messagesEndpoint!.startsWith('http')
+        ? messagesEndpoint!
+        : `${baseUrl}${messagesEndpoint}`;
+      httpPost(postUrl, { jsonrpc: '2.0', id, method, params }).catch((err) => finish(err));
+    };
+
+    const sseReq = http.get(new URL(`${baseUrl}/mcp`), (sseRes) => {
+      sseRes.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed === '') {
+            currentEvent = null;
+            continue;
+          }
+          if (trimmed.startsWith('event:')) {
+            currentEvent = trimmed.slice(6).trim();
+            continue;
+          }
+          if (!trimmed.startsWith('data:')) continue;
+          const data = trimmed.slice(5).trim();
+
+          if (currentEvent === 'endpoint') {
+            currentEvent = null;
+            messagesEndpoint = data;
+            sendNext(0);
+            continue;
+          }
+
+          // The server emits an `error` event when it cannot attach this connection; without this
+          // the stream would simply stay silent and the client would blame its own timeout.
+          if (currentEvent === 'error') {
+            currentEvent = null;
+            return finish(new Error(`server refused the SSE session: ${data}`));
+          }
+
+          try {
+            const parsed = JSON.parse(data);
+            const resolvePending = pending.get(parsed.id);
+            if (resolvePending) {
+              pending.delete(parsed.id);
+              resolvePending(parsed);
+            }
+          } catch {
+            // Keepalive or non-JSON frame.
+          }
+        }
+      });
+      sseRes.on('error', (err) => finish(err));
+    });
+
+    sseReq.on('error', (err) => finish(err));
+  });
+}
+
+/**
  * Helper to sleep for a duration
  */
 function sleep(ms: number): Promise<void> {
@@ -428,7 +541,11 @@ function parseJsonOrSse(body: string, expectedId?: number): { result?: unknown; 
         } catch {
           // Not valid JSON, continue
         }
-      } else if (lineTrimmed && !lineTrimmed.startsWith('event:') && !lineTrimmed.startsWith('id:')) {
+      } else if (
+        lineTrimmed &&
+        !lineTrimmed.startsWith('event:') &&
+        !lineTrimmed.startsWith('id:')
+      ) {
         try {
           const parsed = JSON.parse(lineTrimmed);
           if (!expectedId || parsed.id === expectedId) {

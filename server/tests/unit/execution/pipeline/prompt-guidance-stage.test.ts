@@ -40,7 +40,7 @@ const createGuidanceResult = (
     ...prompt,
     ...overrides,
   },
-  activeMethodology: 'CAGEERF',
+  activeFrameworkType: 'CAGEERF',
   guidanceApplied: true,
   processingTimeMs: 5,
   metadata: {
@@ -384,7 +384,7 @@ describe('PromptGuidanceStage', () => {
       service.applyGuidance.mockImplementation(async (prompt) => ({
         originalPrompt: prompt,
         enhancedPrompt: prompt, // Return prompt as-is to preserve style enhancement
-        activeMethodology: 'CAGEERF',
+        activeFrameworkType: 'CAGEERF',
         guidanceApplied: false, // No additional guidance
         processingTimeMs: 5,
         metadata: {},
@@ -450,7 +450,7 @@ describe('PromptGuidanceStage', () => {
       service.applyGuidance.mockImplementation(async (prompt) => ({
         originalPrompt: prompt,
         enhancedPrompt: prompt,
-        activeMethodology: 'CAGEERF',
+        activeFrameworkType: 'CAGEERF',
         guidanceApplied: false,
         processingTimeMs: 5,
         metadata: {},

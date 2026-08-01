@@ -50,21 +50,21 @@ In `gate.yaml`:
 id: my-gate
 name: Quality Gate
 evaluation:
-  mode: judge          # 'self' (default) or 'judge'
-  model: claude-haiku  # Optional: cheaper model for evaluation
-  strict: true         # Optional: strict evaluation protocol
+  mode: judge # 'self' (default) or 'judge'
+  model: claude-haiku # Optional: cheaper model for evaluation
+  strict: true # Optional: strict evaluation protocol
 ```
 
 ### Global Defaults
 
-In `methodology.yaml` or `config.json`:
+In `framework.yaml` or `config.json`:
 
 ```yaml
 gates:
   evaluation:
-    defaultMode: self       # Default mode for all gates
+    defaultMode: self # Default mode for all gates
     defaultModel: claude-haiku
-    strict: false           # Default strict setting
+    strict: false # Default strict setting
 ```
 
 ### Resolution Hierarchy
@@ -81,10 +81,10 @@ When `strict` is not explicitly set, it defaults to `true` for judge mode and `f
 
 ## Evaluation Modes
 
-| Mode | Evaluator | Context | Default strict |
-|------|-----------|---------|---------------|
-| `self` | Same LLM | Full generation context | `false` |
-| `judge` | Separate sub-agent | Output + criteria only | `true` |
+| Mode    | Evaluator          | Context                 | Default strict |
+| ------- | ------------------ | ----------------------- | -------------- |
+| `self`  | Same LLM           | Full generation context | `false`        |
+| `judge` | Separate sub-agent | Output + criteria only  | `true`         |
 
 ## Strict vs Balanced Evaluation
 
@@ -128,7 +128,7 @@ Use a smaller model for judge evaluation to reduce cost while maintaining indepe
 ```yaml
 evaluation:
   mode: judge
-  model: claude-haiku    # Cheaper model for structural evaluation
+  model: claude-haiku # Cheaper model for structural evaluation
 ```
 
 The judge doesn't need the full model's capabilities — it only needs to match output against criteria.
@@ -137,14 +137,14 @@ The judge doesn't need the full model's capabilities — it only needs to match 
 
 Internally, judge mode constructs a `JudgeEnvelope` containing only:
 
-| Field | Content | Source |
-|-------|---------|--------|
-| `output` | Raw LLM output text | The response being evaluated |
-| `criteria` | Gate criteria list | From gate definition |
-| `gateName` | Gate name for context | From gate definition |
-| `gateId` | Gate identifier | From gate definition |
-| `strict` | Evaluation protocol flag | Resolved from config |
-| `verdictFormat` | Expected verdict format | Standard format |
+| Field           | Content                  | Source                       |
+| --------------- | ------------------------ | ---------------------------- |
+| `output`        | Raw LLM output text      | The response being evaluated |
+| `criteria`      | Gate criteria list       | From gate definition         |
+| `gateName`      | Gate name for context    | From gate definition         |
+| `gateId`        | Gate identifier          | From gate definition         |
+| `strict`        | Evaluation protocol flag | Resolved from config         |
+| `verdictFormat` | Expected verdict format  | Standard format              |
 
 Everything else — prompt template, chain history, framework context, generation reasoning — is excluded.
 
@@ -161,13 +161,16 @@ Evaluate the following output against the criteria below.
 **IMPORTANT: You did NOT produce this output. Evaluate it objectively.**
 
 ### Output Under Review
+
 [raw output text]
 
 ### Evaluation Criteria (Gate Name)
+
 - Criterion 1
 - Criterion 2
 
 ### Evaluation Protocol
+
 [strict or balanced instructions]
 
 Respond with: `GATE_REVIEW: PASS|FAIL - reason`
@@ -177,11 +180,11 @@ Respond with: `GATE_REVIEW: PASS|FAIL - reason`
 
 Judge mode and assertions are complementary:
 
-| Layer | Validates | Cost | Independence |
-|-------|-----------|------|-------------|
-| Assertions | Structure (sections, length, terms) | Zero (deterministic) | N/A — rule-based |
-| Gates (self) | Content quality | LLM cost | Low — self-review |
-| Gates (judge) | Content quality | LLM cost (separate call) | High — context-isolated |
+| Layer         | Validates                           | Cost                     | Independence            |
+| ------------- | ----------------------------------- | ------------------------ | ----------------------- |
+| Assertions    | Structure (sections, length, terms) | Zero (deterministic)     | N/A — rule-based        |
+| Gates (self)  | Content quality                     | LLM cost                 | Low — self-review       |
+| Gates (judge) | Content quality                     | LLM cost (separate call) | High — context-isolated |
 
 Typical stack for highest quality:
 

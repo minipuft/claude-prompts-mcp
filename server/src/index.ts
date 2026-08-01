@@ -351,7 +351,7 @@ WORKSPACE STRUCTURE:
     resources/
       prompts/                 - Custom prompt templates
       gates/                   - Custom validation gates
-      methodologies/           - Custom reasoning frameworks
+      frameworks/           - Custom reasoning frameworks
       styles/                  - Custom output styles
     config.json                - Server configuration overrides
 

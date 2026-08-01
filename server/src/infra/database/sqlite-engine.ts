@@ -29,8 +29,16 @@ import { DatabaseSync } from 'node:sqlite';
 import type { DatabasePort } from '../../shared/types/persistence.js';
 import type { Logger } from '../logging/index.js';
 
-/** Bump this when changing the embedded schema. Triggers drop-and-recreate. */
-const SCHEMA_VERSION = 15;
+/**
+ * Bump this when changing the embedded schema. Triggers drop-and-recreate.
+ *
+ * v16: retired the `StepState` enum. Persisted step `state` values `rendered` and
+ * `response_captured` no longer exist — both are now lifecycle `working`, distinguished by the
+ * `renderedAt` / `respondedAt` substate timestamps. `StepSubstate.responseAt` was also renamed to
+ * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
+ * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
+ */
+const SCHEMA_VERSION = 16;
 
 /**
  * Database configuration options

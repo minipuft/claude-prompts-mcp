@@ -6,7 +6,7 @@
  * based on the resource_type parameter.
  */
 
-import { PROMPT_ONLY_ACTIONS, METHODOLOGY_ONLY_ACTIONS, CHECKPOINT_ONLY_ACTIONS } from './types.js';
+import { PROMPT_ONLY_ACTIONS, FRAMEWORK_ONLY_ACTIONS, CHECKPOINT_ONLY_ACTIONS } from './types.js';
 import { resolveRequestIdentity } from '../../../../shared/utils/request-identity-resolver.js';
 import { resolveContinuityScopeId } from '../../../../shared/utils/request-identity-scope.js';
 
@@ -86,7 +86,7 @@ export class ResourceManagerRouter {
           return await this.routeToPromptResource(args, enrichedContext);
         case 'gate':
           return await this.routeToGateManager(args, enrichedContext);
-        case 'methodology':
+        case 'framework':
           return await this.routeToFrameworkManager(args, enrichedContext);
         case 'checkpoint':
           return await this.routeToCheckpointManager(args, enrichedContext);
@@ -120,11 +120,11 @@ export class ResourceManagerRouter {
       };
     }
 
-    // Check methodology-only actions
-    if (METHODOLOGY_ONLY_ACTIONS.includes(action) && resourceType !== 'methodology') {
+    // Check framework-only actions
+    if (FRAMEWORK_ONLY_ACTIONS.includes(action) && resourceType !== 'framework') {
       return {
         valid: false,
-        error: `Action "${action}" is only valid for resource_type: "methodology"`,
+        error: `Action "${action}" is only valid for resource_type: "framework"`,
       };
     }
 
@@ -282,7 +282,7 @@ export class ResourceManagerRouter {
 
     if (args.id) frameworkArgs.id = args.id;
     if (args.name) frameworkArgs.name = args.name;
-    if (args.methodology) frameworkArgs.methodology = args.methodology;
+    if (args.framework) frameworkArgs.framework = args.framework;
     if (args.description) frameworkArgs.description = args.description;
     if (args.system_prompt_guidance) {
       frameworkArgs.system_prompt_guidance = args.system_prompt_guidance;
@@ -335,15 +335,22 @@ export class ResourceManagerRouter {
       frameworkArgs.reason = args.reason;
     }
 
-    // Advanced methodology parameters (pass-through)
-    if (args.methodology_gates) {
-      frameworkArgs.methodology_gates = args.methodology_gates;
+    // Advanced framework parameters (pass-through)
+    // The input schema is `.passthrough()`, so a pre-rename client key arrives intact but no
+    // typed consumer reads it. Fold here rather than downstream so only this boundary knows
+    // both spellings exist. NOTE: `framework_gates` here is a framework authoring payload
+    // (array of FrameworkGate). The identically-named key inside a *prompt's*
+    // `gate_configuration` is an unrelated boolean toggle — same token, different concept.
+    const frameworkGatesArg = args.framework_gates ?? args.methodology_gates;
+    if (frameworkGatesArg) {
+      frameworkArgs.framework_gates = frameworkGatesArg;
     }
     if (args.template_suggestions) {
       frameworkArgs.template_suggestions = args.template_suggestions;
     }
-    if (args.methodology_elements) {
-      frameworkArgs.methodology_elements = args.methodology_elements;
+    const frameworkElementsArg = args.framework_elements ?? args.methodology_elements;
+    if (frameworkElementsArg) {
+      frameworkArgs.framework_elements = frameworkElementsArg;
     }
     if (args.argument_suggestions) {
       frameworkArgs.argument_suggestions = args.argument_suggestions;

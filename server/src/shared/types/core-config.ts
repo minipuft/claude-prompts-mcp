@@ -143,8 +143,8 @@ export interface FrameworkInjectionConfig {
 /**
  * Configuration toggles for framework-driven features
  */
-export interface FrameworksConfig {
-  /** Enable dynamic tool descriptions per methodology */
+export interface ResolvedFrameworkConfig {
+  /** Enable dynamic tool descriptions per framework */
   dynamicToolDescriptions: boolean;
   /** Injection control for framework content */
   injection?: FrameworkInjectionConfig;
@@ -179,8 +179,8 @@ export interface GateSystemSettings {
   enabled: boolean;
   /** Directory containing gate definitions (e.g., 'gates' for server/gates/{id}/) */
   definitionsDirectory?: string;
-  /** Enable methodology-specific gates (auto-added based on active framework) */
-  enableMethodologyGates?: boolean;
+  /** Enable framework-specific gates (auto-added based on active framework) */
+  enableFrameworkGates?: boolean;
 }
 
 /**
@@ -193,9 +193,14 @@ export interface GatesConfig {
   directory?: string;
   /** Enable/disable the gate subsystem entirely */
   enabled?: boolean;
-  /** Enable methodology-specific quality gates */
-  enableMethodologyGates?: boolean;
-  /** New-style: methodology gates */
+  /**
+   * Resolved internal spelling. `ConfigManager` folds the config.json key into this, so
+   * consumers read only this field and never the wire key below.
+   */
+  enableFrameworkGates?: boolean;
+  /** config.json key: enable framework-specific quality gates */
+  frameworkGates?: boolean;
+  /** @deprecated Pre-rename spelling of `frameworkGates`; folded forward by ConfigManager. */
   methodologyGates?: boolean;
   /** Judge evaluation defaults — gates with `evaluation.mode: 'judge'` use context-isolated review */
   evaluation?: {
@@ -207,7 +212,7 @@ export interface GatesConfig {
 
 /**
  * Configuration for phase guard enforcement.
- * Controls deterministic structural validation of LLM output against methodology phase markers.
+ * Controls deterministic structural validation of LLM output against framework phase markers.
  */
 export interface PhaseGuardsConfig {
   /** Enforcement mode: 'enforce' creates pending gate review, 'warn' logs warning, 'off' disables */
@@ -217,14 +222,14 @@ export interface PhaseGuardsConfig {
 }
 
 /**
- * New-style methodologies configuration (replaces frameworks)
+ * New-style frameworks configuration (replaces frameworks)
  */
-export interface MethodologiesConfig {
-  /** Enable methodology system */
+export interface FrameworkSettings {
+  /** Enable framework system */
   enabled?: boolean;
-  /** Adapt MCP tool descriptions based on active methodology */
+  /** Adapt MCP tool descriptions based on active framework */
   dynamicToolDescriptions?: boolean;
-  /** Inject methodology guidance every N chain steps (default: 2) */
+  /** Inject framework guidance every N chain steps (default: 2) */
   systemPromptFrequency?: number;
   /** Where to inject system prompt: 'steps', 'gates', or 'both' (default: 'steps') */
   systemPromptTarget?: InjectionTargetConfig;
@@ -274,7 +279,7 @@ export interface ResourcesConfig {
   registerWithMcp?: boolean;
   prompts?: { enabled?: boolean };
   gates?: { enabled?: boolean };
-  methodologies?: { enabled?: boolean };
+  frameworks?: { enabled?: boolean };
   observability?: {
     enabled?: boolean;
     sessions?: boolean;
@@ -417,14 +422,13 @@ export interface Config {
   analysis?: AnalysisConfig;
   /** Gates system configuration (quality validation) */
   gates?: GatesConfig;
-  /** Phase guard enforcement for methodology structural validation */
+  /** Phase guard enforcement for framework structural validation */
   phaseGuards?: PhaseGuardsConfig;
   /** Execution strategy configuration (judge mode, etc.) */
   execution?: ExecutionConfig;
   /** Framework feature configuration (injection, tool descriptions) - LEGACY */
-  frameworks?: FrameworksConfig;
-  /** New-style: Methodology configuration */
-  methodologies?: MethodologiesConfig;
+  /** New-style: Framework configuration */
+  frameworks?: FrameworkSettings;
   /** Chain session lifecycle configuration - LEGACY */
   chainSessions?: ChainSessionConfig;
   /**
@@ -529,7 +533,7 @@ export interface ContentAnalysisResult {
     hasSystemMessage: boolean;
     hasUserTemplate: boolean;
     hasStructuredReasoning: boolean;
-    hasMethodologyKeywords: boolean;
+    hasFrameworkKeywords: boolean;
     hasComplexAnalysis: boolean;
     advancedChainFeatures?: {
       hasDependencies: boolean;
@@ -582,7 +586,7 @@ export type ExecutionModifier = 'clean' | 'judge' | 'lean' | 'framework';
  * - clean: Skip all injection (system-prompt, gate-guidance, style-guidance)
  * - judge: Trigger judge selection phase for resource menu (%judge in command)
  * - lean: Skip system-prompt and style-guidance, keep gate-guidance only
- * - framework: Force framework methodology injection
+ * - framework: Force framework injection
  */
 export interface ExecutionModifiers {
   clean?: boolean;

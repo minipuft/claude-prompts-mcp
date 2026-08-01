@@ -3,15 +3,15 @@
  * Unified Resource Manager Types
  *
  * Defines the types for the unified resource_manager MCP tool
- * that routes to prompt, gate, and methodology handlers.
+ * that routes to prompt, gate, and framework handlers.
  */
 
 import type { Logger, ToolResponse } from '../../../../shared/types/index.js';
 import type {
   FrameworkManagerInput,
-  MethodologyGate,
+  FrameworkGate,
   TemplateSuggestion,
-  MethodologyElements,
+  FrameworkElements,
   ArgumentSuggestion,
   ProcessingStep,
   ExecutionStep,
@@ -54,7 +54,7 @@ export interface ToolDefinitionInput {
 /**
  * Resource types supported by the unified manager
  */
-export type ResourceType = 'prompt' | 'gate' | 'methodology' | 'checkpoint';
+export type ResourceType = 'prompt' | 'gate' | 'framework' | 'checkpoint';
 
 /**
  * All possible actions across resource types
@@ -69,7 +69,7 @@ export type ResourceAction =
   | 'analyze_type' // prompt only
   | 'analyze_gates' // prompt only
   | 'guide' // prompt only
-  | 'switch' // methodology only
+  | 'switch' // framework only
   | 'history' // versioning (all types)
   | 'rollback' // versioning (all types) + checkpoint
   | 'compare' // versioning (all types)
@@ -79,7 +79,7 @@ export type ResourceAction =
  * Actions specific to certain resource types
  */
 export const PROMPT_ONLY_ACTIONS: ResourceAction[] = ['analyze_type', 'analyze_gates', 'guide'];
-export const METHODOLOGY_ONLY_ACTIONS: ResourceAction[] = ['switch'];
+export const FRAMEWORK_ONLY_ACTIONS: ResourceAction[] = ['switch'];
 export const CHECKPOINT_ONLY_ACTIONS: ResourceAction[] = ['clear'];
 export const VERSIONING_ACTIONS: ResourceAction[] = ['history', 'rollback', 'compare'];
 export const COMMON_ACTIONS: ResourceAction[] = [
@@ -165,8 +165,8 @@ export interface ResourceManagerInput {
     preserve_context?: boolean;
   };
 
-  // Methodology-specific parameters
-  methodology?: string;
+  // Framework-specific parameters
+  framework?: string;
   system_prompt_guidance?: string;
   phases?: FrameworkPhase[];
   gates?: {
@@ -177,10 +177,14 @@ export interface ResourceManagerInput {
   enabled?: boolean;
   persist?: boolean;
 
-  // Advanced methodology parameters (not advertised for token efficiency)
-  methodology_gates?: MethodologyGate[];
+  // Advanced framework parameters (not advertised for token efficiency)
+  framework_gates?: FrameworkGate[];
+  /** @deprecated Pre-rename spelling of `framework_gates`; folded on read. */
+  methodology_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
-  methodology_elements?: MethodologyElements;
+  framework_elements?: FrameworkElements;
+  /** @deprecated Pre-rename spelling of `framework_elements`; folded on read. */
+  methodology_elements?: FrameworkElements;
   argument_suggestions?: ArgumentSuggestion[];
   judge_prompt?: string;
 

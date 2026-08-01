@@ -9,7 +9,7 @@
  *
  * This ensures SSOT — any schema change is enforced everywhere.
  *
- * @see methodology-schema.ts for the pattern this follows
+ * @see framework-schema.ts for the pattern this follows
  *
  * ## Gate Enforcement Modes (taxonomy)
  *
@@ -20,8 +20,8 @@
  * |----------------------------|-----------------------------------------------|-----------------------------------------------------------------------|
  * | `inline_guidance`          | **None** — rendered as agent-facing checklist | Soft criteria the agent self-assesses (style, completeness reminders) |
  * | `llm_self_check`           | **Reserved** — runner not yet implemented     | (Not usable today)                                                    |
- * | `methodology_compliance`   | **Hard** — phase guards (stage 09b) check     | Required output sections per active methodology phases.yaml           |
- * |                            | section presence + min_length + forbidden_terms |                                                                     |
+ * | `framework_compliance`     | **None** — auto-passed by GateValidator       | Declares intent only. Stage 09b enforces framework phase guards      |
+ * |                            | (see gate-validator.ts default branch)        | from `phases.yaml`, independently of this criteria type              |
  * | `shell_verify`             | **Hard** — runs shell command, exit 0 = pass  | Ground-truth checks: tests passing, files existing, content claims    |
  * |                            | (supports `shell_stdin_source: agent_response`) | matching reality (file paths, line counts, symbol locations)        |
  * | `script_tool`              | **Hard** — registered script with JSON stdin, | Structured validation requiring rich input/output contracts           |
@@ -61,22 +61,31 @@ export const GatePassCriteriaSchema = z
      *   previously-named `content_check` and `pattern_check` (which were
      *   intentionally skipped by GateValidator — see gate-validator.ts).
      * - `llm_self_check`: type declared, runner not yet implemented. Reserved.
-     * - `methodology_compliance`: enforced by methodology phase guards
-     *   (stage 09b) — checks section presence + min_length + forbidden_terms
-     *   per active framework's `phases.yaml`.
+     * - `framework_compliance`: declarative only. GateValidator has no branch
+     *   for it, so it falls through to the auto-pass default. Stage 09b does
+     *   check section presence + min_length + forbidden_terms, but it triggers
+     *   on the active framework's `phases.yaml` guards — not on this value.
      * - `shell_verify`: runs `shell_command`, exit 0 = pass. Hard enforcement.
      *   Supports `shell_stdin_source: 'agent_response'` for response-content
      *   verification against ground truth.
      * - `script_tool`: runs a registered script tool with JSON input via stdin,
      *   parses structured pass/fail return.
      */
-    type: z.enum([
-      'inline_guidance',
-      'llm_self_check',
-      'methodology_compliance',
-      'shell_verify',
-      'script_tool',
-    ]),
+    /**
+     * Unlike the `.passthrough()` fields below, this is a CLOSED enum — a pre-rename value fails
+     * loudly at parse rather than dropping silently. The preprocess exists so a gate authored
+     * before the rename still loads at all, not to prevent a silent loss.
+     */
+    type: z.preprocess(
+      (value) => (value === 'methodology_compliance' ? 'framework_compliance' : value),
+      z.enum([
+        'inline_guidance',
+        'llm_self_check',
+        'framework_compliance',
+        'shell_verify',
+        'script_tool',
+      ])
+    ),
 
     // Content check options
     min_length: z.number().int().nonnegative().optional(),
@@ -84,8 +93,8 @@ export const GatePassCriteriaSchema = z
     required_patterns: z.array(z.string()).optional(),
     forbidden_patterns: z.array(z.string()).optional(),
 
-    // Methodology compliance options
-    methodology: z.string().optional(),
+    // Framework compliance options
+    framework: z.string().optional(),
     min_compliance_score: z.number().min(0).max(1).optional(),
     severity: z.enum(['warn', 'fail']).optional(),
     quality_indicators: z
@@ -141,8 +150,20 @@ export const GatePassCriteriaSchema = z
     script_tool_timeout: z.number().int().positive().optional(),
     /** Working directory for script execution */
     script_tool_working_dir: z.string().optional(),
+    /** @deprecated Pre-rename spelling of `framework`; folded in by the transform below. */
+    methodology: z.string().optional(),
   })
-  .passthrough(); // Allow additional fields for extensibility
+  .passthrough() // Allow additional fields for extensibility
+  // Fold the pre-rename spelling forward, matching what FrameworkSchema does for
+  // `methodologyGates`. Without this a gate authored before the rename still parses (passthrough
+  // keeps the key) but no typed consumer reads it, so the criterion silently evaluates as absent —
+  // the same failure mode that made every framework contribute zero gates.
+  .transform((data) => {
+    if (data.framework === undefined && data.methodology !== undefined) {
+      return { ...data, framework: data.methodology };
+    }
+    return data;
+  });
 
 export type GatePassCriteriaYaml = z.infer<typeof GatePassCriteriaSchema>;
 
@@ -232,7 +253,7 @@ export const GateDefinitionSchema = z
     enforcementMode: z.enum(['blocking', 'advisory', 'informational']).optional(),
     /**
      * Gate type classification for dynamic identification.
-     * - 'framework': Methodology-related gates, filtered when frameworks disabled
+     * - 'framework': Framework-related gates, filtered when frameworks disabled
      * - 'category': Category-based gates (code, documentation, etc.)
      * - 'custom': User-defined custom gates
      */

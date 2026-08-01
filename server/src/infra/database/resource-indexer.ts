@@ -2,7 +2,7 @@
 /**
  * Resource Indexer
  *
- * Synchronizes file-based resources (prompts, gates, methodologies, styles, tools)
+ * Synchronizes file-based resources (prompts, gates, frameworks, styles, tools)
  * to the SQLite resource_index table for queryable lookups.
  *
  * Architecture:
@@ -11,7 +11,7 @@
  * ┌──────────────┐    sync    ┌───────────────────────┐
  * │ prompts/     │ ────────▶  │ id, type, name,       │
  * │ gates/       │            │ category, description,│
- * │ methodologies│            │ content_hash,         │
+ * │ frameworks│            │ content_hash,         │
  * │ styles/      │            │ file_path,            │
  * │ tools (nested)│           │ metadata_json,        │
  * └──────────────┘            │ keywords, indexed_at  │
@@ -42,7 +42,7 @@ import type { Logger } from '../logging/index.js';
 /**
  * Resource types supported by the indexer
  */
-export type IndexedResourceType = 'prompt' | 'gate' | 'methodology' | 'style' | 'tool';
+export type IndexedResourceType = 'prompt' | 'gate' | 'framework' | 'style' | 'tool';
 
 /**
  * Indexed resource entry from SQLite
@@ -309,7 +309,7 @@ function buildMetadata(
         triggers: extractKeywords(`${name} ${description}`, 10),
       };
     }
-    case 'methodology':
+    case 'framework':
     case 'style': {
       return {
         enabled: (data['enabled'] as boolean) ?? true,
@@ -334,8 +334,8 @@ export interface ResourceIndexerConfig {
   trackPrompts?: boolean;
   /** Whether to track gates */
   trackGates?: boolean;
-  /** Whether to track methodologies */
-  trackMethodologies?: boolean;
+  /** Whether to track frameworks */
+  trackFrameworks?: boolean;
   /** Whether to track styles */
   trackStyles?: boolean;
   /** Whether to track script tools (nested in prompts) */
@@ -363,7 +363,7 @@ export class ResourceIndexer {
       resourcesDir: config.resourcesDir,
       trackPrompts: config.trackPrompts ?? true,
       trackGates: config.trackGates ?? true,
-      trackMethodologies: config.trackMethodologies ?? true,
+      trackFrameworks: config.trackFrameworks ?? true,
       trackStyles: config.trackStyles ?? true,
       trackTools: config.trackTools ?? true,
     };
@@ -384,7 +384,7 @@ export class ResourceIndexer {
     const types: Array<{ type: IndexedResourceType; enabled: boolean; subdir: string }> = [
       { type: 'prompt', enabled: this.config.trackPrompts, subdir: 'prompts' },
       { type: 'gate', enabled: this.config.trackGates, subdir: 'gates' },
-      { type: 'methodology', enabled: this.config.trackMethodologies, subdir: 'methodologies' },
+      { type: 'framework', enabled: this.config.trackFrameworks, subdir: 'frameworks' },
       { type: 'style', enabled: this.config.trackStyles, subdir: 'styles' },
     ];
 
@@ -580,8 +580,8 @@ export class ResourceIndexer {
         return 'prompt.yaml';
       case 'gate':
         return 'gate.yaml';
-      case 'methodology':
-        return 'methodology.yaml';
+      case 'framework':
+        return 'framework.yaml';
       case 'style':
         return 'style.yaml';
       default:
@@ -748,7 +748,7 @@ export class ResourceIndexer {
     const stats: Record<IndexedResourceType, number> = {
       prompt: 0,
       gate: 0,
-      methodology: 0,
+      framework: 0,
       style: 0,
       tool: 0,
     };
@@ -778,12 +778,12 @@ export class ResourceIndexer {
   }
 
   /**
-   * Get valid framework/methodology IDs from the index.
+   * Get valid framework IDs from the index.
    * Replaces directory-scanning _meta.valid_frameworks from cache files.
    */
   getValidFrameworks(): string[] {
     const rows = this.db.query<{ id: string }>(
-      "SELECT id FROM resource_index WHERE type = 'methodology' ORDER BY id"
+      "SELECT id FROM resource_index WHERE type = 'framework' ORDER BY id"
     );
     return rows.map((r) => r.id.toLowerCase());
   }

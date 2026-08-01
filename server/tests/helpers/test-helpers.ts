@@ -198,7 +198,7 @@ export class MockConfigManager {
   getFrameworksConfig() {
     return {
       enableSystemPromptInjection: true,
-      enableMethodologyGates: false,
+      enableFrameworkGates: false,
       enableDynamicToolDescriptions: false,
     };
   }
@@ -320,7 +320,7 @@ export class MockPromptGuidanceService {
 
   private initialized: boolean = false;
   private config: any;
-  private currentMethodology: string = 'CAGEERF';
+  private currentFramework: string = 'CAGEERF';
   private logger: any;
 
   constructor(logger?: any) {
@@ -351,11 +351,11 @@ export class MockPromptGuidanceService {
       return {
         originalPrompt: prompt,
         enhancedPrompt: prompt,
-        activeMethodology: this.currentMethodology,
+        activeFrameworkType: this.currentFramework,
         guidanceApplied: true,
         processingTimeMs: 1,
         metadata: {
-          frameworkUsed: this.currentMethodology,
+          frameworkUsed: this.currentFramework,
           enhancementsApplied: ['mock_enhancement'],
           confidenceScore: 0.9,
           semanticAware: options.semanticAnalysis !== undefined,
@@ -386,7 +386,6 @@ export class MockPromptGuidanceService {
       templateEnhancement: {
         enabled: true,
         enhancementLevel: 'moderate',
-        enableArgumentSuggestions: true,
         enableStructureOptimization: true,
       },
     }));

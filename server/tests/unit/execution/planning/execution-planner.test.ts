@@ -47,7 +47,7 @@ const baseAnalysis: ContentAnalysisResult = {
     hasSystemMessage: false,
     hasUserTemplate: true,
     hasStructuredReasoning: false,
-    hasMethodologyKeywords: false,
+    hasFrameworkKeywords: false,
     hasComplexAnalysis: false,
   },
   complexity: 'medium',

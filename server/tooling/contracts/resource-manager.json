@@ -1,20 +1,20 @@
 {
   "tool": "resource_manager",
   "version": 1,
-  "summary": "Unified resource management for prompts, gates, methodologies, and checkpoints. Use resource_type to specify the resource kind, then action for the operation.",
+  "summary": "Unified resource management for prompts, gates, frameworks, and checkpoints. Use resource_type to specify the resource kind, then action for the operation.",
   "toolDescription": {
-    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, methodologies, checkpoints.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | methodology | checkpoint\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare | clear\n\nUPDATE: update(id, description:\"new\") \u2014 only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\nCHECKPOINT: create (save state), rollback (restore), list (show all), delete (remove), clear (remove all)\n\nCREATION GUIDES:\n\u2022 >>create_methodology - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
-    "shortDescription": "Manage prompts, gates, methodologies, and checkpoints",
+    "description": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: CRUD for prompts, gates, frameworks, checkpoints.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | checkpoint\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare | clear\n\nUPDATE: update(id, description:\"new\") \u2014 only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\nCHECKPOINT: create (save state), rollback (restore), list (show all), delete (remove), clear (remove all)\n\nCREATION GUIDES:\n\u2022 >>create_framework - Framework creation with validation\n\u2022 >>create_gate - Quality gate creation\n\u2022 >>create_prompt - Prompt/chain creation",
+    "shortDescription": "Manage prompts, gates, frameworks, and checkpoints",
     "category": "management",
     "frameworkAware": {
-      "enabled": "\ud83d\uddc2\ufe0f RESOURCE MANAGER [FRAMEWORK]: Operations reflect active methodology context.",
+      "enabled": "\ud83d\uddc2\ufe0f RESOURCE MANAGER [FRAMEWORK]: Operations reflect active framework context.",
       "disabled": "\ud83d\uddc2\ufe0f RESOURCE MANAGER: Standard resource lifecycle operations."
     }
   },
   "parameters": [
     {
       "name": "resource_type",
-      "type": "enum[prompt|gate|methodology|checkpoint]",
+      "type": "enum[prompt|gate|framework|checkpoint]",
       "description": "Type of resource to manage. Routes to appropriate handler.",
       "status": "working",
       "required": true
@@ -22,7 +22,7 @@
     {
       "name": "action",
       "type": "enum[create|update|delete|reload|list|inspect|analyze_type|analyze_gates|guide|switch|history|rollback|compare|clear]",
-      "description": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/methodology). Checkpoint: create/rollback/list/delete/clear.",
+      "description": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/framework). Checkpoint: create/rollback/list/delete/clear.",
       "status": "working",
       "required": true
     },
@@ -182,51 +182,51 @@
       "includeInDescription": false
     },
     {
-      "name": "methodology",
+      "name": "framework",
       "type": "string",
-      "description": "[Methodology] Methodology type identifier. Use action:'list' to see registered methodologies.",
+      "description": "[Framework] Framework type identifier. Use action:'list' to see registered frameworks.",
       "status": "working",
       "includeInDescription": false
     },
     {
       "name": "system_prompt_guidance",
       "type": "string",
-      "description": "[Methodology] System prompt guidance injected when active.",
+      "description": "[Framework] System prompt guidance injected when active.",
       "status": "working",
       "includeInDescription": false
     },
     {
       "name": "phases",
       "type": "array<object>",
-      "description": "[Methodology] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (methodology_gates, processing_steps, execution_steps, etc.) are also accepted.",
+      "description": "[Framework] Phase definitions and advanced fields. Core: id, name, description. Advanced fields (framework_gates, processing_steps, execution_steps, etc.) are also accepted.",
       "status": "working",
       "includeInDescription": false
     },
     {
       "name": "gates",
       "type": "object",
-      "description": "[Methodology] Gate configuration: include, exclude arrays.",
+      "description": "[Framework] Gate configuration: include, exclude arrays.",
       "status": "working",
       "includeInDescription": false
     },
     {
       "name": "tool_descriptions",
       "type": "object",
-      "description": "[Methodology] Tool description overlays when active.",
+      "description": "[Framework] Tool description overlays when active.",
       "status": "working",
       "includeInDescription": false
     },
     {
       "name": "enabled",
       "type": "boolean",
-      "description": "[Methodology] Whether the methodology is enabled.",
+      "description": "[Framework] Whether the framework is enabled.",
       "status": "working",
       "includeInDescription": false
     },
     {
       "name": "persist",
       "type": "boolean",
-      "description": "[Methodology] For switch: persist the change to config. Default: false.",
+      "description": "[Framework] For switch: persist the change to config. Default: false.",
       "status": "working",
       "includeInDescription": false
     },
@@ -369,14 +369,14 @@
       "parameters": ["resource_type", "action", "enabled_only"]
     },
     {
-      "id": "methodology:create",
-      "summary": "Create a new methodology with YAML configuration.",
+      "id": "framework:create",
+      "summary": "Create a new framework with YAML configuration.",
       "parameters": [
         "resource_type",
         "action",
         "id",
         "name",
-        "methodology",
+        "framework",
         "description",
         "system_prompt_guidance",
         "phases",
@@ -385,14 +385,14 @@
       ]
     },
     {
-      "id": "methodology:update",
-      "summary": "Update existing methodology configuration.",
+      "id": "framework:update",
+      "summary": "Update existing framework configuration.",
       "parameters": [
         "resource_type",
         "action",
         "id",
         "name",
-        "methodology",
+        "framework",
         "description",
         "system_prompt_guidance",
         "phases",
@@ -402,13 +402,13 @@
       ]
     },
     {
-      "id": "methodology:list",
-      "summary": "List all available methodologies.",
+      "id": "framework:list",
+      "summary": "List all available frameworks.",
       "parameters": ["resource_type", "action", "enabled_only"]
     },
     {
-      "id": "methodology:switch",
-      "summary": "Switch the active framework/methodology.",
+      "id": "framework:switch",
+      "summary": "Switch the active framework.",
       "parameters": ["resource_type", "action", "id", "persist", "reason"]
     },
     {
@@ -475,8 +475,8 @@
   ],
   "conditionalRequirements": {
     "switch": {
-      "resource_type": "methodology",
-      "message": "The 'switch' action is only valid for resource_type: 'methodology'"
+      "resource_type": "framework",
+      "message": "The 'switch' action is only valid for resource_type: 'framework'"
     },
     "analyze_type": {
       "resource_type": "prompt",

@@ -15,8 +15,10 @@ import {
 } from '../../../src/infra/observability/notifications/index.js';
 import { noopLogger } from '../../../src/infra/logging/index.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/08-response-capture-stage.js';
+import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
+import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/index.js';
-import type { ChainSessionService } from '../../../src/modules/chains/types.js';
+import type { ChainSessionService } from '../../../src/shared/types/chain-session.js';
 import type { McpToolRequest } from '../../../src/shared/types/index.js';
 
 describe('ResponseCaptureStage Hook Emission', () => {
@@ -24,7 +26,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
   let notificationEmitter: McpNotificationEmitter;
   let mockServer: jest.Mocked<McpNotificationServer>;
   let stage: StepResponseCaptureStage;
-  let mockChainSessionManager: jest.Mocked<ChainSessionService>;
+  let mockChainSessionStore: jest.Mocked<ChainSessionService>;
 
   beforeEach(() => {
     hookRegistry = new HookRegistry(noopLogger);
@@ -36,7 +38,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
     notificationEmitter.setServer(mockServer);
 
     // Create mock chain session manager
-    mockChainSessionManager = {
+    mockChainSessionStore = {
       getSession: jest.fn(),
       getPendingGateReview: jest.fn(),
       isRetryLimitExceeded: jest.fn(),
@@ -50,7 +52,15 @@ describe('ResponseCaptureStage Hook Emission', () => {
       getChainContext: jest.fn(),
     } as unknown as jest.Mocked<ChainSessionService>;
 
-    stage = new StepResponseCaptureStage(mockChainSessionManager, noopLogger);
+    // Real collaborators: gate events are emitted by GateVerdictProcessor, not by the stage, so
+    // a mocked processor would make these assertions vacuous. The session store stays mocked —
+    // it is the I/O boundary.
+    stage = new StepResponseCaptureStage(
+      new GateVerdictProcessor(mockChainSessionStore, noopLogger),
+      new StepCaptureService(mockChainSessionStore, noopLogger),
+      mockChainSessionStore,
+      noopLogger
+    );
   });
 
   afterEach(() => {
@@ -64,7 +74,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
 
     // Setup session with pending gate review
     const sessionId = 'test-session-1';
-    mockChainSessionManager.getSession.mockReturnValue({
+    mockChainSessionStore.getSession.mockReturnValue({
       sessionId,
       chainId: 'test-chain',
       state: { currentStep: 1, totalSteps: 2 },
@@ -74,8 +84,8 @@ describe('ResponseCaptureStage Hook Emission', () => {
         maxAttempts: 2,
       },
     } as any);
-    mockChainSessionManager.recordGateReviewOutcome.mockResolvedValue('cleared');
-    mockChainSessionManager.getPendingGateReview.mockReturnValue(undefined);
+    mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('cleared');
+    mockChainSessionStore.getPendingGateReview.mockReturnValue(undefined);
 
     // Create context with gate verdict (command can be undefined for chain resume)
     const request: McpToolRequest = {
@@ -106,7 +116,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
 
   test('emits gate failed notification when FAIL verdict is processed', async () => {
     const sessionId = 'test-session-2';
-    mockChainSessionManager.getSession.mockReturnValue({
+    mockChainSessionStore.getSession.mockReturnValue({
       sessionId,
       chainId: 'test-chain',
       state: { currentStep: 1, totalSteps: 2 },
@@ -116,13 +126,16 @@ describe('ResponseCaptureStage Hook Emission', () => {
         maxAttempts: 2,
       },
     } as any);
-    mockChainSessionManager.recordGateReviewOutcome.mockResolvedValue('pending');
-    mockChainSessionManager.getPendingGateReview.mockReturnValue({
+    mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
+    mockChainSessionStore.getPendingGateReview.mockReturnValue({
+      combinedPrompt: 'Review against code-quality.',
       gateIds: ['code-quality'],
+      prompts: [],
+      createdAt: 1_700_000_000_000,
       attemptCount: 2,
       maxAttempts: 2,
     });
-    mockChainSessionManager.isRetryLimitExceeded.mockReturnValue(false);
+    mockChainSessionStore.isRetryLimitExceeded.mockReturnValue(false);
 
     const request: McpToolRequest = {
       chain_id: sessionId,
@@ -159,7 +172,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
     const retryExhaustedEvents: Array<{ gateIds: string[]; chainId: string }> = [];
     hookRegistry.on('gate:retryExhausted', (event) => retryExhaustedEvents.push(event));
 
-    mockChainSessionManager.getSession.mockReturnValue({
+    mockChainSessionStore.getSession.mockReturnValue({
       sessionId,
       chainId: 'test-chain',
       state: { currentStep: 1, totalSteps: 2 },
@@ -169,13 +182,16 @@ describe('ResponseCaptureStage Hook Emission', () => {
         maxAttempts: 2,
       },
     } as any);
-    mockChainSessionManager.recordGateReviewOutcome.mockResolvedValue('pending');
-    mockChainSessionManager.getPendingGateReview.mockReturnValue({
+    mockChainSessionStore.recordGateReviewOutcome.mockResolvedValue('pending');
+    mockChainSessionStore.getPendingGateReview.mockReturnValue({
+      combinedPrompt: 'Review against code-quality.',
       gateIds: ['code-quality'],
+      prompts: [],
+      createdAt: 1_700_000_000_000,
       attemptCount: 2,
       maxAttempts: 2,
     });
-    mockChainSessionManager.isRetryLimitExceeded.mockReturnValue(true);
+    mockChainSessionStore.isRetryLimitExceeded.mockReturnValue(true);
 
     const request: McpToolRequest = {
       chain_id: sessionId,

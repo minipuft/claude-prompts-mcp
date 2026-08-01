@@ -153,8 +153,10 @@ export default [
             // Deleted parser files (now in command-parser.ts and symbolic-operator-parser.ts)
             'symbolic-command-parser',
             'unified-command-parser',
-            // Deleted TypeScript methodology guides (now YAML in /methodologies)
-            { type: 'regex', value: 'frameworks/methodology/guides/.*-guide' },
+            // Deleted TypeScript framework guides (now YAML under resources/frameworks/).
+            // The directory was `frameworks/methodology/guides/` before the pass-4 rename;
+            // both spellings stay banned so neither path can come back.
+            { type: 'regex', value: 'frameworks/(methodology|definitions)/guides/.*-guide' },
           ],
         },
       ],
@@ -309,7 +311,7 @@ export default [
             'legacy-',
             'symbolic-command-parser',
             'unified-command-parser',
-            { type: 'regex', value: 'frameworks/methodology/guides/.*-guide' },
+            { type: 'regex', value: 'frameworks/(methodology|definitions)/guides/.*-guide' },
           ],
         },
       ],

@@ -14,9 +14,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 // Import all module managers
 import { createRuntimeFoundation } from './context.js';
 import { loadPromptData } from './data-loader.js';
+import { buildFrameworkAuxiliaryReloadConfig } from './framework-hot-reload.js';
 import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildHealthReport } from './health.js';
-import { buildMethodologyAuxiliaryReloadConfig } from './methodology-hot-reload.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
@@ -34,7 +34,7 @@ import { reloadPromptData } from '../modules/prompts/prompt-refresh-service.js';
 import { registerResources, notifyResourcesChanged } from '../modules/resources/index.js';
 import { ConversationStore, createConversationStore } from '../modules/text-refs/conversation.js';
 import { TextReferenceStore } from '../modules/text-refs/index.js';
-import { FrameworksConfig, TransportMode } from '../shared/types/index.js';
+import { ResolvedFrameworkConfig, TransportMode } from '../shared/types/index.js';
 import { ServiceOrchestrator } from '../shared/utils/service-orchestrator.js';
 
 import type { PathResolver } from './paths.js';
@@ -88,7 +88,7 @@ export class Application {
   private transportType?: TransportMode;
 
   private frameworksConfigListener:
-    | ((newConfig: FrameworksConfig, previousConfig: FrameworksConfig) => void)
+    | ((newConfig: ResolvedFrameworkConfig, previousConfig: ResolvedFrameworkConfig) => void)
     | undefined;
   /**
    * Conditional debug logging to prevent output flood during tests
@@ -366,7 +366,7 @@ export class Application {
   }
 
   /**
-   * Register MCP resources for prompts, gates, methodologies, and observability.
+   * Register MCP resources for prompts, gates, frameworks, and observability.
    * Resources provide 5-16x more token-efficient discovery than tool-based list operations.
    */
   private registerMcpResources(): void {
@@ -379,7 +379,7 @@ export class Application {
 
     // Get optional dependencies from managers (members are definite-assigned at this point)
     const fm = this.frameworkStateStore.getFrameworkManager();
-    const csm = this.mcpToolsManager.getChainSessionManager();
+    const csm = this.mcpToolsManager.getChainSessionStore();
     const mc = this.mcpToolsManager.getMetricsCollector();
 
     registerResources(this.mcpServer, {
@@ -395,7 +395,7 @@ export class Application {
             get: (id: string) => this.gateManager!.get(id),
           }
         : undefined,
-      // Phase 2: Methodology resources
+      // Phase 2: Framework resources
       frameworkManager:
         fm != null
           ? {
@@ -404,7 +404,7 @@ export class Application {
             }
           : undefined,
       // Phase 2: Observability resources
-      chainSessionManager:
+      chainSessionStore:
         csm != null
           ? {
               listActiveSessions: (limit?: number) => csm.listActiveSessions(limit),
@@ -430,7 +430,7 @@ export class Application {
       resourcesConfig: {
         prompts: resourcesConfig.prompts,
         gates: resourcesConfig.gates,
-        methodologies: resourcesConfig.methodologies,
+        frameworks: resourcesConfig.frameworks,
         observability: resourcesConfig.observability,
         logs: resourcesConfig.logs,
       },
@@ -794,8 +794,8 @@ export class Application {
         this.serviceOrchestrator.register({
           name: serviceName,
           start: async () => {
-            // Build auxiliary reload configs for methodology, gates, and script tools
-            const methodologyAux = buildMethodologyAuxiliaryReloadConfig(
+            // Build auxiliary reload configs for framework, gates, and script tools
+            const frameworkAux = buildFrameworkAuxiliaryReloadConfig(
               this.logger,
               this.mcpToolsManager
             );
@@ -816,7 +816,7 @@ export class Application {
 
             // Collect all auxiliary reloads
             const auxiliaryReloads = [
-              methodologyAux,
+              frameworkAux,
               gateAux,
               scriptAux,
               resourceChangeTrackerAux,
@@ -1105,8 +1105,8 @@ export class Application {
     }
 
     this.frameworksConfigListener = (
-      newConfig: FrameworksConfig,
-      previousConfig: FrameworksConfig
+      newConfig: ResolvedFrameworkConfig,
+      previousConfig: ResolvedFrameworkConfig
     ) => {
       this.handleFrameworkConfigChange(newConfig, previousConfig);
     };
@@ -1116,8 +1116,8 @@ export class Application {
   }
 
   private handleFrameworkConfigChange(
-    newConfig: FrameworksConfig,
-    previousConfig?: FrameworksConfig
+    newConfig: ResolvedFrameworkConfig,
+    previousConfig?: ResolvedFrameworkConfig
   ): void {
     if (!this.logger) {
       return;
@@ -1138,11 +1138,14 @@ export class Application {
     }
   }
 
-  private syncFrameworkSystemStateFromConfig(config: FrameworksConfig, reason?: string): void {
+  private syncFrameworkSystemStateFromConfig(
+    config: ResolvedFrameworkConfig,
+    reason?: string
+  ): void {
     const gatesConfig = this.configManager.getGatesConfig();
     const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
     const shouldEnable =
-      systemPromptEnabled || gatesConfig.enableMethodologyGates || config.dynamicToolDescriptions;
+      systemPromptEnabled || gatesConfig.enableFrameworkGates || config.dynamicToolDescriptions;
 
     if (!this.frameworkStateStore) {
       return;
@@ -1156,15 +1159,15 @@ export class Application {
     this.frameworkStateStore.setFrameworkSystemEnabled(shouldEnable, resolvedReason);
   }
 
-  private describeDisabledFrameworkFeatures(config: FrameworksConfig): string[] {
+  private describeDisabledFrameworkFeatures(config: ResolvedFrameworkConfig): string[] {
     const gatesConfig = this.configManager.getGatesConfig();
     const disabled: string[] = [];
     const systemPromptEnabled = config.injection?.systemPrompt?.enabled ?? true;
     if (!systemPromptEnabled) {
       disabled.push('system prompt injection');
     }
-    if (!gatesConfig.enableMethodologyGates) {
-      disabled.push('methodology gates');
+    if (!gatesConfig.enableFrameworkGates) {
+      disabled.push('framework gates');
     }
     if (!config.dynamicToolDescriptions) {
       disabled.push('dynamic tool descriptions');

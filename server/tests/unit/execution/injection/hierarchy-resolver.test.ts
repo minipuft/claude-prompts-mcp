@@ -426,6 +426,148 @@ describe('HierarchyResolver', () => {
     });
   });
 
+  describe('prompt tier', () => {
+    // The prompt tier sits between step and chain. All three of these cases go through a
+    // different `findPromptConfig` call site — `resolve`, the frequency walk, and the target
+    // walk. Threading only the first is the documented failure mode: a prompt could disable
+    // injection and still inherit a category's frequency.
+
+    it('outranks chain and category config', () => {
+      const config: InjectionConfig = {
+        ...DEFAULT_INJECTION_CONFIG,
+        chains: [{ chainPattern: 'demo-*', 'system-prompt': { enabled: true } }],
+        categories: [{ categoryId: 'analysis', 'system-prompt': { enabled: true } }],
+      };
+      const resolver = new HierarchyResolver(config, mockLogger);
+
+      const result = resolver.resolve('system-prompt', {
+        injectionType: 'system-prompt',
+        currentStep: 1,
+        chainId: 'demo-chain',
+        categoryId: 'analysis',
+        promptId: 'demo',
+        promptInjection: { 'system-prompt': { enabled: false } },
+      });
+
+      expect(result.source).toBe('prompt-config');
+      expect(result.config.enabled).toBe(false);
+    });
+
+    it('yields to a step rule, which is the more specific statement', () => {
+      const config: InjectionConfig = {
+        ...DEFAULT_INJECTION_CONFIG,
+        steps: [{ stepTarget: 1, 'system-prompt': { enabled: false } }],
+      };
+      const resolver = new HierarchyResolver(config, mockLogger);
+
+      const result = resolver.resolve('system-prompt', {
+        injectionType: 'system-prompt',
+        currentStep: 1,
+        promptInjection: { 'system-prompt': { enabled: true } },
+      });
+
+      expect(result.source).toBe('step-config');
+    });
+
+    it('does not match a rule for a different injection type', () => {
+      const resolver = new HierarchyResolver(DEFAULT_INJECTION_CONFIG, mockLogger);
+
+      const result = resolver.resolve('system-prompt', {
+        injectionType: 'system-prompt',
+        currentStep: 1,
+        promptInjection: { 'gate-guidance': { enabled: false } },
+      });
+
+      expect(result.source).not.toBe('prompt-config');
+      expect(result.config.enabled).toBe(true);
+    });
+
+    it('is skipped when the rule declares no fields', () => {
+      const config: InjectionConfig = {
+        ...DEFAULT_INJECTION_CONFIG,
+        categories: [{ categoryId: 'analysis', 'system-prompt': { enabled: false } }],
+      };
+      const resolver = new HierarchyResolver(config, mockLogger);
+
+      const result = resolver.resolve('system-prompt', {
+        injectionType: 'system-prompt',
+        currentStep: 1,
+        categoryId: 'analysis',
+        promptInjection: { 'system-prompt': {} },
+      });
+
+      // An empty rule must not shadow the category tier that does declare something.
+      expect(result.source).toBe('category-config');
+      expect(result.config.enabled).toBe(false);
+    });
+
+    it('inherits omitted fields from defaults rather than blanking them', () => {
+      const resolver = new HierarchyResolver(DEFAULT_INJECTION_CONFIG, mockLogger);
+
+      const result = resolver.resolve('system-prompt', {
+        injectionType: 'system-prompt',
+        currentStep: 1,
+        promptInjection: { 'system-prompt': { enabled: false } },
+      });
+
+      expect(result.config.enabled).toBe(false);
+      expect(result.config.frequency).toEqual(DEFAULT_INJECTION_CONFIG['system-prompt']?.frequency);
+    });
+
+    it('supplies frequency to the runtime-override walk, above chain and category', () => {
+      const config: InjectionConfig = {
+        ...DEFAULT_INJECTION_CONFIG,
+        chains: [{ chainPattern: 'demo-*', 'system-prompt': { frequency: { mode: 'never' } } }],
+      };
+      const resolver = new HierarchyResolver(config, mockLogger);
+
+      const result = resolver.resolve(
+        'system-prompt',
+        {
+          injectionType: 'system-prompt',
+          currentStep: 1,
+          chainId: 'demo-chain',
+          promptInjection: { 'system-prompt': { frequency: { mode: 'every', interval: 3 } } },
+        },
+        { type: 'system-prompt', enabled: true, scope: 'session', setAt: 0 }
+      );
+
+      expect(result.source).toBe('runtime-override');
+      expect(result.config.frequency).toEqual({ mode: 'every', interval: 3 });
+      expect(result.resolutionPath).toContain('prompt-config');
+    });
+
+    it('supplies target to the runtime-override walk, above chain and category', () => {
+      const config: InjectionConfig = {
+        ...DEFAULT_INJECTION_CONFIG,
+        categories: [{ categoryId: 'analysis', 'system-prompt': { target: 'gates' } }],
+      };
+      const resolver = new HierarchyResolver(config, mockLogger);
+
+      const result = resolver.resolve(
+        'system-prompt',
+        {
+          injectionType: 'system-prompt',
+          currentStep: 1,
+          categoryId: 'analysis',
+          promptInjection: { 'system-prompt': { target: 'steps' } },
+        },
+        { type: 'system-prompt', enabled: true, scope: 'session', setAt: 0 }
+      );
+
+      expect(result.config.target).toBe('steps');
+    });
+
+    it('reports prompt-config in the documented resolution priority', () => {
+      const resolver = new HierarchyResolver(DEFAULT_INJECTION_CONFIG, mockLogger);
+      const priority = resolver.getResolutionPriority();
+
+      expect(priority).toContain('prompt-config');
+      expect(priority.indexOf('prompt-config')).toBeGreaterThan(priority.indexOf('step-config'));
+      expect(priority.indexOf('prompt-config')).toBeLessThan(priority.indexOf('chain-config'));
+    });
+  });
+
   describe('injection types', () => {
     it('should handle all injection types', () => {
       const resolver = new HierarchyResolver(DEFAULT_INJECTION_CONFIG, mockLogger);

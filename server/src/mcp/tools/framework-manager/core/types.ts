@@ -23,7 +23,7 @@ export type FrameworkManagerActionId =
   | 'compare';
 
 /**
- * Phase definition for methodology
+ * Phase definition for framework
  */
 export interface PhaseDefinition {
   id: string;
@@ -33,17 +33,17 @@ export interface PhaseDefinition {
 }
 
 // ============================================================================
-// Advanced Methodology Types (for CAGEERF-quality frameworks)
+// Advanced Framework Types (for CAGEERF-quality frameworks)
 // ============================================================================
 
 /**
- * Methodology-specific quality gate with validation criteria
+ * Framework-specific quality gate with validation criteria
  */
-export interface MethodologyGate {
+export interface FrameworkGate {
   id: string;
   name: string;
   description: string;
-  methodologyArea: string;
+  frameworkArea: string;
   priority: 'high' | 'medium' | 'low';
   validationCriteria: string[];
 }
@@ -55,7 +55,7 @@ export interface ProcessingStep {
   id: string;
   name: string;
   description: string;
-  methodologyBasis: string;
+  frameworkBasis: string;
   order: number;
   required: boolean;
   /** Header marker for section detection (e.g., "## Context") */
@@ -71,7 +71,7 @@ export interface ExecutionStep {
   id: string;
   name: string;
   action: string;
-  methodologyPhase: string;
+  frameworkPhase: string;
   dependencies: string[];
   expected_output: string;
 }
@@ -84,14 +84,14 @@ export interface TemplateSuggestion {
   type: 'addition' | 'structure' | 'modification';
   description: string;
   content: string;
-  methodologyJustification: string;
+  frameworkJustification: string;
   impact: 'high' | 'medium' | 'low';
 }
 
 /**
- * Methodology elements for prompt creation guidance
+ * Framework elements for prompt creation guidance
  */
-export interface MethodologyElements {
+export interface FrameworkElements {
   requiredSections: string[];
   optionalSections?: string[];
   sectionDescriptions: Record<string, string>;
@@ -104,7 +104,7 @@ export interface ArgumentSuggestion {
   name: string;
   type: 'string' | 'array' | 'object' | 'boolean' | 'number';
   description: string;
-  methodologyReason: string;
+  frameworkReason: string;
   examples: string[];
 }
 
@@ -153,7 +153,7 @@ export interface FrameworkManagerInput {
   action: FrameworkManagerActionId;
   id?: string;
   name?: string;
-  methodology?: string;
+  framework?: string;
   description?: string;
   system_prompt_guidance?: string;
   phases?: PhaseDefinition[];
@@ -174,10 +174,14 @@ export interface FrameworkManagerInput {
   confirm?: boolean;
   reason?: string;
 
-  // Advanced methodology fields (not advertised in tool description for token efficiency)
-  methodology_gates?: MethodologyGate[];
+  // Advanced framework fields (not advertised in tool description for token efficiency)
+  framework_gates?: FrameworkGate[];
+  /** @deprecated Pre-rename spelling of `framework_gates`; folded on read. */
+  methodology_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
-  methodology_elements?: MethodologyElements;
+  framework_elements?: FrameworkElements;
+  /** @deprecated Pre-rename spelling of `framework_elements`; folded on read. */
+  methodology_elements?: FrameworkElements;
   argument_suggestions?: ArgumentSuggestion[];
   judge_prompt?: string;
 
@@ -217,10 +221,10 @@ export interface FrameworkManagerDependencies {
 }
 
 /**
- * Methodology validation result with structured error handling
+ * Framework validation result with structured error handling
  */
-export interface MethodologyValidationResult {
-  /** Whether the methodology passes validation (all required fields present) */
+export interface FrameworkDraftValidationResult {
+  /** Whether the framework passes validation (all required fields present) */
   valid: boolean;
   /** Quality level based on field coverage */
   level: 'incomplete' | 'standard' | 'full';
@@ -235,15 +239,13 @@ export interface MethodologyValidationResult {
 }
 
 /**
- * Methodology creation data
+ * Framework creation data
  */
-export interface MethodologyCreationData {
+export interface FrameworkCreationData {
   id: string;
   name: string;
   /** The framework type discriminator (e.g., 'CAGEERF', 'ReACT') */
-  type?: string;
-  /** @deprecated Use `type` instead. Kept for backward compatibility during migration. */
-  methodology: string;
+  type: string;
   description?: string;
   system_prompt_guidance: string;
   phases?: PhaseDefinition[];
@@ -254,10 +256,14 @@ export interface MethodologyCreationData {
   tool_descriptions?: FrameworkManagerInput['tool_descriptions'];
   enabled?: boolean;
 
-  // Advanced methodology fields (for CAGEERF-quality frameworks)
-  methodology_gates?: MethodologyGate[];
+  // Advanced framework fields (for CAGEERF-quality frameworks)
+  framework_gates?: FrameworkGate[];
+  /** @deprecated Pre-rename spelling of `framework_gates`; folded on read. */
+  methodology_gates?: FrameworkGate[];
   template_suggestions?: TemplateSuggestion[];
-  methodology_elements?: MethodologyElements;
+  framework_elements?: FrameworkElements;
+  /** @deprecated Pre-rename spelling of `framework_elements`; folded on read. */
+  methodology_elements?: FrameworkElements;
   argument_suggestions?: ArgumentSuggestion[];
   judge_prompt?: string;
 

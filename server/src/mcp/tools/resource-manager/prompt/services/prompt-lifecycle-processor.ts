@@ -117,7 +117,7 @@ export class PromptLifecycleProcessor {
       isChain: args.is_chain || false,
       chainSteps: args.chain_steps || [],
       tools: args.tools || [],
-      gateConfiguration: args['gate_configuration'] || args.gates,
+      gateConfiguration: args['gate_configuration'],
     };
 
     // Chain step reference validation (non-blocking warnings)

@@ -1,7 +1,0 @@
-id: test-method
-name: Test Methodology
-type: TestMethod
-methodology: TestMethod
-version: 1.0.0
-description: A test methodology
-enabled: true

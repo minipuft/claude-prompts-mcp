@@ -53,10 +53,10 @@ import {
   ResponseFormattingStage,
   PostFormattingCleanupStage,
 } from '../../../../engine/execution/pipeline/index.js';
-import { getDefaultRuntimeLoader } from '../../../../engine/frameworks/methodology/index.js';
+import { getDefaultRuntimeLoader } from '../../../../engine/frameworks/definitions/index.js';
 import {
   JudgeMenuFormatter,
-  type MethodologyJudgePromptProvider,
+  type FrameworkJudgePromptProvider,
 } from '../../../../engine/gates/judge/judge-menu-formatter.js';
 import { JudgeResourceCollector } from '../../../../engine/gates/judge/judge-resource-collector.js';
 import { GateEnhancementService } from '../../../../engine/gates/services/gate-enhancement-service.js';
@@ -70,8 +70,8 @@ import {
   createVerifyActiveStateStore,
 } from '../../../../engine/gates/shell/index.js';
 import { createToolDetectionService } from '../../../../modules/automation/detection/tool-detection-service.js';
-import { createExecutionModeService } from '../../../../modules/automation/execution/execution-mode-service.js';
 import { createScriptExecutor } from '../../../../modules/automation/execution/script-executor.js';
+import { createToolTriggerFilter } from '../../../../modules/automation/execution/tool-trigger-filter.js';
 
 import type { PipelineDependencies } from './pipeline-dependencies.js';
 import type { GateService } from '../../../../engine/gates/services/gate-service-interface.js';
@@ -106,7 +106,7 @@ export class PipelineBuilder {
 
     const dependencyStage = new DependencyInjectionStage(
       temporaryGateRegistry,
-      deps.chainSessionManager,
+      deps.chainSessionStore,
       deps.getFrameworkStateEnabled,
       deps.getAnalyticsService,
       'canonical-stage-0',
@@ -137,7 +137,7 @@ export class PipelineBuilder {
       deps.parsingSystem.argumentParser,
       deps.logger
     );
-    const blueprintResolver = new ChainBlueprintResolver(deps.chainSessionManager, deps.logger);
+    const blueprintResolver = new ChainBlueprintResolver(deps.chainSessionStore, deps.logger);
     const commandParsingStage = new CommandParsingStage(
       deps.parsingSystem.commandParser,
       deps.parsingSystem.argumentParser,
@@ -166,11 +166,11 @@ export class PipelineBuilder {
     // Script execution stage (04b)
     const scriptExecutor = createScriptExecutor({ debug: false });
     const toolDetectionService = createToolDetectionService({ debug: false });
-    const executionModeService = createExecutionModeService({ debug: false });
+    const toolTriggerFilter = createToolTriggerFilter({ debug: false });
     const scriptExecutionStage = new ScriptExecutionStage(
       scriptExecutor,
       toolDetectionService,
-      executionModeService,
+      toolTriggerFilter,
       deps.logger
     );
 
@@ -199,18 +199,18 @@ export class PipelineBuilder {
     const frameworksProvider = () => {
       try {
         const loader = getDefaultRuntimeLoader();
-        const ids = loader.discoverMethodologies();
+        const ids = loader.discoverFrameworks();
         return ids
           .map((id) => {
-            const def = loader.loadMethodology(id);
+            const def = loader.loadFramework(id);
             if (!def || def.enabled === false) return null;
             const description =
               (def as unknown as Record<string, unknown>)['description'] ??
               def.systemPromptGuidance?.trim().split('\n')[0] ??
-              'Methodology framework';
+              'Framework';
             return {
-              id: (def.methodology || def.id).toLowerCase(),
-              name: def.name || def.methodology || def.id,
+              id: (def.type || def.id).toLowerCase(),
+              name: def.name || def.type || def.id,
               description: String(description),
               category: 'guidance' as const,
               userMessageTemplate: '',
@@ -224,10 +224,10 @@ export class PipelineBuilder {
       }
     };
 
-    const judgePromptProvider: MethodologyJudgePromptProvider = (frameworkId) => {
+    const judgePromptProvider: FrameworkJudgePromptProvider = (frameworkId) => {
       try {
         const loader = getDefaultRuntimeLoader();
-        const definition = loader.loadMethodology(frameworkId);
+        const definition = loader.loadFramework(frameworkId);
         return definition?.judgePrompt;
       } catch {
         return undefined;
@@ -277,7 +277,7 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    const sessionStage = new SessionManagementStage(deps.chainSessionManager, deps.logger);
+    const sessionStage = new SessionManagementStage(deps.chainSessionStore, deps.logger);
     const injectionControlStage = new InjectionControlStage(
       () => deps.configManager.getInjectionConfig(),
       deps.logger
@@ -285,12 +285,12 @@ export class PipelineBuilder {
 
     // ── Stage 08-12: Execution and Formatting ──
 
-    const gateVerdictProcessor = new GateVerdictProcessor(deps.chainSessionManager, deps.logger);
-    const stepCaptureService = new StepCaptureService(deps.chainSessionManager, deps.logger);
+    const gateVerdictProcessor = new GateVerdictProcessor(deps.chainSessionStore, deps.logger);
+    const stepCaptureService = new StepCaptureService(deps.chainSessionStore, deps.logger);
     const responseCaptureStage = new StepResponseCaptureStage(
       gateVerdictProcessor,
       stepCaptureService,
-      deps.chainSessionManager,
+      deps.chainSessionStore,
       deps.logger
     );
 
@@ -302,12 +302,12 @@ export class PipelineBuilder {
     const shellVerificationStage = createShellVerificationStage(
       shellVerifyExecutor,
       verifyActiveStateStore,
-      deps.chainSessionManager,
+      deps.chainSessionStore,
       deps.logger
     );
 
     // Lifecycle hook: clean up verify-state when sessions are cleared
-    deps.chainSessionManager.onSessionCleared(async (_sessionId: string, session) => {
+    deps.chainSessionStore.onSessionCleared(async (_sessionId: string, session) => {
       if (session.pendingShellVerification?.shellVerify?.loop === true) {
         await verifyActiveStateStore.clearState(session.chainId);
       }
@@ -315,7 +315,7 @@ export class PipelineBuilder {
 
     const executionStage = new StepExecutionStage(
       deps.chainOperatorExecutor,
-      deps.chainSessionManager,
+      deps.chainSessionStore,
       deps.logger,
       deps.referenceResolver,
       deps.scriptReferenceResolver,
@@ -327,13 +327,13 @@ export class PipelineBuilder {
       () => deps.frameworkManager,
       () =>
         deps.configManager.getConfig().phaseGuards ?? { mode: 'enforce' as const, maxRetries: 2 },
-      deps.chainSessionManager,
+      deps.chainSessionStore,
       deps.logger
     );
 
     const gateReviewStage = new GateReviewStage(
       deps.chainOperatorExecutor,
-      deps.chainSessionManager,
+      deps.chainSessionStore,
       deps.lightweightGateSystem.gateLoader,
       deps.logger,
       () => deps.configManager.getConfig().gates
@@ -346,7 +346,7 @@ export class PipelineBuilder {
       deps.executionRecordStore
     );
     const postFormattingStage = new PostFormattingCleanupStage(
-      deps.chainSessionManager,
+      deps.chainSessionStore,
       temporaryGateRegistry,
       deps.logger
     );
@@ -371,7 +371,7 @@ export class PipelineBuilder {
       responseCaptureStage,
       shellVerificationStage, // 08b - Shell verification (Ralph Wiggum loops)
       executionStage,
-      phaseGuardVerificationStage, // 09b - Phase guard verification (methodology phases)
+      phaseGuardVerificationStage, // 09b - Phase guard verification (framework phases)
       gateReviewStage,
       formattingStage,
       postFormattingStage,

@@ -54,7 +54,7 @@ export interface SystemControlContext {
   readonly frameworkManager?: FrameworkManager;
   readonly gateStateStore?: GateStateStore;
   readonly gateGuidanceRenderer?: GateGuidanceRenderer;
-  readonly chainSessionManager?: ChainSessionService;
+  readonly chainSessionStore?: ChainSessionService;
   readonly configManager?: ConfigManager;
   readonly safeConfigWriter?: SafeConfigWriter;
   readonly onRestart?: (reason: string) => Promise<void>;

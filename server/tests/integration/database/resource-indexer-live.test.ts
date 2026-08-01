@@ -3,7 +3,7 @@
  * ResourceIndexer Live Data Test
  *
  * Verifies the indexer works with real resource files from server/resources/.
- * Tests the actual production data path — prompts, gates, methodologies, styles.
+ * Tests the actual production data path — prompts, gates, frameworks, styles.
  */
 
 import * as fs from 'node:fs/promises';
@@ -74,13 +74,13 @@ describe('ResourceIndexer — live server resources', () => {
     }
   });
 
-  it('should index methodologies from server/resources/methodologies/', async () => {
-    const methodologies = indexer.queryByType('methodology');
-    expect(methodologies.length).toBeGreaterThan(0);
+  it('should index frameworks from server/resources/frameworks/', async () => {
+    const frameworks = indexer.queryByType('framework');
+    expect(frameworks.length).toBeGreaterThan(0);
 
-    for (const m of methodologies) {
+    for (const m of frameworks) {
       expect(m.id).toBeTruthy();
-      expect(m.type).toBe('methodology');
+      expect(m.type).toBe('framework');
     }
   });
 
@@ -99,11 +99,11 @@ describe('ResourceIndexer — live server resources', () => {
 
     expect(stats.prompt).toBe(indexer.queryByType('prompt').length);
     expect(stats.gate).toBe(indexer.queryByType('gate').length);
-    expect(stats.methodology).toBe(indexer.queryByType('methodology').length);
+    expect(stats.framework).toBe(indexer.queryByType('framework').length);
     expect(stats.style).toBe(indexer.queryByType('style').length);
 
     // Total should be positive
-    const total = stats.prompt + stats.gate + stats.methodology + stats.style;
+    const total = stats.prompt + stats.gate + stats.framework + stats.style;
     expect(total).toBeGreaterThan(0);
   });
 

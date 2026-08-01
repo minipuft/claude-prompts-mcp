@@ -60,7 +60,7 @@ describe('Consolidated MCP tool factories', () => {
       getResolvedPromptsDirectory: () => '/test/prompts',
       getFrameworksConfig: () => ({
         enableSystemPromptInjection: false,
-        enableMethodologyGates: false,
+        enableFrameworkGates: false,
         enableDynamicToolDescriptions: false,
       }),
       getServerRoot: () => process.cwd(),

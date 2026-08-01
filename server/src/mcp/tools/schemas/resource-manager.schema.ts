@@ -3,7 +3,7 @@
  * Resource Manager Input Schema
  *
  * Hand-written replacement for the generated resourceManagerSchema in mcp-schemas.ts.
- * Uses .passthrough() to allow methodology fields to flow through for advanced scenarios.
+ * Uses .passthrough() to allow framework fields to flow through for advanced scenarios.
  */
 
 import { z } from 'zod';
@@ -18,14 +18,14 @@ import { ChainStepSchema } from '../../../modules/prompts/prompt-schema.js';
  * Resource Manager input schema.
  *
  * Unlike prompt_engine/system_control, resource_manager descriptions come from
- * the contract JSON and are not rebuilt per-methodology at registration time.
- * The ToolDescriptionLoader handles methodology overlay for the tool-level description.
+ * the contract JSON and are not rebuilt per-framework at registration time.
+ * The ToolDescriptionLoader handles framework overlay for the tool-level description.
  */
 export const resourceManagerInputSchema = z
   .object({
     // ── Core parameters ──────────────────────────────────────────────────
     /** Type of resource to manage. Routes to appropriate handler. */
-    resource_type: z.enum(['prompt', 'gate', 'methodology', 'checkpoint']),
+    resource_type: z.enum(['prompt', 'gate', 'framework', 'checkpoint']),
     /** Operation to perform. */
     action: z.enum([
       'create',
@@ -110,20 +110,20 @@ export const resourceManagerInputSchema = z
     /** [Gate] Retry configuration. */
     retry_config: z.record(z.unknown()).optional(),
 
-    // ── Methodology parameters ───────────────────────────────────────────
-    /** [Methodology] Methodology type identifier. */
-    methodology: z.string().optional(),
-    /** [Methodology] System prompt guidance injected when active. */
+    // ── Framework parameters ─────────────────────────────────────────────
+    /** [Framework] Framework type identifier (e.g. 'CAGEERF', 'ReACT'). */
+    framework: z.string().optional(),
+    /** [Framework] System prompt guidance injected when active. */
     system_prompt_guidance: z.string().optional(),
-    /** [Methodology] Phase definitions. */
+    /** [Framework] Phase definitions. */
     phases: z.array(z.unknown()).optional(),
-    /** [Methodology] Gate configuration: include, exclude arrays. */
+    /** [Framework] Gate configuration: include, exclude arrays. */
     gates: z.record(z.unknown()).optional(),
-    /** [Methodology] Tool description overlays when active. */
+    /** [Framework] Tool description overlays when active. */
     tool_descriptions: z.record(z.unknown()).optional(),
-    /** [Methodology] Whether the methodology is enabled. */
+    /** [Framework] Whether the framework is enabled. */
     enabled: z.boolean().optional(),
-    /** [Methodology] For switch: persist the change to config. */
+    /** [Framework] For switch: persist the change to config. */
     persist: z.boolean().optional(),
 
     // ── Versioning parameters ────────────────────────────────────────────

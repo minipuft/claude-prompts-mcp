@@ -10,7 +10,7 @@ const createLogger = () => ({
   debug: jest.fn(),
 });
 
-const createMockChainSessionManager = () => ({
+const createMockChainSessionStore = () => ({
   getSession: jest.fn(),
   hasActiveSession: jest.fn(),
   getPendingGateReview: jest.fn(),
@@ -25,10 +25,10 @@ describe('DependencyInjectionStage', () => {
   test('records dependency snapshot metadata', async () => {
     const registry = {};
     const analyticsService = { id: 'analytics-1' };
-    const chainSessionManager = createMockChainSessionManager();
+    const chainSessionStore = createMockChainSessionStore();
     const stage = new DependencyInjectionStage(
       registry as any,
-      chainSessionManager as any,
+      chainSessionStore as any,
       () => true,
       () => analyticsService as any,
       'canonical-stage-0',
@@ -50,10 +50,10 @@ describe('DependencyInjectionStage', () => {
 
   test('initializes gate enforcement authority', async () => {
     const registry = {};
-    const chainSessionManager = createMockChainSessionManager();
+    const chainSessionStore = createMockChainSessionStore();
     const stage = new DependencyInjectionStage(
       registry as any,
-      chainSessionManager as any,
+      chainSessionStore as any,
       () => false,
       () => undefined,
       'canonical-stage-0',

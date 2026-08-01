@@ -589,7 +589,7 @@ export class PromptExecutionPipeline {
     const gateState = context.state.gates;
     const allGateIds = [
       ...gateState.temporaryGateIds,
-      ...gateState.methodologyGateIds,
+      ...gateState.frameworkGateIds,
       ...gateState.registeredInlineGateIds,
     ];
     const failedCount = gateState.blockedGateIds?.length ?? 0;

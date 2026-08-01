@@ -2,7 +2,7 @@
  * Integration test for category-aware gate selection.
  *
  * Tests that:
- * 1. getCategoryGates() returns gates based on YAML activation.prompt_categories
+ * 1. selectGates() returns gates based on YAML activation.prompt_categories
  * 2. Framework gates (gate_type: 'framework') require BOTH category AND framework match
  * 3. Regular gates activate based on category matching only
  */
@@ -45,51 +45,65 @@ describe('Gate Category Selection Integration', () => {
     }
   });
 
-  describe('getCategoryGates() - YAML-driven gate selection', () => {
+  /**
+   * Category-gate activation, queried the way production queries it:
+   * `GateSetResolver.registryGateIds()` — the ADR-0001 owner of registry auto-assignment —
+   * issues exactly the call below, so this is the path that decides a category's gates.
+   *
+   * Two semantics worth stating, because neither is visible at this call site:
+   *   - Case folding belongs to `gate-activation.ts`; `checkRegularGateActivation` lowercases
+   *     both the context category and the declared ones, so callers need not normalize.
+   *   - Framework gates are excluded here by their own declared `framework_context` failing to
+   *     match an absent framework — not by any test on `gate_type`. A framework gate that
+   *     declared no `framework_context` would therefore activate on category alone.
+   */
+  describe('category gate selection — the query GateSetResolver issues', () => {
+    const categoryGates = (promptCategory: string): string[] =>
+      gateManager.selectGates({ promptCategory, enabledOnly: true }).selectedIds;
+
     test('returns code-quality gate for development category', () => {
-      const gates = gateManager.getCategoryGates('development');
+      const gates = categoryGates('development');
       expect(gates).toContain('code-quality');
     });
 
     test('does NOT return code-quality gate for research category', () => {
-      const gates = gateManager.getCategoryGates('research');
+      const gates = categoryGates('research');
       expect(gates).not.toContain('code-quality');
     });
 
     test('excludes gates with explicit_request: true from auto-assignment', () => {
       // technical-accuracy and research-quality have explicit_request: true
-      const devGates = gateManager.getCategoryGates('development');
+      const devGates = categoryGates('development');
       expect(devGates).not.toContain('technical-accuracy');
 
-      const researchGates = gateManager.getCategoryGates('research');
+      const researchGates = categoryGates('research');
       expect(researchGates).not.toContain('research-quality');
     });
 
     test('returns security-awareness for development category', () => {
       // security-awareness has development in categories and explicit_request: false
-      const gates = gateManager.getCategoryGates('development');
+      const gates = categoryGates('development');
       expect(gates).toContain('security-awareness');
     });
 
-    test('excludes framework gates from category selection', () => {
-      // framework-compliance has gate_type: 'framework' and should be excluded
-      const devGates = gateManager.getCategoryGates('development');
+    test('excludes framework gates when no framework is in context', () => {
+      // framework-compliance declares framework_context, so category alone cannot activate it
+      const devGates = categoryGates('development');
       expect(devGates).not.toContain('framework-compliance');
 
-      const researchGates = gateManager.getCategoryGates('research');
+      const researchGates = categoryGates('research');
       expect(researchGates).not.toContain('framework-compliance');
     });
 
     test('handles case-insensitive category matching', () => {
-      const upperGates = gateManager.getCategoryGates('DEVELOPMENT');
-      const lowerGates = gateManager.getCategoryGates('development');
+      const upperGates = categoryGates('DEVELOPMENT');
+      const lowerGates = categoryGates('development');
       expect(upperGates).toEqual(lowerGates);
     });
 
-    test('returns empty for unknown category without matching gates', () => {
-      const gates = gateManager.getCategoryGates('unknown_category_xyz');
-      // Should return gates with no category restriction or matching 'general'
-      // Most gates have specific categories, so this may be empty or contain only unrestricted gates
+    test('returns an array for an unknown category', () => {
+      const gates = categoryGates('unknown_category_xyz');
+      // Gates with no category restriction still activate; gates with specific categories do not.
       expect(Array.isArray(gates)).toBe(true);
     });
   });

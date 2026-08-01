@@ -46,13 +46,6 @@ export interface JSONSchemaDefinition {
 export type ScriptRuntime = 'python' | 'node' | 'shell' | 'auto';
 
 /**
- * @deprecated ExecutionMode is deprecated. Use `trigger: explicit` instead of
- * `mode: manual`, and `confirm: true` instead of `mode: confirm`.
- * This type alias is preserved only for backwards compatibility during migration.
- */
-export type ExecutionMode = 'auto' | 'manual' | 'confirm';
-
-/**
  * Trigger type for tool execution (deterministic, not probabilistic).
  *
  * Modern automation systems use deterministic triggers, not confidence scores.
@@ -313,7 +306,7 @@ export interface ScriptInputValidationResult {
 }
 
 // ============================================================================
-// Execution Mode Service Types
+// Tool Trigger Filter Types
 // ============================================================================
 
 /**
@@ -335,16 +328,16 @@ export interface ToolPendingConfirmation {
 }
 
 /**
- * Result of execution mode filtering.
+ * Result of trigger/confirm filtering.
  *
- * Returned by ExecutionModeService when filtering tool matches by execution mode.
+ * Returned by ToolTriggerFilter when partitioning tool matches.
  */
-export interface ExecutionModeFilterResult {
-  /** Tools ready for immediate execution (mode: auto, matched successfully) */
+export interface ToolTriggerFilterResult {
+  /** Tools ready for immediate execution (default trigger, matched successfully) */
   readyForExecution: ToolDetectionMatch[];
-  /** Tools skipped due to mode: manual (without explicit request) */
+  /** Tools skipped due to `trigger: explicit` (no explicit request). Legacy: always empty. */
   skippedManual: string[];
-  /** Tools requiring user confirmation (mode: confirm) */
+  /** Tools requiring user confirmation (`confirm: true`) */
   pendingConfirmation: ToolPendingConfirmation[];
   /** Whether pipeline should return early for confirmation */
   requiresConfirmation: boolean;

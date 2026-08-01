@@ -1,0 +1,531 @@
+/**
+ * Framework Creation Integration Test
+ *
+ * Tests the complete framework creation workflow with real modules:
+ * - FrameworkToolHandler (real validation logic)
+ * - FrameworkFileWriter (mocked filesystem)
+ * - FrameworkManager (real registration)
+ *
+ * Mocks:
+ * - Filesystem operations (controlled fixtures)
+ * - FrameworkManager registry operations
+ *
+ * Classification: Integration (multiple real modules, mock I/O only)
+ *
+ * Note: The manager now requires framework_gates for validation to pass.
+ * Frameworks without all required fields will fail validation.
+ */
+
+import { describe, expect, test, jest, beforeEach } from '@jest/globals';
+
+import type { Logger } from '../../../src/infra/logging/index.js';
+import type { ConfigManager } from '../../../src/infra/config/index.js';
+import type { FrameworkManager } from '../../../src/engine/frameworks/framework-manager.js';
+import type { ToolResponse } from '../../../src/shared/types/index.js';
+import type {
+  FrameworkManagerInput,
+  FrameworkCreationData,
+} from '../../../src/mcp/tools/framework-manager/core/types.js';
+
+// Import the real manager for integration testing
+import { FrameworkToolHandler } from '../../../src/mcp/tools/framework-manager/core/manager.js';
+
+const createLogger = (): Logger => ({
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  debug: jest.fn(),
+});
+
+const createMockConfigManager = (): ConfigManager =>
+  ({
+    getServerRoot: jest.fn().mockReturnValue('/test/server'),
+    getConfigPath: jest.fn().mockReturnValue('/test/server/config.json'),
+    getConfig: jest.fn().mockReturnValue({}),
+    getFrameworksConfig: jest.fn().mockReturnValue({ enabled: true }),
+    getGatesConfig: jest.fn().mockReturnValue({}),
+    getChainSessionConfig: jest.fn().mockReturnValue(null),
+    getInjectionConfig: jest.fn().mockReturnValue(null),
+    getVersioningConfig: jest.fn().mockReturnValue({
+      enabled: true,
+      max_versions: 50,
+      auto_version: true,
+    }),
+    shutdown: jest.fn(),
+  }) as unknown as ConfigManager;
+
+const createMockFrameworkManager = (): FrameworkManager => {
+  const registeredFrameworks = new Map<
+    string,
+    { id: string; name: string; type: string; enabled: boolean; description: string }
+  >();
+
+  // Mock framework registry with all required methods
+  const mockFrameworkRegistry = {
+    hasGuide: jest.fn((id: string) => registeredFrameworks.has(id.toLowerCase())),
+    getRuntimeLoader: jest.fn(() => ({
+      clearCache: jest.fn(),
+    })),
+    loadAndRegisterById: jest.fn(async (id: string) => {
+      // Simulate successful registration
+      return { id, name: `${id} Guide` };
+    }),
+    unregisterGuide: jest.fn((id: string) => registeredFrameworks.delete(id.toLowerCase())),
+  };
+
+  return {
+    getFramework: jest.fn((id: string) => registeredFrameworks.get(id.toLowerCase())),
+    listFrameworks: jest.fn(() => Array.from(registeredFrameworks.values())),
+    registerFramework: jest.fn(async (id: string) => {
+      registeredFrameworks.set(id.toLowerCase(), {
+        id: id.toLowerCase(),
+        name: `${id} Framework`,
+        type: id.toUpperCase(),
+        enabled: true,
+        description: '',
+      });
+      return true;
+    }),
+    unregister: jest.fn((id: string) => {
+      return registeredFrameworks.delete(id.toLowerCase());
+    }),
+    getFrameworkGuide: jest.fn(() => null),
+    getFrameworkRegistry: jest.fn(() => mockFrameworkRegistry),
+  } as unknown as FrameworkManager;
+};
+
+const createMockFileService = () => {
+  const writtenFiles: Map<string, FrameworkCreationData> = new Map();
+
+  return {
+    frameworkExists: jest.fn((id: string) => writtenFiles.has(id.toLowerCase())),
+    deleteFramework: jest.fn(async (id: string) => {
+      writtenFiles.delete(id.toLowerCase());
+      return true;
+    }),
+    getFrameworkDir: jest.fn(
+      (id: string) => `/test/server/resources/frameworks/${id.toLowerCase()}`
+    ),
+    writeFrameworkFiles: jest.fn(async (data: FrameworkCreationData) => {
+      writtenFiles.set(data.id.toLowerCase(), data);
+      return {
+        success: true,
+        paths: [
+          `/test/server/resources/frameworks/${data.id}/framework.yaml`,
+          `/test/server/resources/frameworks/${data.id}/phases.yaml`,
+        ],
+      };
+    }),
+    loadExistingFramework: jest.fn(async (id: string) => {
+      const data = writtenFiles.get(id.toLowerCase());
+      if (data === undefined) return null;
+      // Return ExistingFrameworkData structure (raw YAML representation)
+      return {
+        framework: data as unknown as Record<string, unknown>,
+        phases: null,
+        systemPrompt: data.system_prompt_guidance,
+        judgePrompt: null,
+        frameworkPath: `/test/server/resources/frameworks/${id}/framework.yaml`,
+        phasesPath: null,
+        systemPromptPath: `/test/server/resources/frameworks/${id}/system-prompt.md`,
+        judgePromptPath: null,
+      };
+    }),
+    toFrameworkCreationData: jest.fn(
+      (
+        id: string,
+        existing: { framework: Record<string, unknown>; systemPrompt: string | null }
+      ) => {
+        // Convert ExistingFrameworkData back to FrameworkCreationData
+        const raw = existing.framework;
+        const name = typeof raw['name'] === 'string' ? raw['name'] : undefined;
+        const systemGuidance =
+          existing.systemPrompt ??
+          (typeof raw['system_prompt_guidance'] === 'string'
+            ? raw['system_prompt_guidance']
+            : undefined);
+        if (name === undefined || systemGuidance === undefined) return null;
+        return {
+          id,
+          name,
+          // Mirrors FrameworkFileWriter.toFrameworkCreationData: the source key is `type` and
+          // the destination field is `type`. This read `raw['methodology']` into a `framework`
+          // field — wrong on both counts, and `type` is required by FrameworkCreationData.
+          type: typeof raw['type'] === 'string' ? raw['type'] : id.toUpperCase(),
+          system_prompt_guidance: systemGuidance,
+          ...raw, // Include all other fields
+        } as FrameworkCreationData;
+      }
+    ),
+    getWrittenData: (id: string) => writtenFiles.get(id.toLowerCase()),
+    clear: () => writtenFiles.clear(),
+  };
+};
+
+describe('Framework Creation Integration', () => {
+  let logger: Logger;
+  let configManager: ConfigManager;
+  let frameworkManager: FrameworkManager;
+  let mockFileService: ReturnType<typeof createMockFileService>;
+  let manager: FrameworkToolHandler;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    logger = createLogger();
+    configManager = createMockConfigManager();
+    frameworkManager = createMockFrameworkManager();
+    mockFileService = createMockFileService();
+
+    // Create manager with mocked file service
+    manager = new FrameworkToolHandler({
+      logger,
+      frameworkManager,
+      configManager,
+    });
+
+    // Override file service with mock.
+    //
+    // The seam is `ctx.fileService`, not `manager.fileService`. FrameworkToolHandler builds a
+    // shared FrameworkResourceContext and hands the same object to every processor, which read
+    // `this.ctx.fileService` at call time — so replacing it here reaches all of them. Assigning
+    // to `manager.fileService` (as this did) created a property nobody reads, and every write
+    // went to the real filesystem via the mock config's serverRoot: `EACCES ... mkdir '/test'`.
+    (manager as unknown as { ctx: { fileService: typeof mockFileService } }).ctx.fileService =
+      mockFileService;
+  });
+
+  describe('Validation Requirements', () => {
+    test('rejects framework missing phases', async () => {
+      // Arrange: Framework without phases (should fail validation)
+      const input: FrameworkManagerInput = {
+        action: 'create',
+        id: 'no-phases-test',
+        name: 'No Phases Framework',
+        system_prompt_guidance: 'Apply this framework.',
+        // Missing: phases
+        // Missing: framework_gates
+      };
+
+      // Act
+      const response = await manager.handleAction(input, {});
+
+      // Assert: Validation failure
+      expect(response.isError).toBe(true);
+      const text = (response.content[0] as { text: string }).text;
+      expect(text).toContain('phases is required');
+    });
+
+    test('rejects framework missing framework_gates', async () => {
+      // Arrange: Framework with phases but no gates
+      const input: FrameworkManagerInput = {
+        action: 'create',
+        id: 'no-gates-test',
+        name: 'No Gates Framework',
+        system_prompt_guidance: 'Apply this framework.',
+        phases: [
+          { id: 'phase1', name: 'Phase 1', description: 'First phase' },
+          { id: 'phase2', name: 'Phase 2', description: 'Second phase' },
+        ],
+        // Missing: framework_gates
+      };
+
+      // Act
+      const response = await manager.handleAction(input, {});
+
+      // Assert: Validation failure
+      expect(response.isError).toBe(true);
+      const text = (response.content[0] as { text: string }).text;
+      expect(text).toContain('framework_gates is required');
+    });
+
+    test('creates valid framework with all required fields', async () => {
+      // Arrange: Complete framework with all required fields
+      const input: FrameworkManagerInput = {
+        action: 'create',
+        id: 'valid-test',
+        name: 'Valid Test Framework',
+        system_prompt_guidance: 'Apply this framework systematically.',
+        phases: [
+          { id: 'phase1', name: 'Phase 1', description: 'First phase' },
+          { id: 'phase2', name: 'Phase 2', description: 'Second phase' },
+        ],
+        framework_gates: [
+          {
+            id: 'phase1_gate',
+            name: 'Phase 1 Gate',
+            description: 'Validates phase 1',
+            frameworkArea: 'Phase 1',
+            priority: 'high',
+            validationCriteria: ['Criteria 1', 'Criteria 2'],
+          },
+        ],
+      };
+
+      // Act
+      const response = await manager.handleAction(input, {});
+
+      // Assert: Success
+      expect(response.isError).toBe(false);
+      const text = (response.content[0] as { text: string }).text;
+      expect(text).toContain("'valid-test' created");
+      expect(text).toMatch(/\d+%/); // Should show percentage
+    });
+  });
+
+  describe('Completeness Scoring', () => {
+    test('shows 80% score for minimal valid framework', async () => {
+      // Arrange: Minimal valid framework (only required fields)
+      const input: FrameworkManagerInput = {
+        action: 'create',
+        id: 'minimal-valid',
+        name: 'Minimal Valid Framework',
+        system_prompt_guidance: 'Apply this framework.',
+        phases: [
+          { id: 'phase1', name: 'Phase 1', description: 'First' },
+          { id: 'phase2', name: 'Phase 2', description: 'Second' },
+        ],
+        framework_gates: [
+          {
+            id: 'gate1',
+            name: 'Gate 1',
+            description: 'Test gate',
+            frameworkArea: 'Phase 1',
+            priority: 'high',
+            validationCriteria: ['Check 1'],
+          },
+        ],
+      };
+
+      // Act
+      const response = await manager.handleAction(input, {});
+
+      // Assert: 80% (30 guidance + 30 phases + 20 gates)
+      expect(response.isError).toBe(false);
+      const text = (response.content[0] as { text: string }).text;
+      expect(text).toContain('80%');
+    });
+
+    test('shows higher score with optional fields', async () => {
+      // Arrange: Framework with optional fields
+      const input: FrameworkManagerInput = {
+        action: 'create',
+        id: 'enhanced-test',
+        name: 'Enhanced Test Framework',
+        description: 'A complete framework', // +5%
+        system_prompt_guidance: 'Apply this framework.',
+        phases: [
+          { id: 'phase1', name: 'Phase 1', description: 'First' },
+          { id: 'phase2', name: 'Phase 2', description: 'Second' },
+        ],
+        framework_gates: [
+          {
+            id: 'gate1',
+            name: 'Gate 1',
+            description: 'Test gate',
+            frameworkArea: 'Phase 1',
+            priority: 'high',
+            validationCriteria: ['Check 1'],
+          },
+        ],
+        framework_elements: {
+          // +10%
+          requiredSections: ['Phase 1', 'Phase 2'],
+        },
+        template_suggestions: [
+          // +5%
+          {
+            section: 'system',
+            type: 'addition',
+            description: 'Add guidance',
+            content: 'Test',
+            frameworkJustification: 'Consistency',
+            impact: 'high',
+          },
+        ],
+      };
+
+      // Act
+      const response = await manager.handleAction(input, {});
+
+      // Assert: 100% (80 base + 5 description + 10 elements + 5 suggestions)
+      expect(response.isError).toBe(false);
+      const text = (response.content[0] as { text: string }).text;
+      expect(text).toContain('100%');
+    });
+  });
+
+  describe('Field Preservation', () => {
+    test('preserves all advanced fields in written data', async () => {
+      // Arrange: Framework with all field types
+      const input: FrameworkManagerInput = {
+        action: 'create',
+        id: 'preservation-test',
+        name: 'Preservation Test',
+        system_prompt_guidance: 'Test guidance',
+        phases: [
+          { id: 'p1', name: 'Phase 1', description: 'First' },
+          { id: 'p2', name: 'Phase 2', description: 'Second' },
+        ],
+        framework_gates: [
+          {
+            id: 'g1',
+            name: 'Gate 1',
+            description: 'Test gate',
+            frameworkArea: 'Phase 1',
+            priority: 'high',
+            validationCriteria: ['criteria'],
+          },
+        ],
+        processing_steps: [
+          {
+            id: 's1',
+            name: 'Step 1',
+            description: 'First step',
+            frameworkBasis: 'Phase 1',
+            order: 1,
+            required: true,
+          },
+        ],
+        execution_steps: [
+          {
+            id: 'e1',
+            name: 'Exec 1',
+            action: 'Do',
+            frameworkPhase: 'Phase 1',
+            dependencies: [],
+            expected_output: 'Output',
+          },
+        ],
+        quality_indicators: {
+          p1: { keywords: ['test'], patterns: ['test'] },
+        },
+      };
+
+      // Act
+      await manager.handleAction(input, {});
+
+      // Assert: All fields preserved in written data
+      const writtenData = mockFileService.getWrittenData('preservation-test');
+      expect(writtenData).toBeDefined();
+      expect(writtenData?.phases).toHaveLength(2);
+      expect(writtenData?.framework_gates).toHaveLength(1);
+      expect(writtenData?.processing_steps).toHaveLength(1);
+      expect(writtenData?.execution_steps).toHaveLength(1);
+      expect(writtenData?.quality_indicators).toHaveProperty('p1');
+    });
+  });
+
+  describe('Error Handling', () => {
+    test('rejects missing required fields', async () => {
+      // Arrange: Missing name
+      const input: FrameworkManagerInput = {
+        action: 'create',
+        id: 'test',
+        name: '', // Empty
+        system_prompt_guidance: 'Test',
+      };
+
+      // Act
+      const response = await manager.handleAction(input, {});
+
+      // Assert: Error response
+      expect(response.isError).toBe(true);
+      expect((response.content[0] as { text: string }).text).toContain('name is required');
+    });
+
+    test('rejects duplicate framework ID', async () => {
+      // Arrange: Create first framework (valid)
+      const firstInput: FrameworkManagerInput = {
+        action: 'create',
+        id: 'duplicate-test',
+        name: 'First',
+        system_prompt_guidance: 'Test guidance.',
+        phases: [
+          { id: 'p1', name: 'Phase 1', description: 'First' },
+          { id: 'p2', name: 'Phase 2', description: 'Second' },
+        ],
+        framework_gates: [
+          {
+            id: 'gate1',
+            name: 'Gate 1',
+            description: 'Test',
+            frameworkArea: 'Phase 1',
+            priority: 'high',
+            validationCriteria: ['Check'],
+          },
+        ],
+      };
+      await manager.handleAction(firstInput, {});
+
+      // Act: Try to create duplicate
+      const duplicateInput: FrameworkManagerInput = {
+        action: 'create',
+        id: 'duplicate-test',
+        name: 'Second',
+        system_prompt_guidance: 'Test 2',
+        phases: [
+          { id: 'p1', name: 'Phase 1', description: 'First' },
+          { id: 'p2', name: 'Phase 2', description: 'Second' },
+        ],
+        framework_gates: [
+          {
+            id: 'gate1',
+            name: 'Gate 1',
+            description: 'Test',
+            frameworkArea: 'Phase 1',
+            priority: 'high',
+            validationCriteria: ['Check'],
+          },
+        ],
+      };
+      const response = await manager.handleAction(duplicateInput, {});
+
+      // Assert: Error response
+      expect(response.isError).toBe(true);
+      expect((response.content[0] as { text: string }).text).toContain('already exists');
+    });
+  });
+
+  describe('Inspect Action', () => {
+    test('shows framework details for existing framework', async () => {
+      // Arrange: Create a framework first
+      const createInput: FrameworkManagerInput = {
+        action: 'create',
+        id: 'inspect-test',
+        name: 'Inspect Test Framework',
+        system_prompt_guidance: 'Test guidance',
+        description: 'Test description',
+        phases: [
+          { id: 'p1', name: 'Phase 1', description: 'First' },
+          { id: 'p2', name: 'Phase 2', description: 'Second' },
+        ],
+        framework_gates: [
+          {
+            id: 'gate1',
+            name: 'Gate 1',
+            description: 'Test',
+            frameworkArea: 'Phase 1',
+            priority: 'high',
+            validationCriteria: ['Check'],
+          },
+        ],
+      };
+      await manager.handleAction(createInput, {});
+
+      // Act: Inspect the framework
+      const inspectInput: FrameworkManagerInput = {
+        action: 'inspect',
+        id: 'inspect-test',
+      };
+      const response = await manager.handleAction(inspectInput, {});
+
+      // Assert: Should show framework details
+      expect(response.isError).toBe(false);
+      const text = (response.content[0] as { text: string }).text;
+
+      // Should show basic details
+      expect(text).toContain('Framework:');
+      expect(text).toContain('ID: inspect-test');
+    });
+  });
+});

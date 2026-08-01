@@ -40,7 +40,6 @@ export {
 
 // Chain execution types (cross-cutting: engine + modules + mcp)
 export {
-  StepState,
   type StepMetadata,
   type GateReviewHistoryEntry,
   type GateReviewExecutionContext,
@@ -54,7 +53,7 @@ export {
 // Also import locally for use by interfaces defined in this file
 import type {
   ConfirmationRequired,
-  ExecutionModeFilterResult,
+  ToolTriggerFilterResult,
   LoadedScriptTool,
   ScriptExecutionRequest,
   ScriptExecutionResult,
@@ -70,14 +69,14 @@ export type {
   Config,
   ExecutionConfig,
   FrameworkInjectionConfig,
-  FrameworksConfig,
+  ResolvedFrameworkConfig,
   LLMIntegrationConfig,
   LLMProvider,
   LoggingConfig,
   Message,
   MessageContent,
   MessageRole,
-  MethodologiesConfig,
+  FrameworkSettings,
   PromptsConfig,
   ResourcesConfig,
   SemanticAnalysisConfig,
@@ -141,7 +140,9 @@ export interface PromptArgument {
     /** Maximum length for strings */
     maxLength?: number;
     /**
-     * @deprecated Removed in v3.0.0 - LLM handles semantic variation better than strict enums.
+     * @deprecated Enforcement was dropped in v3.0.0 — the LLM handles semantic variation
+     * better than a strict enum. The field is still accepted and parsed; argument-schema.ts
+     * deliberately never applies it.
      */
     allowedValues?: Array<string | number | boolean>;
   };
@@ -274,8 +275,8 @@ export interface ToolDescription {
     disabled?: string;
     parametersEnabled?: Record<string, ToolParameter | string>;
     parametersDisabled?: Record<string, ToolParameter | string>;
-    methodologies?: Record<string, string>;
-    methodologyParameters?: Record<string, Record<string, ToolParameter | string>>;
+    frameworks?: Record<string, string>;
+    frameworkParameters?: Record<string, Record<string, ToolParameter | string>>;
   };
 }
 
@@ -283,9 +284,13 @@ export interface ToolDescriptionsConfig {
   version: string;
   lastUpdated?: string;
   tools: Record<string, ToolDescription>;
-  // Runtime metadata used when the active file is regenerated from framework state
+  // Runtime metadata used when the active file is regenerated from framework state.
+  // These two are not duplicates: overlays are registered under both a framework's id and its
+  // type, so lookup prefers the type and falls back to the id (`activeFrameworkType ?? activeFramework`).
+  /** Active framework's id (e.g. 'cageerf'). */
   activeFramework?: string;
-  activeMethodology?: string;
+  /** Active framework's type (e.g. 'CAGEERF'). Preferred overlay lookup key. */
+  activeFrameworkType?: string;
   generatedFrom?: 'fallback' | 'legacy' | 'defaults' | string;
   generatedAt?: string;
 }
@@ -588,16 +593,16 @@ export interface ToolDetectionServicePort {
 
 /**
  * Execution mode service interface (engine/ contract).
- * Concrete: modules/automation/execution/execution-mode-service.ts ExecutionModeService
+ * Concrete: modules/automation/execution/tool-trigger-filter.ts ToolTriggerFilter
  */
-export interface ExecutionModeServicePort {
-  filterByExecutionMode(
+export interface ToolTriggerFilterPort {
+  filterByTrigger(
     matches: ToolDetectionMatch[],
     tools: LoadedScriptTool[],
     promptId: string
-  ): ExecutionModeFilterResult;
+  ): ToolTriggerFilterResult;
   buildConfirmationResponse(
-    filterResult: ExecutionModeFilterResult,
+    filterResult: ToolTriggerFilterResult,
     promptId: string
   ): ConfirmationRequired;
   logManualOverride(toolId: string): void;
@@ -691,7 +696,7 @@ export type HotReloadEventType =
   | 'prompt_changed'
   | 'config_changed'
   | 'category_changed'
-  | 'methodology_changed'
+  | 'framework_changed'
   | 'gate_changed'
   | 'reload_required';
 
@@ -708,8 +713,8 @@ export interface HotReloadEvent {
   reason: string;
   affectedFiles: string[];
   category?: string;
-  /** Methodology ID for methodology_changed events */
-  methodologyId?: string;
+  /** Framework ID for framework_changed events */
+  frameworkId?: string;
   /** Gate ID for gate_changed events */
   gateId?: string;
   /** The type of file change (added, modified, removed) */
@@ -792,10 +797,25 @@ export interface PromptData {
   gates?: GateDefinition[];
   /** Gate configuration (YAML format) */
   gateConfiguration?: PromptGateConfiguration;
+  /**
+   * Prompt-level injection control, resolved between step and chain config.
+   *
+   * Referenced inline rather than through a top-level import: `./injection.js` is already
+   * re-exported wholesale below, and adding a type import here would reorder an import group
+   * this type has no stake in.
+   */
+  injection?: import('./injection.js').PromptInjectionConfig;
   /** Chain steps for multi-step execution (YAML format) */
   chainSteps?: ChainStep[];
   /** Whether to register this prompt with MCP. Overrides category default. */
   registerWithMcp?: boolean;
+  /**
+   * Behavior of the native MCP prompt surface when invoked as a slash command:
+   * 'expand' returns plain template text; 'launch' returns a directive routing
+   * the invocation through the prompt_engine pipeline (framework/gates/chains/
+   * telemetry). Default: 'expand'. Overrides category default.
+   */
+  mcpPromptMode?: 'expand' | 'launch';
   /** Script tool IDs declared by this prompt (references tools/{id}/ directories) */
   tools?: string[];
   /** Client-agnostic capability hint for delegation model selection */

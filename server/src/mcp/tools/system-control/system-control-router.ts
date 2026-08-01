@@ -1,14 +1,11 @@
 // @lifecycle canonical - Thin router for system_control MCP tool actions.
 
-import { resolveRequestIdentity } from '../../../shared/utils/request-identity-resolver.js';
 import {
   SYSTEM_CONTROL_ACTION_IDS,
   type SystemControlActionId,
 } from '../../metadata/definitions/system-control.js';
 import { recordActionInvocation } from '../../metadata/usage-tracker.js';
 import { SafeConfigWriter, createSafeConfigWriter } from '../config-utils.js';
-import { ResponseFormatter } from '../prompt-engine/processors/response-formatter.js';
-import { ToolDescriptionLoader } from '../tool-description-loader.js';
 import { createStructuredResponse } from './core/response-utils.js';
 import { AnalyticsActionHandler } from './handlers/analytics-action-handler.js';
 import { ChangesActionHandler } from './handlers/changes-action-handler.js';
@@ -31,7 +28,9 @@ import {
   type ChainSessionService,
   StateStoreOptions,
 } from '../../../shared/types/index.js';
+import { resolveRequestIdentity } from '../../../shared/utils/request-identity-resolver.js';
 import { resolveContinuityScopeId } from '../../../shared/utils/request-identity-scope.js';
+import { ResponseFormatter } from '../prompt-engine/processors/response-formatter.js';
 
 import type { ActionHandler } from './core/action-handler-base.js';
 import type { SystemAnalytics, SystemControlContext } from './core/types.js';
@@ -59,7 +58,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   frameworkManager?: FrameworkManager;
   gateStateStore?: GateStateStore;
   gateGuidanceRenderer?: GateGuidanceRenderer;
-  chainSessionManager?: ChainSessionService;
+  chainSessionStore?: ChainSessionService;
   configManager?: ConfigManager;
   safeConfigWriter?: SafeConfigWriter;
   onRestart?: (reason: string) => Promise<void>;
@@ -100,10 +99,6 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     this.frameworkManager = frameworkManager;
   }
 
-  setToolDescriptionLoader(_manager: ToolDescriptionLoader): void {
-    // Stored for backwards compat; no handler uses it.
-  }
-
   setAnalyticsService(analyticsService: MetricsCollector): void {
     this.analyticsService = analyticsService;
     this.responseFormatter.setAnalyticsService(analyticsService);
@@ -136,8 +131,8 @@ export class ConsolidatedSystemControl implements SystemControlContext {
     this.logger.debug('Gate system manager configured for runtime gate control');
   }
 
-  setChainSessionManager(chainSessionManager: ChainSessionService): void {
-    this.chainSessionManager = chainSessionManager;
+  setChainSessionStore(chainSessionStore: ChainSessionService): void {
+    this.chainSessionStore = chainSessionStore;
     this.logger.debug('Chain session manager configured for session control');
   }
 
@@ -227,10 +222,14 @@ export class ConsolidatedSystemControl implements SystemControlContext {
       return '⚠️ Persistence skipped (config writer unavailable).';
     }
 
+    // Every key here must appear in CONFIG_VALID_KEYS — updateConfigValue rejects anything else
+    // as "Unknown configuration key". Two of the three previously listed did not
+    // (`frameworks.injection.systemPrompt.enabled` and `gates.enableMethodologyGates`), and the
+    // loop returns on first failure, so persistence aborted before writing anything.
     const keys = [
-      'frameworks.injection.systemPrompt.enabled',
+      'frameworks.enabled',
       'frameworks.dynamicToolDescriptions',
-      'gates.enableMethodologyGates',
+      'gates.frameworkGates',
     ];
 
     try {

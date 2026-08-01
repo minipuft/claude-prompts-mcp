@@ -34,7 +34,7 @@ export class ChainOperatorExecutor {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private readonly gateGuidanceRenderer?: any,
     private readonly getFrameworkContext?: (promptId: string) => Promise<{
-      selectedFramework?: { methodology: string; name: string };
+      selectedFramework?: { type: string; name: string };
       category?: string;
       systemPrompt?: string;
     } | null>,
@@ -162,12 +162,12 @@ export class ChainOperatorExecutor {
     let gateGuidance = '';
     if (gateGuidanceEnabled && gateIdsToRender.length > 0) {
       // Get framework and category context if available
-      let frameworkMethodology = 'CAGEERF';
+      let frameworkType = 'CAGEERF';
       let category = 'general';
 
       const reviewStepContext = await this.resolveFrameworkContext(targetStep ?? undefined);
       if (reviewStepContext) {
-        frameworkMethodology = reviewStepContext.selectedFramework?.methodology || 'CAGEERF';
+        frameworkType = reviewStepContext.selectedFramework?.type || 'CAGEERF';
         category = reviewStepContext.category || 'general';
       }
 
@@ -175,7 +175,7 @@ export class ChainOperatorExecutor {
       if (this.gateGuidanceRenderer) {
         try {
           gateGuidance = await this.gateGuidanceRenderer.renderGuidance(gateIdsToRender, {
-            framework: frameworkMethodology,
+            framework: frameworkType,
             category,
             promptId: targetStep?.promptId,
             explicitGateIds,
@@ -557,7 +557,7 @@ export class ChainOperatorExecutor {
     return [
       '---',
       '',
-      '## 🎯 Framework Methodology Active',
+      '## 🎯 Framework Framework Active',
       '',
       `**${frameworkName}**`,
       '',
@@ -569,7 +569,7 @@ export class ChainOperatorExecutor {
   }
 
   private async resolveFrameworkContext(step?: ChainStepPrompt): Promise<{
-    selectedFramework?: { methodology: string; name: string };
+    selectedFramework?: { type: string; name: string };
     category?: string;
     systemPrompt?: string;
   } | null> {

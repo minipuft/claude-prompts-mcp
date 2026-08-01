@@ -52,18 +52,18 @@ export {
   type GateSchemaValidationResult,
 } from '../engine/gates/core/gate-schema.js';
 
-// ── Methodology schemas (pure Zod) ──────────────────────────────────────────
+// ── Framework schemas (pure Zod) ──────────────────────────────────────────
 
 export {
-  MethodologyGateSchema,
+  FrameworkGateSchema,
   TemplateSuggestionSchema,
-  MethodologySchema,
-  validateMethodologySchema,
-  type MethodologyGate,
+  FrameworkSchema,
+  validateFrameworkSchema,
+  type FrameworkGate,
   type TemplateSuggestion,
-  type MethodologyYaml,
-  type MethodologySchemaValidationResult,
-} from '../engine/frameworks/methodology/methodology-schema.js';
+  type FrameworkYaml,
+  type FrameworkSchemaValidationResult,
+} from '../engine/frameworks/definitions/framework-schema.js';
 
 // ── Style schemas (pure Zod) ────────────────────────────────────────────────
 

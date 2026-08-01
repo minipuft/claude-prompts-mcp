@@ -24,10 +24,10 @@ export const RESOURCE_URI_PATTERNS = {
   GATE_ITEM: 'resource://gate/{id}',
   GATE_GUIDANCE: 'resource://gate/{id}/guidance',
 
-  // Methodology resources (Phase 2)
-  METHODOLOGY_LIST: 'resource://methodology/',
-  METHODOLOGY_ITEM: 'resource://methodology/{id}',
-  METHODOLOGY_SYSTEM_PROMPT: 'resource://methodology/{id}/system-prompt',
+  // Framework resources (Phase 2)
+  FRAMEWORK_LIST: 'resource://framework/',
+  FRAMEWORK_ITEM: 'resource://framework/{id}',
+  FRAMEWORK_SYSTEM_PROMPT: 'resource://framework/{id}/system-prompt',
 
   // Observability resources (Phase 2)
   SESSION_LIST: 'resource://session/',
@@ -73,9 +73,9 @@ export interface GateResourceMetadata extends ResourceListItem {
 }
 
 /**
- * Methodology resource metadata for list responses
+ * Framework resource metadata for list responses
  */
-export interface MethodologyResourceMetadata extends ResourceListItem {
+export interface FrameworkResourceMetadata extends ResourceListItem {
   type: string;
   enabled: boolean;
   priority: number;
@@ -139,7 +139,7 @@ export interface ResourceDependencies {
         }
       | undefined;
   };
-  // Methodology/framework dependencies (Phase 2)
+  // Framework dependencies (Phase 2)
   frameworkManager?: {
     listFrameworks(enabledOnly?: boolean): Array<{
       id: string;
@@ -165,7 +165,7 @@ export interface ResourceDependencies {
       | undefined;
   };
   // Session and metrics dependencies (Phase 2)
-  chainSessionManager?: {
+  chainSessionStore?: {
     listActiveSessions(limit?: number): Array<{
       sessionId: string;
       chainId: string;
@@ -267,7 +267,7 @@ export interface ResourceDependencies {
   resourcesConfig?: {
     prompts?: { enabled?: boolean };
     gates?: { enabled?: boolean };
-    methodologies?: { enabled?: boolean };
+    frameworks?: { enabled?: boolean };
     observability?: {
       enabled?: boolean;
       sessions?: boolean;

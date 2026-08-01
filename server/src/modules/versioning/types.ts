@@ -23,8 +23,8 @@ export interface VersionEntry {
  * Assembled history for a resource (loaded from version_history table)
  */
 export interface HistoryFile {
-  /** Type of resource (prompt, gate, methodology) */
-  resource_type: 'prompt' | 'gate' | 'methodology';
+  /** Type of resource (prompt, gate, framework) */
+  resource_type: 'prompt' | 'gate' | 'framework';
   /** ID of the resource */
   resource_id: string;
   /** Current/latest version number */

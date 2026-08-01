@@ -10,7 +10,7 @@ import type {
 import type { VersioningConfig, Logger } from '../../shared/types/index.js';
 import type { DatabasePort } from '../../shared/types/persistence.js';
 
-type ResourceType = 'prompt' | 'gate' | 'methodology';
+type ResourceType = 'prompt' | 'gate' | 'framework';
 
 interface VersionRow {
   id: number;
@@ -33,7 +33,7 @@ export interface VersioningConfigProvider {
 }
 
 /**
- * Service for managing version history of resources (prompts, gates, methodologies).
+ * Service for managing version history of resources (prompts, gates, frameworks).
  *
  * Persists version snapshots in the SQLite `version_history` table via SqliteEngine.
  * Supports automatic versioning on updates, rollback, and version comparison.

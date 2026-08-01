@@ -79,7 +79,7 @@ def validate_pass_criteria(data: dict[str, Any]) -> tuple[list[str], list[str]]:
     valid_types = [
         "inline_guidance",
         "llm_self_check",
-        "methodology_compliance",
+        "framework_compliance",
         "shell_verify",
         "script_tool",
     ]

@@ -2,6 +2,13 @@
 
 Full schema for defining reusable quality gates in `resources/gates/{id}/gate.yaml`.
 
+> **Scope**: this page documents **standalone `gate.yaml` files** — reusable gates the registry
+> activates by category or framework. It is not the schema for a prompt's own
+> `gateConfiguration.inline_gate_definitions` block, which is narrower and documented in
+> [Prompt YAML Schema § Inline Gate Definitions](prompt-yaml-schema.md#inline-gate-definitions).
+> The two are related but not interchangeable: an inline definition is scoped to one prompt and
+> registered per execution, and it accepts fewer fields.
+
 ## Why This Matters
 
 | Problem             | Solution            | Result                                    |

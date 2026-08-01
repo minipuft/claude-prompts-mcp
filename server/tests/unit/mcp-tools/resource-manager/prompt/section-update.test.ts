@@ -18,7 +18,13 @@ describe('UPDATE_FIELDS map', () => {
   });
 
   it('covers all updatable string fields', () => {
-    const stringFields = ['name', 'category', 'description', 'system_message', 'user_message_template'];
+    const stringFields = [
+      'name',
+      'category',
+      'description',
+      'system_message',
+      'user_message_template',
+    ];
     for (const field of stringFields) {
       expect(UPDATE_FIELDS).toHaveProperty(field);
     }

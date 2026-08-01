@@ -60,7 +60,7 @@ export function filterFrameworkGuidance(
     let result = filteredLines.join('\n');
     result = result.replace(
       `- ${resolvedFrameworkName}: `,
-      `**${resolvedFrameworkName} Methodology Guidelines:**\n- `
+      `**${resolvedFrameworkName} Framework Guidelines:**\n- `
     );
     return result;
   }

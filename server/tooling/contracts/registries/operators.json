@@ -64,7 +64,7 @@
       "id": "framework",
       "symbol": "@",
       "role": "prefix",
-      "description": "Apply methodology framework",
+      "description": "Apply a framework",
       "purpose": "Inject framework guidance (CAGEERF, ReACT, etc.)",
       "pattern": {
         "typescript": "(?:^|\\s)@([A-Za-z0-9_-]+)(?=\\s|$)"

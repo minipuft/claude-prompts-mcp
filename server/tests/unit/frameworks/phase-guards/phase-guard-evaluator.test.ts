@@ -2,7 +2,7 @@ import {
   evaluatePhaseGuards,
   buildPhaseGuardPassSummary,
 } from '../../../../src/engine/frameworks/phase-guards/phase-guard-evaluator.js';
-import type { ProcessingStep } from '../../../../src/engine/frameworks/types/methodology-types.js';
+import type { ProcessingStep } from '../../../../src/engine/frameworks/types/framework-types.js';
 import type { PhaseGuardEvaluationResult } from '../../../../src/engine/frameworks/phase-guards/types.js';
 
 function makePhase(
@@ -11,7 +11,7 @@ function makePhase(
   return {
     name: overrides.id,
     description: `Test phase ${overrides.id}`,
-    methodologyBasis: 'test',
+    frameworkBasis: 'test',
     order: 1,
     required: true,
     ...overrides,
@@ -34,7 +34,7 @@ describe('evaluatePhaseGuards', () => {
         id: 'no-marker',
         name: 'No Marker',
         description: 'Phase without section_header',
-        methodologyBasis: 'test',
+        frameworkBasis: 'test',
         order: 1,
         required: true,
         guards: { required: true },

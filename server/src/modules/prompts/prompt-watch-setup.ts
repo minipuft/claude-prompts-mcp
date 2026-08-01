@@ -55,13 +55,13 @@ export async function discoverPromptDirectories(
 
 /**
  * Build a deduplicated map of watch targets from prompt directories,
- * methodology directories, and auxiliary reload directories.
+ * framework directories, and auxiliary reload directories.
  */
 export function buildWatchTargets(
   promptsDir: string,
   categoryDirs: WatchTarget[],
   options?: {
-    methodologyDirectories?: string[];
+    frameworkDirectories?: string[];
     auxiliaryDirectories?: string[][];
   }
 ): WatchTarget[] {
@@ -79,9 +79,9 @@ export function buildWatchTargets(
     targets.set(dir.path, target);
   }
 
-  // Methodology directories
-  if (options?.methodologyDirectories) {
-    for (const dir of options.methodologyDirectories) {
+  // Framework directories
+  if (options?.frameworkDirectories) {
+    for (const dir of options.frameworkDirectories) {
       if (dir) {
         targets.set(dir, { path: dir });
       }

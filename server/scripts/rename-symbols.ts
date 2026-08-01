@@ -39,16 +39,15 @@ const RENAMES: RenameEntry[] = [
   { oldName: 'CategoryManager', newName: 'CategoryAssigner', kind: 'class', tier: 2 },
 
   // Tier 3: State Stores
-  { oldName: 'FrameworkStateStore', newName: 'FrameworkStateStore', kind: 'class', tier: 3 },
-  { oldName: 'GateStateStore', newName: 'GateStateStore', kind: 'class', tier: 3 },
+  // FrameworkStateStore / GateStateStore / TextReferenceStore / ConversationStore were listed
+  // here renaming to themselves. An identity entry is not a no-op: ts-morph still resolves and
+  // rewrites every reference, so each one was real risk buying nothing. Removed 2026-07-29.
   {
     oldName: 'VerifyActiveStateManager',
     newName: 'VerifyActiveStateStore',
     kind: 'class',
     tier: 3,
   },
-  { oldName: 'TextReferenceStore', newName: 'TextReferenceStore', kind: 'class', tier: 3 },
-  { oldName: 'ConversationStore', newName: 'ConversationStore', kind: 'class', tier: 3 },
 
   // Tier 4: Infrastructure
   { oldName: 'ServerManager', newName: 'ServerLifecycle', kind: 'class', tier: 4 },

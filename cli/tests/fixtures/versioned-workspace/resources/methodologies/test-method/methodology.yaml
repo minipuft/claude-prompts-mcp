@@ -1,8 +1,0 @@
-id: test-method
-name: Test Method
-methodology: TEST_METHOD
-version: 1.0.0
-description: A test methodology for CLI integration tests
-enabled: false
-systemPromptGuidance: |
-  Apply the test methodology systematically.

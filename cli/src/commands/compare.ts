@@ -17,7 +17,7 @@ export async function compare(options: CompareOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm compare <prompt|gate|methodology|style> <id> <from> <to>\n` +
+      `Usage: cpm compare <prompt|gate|framework|style> <id> <from> <to>\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
@@ -25,7 +25,7 @@ export async function compare(options: CompareOptions): Promise<number> {
 
   if (!options.id || !options.from || !options.to) {
     console.error(
-      'Usage: cpm compare <prompt|gate|methodology|style> <id> <from> <to>\nResource ID and both version numbers are required.',
+      'Usage: cpm compare <prompt|gate|framework|style> <id> <from> <to>\nResource ID and both version numbers are required.',
     );
     return 1;
   }

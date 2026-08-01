@@ -10,7 +10,7 @@ import type {
   AnalysisConfig,
   SemanticAnalysisConfig,
   LoggingConfig,
-  FrameworksConfig,
+  ResolvedFrameworkConfig,
   GateSystemSettings as GatesConfig,
   ChainSessionConfig,
   ExecutionConfig,
@@ -41,7 +41,7 @@ export interface ConfigManager {
   getAnalysisConfig(): AnalysisConfig;
   getSemanticAnalysisConfig(): SemanticAnalysisConfig;
   getLoggingConfig(): LoggingConfig;
-  getFrameworksConfig(): FrameworksConfig;
+  getFrameworksConfig(): ResolvedFrameworkConfig;
   getGatesConfig(): GatesConfig;
   getChainSessionConfig(): ChainSessionConfig;
   getExecutionConfig(): ExecutionConfig;
@@ -69,12 +69,12 @@ export interface ConfigManager {
   on(event: 'configChanged', listener: (config: Config) => void): this;
   on(
     event: 'frameworksConfigChanged',
-    listener: (current: FrameworksConfig, previous: FrameworksConfig) => void
+    listener: (current: ResolvedFrameworkConfig, previous: ResolvedFrameworkConfig) => void
   ): this;
   off(event: 'configChanged', listener: (config: Config) => void): this;
   off(
     event: 'frameworksConfigChanged',
-    listener: (current: FrameworksConfig, previous: FrameworksConfig) => void
+    listener: (current: ResolvedFrameworkConfig, previous: ResolvedFrameworkConfig) => void
   ): this;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   off(event: string, listener: (...args: any[]) => void): this;

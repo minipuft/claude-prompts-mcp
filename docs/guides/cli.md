@@ -6,13 +6,13 @@ Use the CLI for automation, CI pipelines, and offline workspace management. Use 
 
 ## When to Use What
 
-| I want to... | Use |
-| ------------ | --- |
+| I want to...                                   | Use                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------ |
 | Execute prompts, run chains, switch frameworks | MCP server (`prompt_engine`, `resource_manager`, `system_control`) |
-| Scaffold a new workspace or resource | CLI (`cpm init`, `cpm create`) |
-| Validate resources in CI | CLI (`cpm validate --all`) |
-| View or rollback version history | CLI (`cpm history`, `cpm rollback`) |
-| Manage config without restarting | CLI (`cpm config set`) |
+| Scaffold a new workspace or resource           | CLI (`cpm init`, `cpm create`)                                     |
+| Validate resources in CI                       | CLI (`cpm validate --all`)                                         |
+| View or rollback version history               | CLI (`cpm history`, `cpm rollback`)                                |
+| Manage config without restarting               | CLI (`cpm config set`)                                             |
 
 The CLI and MCP server share validation logic but operate independently — the CLI never starts the server process.
 
@@ -48,7 +48,7 @@ cpm validate --styles
 | ------------------------ | ----------------------------------------------------- |
 | `--prompts`              | Validate prompts only                                 |
 | `--gates`                | Validate gates only                                   |
-| `--methodologies`        | Validate methodologies only                           |
+| `--frameworks`           | Validate frameworks only                              |
 | `--styles`               | Validate styles only                                  |
 | `--all`                  | Validate all resource types (default)                 |
 | `--config`               | Also validate `config.json` keys and values           |
@@ -64,7 +64,7 @@ List resources by type.
 ```bash
 cpm list prompts --workspace server
 cpm list gates --json
-cpm list methodologies -w ./my-workspace
+cpm list frameworks -w ./my-workspace
 cpm list styles
 ```
 
@@ -77,11 +77,11 @@ Inspect a specific resource by type and ID.
 ```bash
 cpm inspect prompt action_plan --workspace server
 cpm inspect gate code-quality --json
-cpm inspect methodology cageerf -w server
+cpm inspect framework cageerf -w server
 cpm inspect style analytical
 ```
 
-Accepts both singular and plural type names (`prompt`/`prompts`, `gate`/`gates`, `methodology`/`methodologies`, `style`/`styles`).
+Accepts both singular and plural type names (`prompt`/`prompts`, `gate`/`gates`, `framework`/`frameworks`, `style`/`styles`).
 
 ### init
 
@@ -103,7 +103,7 @@ Create a new resource with template YAML.
 ```bash
 cpm create prompt my-analysis --name "My Analysis" --description "Analyze code" --category tools
 cpm create gate code-review --name "Code Review"
-cpm create methodology my-method --name "My Method" --json
+cpm create framework my-method --name "My Method" --json
 cpm create style analytical --name "Analytical" --description "Structured analytical responses"
 ```
 
@@ -186,7 +186,7 @@ Rename a resource (changes directory name and `id:` field in YAML).
 ```bash
 cpm rename prompt old-name new-name --workspace server
 cpm rename gate code-review quality-gate --json
-cpm rename methodology old-method new-method
+cpm rename framework old-method new-method
 ```
 
 | Flag                     | Purpose                            |
@@ -217,10 +217,10 @@ Only prompts have categories — other resource types should use `rename` instea
 
 ### toggle
 
-Toggle the `enabled` field for methodologies or styles.
+Toggle the `enabled` field for frameworks or styles.
 
 ```bash
-cpm toggle methodology cageerf --workspace server
+cpm toggle framework cageerf --workspace server
 cpm toggle style analytical --json
 ```
 
@@ -230,7 +230,7 @@ cpm toggle style analytical --json
 | `-w, --workspace <path>` | Workspace directory                |
 | `--json`                 | JSON output                        |
 
-Flips `enabled: true` to `false` (or vice versa). Only methodologies and styles have an `enabled` field. Exit codes: `0` toggled, `1` error.
+Flips `enabled: true` to `false` (or vice versa). Only frameworks and styles have an `enabled` field. Exit codes: `0` toggled, `1` error.
 
 ### link-gate
 
@@ -264,14 +264,14 @@ cpm config reset --force -w server                  # Reset to defaults
 cpm config keys                                     # List all valid config keys
 ```
 
-| Subcommand | Usage                             | Description                                  |
-| ---------- | --------------------------------- | -------------------------------------------- |
-| `list`     | `cpm config list`                 | Display full config as formatted JSON        |
-| `get`      | `cpm config get <key>`            | Get value by dot-notation key                |
-| `set`      | `cpm config set <key> <value>`    | Set value with backup + validation           |
-| `validate` | `cpm config validate`             | Validate all config keys and values          |
-| `reset`    | `cpm config reset --force`        | Reset to defaults (requires `--force`)       |
-| `keys`     | `cpm config keys`                 | List all valid keys with types               |
+| Subcommand | Usage                          | Description                            |
+| ---------- | ------------------------------ | -------------------------------------- |
+| `list`     | `cpm config list`              | Display full config as formatted JSON  |
+| `get`      | `cpm config get <key>`         | Get value by dot-notation key          |
+| `set`      | `cpm config set <key> <value>` | Set value with backup + validation     |
+| `validate` | `cpm config validate`          | Validate all config keys and values    |
+| `reset`    | `cpm config reset --force`     | Reset to defaults (requires `--force`) |
+| `keys`     | `cpm config keys`              | List all valid keys with types         |
 
 Keys use dot-notation (e.g., `gates.mode`, `server.port`, `logging.level`). The `set` subcommand creates a timestamped backup before writing and warns when a key requires server restart. The `--json` and `-w` flags work with all subcommands.
 
@@ -283,22 +283,22 @@ Shorthand for toggling subsystem mode switches (`on`/`off`).
 
 ```bash
 cpm enable gates                       # gates.mode = on
-cpm disable methodologies -w server    # methodologies.mode = off
+cpm disable frameworks -w server    # frameworks.mode = off
 cpm enable resources --json            # resources.mode = on (JSON output)
 ```
 
-| Subsystem | Config Key |
-| --------- | ---------- |
-| `gates` | `gates.mode` |
-| `methodologies` | `methodologies.mode` |
-| `resources` | `resources.mode` |
-| `resources.prompts` | `resources.prompts.mode` |
-| `resources.gates` | `resources.gates.mode` |
-| `resources.methodologies` | `resources.methodologies.mode` |
-| `resources.observability` | `resources.observability.mode` |
-| `resources.logs` | `resources.logs.mode` |
-| `verification` | `verification.isolation.mode` |
-| `analysis` | `analysis.semanticAnalysis.llmIntegration.mode` |
+| Subsystem                 | Config Key                                      |
+| ------------------------- | ----------------------------------------------- |
+| `gates`                   | `gates.mode`                                    |
+| `frameworks`              | `frameworks.mode`                               |
+| `resources`               | `resources.mode`                                |
+| `resources.prompts`       | `resources.prompts.mode`                        |
+| `resources.gates`         | `resources.gates.mode`                          |
+| `resources.frameworks`    | `resources.frameworks.mode`                     |
+| `resources.observability` | `resources.observability.mode`                  |
+| `resources.logs`          | `resources.logs.mode`                           |
+| `verification`            | `verification.isolation.mode`                   |
+| `analysis`                | `analysis.semanticAnalysis.llmIntegration.mode` |
 
 Reports "already enabled/disabled" without writing when the value is unchanged. Exit codes: `0` success, `1` unknown subsystem or error.
 

@@ -29,7 +29,7 @@ export class DependencyInjectionStage extends BasePipelineStage {
 
   constructor(
     private readonly temporaryGateRegistry: TemporaryGateRegistry,
-    private readonly chainSessionManager: ChainSessionService,
+    private readonly chainSessionStore: ChainSessionService,
     private readonly frameworkEnabledProvider: FrameworkEnabledProvider | null,
     private readonly metricsProvider: MetricsProvider | null,
     private readonly pipelineVersion: string,
@@ -49,7 +49,7 @@ export class DependencyInjectionStage extends BasePipelineStage {
 
     // Initialize gate enforcement authority for downstream stages
     context.gateEnforcement = new GateEnforcementAuthority(
-      this.chainSessionManager,
+      this.chainSessionStore,
       this.logger,
       this.gateLoader
     );

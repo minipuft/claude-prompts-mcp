@@ -20,7 +20,7 @@ import { z } from 'zod';
 
 /**
  * Schema for per-tool description overlays when a style is active.
- * Mirrors MethodologyToolDescription shape from methodology-types.ts
+ * Mirrors FrameworkToolDescription shape from framework-types.ts
  * so the overlay priority chain is consistent.
  */
 export const StyleToolDescriptionSchema = z.object({

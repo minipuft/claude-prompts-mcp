@@ -14,7 +14,7 @@ export * from './resource-loader-types.js';
 export * from './file-transactions.js';
 export * from './usage-tracker.js';
 
-// Template system removed - functionality moved to methodology guides
+// Template system removed - functionality moved to framework guides
 
 // Additional utilities extracted from index.ts
 

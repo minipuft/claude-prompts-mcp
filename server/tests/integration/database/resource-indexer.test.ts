@@ -32,7 +32,7 @@ const RESOURCES_DIR = path.join(TEST_DIR, 'resources');
  * Create a minimal YAML resource file on disk
  */
 async function createResource(
-  type: 'prompts' | 'gates' | 'methodologies' | 'styles',
+  type: 'prompts' | 'gates' | 'frameworks' | 'styles',
   id: string,
   fields: Record<string, string>
 ): Promise<void> {
@@ -41,8 +41,8 @@ async function createResource(
       ? 'prompt.yaml'
       : type === 'gates'
         ? 'gate.yaml'
-        : type === 'methodologies'
-          ? 'methodology.yaml'
+        : type === 'frameworks'
+          ? 'framework.yaml'
           : 'style.yaml';
 
   const dir = path.join(RESOURCES_DIR, type, id);
@@ -122,8 +122,8 @@ describe('ResourceIndexer', () => {
       expect(gate!.type).toBe('gate');
     });
 
-    it('should index methodologies from disk', async () => {
-      await createResource('methodologies', 'cageerf', {
+    it('should index frameworks from disk', async () => {
+      await createResource('frameworks', 'cageerf', {
         id: 'cageerf',
         name: 'CAGEERF',
         description: 'Context-Analysis-Goals framework',
@@ -132,7 +132,7 @@ describe('ResourceIndexer', () => {
       const result = await indexer.syncAll();
 
       expect(result.added).toBe(1);
-      const meth = indexer.getResource('methodology', 'cageerf');
+      const meth = indexer.getResource('framework', 'cageerf');
       expect(meth).not.toBeNull();
       expect(meth!.name).toBe('CAGEERF');
     });
@@ -155,7 +155,7 @@ describe('ResourceIndexer', () => {
     it('should index all resource types in a single syncAll call', async () => {
       await createResource('prompts', 'p1', { id: 'p1', name: 'Prompt 1' });
       await createResource('gates', 'g1', { id: 'g1', name: 'Gate 1' });
-      await createResource('methodologies', 'm1', { id: 'm1', name: 'Method 1' });
+      await createResource('frameworks', 'm1', { id: 'm1', name: 'Method 1' });
       await createResource('styles', 's1', { id: 's1', name: 'Style 1' });
 
       const result = await indexer.syncAll();
@@ -166,7 +166,7 @@ describe('ResourceIndexer', () => {
       const stats = indexer.getStats();
       expect(stats.prompt).toBe(1);
       expect(stats.gate).toBe(1);
-      expect(stats.methodology).toBe(1);
+      expect(stats.framework).toBe(1);
       expect(stats.style).toBe(1);
     });
 
@@ -330,7 +330,7 @@ describe('ResourceIndexer', () => {
       const stats = indexer.getStats();
       expect(stats.prompt).toBe(3);
       expect(stats.gate).toBe(1);
-      expect(stats.methodology).toBe(0);
+      expect(stats.framework).toBe(0);
       expect(stats.style).toBe(0);
     });
   });

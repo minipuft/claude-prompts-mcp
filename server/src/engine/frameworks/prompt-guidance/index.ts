@@ -3,11 +3,11 @@
  * Prompt Guidance System Index
  *
  * Central exports for the prompt guidance system that provides intelligent
- * methodology integration for MCP prompts.
+ * framework integration for MCP prompts.
  *
  * The prompt guidance system consists of:
  * - PromptGuidanceService: Unified service orchestrating all guidance components
- * - TemplateEnhancer: Enhances user templates with methodology-specific guidance
+ * - TemplateEnhancer: Enhances user templates with framework-specific guidance
  *
  * Active framework state is read from FrameworkManager (SQLite-backed via FrameworkStateStore).
  */
@@ -30,8 +30,6 @@ export type { PromptGuidanceResult as ServicePromptGuidanceResult } from './serv
 
 // Re-export relevant types from the types system
 export type {
-  MethodologyState,
-  MethodologySwitchRequest,
   PromptGuidanceConfig,
   PromptGuidanceResult,
   SystemPromptInjectionResult,

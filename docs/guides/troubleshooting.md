@@ -1,6 +1,5 @@
 # Troubleshooting
 
-
 Common issues and how to fix them.
 
 ---
@@ -12,6 +11,7 @@ Common issues and how to fix them.
 **Cause**: Working directory isn't `server/` or paths aren't absolute.
 
 **Fix**:
+
 1. Run from `server/` directory
 2. Use `--workspace` flag or `MCP_WORKSPACE` environment variable to set your workspace
 3. Run with `--debug-startup` to see detection strategies:
@@ -20,6 +20,7 @@ Common issues and how to fix them.
    ```
 
 **Recommended**: Use the new path configuration system instead of deprecated env vars:
+
 ```bash
 # Via CLI flags
 npx claude-prompts --workspace=/path/to/workspace
@@ -33,6 +34,7 @@ MCP_WORKSPACE=/path/to/workspace npx claude-prompts
 **Cause**: Invalid JSON in `config.json` blocks startup.
 
 **Fix**:
+
 ```bash
 node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 ```
@@ -49,6 +51,7 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 **Cause**: STDIO conflict, wrong paths, or JSON syntax error in client config.
 
 **Fix**:
+
 1. Run server manually to verify startup:
    ```bash
    node dist/index.js --transport=stdio --verbose
@@ -63,6 +66,7 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 **Cause**: Server didn't register tools or client cache is stale.
 
 **Fix**:
+
 1. Check `system_control(action: "status")` to verify server is running
 2. Restart Claude Desktop to refresh MCP connections
 3. Verify `prompts.registerWithMcp: true` in `config.json`
@@ -79,6 +83,7 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 **Cause**: Prompt not listed in registry or file path mismatch.
 
 **Fix**:
+
 1. Check registry: `resource_manager(resource_type: "prompt", action: "list")`
 2. Verify path in `prompts/promptsConfig.json`
 3. Manual reload: `resource_manager(resource_type: "prompt", action: "reload")`
@@ -88,6 +93,7 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 **Cause**: File watcher issue or file not in watched paths.
 
 **Fix**:
+
 1. Confirm file is listed in `prompts/promptsConfig.json`
 2. Trigger manual reload: `resource_manager(resource_type: "prompt", action: "reload")`
 3. Check `server/logs/` for watcher errors
@@ -105,6 +111,7 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 **Cause**: `runtime-state/state.db` permissions or corruption.
 
 **Fix**:
+
 1. Check write permissions on `runtime-state/` directory
 2. Delete `state.db` and restart (sessions will reset)
 3. In CI, use HTTP transport (`--transport=streamable-http`) to avoid STDIO restrictions
@@ -117,6 +124,7 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 **Cause**: Gate failed and waiting for verdict, or session corrupted.
 
 **Fix**:
+
 1. Check if gate review is pending—send `gate_verdict` (preferred format: `GATE_REVIEW: PASS/FAIL - reason`) or `gate_action` when retries are exhausted
 2. Bundle responses for efficiency: include both `user_response` and `gate_verdict` in one call
 3. Force restart: `prompt_engine(command: ">>prompt", force_restart: true)`
@@ -128,9 +136,10 @@ node -e "JSON.parse(require('fs').readFileSync('config.json'))"
 
 ### "No active framework" Messages
 
-**Expected behavior** when you haven't switched methodologies.
+**Expected behavior** when you haven't switched frameworks.
 
 **Fix** (if you want a framework active):
+
 ```bash
 system_control(action: "framework", operation: "switch", framework: "CAGEERF")
 ```
@@ -140,7 +149,8 @@ system_control(action: "framework", operation: "switch", framework: "CAGEERF")
 **Cause**: Injection disabled in config or using `%clean` modifier.
 
 **Fix**:
-1. Check `methodologies.enabled: true` in `config.json`
+
+1. Check `frameworks.enabled: true` in `config.json`
 2. Remove `%clean` or `%lean` modifiers from command
 3. Use `%guided` to force injection
 
@@ -156,8 +166,9 @@ system_control(action: "framework", operation: "switch", framework: "CAGEERF")
 **Cause**: No gates specified or framework gates disabled.
 
 **Fix**:
+
 1. Add gates explicitly: `gates: ["code-quality"]` or `:: 'criteria'`
-2. Check `gates.methodologyGates: true` in config
+2. Check `gates.frameworkGates: true` in config
 3. Verify gate activation rules match your prompt category
 
 ### Gate Keeps Failing
@@ -165,6 +176,7 @@ system_control(action: "framework", operation: "switch", framework: "CAGEERF")
 **Cause**: Retry limit reached or criteria unclear.
 
 **Fix**:
+
 1. Use `gate_action: "skip"` to bypass and continue
 2. Use `gate_action: "retry"` to reset attempt counter
 3. Clarify criteria in the gate definition
@@ -183,6 +195,7 @@ node dist/index.js --transport=stdio --verbose
 ```
 
 Or set environment variable:
+
 ```bash
 LOG_LEVEL=debug node dist/index.js --transport=stdio
 ```

@@ -10,11 +10,11 @@ import {
   initializeResourceChangeTracker,
   compareResourceBaseline,
 } from './resource-change-tracking.js';
+import { getDefaultRuntimeLoader } from '../engine/frameworks/definitions/runtime-framework-loader.js';
 import {
   createFrameworkStateStore,
   FrameworkStateStore,
 } from '../engine/frameworks/framework-state-store.js';
-import { getDefaultRuntimeLoader } from '../engine/frameworks/methodology/runtime-methodology-loader.js';
 import { createGateManager, GateManager } from '../engine/gates/gate-manager.js';
 import { createMetricsCollector } from '../infra/observability/metrics/index.js';
 import { ResourceChangeTracker } from '../infra/observability/tracking/index.js';
@@ -36,7 +36,7 @@ import type { Category, PromptData } from '../modules/prompts/types.js';
 import type { ConversationStore } from '../modules/text-refs/conversation.js';
 import type { TextReferenceStore } from '../modules/text-refs/index.js';
 import type {
-  FrameworksConfig,
+  ResolvedFrameworkConfig,
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '../shared/types/index.js';
@@ -45,7 +45,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 export interface ModuleInitCallbacks {
   fullServerRefresh: () => Promise<void>;
   restartServer: (reason: string) => Promise<void>;
-  handleFrameworkConfigChange: (config: FrameworksConfig, previous?: FrameworksConfig) => void;
+  handleFrameworkConfigChange: (
+    config: ResolvedFrameworkConfig,
+    previous?: ResolvedFrameworkConfig
+  ) => void;
 }
 
 export interface ModuleInitParams {
@@ -155,19 +158,17 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     }
   }
 
-  // Initialize methodology + style loaders with PathResolver-resolved dirs
+  // Initialize framework + style loaders with PathResolver-resolved dirs
   // This ensures PathResolver is the SSOT for directory resolution and enables overlays.
   // Must happen before any pipeline/tool code calls getDefaultRuntimeLoader().
-  const methodologiesDir = pathResolver?.getMethodologiesPath();
-  const additionalMethodologiesDirs = pathResolver?.getOverlayResourceDirs('methodologies') ?? [];
+  const frameworksDir = pathResolver?.getFrameworksPath();
+  const additionalFrameworksDirs = pathResolver?.getOverlayResourceDirs('frameworks') ?? [];
   getDefaultRuntimeLoader({
-    ...(methodologiesDir !== undefined ? { methodologiesDir } : {}),
-    ...(additionalMethodologiesDirs.length > 0 ? { additionalMethodologiesDirs } : {}),
+    ...(frameworksDir !== undefined ? { frameworksDir } : {}),
+    ...(additionalFrameworksDirs.length > 0 ? { additionalFrameworksDirs } : {}),
   });
-  if (isVerbose && additionalMethodologiesDirs.length > 0) {
-    logger.info(
-      `  📂 Additional methodology directories: ${additionalMethodologiesDirs.join(', ')}`
-    );
+  if (isVerbose && additionalFrameworksDirs.length > 0) {
+    logger.info(`  📂 Additional framework directories: ${additionalFrameworksDirs.join(', ')}`);
   }
 
   const stylesDir = pathResolver?.getStylesPath();

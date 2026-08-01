@@ -110,7 +110,7 @@ export class HotReloadObserver {
   private config: HotReloadConfig;
   private fileObserver: FileObserver;
   private onReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
-  private onMethodologyReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
+  private onFrameworkReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private onGateReloadCallback: ((event: HotReloadEvent) => Promise<void>) | undefined;
   private auxiliaryReloads: AuxiliaryReloadConfig[] = [];
   private stats: HotReloadStats;
@@ -218,12 +218,12 @@ export class HotReloadObserver {
   }
 
   /**
-   * Set the callback for methodology reload events
-   * This callback is invoked when methodology YAML files change
+   * Set the callback for framework reload events
+   * This callback is invoked when framework YAML files change
    */
-  setMethodologyReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
-    this.onMethodologyReloadCallback = callback;
-    this.logger.debug('HotReloadObserver: Methodology reload callback registered');
+  setFrameworkReloadCallback(callback: (event: HotReloadEvent) => Promise<void>): void {
+    this.onFrameworkReloadCallback = callback;
+    this.logger.debug('HotReloadObserver: Framework reload callback registered');
   }
 
   /**
@@ -236,7 +236,7 @@ export class HotReloadObserver {
   }
 
   /**
-   * Register auxiliary reload handlers (e.g., methodology, gate) with their watch directories.
+   * Register auxiliary reload handlers (e.g., framework, gate) with their watch directories.
    * Directories must also be passed to watchDirectories by the caller.
    */
   setAuxiliaryReloads(reloads: AuxiliaryReloadConfig[]): void {
@@ -246,7 +246,7 @@ export class HotReloadObserver {
     }));
 
     // Register auxiliary directories with the file observer so their events
-    // bypass prompt/config/methodology classification and reach triggerAuxiliaryReloads()
+    // bypass prompt/config/framework classification and reach triggerAuxiliaryReloads()
     const allDirs = this.auxiliaryReloads.flatMap((r) => r.directories);
     this.fileObserver.registerAuxiliaryDirectories(allDirs);
 
@@ -303,8 +303,8 @@ export class HotReloadObserver {
       this.handleFileChange(event);
     });
 
-    this.fileObserver.on('methodologyFileChange', (event: FileChangeEvent) => {
-      this.handleMethodologyFileChange(event);
+    this.fileObserver.on('frameworkFileChange', (event: FileChangeEvent) => {
+      this.handleFrameworkFileChange(event);
     });
 
     this.fileObserver.on('watcherError', (error: { directoryPath: string; error: Error }) => {
@@ -337,39 +337,39 @@ export class HotReloadObserver {
   }
 
   /**
-   * Handle methodology file change events
+   * Handle framework file change events
    * These are processed separately from regular file changes to enable
-   * targeted methodology reload without affecting prompt system
+   * targeted framework reload without affecting prompt system
    */
-  private async handleMethodologyFileChange(event: FileChangeEvent): Promise<void> {
+  private async handleFrameworkFileChange(event: FileChangeEvent): Promise<void> {
     this.stats.filesChanged++;
-    const methodologyId = event.methodologyId ?? this.extractMethodologyId(event.filePath);
+    const frameworkId = event.frameworkId ?? this.extractFrameworkId(event.filePath);
 
     this.logger.info(
-      `🔧 Methodology file change detected: ${event.type} - ${event.filename}` +
-        (methodologyId ? ` (methodology: ${methodologyId})` : '')
+      `🔧 Framework file change detected: ${event.type} - ${event.filename}` +
+        (frameworkId ? ` (framework: ${frameworkId})` : '')
     );
 
     // Map FileChangeType to FileChangeOperation (filter out 'renamed' as it becomes 'added' or 'removed')
     const changeType = this.mapToChangeOperation(event.type);
 
     const hotReloadEvent: HotReloadEvent = {
-      type: 'methodology_changed',
-      reason: `Methodology file ${event.type}: ${event.filename}`,
+      type: 'framework_changed',
+      reason: `Framework file ${event.type}: ${event.filename}`,
       affectedFiles: [event.filePath],
       timestamp: event.timestamp,
-      requiresFullReload: false, // Methodology changes typically don't need full reload
+      requiresFullReload: false, // Framework changes typically don't need full reload
       changeType,
-      ...(methodologyId ? { methodologyId } : {}),
+      ...(frameworkId ? { frameworkId } : {}),
     };
 
-    // Use dedicated methodology callback if available, otherwise fall through to general reload
-    if (this.onMethodologyReloadCallback) {
+    // Use dedicated framework callback if available, otherwise fall through to general reload
+    if (this.onFrameworkReloadCallback) {
       try {
-        await this.onMethodologyReloadCallback(hotReloadEvent);
-        this.logger.info(`✅ Methodology ${methodologyId ?? 'unknown'} reloaded successfully`);
+        await this.onFrameworkReloadCallback(hotReloadEvent);
+        this.logger.info(`✅ Framework ${frameworkId ?? 'unknown'} reloaded successfully`);
       } catch (error) {
-        this.logger.error(`❌ Failed to reload methodology ${methodologyId ?? 'unknown'}:`, error);
+        this.logger.error(`❌ Failed to reload framework ${frameworkId ?? 'unknown'}:`, error);
       }
     } else {
       // Fallback to regular reload processing
@@ -378,11 +378,11 @@ export class HotReloadObserver {
   }
 
   /**
-   * Extract methodology ID from file path
+   * Extract framework ID from file path
    */
-  private extractMethodologyId(filePath: string): string | undefined {
+  private extractFrameworkId(filePath: string): string | undefined {
     const normalizedPath = filePath.replace(/\\/g, '/');
-    const match = normalizedPath.match(/\/methodologies\/([^/]+)\//);
+    const match = normalizedPath.match(/\/frameworks\/([^/]+)\//);
     return match?.[1]?.toLowerCase();
   }
 

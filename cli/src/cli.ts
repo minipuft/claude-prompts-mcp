@@ -65,7 +65,7 @@ function parseCliArgs(args: string[] = process.argv.slice(2)): ParsedArgs {
       // validate flags
       prompts: { type: 'boolean' },
       gates: { type: 'boolean' },
-      methodologies: { type: 'boolean' },
+      frameworks: { type: 'boolean' },
       styles: { type: 'boolean' },
       config: { type: 'boolean' },
       all: { type: 'boolean' },
@@ -104,7 +104,7 @@ function parseCliArgs(args: string[] = process.argv.slice(2)): ParsedArgs {
     flags: {
       prompts: values.prompts as boolean | undefined,
       gates: values.gates as boolean | undefined,
-      methodologies: values.methodologies as boolean | undefined,
+      frameworks: values.frameworks as boolean | undefined,
       styles: values.styles as boolean | undefined,
       config: values.config as boolean | undefined,
       all: values.all as boolean | undefined,
@@ -128,7 +128,7 @@ Usage: cpm validate [options]
 Options:
       --prompts           Validate prompts only
       --gates             Validate gates only
-      --methodologies     Validate methodologies only
+      --frameworks     Validate frameworks only
       --styles            Validate styles only
       --config            Also validate config.json
       --all               Validate all types + config.json
@@ -142,9 +142,9 @@ Examples:
 
   list: `cpm list - List resources by type
 
-Usage: cpm list <prompts|gates|methodologies|styles> [options]
+Usage: cpm list <prompts|gates|frameworks|styles> [options]
 
-Accepts singular or plural type names (prompt/prompts, gate/gates, methodology/methodologies, style/styles).
+Accepts singular or plural type names (prompt/prompts, gate/gates, framework/frameworks, style/styles).
 
 Options:
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
@@ -153,13 +153,13 @@ Options:
 Examples:
   cpm list prompts --workspace server
   cpm list gates --json
-  cpm list methodology -w ./my-workspace`,
+  cpm list framework -w ./my-workspace`,
 
   inspect: `cpm inspect - Inspect a specific resource
 
 Usage: cpm inspect <type> <id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Options:
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
@@ -168,7 +168,7 @@ Options:
 Examples:
   cpm inspect prompt action_plan --workspace server
   cpm inspect gate code-quality --json
-  cpm inspect methodology cageerf -w server`,
+  cpm inspect framework cageerf -w server`,
 
   init: `cpm init - Initialize a new workspace
 
@@ -189,7 +189,7 @@ Examples:
 
 Usage: cpm create <type> <id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Creates a resource directory with template YAML and companion file.
 Prompts are grouped by category (default: general).
@@ -205,13 +205,13 @@ Options:
 Examples:
   cpm create prompt my-analysis --name "My Analysis" --description "Analyze code"
   cpm create gate code-review --name "Code Review" -w server
-  cpm create methodology my-method --category tools`,
+  cpm create framework my-method --category tools`,
 
   delete: `cpm delete - Delete a resource
 
 Usage: cpm delete <type> <id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Removes the resource directory and its version history.
 Requires --force to confirm deletion.
@@ -229,7 +229,7 @@ Examples:
 
 Usage: cpm history <type> <id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Displays the SQLite-backed version log for a resource.
 
@@ -246,7 +246,7 @@ Examples:
 
 Usage: cpm compare <type> <id> <from> <to> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Shows differences between two version snapshots from SQLite history.
 
@@ -262,7 +262,7 @@ Examples:
 
 Usage: cpm rollback <type> <id> <version> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Saves current state as a new version, then restores the target version.
 
@@ -279,7 +279,7 @@ Examples:
 
 Usage: cpm rename <type> <old-id> <new-id> [options]
 
-Types: prompt, gate, methodology, style (singular or plural)
+Types: prompt, gate, framework, style (singular or plural)
 
 Renames the resource directory and updates the id field in YAML.
 Warns about cross-references that may need manual updating.
@@ -310,10 +310,10 @@ Examples:
 
   toggle: `cpm toggle - Toggle enabled state
 
-Usage: cpm toggle <methodology|style> <id> [options]
+Usage: cpm toggle <framework|style> <id> [options]
 
 Flips the 'enabled' field between true and false.
-Only methodologies and styles have an enabled field.
+Only frameworks and styles have an enabled field.
 
 Options:
       --no-validate       Skip post-toggle schema validation
@@ -321,7 +321,7 @@ Options:
       --json              JSON output
 
 Examples:
-  cpm toggle methodology cageerf -w server
+  cpm toggle framework cageerf -w server
   cpm toggle style analytical --json`,
 
   'link-gate': `cpm link-gate - Link or unlink a gate to a prompt
@@ -365,11 +365,11 @@ Shorthand for 'cpm config set <key> on'.
 
 Subsystems:
   gates                     Quality gates (gates.mode)
-  methodologies             Framework methodologies (methodologies.mode)
+  frameworks             Framework system (frameworks.mode)
   resources                 MCP resource registration (resources.mode)
   resources.prompts         Prompt resources (resources.prompts.mode)
   resources.gates           Gate resources (resources.gates.mode)
-  resources.methodologies   Methodology resources (resources.methodologies.mode)
+  resources.frameworks   Framework resources (resources.frameworks.mode)
   resources.observability   Observability resources (resources.observability.mode)
   resources.logs            Log resources (resources.logs.mode)
   verification              Verification isolation (verification.isolation.mode)
@@ -382,7 +382,7 @@ Options:
 Examples:
   cpm enable gates
   cpm enable resources -w server
-  cpm disable methodologies --json`,
+  cpm disable frameworks --json`,
 
   disable: `cpm disable - Disable a subsystem
 
@@ -419,7 +419,7 @@ Options:
 Examples:
   cpm config list -w server
   cpm config get gates.mode
-  cpm config set methodologies.mode on
+  cpm config set frameworks.mode on
   cpm config set server.port 8080 --json
   cpm config validate -w server
   cpm config reset --force
@@ -437,7 +437,7 @@ function printHelp(command?: CommandName): void {
 Usage: cpm <command> [options]
 
 Commands:
-  validate   Validate workspace resources (prompts, gates, methodologies, styles)
+  validate   Validate workspace resources (prompts, gates, frameworks, styles)
   list       List resources by type
   inspect    Inspect a specific resource
   init       Initialize a new workspace with starter prompts
@@ -448,7 +448,7 @@ Commands:
   rollback   Restore a previous resource version
   rename     Rename a resource (directory + YAML id)
   move       Move a prompt to a different category
-  toggle     Toggle enabled state (methodologies, styles)
+  toggle     Toggle enabled state (frameworks, styles)
   link-gate  Link or unlink a gate to a prompt
   guide      Command discovery and help
   config     Manage workspace configuration (config.json)
@@ -507,7 +507,7 @@ export async function run(args?: string[]): Promise<void> {
         flags: {
           prompts: parsed.flags['prompts'] as boolean | undefined,
           gates: parsed.flags['gates'] as boolean | undefined,
-          methodologies: parsed.flags['methodologies'] as boolean | undefined,
+          frameworks: parsed.flags['frameworks'] as boolean | undefined,
           styles: parsed.flags['styles'] as boolean | undefined,
           config: parsed.flags['config'] as boolean | undefined,
           all: parsed.flags['all'] as boolean | undefined,

@@ -1,11 +1,11 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-05-13T05:01:00.013Z",
+  "lastUpdated": "2026-07-30T22:50:15.986Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
-      "description": "🚀 PROMPT ENGINE: Execute prompts with methodology guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply methodology (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
-      "shortDescription": "Execute prompts with validation and methodology",
+      "description": "🚀 PROMPT ENGINE: Execute prompts with framework guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- @Framework >>prompt                  # Apply framework (CAGEERF, ReACT, etc.)\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS: %clean (no injection), %lean (gates only), %judge (preview)\n",
+      "shortDescription": "Execute prompts with validation and framework",
       "category": "execution",
       "parameters": {
         "command": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: \"criteria\" %clean/%lean | Shell verify: :: verify:\"cmd\" :preset",
@@ -21,8 +21,8 @@
         "options": "Execution options forwarded downstream."
       },
       "frameworkAware": {
-        "enabled": "🚀 PROMPT ENGINE [FRAMEWORK]: Returns prompts with methodology guidance injected. You apply the methodology yourself.",
-        "disabled": "🚀 PROMPT ENGINE: Returns prompts without methodology injection. Raw template expansion only."
+        "enabled": "🚀 PROMPT ENGINE [FRAMEWORK]: Returns prompts with framework guidance injected. You apply the framework yourself.",
+        "disabled": "🚀 PROMPT ENGINE: Returns prompts without framework injection. Raw template expansion only."
       },
       "triggerExamples": [
         "User: '>>analyze this code' → prompt_engine(command: '>>analyze this code')",
@@ -30,12 +30,12 @@
       ]
     },
     "resource_manager": {
-      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, methodologies, checkpoints.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | methodology | checkpoint\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare | clear\n\nUPDATE: update(id, description:\"new\") — only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\nCHECKPOINT: create (save state), rollback (restore), list (show all), delete (remove), clear (remove all)\n\nCREATION GUIDES:\n• >>create_methodology - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
-      "shortDescription": "Manage prompts, gates, methodologies, and checkpoints",
+      "description": "🗂️ RESOURCE MANAGER: CRUD for prompts, gates, frameworks, checkpoints.\n\nresource_manager(resource_type, action, id?, name?, description?)\n\nTYPES: prompt | gate | framework | checkpoint\nACTIONS: create | update | delete | list | inspect | reload | guide | switch | history | rollback | compare | clear\n\nUPDATE: update(id, description:\"new\") — only provided fields change. inspect(id, detail:\"full\") to see current content first.\n\nVERSIONING: history (view versions), rollback (restore), compare (diff versions)\nCHECKPOINT: create (save state), rollback (restore), list (show all), delete (remove), clear (remove all)\n\nCREATION GUIDES:\n• >>create_framework - Framework creation with validation\n• >>create_gate - Quality gate creation\n• >>create_prompt - Prompt/chain creation",
+      "shortDescription": "Manage prompts, gates, frameworks, and checkpoints",
       "category": "management",
       "parameters": {
         "resource_type": "Type of resource to manage. Routes to appropriate handler.",
-        "action": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (methodology), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/methodology). Checkpoint: create/rollback/list/delete/clear.",
+        "action": "Operation to perform. Type-specific: analyze_type/guide (prompt), switch (framework), clear (checkpoint). Versioning: history/rollback/compare (prompt/gate/framework). Checkpoint: create/rollback/list/delete/clear.",
         "id": "Resource identifier. Required for create, update, delete, inspect, reload, switch.",
         "name": "Human-friendly name for the resource (create/update).",
         "description": "Resource description explaining its purpose (create/update).",
@@ -44,7 +44,7 @@
         "reason": "Audit reason for reload/delete/switch operations."
       },
       "frameworkAware": {
-        "enabled": "🗂️ RESOURCE MANAGER [FRAMEWORK]: Operations reflect active methodology context.",
+        "enabled": "🗂️ RESOURCE MANAGER [FRAMEWORK]: Operations reflect active framework context.",
         "disabled": "🗂️ RESOURCE MANAGER: Standard resource lifecycle operations."
       }
     },
@@ -67,8 +67,8 @@
         "force": "For clone: overwrite existing resource directory."
       },
       "frameworkAware": {
-        "enabled": "🧩 SKILLS SYNC [FRAMEWORK]: Skill sync actions with active methodology context available in surrounding workflow.",
-        "disabled": "🧩 SKILLS SYNC: Skill sync actions without methodology context."
+        "enabled": "🧩 SKILLS SYNC [FRAMEWORK]: Skill sync actions with active framework context available in surrounding workflow.",
+        "disabled": "🧩 SKILLS SYNC: Skill sync actions without framework context."
       }
     },
     "system_control": {
@@ -76,7 +76,7 @@
       "shortDescription": "System administration",
       "category": "system",
       "parameters": {
-        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable methodologies), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect/cancel).",
+        "action": "The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (view/modify settings), maintenance (restart), guide (get recommendations), session (manage execution sessions — list/clear/inspect/cancel).",
         "operation": "Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; session list/clear/inspect/cancel).",
         "session_id": "Target session ID or chain ID for session operations.",
         "framework": "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
@@ -88,8 +88,8 @@
         "search_query": "Filter gates by keyword (matches ID, name, or description). Use with gates:list action."
       },
       "frameworkAware": {
-        "enabled": "⚙️ SYSTEM CONTROL [FRAMEWORK]: Status includes active methodology context. Guide reflects current framework.",
-        "disabled": "⚙️ SYSTEM CONTROL: Standard system status without methodology context."
+        "enabled": "⚙️ SYSTEM CONTROL [FRAMEWORK]: Status includes active framework context. Guide reflects current framework.",
+        "disabled": "⚙️ SYSTEM CONTROL: Standard system status without framework context."
       }
     }
   }

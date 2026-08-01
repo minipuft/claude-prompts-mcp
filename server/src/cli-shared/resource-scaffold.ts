@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { type ResourceValidationResult, validateResourceFile } from './resource-validation.js';
 import { deleteHistoryFile } from './version-history.js';
 
-type ResourceType = 'prompts' | 'gates' | 'methodologies' | 'styles';
+type ResourceType = 'prompts' | 'gates' | 'frameworks' | 'styles';
 
 export interface CreateResourceOptions {
   name?: string;
@@ -119,21 +119,21 @@ function gateYaml(id: string, opts: CreateResourceOptions): string {
   ].join('\n');
 }
 
-function methodologyYaml(id: string, opts: CreateResourceOptions): string {
+function frameworkYaml(id: string, opts: CreateResourceOptions): string {
   const name = opts.name ?? id;
-  const desc = opts.description ?? `${name} methodology`;
+  const desc = opts.description ?? `${name} framework`;
   return [
     `id: ${id}`,
     `name: ${name}`,
-    `methodology: ${id.toUpperCase().replace(/-/g, '_')}`,
+    `type: ${id.toUpperCase().replace(/-/g, '_')}`,
     `version: 1.0.0`,
     `description: >-`,
     `  ${desc}`,
     `enabled: false`,
     '',
     'systemPromptGuidance: |',
-    `  Apply the ${name} methodology systematically.`,
-    '  Define your methodology phases and guidance here.',
+    `  Apply the ${name} framework systematically.`,
+    '  Define your framework phases and guidance here.',
     '',
     '# phasesFile: phases.yaml',
     '# judgePromptFile: judge-prompt.md',
@@ -143,12 +143,12 @@ function methodologyYaml(id: string, opts: CreateResourceOptions): string {
     '#   include:',
     '#     - framework-compliance',
     '',
-    '# --- Methodology-Specific Gates (uncomment to define) ---',
-    '# methodologyGates:',
+    '# --- Framework-Specific Gates (uncomment to define) ---',
+    '# frameworkGates:',
     '#   - id: phase_completeness',
     '#     name: Phase Completeness',
-    '#     description: Verify all methodology phases are addressed',
-    '#     methodologyArea: Core',
+    '#     description: Verify all framework phases are addressed',
+    '#     frameworkArea: Core',
     '#     priority: high',
     '#     validationCriteria:',
     '#       - All required phases present',
@@ -187,14 +187,14 @@ function styleYaml(id: string, opts: CreateResourceOptions): string {
 const YAML_GENERATORS: Record<ResourceType, (id: string, opts: CreateResourceOptions) => string> = {
   prompts: promptYaml,
   gates: gateYaml,
-  methodologies: methodologyYaml,
+  frameworks: frameworkYaml,
   styles: styleYaml,
 };
 
 const ENTRY_FILES: Record<ResourceType, string> = {
   prompts: 'prompt.yaml',
   gates: 'gate.yaml',
-  methodologies: 'methodology.yaml',
+  frameworks: 'framework.yaml',
   styles: 'style.yaml',
 };
 
@@ -208,9 +208,9 @@ const COMPANION_FILES: Record<ResourceType, { name: string; content: string }> =
     content:
       '## Validation Criteria\n\n- Criterion one\n- Criterion two\n\n## Common Failures\n\n- Failure pattern\n',
   },
-  methodologies: {
+  frameworks: {
     name: 'system-prompt.md',
-    content: 'Apply the methodology systematically, ensuring thorough coverage of each phase.\n',
+    content: 'Apply the framework systematically, ensuring thorough coverage of each phase.\n',
   },
   styles: {
     name: 'guidance.md',

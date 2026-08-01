@@ -40,15 +40,15 @@ export function registerObservabilityResources(
   server: McpServer,
   dependencies: ResourceDependencies
 ): void {
-  const { logger, chainSessionManager, metricsCollector } = dependencies;
+  const { logger, chainSessionStore, metricsCollector } = dependencies;
 
-  // Register session resources if ChainSessionManager is available
-  if (chainSessionManager !== undefined) {
+  // Register session resources if ChainSessionStore is available
+  if (chainSessionStore !== undefined) {
     registerSessionResources(server, dependencies);
     logger.debug('[ObservabilityResources] Session resources registered');
   } else {
     logger.warn(
-      '[ObservabilityResources] ChainSessionManager not available, skipping session resources'
+      '[ObservabilityResources] ChainSessionStore not available, skipping session resources'
     );
   }
 
@@ -83,9 +83,9 @@ export function registerObservabilityResources(
  * Register session-related resources
  */
 function registerSessionResources(server: McpServer, dependencies: ResourceDependencies): void {
-  const { logger, chainSessionManager } = dependencies;
+  const { logger, chainSessionStore } = dependencies;
 
-  if (chainSessionManager === undefined) {
+  if (chainSessionStore === undefined) {
     return;
   }
 
@@ -94,7 +94,7 @@ function registerSessionResources(server: McpServer, dependencies: ResourceDepen
     'sessions',
     new ResourceTemplate(RESOURCE_URI_PATTERNS.SESSION_LIST, {
       list: async () => {
-        const sessions = chainSessionManager.listActiveSessions(50);
+        const sessions = chainSessionStore.listActiveSessions(50);
         logger.debug(`[ObservabilityResources] Listing ${sessions.length} active sessions`);
 
         // Use chainId (user-facing) in URIs, not internal sessionId
@@ -119,7 +119,7 @@ function registerSessionResources(server: McpServer, dependencies: ResourceDepen
       mimeType: 'application/json',
     },
     async (): Promise<ReadResourceResult> => {
-      const sessions = chainSessionManager.listActiveSessions(50);
+      const sessions = chainSessionStore.listActiveSessions(50);
       // Use chainId (user-facing) in URIs, not internal sessionId
       const list: SessionResourceMetadata[] = sessions.map((s) => ({
         uri: buildUri(RESOURCE_URI_PATTERNS.SESSION_ITEM, s.chainId),
@@ -160,7 +160,7 @@ function registerSessionResources(server: McpServer, dependencies: ResourceDepen
       const chainId = variables['chainId'] as string;
 
       // Use chainId lookup (user-facing identifier like chain-quick_decision#1)
-      const session = chainSessionManager.getSessionByChainIdentifier(chainId);
+      const session = chainSessionStore.getSessionByChainIdentifier(chainId);
 
       if (session === undefined) {
         throw new ResourceNotFoundError('Session', chainId);
@@ -188,7 +188,7 @@ function registerSessionResources(server: McpServer, dependencies: ResourceDepen
  * Register metrics-related resources
  */
 function registerMetricsResources(server: McpServer, dependencies: ResourceDependencies): void {
-  const { logger, metricsCollector, chainSessionManager } = dependencies;
+  const { logger, metricsCollector, chainSessionStore } = dependencies;
 
   if (metricsCollector === undefined) {
     return;
@@ -208,7 +208,7 @@ function registerMetricsResources(server: McpServer, dependencies: ResourceDepen
       logger.debug('[ObservabilityResources] Reading pipeline metrics');
 
       const analytics = metricsCollector.getAnalyticsSummary();
-      const sessionStats = chainSessionManager?.getSessionStats();
+      const sessionStats = chainSessionStore?.getSessionStats();
 
       // Lean metrics: exclude performanceTrends (token fodder), include useful aggregates
       const { performanceTrends: _trends, ...leanSystemMetrics } = analytics.systemMetrics;

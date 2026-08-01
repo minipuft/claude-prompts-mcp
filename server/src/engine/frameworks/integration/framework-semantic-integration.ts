@@ -5,7 +5,7 @@
  *
  * Key Integration Points:
  * - Semantic Analysis provides WHAT the prompt needs (complexity, structure, requirements)
- * - Framework Manager provides HOW to approach it (methodology, system prompts)
+ * - Framework Manager provides HOW to approach it (framework, system prompts)
  * - Integration layer coordinates between systems WITHOUT interference
  */
 
@@ -490,7 +490,7 @@ export class FrameworkSemanticIntegration {
     semanticAnalysis: ContentAnalysisResult,
     frameworkContext: FrameworkExecutionContext
   ): string {
-    const baseApproach = `Execute as ${semanticAnalysis.executionType} using ${frameworkContext.selectedFramework.name} methodology`;
+    const baseApproach = `Execute as ${semanticAnalysis.executionType} using ${frameworkContext.selectedFramework.name} framework`;
 
     // Add mode-specific context
     if (semanticAnalysis.analysisMetadata.mode === 'semantic') {
@@ -701,7 +701,7 @@ export class FrameworkSemanticIntegration {
         },
       },
       recommendations: {
-        executionApproach: `Execute as ${semanticAnalysis.executionType} without framework methodology`,
+        executionApproach: `Execute as ${semanticAnalysis.executionType} without framework`,
         expectedPerformance: {
           processingTime: this.estimateProcessingTime(semanticAnalysis),
           memoryUsage: this.estimateMemoryUsage(semanticAnalysis),
@@ -798,7 +798,7 @@ export class FrameworkSemanticIntegration {
           hasSystemMessage: false,
           hasUserTemplate: false,
           hasStructuredReasoning: false,
-          hasMethodologyKeywords: false,
+          hasFrameworkKeywords: false,
           hasComplexAnalysis: false,
         },
         complexity: 'low',

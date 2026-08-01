@@ -31,4 +31,4 @@ export type {
   CommandExecutionMode,
   CommandExecutionMetric,
   MetricsCollector,
-} from './types.js';
+} from '../../../shared/types/metrics.js';

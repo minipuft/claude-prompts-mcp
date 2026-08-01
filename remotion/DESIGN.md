@@ -6,22 +6,23 @@
 
 **Source**: Anthropic's official CLI tool
 
-| Element | Value | Notes |
-|---------|-------|-------|
-| Background | `#1a1625` | Deep purple-tinted dark |
-| Chrome/Header | `#2d2640` | Slightly lighter purple |
-| Primary Accent | `#a855f7` | Vivid purple |
-| Secondary Accent | `#c084fc` | Light purple |
-| Prompt Character | `❯` | Unicode U+276F |
-| Prompt Color | `#c084fc` | Light purple |
-| Command Text | `#f8fafc` | Near-white |
-| Output Text | `#e2e8f0` | Slightly muted |
-| Success | `#22c55e` | Green |
-| Error | `#ef4444` | Red |
-| Tool Call Badge | `#6366f1` | Indigo background |
-| Cursor | `▋` blinking | Purple tint |
+| Element          | Value        | Notes                   |
+| ---------------- | ------------ | ----------------------- |
+| Background       | `#1a1625`    | Deep purple-tinted dark |
+| Chrome/Header    | `#2d2640`    | Slightly lighter purple |
+| Primary Accent   | `#a855f7`    | Vivid purple            |
+| Secondary Accent | `#c084fc`    | Light purple            |
+| Prompt Character | `❯`          | Unicode U+276F          |
+| Prompt Color     | `#c084fc`    | Light purple            |
+| Command Text     | `#f8fafc`    | Near-white              |
+| Output Text      | `#e2e8f0`    | Slightly muted          |
+| Success          | `#22c55e`    | Green                   |
+| Error            | `#ef4444`    | Red                     |
+| Tool Call Badge  | `#6366f1`    | Indigo background       |
+| Cursor           | `▋` blinking | Purple tint             |
 
 **Visual Features**:
+
 - Rounded corners (16px)
 - Subtle glow on accent elements
 - Tool calls shown in indigo badges
@@ -31,21 +32,22 @@
 
 **Source**: Go-based CLI tool (opencode-ai)
 
-| Element | Value | Notes |
-|---------|-------|-------|
-| Background | `#0d1117` | GitHub-dark style |
-| Chrome/Header | `#161b22` | Slightly lighter |
-| Primary Accent | `#06b6d4` | Cyan/Teal |
-| Secondary Accent | `#22d3ee` | Light cyan |
-| Prompt Character | `$` | Standard shell |
-| Prompt Color | `#22d3ee` | Light cyan |
-| Command Text | `#f0f6fc` | Near-white |
-| Output Text | `#c9d1d9` | Muted gray |
-| Success | `#3fb950` | GitHub green |
-| Error | `#f85149` | GitHub red |
-| Tool Badge | `#1f6feb` | Blue |
+| Element          | Value     | Notes             |
+| ---------------- | --------- | ----------------- |
+| Background       | `#0d1117` | GitHub-dark style |
+| Chrome/Header    | `#161b22` | Slightly lighter  |
+| Primary Accent   | `#06b6d4` | Cyan/Teal         |
+| Secondary Accent | `#22d3ee` | Light cyan        |
+| Prompt Character | `$`       | Standard shell    |
+| Prompt Color     | `#22d3ee` | Light cyan        |
+| Command Text     | `#f0f6fc` | Near-white        |
+| Output Text      | `#c9d1d9` | Muted gray        |
+| Success          | `#3fb950` | GitHub green      |
+| Error            | `#f85149` | GitHub red        |
+| Tool Badge       | `#1f6feb` | Blue              |
 
 **Visual Features**:
+
 - Clean, minimal design
 - GitHub-inspired aesthetics
 - Squared corners (8px)
@@ -55,21 +57,22 @@
 
 **Source**: Google's Gemini CLI
 
-| Element | Value | Notes |
-|---------|-------|-------|
-| Background | `#1e1e2e` | Dark slate |
-| Chrome/Header | `#313244` | Slate gray |
-| Primary Accent | `#8ab4f8` | Google Blue light |
-| Secondary Accent | `#4285f4` | Google Blue |
-| Prompt Character | `>` | Simple arrow |
-| Prompt Color | `#8ab4f8` | Light blue |
-| Command Text | `#e8eaed` | Light gray |
-| Output Text | `#bdc1c6` | Muted |
-| Success | `#81c995` | Soft green |
-| Error | `#f28b82` | Soft red |
-| Tool Badge | `#669df6` | Mid blue |
+| Element          | Value     | Notes             |
+| ---------------- | --------- | ----------------- |
+| Background       | `#1e1e2e` | Dark slate        |
+| Chrome/Header    | `#313244` | Slate gray        |
+| Primary Accent   | `#8ab4f8` | Google Blue light |
+| Secondary Accent | `#4285f4` | Google Blue       |
+| Prompt Character | `>`       | Simple arrow      |
+| Prompt Color     | `#8ab4f8` | Light blue        |
+| Command Text     | `#e8eaed` | Light gray        |
+| Output Text      | `#bdc1c6` | Muted             |
+| Success          | `#81c995` | Soft green        |
+| Error            | `#f28b82` | Soft red          |
+| Tool Badge       | `#669df6` | Mid blue          |
 
 **Visual Features**:
+
 - Material Design influence
 - Medium rounded corners (12px)
 - Subtle shadows
@@ -85,33 +88,33 @@
 export const colors = {
   // Backgrounds (shared across all themes)
   background: {
-    primary: "#0f0f23",     // Main canvas - deep blue-black
-    secondary: "#1a1a3e",   // Secondary surfaces
-    tertiary: "#2d2d5f",    // Tertiary/elevated surfaces
+    primary: "#0f0f23", // Main canvas - deep blue-black
+    secondary: "#1a1a3e", // Secondary surfaces
+    tertiary: "#2d2d5f", // Tertiary/elevated surfaces
   },
 
   // Primary accent (indigo - MCP brand)
   accent: {
-    primary: "#6366f1",     // Main brand color
-    light: "#a5b4fc",       // Light variant
-    mid: "#818cf8",         // Mid variant
-    dark: "#4f46e5",        // Dark variant
+    primary: "#6366f1", // Main brand color
+    light: "#a5b4fc", // Light variant
+    mid: "#818cf8", // Mid variant
+    dark: "#4f46e5", // Dark variant
   },
 
   // Status colors (semantic)
   status: {
-    pass: "#22c55e",        // Success/pass
-    fail: "#ef4444",        // Error/fail
-    warning: "#f59e0b",     // Warning
-    info: "#06b6d4",        // Info
+    pass: "#22c55e", // Success/pass
+    fail: "#ef4444", // Error/fail
+    warning: "#f59e0b", // Warning
+    info: "#06b6d4", // Info
   },
 
   // Text hierarchy
   text: {
-    primary: "#f8fafc",     // Headlines, primary content
-    secondary: "#cbd5e1",   // Descriptions, secondary
-    muted: "#64748b",       // Disabled, tertiary
-    inverse: "#0f172a",     // Text on light backgrounds
+    primary: "#f8fafc", // Headlines, primary content
+    secondary: "#cbd5e1", // Descriptions, secondary
+    muted: "#64748b", // Disabled, tertiary
+    inverse: "#0f172a", // Text on light backgrounds
   },
 
   // Overlays and borders
@@ -157,35 +160,35 @@ export const colors = {
 
 ### Font Stack
 
-| Role | Font | Fallback |
-|------|------|----------|
-| Display | Space Grotesk | system-ui |
-| Body | Space Grotesk | system-ui |
-| Mono | JetBrains Mono | Consolas, monospace |
+| Role    | Font           | Fallback            |
+| ------- | -------------- | ------------------- |
+| Display | Space Grotesk  | system-ui           |
+| Body    | Space Grotesk  | system-ui           |
+| Mono    | JetBrains Mono | Consolas, monospace |
 
 ### Size Scale (8px baseline)
 
-| Token | Size | Use Case |
-|-------|------|----------|
-| xs | 12px | Labels, badges |
-| sm | 16px | Body small, terminal |
-| md | 20px | Body default |
-| lg | 24px | Subheadings |
-| xl | 32px | Section titles |
-| 2xl | 40px | Large titles |
-| 3xl | 48px | Feature titles |
-| 4xl | 56px | Hero subtitles |
-| 5xl | 72px | Hero titles |
-| 6xl | 88px | Display titles |
+| Token | Size | Use Case             |
+| ----- | ---- | -------------------- |
+| xs    | 12px | Labels, badges       |
+| sm    | 16px | Body small, terminal |
+| md    | 20px | Body default         |
+| lg    | 24px | Subheadings          |
+| xl    | 32px | Section titles       |
+| 2xl   | 40px | Large titles         |
+| 3xl   | 48px | Feature titles       |
+| 4xl   | 56px | Hero subtitles       |
+| 5xl   | 72px | Hero titles          |
+| 6xl   | 88px | Display titles       |
 
 ### Weights
 
-| Token | Weight | Use |
-|-------|--------|-----|
-| regular | 400 | Body text |
-| medium | 500 | Emphasis |
-| semibold | 600 | Subheadings |
-| bold | 700 | Headlines |
+| Token    | Weight | Use         |
+| -------- | ------ | ----------- |
+| regular  | 400    | Body text   |
+| medium   | 500    | Emphasis    |
+| semibold | 600    | Subheadings |
+| bold     | 700    | Headlines   |
 
 ---
 
@@ -193,21 +196,21 @@ export const colors = {
 
 ### Duration Presets (at 30fps)
 
-| Token | Frames | Seconds | Use Case |
-|-------|--------|---------|----------|
-| instant | 0 | 0s | No animation |
-| fast | 12 | 0.4s | Micro-interactions, badges |
-| normal | 30 | 1.0s | Standard transitions |
-| slow | 45 | 1.5s | Emphasis, reveals |
-| dramatic | 60 | 2.0s | Hero animations |
+| Token    | Frames | Seconds | Use Case                   |
+| -------- | ------ | ------- | -------------------------- |
+| instant  | 0      | 0s      | No animation               |
+| fast     | 12     | 0.4s    | Micro-interactions, badges |
+| normal   | 30     | 1.0s    | Standard transitions       |
+| slow     | 45     | 1.5s    | Emphasis, reveals          |
+| dramatic | 60     | 2.0s    | Hero animations            |
 
 ### Stagger Delays
 
-| Token | Frames | Use Case |
-|-------|--------|----------|
-| tight | 8 | Dense lists |
-| base | 15 | Standard lists |
-| relaxed | 24 | Spaced items |
+| Token   | Frames | Use Case       |
+| ------- | ------ | -------------- |
+| tight   | 8      | Dense lists    |
+| base    | 15     | Standard lists |
+| relaxed | 24     | Spaced items   |
 
 ### Spring Presets
 
@@ -242,13 +245,14 @@ export const springs = {
 
 **Purpose**: Brand introduction, feature overview
 
-| Time | Scene | Visual | Audio Cue |
-|------|-------|--------|-----------|
-| 0-3s | Title reveal | "Claude Prompts MCP" fades in with glow | Whoosh |
-| 3-5s | Tagline | "Prompt Engineering at Scale" slides up | Subtle chime |
-| 5-10s | Features | 4 cards stagger in (2x2 grid) | Soft ticks |
+| Time  | Scene        | Visual                                  | Audio Cue    |
+| ----- | ------------ | --------------------------------------- | ------------ |
+| 0-3s  | Title reveal | "Claude Prompts MCP" fades in with glow | Whoosh       |
+| 3-5s  | Tagline      | "Prompt Engineering at Scale" slides up | Subtle chime |
+| 5-10s | Features     | 4 cards stagger in (2x2 grid)           | Soft ticks   |
 
 **Feature Cards**:
+
 1. **Chains** — "Orchestrate multi-step prompts"
 2. **Gates** — "Quality validation built-in"
 3. **Frameworks** — "Structured reasoning modes"
@@ -258,13 +262,14 @@ export const springs = {
 
 **Purpose**: Show the power of symbolic operators vs verbose JSON
 
-| Time | Scene | Visual |
-|------|-------|--------|
-| 0-4s | Problem | JSON config block (warning accent) |
-| 4-8s | Solution | Terminal typing symbolic command |
-| 8-15s | Breakdown | 4 operator cards explaining each |
+| Time  | Scene     | Visual                             |
+| ----- | --------- | ---------------------------------- |
+| 0-4s  | Problem   | JSON config block (warning accent) |
+| 4-8s  | Solution  | Terminal typing symbolic command   |
+| 8-15s | Breakdown | 4 operator cards explaining each   |
 
 **Command to show**:
+
 ```
 >>research --> >>analyze --> >>report @CAGEERF :: 'cite sources' #analytical
 ```
@@ -273,7 +278,7 @@ export const springs = {
 | Operator | Label | Description |
 |----------|-------|-------------|
 | `-->` | Chain | Sequential step execution |
-| `@CAGEERF` | Framework | Apply methodology |
+| `@CAGEERF` | Framework | Structured reasoning |
 | `::` | Gate | Quality criteria |
 | `#analytical` | Style | Response formatting |
 
@@ -281,15 +286,16 @@ export const springs = {
 
 **Purpose**: Visualize multi-step chain execution with state persistence
 
-| Time | Scene | Visual |
-|------|-------|--------|
-| 0-3s | Input | Terminal (OpenCode) typing `>>research_chain` |
-| 3-8s | Step 1 | Parse → active, others dim |
-| 8-13s | Step 2 | Resolve → active, Parse complete |
-| 13-18s | Step 3 | Execute → active, flow complete |
-| 18-20s | Persist | "Session state saved" badge |
+| Time   | Scene   | Visual                                        |
+| ------ | ------- | --------------------------------------------- |
+| 0-3s   | Input   | Terminal (OpenCode) typing `>>research_chain` |
+| 3-8s   | Step 1  | Parse → active, others dim                    |
+| 8-13s  | Step 2  | Resolve → active, Parse complete              |
+| 13-18s | Step 3  | Execute → active, flow complete               |
+| 18-20s | Persist | "Session state saved" badge                   |
 
 **Flow Steps**:
+
 1. **Parse** — "Decode the command"
 2. **Resolve** — "Fetch prompt assets"
 3. **Execute** — "Run the step"
@@ -298,14 +304,15 @@ export const springs = {
 
 **Purpose**: Show quality validation with pass/fail states
 
-| Time | Scene | Visual |
-|------|-------|--------|
-| 0-3s | Output | LLM response streaming in |
-| 3-10s | Validation | Criteria checking one by one |
-| 10-13s | Fail state | Red X on "Token limit" criterion |
+| Time   | Scene      | Visual                            |
+| ------ | ---------- | --------------------------------- |
+| 0-3s   | Output     | LLM response streaming in         |
+| 3-10s  | Validation | Criteria checking one by one      |
+| 10-13s | Fail state | Red X on "Token limit" criterion  |
 | 13-15s | Retry hint | "Improve: Reduce verbosity" badge |
 
 **Criteria to check**:
+
 1. ✅ "Follows template structure"
 2. ✅ "Required fields present"
 3. ✅ "No sensitive data exposed"
@@ -315,13 +322,14 @@ export const springs = {
 
 **Purpose**: Before/after comparison of framework guidance
 
-| Time | Scene | Visual |
-|------|-------|--------|
-| 0-5s | Without | Messy, unstructured output panel |
-| 5-10s | With | Clean, phased output with CAGEERF |
-| 10-15s | Side-by-side | Both panels visible, comparison |
+| Time   | Scene        | Visual                            |
+| ------ | ------------ | --------------------------------- |
+| 0-5s   | Without      | Messy, unstructured output panel  |
+| 5-10s  | With         | Clean, phased output with CAGEERF |
+| 10-15s | Side-by-side | Both panels visible, comparison   |
 
 **Without Framework** (messy output):
+
 ```
 Here's what I think about the topic...
 There are several considerations...
@@ -329,6 +337,7 @@ In conclusion...
 ```
 
 **With @CAGEERF** (structured output):
+
 ```
 ## Context
 [Defined scope]
@@ -344,18 +353,20 @@ In conclusion...
 
 **Purpose**: Full workflow showing tool call → response → validation
 
-| Time | Scene | Visual |
-|------|-------|--------|
-| 0-8s | Tool call | Terminal (Claude) typing `prompt_engine(...)` |
-| 8-15s | Response | Streaming response appearing |
-| 15-20s | Validation | Gate criteria with badges |
+| Time   | Scene      | Visual                                        |
+| ------ | ---------- | --------------------------------------------- |
+| 0-8s   | Tool call  | Terminal (Claude) typing `prompt_engine(...)` |
+| 8-15s  | Response   | Streaming response appearing                  |
+| 15-20s | Validation | Gate criteria with badges                     |
 
 **Tool call**:
+
 ```
 prompt_engine(command:">>audit @CAGEERF")
 ```
 
 **Response** (streaming):
+
 ```
 Audit report ready.
 - Security checks complete
@@ -364,6 +375,7 @@ Audit report ready.
 ```
 
 **Validation** (bottom bar):
+
 - ✅ Security review — PASS
 - ✅ Formatting review — PASS
 - Badge: "Gate Review Complete"
@@ -385,13 +397,13 @@ The Terminal should distinguish between:
 
 ```typescript
 type TerminalLine =
-  | { type: 'command'; text: string }
-  | { type: 'output'; text: string }
-  | { type: 'tool'; name: string; args?: string }
-  | { type: 'error'; text: string };
+  | { type: "command"; text: string }
+  | { type: "output"; text: string }
+  | { type: "tool"; name: string; args?: string }
+  | { type: "error"; text: string };
 
 type TerminalProps = {
-  variant: 'claude-code' | 'opencode' | 'gemini';
+  variant: "claude-code" | "opencode" | "gemini";
   title?: string;
   lines: TerminalLine[];
   typing?: {

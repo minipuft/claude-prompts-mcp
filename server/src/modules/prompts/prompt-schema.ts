@@ -9,7 +9,7 @@
  * - ResourceVerificationService (MCP tool validation)
  *
  * @see gate-schema.ts for the pattern this follows
- * @see methodology-schema.ts for the pattern this follows
+ * @see framework-schema.ts for the pattern this follows
  */
 
 import { z } from 'zod';
@@ -30,8 +30,10 @@ export const ArgumentValidationSchema = z
     /** Maximum length for strings */
     maxLength: z.number().int().positive().optional(),
     /**
-     * @deprecated Removed in v3.0.0 - LLM handles semantic variation better than strict enums.
-     * This field is parsed but ignored by the validation system.
+     * @deprecated Enforcement was dropped in v3.0.0 — the LLM handles semantic variation
+     * (e.g. "urgent" vs "high") better than a strict enum. The field itself was not removed:
+     * it is still accepted here and carried through yaml-prompt-loader.ts, but
+     * argument-schema.ts deliberately never applies it.
      */
     allowedValues: z.array(z.union([z.string(), z.number(), z.boolean()])).optional(),
   })
@@ -128,6 +130,55 @@ export const PromptGateConfigurationSchema = z
 export type PromptGateConfigurationYaml = z.infer<typeof PromptGateConfigurationSchema>;
 
 // ============================================
+// Injection Configuration Schema
+// ============================================
+
+/**
+ * Schema for one injection type's rule inside a prompt-level injection block.
+ *
+ * Deliberately narrower than the category/chain/step rule shape: no `conditions`, because
+ * every condition case describes a position within a chain rather than a property of the
+ * prompt. Every field here is read by the hierarchy resolver — nothing is accepted that
+ * cannot take effect.
+ */
+export const PromptInjectionRuleSchema = z
+  .object({
+    /** Whether this injection type is enabled for this prompt */
+    enabled: z.boolean().optional(),
+    /** How often to inject during chain execution */
+    frequency: z
+      .object({
+        mode: z.enum(['every', 'first-only', 'never']),
+        interval: z.number().int().positive().optional(),
+      })
+      .optional(),
+    /** Which execution contexts receive the injection */
+    target: z.enum(['steps', 'gates', 'both']).optional(),
+  })
+  .strict();
+
+/**
+ * Schema for a prompt's own injection configuration.
+ *
+ * Resolved between step and chain config: a prompt's declaration about itself outranks the
+ * chain or category it runs inside. Setting `system-prompt.enabled: false` also withholds
+ * gates that score framework adherence — scoring a framework that was never injected
+ * is incoherent (ADR 0001).
+ */
+export const PromptInjectionConfigSchema = z
+  .object({
+    /** Framework system prompt injection */
+    'system-prompt': PromptInjectionRuleSchema.optional(),
+    /** Quality gate guidance injection */
+    'gate-guidance': PromptInjectionRuleSchema.optional(),
+    /** Response style guidance injection */
+    'style-guidance': PromptInjectionRuleSchema.optional(),
+  })
+  .strict();
+
+export type PromptInjectionConfigYaml = z.infer<typeof PromptInjectionConfigSchema>;
+
+// ============================================
 // Category Schema
 // ============================================
 
@@ -143,6 +194,8 @@ export const CategorySchema = z.object({
   description: z.string().min(1, 'Category description is required'),
   /** MCP registration default for prompts in this category */
   registerWithMcp: z.boolean().optional(),
+  /** Native MCP prompt behavior default for prompts in this category: 'expand' or 'launch' */
+  mcpPromptMode: z.enum(['expand', 'launch']).optional(),
 });
 
 export type CategoryYaml = z.infer<typeof CategorySchema>;
@@ -187,10 +240,14 @@ export const PromptDataSchema = z
     arguments: z.array(PromptArgumentSchema).default([]),
     /** Gate configuration for validation */
     gateConfiguration: PromptGateConfigurationSchema.optional(),
+    /** Prompt-level injection control (resolved between step and chain config) */
+    injection: PromptInjectionConfigSchema.optional(),
     /** Chain steps for chain-type prompts */
     chainSteps: z.array(ChainStepSchema).optional(),
     /** Whether to register this prompt with MCP */
     registerWithMcp: z.boolean().optional(),
+    /** Native MCP prompt behavior: 'expand' (plain text) or 'launch' (route through prompt_engine) */
+    mcpPromptMode: z.enum(['expand', 'launch']).optional(),
     /** Script tool IDs declared by this prompt (references tools/{id}/ directories) */
     tools: z.array(z.string().min(1)).optional(),
     /** Client-agnostic capability hint for delegation model selection */
@@ -210,7 +267,7 @@ export type PromptDataYaml = z.infer<typeof PromptDataSchema>;
 /**
  * Schema for prompt.yaml files in directory-based format.
  *
- * This format mirrors the gates/methodologies pattern:
+ * This format mirrors the gates/frameworks pattern:
  * - Each prompt gets its own directory: `prompts/{category}/{id}/`
  * - Main definition in `prompt.yaml`
  * - Optional referenced files for system message and user template
@@ -282,6 +339,10 @@ export const PromptYamlSchema = z
     /** Gate configuration for validation */
     gateConfiguration: PromptGateConfigurationSchema.optional(),
 
+    // Injection control
+    /** Prompt-level injection control (resolved between step and chain config) */
+    injection: PromptInjectionConfigSchema.optional(),
+
     // Chain steps (for chain-type prompts)
     /** Chain steps for multi-step execution */
     chainSteps: z.array(ChainStepSchema).optional(),
@@ -289,6 +350,8 @@ export const PromptYamlSchema = z
     // MCP registration
     /** Whether to register this prompt with MCP (default: true) */
     registerWithMcp: z.boolean().optional(),
+    /** Native MCP prompt behavior: 'expand' (plain text) or 'launch' (route through prompt_engine). Default: 'expand' */
+    mcpPromptMode: z.enum(['expand', 'launch']).optional(),
 
     // Script tools
     /** Script tool IDs declared by this prompt (references tools/{id}/ directories) */
