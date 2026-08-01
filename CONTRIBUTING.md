@@ -184,8 +184,28 @@ git commit -m "docs(guides): update injection control frequency table"
 git commit -m "refactor(runtime): extract module initialization to dedicated service"
 ```
 
-> [!NOTE]
-> Breaking changes: add `!` after type/scope (e.g., `feat(mcp-tools)!: redesign resource_manager schema`) and include a `BREAKING CHANGE:` footer.
+### Breaking Changes
+
+Add `!` after the type/scope (e.g. `feat(mcp-tools)!: redesign resource_manager schema`) **and** a
+`BREAKING CHANGE:` footer. Release Please reads either one to cut a major.
+
+**A change is breaking only if it alters the declared public API.** That surface is defined in
+`CLAUDE.md` § Public API Contract — the MCP tool surface, the CLI commands, the resource formats,
+the Python hook contract, and the symbolic command language. Internal TypeScript exports, package
+manifest fields, `src/` layout and build tooling are explicitly outside it.
+
+This distinction is the difference between a version number that means something and one that
+climbs on every refactor. When unsure, ask: **can a user observe this without reading our source?**
+If not, it is not breaking.
+
+| Change                                          | Breaking?                                  |
+| ----------------------------------------------- | ------------------------------------------ |
+| Rename a `prompt_engine` parameter              | **Yes** — MCP tool surface                 |
+| Remove a `cpm` flag                             | **Yes** — CLI surface                      |
+| Change the gate YAML schema                     | **Yes** — resource format                  |
+| Restructure `src/` layers, rewrite imports      | No — internal                              |
+| Drop `types` / `src` from the published package | No — packaging, no library API is declared |
+| Add a validation script or CI job               | No                                         |
 
 ## Testing
 
