@@ -25,7 +25,7 @@ jobs:
       || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # For workflow_run: use the branch/tag from the triggering workflow
           # For workflow_dispatch: use current ref
@@ -110,7 +110,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       artifact-name: dist-runtime-${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
@@ -205,7 +205,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
@@ -272,7 +272,7 @@ jobs:
             name: opencode
     steps:
       - name: Checkout upstream (for version)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           path: upstream
@@ -290,7 +290,7 @@ jobs:
           echo "license=$license" >> $GITHUB_OUTPUT
 
       - name: Checkout downstream
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ matrix.repo }}
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
@@ -439,7 +439,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 

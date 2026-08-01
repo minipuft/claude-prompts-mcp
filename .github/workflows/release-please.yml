@@ -34,7 +34,7 @@ jobs:
 
       - name: Checkout repo
         if: steps.release.outputs.pr && steps.release.outputs.release_created != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           fetch-depth: 0
