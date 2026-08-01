@@ -37,12 +37,7 @@ export type ChainRunStatus = 'working' | 'input_required' | 'completed' | 'faile
  * {@link StepSubstate} flags.
  */
 export type StepLifecycle =
-  | 'pending'
-  | 'working'
-  | 'input_required'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+  'pending' | 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Non-sticky progress flags meaningful only when the enclosing step is in `working`.

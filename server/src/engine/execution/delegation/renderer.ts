@@ -16,9 +16,9 @@ const SECTION_DELIMITER = '\u2550'.repeat(65);
 export class DelegationRenderer {
   constructor(
     private readonly strategy:
-      | DelegationStrategy
-      | ((payload: DelegationPayload) => DelegationStrategy) = (payload: DelegationPayload) =>
-      resolveDelegationStrategy(payload.clientProfile)
+      DelegationStrategy | ((payload: DelegationPayload) => DelegationStrategy) = (
+      payload: DelegationPayload
+    ) => resolveDelegationStrategy(payload.clientProfile)
   ) {}
 
   /**

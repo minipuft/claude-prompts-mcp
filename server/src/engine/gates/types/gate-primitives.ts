@@ -51,11 +51,7 @@ export interface GatePassCriteria {
    * - `script_tool`: registered script with JSON stdin
    */
   type:
-    | 'inline_guidance'
-    | 'llm_self_check'
-    | 'framework_compliance'
-    | 'shell_verify'
-    | 'script_tool';
+    'inline_guidance' | 'llm_self_check' | 'framework_compliance' | 'shell_verify' | 'script_tool';
 
   // Content check options
   min_length?: number;

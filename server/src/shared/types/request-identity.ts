@@ -13,11 +13,7 @@ import type {
 export type RequestIdentitySource = 'token' | 'header' | 'launch-default' | 'default';
 export type RequestIdentityTransport = 'stdio' | 'http';
 export type RequestClientProfileSource =
-  | 'launch-default'
-  | 'trusted-request'
-  | 'request-hint'
-  | 'client-info'
-  | 'default';
+  'launch-default' | 'trusted-request' | 'request-hint' | 'client-info' | 'default';
 
 /**
  * Canonical client profile used to select delegation instructions.
