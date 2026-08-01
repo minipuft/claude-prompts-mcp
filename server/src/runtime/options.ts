@@ -11,7 +11,7 @@ import type {
   ClientFamily,
   IdentityLaunchDefaults,
   IdentityPolicyMode,
-} from '../shared/types/core-config.js';
+} from '#shared/types/core-config.js';
 
 /**
  * Path-related options parsed from CLI flags and environment variables

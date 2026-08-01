@@ -14,7 +14,7 @@
 
 import { EventEmitter } from 'events';
 
-import type { GateDefinition, HookRegistryPort, Logger } from '../../shared/types/index.js';
+import type { GateDefinition, HookRegistryPort, Logger } from '#shared/types/index.js';
 
 /**
  * Minimal execution context for hook callbacks.

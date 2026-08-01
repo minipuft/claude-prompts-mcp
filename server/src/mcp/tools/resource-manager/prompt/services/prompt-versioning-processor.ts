@@ -1,10 +1,11 @@
 // @lifecycle canonical - Prompt version history operations.
 
-import { ToolResponse } from '../../../../../shared/types/index.js';
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptResourceContext } from '../core/context.js';
 import { FileOperations } from '../operations/file-operations.js';
 import { validateRequiredFields } from '../utils/validation.js';
+
+import { ToolResponse } from '#shared/types/index.js';
 
 export class PromptVersioningProcessor {
   private readonly context: PromptResourceContext;

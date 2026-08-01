@@ -19,7 +19,7 @@ import type {
   HotReloadEventType,
   FileChangeOperation,
   HotReloadEvent,
-} from '../../shared/types/index.js';
+} from '#shared/types/index.js';
 
 export type { HotReloadEventType, FileChangeOperation, HotReloadEvent };
 

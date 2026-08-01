@@ -2,7 +2,7 @@
 
 import { DEFAULT_CONFIG_BY_TYPE, RESOLUTION_PRIORITY } from '../constants.js';
 
-import type { Logger } from '../../../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type {
   CategoryInjectionConfig,
   ChainInjectionConfig,

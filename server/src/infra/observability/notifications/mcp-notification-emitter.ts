@@ -16,7 +16,7 @@
  * - notifications/chain/failed - Chain failed with error
  */
 
-import type { McpNotificationEmitterPort } from '../../../shared/types/index.js';
+import type { McpNotificationEmitterPort } from '#shared/types/index.js';
 import type { Logger } from '../../logging/index.js';
 
 /**

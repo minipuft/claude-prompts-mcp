@@ -22,8 +22,6 @@ import { monotonicFactory } from 'ulid';
  */
 const ulid = monotonicFactory();
 
-import { resolveContinuityScopeId } from '../../shared/utils/request-identity-scope.js';
-
 import type {
   ExecutionRecord,
   StepLifecycle,
@@ -31,9 +29,11 @@ import type {
   InputRequiredReason,
   EvidencePayload,
   GateVerdictSummary,
-} from '../../shared/types/chain-execution.js';
-import type { Logger } from '../../shared/types/index.js';
-import type { DatabasePort, StateStoreOptions } from '../../shared/types/persistence.js';
+} from '#shared/types/chain-execution.js';
+import type { Logger } from '#shared/types/index.js';
+import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
+
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 interface ExecutionRecordRow {
   execution_id: string;

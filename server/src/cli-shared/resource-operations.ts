@@ -31,7 +31,8 @@ import {
   validateResourceFile,
 } from './resource-validation.js';
 import { renameHistoryResource } from './version-history.js';
-import { loadYamlFileSync, serializeYaml } from '../shared/utils/yaml/index.js';
+
+import { loadYamlFileSync, serializeYaml } from '#shared/utils/yaml/index.js';
 
 // ── Result types ────────────────────────────────────────────────────────────
 

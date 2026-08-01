@@ -17,45 +17,56 @@ import * as path from 'node:path';
 
 import { ChainSessionRouter } from './chain-session-router.js';
 import { PipelineBuilder } from './pipeline-builder.js';
-import { ChainOperatorExecutor } from '../../../../engine/execution/operators/chain-operator-executor.js';
-import { createParsingSystem } from '../../../../engine/execution/parsers/index.js';
-import { createSymbolicCommandParser } from '../../../../engine/execution/parsers/symbolic-operator-parser.js';
-import { ExecutionPlanner } from '../../../../engine/execution/planning/execution-planner.js';
+import { ToolDescriptionLoader } from '../../tool-description-loader.js';
+import { ResponseFormatter } from '../processors/response-formatter.js';
+import { renderPromptEngineGuide } from '../utils/guide.js';
+
+import type { ParsingSystem } from '#engine/execution/parsers/index.js';
+import type { PromptExecutionPipeline } from '#engine/execution/pipeline/index.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { GateManager } from '#engine/gates/gate-manager.js';
+import type { PromptData } from '#modules/prompts/types.js';
+import type { McpToolRequest } from '#shared/types/execution.js';
+
+import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
+import { createParsingSystem } from '#engine/execution/parsers/index.js';
+import { createSymbolicCommandParser } from '#engine/execution/parsers/symbolic-operator-parser.js';
+import { ExecutionPlanner } from '#engine/execution/planning/execution-planner.js';
 import {
   PromptReferenceResolver,
   ScriptReferenceResolver,
-} from '../../../../engine/execution/reference/index.js';
-import { FrameworkManager } from '../../../../engine/frameworks/framework-manager.js';
-import { FrameworkStateStore } from '../../../../engine/frameworks/framework-state-store.js';
-import { FrameworkValidator } from '../../../../engine/frameworks/framework-validator.js';
+} from '#engine/execution/reference/index.js';
+import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
+import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import { FrameworkValidator } from '#engine/frameworks/framework-validator.js';
 import {
   PromptGuidanceService,
   createPromptGuidanceService,
-} from '../../../../engine/frameworks/prompt-guidance/index.js';
-import { FrameworkExecutionContext } from '../../../../engine/frameworks/types/index.js';
+} from '#engine/frameworks/prompt-guidance/index.js';
+import { FrameworkExecutionContext } from '#engine/frameworks/types/index.js';
 import {
   LightweightGateSystem,
   createGateValidator,
   createTemporaryGateRegistry,
-} from '../../../../engine/gates/core/index.js';
+} from '#engine/gates/core/index.js';
 import {
   GateGuidanceRenderer,
   createGateGuidanceRenderer,
-} from '../../../../engine/gates/guidance/GateGuidanceRenderer.js';
-import { GateManagerProvider } from '../../../../engine/gates/registry/gate-provider-adapter.js';
-import { GateReferenceResolver } from '../../../../engine/gates/services/gate-reference-resolver.js';
-import { WorkspaceScriptLoader } from '../../../../modules/automation/core/index.js';
-import { createScriptExecutor } from '../../../../modules/automation/execution/script-executor.js';
+} from '#engine/gates/guidance/GateGuidanceRenderer.js';
+import { GateManagerProvider } from '#engine/gates/registry/gate-provider-adapter.js';
+import { GateReferenceResolver } from '#engine/gates/services/gate-reference-resolver.js';
+import { WorkspaceScriptLoader } from '#modules/automation/core/index.js';
+import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import {
   ExecutionRecordStore,
   createExecutionRecordStore,
-} from '../../../../modules/chains/execution-record-store.js';
-import { createChainSessionStore } from '../../../../modules/chains/manager.js';
-import { StyleManager, createStyleManager } from '../../../../modules/formatting/index.js';
-import { PromptAssetManager } from '../../../../modules/prompts/index.js';
-import { ContentAnalyzer } from '../../../../modules/semantic/configurable-semantic-analyzer.js';
-import { ConversationStore } from '../../../../modules/text-refs/conversation.js';
-import { TextReferenceStore, ArgumentHistoryTracker } from '../../../../modules/text-refs/index.js';
+} from '#modules/chains/execution-record-store.js';
+import { createChainSessionStore } from '#modules/chains/manager.js';
+import { StyleManager, createStyleManager } from '#modules/formatting/index.js';
+import { PromptAssetManager } from '#modules/prompts/index.js';
+import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { ConversationStore } from '#modules/text-refs/conversation.js';
+import { TextReferenceStore, ArgumentHistoryTracker } from '#modules/text-refs/index.js';
 import {
   type Logger,
   type MetricsCollector,
@@ -64,18 +75,8 @@ import {
   ToolResponse,
   ConfigManager,
   ChainSessionService,
-} from '../../../../shared/types/index.js';
-import { CHAIN_ID_PATTERN } from '../../../../shared/utils/index.js';
-import { ToolDescriptionLoader } from '../../tool-description-loader.js';
-import { ResponseFormatter } from '../processors/response-formatter.js';
-import { renderPromptEngineGuide } from '../utils/guide.js';
-
-import type { ParsingSystem } from '../../../../engine/execution/parsers/index.js';
-import type { PromptExecutionPipeline } from '../../../../engine/execution/pipeline/index.js';
-import type { ConvertedPrompt } from '../../../../engine/execution/types.js';
-import type { GateManager } from '../../../../engine/gates/gate-manager.js';
-import type { PromptData } from '../../../../modules/prompts/types.js';
-import type { McpToolRequest } from '../../../../shared/types/execution.js';
+} from '#shared/types/index.js';
+import { CHAIN_ID_PATTERN } from '#shared/utils/index.js';
 
 export class PromptExecutor {
   public readonly inlineGateParser: ReturnType<typeof createSymbolicCommandParser>;
@@ -293,7 +294,7 @@ export class PromptExecutor {
     this.analyticsService = analyticsService;
   }
 
-  setDatabasePort(db: import('../../../../shared/types/persistence.js').DatabasePort): void {
+  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
     this.argumentHistoryTracker.setDatabasePort(db);
     if ('setDatabasePort' in this.chainSessionStore) {
       (this.chainSessionStore as { setDatabasePort(db: unknown): void }).setDatabasePort(db);
@@ -384,7 +385,7 @@ export class PromptExecutor {
       gate_action?: 'retry' | 'skip' | 'abort';
       user_response?: string;
       /** Unified gate specifications (canonical in v3.0.0+). Accepts gate IDs, simple checks, or full definitions. */
-      gates?: import('../../../../shared/types/execution.js').GateSpecification[];
+      gates?: import('#shared/types/execution.js').GateSpecification[];
       options?: Record<string, unknown>;
     },
     extra: any

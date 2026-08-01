@@ -10,7 +10,7 @@
  * Part of Gate System Intelligent Selection Upgrade -
  */
 
-import type { Logger } from '../../../shared/types/index.js';
+import type { Logger } from '#shared/types/index.js';
 
 /**
  * Template gate configuration

@@ -13,7 +13,7 @@ import * as path from 'node:path';
 
 import chokidar, { type ChokidarOptions, type FSWatcher } from 'chokidar';
 
-import type { ConfigManager, Logger } from '../../shared/types/index.js';
+import type { ConfigManager, Logger } from '#shared/types/index.js';
 
 /**
  * File change event types

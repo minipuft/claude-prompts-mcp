@@ -7,6 +7,8 @@ import {
 } from '../../../../gates/config/index.js';
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
 
+import type { Logger } from '#infra/logging/index.js';
+import type { ChainSessionService, GateReviewPrompt } from '#shared/types/index.js';
 import type {
   ActionResult,
   CreateReviewOptions,
@@ -21,8 +23,6 @@ import type {
   RetryConfig,
   VerdictSource,
 } from './gate-enforcement-types.js';
-import type { Logger } from '../../../../../infra/logging/index.js';
-import type { ChainSessionService, GateReviewPrompt } from '../../../../../shared/types/index.js';
 import type { GateDefinitionProvider } from '../../../../gates/core/gate-loader.js';
 import type { LightweightGateDefinition } from '../../../../gates/types.js';
 

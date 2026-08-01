@@ -2,13 +2,13 @@
 import { GateEnforcementAuthority } from '../decisions/index.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type {
   ChainSessionService,
   HookRegistryPort,
   McpNotificationEmitterPort,
   MetricsCollector,
-} from '../../../../shared/types/index.js';
+} from '#shared/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
 import type { ExecutionContext } from '../../context/index.js';

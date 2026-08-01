@@ -14,12 +14,13 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 
 import { validatePromptYaml, type PromptYaml } from './prompt-schema.js';
-import { type Logger, PromptArgument } from '../../shared/types/index.js';
-import { INJECTION_TYPES } from '../../shared/types/injection.js';
-import { loadYamlFileSync } from '../../shared/utils/yaml/index.js';
 
+import type { PromptInjectionConfig, PromptInjectionRule } from '#shared/types/injection.js';
 import type { PromptData } from './types.js';
-import type { PromptInjectionConfig, PromptInjectionRule } from '../../shared/types/injection.js';
+
+import { type Logger, PromptArgument } from '#shared/types/index.js';
+import { INJECTION_TYPES } from '#shared/types/injection.js';
+import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // ============================================
 // Shared Types (used by both YAML and Markdown loading)

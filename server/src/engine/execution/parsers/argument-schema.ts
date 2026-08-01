@@ -1,7 +1,7 @@
 // @lifecycle canonical - Declares zod schemas for parsed operator arguments.
 import { z, type ZodTypeAny } from 'zod';
 
-import type { PromptArgument } from '../../../shared/types/index.js';
+import type { PromptArgument } from '#shared/types/index.js';
 import type { ConvertedPrompt } from '../types.js';
 
 export interface SchemaValidationIssue {

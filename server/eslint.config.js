@@ -103,9 +103,11 @@ export default [
             'object',
             'type',
           ],
+          // `@/**` matched nothing — this repo never used that prefix. Subpath imports
+          // (package.json "imports") are the internal-module form.
           pathGroups: [
             {
-              pattern: '@/**',
+              pattern: '#**',
               group: 'internal',
               position: 'before',
             },
@@ -121,6 +123,12 @@ export default [
       'import/no-duplicates': 'error',
       'import/no-cycle': 'error',
       'import/newline-after-import': 'error',
+
+      // Cross-layer relative imports are enforced by `validate:no-crosslayer-relative`,
+      // NOT by no-restricted-imports. A textual `../../*` ban flags 197 legitimate deep
+      // intra-layer imports and zero real violations: `mcp/tools/handlers/x.ts` importing
+      // `../../schemas/y.js` never leaves `mcp`. Whether an import crosses a layer is a
+      // question about the resolved path, so the guard resolves it.
 
       // General rules - warn on all console usage, use EnhancedLogger instead
       'no-console': 'warn',
@@ -270,9 +278,11 @@ export default [
             'object',
             'type',
           ],
+          // `@/**` matched nothing — this repo never used that prefix. Subpath imports
+          // (package.json "imports") are the internal-module form.
           pathGroups: [
             {
-              pattern: '@/**',
+              pattern: '#**',
               group: 'internal',
               position: 'before',
             },

@@ -1,16 +1,17 @@
 // @lifecycle canonical - Manages chain executions within the MCP prompt engine.
 import { ChainManagementCommand } from './types.js';
-import { LightweightGateSystem } from '../../../../engine/gates/core/index.js';
-import { ToolResponse } from '../../../../shared/types/index.js';
 import { ResponseFormatter } from '../processors/response-formatter.js';
 
-import type { ConvertedPrompt } from '../../../../engine/execution/types.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type {
   ChainSession,
   ChainSessionService,
   ChainSessionRouterPort,
   StateStoreOptions,
-} from '../../../../shared/types/index.js';
+} from '#shared/types/index.js';
+
+import { LightweightGateSystem } from '#engine/gates/core/index.js';
+import { ToolResponse } from '#shared/types/index.js';
 
 /**
  * Detects whether an incoming command is a chain management operation.

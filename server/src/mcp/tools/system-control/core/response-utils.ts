@@ -1,6 +1,6 @@
 // @lifecycle canonical - Shared response utilities for system_control handlers.
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 
 export function createStructuredResponse(
   content: any,

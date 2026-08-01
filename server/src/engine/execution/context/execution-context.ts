@@ -1,10 +1,13 @@
 // @lifecycle canonical - Holds runtime execution context data and helpers.
-import { noopLogger } from '../../../infra/logging/index.js';
 import { FrameworkDecisionAuthority } from '../pipeline/decisions/index.js';
 import { DiagnosticAccumulator } from '../pipeline/state/accumulators/diagnostic-accumulator.js';
 import { GateAccumulator } from '../pipeline/state/accumulators/gate-accumulator.js';
 import { McpToolRequestValidator } from '../validation/request-validator.js';
 
+import type { StateStoreOptions } from '#infra/database/stores/interface.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ToolResponse, McpToolRequest } from '#shared/types/index.js';
+import type { RequestIdentitySource } from '#shared/types/request-identity.js';
 import type {
   NamedInlineGate,
   ParsedCommand,
@@ -12,14 +15,12 @@ import type {
   ExecutionResults,
 } from './context-types.js';
 import type { InitializedScriptState, PipelineInternalState } from './internal-state.js';
-import type { StateStoreOptions } from '../../../infra/database/stores/interface.js';
-import type { Logger } from '../../../infra/logging/index.js';
-import type { ToolResponse, McpToolRequest } from '../../../shared/types/index.js';
-import type { RequestIdentitySource } from '../../../shared/types/request-identity.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 import type { GateEnforcementAuthority } from '../pipeline/decisions/index.js';
 import type { ConvertedPrompt, ExecutionModifiers, ExecutionPlan } from '../types.js';
+
+import { noopLogger } from '#infra/logging/index.js';
 
 /**
  * Unified execution context that flows through the new pipeline

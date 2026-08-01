@@ -16,18 +16,15 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import {
-  GitCheckpoint,
-  createGitCheckpoint,
-} from '../../../../engine/gates/shell/git-checkpoint.js';
-
+import type { ConfigManager, Logger, ToolResponse } from '#shared/types/index.js';
 import type {
   CheckpointManagerInput,
   CheckpointManagerDependencies,
   CheckpointRef,
   CheckpointState,
 } from './types.js';
-import type { ConfigManager, Logger, ToolResponse } from '../../../../shared/types/index.js';
+
+import { GitCheckpoint, createGitCheckpoint } from '#engine/gates/shell/git-checkpoint.js';
 
 /**
  * Create a fresh empty checkpoint state.

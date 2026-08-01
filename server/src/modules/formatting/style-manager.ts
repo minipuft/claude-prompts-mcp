@@ -18,9 +18,10 @@ import {
   type StyleLoaderStats,
   type StyleDefinitionYaml,
 } from './core/index.js';
-import { isGateActiveForContext } from '../../engine/gates/utils/gate-activation.js';
 
-import type { StyleManagerPort, Logger } from '../../shared/types/index.js';
+import type { StyleManagerPort, Logger } from '#shared/types/index.js';
+
+import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
 
 /**
  * Configuration for StyleManager

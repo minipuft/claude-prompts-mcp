@@ -10,16 +10,16 @@ import { existsSync } from 'fs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'path';
 
+import type { ConfigManager, Logger } from '#shared/types/index.js';
+import type { FrameworkCreationData } from '../core/types.js';
+
 import {
   ResourceMutationTransaction,
   ResourceVerificationService,
-} from '../../../../modules/resources/services/index.js';
-import { safeWriteFile } from '../../../../shared/utils/file-transactions.js';
-import { loadYamlFile } from '../../../../shared/utils/yaml/yaml-file-loader.js';
-import { serializeYaml } from '../../../../shared/utils/yaml/yaml-parser.js';
-
-import type { ConfigManager, Logger } from '../../../../shared/types/index.js';
-import type { FrameworkCreationData } from '../core/types.js';
+} from '#modules/resources/services/index.js';
+import { safeWriteFile } from '#shared/utils/file-transactions.js';
+import { loadYamlFile } from '#shared/utils/yaml/yaml-file-loader.js';
+import { serializeYaml } from '#shared/utils/yaml/yaml-parser.js';
 
 // ============================================================================
 // Types

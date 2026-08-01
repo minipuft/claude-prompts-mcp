@@ -8,6 +8,7 @@ import {
   contractToParameterDescriptors,
 } from '../../contracts/schemas/adapter.js';
 
+import type { McpToolRequest } from '#shared/types/execution.js';
 import type {
   PromptEngineMetadataData,
   ToolMetadata,
@@ -15,7 +16,6 @@ import type {
   CommandDescriptor,
   UsagePatternDescriptor,
 } from './types.js';
-import type { McpToolRequest } from '../../../shared/types/execution.js';
 
 type RequestField = keyof McpToolRequest;
 

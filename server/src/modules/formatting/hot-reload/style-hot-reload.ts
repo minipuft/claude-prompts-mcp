@@ -8,7 +8,7 @@
  * @see GateHotReloadCoordinator for the pattern this follows
  */
 
-import type { Logger } from '../../../shared/types/index.js';
+import type { Logger } from '#shared/types/index.js';
 import type { StyleDefinitionLoader, StyleDefinitionYaml } from '../core/index.js';
 
 /**

@@ -2,9 +2,9 @@
 import { mergeGateBody } from './gate-body-merge.js';
 import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guidance.js';
 
+import type { Logger } from '#infra/logging/index.js';
 import type { GateBody } from './gate-body-merge.js';
 import type { GateReferenceResolver } from './gate-reference-resolver.js';
-import type { Logger } from '../../../infra/logging/index.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
 import type { TemporaryGateInput } from '../../execution/types.js';
 import type {
@@ -94,7 +94,7 @@ export class TemporaryGateRegistrar {
 
     const overrides = context.state.gates.requestedOverrides as Record<string, any> | undefined;
     const normalizedGates = overrides?.['gates'] as
-      import('../../../shared/types/execution.js').GateSpecification[] | undefined;
+      import('#shared/types/execution.js').GateSpecification[] | undefined;
 
     const canonicalGateIds = new Set<string>();
     const resolvedGateIds = new Set<string>();

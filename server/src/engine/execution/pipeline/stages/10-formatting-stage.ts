@@ -5,10 +5,10 @@ import {
 } from '../../formatting/formatting-context.js';
 import { BasePipelineStage } from '../stage.js';
 
-import type { Logger } from '../../../../infra/logging/index.js';
-import type { ExecutionRecordStore } from '../../../../modules/chains/execution-record-store.js';
-import type { FormatterExecutionContext } from '../../../../shared/types/chain-execution.js';
-import type { ResponseFormatterPort } from '../../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
+import type { FormatterExecutionContext } from '#shared/types/chain-execution.js';
+import type { ResponseFormatterPort } from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { SinglePromptFormattingContext } from '../../formatting/formatting-context.js';
 import type { ResponseAssembler } from '../../formatting/response-assembler.js';

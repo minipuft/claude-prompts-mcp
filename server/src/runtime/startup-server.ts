@@ -6,19 +6,19 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import { createTransportRouter, startMcpServer, TransportRouter } from '../infra/http/index.js';
-import { createApiRouter } from '../mcp/http/api.js';
-
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { ConfigLoader } from '#infra/config/index.js';
+import type { ServerLifecycle } from '#infra/http/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ApiRouter } from '#mcp/http/api.js';
+import type { McpToolRouter } from '#mcp/tools/index.js';
+import type { PromptAssetManager } from '#modules/prompts/index.js';
+import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { TransportMode } from '#shared/types/index.js';
 import type { RuntimeLaunchOptions } from './options.js';
-import type { ConvertedPrompt } from '../engine/execution/types.js';
-import type { ConfigLoader } from '../infra/config/index.js';
-import type { ServerLifecycle } from '../infra/http/index.js';
-import type { Logger } from '../infra/logging/index.js';
-import type { ApiRouter } from '../mcp/http/api.js';
-import type { McpToolRouter } from '../mcp/tools/index.js';
-import type { PromptAssetManager } from '../modules/prompts/index.js';
-import type { Category, PromptData } from '../modules/prompts/types.js';
-import type { TransportMode } from '../shared/types/index.js';
+
+import { createTransportRouter, startMcpServer, TransportRouter } from '#infra/http/index.js';
+import { createApiRouter } from '#mcp/http/api.js';
 
 export interface ServerStartupParams {
   logger: Logger;

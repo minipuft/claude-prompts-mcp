@@ -3,10 +3,11 @@
  * Matching and fuzzy search logic for prompt discovery
  */
 
-import { type Logger } from '../../../../../shared/types/index.js';
 import { PromptClassification, SmartFilters } from '../core/types.js';
 
-import type { ConvertedPrompt } from '../../../../../engine/execution/types.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+
+import { type Logger } from '#shared/types/index.js';
 
 /**
  * Prompt matching engine with fuzzy search capabilities

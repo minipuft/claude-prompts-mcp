@@ -2,7 +2,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
-import { Logger } from '../../../infra/logging/index.js';
+import { Logger } from '#infra/logging/index.js';
 
 const execAsync = promisify(exec);
 

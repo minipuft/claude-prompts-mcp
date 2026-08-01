@@ -19,8 +19,8 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
+import type { Logger, TelemetryConfig } from '#shared/types/index.js';
 import type { TelemetryRuntime, TelemetryStatus } from './types.js';
-import type { Logger, TelemetryConfig } from '../../../shared/types/index.js';
 import type { Tracer } from '@opentelemetry/api';
 import type { Resource } from '@opentelemetry/resources';
 

@@ -33,9 +33,9 @@ import { SqliteEngine } from '../../database/sqlite-engine.js';
 import { SqliteStateStore } from '../../database/stores/sqlite-store.js';
 import { Logger } from '../../logging/index.js';
 
-import type { ChangeSource, TrackedResourceType } from '../../../shared/types/index.js';
+import type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
 
-export type { ChangeSource, TrackedResourceType } from '../../../shared/types/index.js';
+export type { ChangeSource, TrackedResourceType } from '#shared/types/index.js';
 
 /**
  * Type of change operation

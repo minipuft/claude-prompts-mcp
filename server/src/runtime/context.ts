@@ -12,12 +12,13 @@ import * as path from 'node:path';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { PathResolver } from './paths.js';
 import { resolvePackageRoot } from './startup.js';
-import { ConfigLoader } from '../infra/config/index.js';
-import { TransportRouter } from '../infra/http/index.js';
-import { createLogger, EnhancedLoggingConfig, Logger } from '../infra/logging/index.js';
-import { ServiceOrchestrator } from '../shared/utils/service-orchestrator.js';
 
-import type { Config, ConfigManager, TransportMode } from '../shared/types/index.js';
+import type { Config, ConfigManager, TransportMode } from '#shared/types/index.js';
+
+import { ConfigLoader } from '#infra/config/index.js';
+import { TransportRouter } from '#infra/http/index.js';
+import { createLogger, EnhancedLoggingConfig, Logger } from '#infra/logging/index.js';
+import { ServiceOrchestrator } from '#shared/utils/service-orchestrator.js';
 
 export interface RuntimeFoundation {
   logger: Logger;

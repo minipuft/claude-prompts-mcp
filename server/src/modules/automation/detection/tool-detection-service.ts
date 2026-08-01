@@ -21,7 +21,7 @@
 
 import { DEFAULT_EXECUTION_CONFIG } from '../types.js';
 
-import type { ToolDetectionServicePort } from '../../../shared/types/index.js';
+import type { ToolDetectionServicePort } from '#shared/types/index.js';
 import type {
   LoadedScriptTool,
   ToolDetectionMatch,

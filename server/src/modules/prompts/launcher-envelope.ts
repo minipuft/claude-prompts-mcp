@@ -14,8 +14,8 @@
  * and requires no knowledge of the client's slash-command prefix.
  */
 
-import type { ConvertedPrompt } from '../../engine/execution/types.js';
-import type { PromptArgument } from '../../shared/types/index.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { PromptArgument } from '#shared/types/index.js';
 
 /** A single MCP prompt message (the shape returned by `prompts/get`). */
 export interface LauncherMessage {

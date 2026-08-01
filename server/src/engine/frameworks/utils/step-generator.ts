@@ -7,7 +7,7 @@
  * to create step sequences and enhancements.
  */
 
-import type { ContentAnalysisResult } from '../../../shared/types/index.js';
+import type { ContentAnalysisResult } from '#shared/types/index.js';
 import type { PhaseGuard } from '../definitions/framework-schema.js';
 import type {
   ProcessingGuidance,

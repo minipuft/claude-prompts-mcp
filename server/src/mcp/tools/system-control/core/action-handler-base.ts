@@ -1,15 +1,15 @@
 // @lifecycle canonical - Abstract base class for system_control action handlers.
 
-import type { SystemControlContext } from './types.js';
-import type { FrameworkManager } from '../../../../engine/frameworks/framework-manager.js';
-import type { FrameworkStateStore } from '../../../../engine/frameworks/framework-state-store.js';
-import type { GateStateStore } from '../../../../engine/gates/gate-state-store.js';
+import type { FrameworkManager } from '#engine/frameworks/framework-manager.js';
+import type { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import type { GateStateStore } from '#engine/gates/gate-state-store.js';
 import type {
   StateStoreOptions,
   ConfigManager,
   Logger,
   ToolResponse,
-} from '../../../../shared/types/index.js';
+} from '#shared/types/index.js';
+import type { SystemControlContext } from './types.js';
 import type { SafeConfigWriter } from '../../config-utils.js';
 
 /**

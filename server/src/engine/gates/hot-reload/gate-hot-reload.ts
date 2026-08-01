@@ -11,7 +11,7 @@
 import { GateDefinitionLoader } from '../core/gate-definition-loader.js';
 import { createGenericGateGuide } from '../registry/generic-gate-guide.js';
 
-import type { Logger } from '../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { GateRegistry } from '../registry/gate-registry.js';
 import type {
   GateActivationRules,

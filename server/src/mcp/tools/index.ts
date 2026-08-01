@@ -40,22 +40,28 @@ import {
   createConsolidatedSystemControl,
 } from './system-control/index.js';
 import { ToolDescriptionLoader } from './tool-description-loader.js';
-import {
-  FrameworkManager,
-  createFrameworkManager,
-} from '../../engine/frameworks/framework-manager.js';
-import { FrameworkStateStore } from '../../engine/frameworks/framework-state-store.js';
+
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { GateManager } from '#engine/gates/gate-manager.js';
+import type { ChainSessionStore } from '#modules/chains/manager.js';
+import type { Category, PromptData } from '#modules/prompts/types.js';
+import type { GateSpecification } from '#shared/types/execution.js';
+import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
+import type { ResourceManagerInput } from './resource-manager/core/types.js';
+
+import { FrameworkManager, createFrameworkManager } from '#engine/frameworks/framework-manager.js';
+import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import {
   isValidGateVerdict,
   GATE_VERDICT_VALIDATION_MESSAGE,
-} from '../../engine/gates/core/gate-verdict-contract.js';
-import { GateStateStore, createGateStateStore } from '../../engine/gates/gate-state-store.js';
-import { PromptAssetManager } from '../../modules/prompts/index.js';
+} from '#engine/gates/core/gate-verdict-contract.js';
+import { GateStateStore, createGateStateStore } from '#engine/gates/gate-state-store.js';
+import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
-import { createContentAnalyzer } from '../../modules/semantic/configurable-semantic-analyzer.js';
-import { createSemanticIntegrationFactory } from '../../modules/semantic/integrations/index.js';
-import { ConversationStore } from '../../modules/text-refs/conversation.js';
-import { TextReferenceStore } from '../../modules/text-refs/index.js';
+import { createContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { createSemanticIntegrationFactory } from '#modules/semantic/integrations/index.js';
+import { ConversationStore } from '#modules/text-refs/conversation.js';
+import { TextReferenceStore } from '#modules/text-refs/index.js';
 import {
   type ConfigManager,
   type MetricsCollector,
@@ -63,16 +69,9 @@ import {
   type HookRegistryPort,
   type McpNotificationEmitterPort,
   ToolResponse,
-} from '../../shared/types/index.js';
+} from '#shared/types/index.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
 
-import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
-import type { ResourceManagerInput } from './resource-manager/core/types.js';
-import type { ConvertedPrompt } from '../../engine/execution/types.js';
-import type { GateManager } from '../../engine/gates/gate-manager.js';
-import type { ChainSessionStore } from '../../modules/chains/manager.js';
-import type { Category, PromptData } from '../../modules/prompts/types.js';
-import type { GateSpecification } from '../../shared/types/execution.js';
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
 
 // Consolidated tools
@@ -276,7 +275,7 @@ export class McpToolRouter {
   /**
    * Set database port for persistence (cascades to all sub-handlers that need DB access).
    */
-  setDatabasePort(db: import('../../shared/types/persistence.js').DatabasePort): void {
+  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
     this.promptExecutor.setDatabasePort(db);
     this.promptResourceHandler.setDatabasePort(db);
     this.gateManagerTool.setDatabasePort(db);
@@ -513,7 +512,7 @@ export class McpToolRouter {
     | ((
         args: Record<string, unknown>,
         context: Record<string, unknown>
-      ) => Promise<import('../../shared/types/index.js').ToolResponse>)
+      ) => Promise<import('#shared/types/index.js').ToolResponse>)
     | null {
     const router = this.resourceManagerRouter;
     if (router == null) {

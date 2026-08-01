@@ -9,16 +9,16 @@
  * AttributePolicyEnforcer, and TelemetryHookObserver. No embedded domain logic.
  */
 
-import { HookRegistry } from '../infra/hooks/index.js';
+import type { TelemetryStatus } from '#infra/observability/telemetry/index.js';
+import type { Logger, TelemetryConfig } from '#shared/types/index.js';
+
+import { HookRegistry } from '#infra/hooks/index.js';
 import {
   createTelemetryRuntime,
   TelemetryRuntimeImpl,
   AttributePolicyEnforcer,
   TelemetryHookObserver,
-} from '../infra/observability/telemetry/index.js';
-
-import type { TelemetryStatus } from '../infra/observability/telemetry/index.js';
-import type { Logger, TelemetryConfig } from '../shared/types/index.js';
+} from '#infra/observability/telemetry/index.js';
 
 export interface TelemetryLifecycleParams {
   config: TelemetryConfig;

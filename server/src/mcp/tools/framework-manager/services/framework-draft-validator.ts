@@ -1,6 +1,6 @@
 // @lifecycle canonical - Framework validation operations: scoring, error formatting, success formatting.
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { FrameworkCreationData, FrameworkDraftValidationResult } from '../core/types.js';
 
 export class FrameworkDraftValidator {

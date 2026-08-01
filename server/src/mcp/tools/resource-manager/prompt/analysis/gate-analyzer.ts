@@ -6,11 +6,8 @@
  * Integrates with the temporary gate system to provide intelligent gate recommendations.
  */
 
-import type {
-  ConvertedPrompt,
-  TemporaryGateDefinition,
-} from '../../../../../engine/execution/types.js';
-import type { Logger } from '../../../../../shared/types/index.js';
+import type { ConvertedPrompt, TemporaryGateDefinition } from '#engine/execution/types.js';
+import type { Logger } from '#shared/types/index.js';
 import type { PromptResourceDependencies } from '../core/types.js';
 
 /**

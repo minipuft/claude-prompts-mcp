@@ -1,7 +1,7 @@
 // @lifecycle canonical - Directory discovery and watch-target building for hot-reload setup.
 import * as path from 'node:path';
 
-import type { Logger } from '../../shared/types/index.js';
+import type { Logger } from '#shared/types/index.js';
 
 /** Minimal interface for checking YAML prompt presence in a directory. */
 export interface YamlPromptChecker {

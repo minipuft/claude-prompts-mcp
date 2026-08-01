@@ -8,22 +8,24 @@ more work is finalized for that release. Stacking is required, not preferred: `o
 10 `validate:all` members and 3 `validate-no-*` scripts against this branch's 21 and 8, so Tier 1
 cannot enforce guards that do not exist there, and #150 already modifies `ci.yml`.
 **Consequence**: this branch's PR shows #150's commits until #150 lands, and must merge after it.
-**Work type**: bug_fix (Tier 1–2), refactor (Tier 3, deferred)
-**Status**: **Tiers 1 and 2 complete** (2026-07-31, both gates passed). 1.4 held at ◐ by design
-until this branch merges. **Tier 3: 3.1 spike done — `#` confirmed**; it surfaced and fixed an
-unrelated packaging bug (`rootDir`). The 611-import codemod (3.2–3.6) stays deferred.
+**Work type**: bug_fix (Tier 1–2), refactor (Tier 3)
+**Status**: **Tiers 1, 2 and 3 complete** (2026-07-31, all gates passed). 1.4 held at ◐ by design
+until this branch merges.
 
 | Measure                                           | Before            | Now       | Target |
 | ------------------------------------------------- | ----------------- | --------- | ------ |
-| `validate:all` members enforced in CI             | **5/21**          | **26/26** | all    |
-| Recurrence guards (`validate:no-*`) run in CI     | **0/8**           | **8/8**   | 8/8    |
+| `validate:all` members enforced in CI             | **5/21**          | **28/28** | all    |
+| Recurrence guards (`validate:no-*`) run in CI     | **0/8**           | **9/9**   | all    |
 | Unpinned tool installs in workflows               | **2**             | **0**     | 0      |
 | Node version CI tests vs. Node version shipped    | 22.x/24           | 22.x+24   | same   |
 | Dead steps in `.husky/pre-push`                   | **1**             | **0**     | 0      |
 | PR classes that can never satisfy required checks | **1** (docs-only) | **0**     | 0      |
+| Cross-layer relative imports in `src/`            | **614**           | **0**     | 0      |
+| Resolver configs holding a copy of the alias map  | **3**             | **1**     | 1      |
 
-`validate:all` grew 21 → 26 across the three tiers (`validate:required-contexts`,
-`validate:format`, `validate:package-entries`, plus two self-tests). It also
+`validate:all` grew 21 → 28 across the three tiers (`validate:required-contexts`,
+`validate:format`, `validate:package-entries`, `validate:no-crosslayer-relative`, plus three
+self-tests). It also
 **exited 1 on committed HEAD** when Tier 1 started — `validate:documented-options` flagged npm's
 own `--prefix` as an undocumented flag of ours. Nothing caught it because nothing ran it. That is
 F2 demonstrating itself, not a side issue.
@@ -474,11 +476,54 @@ dist) **before** rewriting 611 imports, because the answer determines what the c
 | #   | Step                                                                                                                                                        | Status |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | 3.1 | Spike: 10 files, build, inspect emitted `.d.ts`. Decides `#` vs `@` vs abandon                                                                              | ✓      |
-| 3.2 | Declare `imports` in `server/package.json`; extend to `runtime/` and `cli-shared/`, which the current map omits                                             | ☐      |
-| 3.3 | ts-morph codemod over the **611 cross-layer imports only** — resolve each specifier, rewrite only on layer crossing. Leave the 501 `./` and 388 `../` alone | ☐      |
-| 3.4 | ESLint `no-restricted-imports` banning `../../*` — without this the sweep decays                                                                            | ☐      |
-| 3.5 | Update `import/order` `pathGroups`: `eslint.config.mjs:106` matches `@/**`, which matches nothing here                                                      | ☐      |
-| 3.6 | Confirm `validate:arch` still resolves — `.dependency-cruiser.cjs` sets `tsConfig`, so it maps aliases to real paths before matching `^src/shared/`         | ☐      |
+| 3.2 | Declare `imports` in `server/package.json`; extend to `runtime/` and `cli-shared/`, which the current map omits                                             | ✓      |
+| 3.3 | ts-morph codemod over the **611 cross-layer imports only** — resolve each specifier, rewrite only on layer crossing. Leave the 501 `./` and 388 `../` alone | ✓      |
+| 3.4 | ~~ESLint `no-restricted-imports` banning `../../*`~~ → **`validate:no-crosslayer-relative`** (see Deviations)                                               | ✓      |
+| 3.5 | Update `import/order` `pathGroups`: matched `@/**`, which matches nothing here                                                                              | ✓      |
+| 3.6 | Confirm `validate:arch` still resolves                                                                                                                      | ✓      |
+
+**Package shape decided**: this is a **binary distribution, not a library**. `.mcpbignore` excludes
+`server/src` from the extension, `manifest.json` points at `dist/index.js`, and neither downstream
+plugin contains a single `import … from 'claude-prompts'` — they depend on it for the server binary
+and the Python hooks. So `types`, `exports["."].types`, declaration emit, and `src` in `files` were
+all removed, and `imports → ./src/*` is correct by construction because the only reader is us.
+
+### Gate verdict — PASS (executed 2026-07-31)
+
+| Claim                             | Proof                                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 614 cross-layer imports rewritten | ts-morph codemod: 614 rewritten, 972 intra-layer untouched, **0 unresolved**, 239 files        |
+| Every resolver honours `#`        | tsc **0** · esbuild **0** · Jest **1732/1732** · depcruise **608 `#` edges, 0 unresolvable**   |
+| The runtime actually works        | `verify:mcp` **11/11** against a server spawned from the new bundle                            |
+| The `cpm` CLI still resolves      | cli typecheck **0**, build **0**, tests **75/75** — it reaches into `server/src` cross-package |
+| The migration cannot decay        | `validate:no-crosslayer-relative`, 6/6 self-test rules; a fresh violation exits 1              |
+| The package shape cannot regress  | `validate:package-entries`, 8/8 rules incl. both binary and library shapes                     |
+
+Tier-wide: `validate:all` **0** (28 members) · ratchet 3475 (below the 3477 baseline).
+
+### Deviations
+
+1. **3.4 — ESLint was the wrong instrument; wrote a resolving guard instead.** The planned
+   `no-restricted-imports` ban on `../../*` produced **197 violations, of which 0 were genuinely
+   cross-layer.** `mcp/tools/handlers/x.ts` importing `../../schemas/y.js` never leaves `mcp` —
+   textual matching cannot tell a cross-layer hop from deep intra-layer nesting. This is the same
+   argument that chose ts-morph over sed for the codemod, and it applies just as much to the guard.
+   `validate:no-crosslayer-relative` resolves each specifier with path arithmetic (relative
+   specifiers are pure paths, so no compiler is needed) and flags only real crossings.
+
+2. **The guard immediately caught a gap in my own codemod.** It found 10 surviving cross-layer
+   imports in 8 files: inline `import('…')` **type nodes**. The codemod handled import declarations,
+   export declarations and dynamic-import call expressions — an `ImportTypeNode` is none of those.
+   Fixed in a follow-up pass. Had the guard not existed, those 10 would have shipped as the seed of
+   the decay it exists to prevent.
+
+3. **`rootDir` was load-bearing twice.** It is required for `imports` to resolve at all
+   (`TS2210: the project root is ambiguous`) — the same missing option that broke the published
+   `types` entry. One line fixed both, which is why the packaging fix landed before the codemod.
+
+4. **`import/order` needed a re-sort, not just a pathGroup change.** Switching `@/**` → `#**`
+   produced +292 ordering errors; `eslint --fix` cleared all but 2, which needed manual work because
+   `export` statements sat between imports and the autofixer will not move across them.
 
 **Not** `ast-grep` or `sed`: deciding whether an import crosses a layer requires _resolving_ the
 specifier, not matching its text. ts-morph is already a devDependency. The recorded ts-morph caveat

@@ -12,24 +12,22 @@ import { PromptMatcher } from './search/prompt-matcher.js';
 import { PromptDiscoveryProcessor } from './services/prompt-discovery-processor.js';
 import { PromptLifecycleProcessor } from './services/prompt-lifecycle-processor.js';
 import { PromptVersioningProcessor } from './services/prompt-versioning-processor.js';
-import { FrameworkManager } from '../../../../engine/frameworks/framework-manager.js';
-import { FrameworkStateStore } from '../../../../engine/frameworks/framework-state-store.js';
-import { ContentAnalyzer } from '../../../../modules/semantic/configurable-semantic-analyzer.js';
-import { VersionHistoryService } from '../../../../modules/versioning/index.js';
-import { logMcpToolChange } from '../../../../runtime/resource-change-tracking.js';
-import { type Logger, ToolResponse, ConfigManager } from '../../../../shared/types/index.js';
-import {
-  ValidationError,
-  handleError as utilsHandleError,
-} from '../../../../shared/utils/index.js';
 import { promptResourceMetadata } from '../../../metadata/definitions/prompt-resource.js';
 import { recordActionInvocation } from '../../../metadata/usage-tracker.js';
 
-import type { ConvertedPrompt } from '../../../../engine/execution/types.js';
-import type { PromptData, Category } from '../../../../modules/prompts/types.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { PromptData, Category } from '#modules/prompts/types.js';
 import type { PromptResourceActionId } from '../../../metadata/definitions/prompt-resource.js';
 import type { ActionDescriptor } from '../../../metadata/definitions/types.js';
 import type { PromptResourceHandlerPort } from '../core/types.js';
+
+import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
+import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { VersionHistoryService } from '#modules/versioning/index.js';
+import { logMcpToolChange } from '#runtime/resource-change-tracking.js';
+import { type Logger, ToolResponse, ConfigManager } from '#shared/types/index.js';
+import { ValidationError, handleError as utilsHandleError } from '#shared/utils/index.js';
 
 const PROMPT_RESOURCE_ACTIONS = promptResourceMetadata.data.actions;
 const PROMPT_RESOURCE_ACTION_MAP = new Map<PromptResourceActionId, ActionDescriptor>(
@@ -111,7 +109,7 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
     );
   }
 
-  setDatabasePort(db: import('../../../../shared/types/persistence.js').DatabasePort): void {
+  setDatabasePort(db: import('#shared/types/persistence.js').DatabasePort): void {
     this.versionHistoryService.setDatabasePort(db);
   }
 

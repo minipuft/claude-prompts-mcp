@@ -4,8 +4,8 @@ import type {
   RequestIdentityContext,
   ScriptExecutionResult,
   ToolResponse,
-} from '../../../shared/types/index.js';
-import type { RequestIdentitySource } from '../../../shared/types/request-identity.js';
+} from '#shared/types/index.js';
+import type { RequestIdentitySource } from '#shared/types/request-identity.js';
 import type { PendingShellVerification, ShellVerifyResult } from '../../gates/shell/index.js';
 import type { GateEnforcementMode } from '../../gates/types.js';
 import type { InjectionState } from '../pipeline/decisions/injection/index.js';

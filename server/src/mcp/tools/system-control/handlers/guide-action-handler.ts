@@ -3,7 +3,7 @@
 import { systemControlMetadata } from '../../../metadata/definitions/system-control.js';
 import { ActionHandler } from '../core/action-handler-base.js';
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 
 export class GuideActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {

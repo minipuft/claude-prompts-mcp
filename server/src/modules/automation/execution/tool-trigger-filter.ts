@@ -23,7 +23,7 @@ import {
   type PendingConfirmationTracker,
 } from './pending-confirmation-tracker.js';
 
-import type { ToolTriggerFilterPort } from '../../../shared/types/index.js';
+import type { ToolTriggerFilterPort } from '#shared/types/index.js';
 import type {
   LoadedScriptTool,
   ToolDetectionMatch,

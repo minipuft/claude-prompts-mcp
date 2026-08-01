@@ -6,13 +6,13 @@
  * context building capabilities with clear separation of concerns.
  */
 
-import { ExecutionContext } from '../../../../engine/execution/parsers/index.js';
-import { FrameworkManager } from '../../../../engine/frameworks/framework-manager.js';
-import { FrameworkStateStore } from '../../../../engine/frameworks/framework-state-store.js';
-import { FrameworkExecutionContext } from '../../../../engine/frameworks/types/index.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { Logger } from '#shared/types/index.js';
 
-import type { ConvertedPrompt } from '../../../../engine/execution/types.js';
-import type { Logger } from '../../../../shared/types/index.js';
+import { ExecutionContext } from '#engine/execution/parsers/index.js';
+import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
+import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import { FrameworkExecutionContext } from '#engine/frameworks/types/index.js';
 
 const noopLogger: Logger = {
   info: () => {},

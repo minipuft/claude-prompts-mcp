@@ -6,7 +6,7 @@
  * that routes to prompt, gate, and framework handlers.
  */
 
-import type { Logger, ToolResponse } from '../../../../shared/types/index.js';
+import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type {
   FrameworkManagerInput,
   FrameworkGate,

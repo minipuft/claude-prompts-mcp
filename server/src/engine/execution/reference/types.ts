@@ -7,7 +7,7 @@
  * other prompts by ID, with automatic script execution.
  */
 
-import type { ScriptExecutionResult, ToolDetectionMatch } from '../../../shared/types/index.js';
+import type { ScriptExecutionResult, ToolDetectionMatch } from '#shared/types/index.js';
 
 /**
  * Result of resolving a single prompt reference.

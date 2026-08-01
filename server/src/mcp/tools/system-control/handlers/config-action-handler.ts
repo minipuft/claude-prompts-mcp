@@ -1,12 +1,13 @@
 // @lifecycle canonical - Handler for configuration management operations.
 
-import { handleError as utilsHandleError } from '../../../../shared/utils/index.js';
 import { validateConfigInput } from '../../config-utils.js';
 import { ActionHandler } from '../core/action-handler-base.js';
 import { createStructuredResponse } from '../core/response-utils.js';
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { ConfigKey } from '../../config-utils.js';
+
+import { handleError as utilsHandleError } from '#shared/utils/index.js';
 
 export class ConfigActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {

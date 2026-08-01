@@ -4,8 +4,6 @@
  * Handles category management logic with validation, organization, and relationship tracking
  */
 
-import { type Logger } from '../../shared/types/index.js';
-
 import type { Category, PromptData } from './types.js';
 
 // Import category interfaces from prompts/types.ts instead of redefining
@@ -14,6 +12,8 @@ import type {
   CategoryStatistics,
   CategoryPromptRelationship,
 } from './types.js';
+
+import { type Logger } from '#shared/types/index.js';
 
 /**
  * CategoryManager class

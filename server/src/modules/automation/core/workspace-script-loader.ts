@@ -16,11 +16,12 @@ import { join } from 'path';
 
 import { ScriptToolDefinitionLoader } from './script-definition-loader.js';
 import { validateScriptToolSchema, type ScriptToolYaml } from './script-schema.js';
-import { loadYamlFileSync } from '../../../shared/utils/yaml/index.js';
 import { DEFAULT_EXECUTION_CONFIG } from '../types.js';
 
-import type { ScriptLoader } from '../../../engine/execution/reference/script-reference-resolver.js';
+import type { ScriptLoader } from '#engine/execution/reference/script-reference-resolver.js';
 import type { LoadedScriptTool, ScriptToolLoaderConfig, JSONSchemaDefinition } from '../types.js';
+
+import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 /**
  * Configuration for WorkspaceScriptLoader

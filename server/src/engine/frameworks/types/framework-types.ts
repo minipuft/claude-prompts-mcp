@@ -7,7 +7,7 @@
  * sources to eliminate duplication.
  */
 
-import type { ContentAnalysisResult, ToolParameter } from '../../../shared/types/index.js';
+import type { ContentAnalysisResult, ToolParameter } from '#shared/types/index.js';
 import type { ConvertedPrompt, ExecutionType } from '../../execution/types.js';
 
 /**

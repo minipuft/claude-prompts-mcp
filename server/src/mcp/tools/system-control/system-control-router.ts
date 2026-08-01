@@ -17,9 +17,16 @@ import { InjectionActionHandler } from './handlers/injection-action-handler.js';
 import { MaintenanceActionHandler } from './handlers/maintenance-action-handler.js';
 import { SessionActionHandler } from './handlers/session-action-handler.js';
 import { StatusActionHandler } from './handlers/status-action-handler.js';
-import { FrameworkManager } from '../../../engine/frameworks/framework-manager.js';
-import { FrameworkStateStore } from '../../../engine/frameworks/framework-state-store.js';
-import { GateStateStore } from '../../../engine/gates/gate-state-store.js';
+import { ResponseFormatter } from '../prompt-engine/processors/response-formatter.js';
+
+import type { PromptGuidanceService } from '#engine/frameworks/prompt-guidance/index.js';
+import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
+import type { ActionHandler } from './core/action-handler-base.js';
+import type { SystemAnalytics, SystemControlContext } from './core/types.js';
+
+import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
+import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import { GateStateStore } from '#engine/gates/gate-state-store.js';
 import {
   type ConfigManager,
   type MetricsCollector,
@@ -27,15 +34,9 @@ import {
   type ToolResponse,
   type ChainSessionService,
   StateStoreOptions,
-} from '../../../shared/types/index.js';
-import { resolveRequestIdentity } from '../../../shared/utils/request-identity-resolver.js';
-import { resolveContinuityScopeId } from '../../../shared/utils/request-identity-scope.js';
-import { ResponseFormatter } from '../prompt-engine/processors/response-formatter.js';
-
-import type { ActionHandler } from './core/action-handler-base.js';
-import type { SystemAnalytics, SystemControlContext } from './core/types.js';
-import type { PromptGuidanceService } from '../../../engine/frameworks/prompt-guidance/index.js';
-import type { GateGuidanceRenderer } from '../../../engine/gates/guidance/GateGuidanceRenderer.js';
+} from '#shared/types/index.js';
+import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 function isSystemControlActionId(value: string): value is SystemControlActionId {
   return (SYSTEM_CONTROL_ACTION_IDS as readonly string[]).includes(value);

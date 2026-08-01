@@ -16,9 +16,9 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 import { createTwoFilesPatch } from 'diff';
 
-import { computeContentHash } from '../../shared/utils/hash.js';
-import { loadHistory } from '../../cli-shared/version-history.js';
-import type { DatabasePort } from '../../shared/types/persistence.js';
+import { computeContentHash } from '#shared/utils/hash.js';
+import { loadHistory } from '#cli-shared/version-history.js';
+import type { DatabasePort } from '#shared/types/persistence.js';
 import {
   ResourceMutationTransaction,
   ResourceVerificationError,
@@ -382,7 +382,7 @@ interface SyncManifestEntry {
   sourceSnapshot?: Record<string, string>; // Raw source files at export time, for drift diffing
 }
 
-import type { ToolIndexEntry } from '../../shared/types/persistence.js';
+import type { ToolIndexEntry } from '#shared/types/persistence.js';
 
 export interface SkillsSyncOptions {
   command: string;

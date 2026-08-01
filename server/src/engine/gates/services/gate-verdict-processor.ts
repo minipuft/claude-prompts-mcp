@@ -1,10 +1,10 @@
 // @lifecycle canonical - Processes gate verdicts, actions, and hook events for chain sessions.
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
-import type { HookRegistry, HookExecutionContext } from '../../../infra/hooks/index.js';
-import type { Logger } from '../../../infra/logging/index.js';
-import type { McpNotificationEmitter } from '../../../infra/observability/notifications/index.js';
-import type { ChainSession, ChainSessionService } from '../../../shared/types/index.js';
+import type { HookRegistry, HookExecutionContext } from '#infra/hooks/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
+import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
 import type { GateAction } from '../../execution/pipeline/decisions/index.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';

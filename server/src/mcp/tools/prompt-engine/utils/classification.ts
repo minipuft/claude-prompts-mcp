@@ -6,12 +6,13 @@
  * classification capabilities with clear separation of concerns.
  */
 
-import { ContentAnalyzer } from '../../../../modules/semantic/configurable-semantic-analyzer.js';
-import { isChainPrompt } from '../../../../shared/utils/chainUtils.js';
 import { PromptClassification } from '../core/types.js';
 
-import type { ConvertedPrompt } from '../../../../engine/execution/types.js';
-import type { Logger } from '../../../../shared/types/index.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { Logger } from '#shared/types/index.js';
+
+import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
+import { isChainPrompt } from '#shared/utils/chainUtils.js';
 
 const noopLogger: Logger = {
   info: () => {},

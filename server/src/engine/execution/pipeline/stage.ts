@@ -1,5 +1,5 @@
 // @lifecycle canonical - Base interface for execution pipeline stages.
-import type { Logger } from '../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionContext } from '../context/index.js';
 
 /**

@@ -7,7 +7,7 @@
 
 import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './FrameworkGuidanceFilter.js';
 
-import type { Logger } from '../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';

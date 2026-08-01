@@ -17,9 +17,7 @@
 import { existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
-import { executeProcess } from '../../../shared/utils/process.js';
-
-import type { ScriptExecutorPort } from '../../../shared/types/index.js';
+import type { ScriptExecutorPort } from '#shared/types/index.js';
 import type {
   LoadedScriptTool,
   ScriptExecutionRequest,
@@ -28,6 +26,8 @@ import type {
   ScriptInputValidationResult,
   JSONSchemaDefinition,
 } from '../types.js';
+
+import { executeProcess } from '#shared/utils/process.js';
 
 /**
  * Runtime command mappings for script execution.

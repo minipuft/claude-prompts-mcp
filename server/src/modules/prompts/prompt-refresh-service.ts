@@ -1,8 +1,8 @@
 // @lifecycle canonical - Service that reloads prompts/categories on demand for MCP tools.
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { ConfigManager } from '#shared/types/index.js';
 import type { PromptAssetManager } from './index.js';
 import type { Category, PromptData } from './types.js';
-import type { ConvertedPrompt } from '../../engine/execution/types.js';
-import type { ConfigManager } from '../../shared/types/index.js';
 
 /**
  * Minimal interface for consumers that receive prompt data updates.

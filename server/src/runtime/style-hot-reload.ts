@@ -1,9 +1,10 @@
 // @lifecycle canonical - Builds style hot-reload config for the hot-reload manager.
-import { createStyleHotReloadRegistration } from '../modules/formatting/hot-reload/index.js';
 
-import type { Logger } from '../infra/logging/index.js';
-import type { StyleManager } from '../modules/formatting/index.js';
-import type { AuxiliaryReloadConfig } from '../modules/hot-reload/hot-reload-observer.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { StyleManager } from '#modules/formatting/index.js';
+import type { AuxiliaryReloadConfig } from '#modules/hot-reload/hot-reload-observer.js';
+
+import { createStyleHotReloadRegistration } from '#modules/formatting/hot-reload/index.js';
 
 /**
  * Build style auxiliary reload configuration for HotReloadObserver.

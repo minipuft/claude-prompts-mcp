@@ -6,7 +6,7 @@
  * stage, session manager, and template renderer reads from the same snapshot.
  */
 
-import type { Logger } from '../../shared/types/index.js';
+import type { Logger } from '#shared/types/index.js';
 
 type StoredStepResult = {
   content: string;

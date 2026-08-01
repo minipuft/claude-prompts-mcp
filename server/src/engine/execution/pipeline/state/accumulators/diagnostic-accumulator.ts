@@ -1,6 +1,6 @@
 // @lifecycle canonical - Collects diagnostics from all pipeline stages.
 
-import type { Logger } from '../../../../../infra/logging/index.js';
+import type { Logger } from '#infra/logging/index.js';
 import type { DiagnosticEntry, DiagnosticLevelCounts } from '../types.js';
 
 /**

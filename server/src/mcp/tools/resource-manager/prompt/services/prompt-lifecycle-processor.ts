@@ -1,8 +1,5 @@
 // @lifecycle canonical - Prompt create/update/delete operations.
 
-import { PromptReferenceValidator } from '../../../../../engine/execution/reference/index.js';
-import { ToolResponse } from '../../../../../shared/types/index.js';
-import { PromptError } from '../../../../../shared/utils/index.js';
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
@@ -18,8 +15,12 @@ import {
   validateToolDefinitions,
 } from '../utils/validation.js';
 
-import type { ConvertedPrompt } from '../../../../../engine/execution/types.js';
-import type { PromptData } from '../../../../../modules/prompts/types.js';
+import type { ConvertedPrompt } from '#engine/execution/types.js';
+import type { PromptData } from '#modules/prompts/types.js';
+
+import { PromptReferenceValidator } from '#engine/execution/reference/index.js';
+import { ToolResponse } from '#shared/types/index.js';
+import { PromptError } from '#shared/utils/index.js';
 
 export class PromptLifecycleProcessor {
   private readonly context: PromptResourceContext;

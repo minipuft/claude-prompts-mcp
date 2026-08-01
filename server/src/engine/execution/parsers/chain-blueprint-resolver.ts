@@ -1,6 +1,6 @@
 // @lifecycle canonical - Restores chain session blueprints for response-only execution.
-import type { Logger } from '../../../infra/logging/index.js';
-import type { ChainSessionService, SessionBlueprint } from '../../../shared/types/index.js';
+import type { Logger } from '#infra/logging/index.js';
+import type { ChainSessionService, SessionBlueprint } from '#shared/types/index.js';
 import type { ExecutionContext, ParsedCommand } from '../context/index.js';
 import type { ExecutionPlan } from '../types.js';
 

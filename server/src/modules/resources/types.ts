@@ -6,7 +6,7 @@
  * Resources provide token-efficient read-only access to prompts, gates, and observability data.
  */
 
-import type { Logger } from '../../shared/types/index.js';
+import type { Logger } from '#shared/types/index.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /**

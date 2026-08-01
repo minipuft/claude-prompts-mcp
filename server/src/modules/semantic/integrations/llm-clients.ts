@@ -6,9 +6,9 @@
  * to enable intelligent semantic analysis when configured.
  */
 
-import { type Logger, LLMIntegrationConfig, LLMProvider } from '../../../shared/types/index.js';
-
 import type { LLMClient } from '../types.js';
+
+import { type Logger, LLMIntegrationConfig, LLMProvider } from '#shared/types/index.js';
 
 /**
  * Base LLM client with common functionality

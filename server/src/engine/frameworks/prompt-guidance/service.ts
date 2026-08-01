@@ -7,7 +7,6 @@
  * Active framework state read from FrameworkManager (backed by SQLite via FrameworkStateStore).
  */
 
-import { Logger } from '../../../infra/logging/index.js';
 import { FrameworkManager } from '../framework-manager.js';
 import { TemplateEnhancer, createTemplateEnhancer } from './template-enhancer.js';
 import { TEMPLATE_VARIABLE_NAMES, substituteTemplateVariables } from './template-variables.js';
@@ -19,8 +18,10 @@ import {
   SystemPromptInjectionResult,
 } from '../types/index.js';
 
-import type { ContentAnalysisResult } from '../../../shared/types/index.js';
+import type { ContentAnalysisResult } from '#shared/types/index.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
+
+import { Logger } from '#infra/logging/index.js';
 
 export interface PromptGuidanceServiceConfig {
   systemPromptInjection: {

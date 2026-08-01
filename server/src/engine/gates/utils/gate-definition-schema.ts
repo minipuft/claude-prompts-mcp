@@ -8,17 +8,14 @@
 
 import { z } from 'zod';
 
-import {
-  validateWithSchema,
-  type SchemaValidationResult,
-} from '../../../shared/utils/schema-validator.js';
-
 import type {
   GateDefinitionYaml,
   GatePassCriteria,
   GateRetryConfig,
   LightweightGateDefinition,
 } from '../types.js';
+
+import { validateWithSchema, type SchemaValidationResult } from '#shared/utils/schema-validator.js';
 
 const activationSchema = z
   .object({

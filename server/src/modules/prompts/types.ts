@@ -8,7 +8,7 @@
 
 // Cross-layer types canonical definitions live in shared/types/index.ts.
 // Import only what's used locally by remaining interfaces.
-import type { ChainStep, PromptData } from '../../shared/types/index.js';
+import type { ChainStep, PromptData } from '#shared/types/index.js';
 
 /**
  * A category for organizing prompts
@@ -32,7 +32,7 @@ export type {
   GateDefinition,
   PromptData,
   PromptGateConfiguration,
-} from '../../shared/types/index.js';
+} from '#shared/types/index.js';
 
 // PromptData definition moved to shared/types/index.ts (re-exported above).
 

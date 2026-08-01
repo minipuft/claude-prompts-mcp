@@ -1,6 +1,6 @@
 // @lifecycle canonical - Gate read-only operations: list, inspect.
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput } from '../core/types.js';
 

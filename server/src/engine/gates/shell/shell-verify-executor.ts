@@ -15,11 +15,12 @@
  * @see plans/ralph-style-loop.md for the implementation plan
  */
 
-import { executeProcess } from '../../../shared/utils/process.js';
 import { SHELL_VERIFY_DEFAULT_TIMEOUT, SHELL_VERIFY_MAX_TIMEOUT } from '../constants.js';
 import { SHELL_OUTPUT_MAX_CHARS } from './types.js';
 
 import type { ShellVerifyGate, ShellVerifyResult, ShellVerifyExecutorConfig } from './types.js';
+
+import { executeProcess } from '#shared/utils/process.js';
 
 /**
  * Shell Verification Executor

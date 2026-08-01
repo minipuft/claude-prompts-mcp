@@ -2,7 +2,7 @@
 
 import { ActionHandler } from '../core/action-handler-base.js';
 
-import type { ToolResponse } from '../../../../shared/types/index.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { SystemAnalytics } from '../core/types.js';
 
 export class AnalyticsActionHandler extends ActionHandler {
