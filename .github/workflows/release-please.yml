@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Release Please
         id: release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           # Use PAT to allow releases to trigger downstream workflows (npm-publish).
           # Falls back to github.token for forks (but won't trigger workflow-to-workflow).
