@@ -16,13 +16,13 @@ Hooks activate automatically. Type `>>analyze` and watch the suggestion appear.
 
 ## Why Hooks?
 
-| Problem | Hook | Result |
-|---------|------|--------|
-| Model ignores `>>analyze` syntax | `prompt-suggest.py` | Suggests correct MCP call |
-| Forgets to continue chain | `post-prompt-engine.py` | Injects `[Chain] Step 2/5` reminder |
-| Skips gate review | `post-prompt-engine.py` | Prompts `GATE_REVIEW: PASS\|FAIL` |
-| Ignores FAIL verdict | `gate-enforce.py` | Blocks until criteria addressed |
-| Chain lost after compaction | `compact-recovery.py` | Re-injects chain state post-compaction |
+| Problem                          | Hook                    | Result                                 |
+| -------------------------------- | ----------------------- | -------------------------------------- |
+| Model ignores `>>analyze` syntax | `prompt-suggest.py`     | Suggests correct MCP call              |
+| Forgets to continue chain        | `post-prompt-engine.py` | Injects `[Chain] Step 2/5` reminder    |
+| Skips gate review                | `post-prompt-engine.py` | Prompts `GATE_REVIEW: PASS\|FAIL`      |
+| Ignores FAIL verdict             | `gate-enforce.py`       | Blocks until criteria addressed        |
+| Chain lost after compaction      | `compact-recovery.py`   | Re-injects chain state post-compaction |
 
 ## Hooks Reference
 
@@ -56,11 +56,11 @@ Triggers after `prompt_engine` calls. Tracks chain state and pending gates.
 
 Blocks `prompt_engine` calls that violate gate discipline:
 
-| Check | Trigger | Denial Message |
-|-------|---------|----------------|
-| FAIL verdict | `gate_verdict: "GATE_REVIEW: FAIL - ..."` | "Gate failed: {reason}. Review criteria and retry." |
-| Missing user_response | `chain_id` without `user_response` | "Chain resume requires user_response." |
-| Pending gate | `chain_id` with unresolved gate | "Include gate_verdict: PASS\|FAIL" |
+| Check                 | Trigger                                   | Denial Message                                      |
+| --------------------- | ----------------------------------------- | --------------------------------------------------- |
+| FAIL verdict          | `gate_verdict: "GATE_REVIEW: FAIL - ..."` | "Gate failed: {reason}. Review criteria and retry." |
+| Missing user_response | `chain_id` without `user_response`        | "Chain resume requires user_response."              |
+| Pending gate          | `chain_id` with unresolved gate           | "Include gate_verdict: PASS\|FAIL"                  |
 
 **Test manually:**
 
@@ -94,20 +94,60 @@ Set in `server/config.json`:
 }
 ```
 
-| Mode | Setting | Example |
-|------|---------|---------|
-| Compact (default) | `false` | `[>>] diagnose \| scope:"auth"` |
-| Expanded | `true` | Multi-line with full argument details |
+| Mode              | Setting | Example                               |
+| ----------------- | ------- | ------------------------------------- |
+| Compact (default) | `false` | `[>>] diagnose \| scope:"auth"`       |
+| Expanded          | `true`  | Multi-line with full argument details |
 
 ### hooks.json
 
 ```json
 {
   "hooks": {
-    "UserPromptSubmit": [{"matcher": "*", "hooks": [{"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt-suggest.py"}]}],
-    "PostToolUse": [{"matcher": "*prompt_engine*", "hooks": [{"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-prompt-engine.py"}]}],
-    "PreToolUse": [{"matcher": "*prompt_engine*", "hooks": [{"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/gate-enforce.py"}]}],
-    "SessionStart": [{"matcher": "compact", "hooks": [{"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/compact-recovery.py"}]}]
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt-suggest.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*prompt_engine*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-prompt-engine.py"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*prompt_engine*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/gate-enforce.py"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/compact-recovery.py"
+          }
+        ]
+      }
+    ]
   }
 }
 ```

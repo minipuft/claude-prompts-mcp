@@ -10,6 +10,30 @@
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
 5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries.
 
+## Validation Gates (one contract, two subsets)
+
+**CI is the contract; every other gate is a documented strict subset of it.**
+
+The three gates once ran three different suites with no subset relation, so a green
+`pre-push` did not predict CI and `validate:full` did not either -- that is how a pyrefly
+failure reached `main` from a clean local push.
+
+| Gate | Runs | Relation |
+|------|------|----------|
+| CI `Lint & Validate` + `Build` | typecheck · `validate:all` (23) · build · tests | **The contract** |
+| `.husky/pre-push` | typecheck · lint:ratchet · prettier · validate:python · test:ci · validate:arch · validate:versions · build | strict subset -- every step also runs in CI |
+| `.husky/pre-commit` | contract regen · generated-file guard · lint:staged · validate:python\* · lint:ratchet · typecheck | strict subset, `<10s` budget |
+
+**Adding a step to a hook that CI does not run breaks the contract** -- add it to
+`validate:all` first, which CI runs whole. Removing a step CI depends on breaks it too.
+\* conditional on `hooks/` changes.
+
+Formatting is covered by `validate:format` (a `validate:all` member), which checks every
+repo-level JSON/MD/YAML tracked by git. `pre-push` checks only the files in the push
+range, so it stays a subset. Anything a generator owns belongs in `.prettierignore` with
+a reason -- otherwise the generator and Prettier disagree and every commit touching that
+file fails.
+
 ## Documentation Map
 
 | Topic | Doc |

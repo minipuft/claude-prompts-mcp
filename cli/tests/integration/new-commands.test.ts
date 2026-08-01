@@ -187,7 +187,7 @@ describe('cpm create', () => {
 
     const yamlPath = join(tmpWs, 'resources/frameworks/new-method/framework.yaml');
     const content = readFileSync(yamlPath, 'utf8');
-    expect(content).toContain('framework: NEW_METHOD');
+    expect(content).toContain('type: NEW_METHOD');
     expect(content).toContain('version: 1.0.0');
   });
 });

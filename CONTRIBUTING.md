@@ -30,7 +30,7 @@ git commit -m "feat(server): add new capability"
 
 | Requirement | Version           | Notes                              |
 | ----------- | ----------------- | ---------------------------------- |
-| **Node.js** | 18 -- 24          | `.nvmrc` pinned to 24              |
+| **Node.js** | 18 -- 24          | `.node-version` pinned to 24       |
 | **npm**     | Bundled with Node | Run `npm install` inside `server/` |
 | **Git**     | Any recent        | Required for Husky hooks           |
 

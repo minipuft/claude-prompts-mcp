@@ -4,34 +4,34 @@ Lookup table for client presets, handoff profiles, and integration limits.
 
 ## Client Presets
 
-| `--client` value | Handoff profile | Status | Primary behavior |
-|---|---|---|---|
-| `claude-code` | `task_tool_v1` | canonical | Task tool style guidance |
-| `codex` | `spawn_agent_v1` | canonical | `spawn_agent`-oriented handoff guidance |
-| `gemini` | `gemini_subagent_v1` | canonical | Gemini sub-agent guidance |
-| `opencode` | `opencode_agent_v1` | canonical | OpenCode agent guidance |
-| `cursor` | `cursor_agent_v1` | experimental/testing | Cursor-specific handoff wording with fallback guidance |
-| `unknown` | `neutral_v1` | canonical | Client-neutral fallback guidance |
+| `--client` value | Handoff profile      | Status               | Primary behavior                                       |
+| ---------------- | -------------------- | -------------------- | ------------------------------------------------------ |
+| `claude-code`    | `task_tool_v1`       | canonical            | Task tool style guidance                               |
+| `codex`          | `spawn_agent_v1`     | canonical            | `spawn_agent`-oriented handoff guidance                |
+| `gemini`         | `gemini_subagent_v1` | canonical            | Gemini sub-agent guidance                              |
+| `opencode`       | `opencode_agent_v1`  | canonical            | OpenCode agent guidance                                |
+| `cursor`         | `cursor_agent_v1`    | experimental/testing | Cursor-specific handoff wording with fallback guidance |
+| `unknown`        | `neutral_v1`         | canonical            | Client-neutral fallback guidance                       |
 
 ## Config Shape by Client
 
-| Client | Typical config file | Config format |
-|---|---|---|
-| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) | JSON (`mcpServers`) |
-| Codex | `~/.codex/config.toml` | TOML (`[mcp_servers.*]`) |
-| Cursor | `~/.cursor/mcp.json` | JSON |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` | JSON |
-| Zed | `~/.config/zed/settings.json` (`mcp` key) | JSON |
-| OpenCode | `~/.config/opencode/opencode.json` | JSON (`mcp`) |
-| Gemini CLI | extension-managed | Extension or manual CLI launch |
+| Client         | Typical config file                                                       | Config format                  |
+| -------------- | ------------------------------------------------------------------------- | ------------------------------ |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) | JSON (`mcpServers`)            |
+| Codex          | `~/.codex/config.toml`                                                    | TOML (`[mcp_servers.*]`)       |
+| Cursor         | `~/.cursor/mcp.json`                                                      | JSON                           |
+| Windsurf       | `~/.codeium/windsurf/mcp_config.json`                                     | JSON                           |
+| Zed            | `~/.config/zed/settings.json` (`mcp` key)                                 | JSON                           |
+| OpenCode       | `~/.config/opencode/opencode.json`                                        | JSON (`mcp`)                   |
+| Gemini CLI     | extension-managed                                                         | Extension or manual CLI launch |
 
 ## Hooks / Companion Integration Coverage
 
-| Client family | Companion package in ecosystem | Coverage |
-|---|---|---|
-| Claude Code | `claude-prompts` plugin hooks | full |
-| OpenCode | `opencode-prompts` hooks | full |
-| Gemini CLI | `gemini-prompts` hooks | partial |
+| Client family                   | Companion package in ecosystem          | Coverage       |
+| ------------------------------- | --------------------------------------- | -------------- |
+| Claude Code                     | `claude-prompts` plugin hooks           | full           |
+| OpenCode                        | `opencode-prompts` hooks                | full           |
+| Gemini CLI                      | `gemini-prompts` hooks                  | partial        |
 | Codex / Cursor / Windsurf / Zed | no dedicated hooks package in this repo | MCP tools only |
 
 ## Client Profile Resolution Order

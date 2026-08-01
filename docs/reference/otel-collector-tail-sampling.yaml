@@ -51,7 +51,7 @@ processors:
               type: string_attribute
               string_attribute:
                 key: cpm.stage.name
-                values: ["*"]  # Any stage
+                values: ["*"] # Any stage
             - name: stage-latency
               type: latency
               latency:

@@ -4,5 +4,5 @@ type: validation
 description: A test gate for CLI integration tests
 guidanceFile: guidance.md
 pass_criteria:
-  - type: content_check
-    min_length: 50
+  - type: inline_guidance
+    guidance: Confirm the response addresses the request.

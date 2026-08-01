@@ -1,16 +1,27 @@
 #!/usr/bin/env sh
 
-# Strip Claude Code generated tag and Co-Authored-By lines from commit messages
-# This keeps commit history clean while still using AI assistance
+set -eu
+
+# Strip AI-assistant trailers from commit messages. The assistance is real; the
+# trailers are noise in `git log`, and the session URLs are ephemeral — they point at
+# a transcript nobody else can open. `Claude-Session:` was missing from this list and
+# seven of them reached history before it was added.
+#
+# `sed -i` is deliberately NOT used: GNU sed takes `-i` with no argument while
+# BSD/macOS sed requires `-i ''`, and the two forms are mutually incompatible. Writing
+# to a temp file and moving it back works on both.
 
 COMMIT_MSG_FILE=$1
+TMP="$COMMIT_MSG_FILE.husky.tmp"
 
-# Remove the Claude Code generated tag and Co-Authored-By line
-sed -i '/^🤖 Generated with \[Claude Code\]/d' "$COMMIT_MSG_FILE"
-sed -i '/^Co-Authored-By: Claude/d' "$COMMIT_MSG_FILE"
+# Drop the trailers, then the trailing blank lines their removal leaves behind.
+sed -e '/^🤖 Generated with \[Claude Code\]/d' \
+  -e '/^Co-Authored-By: Claude/d' \
+  -e '/^Claude-Session: /d' \
+  "$COMMIT_MSG_FILE" |
+  sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' >"$TMP"
 
-# Remove trailing blank lines
-sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$COMMIT_MSG_FILE"
+mv "$TMP" "$COMMIT_MSG_FILE"
 
 # Validate commit message format (conventional commits)
 npx --no -- commitlint --edit "$COMMIT_MSG_FILE"

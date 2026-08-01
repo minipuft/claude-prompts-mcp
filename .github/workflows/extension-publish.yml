@@ -9,12 +9,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to build (e.g., 1.1.0)'
+        description: "Version to build (e.g., 1.1.0)"
         required: true
         type: string
 
 permissions:
-  contents: write  # Needed to upload release assets
+  contents: write # Needed to upload release assets
 
 jobs:
   # Build and attach Desktop Extension (.mcpb) to release
@@ -33,7 +33,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: ".node-version"
           cache: npm
           cache-dependency-path: server/package-lock.json
 
@@ -116,7 +116,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: ".node-version"
           cache: npm
           cache-dependency-path: server/package-lock.json
 
@@ -268,8 +268,12 @@ jobs:
         run: |
           version=$(node -p "require('./upstream/server/package.json').version")
           major=$(echo "$version" | cut -d. -f1)
+          # License is read from plugin.json, never hardcoded — a literal here
+          # silently re-stamps stale licensing onto every downstream on release.
+          license=$(node -p "require('./upstream/.claude-plugin/plugin.json').license")
           echo "version=$version" >> $GITHUB_OUTPUT
           echo "major=$major" >> $GITHUB_OUTPUT
+          echo "license=$license" >> $GITHUB_OUTPUT
 
       - name: Checkout downstream
         uses: actions/checkout@v6
@@ -278,20 +282,28 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           path: downstream
 
+      # This job now runs npm (lockfile regeneration + the npm ci assertion below), so the
+      # Node/npm version must be pinned rather than inherited from whatever the runner ships —
+      # lockfileVersion differs across npm majors and would churn the downstream diff.
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: upstream/.node-version
+
       - name: Update ${{ matrix.name }}
         working-directory: downstream
         env:
           VERSION: ${{ steps.version.outputs.version }}
           MAJOR: ${{ steps.version.outputs.major }}
+          LICENSE: ${{ steps.version.outputs.license }}
         run: |
           set -euo pipefail
 
           case "${{ matrix.name }}" in
             marketplace)
-              jq --arg v "$VERSION" '
+              jq --arg v "$VERSION" --arg l "$LICENSE" '
                 .plugins |= map(
                   if .name == "claude-prompts"
-                  then .version = $v | .license = "AGPL-3.0-only"
+                  then .version = $v | .license = $l
                   else .
                   end
                 )
@@ -299,9 +311,11 @@ jobs:
               ;;
 
             gemini)
-              # Update extension manifest version
-              jq --arg v "$VERSION" '.version = $v' gemini-extension.json > tmp.json && mv tmp.json gemini-extension.json
-              # Update npm dependency range to match major
+              # `gemini-extension.json.version` is NOT written here. Gemini CLI resolves an
+              # extension's version from the git HEAD commit and treats that field as metadata,
+              # so stamping the upstream claude-prompts version onto a manifest whose `name` is
+              # "gemini-prompts" only created two version identities in one repo. release-please
+              # owns that field downstream; this job owns the dependency range below.
               jq --arg r "^${MAJOR}.0.0" '.dependencies["claude-prompts"] = $r' package.json > tmp.json && mv tmp.json package.json
               ;;
 
@@ -311,10 +325,26 @@ jobs:
               ;;
           esac
 
+          # Regenerate the lockfile whenever package.json was touched.
+          #
+          # Editing package.json without the lockfile emits a PR that desynchronizes the two.
+          # That is not theoretical: it left opencode-prompts with `package.json ^2.0.0` against
+          # `lockfile claude-prompts@1.7.0`, which fails `npm ci` and therefore blocked its
+          # npm-publish workflow for months. The repo's own CI used `bun install` (which migrates
+          # the lockfile) so nothing surfaced it.
+          #
+          # --package-lock-only: resolve and rewrite the tree without installing or running
+          # scripts, which is all this job needs and keeps it fast.
+          if [ -f package-lock.json ]; then
+            echo "Regenerating package-lock.json to match package.json..."
+            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          fi
+
       - name: Validate update
         working-directory: downstream
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          LICENSE: ${{ steps.version.outputs.license }}
         run: |
           set -euo pipefail
 
@@ -322,14 +352,16 @@ jobs:
             marketplace)
               actual=$(jq -r '.plugins[] | select(.name == "claude-prompts") | .version' .claude-plugin/marketplace.json)
               [ "$actual" = "$VERSION" ] || { echo "ERROR: marketplace version $actual != $VERSION"; exit 1; }
+              actual_license=$(jq -r '.plugins[] | select(.name == "claude-prompts") | .license' .claude-plugin/marketplace.json)
+              [ "$actual_license" = "$LICENSE" ] || { echo "ERROR: marketplace license $actual_license != $LICENSE"; exit 1; }
               jq empty .claude-plugin/marketplace.json
               ;;
 
             gemini)
-              actual=$(jq -r '.version' gemini-extension.json)
-              [ "$actual" = "$VERSION" ] || { echo "ERROR: gemini version $actual != $VERSION"; exit 1; }
               jq empty gemini-extension.json
               jq empty package.json
+              dep=$(jq -r '.dependencies["claude-prompts"]' package.json)
+              echo "Dependency range updated to: $dep"
               ;;
 
             opencode)
@@ -338,6 +370,29 @@ jobs:
               echo "Dependency range updated to: $dep"
               ;;
           esac
+
+          # The assertion this job was missing. Everything above only confirms the strings this
+          # job just wrote — it cannot detect that package.json and package-lock.json disagree,
+          # which is exactly the state that shipped to opencode-prompts and blocked its releases.
+          #
+          # `npm ci` is the check with teeth: it refuses to install when the two are out of sync,
+          # and it is the same command the downstream publish workflows run. If this fails, the
+          # sync PR is never opened and the release surfaces the problem here instead of silently
+          # downstream.
+          if [ -f package-lock.json ]; then
+            echo "Asserting package.json and package-lock.json agree (npm ci)..."
+            if ! npm ci --ignore-scripts --no-audit --no-fund; then
+              echo "::error::${{ matrix.name }}: npm ci failed — package.json and package-lock.json are out of sync. Refusing to open a sync PR that would break the downstream publish path."
+              exit 1
+            fi
+            installed=$(node -p "require('./node_modules/claude-prompts/package.json').version")
+            echo "Lockfile resolves claude-prompts@$installed (upstream released $VERSION)"
+            # Reported, not asserted. npm registry propagation can lag a freshly published
+            # version by minutes, and failing the release for that would trade the bug this
+            # step fixes for a flaky one. The `npm ci` exit code above is the real gate.
+            [ "$installed" = "$VERSION" ] || echo "::warning::${{ matrix.name }}: resolved $installed, not $VERSION — likely registry propagation lag; verify the sync PR before merging."
+            rm -rf node_modules
+          fi
 
           echo "Validation passed for ${{ matrix.name }}"
 
@@ -376,7 +431,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: ".node-version"
           cache: npm
           cache-dependency-path: server/package-lock.json
 
@@ -460,6 +515,7 @@ jobs:
 
   # NOTE: Downstream repos are synced automatically by the sync-downstream job above.
   # - minipuft/minipuft-plugins (marketplace.json version + license)
-  # - minipuft/gemini-prompts (gemini-extension.json version + package.json dependency)
-  # - minipuft/opencode-prompts (package.json dependency range)
+  # - minipuft/gemini-prompts (package.json dependency range + lockfile)
+  # - minipuft/opencode-prompts (package.json dependency range + lockfile)
+  # gemini-extension.json's own version is NOT synced — release-please owns it downstream.
   # PRs are created and auto-merged — no downstream workflow config needed.

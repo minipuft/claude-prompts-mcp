@@ -1,0 +1,3 @@
+# Fixture: a workspace with no resources.
+# Git cannot track empty directories, so this placeholder keeps the
+# empty-workspace validate test able to run.

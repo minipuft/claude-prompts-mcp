@@ -11,11 +11,20 @@
 
 import * as esbuild from 'esbuild';
 import { execSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// The `cpm` CLI ships as a second bin of this package (package.json "bin"). Its build
+// config lives with its source in cli/ and is imported rather than duplicated here, so
+// the two entry points cannot drift. The import is DYNAMIC and guarded: a static import
+// is resolved before any code in this module runs, so it would throw in the Docker build
+// (context is server/, copied to /app, leaving ../cli unresolvable) before any existence
+// check could execute.
+const CLI_CONFIG = join(__dirname, '..', 'cli', 'esbuild.config.mjs');
+const CLI_ENTRY = join(__dirname, '..', 'cli', 'src', 'index.ts');
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
 
 // Build options
@@ -128,6 +137,35 @@ async function build() {
         }
       }
 
+      // Second bin: the cpm CLI, bundled from cli/src with the shared config.
+      // Emitted into dist/ so package.json "files": ["dist"] ships it.
+      //
+      // Only the options object crosses the package boundary — this file runs them
+      // through its OWN esbuild. cli/ imports resolve from cli/node_modules upward,
+      // which CI's Build job (server-only `npm ci`) does not install.
+      //
+      // Skipped when cli/ is absent from the tree. The Docker build uses `server/` as
+      // its context and copies it to /app, so `../cli` resolves to `/cli` and does not
+      // exist — and the image runs the MCP server, which has no use for cpm. The npm
+      // publish path DOES need it, because package.json declares a `cpm` bin; that is
+      // asserted in npm-publish.yml rather than left to this skip.
+      let builtCli = false;
+      if (existsSync(CLI_ENTRY) && existsSync(CLI_CONFIG)) {
+        console.log('\nBuilding cpm CLI...');
+        const { createCliBuildOptions, checkCliBundleSize } = await import(
+          pathToFileURL(CLI_CONFIG).href
+        );
+        const cliOptions = createCliBuildOptions({
+          outfile: join(__dirname, 'dist', 'cpm.js'),
+          minify: isProduction,
+        });
+        await esbuild.build(cliOptions);
+        checkCliBundleSize(cliOptions.outfile);
+        builtCli = true;
+      } else {
+        console.log(`\nSkipping cpm CLI: ${CLI_ENTRY} not present (expected in the Docker build).`);
+      }
+
       // Generate type declarations (consumed via package.json "types" field)
       console.log('Generating type declarations...');
       execSync('npx tsc --emitDeclarationOnly --declaration --outDir dist', {
@@ -135,7 +173,7 @@ async function build() {
         cwd: __dirname,
       });
 
-      console.log('\nBuild complete: dist/index.js');
+      console.log(`\nBuild complete: dist/index.js${builtCli ? ', dist/cpm.js' : ''}`);
     }
   } catch (error) {
     console.error('Build failed:', error);

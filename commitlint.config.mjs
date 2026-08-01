@@ -26,7 +26,6 @@ export default {
         'metrics',
         'docs',
         'tests',
-        'remotion',
         'semantic',
         'execution',
       ],

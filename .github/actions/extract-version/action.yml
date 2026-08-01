@@ -8,15 +8,15 @@ inputs:
   workflow-run-head-branch:
     description: Head branch for workflow_run events.
     required: false
-    default: ''
+    default: ""
   dispatch-version:
     description: User-provided version for workflow_dispatch events.
     required: false
-    default: ''
+    default: ""
   release-tag:
     description: Release tag name for release events.
     required: false
-    default: ''
+    default: ""
   package-json-path:
     description: Path to package.json used for fallback version reads.
     required: false
@@ -24,11 +24,11 @@ inputs:
   append-pr-suffix:
     description: Append -pr when event is pull_request.
     required: false
-    default: 'false'
+    default: "false"
   require-tag:
     description: Fail if provided release tag does not match tag-pattern.
     required: false
-    default: 'false'
+    default: "false"
   tag-pattern:
     description: Regex with capture group for extracting version from tag/branch.
     required: false

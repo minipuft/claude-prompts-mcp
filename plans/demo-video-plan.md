@@ -20,6 +20,7 @@ Each clip shows ONE feature clearly in 10-30s.
 ### Standard Pipeline (all clips)
 
 Every clip uses this WebP filter chain:
+
 1. `crop=iw:ih-50:0:50` — remove Windows Terminal tab bar (50px)
 2. Speed adjustment (`setpts`)
 3. `fps=20`, `scale=720:-1:flags=lanczos` — native display size
@@ -49,26 +50,26 @@ ffmpeg -i input.mp4 -filter_complex "
 
 The v1 GIFs suffered from compounding quality issues:
 
-| Problem | Root Cause | WebP Fix |
-|---------|-----------|----------|
-| Blurry text | 580px rendered at `width="720"` (33% upscale) | Render at 720px native |
-| Visible banding | 48-color palette limit | Full 16.7M colors |
-| Dithering grid | bayer_scale=5 aggressive dithering | No dithering needed |
-| Blue/purple artifacts | Acrylic transparency + 48-color palette | Full color absorbs bleed |
-| Choppy playback | 10fps + 6-12x speed | 20fps + 2-3x speed |
-| Large file size despite low quality | GIF LZW compression | VP8 video-grade compression |
+| Problem                             | Root Cause                                    | WebP Fix                    |
+| ----------------------------------- | --------------------------------------------- | --------------------------- |
+| Blurry text                         | 580px rendered at `width="720"` (33% upscale) | Render at 720px native      |
+| Visible banding                     | 48-color palette limit                        | Full 16.7M colors           |
+| Dithering grid                      | bayer_scale=5 aggressive dithering            | No dithering needed         |
+| Blue/purple artifacts               | Acrylic transparency + 48-color palette       | Full color absorbs bleed    |
+| Choppy playback                     | 10fps + 6-12x speed                           | 20fps + 2-3x speed          |
+| Large file size despite low quality | GIF LZW compression                           | VP8 video-grade compression |
 
 **Eliminated from pipeline**: `geq` blue clamp, `palettegen`/`paletteuse`, bayer dithering, `colorchannelmixer`. Full-color WebP makes all palette workarounds unnecessary.
 
 ### Speed Standards
 
-| Speed | When to Use |
-|-------|-------------|
-| **1x** | Key payoff moment (PASS/FAIL verdict, final output) |
-| **1.5x** | Output the viewer should read and absorb |
-| **2x** | Standard comfortable speedup (default) |
-| **3x** | Typing, loading, boilerplate — nothing critical to read |
-| **4x+** | Avoid — trim the boring parts instead |
+| Speed    | When to Use                                             |
+| -------- | ------------------------------------------------------- |
+| **1x**   | Key payoff moment (PASS/FAIL verdict, final output)     |
+| **1.5x** | Output the viewer should read and absorb                |
+| **2x**   | Standard comfortable speedup (default)                  |
+| **3x**   | Typing, loading, boilerplate — nothing critical to read |
+| **4x+**  | Avoid — trim the boring parts instead                   |
 
 ### v1 GIF Settings (archived)
 
@@ -76,12 +77,14 @@ The v1 GIFs suffered from compounding quality issues:
 <summary>Previous GIF pipeline (deprecated)</summary>
 
 v1 used aggressive GIF optimization to hit <5MB:
+
 - `fps=10`, `scale=580:-1`, `max_colors=48`, `bayer_scale=5`
 - `geq` blue-excess clamp for acrylic transparency bleed
 - `colorchannelmixer` (abandoned — yellow tint), `curves` (abandoned — insufficient)
 - Speed: 3x-12x with variable-speed segment concat
 
 Color correction history:
+
 1. `colorchannelmixer=bb=0.72:rb=0.04:gb=0.04` — killed blue but introduced yellow tint
 2. `curves` on blue shadows — not aggressive enough
 3. `geq` pixel-level clamp — surgical, no tint shift, but compounds with low palette
@@ -109,6 +112,7 @@ All issues traced to the 48-color GIF palette constraint. WebP eliminates the ro
 All clips need fresh recordings. v1 source MP4s are no longer available.
 
 ### Clip 1: System Status — NEEDS RE-RECORDING
+
 - **v1 source**: `WindowsTerminal_qWBilRChm0.mp4` (lost)
 - **v1 output**: `assets/demos/status-demo-3x.gif` (720x656, 12fps, 48 colors)
 - **Target**: `assets/demos/status-demo.webp`
@@ -118,6 +122,7 @@ All clips need fresh recordings. v1 source MP4s are no longer available.
 - **README placement**: `<details>` dropdown between Quick Start and What You Get
 
 ### Clip 2: Hero Demo — Chain + Gate + Delegation — NEEDS RE-RECORDING
+
 - **v1 source**: `WindowsTerminal_DLI4sJn0tS.mp4` (4:12, lost)
 - **v1 output**: `assets/demos/hero-demo.gif` (580x438, 10fps) + `assets/demos/hero-chain-demo.gif`
 - **Target**: `assets/demos/hero-demo.webp` + `assets/demos/hero-chain-demo.webp`
@@ -136,6 +141,7 @@ All clips need fresh recordings. v1 source MP4s are no longer available.
   - WebP B: `<details>` dropdown in "Compose Workflows" section
 
 ### Clip 3: Resource Discovery — NEEDS RE-RECORDING
+
 - **v1 source**: `WindowsTerminal_2JMxV8xaKk.mp4` (17.5s, lost)
 - **v1 output**: `assets/demos/resource-list-demo.gif` (580x438, 12fps, 444KB)
 - **Target**: `assets/demos/resource-list-demo.webp`
@@ -145,6 +151,7 @@ All clips need fresh recordings. v1 source MP4s are no longer available.
 - **README placement**: `<details>` dropdown in "What You Get" section
 
 ### Clip 4: Chain Workflow — NEEDS RE-RECORDING
+
 - **v1 source**: `WindowsTerminal_FigL75A7Ol.mp4` (2:36, lost)
 - **v1 output**: `assets/demos/chain-workflow-demo.gif` (580x452, 10fps, 2.7MB)
 - **Target**: `assets/demos/chain-workflow-demo.webp`
@@ -154,6 +161,7 @@ All clips need fresh recordings. v1 source MP4s are no longer available.
 - **README placement**: `<details>` dropdown in "Compose Workflows" section
 
 ### Clip 5: Verification Loop — NOT RECORDED
+
 - **Target**: `assets/demos/verify-loop-demo.webp`
 - **Prompt**: `>>test_default count:'5' :: verify:"echo 'test passed'" :fast`
 - **Shows**: Shell verification — prompt runs, verify command executes, passes
@@ -161,6 +169,7 @@ All clips need fresh recordings. v1 source MP4s are no longer available.
 - **README placement**: "Verification Loops" section
 
 ### Clip 6: Gate Validation Showcase — NOT RECORDED
+
 - **Target**: `assets/demos/gate-validation-demo.webp`
 - **Goal**: Dedicated demo of gates as the star feature — not buried inside a chain
 - **Prompt** (pick one that produces a visible FAIL → retry → PASS cycle):
@@ -183,6 +192,7 @@ All clips need fresh recordings. v1 source MP4s are no longer available.
   - The hero GIF shows a gate in a chain; this clip isolates the gate mechanism itself
 
 ### Clip 7: Skills Export (CLI — no API cost) — NEEDS RE-RECORDING
+
 - **v1 source**: `WindowsTerminal_xdywH7e01M.mp4` (25.8s, lost)
 - **v1 output**: `assets/demos/skills-export-demo.gif` (580x452, 10fps, 1.5MB)
 - **Target**: `assets/demos/skills-export-demo.webp`
@@ -248,6 +258,7 @@ Record in this order (highest README impact first):
 ## README Migration
 
 When first WebP clip is ready, update all README `<img>` tags:
+
 - `hero-demo.gif` → `hero-demo.webp`
 - `hero-chain-demo.gif` → `hero-chain-demo.webp`
 - `status-demo-3x.gif` → `status-demo.webp`

@@ -3,12 +3,12 @@ name: Renovate Config Validation
 on:
   push:
     paths:
-      - '.github/renovate.json5'
-      - '.github/workflows/renovate-config-validator.yml'
+      - ".github/renovate.json5"
+      - ".github/workflows/renovate-config-validator.yml"
   pull_request:
     paths:
-      - '.github/renovate.json5'
-      - '.github/workflows/renovate-config-validator.yml'
+      - ".github/renovate.json5"
+      - ".github/workflows/renovate-config-validator.yml"
 
 jobs:
   validate-config:
@@ -19,26 +19,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup Node.js 24
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: ".node-version"
 
+      # Pinned so a renovate release cannot change what "valid config" means between
+      # two runs of an unchanged file. Renovate proposes its own bumps here via the
+      # customManagers regex in .github/renovate.json5.
       - name: Install Renovate
-        run: npm install -g renovate
+        run: npm install -g renovate@44.5.2
 
       - name: Validate Renovate config
-        run: |
-          echo "🔍 Validating Renovate configuration..."
-          renovate-config-validator .github/renovate.json5
-
-      - name: Check config syntax
-        run: |
-          echo "✅ Renovate configuration is valid!"
-          echo ""
-          echo "Configuration highlights:"
-          echo "- Auto-merge: Enabled for patch/minor updates"
-          echo "- Security updates: Immediate processing"
-          echo "- Major updates: Manual review required"
-          echo "- Schedule: Weekly (Mondays at 3am UTC)"
-          echo "- Lockfile maintenance: Monthly"
+        run: renovate-config-validator --strict .github/renovate.json5

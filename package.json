@@ -3,10 +3,12 @@
   "version": "2.1.0",
   "private": true,
   "description": "Root package for git hooks and workspace management",
+  "//workspaces": "server/ is deliberately NOT a workspace — it keeps its own lockfile and CI installs it with `npm ci --prefix server`.",
+  "workspaces": [
+    "cli"
+  ],
   "scripts": {
     "prepare": "husky || true",
-    "graphs:render": "bash scripts/render-graphs.sh",
-    "graphs:validate": "bash scripts/render-graphs.sh --validate",
     "sync": "bash scripts/sync-to-cache.sh",
     "dev": "npm run sync && echo 'Restart Claude Code to apply hook changes'",
     "dev:claude": "bash scripts/dev-claude.sh",

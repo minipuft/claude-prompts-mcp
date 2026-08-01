@@ -17,6 +17,12 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "outDir": "dist",
+    // Without rootDir, tsc infers the common source root as the package directory, so
+    // src/index.ts emitted to dist/src/index.d.ts while package.json advertised
+    // "types": "dist/index.d.ts" — a path that did not exist. The package shipped 405
+    // declaration files and no reachable entry, so TS consumers got none of them.
+    // It is also what TS2210 requires before a package.json "imports" map can resolve.
+    "rootDir": "./src",
     "sourceMap": true,
     "declaration": true,
     "resolveJsonModule": true,

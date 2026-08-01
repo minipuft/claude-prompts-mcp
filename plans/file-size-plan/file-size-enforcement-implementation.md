@@ -24,6 +24,7 @@ This document outlines the implementation plan for enforcing the 500-line module
 **Status**: Complete - `server/scripts/validate-filesize.js` implemented
 
 **Features Implemented**:
+
 - ✅ Recursive TypeScript file scanning in `/server/src`
 - ✅ Exclusion of test files (`*.test.ts`, `tests/**`)
 - ✅ Exclusion of generated files (`dist/**`, `node_modules/**`)
@@ -39,19 +40,20 @@ This document outlines the implementation plan for enforcing the 500-line module
 
 ```javascript
 // Configuration
-const HARD_LIMIT = 500;      // Maximum lines per file
-const SOFT_LIMIT = 300;      // Target for new code
-const SRC_DIR = path.join(__dirname, '..', 'src');
+const HARD_LIMIT = 500; // Maximum lines per file
+const SOFT_LIMIT = 300; // Target for new code
+const SRC_DIR = path.join(__dirname, "..", "src");
 
 // Grandfathered files (32 current violators)
 const GRANDFATHERED_FILES = [
-  'mcp-tools/system-control.ts',  // 2716 lines
-  'mcp-tools/prompt-engine/core/engine.ts',  // 2342 lines
+  "mcp-tools/system-control.ts", // 2716 lines
+  "mcp-tools/prompt-engine/core/engine.ts", // 2342 lines
   // ... 30 more files
 ];
 ```
 
 **Validation Logic**:
+
 1. Scan all `.ts` files in `src/` (exclude tests and generated files)
 2. Count lines per file
 3. Check for violations (>500 lines)
@@ -70,22 +72,25 @@ const GRANDFATHERED_FILES = [
 **Changes Made**:
 
 **`.github/workflows/ci.yml`** (line 61-64):
+
 ```yaml
 - name: File size enforcement
   working-directory: server
   run: npm run validate:filesize
-  continue-on-error: true  # Warning only, doesn't block CI
+  continue-on-error: true # Warning only, doesn't block CI
 ```
 
 **`.github/workflows/pr-validation.yml`** (line 55-58):
+
 ```yaml
 - name: File size enforcement
   working-directory: server
   run: npm run validate:filesize
-  continue-on-error: true  # Warning only, doesn't block PR
+  continue-on-error: true # Warning only, doesn't block PR
 ```
 
 **Integration Points**:
+
 - ✅ Added after "Build project" step
 - ✅ Before "Security audit" step
 - ✅ Uses `continue-on-error: true` for soft enforcement (warning-level)
@@ -93,6 +98,7 @@ const GRANDFATHERED_FILES = [
 - ✅ Runs on all pull requests
 
 **Future Enforcement Transition**:
+
 - **Q1 2025**: Keep warning-level (current)
 - **Q2 2025**: Switch to error-level for new violations only (remove `continue-on-error`)
 - **Q3 2025**: Enforce globally (remove all grandfathered exemptions)
@@ -128,6 +134,7 @@ npm run lint && npm run typecheck && npm run validate:all
 ```
 
 **Integration with Existing Workflows**:
+
 - ✅ Added to `validate:all` command (alongside dependency and circular checks)
 - ✅ Can be run independently via `validate:filesize`
 - ✅ Integrated into development workflow recommendations
@@ -141,6 +148,7 @@ npm run lint && npm run typecheck && npm run validate:all
 **Deliverables**:
 
 **4.1 Baseline Report** (`/plans/file-size-baseline.md`):
+
 - ✅ Current violation statistics (32 files, 22.9% of codebase)
 - ✅ Categorized violations by severity (Tier 1-5)
 - ✅ Subsystem-level decomposition roadmap
@@ -148,6 +156,7 @@ npm run lint && npm run typecheck && npm run validate:all
 - ✅ Success metrics and validation process
 
 **4.2 Contributing Guidelines** (`/docs/contributing.md`):
+
 - ✅ File Size Standards section added
 - ✅ Hard limit (500 lines), soft target (300 lines) documented
 - ✅ Exemption process explained
@@ -156,6 +165,7 @@ npm run lint && npm run typecheck && npm run validate:all
 - ✅ Validation commands table updated
 
 **4.3 Implementation Plan** (this document):
+
 - ✅ Complete implementation roadmap
 - ✅ Phase-by-phase tracking
 - ✅ Subsystem decomposition guides
@@ -173,6 +183,7 @@ npm run lint && npm run typecheck && npm run validate:all
 **Quarterly Goals**:
 
 **Q1 2025** (3 files, Tier 1 violations):
+
 - [ ] Decompose `mcp-tools/system-control.ts` (2,716 lines → <500 lines)
   - Strategy: Extract into separate service controllers (framework, analytics, health, config)
   - Estimated effort: 20-25 hours
@@ -187,6 +198,7 @@ npm run lint && npm run typecheck && npm run validate:all
   - Priority: P0 - Critical
 
 **Q2 2025** (14 files, Tier 2-3 violations):
+
 - [ ] Refactor Frameworks subsystem (11 files)
   - Extract common methodology guide utilities
   - Refactor template-enhancer.ts (service-oriented decomposition)
@@ -199,6 +211,7 @@ npm run lint && npm run typecheck && npm run validate:all
   - Estimated effort: 25-35 hours
 
 **Q3 2025** (15 files, Tier 4-5 violations):
+
 - [ ] Refactor remaining violators (runtime, metrics, chain session, semantic, prompts, utilities)
 - [ ] Add `@lifecycle canonical` annotations where appropriate
 - [ ] Remove all grandfathered exemptions
@@ -213,11 +226,13 @@ npm run lint && npm run typecheck && npm run validate:all
 **Priority 1: system-control.ts** (2,716 lines)
 
 **Current State**:
+
 - Monolithic MCP tool handling framework management, analytics, health monitoring, configuration
 - Contains multiple functional areas mixed together
 - Difficult to test and maintain
 
 **Decomposition Plan**:
+
 1. **Extract Framework Control Service** (~600 lines)
    - Framework switching logic
    - State management
@@ -250,6 +265,7 @@ npm run lint && npm run typecheck && npm run validate:all
    - File: `mcp-tools/system-control.ts` (reduced from 2,716 to ~400 lines)
 
 **Migration Steps**:
+
 1. Create service interface definitions
 2. Extract framework control service (test independently)
 3. Extract analytics service (test independently)
@@ -266,11 +282,13 @@ npm run lint && npm run typecheck && npm run validate:all
 **Priority 2: prompt-engine/core/engine.ts** (2,342 lines)
 
 **Current State**:
+
 - Large consolidated engine handling template processing, gate validation, response formatting, error handling
 - Difficult to extend and test
 - Multiple responsibilities mixed together
 
 **Decomposition Plan**:
+
 1. **Extract Template Processor** (~500 lines)
    - Nunjucks template rendering
    - Variable substitution
@@ -302,6 +320,7 @@ npm run lint && npm run typecheck && npm run validate:all
    - File: `mcp-tools/prompt-engine/core/engine.ts` (reduced from 2,342 to ~450 lines)
 
 **Migration Steps**:
+
 1. Create processor/validator/formatter interfaces
 2. Extract template processor (test independently)
 3. Extract gate validator (test independently)
@@ -318,11 +337,13 @@ npm run lint && npm run typecheck && npm run validate:all
 **Priority 3: mcp-tools/index.ts** (1,486 lines)
 
 **Current State**:
+
 - Single file handling all MCP tool registrations
 - Mixed concerns (prompt management, engine, system control)
 - Difficult to navigate and maintain
 
 **Decomposition Plan**:
+
 1. **Extract Prompt Management Registry** (~450 lines)
    - Prompt tool registration
    - Prompt-specific handlers
@@ -345,6 +366,7 @@ npm run lint && npm run typecheck && npm run validate:all
    - File: `mcp-tools/index.ts` (reduced from 1,486 to ~300 lines)
 
 **Migration Steps**:
+
 1. Create registry base interface
 2. Extract prompt management registry
 3. Extract engine registry
@@ -420,13 +442,13 @@ Each decomposition must pass these quality gates:
 
 Track progress using these metrics:
 
-| Metric | Baseline | Q1 Target | Q2 Target | Q3 Target |
-|--------|----------|-----------|-----------|-----------|
-| Total Violations | 32 | 29 (-3) | 20 (-12) | 0 (-32) |
-| Avg File Size | 197 lines | 185 lines | 170 lines | <150 lines |
-| Largest File | 2,716 lines | <1,500 | <1,000 | <500 |
-| Compliance Rate | 77.1% | 79.3% | 85.7% | 100% |
-| Canonical Files | 20 | 50 | 80 | 100% |
+| Metric           | Baseline    | Q1 Target | Q2 Target | Q3 Target  |
+| ---------------- | ----------- | --------- | --------- | ---------- |
+| Total Violations | 32          | 29 (-3)   | 20 (-12)  | 0 (-32)    |
+| Avg File Size    | 197 lines   | 185 lines | 170 lines | <150 lines |
+| Largest File     | 2,716 lines | <1,500    | <1,000    | <500       |
+| Compliance Rate  | 77.1%       | 79.3%     | 85.7%     | 100%       |
+| Canonical Files  | 20          | 50        | 80        | 100%       |
 
 ## Timeline and Resources
 
@@ -435,12 +457,14 @@ Track progress using these metrics:
 **Focus**: Eliminate Tier 1 violations (3 files over 1,500 lines)
 
 **Resources Required**:
+
 - **Development**: 45-57 hours
 - **Testing**: 12-15 hours
 - **Documentation**: 8-10 hours
 - **Total**: 65-82 hours (~2-3 weeks full-time)
 
 **Milestones**:
+
 - Week 4: system-control.ts decomposed
 - Week 6: prompt-engine.ts decomposed
 - Week 8: mcp-tools/index.ts decomposed
@@ -451,12 +475,14 @@ Track progress using these metrics:
 **Focus**: Refactor Frameworks and Execution subsystems (14 files)
 
 **Resources Required**:
+
 - **Development**: 60-85 hours
 - **Testing**: 20-25 hours
 - **Documentation**: 10-12 hours
 - **Total**: 90-122 hours (~3-4 weeks full-time)
 
 **Milestones**:
+
 - Week 4: Frameworks subsystem refactored (11 files)
 - Week 7: Execution subsystem refactored (4 files)
 - Week 10: All Tier 2-3 violations eliminated
@@ -466,12 +492,14 @@ Track progress using these metrics:
 **Focus**: Complete remaining migrations (15 files)
 
 **Resources Required**:
+
 - **Development**: 40-50 hours
 - **Testing**: 15-18 hours
 - **Documentation**: 8-10 hours
 - **Total**: 63-78 hours (~2-3 weeks full-time)
 
 **Milestones**:
+
 - Week 4: Runtime, metrics, chain session modules refactored
 - Week 7: Semantic, prompts, utilities refactored
 - Week 10: 100% compliance achieved
@@ -482,24 +510,28 @@ Track progress using these metrics:
 ### Identified Risks
 
 **Risk 1: Breaking Changes During Decomposition**
+
 - **Likelihood**: Medium
 - **Impact**: High
 - **Mitigation**: Comprehensive test coverage before decomposition, backward compatibility preservation
 - **Contingency**: Rollback plan with git branches for each decomposition
 
 **Risk 2: Performance Regression**
+
 - **Likelihood**: Low
 - **Impact**: Medium
 - **Mitigation**: Performance benchmarking before/after each decomposition
 - **Contingency**: Profile and optimize if degradation detected
 
 **Risk 3: Timeline Slippage**
+
 - **Likelihood**: Medium
 - **Impact**: Medium
 - **Mitigation**: Quarterly checkpoints, prioritized migration order
 - **Contingency**: Adjust scope, focus on critical violations first
 
 **Risk 4: Integration Issues**
+
 - **Likelihood**: Low
 - **Impact**: High
 - **Mitigation**: Integration tests for each refactored module
@@ -523,6 +555,7 @@ Track progress using these metrics:
 **Review Cadence**: Last Friday of each month
 
 **Review Checklist**:
+
 - [ ] Review progress against quarterly goals
 - [ ] Update baseline report with current statistics
 - [ ] Identify blockers or issues

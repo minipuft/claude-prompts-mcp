@@ -1,15 +1,14 @@
 # Tutorial: Build Your First Prompt
 
-
 Stop copy-pasting the same instructions into Claude. Define them once, invoke them anywhere.
 
 ## Why This Matters
 
-| Problem | Solution | Result |
-|---------|----------|--------|
-| **Repetitive Typing** | Defined Templates | Zero copy-pasting |
-| **Inconsistent Output** | Structured Arguments | Reliable results every time |
-| **Slow Iteration** | Hot Reload | Edit → Run instantly (no restart) |
+| Problem                 | Solution             | Result                            |
+| ----------------------- | -------------------- | --------------------------------- |
+| **Repetitive Typing**   | Defined Templates    | Zero copy-pasting                 |
+| **Inconsistent Output** | Structured Arguments | Reliable results every time       |
+| **Slow Iteration**      | Hot Reload           | Edit → Run instantly (no restart) |
 
 ---
 
@@ -44,6 +43,7 @@ prompt_engine(command: ">>hello name='Developer'")
 ```
 
 **Output**:
+
 ```text
 Hello Developer! Welcome to the system.
 Current time: ...
@@ -75,7 +75,7 @@ resources/prompts/general/code_review/
 id: code_review
 name: Code Review
 description: Analyze code for quality issues
-userMessageTemplateFile: user-message.md  # Points to file
+userMessageTemplateFile: user-message.md # Points to file
 
 arguments:
   - name: code
@@ -86,7 +86,7 @@ arguments:
 
 ### `user-message.md`
 
-```markdown
+````markdown
 # Code Review: {{language}}
 
 Please review the following code:
@@ -96,10 +96,11 @@ Please review the following code:
 ```
 
 Check for:
+
 - Logic errors
 - Performance bottlenecks
 - Security risks
-```
+````
 
 ### Run it
 
@@ -138,7 +139,8 @@ arguments:
 
 ### Update `user-message.md`
 
-```markdown
+<!-- prettier-ignore -->
+````markdown
 # Code Review: {{language}}
 
 {% if focus == "security" %}
@@ -163,7 +165,7 @@ arguments:
 ```{{language}}
 {{code}}
 ```
-```
+````
 
 ### What happens
 

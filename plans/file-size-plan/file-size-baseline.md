@@ -11,38 +11,38 @@ This baseline report documents the current state of file size violations in the 
 
 ## Current Violation Statistics
 
-| Metric | Value |
-|--------|-------|
-| Total TypeScript Files | 140 |
-| Files Over 500 Lines | 32 (22.9%) |
-| Files 500-700 Lines | 12 (8.6%) |
-| Files 700-900 Lines | 10 (7.1%) |
-| Files 900-1500 Lines | 7 (5.0%) |
-| Files Over 1500 Lines | 3 (2.1%) |
-| Largest File | system-control.ts (2,716 lines) |
-| Total Lines in Violations | 27,494 lines |
-| Average Violation Size | 859 lines |
+| Metric                    | Value                           |
+| ------------------------- | ------------------------------- |
+| Total TypeScript Files    | 140                             |
+| Files Over 500 Lines      | 32 (22.9%)                      |
+| Files 500-700 Lines       | 12 (8.6%)                       |
+| Files 700-900 Lines       | 10 (7.1%)                       |
+| Files 900-1500 Lines      | 7 (5.0%)                        |
+| Files Over 1500 Lines     | 3 (2.1%)                        |
+| Largest File              | system-control.ts (2,716 lines) |
+| Total Lines in Violations | 27,494 lines                    |
+| Average Violation Size    | 859 lines                       |
 
 ## Critical Violators (Over 1000 Lines)
 
 ### Tier 1: Extreme Violations (1500+ lines) - Requires Immediate Decomposition
 
-| Lines | File | Priority | Target Deadline |
-|-------|------|----------|-----------------|
-| 2716 | mcp-tools/system-control.ts | P0 - Critical | 2025-Q1 |
-| 2342 | mcp-tools/prompt-engine/core/engine.ts | P0 - Critical | 2025-Q1 |
-| 1486 | mcp-tools/index.ts | P0 - Critical | 2025-Q2 |
+| Lines | File                                   | Priority      | Target Deadline |
+| ----- | -------------------------------------- | ------------- | --------------- |
+| 2716  | mcp-tools/system-control.ts            | P0 - Critical | 2025-Q1         |
+| 2342  | mcp-tools/prompt-engine/core/engine.ts | P0 - Critical | 2025-Q1         |
+| 1486  | mcp-tools/index.ts                     | P0 - Critical | 2025-Q2         |
 
 **Decomposition Strategy**: These files contain multiple functional areas that can be separated into focused service modules. Follow service-oriented decomposition pattern from REFACTORING.md.
 
 ### Tier 2: High Violations (1000-1500 lines) - Requires Structured Decomposition
 
-| Lines | File | Priority | Target Deadline |
-|-------|------|----------|-----------------|
-| 1302 | runtime/application.ts | P1 - High | 2025-Q2 |
-| 1166 | frameworks/prompt-guidance/template-enhancer.ts | P1 - High | 2025-Q2 |
-| 1011 | execution/parsers/argument-parser.ts | P1 - High | 2025-Q2 |
-| 1003 | metrics/analytics-service.ts | P1 - High | 2025-Q2 |
+| Lines | File                                            | Priority  | Target Deadline |
+| ----- | ----------------------------------------------- | --------- | --------------- |
+| 1302  | runtime/application.ts                          | P1 - High | 2025-Q2         |
+| 1166  | frameworks/prompt-guidance/template-enhancer.ts | P1 - High | 2025-Q2         |
+| 1011  | execution/parsers/argument-parser.ts            | P1 - High | 2025-Q2         |
+| 1003  | metrics/analytics-service.ts                    | P1 - High | 2025-Q2         |
 
 **Decomposition Strategy**: Extract cohesive subsystems into separate modules, maintain clear interfaces, use dependency injection for testability.
 
@@ -50,18 +50,18 @@ This baseline report documents the current state of file size violations in the 
 
 ### Tier 3: Moderate Violations - Gradual Refactoring
 
-| Lines | File | Subsystem | Target Deadline |
-|-------|------|-----------|-----------------|
-| 981 | chain-session/manager.ts | Chain Execution | 2025-Q2 |
-| 888 | frameworks/integration/framework-semantic-integration.ts | Framework Integration | 2025-Q2 |
-| 798 | mcp-tools/resource-manager/prompt/prompt-resource-service.ts | Prompt Management | 2025-Q3 |
-| 791 | semantic/configurable-semantic-analyzer.ts | Semantic Analysis | 2025-Q3 |
-| 763 | frameworks/methodology/guides/cageerf-guide.ts | Methodology | 2025-Q3 |
-| 749 | execution/parsers/command-parser.ts | Command Parsing | 2025-Q3 |
-| 748 | utils/file-observer.ts | Utilities | 2025-Q3 |
-| 743 | frameworks/framework-state-manager.ts | Framework State | 2025-Q3 |
-| 742 | hot-reload/hot-reload-manager.ts | Hot Reload | 2025-Q3 |
-| 732 | types/shared-types.ts | Type Definitions | 2025-Q3 |
+| Lines | File                                                         | Subsystem             | Target Deadline |
+| ----- | ------------------------------------------------------------ | --------------------- | --------------- |
+| 981   | chain-session/manager.ts                                     | Chain Execution       | 2025-Q2         |
+| 888   | frameworks/integration/framework-semantic-integration.ts     | Framework Integration | 2025-Q2         |
+| 798   | mcp-tools/resource-manager/prompt/prompt-resource-service.ts | Prompt Management     | 2025-Q3         |
+| 791   | semantic/configurable-semantic-analyzer.ts                   | Semantic Analysis     | 2025-Q3         |
+| 763   | frameworks/methodology/guides/cageerf-guide.ts               | Methodology           | 2025-Q3         |
+| 749   | execution/parsers/command-parser.ts                          | Command Parsing       | 2025-Q3         |
+| 748   | utils/file-observer.ts                                       | Utilities             | 2025-Q3         |
+| 743   | frameworks/framework-state-manager.ts                        | Framework State       | 2025-Q3         |
+| 742   | hot-reload/hot-reload-manager.ts                             | Hot Reload            | 2025-Q3         |
+| 732   | types/shared-types.ts                                        | Type Definitions      | 2025-Q3         |
 
 **Decomposition Strategy**: Extract helper functions into utility modules, separate concerns (state management vs. business logic), split large type definition files by domain.
 
@@ -69,13 +69,13 @@ This baseline report documents the current state of file size violations in the 
 
 ### Tier 4: Methodology Guides
 
-| Lines | File | Guide Type | Target Deadline |
-|-------|------|------------|-----------------|
-| 721 | frameworks/methodology/guides/scamper-guide.ts | Methodology | 2025-Q3 |
-| 719 | frameworks/prompt-guidance/system-prompt-injector.ts | Framework Support | 2025-Q3 |
-| 717 | frameworks/methodology/guides/5w1h-guide.ts | Methodology | 2025-Q3 |
-| 714 | execution/context/context-resolver.ts | Execution Context | 2025-Q3 |
-| 714 | frameworks/methodology/guides/react-guide.ts | Methodology | 2025-Q3 |
+| Lines | File                                                 | Guide Type        | Target Deadline |
+| ----- | ---------------------------------------------------- | ----------------- | --------------- |
+| 721   | frameworks/methodology/guides/scamper-guide.ts       | Methodology       | 2025-Q3         |
+| 719   | frameworks/prompt-guidance/system-prompt-injector.ts | Framework Support | 2025-Q3         |
+| 717   | frameworks/methodology/guides/5w1h-guide.ts          | Methodology       | 2025-Q3         |
+| 714   | execution/context/context-resolver.ts                | Execution Context | 2025-Q3         |
+| 714   | frameworks/methodology/guides/react-guide.ts         | Methodology       | 2025-Q3         |
 
 **Pattern**: Methodology guides follow similar structures. Create shared guide utilities and extract common patterns.
 
@@ -83,17 +83,17 @@ This baseline report documents the current state of file size violations in the 
 
 ### Tier 5: Framework & Prompt Services
 
-| Lines | File | Subsystem | Target Deadline |
-|-------|------|-----------|-----------------|
-| 686 | frameworks/prompt-guidance/methodology-tracker.ts | Framework Guidance | 2025-Q3 |
-| 663 | frameworks/prompt-guidance/service.ts | Framework Guidance | 2025-Q3 |
-| 631 | prompts/loader.ts | Prompt Loading | 2025-Q3 |
-| 615 | mcp-tools/tool-description-manager.ts | MCP Tools | 2025-Q3 |
-| 590 | execution/pipeline/gate-enhancement-stage.ts | Execution Pipeline | 2025-Q3 |
-| 589 | prompts/promptUtils.ts | Prompt Utilities | 2025-Q3 |
-| 566 | prompts/category-extractor.ts | Prompt Management | 2025-Q3 |
-| 549 | mcp-tools/resource-manager/prompt/operations/file-operations.ts | File Operations | 2025-Q3 |
-| 503 | mcp-tools/prompt-engine/utils/validation.ts | Validation | 2025-Q3 |
+| Lines | File                                                            | Subsystem          | Target Deadline |
+| ----- | --------------------------------------------------------------- | ------------------ | --------------- |
+| 686   | frameworks/prompt-guidance/methodology-tracker.ts               | Framework Guidance | 2025-Q3         |
+| 663   | frameworks/prompt-guidance/service.ts                           | Framework Guidance | 2025-Q3         |
+| 631   | prompts/loader.ts                                               | Prompt Loading     | 2025-Q3         |
+| 615   | mcp-tools/tool-description-manager.ts                           | MCP Tools          | 2025-Q3         |
+| 590   | execution/pipeline/gate-enhancement-stage.ts                    | Execution Pipeline | 2025-Q3         |
+| 589   | prompts/promptUtils.ts                                          | Prompt Utilities   | 2025-Q3         |
+| 566   | prompts/category-extractor.ts                                   | Prompt Management  | 2025-Q3         |
+| 549   | mcp-tools/resource-manager/prompt/operations/file-operations.ts | File Operations    | 2025-Q3         |
+| 503   | mcp-tools/prompt-engine/utils/validation.ts                     | Validation         | 2025-Q3         |
 
 **Strategy**: These files are closer to the limit. Apply focused refactoring to bring under 500 lines without major architectural changes.
 
@@ -102,11 +102,13 @@ This baseline report documents the current state of file size violations in the 
 ### MCP Tools Subsystem (6 files, 8,507 lines)
 
 **Top Violators**:
+
 - system-control.ts (2,716 lines)
 - prompt-engine/core/engine.ts (2,342 lines)
 - index.ts (1,486 lines)
 
 **Decomposition Plan**:
+
 1. **Phase 1**: Extract system-control.ts into separate service controllers
    - Framework control service
    - Analytics service
@@ -125,11 +127,13 @@ This baseline report documents the current state of file size violations in the 
 ### Frameworks Subsystem (11 files, 8,381 lines)
 
 **Top Violators**:
+
 - template-enhancer.ts (1,166 lines)
 - framework-semantic-integration.ts (888 lines)
 - Four methodology guides (763-714 lines each)
 
 **Decomposition Plan**:
+
 1. **Phase 1**: Extract common methodology guide utilities
    - Shared guide base class
    - Common validation patterns
@@ -147,11 +151,13 @@ This baseline report documents the current state of file size violations in the 
 ### Execution Subsystem (4 files, 3,464 lines)
 
 **Top Violators**:
+
 - argument-parser.ts (1,011 lines)
 - command-parser.ts (749 lines)
 - context-resolver.ts (714 lines)
 
 **Decomposition Plan**:
+
 1. **Phase 1**: Extract parsing strategies from argument-parser
    - JSON parser
    - Key-value parser
@@ -170,6 +176,7 @@ This baseline report documents the current state of file size violations in the 
 ### Remaining Subsystems (11 files, 7,142 lines)
 
 **Subsystems**:
+
 - Runtime: application.ts (1,302 lines)
 - Metrics: analytics-service.ts (1,003 lines)
 - Chain Session: manager.ts (981 lines)
@@ -184,12 +191,14 @@ This baseline report documents the current state of file size violations in the 
 ## Migration Tracking
 
 ### Q1 2025 Goals
+
 - [ ] Decompose system-control.ts (2,716 → <500 lines)
 - [ ] Decompose prompt-engine.ts (2,342 → <500 lines)
 - [ ] Decompose mcp-tools/index.ts (1,486 → <500 lines)
 - [ ] **Target**: Eliminate all Tier 1 violations (3 files)
 
 ### Q2 2025 Goals
+
 - [ ] Decompose runtime/application.ts (1,302 → <500 lines)
 - [ ] Decompose template-enhancer.ts (1,166 → <500 lines)
 - [ ] Decompose argument-parser.ts (1,011 → <500 lines)
@@ -199,6 +208,7 @@ This baseline report documents the current state of file size violations in the 
 - [ ] **Target**: Eliminate all Tier 2 violations (4 files)
 
 ### Q3 2025 Goals
+
 - [ ] Refactor all remaining violators (25 files)
 - [ ] Add @lifecycle canonical annotations where appropriate
 - [ ] Remove all grandfathered exemptions
@@ -206,22 +216,24 @@ This baseline report documents the current state of file size violations in the 
 
 ## Success Metrics
 
-| Metric | Baseline | Q1 Target | Q2 Target | Q3 Target |
-|--------|----------|-----------|-----------|-----------|
-| Files Over 500 Lines | 32 | 29 (-3) | 20 (-12) | 0 (-32) |
-| Average File Size | 197 lines | 185 lines | 170 lines | <150 lines |
-| Largest File Size | 2,716 lines | <1,500 lines | <1,000 lines | <500 lines |
-| Compliance Rate | 77.1% | 79.3% | 85.7% | 100% |
+| Metric               | Baseline    | Q1 Target    | Q2 Target    | Q3 Target  |
+| -------------------- | ----------- | ------------ | ------------ | ---------- |
+| Files Over 500 Lines | 32          | 29 (-3)      | 20 (-12)     | 0 (-32)    |
+| Average File Size    | 197 lines   | 185 lines    | 170 lines    | <150 lines |
+| Largest File Size    | 2,716 lines | <1,500 lines | <1,000 lines | <500 lines |
+| Compliance Rate      | 77.1%       | 79.3%        | 85.7%        | 100%       |
 
 ## Validation Process
 
 ### Current Enforcement
+
 - **Script**: `npm run validate:filesize`
 - **CI Integration**: Warning-level (does not block)
 - **Grandfathering**: All 32 current violators exempted
 - **New Files**: Must stay under 500 lines
 
 ### Future Enforcement (Post-Migration)
+
 - **Phase 1** (Q1 2025): Remove Tier 1 exemptions (3 files)
 - **Phase 2** (Q2 2025): Remove Tier 2-3 exemptions (14 files)
 - **Phase 3** (Q3 2025): Remove all exemptions, enforce globally

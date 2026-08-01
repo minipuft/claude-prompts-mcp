@@ -5,15 +5,15 @@ inputs:
   node-version:
     description: Node.js version (mutually exclusive with node-version-file).
     required: false
-    default: ''
+    default: ""
   node-version-file:
     description: Node version file path (mutually exclusive with node-version).
     required: false
-    default: ''
+    default: ""
   registry-url:
     description: Optional npm registry URL.
     required: false
-    default: ''
+    default: ""
   cache:
     description: Dependency cache mode for setup-node.
     required: false
@@ -25,7 +25,7 @@ inputs:
   run-install:
     description: Whether to run npm ci.
     required: false
-    default: 'true'
+    default: "true"
   install-working-directory:
     description: Working directory for npm ci.
     required: false
@@ -33,7 +33,7 @@ inputs:
   npm-ci-args:
     description: Extra arguments passed to npm ci.
     required: false
-    default: ''
+    default: ""
 
 runs:
   using: composite
