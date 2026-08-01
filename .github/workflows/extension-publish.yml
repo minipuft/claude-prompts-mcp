@@ -86,7 +86,7 @@ jobs:
 
       - name: Upload to Release
         if: github.event_name == 'workflow_run'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: claude-prompts-${{ steps.version.outputs.version }}.mcpb
           # Match Release Please tag format (include-component-in-tag: false)
@@ -516,7 +516,7 @@ jobs:
 
       - name: Upload to Release
         if: github.event_name == 'workflow_run'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: claude-prompts-plugin-${{ steps.version.outputs.version }}.zip
           # Match Release Please tag format (include-component-in-tag: false)
