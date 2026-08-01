@@ -74,9 +74,9 @@ jobs:
         working-directory: server
         run: npm run build
 
-      # package.json declares a `cpm` bin, and the cpm build is skipped when cli/ is
-      # absent (the Docker context case). Publishing without this file would ship a
-      # manifest whose bin points at nothing. Assert it here rather than trusting the skip.
+      # package.json declares a `cpm` bin. Publishing without that file would ship a
+      # manifest whose bin points at nothing, so assert every declared bin exists rather
+      # than trusting the build to have emitted it.
       - name: Verify both bins were emitted
         working-directory: server
         run: |
