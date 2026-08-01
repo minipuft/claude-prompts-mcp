@@ -499,8 +499,7 @@ export class ChainOperatorExecutor {
    */
   private isGateGuidanceEnabled(chainContext: Record<string, unknown>): boolean {
     const injectionState = chainContext['injectionState'] as
-      | { gateGuidance?: { inject?: boolean } }
-      | undefined;
+      { gateGuidance?: { inject?: boolean } } | undefined;
 
     return injectionState?.gateGuidance?.inject !== false;
   }
@@ -642,13 +641,11 @@ export class ChainOperatorExecutor {
     const fromIdentityContext = this.asRequestClientProfile(
       (
         chainContext['requestIdentityContext'] as
-          | { clientProfile?: RequestClientProfile }
-          | undefined
+          { clientProfile?: RequestClientProfile } | undefined
       )?.clientProfile ??
         (
           chainContext['requestIdentityContext'] as
-            | { identity?: { clientProfile?: RequestClientProfile } }
-            | undefined
+            { identity?: { clientProfile?: RequestClientProfile } } | undefined
         )?.identity?.clientProfile
     );
     if (fromIdentityContext != null) {

@@ -476,8 +476,7 @@ export class GateVerdictProcessor {
     reason?: string
   ): Promise<void> {
     const deps = context.metadata['pipelineDependencies'] as
-      | { hookRegistry?: HookRegistry; notificationEmitter?: McpNotificationEmitter }
-      | undefined;
+      { hookRegistry?: HookRegistry; notificationEmitter?: McpNotificationEmitter } | undefined;
     const hooks = deps?.hookRegistry;
     const notifications = deps?.notificationEmitter;
 

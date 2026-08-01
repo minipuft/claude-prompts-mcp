@@ -364,8 +364,7 @@ export class StyleDefinitionLoader {
   private inlineReferencedFiles(definition: StyleDefinitionYaml, styleDir: string): void {
     // Inline guidance.md if referenced
     const guidanceFile = (definition as Record<string, unknown>)['guidanceFile'] as
-      | string
-      | undefined;
+      string | undefined;
     if (guidanceFile) {
       const guidancePath = join(styleDir, guidanceFile);
       if (existsSync(guidancePath)) {

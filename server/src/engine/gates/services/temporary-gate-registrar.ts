@@ -94,8 +94,7 @@ export class TemporaryGateRegistrar {
 
     const overrides = context.state.gates.requestedOverrides as Record<string, any> | undefined;
     const normalizedGates = overrides?.['gates'] as
-      | import('../../../shared/types/execution.js').GateSpecification[]
-      | undefined;
+      import('../../../shared/types/execution.js').GateSpecification[] | undefined;
 
     const canonicalGateIds = new Set<string>();
     const resolvedGateIds = new Set<string>();
@@ -298,8 +297,7 @@ export class TemporaryGateRegistrar {
 
     if (canonicalGateIds.size > 0) {
       const overrides = context.state.gates.requestedOverrides as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
 
       const existingGates = (overrides?.['gates'] as any[]) ?? [];
       const existingGateStrings = existingGates.filter((g): g is string => typeof g === 'string');

@@ -35,8 +35,7 @@ import type { ExecutionContext } from '../../context/index.js';
 export const PHASE_GUARD_GATE_ID = '__phase_guard__';
 
 type FrameworkRegistryProvider = () =>
-  | { getFrameworkGuide(id: string): FrameworkGuide | undefined }
-  | undefined;
+  { getFrameworkGuide(id: string): FrameworkGuide | undefined } | undefined;
 
 type PhaseGuardsConfigProvider = () => PhaseGuardsConfig | undefined;
 
