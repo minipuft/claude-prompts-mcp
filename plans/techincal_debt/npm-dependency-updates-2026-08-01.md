@@ -119,36 +119,108 @@ One PR, **two separate commits** so a bisect can attribute a failure.
 
 ### B-1: js-yaml 4.3.1 → 5.2.3
 
-`js-yaml` 5 is a TypeScript rewrite with a reorganised public API. Two removals hit
-`server/src/shared/utils/yaml/yaml-parser.ts` — the single chokepoint all 7 importers pass through.
+`js-yaml` 5 is a TypeScript rewrite with a reorganised public API.
 
-| #   | File                                                      | Change                                                                     | ~Lines | Depends | Verify                                        |
-| --- | --------------------------------------------------------- | -------------------------------------------------------------------------- | ------ | ------- | --------------------------------------------- |
-| B1  | `server/package.json`                                     | `js-yaml` → ^5.2.3 (+ drop `@types/js-yaml` if v5 self-types)              | 2      | —       | `npm ci` clean                                |
-| B2  | `server/src/shared/utils/yaml/yaml-parser.ts:82`          | drop `yaml.DEFAULT_SCHEMA`; v5 `load` defaults to `CORE_SCHEMA`            | ~3     | B1      | `npm run typecheck`                           |
-| B3  | `server/src/shared/utils/yaml/yaml-parser.ts:17,22,84-86` | resolve the `onWarning` removal across the **exported** `YamlParseOptions` | ~15    | B2      | `npm run typecheck` + the 7 importers compile |
-| B4  | `server/tests/integration/yaml-corpus.test.ts` **(new)**  | load all 74 bundled YAML resources; assert each parses non-empty           | ~40    | B2, B3  | fails if any resource stops parsing           |
+| #   | Status | File                                                               | Change                                                                           | ~Lines | Depends     | Verify                                          |
+| --- | ------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------- | ------ | ----------- | ----------------------------------------------- |
+| B1  | ✓      | `server/package.json`                                              | `js-yaml` → ^5.2.3; **`@types/js-yaml` removed** — v5 self-types                 | 2      | —           | `npm ci` clean                                  |
+| B2  | ✓      | `server/src/shared/utils/yaml/yaml-parser.ts`                      | drop `yaml.DEFAULT_SCHEMA`; v5 `load` defaults to `CORE_SCHEMA`                  | ~3     | B1          | `npm run typecheck`                             |
+| B3  | ✓      | `server/src/shared/utils/yaml/yaml-parser.ts`                      | remove `onWarning` from `YamlParseOptions` and `warnings` from `YamlParseResult` | ~40    | B2          | `npm run typecheck`                             |
+| B3b | ✓      | 14 files across `src/`, `scripts/`, `tests/`                       | `import yaml from 'js-yaml'` → `import * as yaml from 'js-yaml'`                 | 14     | B1          | **`npm run build`** — typecheck cannot see this |
+| B4  | ✓      | `server/tests/integration/resources/yaml-corpus.test.ts` **(new)** | load every git-tracked YAML resource; assert each parses non-empty               | ~85    | B2, B3, B3b | fails if any resource stops parsing             |
 
-**The B3 decision** (not pre-decided here — it depends on whether any caller reads `warnings`):
-`YamlParseOptions.onWarning` and `YamlParseResult.warnings` are exported. Either preserve the
-field via another mechanism, or propagate the removal to all 7 importers. Probe first:
-`rg -n "\.warnings" server/src/` across the importers.
+#### B3 resolved: the option and the field were dead surface
+
+The plan left this open pending `rg -n "\.warnings" server/src/`. Probed across `src/`, `scripts/`
+and `tests/`: **no caller passes `onWarning`, and no caller reads `YamlParseResult.warnings`.**
+Every `.warnings` hit belongs to an unrelated type (validation results, diagnostics). So the
+removal propagates rather than being preserved — nothing consumed it.
+
+`allowDuplicateKeys` was removed in the same edit. It was declared on `YamlParseOptions` but never
+forwarded to `yaml.load`, so setting it had no effect in any version — a knob that has always been
+a no-op, not a v5 casualty.
+
+#### B3b — the scope error this tier turned up
+
+The plan said the wrapper was "the single chokepoint all 7 importers pass through." **It is not.**
+`rg -n "from 'js-yaml'"` finds **15** direct importers; the wrapper is one of them. Fourteen used
+`import yaml from 'js-yaml'`, and **js-yaml 5 publishes no default export**:
+
+```
+SyntaxError: The requested module 'js-yaml' does not provide an export named 'default'
+```
+
+**The plan's stated verification for B2 and B3 — `npm run typecheck` — cannot detect this.** With
+`esModuleInterop` and `allowSyntheticDefaultImports` both `true` (`tsconfig.json:8-9`), TypeScript
+accepts a default import that Node rejects at module instantiation. Measured: after bumping to
+js-yaml 5 and before any source edit, `tsc --noEmit` reported **4 errors, all inside
+`yaml-parser.ts`, and zero for the 14 files that crash on import.**
+
+What does catch it is `npm run build` — esbuild fails with
+`No matching export in "js-yaml.mjs" for import "default"`. The unbundled `scripts/*.js` have no
+bundler in front of them and fail at runtime; confirmed by importing
+`scripts/generate-gate-index.js`, which threw the SyntaxError above before the fix and runs clean
+after.
+
+The fix is the namespace form, verified through both consumption paths _before_ being applied
+(`import * as yaml` bundles under esbuild and resolves under plain Node). That keeps every
+`yaml.load` / `yaml.dump` call site untouched — 1 line per file instead of rewriting ~60 member
+accesses.
 
 ### B-2: diff 8.0.4 → 9.0.0 + retire @types/diff
 
-| #   | File                                                                               | Change                                    | ~Lines | Depends | Verify                                                      |
-| --- | ---------------------------------------------------------------------------------- | ----------------------------------------- | ------ | ------- | ----------------------------------------------------------- |
-| B5  | `server/package.json`                                                              | `diff` → ^9.0.0; **remove `@types/diff`** | 2      | —       | `npm run typecheck` — proves v9's own types resolve         |
-| B6  | `server/src/modules/skills-sync/service.ts:17`                                     | confirm `createTwoFilesPatch` signature   | 0-3    | B5      | typecheck                                                   |
-| B7  | `server/src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.ts:3` | confirm `createPatch`, `structuredPatch`  | 0-3    | B5      | `resource_manager action:compare` returns a non-empty patch |
+| #   | Status | File                                                                               | Change                                     | ~Lines | Depends | Verify                                              |
+| --- | ------ | ---------------------------------------------------------------------------------- | ------------------------------------------ | ------ | ------- | --------------------------------------------------- |
+| B5  | ✓      | `server/package.json`                                                              | `diff` → ^9.0.0; **`@types/diff` removed** | 2      | —       | `npm run typecheck` — proves v9's own types resolve |
+| B6  | ✓      | `server/src/modules/skills-sync/service.ts:17`                                     | confirm `createTwoFilesPatch` signature    | 0      | B5      | typecheck                                           |
+| B7  | ✓      | `server/src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.ts:3` | confirm `createPatch`, `structuredPatch`   | 0      | B5      | patch generation exercised end-to-end               |
 
-**Gate**: `npm run validate:all` exit 0 · `test:ci` 146 suites green · `verify:mcp` passes.
+B6 and B7 needed **no code change**. Verified by executing all three functions against diff@9.0.0
+rather than by reading release notes: `createPatch` emits an `@@` hunk header, `structuredPatch`
+returns hunks whose shape is still `oldStart, oldLines, newStart, newLines, lines`, and
+`createTwoFilesPatch` returns a non-empty patch. Identical input yields **0** hunks, which is what
+proves the probe distinguishes "no change" from "cannot see the change".
+
+`@types/diff` retirement independently corroborated: it was listed under knip's _Unused
+devDependencies_ before the change and is absent after, leaving only `ts-morph`.
+
+**Gate**: `npm run validate:all` exit 0 · `test:ci` 146 suites green · `verify:mcp` passes. — **PASSED**
 
 **Residual risk (accepted, documented)**: findings 5 and 6 discharge the merge-key and empty-file
 hazards for _bundled_ resources. Workspace overlays are user-supplied and cannot be probed from
-here — note the js-yaml major in `CHANGELOG.md` under Changed.
+here — noted in `CHANGELOG.md` under Changed.
 
----
+### Tier B verification evidence
+
+| Check                                                                     | Result                                                                   |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `npm run typecheck`                                                       | exit 0                                                                   |
+| `npm run build`                                                           | exit 0 — the gate that actually sees the default-import break            |
+| `npm run lint:ratchet`                                                    | 3474 errors / 1434 warnings — one **fewer** error than the 3475 baseline |
+| `npm run validate:all`                                                    | exit 0 (all 23 members)                                                  |
+| `npm run test:ci`                                                         | 146 suites / 1732 tests green                                            |
+| `npm run test:integration`                                                | 33 suites / 426 tests green (was 351 — +75 from B4)                      |
+| `npm run test:e2e`                                                        | 3 suites / 36 passed, 2 skipped                                          |
+| `npm run verify:mcp`                                                      | 11/11 checks — all 3 tools answer                                        |
+| `scripts/generate-gate-index.js`, `scripts/validate-required-contexts.js` | import and run clean (both threw `SyntaxError` pre-fix)                  |
+
+**B4 proven falsifiable**, not merely green. Two probe resources were injected in turn and each
+failed the suite before being removed:
+
+| Injected                      | Reported                                                       |
+| ----------------------------- | -------------------------------------------------------------- |
+| malformed YAML (`b: {broken`) | `failed to parse: deficient indentation ... (2:1)`             |
+| an empty file                 | `failed to parse: expected a document, but the input is empty` |
+
+The empty-file case is the one that matters: it is js-yaml 5's new behaviour, so B4 demonstrably
+guards the exact hazard finding 6 discharged for today's corpus.
+
+**A corpus bug B4 caught in its own first draft.** The initial version walked `resources/` with
+`readdirSync` and collected **175** files; `git ls-files` reports **74**. The other 101 are
+untracked personal prompts admitted by `resources/prompts/.gitignore` (which ignores `*` with
+targeted un-ignores). A filesystem walk would test a different corpus on every machine, and a
+local-only failure would look like a CI-passing regression. The test now enumerates git-tracked
+files and asserts a floor of 50, so a broken glob fails instead of silently passing on an empty set.
 
 ## Tier C — zod 3 → 4
 
