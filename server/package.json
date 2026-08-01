@@ -29,7 +29,7 @@
   "scripts": {
     "prebuild": "npm run generate:contracts",
     "build": "node esbuild.config.mjs",
-    "postbuild": "chmod +x dist/index.js dist/cpm.js || true",
+    "postbuild": "chmod +x dist/*.js || true",
     "build:prod": "NODE_ENV=production node esbuild.config.mjs",
     "build:watch": "node esbuild.config.mjs --watch",
     "build:tsc": "tsc --project tsconfig.json",

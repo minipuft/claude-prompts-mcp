@@ -74,6 +74,18 @@ jobs:
         working-directory: server
         run: npm run build
 
+      # package.json declares a `cpm` bin, and the cpm build is skipped when cli/ is
+      # absent (the Docker context case). Publishing without this file would ship a
+      # manifest whose bin points at nothing. Assert it here rather than trusting the skip.
+      - name: Verify both bins were emitted
+        working-directory: server
+        run: |
+          set -euo pipefail
+          for bin in $(node -p "Object.values(require('./package.json').bin).join(' ')"); do
+            test -f "$bin" || { echo "::error::Declared bin missing from build output: $bin"; exit 1; }
+            echo "  ok $bin"
+          done
+
       - name: Test
         working-directory: server
         run: npm run test:ci
