@@ -1,15 +1,14 @@
 # Template Syntax Reference
 
-
 We use **Nunjucks** (a robust templating engine) extended with custom tags for embedding prompts and scripts.
 
 ## Why This Matters
 
-| Problem | Solution | Result |
-|---------|----------|--------|
-| **Duplication** | `{{ref:id}}` | Shared snippets updated in one place |
-| **Static Prompts** | Conditionals | Prompts adapt to input |
-| **Data Fetching** | `{{script:id}}` | Real-time data in templates |
+| Problem            | Solution        | Result                               |
+| ------------------ | --------------- | ------------------------------------ |
+| **Duplication**    | `{{ref:id}}`    | Shared snippets updated in one place |
+| **Static Prompts** | Conditionals    | Prompts adapt to input               |
+| **Data Fetching**  | `{{script:id}}` | Real-time data in templates          |
 
 ---
 
@@ -57,13 +56,14 @@ Use equality checks for arguments with discrete options. The server automaticall
 
 **Extraction behavior:**
 
-| Source | Priority | Example |
-|--------|----------|---------|
-| YAML `options` array | 1 (highest) | `options: ["a", "b", "c"]` |
-| Template `{% if x == "val" %}` | 2 | Parsed at cache-generation |
-| Description pattern | 3 (lowest) | `'Type: a \| b \| c'` |
+| Source                         | Priority    | Example                    |
+| ------------------------------ | ----------- | -------------------------- |
+| YAML `options` array           | 1 (highest) | `options: ["a", "b", "c"]` |
+| Template `{% if x == "val" %}` | 2           | Parsed at cache-generation |
+| Description pattern            | 3 (lowest)  | `'Type: a \| b \| c'`      |
 
 **Hook output example:**
+
 ```
 doc_type: tutorial | howto | reference (required)
 ```
@@ -114,11 +114,11 @@ Word count: {{ script:word_count text=content }}
 
 Available in all templates automatically.
 
-| Variable | Description |
-|----------|-------------|
-| `{{input}}` | The raw arguments object passed to the prompt. |
-| `{{chain_id}}` | Current chain session ID (if in a chain). |
-| `{{step_results}}` | Map of all previous chain step outputs. |
+| Variable               | Description                                    |
+| ---------------------- | ---------------------------------------------- |
+| `{{input}}`            | The raw arguments object passed to the prompt. |
+| `{{chain_id}}`         | Current chain session ID (if in a chain).      |
+| `{{step_results}}`     | Map of all previous chain step outputs.        |
 | `{{previous_message}}` | The last user message (for context awareness). |
 
 ---

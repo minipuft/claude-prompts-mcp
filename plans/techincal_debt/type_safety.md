@@ -358,26 +358,22 @@ const path = env["PROMPTS_PATH"];
 ### Critical Files (Need immediate attention)
 
 1. **src/runtime/application.ts** (lines 92-102)
-
    - `null as any` constructor pattern
    - Bypasses entire type system
    - Risk: Runtime errors from uninitialized properties
    - **Priority**: 🔴 CRITICAL - Fix first
 
 2. **src/api/index.ts**
-
    - 50+ violations in single file
    - Heavy `any` usage in MCP tool handlers
    - **Priority**: 🔴 HIGH
 
 3. **src/chain-session/manager.ts**
-
    - 48+ violations
    - Unnecessary optional chaining
    - **Priority**: 🟡 MEDIUM
 
 4. **src/mcp-tools/prompt-engine/**
-
    - ~200 violations across subsystem
    - Core execution engine
    - **Priority**: 🔴 HIGH

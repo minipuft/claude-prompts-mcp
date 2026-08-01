@@ -57,4 +57,3 @@ How do we prove this decision works?
 
 - Related PRs/issues/plans
 - Supersedes / superseded-by links (if applicable)
-

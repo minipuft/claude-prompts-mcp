@@ -28,11 +28,11 @@ failure reached `main` from a clean local push.
 `validate:all` first, which CI runs whole. Removing a step CI depends on breaks it too.
 \* conditional on `hooks/` changes.
 
-**One known exception**: `pre-push` step 3 runs `prettier --check` on repo-level
-JSON/MD/YAML and CI has no counterpart, so a formatting regression in those files may
-merge. Closing it means adding a format check to `validate:all`, which is blocked on
-27 of 103 repo-level text files not currently satisfying Prettier. **Retires when**
-those 27 are formatted in a dedicated commit -- then add the check and delete this note.
+Formatting is covered by `validate:format` (a `validate:all` member), which checks every
+repo-level JSON/MD/YAML tracked by git. `pre-push` checks only the files in the push
+range, so it stays a subset. Anything a generator owns belongs in `.prettierignore` with
+a reason -- otherwise the generator and Prettier disagree and every commit touching that
+file fails.
 
 ## Documentation Map
 

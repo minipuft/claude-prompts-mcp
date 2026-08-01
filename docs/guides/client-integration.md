@@ -12,15 +12,15 @@ This guide shows you how to configure the `--client` launch flag so the server e
 
 1. **Pick the preset for your host client**
 
-   | Host client | Use `--client` |
-   |---|---|
-   | Claude Code / Claude Desktop | `claude-code` |
-   | Codex | `codex` |
-   | Gemini CLI | `gemini` |
-   | OpenCode | `opencode` |
-   | Cursor | `cursor` |
-   | Windsurf (experimental mapping) | `cursor` |
-   | Unknown/unsupported client | `unknown` |
+   | Host client                     | Use `--client` |
+   | ------------------------------- | -------------- |
+   | Claude Code / Claude Desktop    | `claude-code`  |
+   | Codex                           | `codex`        |
+   | Gemini CLI                      | `gemini`       |
+   | OpenCode                        | `opencode`     |
+   | Cursor                          | `cursor`       |
+   | Windsurf (experimental mapping) | `cursor`       |
+   | Unknown/unsupported client      | `unknown`      |
 
 2. **Add the flag to your client MCP config**
 

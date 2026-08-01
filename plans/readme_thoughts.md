@@ -28,6 +28,7 @@ or releasing workflow capabilities in their own way. The server's role shifted f
 "be the engine" to "be a helpful assistant that enhances whatever the client provides."
 
 This means:
+
 - **Skills sync** exports templates INTO client-native formats (not "use our format instead")
 - **Delegation (`==>`)** hands work TO client-native subagents (not "run everything through us")
 - **Gates/methodologies** add quality layers the client doesn't have (complementary, not competing)
@@ -92,15 +93,15 @@ This is how you compose resources into workflows. The operator syntax wires Laye
 >>template @methodology :: 'gate criteria' --> next_step :: verify:"shell command" ==> agent_step
 ```
 
-| Symbol | What it does | Layer 1 resource it activates |
-|---|---|---|
-| `>>` | Execute a template | Prompt template |
-| `@` | Inject reasoning framework | Methodology |
-| `::` | Add quality criteria | Gate |
-| `#` | Apply formatting | Style |
-| `-->` | Chain to next step | (orchestration) |
-| `==>` | Hand off step to an agent | (agent handoff) |
-| `%` | Modify behavior | (execution control) |
+| Symbol | What it does               | Layer 1 resource it activates |
+| ------ | -------------------------- | ----------------------------- |
+| `>>`   | Execute a template         | Prompt template               |
+| `@`    | Inject reasoning framework | Methodology                   |
+| `::`   | Add quality criteria       | Gate                          |
+| `#`    | Apply formatting           | Style                         |
+| `-->`  | Chain to next step         | (orchestration)               |
+| `==>`  | Hand off step to an agent  | (agent handoff)               |
+| `%`    | Modify behavior            | (execution control)           |
 
 **README framing**: "Compose resources naturally. The operator syntax wires templates,
 gates, and methodologies together — chain steps, add quality criteria inline, hand
@@ -136,10 +137,12 @@ Leading with resources answers "why should I install this?" first.
 Open with what you GET, not how the engine works.
 
 Something like:
+
 > Reusable prompt templates, quality gates, and reasoning frameworks for AI coding tools —
 > managed through MCP, composable into multi-step workflows, exportable as native client skills.
 
 Or structured as three beats:
+
 > **Author** prompt templates, quality gates, and reasoning methodologies.
 > **Compose** them into multi-step workflows with an operator syntax.
 > **Export** as native skills to Claude Code, Cursor, OpenCode, and more.
@@ -152,12 +155,12 @@ The key word is **"for"** — it serves the client, not replaces it.
 
 Show the four resource types with a concrete example each:
 
-| Resource | What it is | Example |
-|---|---|---|
-| Prompt template | Versioned, parameterized YAML template | `>>code_review target:'src/auth/'` |
-| Quality gate | Criteria the AI validates against | `:: 'no false positives' :: 'cite sources'` |
-| Methodology | Reasoning framework injected into prompts | `@CAGEERF` (Context → Analysis → Goals → ...) |
-| Style | Response formatting guidance | `#analytical` |
+| Resource        | What it is                                | Example                                       |
+| --------------- | ----------------------------------------- | --------------------------------------------- |
+| Prompt template | Versioned, parameterized YAML template    | `>>code_review target:'src/auth/'`            |
+| Quality gate    | Criteria the AI validates against         | `:: 'no false positives' :: 'cite sources'`   |
+| Methodology     | Reasoning framework injected into prompts | `@CAGEERF` (Context → Analysis → Goals → ...) |
+| Style           | Response formatting guidance              | `#analytical`                                 |
 
 Then: "All resources are hot-reloadable, versioned with history, and manageable through
 the `resource_manager` tool. Edit a template, test it immediately."
@@ -174,6 +177,7 @@ NOW show the operator language — as the way to wire resources together:
 ```
 
 Decompose what happened — but frame it as "the server composed your resources":
+
 1. Loaded the `review` template, resolved arguments
 2. Injected CAGEERF methodology (how to reason about the review)
 3. Added a quality gate (the AI must self-evaluate against this)
@@ -192,6 +196,7 @@ Brief. The compatibility story speaks for itself.
 
 Quick start (keep current multi-client install — it's good).
 Then link to docs by user journey:
+
 - "I want to run workflows" → syntax + quick start
 - "I want to build workflows" → prompt authoring tutorial
 - "I want to understand the system" → architecture docs
@@ -214,6 +219,7 @@ Then link to docs by user journey:
 ```
 
 ### What stays from current README
+
 - Multi-client installation (well-structured)
 - Syntax reference table (compact, useful)
 - Mermaid diagram (update to match three-layer model)
@@ -221,17 +227,20 @@ Then link to docs by user journey:
 - Contributing section
 
 ### What gets reworked
+
 - **Opening tagline**: feature description → value proposition
 - **"What You Get"**: feature list → resources-first showcase
 - **Gates/Frameworks/Chains sections**: standalone features → folded into Layer 2 composition
 - **Documentation links**: by feature → by user journey
 
 ### What gets added
+
 - **"What the Server Adds" table** — complements the client, doesn't compete
 - **Skills Sync section** (Layer 3)
 - **Delegation mention** in the composition section
 
 ### What moves to docs (out of README)
+
 - Detailed configuration table → `docs/reference/`
 - MCP Resources section → `docs/reference/mcp-tools.md`
 - Checkpoints → `docs/guides/`
@@ -239,6 +248,7 @@ Then link to docs by user journey:
 - Ralph Loops deep dive → stays linked, details in `docs/guides/ralph-loops.md`
 
 ### What gets removed from README
+
 - Evolution phases (goes to `docs/portfolio/` only)
 - Excessive config examples
 
@@ -249,17 +259,17 @@ Then link to docs by user journey:
 Standard structure (from [makeareadme.com](https://www.makeareadme.com/),
 [MCP reference servers](https://github.com/modelcontextprotocol/servers)):
 
-| Section | Convention | Our current README | Action |
-|---|---|---|---|
-| Name + description | 1-2 sentences, what it does + who it's for | Has tagline but it describes internals | **Rewrite** — outcome-focused |
-| Badges | Build, version, license | Has npm + license | Keep |
-| Visual | Screenshot, GIF, or demo | Logo only | **Add demo GIF or screenshot** |
-| Installation | Step-by-step per platform | Strong — 6 client setups | Keep (it's a strength) |
-| Usage | "Use examples liberally" | Has syntax table + examples | **Rework** — organize around the 3 layers |
-| Features/Description | What makes this different | Feature list (disconnected) | **Rework** — "what the server adds" framing |
-| Documentation | Links to deeper docs | Has links but by feature | **Rework** — by user journey |
-| Contributing | How to contribute | Has it | Keep |
-| License | State it clearly | Has it | Keep |
+| Section              | Convention                                 | Our current README                     | Action                                      |
+| -------------------- | ------------------------------------------ | -------------------------------------- | ------------------------------------------- |
+| Name + description   | 1-2 sentences, what it does + who it's for | Has tagline but it describes internals | **Rewrite** — outcome-focused               |
+| Badges               | Build, version, license                    | Has npm + license                      | Keep                                        |
+| Visual               | Screenshot, GIF, or demo                   | Logo only                              | **Add demo GIF or screenshot**              |
+| Installation         | Step-by-step per platform                  | Strong — 6 client setups               | Keep (it's a strength)                      |
+| Usage                | "Use examples liberally"                   | Has syntax table + examples            | **Rework** — organize around the 3 layers   |
+| Features/Description | What makes this different                  | Feature list (disconnected)            | **Rework** — "what the server adds" framing |
+| Documentation        | Links to deeper docs                       | Has links but by feature               | **Rework** — by user journey                |
+| Contributing         | How to contribute                          | Has it                                 | Keep                                        |
+| License              | State it clearly                           | Has it                                 | Keep                                        |
 
 **Key principle from makeareadme**: "Too long is better than too short" — but use
 sub-docs for depth rather than cramming everything in the README.
@@ -269,10 +279,12 @@ then transport options. Very practical, setup-focused. Our multi-client install 
 matches this pattern well.
 
 **What we're missing**:
+
 - A demo visual (GIF > screenshot > nothing)
 - A description that explains what the resources DO, not what they ARE
 
 **What we're overdoing**:
+
 - Config details in README (move to docs)
 - MCP Resources section (too deep for README)
 - Standalone feature sections that should be folded into usage examples
@@ -294,6 +306,7 @@ You don't manually enforce quality. You define what quality means (resources),
 and the pipeline enforces it (execution).
 
 This is the framing the tagline needs:
+
 - Not: "reusable prompts" (storage)
 - Not: "workflow engine" (replaces client)
 - But: "define your standards, the server enforces them" (quality through structure)
@@ -312,6 +325,7 @@ Current: "Hot-reloadable prompts with chains, gates, and structured reasoning fo
 ### Round 1 (positioning)
 
 These were the earlier candidates, pre-enforcement insight:
+
 1. "Structured prompt workflows for AI coding tools. Author once, run anywhere, validate everything."
 2. "Turn one-shot prompts into multi-step workflows — with quality gates, reasoning frameworks, and cross-client portability."
 3. "Workflow authoring for MCP clients. Templates, chains, gates, and subagent delegation."
@@ -347,24 +361,25 @@ with context, or validate output before moving on. That's the gap.
 **Tagline attempts (problem-first, not category-first):**
 
 A. Stop re-explaining your standards to the AI.
-   Define your prompts with built-in validation and reasoning guidance —
-   the server assembles them automatically. Use through MCP or export
-   as native skills to any client.
+Define your prompts with built-in validation and reasoning guidance —
+the server assembles them automatically. Use through MCP or export
+as native skills to any client.
 
 B. AI coding tools run your prompts. This server makes sure they run well.
-   Author prompts with built-in output validation, reasoning guidance, and
-   multi-step structure — use through MCP or export as native skills.
+Author prompts with built-in output validation, reasoning guidance, and
+multi-step structure — use through MCP or export as native skills.
 
 C. Your AI forgets your standards between prompts. This server doesn't.
-   Define how prompts should reason, what they should validate, and how
-   steps connect — applied automatically, on any MCP client.
+Define how prompts should reason, what they should validate, and how
+steps connect — applied automatically, on any MCP client.
 
 D. Consistent AI output without repeating yourself.
-   Author prompts with built-in validation and reasoning guidance.
-   The server assembles them into structured workflows — use through
-   MCP or export as native skills to any client.
+Author prompts with built-in validation and reasoning guidance.
+The server assembles them into structured workflows — use through
+MCP or export as native skills to any client.
 
 **What these share**:
+
 - Lead with the PROBLEM (re-explaining, inconsistency, forgetting)
 - "assembles" not "enforces"
 - Dual-path: "use through MCP or export as native skills"
@@ -382,6 +397,7 @@ Orchestrate agentic workflows with a composable operator syntax.
 Export as native skills.
 
 Three sentences, three layers:
+
 1. Resources (the product): craft prompts with quality + reasoning built in
 2. Composition (the method): orchestrate with operators
 3. Distribution (the reach): export as native client skills
@@ -402,6 +418,7 @@ Track workflow progress across steps and long sessions.
 Enforce validation rules and step handoffs between agents.
 
 Three sentences, same rhythm as the main tagline (Craft / Orchestrate / Export):
+
 1. Route: `>>syntax` detected in conversation → correct MCP tool call
 2. Track: workflow state persists across steps and context compaction
 3. Enforce: validation and agent handoffs stay on track even when models drift
@@ -418,11 +435,13 @@ Other clients: MCP tools only.
 ## Honest Framing
 
 Things to be honest about (builds credibility):
+
 - "Architecture is actively evolving" — not claiming production-grade maturity
 - The trajectory is the story: template storage → chains → quality gates → client assistant
 - "Solo project" — one person, which makes the scope more impressive, not less
 
 Things NOT to undersell:
+
 - Cross-client support is genuinely novel in the MCP ecosystem
 - The gate/verification system solves a real problem (LLM self-evaluation is unreliable)
 - Skills sync is a forward-looking distribution model

@@ -1,6 +1,5 @@
 # Chain Authoring: Documentation-to-Skill Pipeline
 
-
 Build a 4-phase chain that researches library docs and outputs Claude Code skills.
 
 ---
@@ -15,12 +14,12 @@ docs comprehensively, read backlinks, then create a well-organized skill.md
 
 Natural language → structured chain. Four phases emerged:
 
-| Phase | Purpose |
-|-------|---------|
-| Discovery | Find latest version, map essential docs |
-| Scraping | Fetch docs, extract APIs, follow backlinks |
-| Analysis | Identify patterns, prioritize content |
-| Synthesis | Create token-efficient skill files |
+| Phase     | Purpose                                    |
+| --------- | ------------------------------------------ |
+| Discovery | Find latest version, map essential docs    |
+| Scraping  | Fetch docs, extract APIs, follow backlinks |
+| Analysis  | Identify patterns, prioritize content      |
+| Synthesis | Create token-efficient skill files         |
 
 ---
 
@@ -109,18 +108,20 @@ Execute the phase—research docs, build inventory:
 
 ```markdown
 ## Version Info
-| Field | Value |
-|-------|-------|
-| Latest Stable | 4.3.5 |
-| Release Date | July 2025 |
+
+| Field            | Value                              |
+| ---------------- | ---------------------------------- |
+| Latest Stable    | 4.3.5                              |
+| Release Date     | July 2025                          |
 | Breaking Changes | v3→v4: String validators top-level |
 
 ## Priority 1 Docs
-| Doc | URL | Purpose |
-|-----|-----|---------|
-| Official | https://zod.dev | Overview |
-| API | https://zod.dev/api | Schema reference |
-| Migration | https://zod.dev/v4/changelog | v3→v4 changes |
+
+| Doc       | URL                          | Purpose          |
+| --------- | ---------------------------- | ---------------- |
+| Official  | https://zod.dev              | Overview         |
+| API       | https://zod.dev/api          | Schema reference |
+| Migration | https://zod.dev/v4/changelog | v3→v4 changes    |
 ```
 
 **Pass the gate and continue:**
@@ -167,17 +168,19 @@ skills/zod/
 TypeScript-first schema validation. v4.3.5 (July 2025)
 
 ## Quick Reference
-| Task | Code |
-|------|------|
-| Define schema | `z.object({ name: z.string() })` |
-| Validate | `schema.parse(data)` or `.safeParse(data)` |
-| Get TS type | `type T = z.infer<typeof schema>` |
-| Email (v4) | `z.email()` NOT `z.string().email()` |
+
+| Task          | Code                                       |
+| ------------- | ------------------------------------------ |
+| Define schema | `z.object({ name: z.string() })`           |
+| Validate      | `schema.parse(data)` or `.safeParse(data)` |
+| Get TS type   | `type T = z.infer<typeof schema>`          |
+| Email (v4)    | `z.email()` NOT `z.string().email()`       |
 
 ## v4 Breaking Changes
-| v3 | v4 |
-|----|-----|
-| `z.string().email()` | `z.email()` |
+
+| v3                   | v4                 |
+| -------------------- | ------------------ |
+| `z.string().email()` | `z.email()`        |
 | `{ message: "..." }` | `{ error: "..." }` |
 ```
 
@@ -185,25 +188,25 @@ TypeScript-first schema validation. v4.3.5 (July 2025)
 
 ## Key Patterns
 
-| Pattern | Why |
-|---------|-----|
-| Step prompts first | Chain references them by `promptId` |
-| Focused step instructions | Each phase has clear scope |
-| Gates at checkpoints | Validate before proceeding |
-| `user_response` carries output | Model context has history |
-| `gate_verdict` advances chain | Self-evaluation against criteria |
+| Pattern                        | Why                                 |
+| ------------------------------ | ----------------------------------- |
+| Step prompts first             | Chain references them by `promptId` |
+| Focused step instructions      | Each phase has clear scope          |
+| Gates at checkpoints           | Validate before proceeding          |
+| `user_response` carries output | Model context has history           |
+| `gate_verdict` advances chain  | Self-evaluation against criteria    |
 
 ---
 
 ## When to Use Chains
 
-| Scenario | Single Prompt | Chain |
-|----------|---------------|-------|
-| One-shot task | ✓ | |
-| Multi-phase workflow | | ✓ |
-| Quality gates between phases | | ✓ |
-| Reusable step prompts | | ✓ |
-| Progress visibility | | ✓ |
+| Scenario                     | Single Prompt | Chain |
+| ---------------------------- | ------------- | ----- |
+| One-shot task                | ✓             |       |
+| Multi-phase workflow         |               | ✓     |
+| Quality gates between phases |               | ✓     |
+| Reusable step prompts        |               | ✓     |
+| Progress visibility          |               | ✓     |
 
 ---
 

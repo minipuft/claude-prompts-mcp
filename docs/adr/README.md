@@ -2,7 +2,7 @@
 
 This directory stores Architecture Decision Records (ADRs) for the Claude Prompts MCP server.
 
-Use ADRs to capture *why* a technical decision was made, what alternatives were considered, and
+Use ADRs to capture _why_ a technical decision was made, what alternatives were considered, and
 what tradeoffs we accepted. ADRs are written for future maintainers (humans + tooling) to reduce
 context loss and prevent architecture drift.
 
@@ -34,4 +34,3 @@ Use one of:
 ## Template
 
 Start with `0000-template.md` and fill it in.
-

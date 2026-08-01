@@ -62,11 +62,11 @@
 
 Presets provide common configurations for different development scenarios:
 
-| Preset | Max Attempts | Timeout | Best For |
-|--------|-------------|---------|----------|
-| `:fast` | 1 | 30s | Quick iteration during development |
-| `:full` | 5 | 300s (5 min) | CI-style validation |
-| `:extended` | 10 | 600s (10 min) | Long-running test suites |
+| Preset      | Max Attempts | Timeout       | Best For                           |
+| ----------- | ------------ | ------------- | ---------------------------------- |
+| `:fast`     | 1            | 30s           | Quick iteration during development |
+| `:full`     | 5            | 300s (5 min)  | CI-style validation                |
+| `:extended` | 10           | 600s (10 min) | Long-running test suites           |
 
 ```bash
 # Quick feedback during development
@@ -81,11 +81,11 @@ Presets provide common configurations for different development scenarios:
 
 ## Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `max:N` | 5 | Maximum verification attempts before escalation |
-| `timeout:N` | 300 | Command timeout in seconds |
-| `loop:true` | false | Enable Stop hook for autonomous loops |
+| Option      | Default | Description                                     |
+| ----------- | ------- | ----------------------------------------------- |
+| `max:N`     | 5       | Maximum verification attempts before escalation |
+| `timeout:N` | 300     | Command timeout in seconds                      |
+| `loop:true` | false   | Enable Stop hook for autonomous loops           |
 
 ### Combining Options with Presets
 
@@ -121,6 +121,7 @@ When `loop:true` is enabled, the Stop hook prevents Claude from stopping until v
 6. Only when verification passes or max attempts are reached can Claude stop
 
 **Important:** The Stop hook runs at the **end of Claude's turn**, not after each tool call. This means:
+
 - Claude makes all changes in one turn
 - When Claude finishes responding, the hook verifies the work
 - If verification fails, Claude gets another turn to fix issues
@@ -182,7 +183,7 @@ Configure isolation in `server/config.json`:
     "inContextAttempts": 3,
     "isolation": {
       "enabled": true,
-      "maxBudget": 1.00,
+      "maxBudget": 1.0,
       "timeout": 300,
       "permissionMode": "delegate"
     }
@@ -190,13 +191,13 @@ Configure isolation in `server/config.json`:
 }
 ```
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `verification.inContextAttempts` | `3` | Iterations before spawning CLI (1-3 = in-context, 4+ = isolated) |
-| `verification.isolation.enabled` | `true` | Enable context isolation |
-| `verification.isolation.maxBudget` | `1.00` | Max USD budget per spawn |
-| `verification.isolation.timeout` | `300` | Timeout in seconds for spawned instance |
-| `verification.isolation.permissionMode` | `delegate` | CLI permission mode (`delegate`, `ask`, `deny`) |
+| Setting                                 | Default    | Description                                                      |
+| --------------------------------------- | ---------- | ---------------------------------------------------------------- |
+| `verification.inContextAttempts`        | `3`        | Iterations before spawning CLI (1-3 = in-context, 4+ = isolated) |
+| `verification.isolation.enabled`        | `true`     | Enable context isolation                                         |
+| `verification.isolation.maxBudget`      | `1.00`     | Max USD budget per spawn                                         |
+| `verification.isolation.timeout`        | `300`      | Timeout in seconds for spawned instance                          |
+| `verification.isolation.permissionMode` | `delegate` | CLI permission mode (`delegate`, `ask`, `deny`)                  |
 
 ### Spawn Output (What You Get Back)
 
@@ -241,6 +242,7 @@ The response includes orchestration metadata:
 ```
 
 Use this metadata to:
+
 - Track costs across verification loops
 - Make budget-based decisions
 - Log debugging sessions
@@ -280,8 +282,10 @@ After max attempts, the user is prompted for a decision:
 
 ### Error Output:
 ```
+
 FAIL src/auth.test.ts
-  ✕ should validate token (15ms)
+✕ should validate token (15ms)
+
 ```
 
 **Choose an action using `gate_action` parameter:**
@@ -383,6 +387,7 @@ To verify a specific step, run the chain without `:: verify` and add verificatio
 `:: verify` is parsed from the inline command syntax only on the **first call**. When resuming a chain with `chain_id` and `user_response`, the inline operators are not re-parsed — the resumed execution uses the persisted chain session state.
 
 This means:
+
 - Verification runs once during initial execution
 - After a bounce-back (failed verification), submitting a fix via `chain_id` + `user_response` resumes with the persisted `pendingShellVerification` state
 - The `:: verify` syntax itself is not re-evaluated on resume
