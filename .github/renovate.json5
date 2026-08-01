@@ -139,11 +139,16 @@
       matchPackageNames: ["zod"],
       allowedVersions: "<4.0.0",
     },
-    {
-      description: "Hold express at v4.x until LLM ecosystem catches up to v5",
-      matchPackageNames: ["express", "@types/express"],
-      allowedVersions: "<5.0.0",
-    },
+    // The express <5.0.0 hold was removed on 2026-08-01. It was dead config contradicted
+    // by the repo it governed: server/package.json already declares express ^5.2.1 and
+    // @types/express ^5.0.6, and @modelcontextprotocol/sdk itself depends on express
+    // ^5.2.1. The migration the hold existed to defer had already happened, so all the
+    // rule still did was block v5.x PATCH updates — including any security fix.
+    //
+    // The zod hold below stays: the SDK now accepts ^3.25 || ^4.0, so the stated reason
+    // is satisfied at the boundary, but 16 files import zod (several are the hand-written
+    // MCP parameter schemas that are the validation SSOT). That is a migration, not a
+    // version bump, and it is tracked in its own plan rather than lifted here.
   ],
 
   // Vulnerability alerts
