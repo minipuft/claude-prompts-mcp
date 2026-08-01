@@ -66,7 +66,7 @@ jobs:
       # gate — the action would have been a second, silently divergent one.
       - name: Install pinned Python tooling
         working-directory: .
-        run: pip install ruff==0.15.5 pyrefly==1.1.1 --quiet
+        run: pip install ruff==0.16.0 pyrefly==1.1.1 --quiet
 
       # The seven `validate:no-*` recurrence guards shell out to ripgrep, which the
       # GitHub runner image does not ship. This was latent until validate:all started
