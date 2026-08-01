@@ -4,7 +4,7 @@
  * Handles registering prompts with MCP server using proper MCP protocol and managing conversation history
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { buildLauncherMessages } from './launcher-envelope.js';
 import { ConversationStore } from '../text-refs/conversation.js';

@@ -37,7 +37,7 @@
  * For deeper documentation: docs/guides/gates.md (Enforcement Modes section).
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // ============================================
 // Pass Criteria Schema
@@ -99,6 +99,7 @@ export const GatePassCriteriaSchema = z
     severity: z.enum(['warn', 'fail']).optional(),
     quality_indicators: z
       .record(
+        z.string(),
         z.object({
           keywords: z.array(z.string()).optional(),
           patterns: z.array(z.string()).optional(),
@@ -112,7 +113,7 @@ export const GatePassCriteriaSchema = z
 
     // Pattern check options
     regex_patterns: z.array(z.string()).optional(),
-    keyword_count: z.record(z.number()).optional(),
+    keyword_count: z.record(z.string(), z.number()).optional(),
 
     // Shell verification options (ground-truth validation via exit code)
     /** Shell command to execute for verification (exit 0 = pass) */
@@ -122,7 +123,7 @@ export const GatePassCriteriaSchema = z
     /** Working directory for shell command execution */
     shell_working_dir: z.string().optional(),
     /** Additional environment variables for shell command */
-    shell_env: z.record(z.string()).optional(),
+    shell_env: z.record(z.string(), z.string()).optional(),
     /** Maximum verification attempts before escalation (default: 5) */
     shell_max_attempts: z.number().int().positive().optional(),
     /** Preset for shell verification (:fast, :full, :extended) */
@@ -145,7 +146,7 @@ export const GatePassCriteriaSchema = z
     /** Script or command to execute for verification */
     script_tool_id: z.string().optional(),
     /** JSON input sent via stdin to the script */
-    script_tool_input: z.record(z.unknown()).optional(),
+    script_tool_input: z.record(z.string(), z.unknown()).optional(),
     /** Timeout in milliseconds for script execution (default: 30000) */
     script_tool_timeout: z.number().int().positive().optional(),
     /** Working directory for script execution */
@@ -241,7 +242,7 @@ export const GateDefinitionSchema = z
     name: z.string().min(1, 'Gate name is required'),
     /** Gate type: 'validation' runs checks, 'guidance' only provides instructional text */
     type: z.enum(['validation', 'guidance'], {
-      errorMap: () => ({ message: "Gate type must be 'validation' or 'guidance'" }),
+      error: () => "Gate type must be 'validation' or 'guidance'",
     }),
     /** Description of what this gate checks/guides */
     description: z.string().min(1, 'Gate description is required'),

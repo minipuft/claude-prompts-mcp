@@ -12,7 +12,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod/v4';
 import {
   FrameworkSchema,
   PhasesFileSchema,
@@ -24,9 +24,12 @@ const SCHEMAS_DIR = join(__dirname, '..', 'resources', 'schemas');
 mkdirSync(SCHEMAS_DIR, { recursive: true });
 
 // Generate framework.yaml schema
-const frameworkJsonSchema = zodToJsonSchema(FrameworkSchema, {
-  name: 'FrameworkResourceDefinition',
-  $refStrategy: 'none',
+// zod 4 ships its own converter, so the zod-to-json-schema dependency is gone.
+// `target: 'draft-7'` preserves the dialect these files have always declared, and
+// `io: 'input'` matches what a YAML author writes (pre-transform).
+const frameworkJsonSchema: Record<string, unknown> = z.toJSONSchema(FrameworkSchema, {
+  target: 'draft-7',
+  io: 'input',
 });
 frameworkJsonSchema['$schema'] = 'http://json-schema.org/draft-07/schema#';
 frameworkJsonSchema['title'] = 'Framework Definition';
@@ -40,9 +43,9 @@ writeFileSync(
 console.log('  ✓ framework.schema.json');
 
 // Generate phases.yaml schema
-const phasesJsonSchema = zodToJsonSchema(PhasesFileSchema, {
-  name: 'PhasesDefinition',
-  $refStrategy: 'none',
+const phasesJsonSchema: Record<string, unknown> = z.toJSONSchema(PhasesFileSchema, {
+  target: 'draft-7',
+  io: 'input',
 });
 phasesJsonSchema['$schema'] = 'http://json-schema.org/draft-07/schema#';
 phasesJsonSchema['title'] = 'Phases Definition';

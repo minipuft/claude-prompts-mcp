@@ -61,6 +61,8 @@
     "start:development": "node dist/index.js --verbose --transport=sse",
     "start:test": "node dist/index.js --startup-test",
     "verify:mcp": "node scripts/verify-mcp-surface.mjs",
+    "capture:tool-schemas": "node scripts/capture-tool-schemas.mjs",
+    "validate:tool-schemas": "node scripts/capture-tool-schemas.mjs --check",
     "verify:mcp:self-test": "node scripts/verify-mcp-surface.mjs --self-test",
     "help": "node dist/index.js --help",
     "test": "npm run pretest && npm run test:unit",
@@ -116,7 +118,7 @@
     "dev:graph:json": "madge --ts-config ./tsconfig.json --extensions ts src --json",
     "prepack": "rsync -a --exclude='__pycache__' --exclude='*.pyc' ../hooks ./",
     "postpack": "rm -rf ./hooks",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run build:prod",
     "release": "npm run build && npm test && npm publish --access public",
     "pack:mcpb": "../scripts/build-extension.sh",
     "pack:mcpb:validate": "cd .. && npx @anthropic-ai/mcpb validate manifest.json"
@@ -167,7 +169,7 @@
     "js-yaml": "^5.2.3",
     "nunjucks": "^3.2.4",
     "ulid": "^3.0.2",
-    "zod": "^3.22.4"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
@@ -191,7 +193,6 @@
     "ts-morph": "^27.0.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "8.53.0",
-    "zod-to-json-schema": "^3.25.1"
+    "typescript-eslint": "8.53.0"
   }
 }

@@ -15,7 +15,7 @@
  * @see plans/script-tools-implementation.md
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // ============================================================================
 // Trigger Type Schema (Deterministic - Modern Standards)
@@ -195,7 +195,7 @@ export const ScriptToolYamlSchema = z.object({
   /** Execution timeout in milliseconds (default: 30000) */
   timeout: z.number().positive().optional(),
   /** Environment variables to pass to the script */
-  env: z.record(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
   /** Working directory relative to tool directory */
   workingDir: z.string().optional(),
   /** Whether this tool is enabled (default: true) */

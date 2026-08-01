@@ -12,7 +12,7 @@
  * @see framework-schema.ts for the pattern this follows
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // ============================================
 // Argument Validation Schema
@@ -78,9 +78,9 @@ export const ChainStepSchema = z.object({
   /** Name/identifier of this step */
   stepName: z.string().min(1, 'Step name is required'),
   /** Map step results to semantic names */
-  inputMapping: z.record(z.string()).optional(),
+  inputMapping: z.record(z.string(), z.string()).optional(),
   /** Name this step's output for downstream steps */
-  outputMapping: z.record(z.string()).optional(),
+  outputMapping: z.record(z.string(), z.string()).optional(),
   /** Number of retry attempts on failure (default: 0) */
   retries: z.number().int().nonnegative().optional(),
   /** Client-agnostic capability hint for delegation model selection */
@@ -119,7 +119,7 @@ export const PromptGateConfigurationSchema = z
             pass_criteria: z.array(z.any()).optional(),
             expires_at: z.number().optional(),
             source: z.enum(['manual', 'automatic', 'analysis']).optional(),
-            context: z.record(z.any()).optional(),
+            context: z.record(z.string(), z.any()).optional(),
           })
           .passthrough()
       )

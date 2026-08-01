@@ -7,7 +7,7 @@
  * and documentation snippets. Keeping this in TypeScript + Zod ensures
  * manifests stay strict and human readable.
  */
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 export const parameterStatusSchema = z.enum([
   'working',
@@ -79,7 +79,7 @@ export const toolContractSchema = z.object({
   toolDescription: toolDescriptionSchema.optional(), // Optional for backwards compatibility
   parameters: z.array(parameterSchema).min(1),
   commands: z.array(commandDescriptorSchema).optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 export type ToolContract = z.infer<typeof toolContractSchema>;

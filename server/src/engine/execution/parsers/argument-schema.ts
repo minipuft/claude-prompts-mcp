@@ -1,5 +1,5 @@
 // @lifecycle canonical - Declares zod schemas for parsed operator arguments.
-import { z, type ZodTypeAny } from 'zod';
+import { z, type ZodTypeAny } from 'zod/v4';
 
 import type { PromptArgument } from '#shared/types/index.js';
 import type { ConvertedPrompt } from '../types.js';
@@ -92,12 +92,12 @@ export class ArgumentSchemaValidator {
       case 'number':
         return this.applyCommonConstraints(
           arg,
-          z.coerce.number({ invalid_type_error: `Argument ${arg.name} must be a number` })
+          z.coerce.number({ error: `Argument ${arg.name} must be a number` })
         );
       case 'boolean':
         return this.applyCommonConstraints(
           arg,
-          z.coerce.boolean({ invalid_type_error: `Argument ${arg.name} must be a boolean` })
+          z.coerce.boolean({ error: `Argument ${arg.name} must be a boolean` })
         );
       case 'array':
         return this.createArraySchema(arg);
@@ -107,20 +107,22 @@ export class ArgumentSchemaValidator {
       default:
         return this.applyStringConstraints(
           arg,
-          z.string({ invalid_type_error: `Argument ${arg.name} must be a string` })
+          z.string({ error: `Argument ${arg.name} must be a string` })
         );
     }
   }
 
   private createArraySchema(arg: PromptArgument): ZodTypeAny {
     const target = z.array(z.any(), {
-      invalid_type_error: `Argument ${arg.name} must be an array`,
+      error: `Argument ${arg.name} must be an array`,
     });
 
     const schema = z.preprocess((val) => {
       if (typeof val === 'string') {
         try {
-          const parsed = JSON.parse(val);
+          // Annotated `unknown`, not left as JSON.parse's `any`: zod 4 type-checks the
+          // preprocess return position, so an `any` here becomes an unsafe-return.
+          const parsed: unknown = JSON.parse(val);
           return parsed;
         } catch {
           return val;
@@ -133,14 +135,16 @@ export class ArgumentSchemaValidator {
   }
 
   private createObjectSchema(arg: PromptArgument): ZodTypeAny {
-    const target = z.record(z.any(), {
-      invalid_type_error: `Argument ${arg.name} must be an object`,
+    const target = z.record(z.string(), z.any(), {
+      error: `Argument ${arg.name} must be an object`,
     });
 
     const schema = z.preprocess((val) => {
       if (typeof val === 'string') {
         try {
-          const parsed = JSON.parse(val);
+          // Annotated `unknown`, not left as JSON.parse's `any`: zod 4 type-checks the
+          // preprocess return position, so an `any` here becomes an unsafe-return.
+          const parsed: unknown = JSON.parse(val);
           return parsed;
         } catch {
           return val;

@@ -134,21 +134,24 @@
       isVulnerabilityAlert: true,
       prPriority: 10,
     },
-    {
-      description: "Hold zod at v3.x until LLM ecosystem catches up to v4",
-      matchPackageNames: ["zod"],
-      allowedVersions: "<4.0.0",
-    },
+    // The zod <4.0.0 hold was removed on 2026-08-01, together with the migration it was
+    // deferring. What satisfied it: @modelcontextprotocol/sdk 1.30.0 accepts ^3.25 || ^4.0,
+    // all 16 importers moved to `zod/v4`, and the emitted MCP inputSchema is now pinned by
+    // tests/snapshots/mcp-input-schemas.json so a converter change cannot land unnoticed.
+    //
+    // The upgrade is not a version bump: the SDK picks its JSON Schema converter from the
+    // zod major (zod-json-schema-compat.js:19-28), so bumping zod rewrites the published
+    // tool surface. That snapshot is what makes future zod majors reviewable instead of
+    // silent — do not re-add a blanket hold, let the snapshot diff fail the PR.
     // The express <5.0.0 hold was removed on 2026-08-01. It was dead config contradicted
     // by the repo it governed: server/package.json already declares express ^5.2.1 and
     // @types/express ^5.0.6, and @modelcontextprotocol/sdk itself depends on express
     // ^5.2.1. The migration the hold existed to defer had already happened, so all the
     // rule still did was block v5.x PATCH updates — including any security fix.
     //
-    // The zod hold below stays: the SDK now accepts ^3.25 || ^4.0, so the stated reason
-    // is satisfied at the boundary, but 16 files import zod (several are the hand-written
-    // MCP parameter schemas that are the validation SSOT). That is a migration, not a
-    // version bump, and it is tracked in its own plan rather than lifted here.
+    // Both holds are now gone; there are no `allowedVersions` pins left in this file.
+    // Neither was retired by relaxing a rule — each was retired by finishing the
+    // migration it was deferring.
   ],
 
   // Vulnerability alerts

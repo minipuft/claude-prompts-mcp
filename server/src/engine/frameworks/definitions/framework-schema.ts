@@ -10,7 +10,7 @@
  * This ensures SSOT - any schema change is enforced everywhere.
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // ============================================
 // Gate Schema
@@ -108,8 +108,8 @@ export const PhasesFileSchema = z
         validationSteps: z.array(z.string()).optional(),
       })
       .optional(),
-    qualityIndicators: z.record(z.unknown()).optional(),
-    executionTypeEnhancements: z.record(z.unknown()).optional(),
+    qualityIndicators: z.record(z.string(), z.unknown()).optional(),
+    executionTypeEnhancements: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough();
 
@@ -149,7 +149,7 @@ export const FrameworkSchema = z
 
     // Guidance
     systemPromptGuidance: z.string().optional(),
-    toolDescriptions: z.record(z.unknown()).optional(),
+    toolDescriptions: z.record(z.string(), z.unknown()).optional(),
     templateSuggestions: z.array(TemplateSuggestionSchema).optional(),
   })
   .passthrough() // Allow additional fields not in schema

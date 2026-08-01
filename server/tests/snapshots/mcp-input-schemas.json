@@ -1,0 +1,472 @@
+{
+  "prompt_engine": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "chain_id": {
+        "description": "Resume token (e.g., `chain-demo#2`). RESUME: chain_id + user_response only. Omit command.",
+        "pattern": "^chain-[a-zA-Z0-9_-]+(?:#\\d+)?$",
+        "type": "string"
+      },
+      "command": {
+        "description": "Prompt ID to expand. Resulting prompt will include CAGEERF phase guidance for you to apply.",
+        "minLength": 1,
+        "type": "string"
+      },
+      "force_restart": {
+        "description": "Create a new chain execution (increments chain ID). Use `command`.",
+        "type": "boolean"
+      },
+      "gate_action": {
+        "description": "User choice after gate retry limit exhaustion. \"retry\" resets attempt count, \"skip\" bypasses the gate, \"abort\" stops execution.",
+        "enum": ["retry", "skip", "abort"],
+        "type": "string"
+      },
+      "gate_verdict": {
+        "description": "Send PASS/FAIL verdicts when resuming after gate reviews (e.g., \"GATE_REVIEW: PASS - rationale\"). Keep user_response for actual step output.",
+        "type": "string"
+      },
+      "gates": {
+        "description": "Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions. Supports mixed types in single array for maximum flexibility. Canonical parameter for all gate specification (v3.0.0+).",
+        "items": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "properties": {
+                "description": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["name", "description"],
+              "type": "object"
+            },
+            {
+              "properties": {
+                "apply_to_steps": {
+                  "items": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "type": "array"
+                },
+                "context": {
+                  "additionalProperties": {},
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "criteria": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "guidance": {
+                  "type": "string"
+                },
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "pass_criteria": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "scope": {
+                  "enum": ["execution", "session", "chain", "step"],
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": ["critical", "high", "medium", "low"],
+                  "type": "string"
+                },
+                "source": {
+                  "enum": ["manual", "automatic", "analysis"],
+                  "type": "string"
+                },
+                "target_step_number": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                },
+                "template": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": {
+                  "enum": ["validation", "guidance"],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "type": "array"
+      },
+      "options": {
+        "additionalProperties": {},
+        "description": "Additional execution options (key-value pairs) passed through to execution.",
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "user_response": {
+        "description": "Your Step output to capture before advancing. Supply the same text you would reply with during manual execution.",
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "type": "object"
+  },
+  "resource_manager": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": {},
+    "properties": {
+      "action": {
+        "enum": [
+          "create",
+          "update",
+          "delete",
+          "reload",
+          "list",
+          "inspect",
+          "analyze_type",
+          "analyze_gates",
+          "guide",
+          "switch",
+          "history",
+          "rollback",
+          "compare",
+          "clear"
+        ],
+        "type": "string"
+      },
+      "activation": {
+        "additionalProperties": {},
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "arguments": {
+        "items": {
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": ["name", "type", "description"],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "category": {
+        "type": "string"
+      },
+      "chain_step_data": {
+        "additionalProperties": {},
+        "properties": {
+          "inputMapping": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "outputMapping": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "promptId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "retries": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stepName": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "subagentModel": {
+            "enum": ["heavy", "standard", "fast"],
+            "type": "string"
+          }
+        },
+        "required": ["promptId", "stepName"],
+        "type": "object"
+      },
+      "chain_step_index": {
+        "maximum": 9007199254740991,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "chain_step_operation": {
+        "enum": ["add", "remove", "reorder", "replace"],
+        "type": "string"
+      },
+      "chain_step_order": {
+        "items": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "chain_steps": {
+        "items": {
+          "additionalProperties": {},
+          "properties": {
+            "inputMapping": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "outputMapping": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "promptId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "retries": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "stepName": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "subagentModel": {
+              "enum": ["heavy", "standard", "fast"],
+              "type": "string"
+            }
+          },
+          "required": ["promptId", "stepName"],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "confirm": {
+        "type": "boolean"
+      },
+      "description": {
+        "type": "string"
+      },
+      "detail": {
+        "enum": ["summary", "full"],
+        "type": "string"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "enabled_only": {
+        "type": "boolean"
+      },
+      "execution_hint": {
+        "enum": ["single", "chain"],
+        "type": "string"
+      },
+      "filter": {
+        "type": "string"
+      },
+      "format": {
+        "enum": ["table", "json", "text"],
+        "type": "string"
+      },
+      "framework": {
+        "type": "string"
+      },
+      "from_version": {
+        "type": "number"
+      },
+      "gate_configuration": {
+        "additionalProperties": {},
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "gate_type": {
+        "enum": ["validation", "guidance"],
+        "type": "string"
+      },
+      "gates": {
+        "additionalProperties": {},
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "guidance": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "limit": {
+        "type": "number"
+      },
+      "name": {
+        "type": "string"
+      },
+      "pass_criteria": {
+        "items": {},
+        "type": "array"
+      },
+      "persist": {
+        "type": "boolean"
+      },
+      "phases": {
+        "items": {},
+        "type": "array"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "resource_type": {
+        "enum": ["prompt", "gate", "framework", "checkpoint"],
+        "type": "string"
+      },
+      "retry_config": {
+        "additionalProperties": {},
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "search_query": {
+        "type": "string"
+      },
+      "skip_version": {
+        "type": "boolean"
+      },
+      "system_message": {
+        "type": "string"
+      },
+      "system_prompt_guidance": {
+        "type": "string"
+      },
+      "to_version": {
+        "type": "number"
+      },
+      "tool_descriptions": {
+        "additionalProperties": {},
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "tools": {
+        "items": {},
+        "type": "array"
+      },
+      "user_message_template": {
+        "type": "string"
+      },
+      "version": {
+        "type": "number"
+      }
+    },
+    "required": ["resource_type", "action"],
+    "type": "object"
+  },
+  "system_control": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "action": {
+        "description": "Use 'guide' with topic:'framework' for phase-specific operation guidance.",
+        "type": "string"
+      },
+      "framework": {
+        "description": "Framework identifier when switching. Use framework:list to see available options.",
+        "type": "string"
+      },
+      "include_history": {
+        "description": "Include historical entries (where supported).",
+        "type": "boolean"
+      },
+      "include_metrics": {
+        "description": "Include detailed metrics output (where supported).",
+        "type": "boolean"
+      },
+      "operation": {
+        "description": "Sub-command for the selected action (e.g. framework: switch|list|enable|disable, analytics: view|reset|history).",
+        "type": "string"
+      },
+      "persist": {
+        "description": "When true, gate/framework enable/disable changes are also written to config.json.",
+        "type": "boolean"
+      },
+      "reason": {
+        "description": "Audit-friendly explanation for switches, config changes, or restarts.",
+        "type": "string"
+      },
+      "search_query": {
+        "description": "Filter gates by keyword (matches ID, name, or description). Use with gates:list action.",
+        "type": "string"
+      },
+      "session_id": {
+        "description": "Target session ID or chain ID for session operations.",
+        "type": "string"
+      },
+      "show_details": {
+        "description": "Request an expanded response for list/status style commands.",
+        "type": "boolean"
+      },
+      "topic": {
+        "description": "Guide topic when requesting guidance.",
+        "type": "string"
+      }
+    },
+    "required": ["action"],
+    "type": "object"
+  }
+}

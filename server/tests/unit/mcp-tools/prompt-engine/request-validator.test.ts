@@ -60,7 +60,10 @@ describe('McpToolRequestValidator', () => {
       const raw = { command: null };
 
       expect(() => McpToolRequestValidator.validate(raw)).toThrow(
-        'McpToolRequest validation failed: command: Expected string, received null'
+        // zod 4 reworded its built-in type error: "Expected string, received null"
+        // became "Invalid input: expected string, received null". This text reaches MCP
+        // clients verbatim through the thrown message, so the change is observable.
+        'McpToolRequest validation failed: command: Invalid input: expected string, received null'
       );
     });
 

@@ -222,64 +222,128 @@ targeted un-ignores). A filesystem walk would test a different corpus on every m
 local-only failure would look like a CI-passing regression. The test now enumerates git-tracked
 files and asserts a floor of 50, so a broken glob fails instead of silently passing on an empty set.
 
-## Tier C — zod 3 → 4
+## Tier C — zod 3 → 4 — gate PASSED
 
-One PR, staged internally. **Blocked on PR #170 merging first** (finding 10) — both edit
-`.github/renovate.json5`, and a rebase could silently reinstate the express hold.
+PR #170 merged and the rebase did **not** reinstate the express hold. All nine subtiers are
+done, with two scope corrections recorded below.
 
-### The contract question
+| #   | Status | Step                                     | Result                                                                        |
+| --- | ------ | ---------------------------------------- | ----------------------------------------------------------------------------- |
+| C1  | ✓      | capture the zod-3 `inputSchema` baseline | `scripts/capture-tool-schemas.mjs` + `tests/snapshots/mcp-input-schemas.json` |
+| C2  | ✓      | `zod` → ^4.4.3                           | installed                                                                     |
+| C3  | ✓      | migrate the non-MCP importers            | 69 typecheck errors → 0                                                       |
+| C4  | ✓      | migrate the 3 MCP schema files           | included above                                                                |
+| C5  | ✓      | `zodToJsonSchema()` → `z.toJSONSchema()` | `generate-framework-schemas.ts`                                               |
+| C6  | ✓      | drop `zod-to-json-schema`                | **from our dependencies only** — see below                                    |
+| C7  | ✓      | diff the published surface               | **39 changes → major**                                                        |
+| C8  | ✓      | remove the zod hold                      | `renovate.json5` now has no `allowedVersions` pins at all                     |
+| C9  | ✓      | version decision                         | **4.0.0**, per C7                                                             |
 
-`server/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js:19-28`:
+### The migration, by pattern
 
-```js
-if (isZ4Schema(schema)) {
-  return z4mini.toJSONSchema(schema, {
-    target: mapMiniTarget(opts?.target),
-    io: opts?.pipeStrategy ?? "input",
-  });
-}
-return zodToJsonSchema(schema, {
-  strictUnions: opts?.strictUnions ?? true,
-  pipeStrategy: opts?.pipeStrategy ?? "input",
-});
+| zod 3                                     | zod 4                                   | Sites                                                                                     |
+| ----------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `z.record(V)`                             | `z.record(z.string(), V)`               | 24 — the single argument is now the **key** type, so a bare call silently changes meaning |
+| `errorMap: (issue, ctx) => ({ message })` | `error: (issue) => string \| undefined` | 8 — `ctx.defaultError` becomes `return undefined`                                         |
+| `invalid_type_error: M`                   | `error: M`                              | 5                                                                                         |
+| `z.ZodIssueCode.invalid_enum_value`       | `'invalid_value'`                       | 2                                                                                         |
+| `ZodError.errors`                         | `ZodError.issues`                       | 2                                                                                         |
+
+### Two blockers typecheck could not see
+
+**1. The published server bundle crashed on import.**
+
+```
+TypeError: Class2 is not a constructor
+    at _custom (dist/index.js:11460)
+    at dist/index.js:288044   <- SDK types.js: AssertObjectSchema = custom(...)
 ```
 
-Two independent implementations of optional/nullable representation, `$ref` handling and draft
-targeting. The v3 path passes `strictUnions: true`; the v4 path has no equivalent option.
+Not duplicate zod copies — one copy of each module is bundled and the SDK imports cleanly
+**unbundled**. It is an esbuild init-order fault: our source imported `zod` (root), the SDK
+imports `zod/v4`, and those are different files. Pulling in the root re-export made esbuild wrap
+zod's modules in a lazy `__esm` initialiser, so `ZodCustom` (assigned at line 14748, inside it)
+was still `undefined` when the SDK's top-level `custom()` ran at 288044.
 
-`CLAUDE.md:125` puts the MCP tool surface inside the Public API Contract. **So the diff decides
-the version: empty → 3.x minor; non-empty → 4.0.0.** Do not pre-declare either.
+Fixed by importing `zod/v4` in all 16 source files, matching the SDK. An esbuild `alias` was tried
+first and rejected: aliases are prefix-based, so `zod -> zod/v4` also rewrites `zod/v3` and
+`zod/v4-mini` into paths the package does not export.
 
-### Migration surface (measured across the 16 importers)
+**2. The `cpm` CLI bundle doubled and broke its budget.**
 
-| Pattern              | Sites | zod 4                                           |
-| -------------------- | ----- | ----------------------------------------------- |
-| `message:`           | 27    | → `error:` — deprecated, still works, may defer |
-| `errorMap`           | 8     | → `error` function — **removed**                |
-| `invalid_type_error` | 5     | → unified `error` function — **removed**        |
-| `.passthrough()`     | 15    | → `z.looseObject()`                             |
-| `.strict()`          | 3     | → `z.strictObject()`                            |
+```
+415.6 KB (zod 3)  ->  842.4 KB (zod 4)   budget 500 KB
+```
 
-| #   | File                                                                                     | Change                                                                                                         | ~Lines | Depends     | Verify                                              |
-| --- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------ | ----------- | --------------------------------------------------- |
-| C1  | `server/tests/integration/mcp-input-schema.test.ts` **(new)**                            | capture `inputSchema` for all 3 tools under **zod 3** to a committed snapshot                                  | ~60    | #170 merged | run on zod 3 — snapshot written and green           |
-| C2  | `server/package.json`                                                                    | `zod` → ^4.4.3                                                                                                 | 1      | C1          | `npm ci`                                            |
-| C3  | 13 non-MCP zod importers                                                                 | `errorMap`/`invalid_type_error` → `error`; `.passthrough()`/`.strict()` → `z.looseObject()`/`z.strictObject()` | ~45    | C2          | `npm run typecheck`                                 |
-| C4  | `server/src/mcp/tools/schemas/{prompt-engine,system-control,resource-manager}.schema.ts` | same migration on the validation SSOT                                                                          | ~15    | C2          | `npm run typecheck`                                 |
-| C5  | `server/scripts/generate-framework-schemas.ts:15,27,43`                                  | `zodToJsonSchema()` → `z.toJSONSchema()`                                                                       | ~10    | C2          | `npm run validate:contracts`                        |
-| C6  | `server/package.json`                                                                    | **remove `zod-to-json-schema`**                                                                                | 1      | C5          | `rg -n "zod-to-json-schema" src/ scripts/` → 0 hits |
-| C7  | —                                                                                        | re-run C1's capture and diff against the snapshot                                                              | 0      | C3, C4      | **the diff IS the deliverable**                     |
-| C8  | `.github/renovate.json5:138-140`                                                         | remove the zod hold                                                                                            | 4      | C7          | json5 parses; renovate-config-validator green       |
-| C9  | `CHANGELOG.md` / release strategy                                                        | record per C7's outcome                                                                                        | ~5     | C7          | —                                                   |
+**279 KB of that was locales.** `zod/v4/classic/external.js` ends with
+`export * as locales from "../locales/index.js"`, and a namespace re-export is opaque to tree
+shaking, so all 53 translations ship. `cli/build/zod-locales-trim.mjs` replaces that barrel with a
+stub exporting `en` alone. The default locale is unaffected — it arrives through a separate direct
+import two lines earlier (`import en from "../locales/en.js"; config(en())`), which the plugin
+never intercepts.
 
-**Gate**: `validate:all` exit 0 · `test:ci` green · `verify:mcp` passes · C7's diff enumerated in
-the PR body, not summarised.
+That left 565 KB, still over. Rather than raise the ceiling, `prepublishOnly` now runs `build:prod`:
 
-> C6 matters beyond tidiness: leaving `zod-to-json-schema` installed keeps a second converter that
-> nothing calls — the parallel-system smell `cleanup-standards.md` exists to prevent. (The SDK
-> retains its own copy as a transitive dep; that is the SDK's business, not ours.)
+| Artifact                                           | Size         |
+| -------------------------------------------------- | ------------ |
+| published today (zod 3, unminified)                | 415.6 KB     |
+| zod 4 + locale trim, unminified                    | 565.4 KB     |
+| **zod 4 + locale trim, minified — what now ships** | **294.9 KB** |
 
----
+The published CLI ends up **29% smaller than before this tier**, despite the larger dependency.
+
+Two budgets exist now because two artifacts do: 500 KB minified (shipped) and 625 KB unminified
+(CI, pre-push, local). Both are enforced, and the minify flag is threaded through both call sites —
+`server/esbuild.config.mjs` was passing none, which silently graded the published bundle against
+the looser ceiling. Skipping the check when unminified was rejected outright: CI runs exactly that
+path, so it would have been a check that cannot fail. Verified against four synthetic sizes,
+accepting and rejecting on both sides of both budgets.
+
+### C7 — the diff that decided the version
+
+**39 changes: 26 additions, 9 removals, 4 rewordings.** Non-empty, so **4.0.0**.
+
+| Group                      | Change                                                                                                           | Reading                                                                                                                                                                                                                            |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Strictness dropped** (3) | `additionalProperties: false` removed from `prompt_engine`, `system_control`, `resource_manager.arguments.items` | The contract change. The schema no longer advertises that unknown keys are rejected. Runtime parsing is unchanged; the published document is not. **Deliberately not restored** with `z.strictObject()` — owner's call, 2026-08-01 |
+| `$ref` inlined (7)         | `chain_step_data.properties.*` pointed into `chain_steps/items`; zod 4 expands them                              | Equivalent semantically, different document for any client resolving `$ref`                                                                                                                                                        |
+| Additive precision (26)    | `propertyNames: {type: "string"}` per record; safe-integer `maximum` per integer                                 | Harmless                                                                                                                                                                                                                           |
+
+Rewordings are `additionalProperties: true` → `{}` on `.passthrough()` objects — same statement,
+zod 4's spelling.
+
+Outside the schema: zod 4 reworded its type errors. `"Expected string, received null"` became
+`"Invalid input: expected string, received null"`, and that text reaches clients through the thrown
+validation message. One unit test asserted the old wording; updated.
+
+### A defect found in the diff tool itself
+
+The first C7 run reported `additionalProperties: true` as **deleted** on three passthrough objects.
+It was not — zod 4 writes `{}`, and `flatten()` walked an empty object and emitted no leaf, so `{}`
+vanished and read as a removal. That would have inflated a wording change into a semantic one, on
+the one output this tier exists to produce. Fixed before the diff was used to decide anything.
+
+### The snapshot is now enforced, not decorative
+
+`npm run validate:tool-schemas` runs in CI's Build job, after the build it depends on — not in
+`validate:all`, which runs before the build and could not spawn the server. Without a wired check
+the snapshot would have been a file nobody reads, which is precisely what the retired renovate
+hold claims replaced it.
+
+### C6 correction
+
+`zod-to-json-schema` is removed **from our dependencies**, not from the tree. The SDK imports it
+directly for its own zod-3 path, so it stays hoisted as a transitive. The plan's "0 hits" check
+holds for `src/`, `scripts/` and `tooling/`; the stronger reading — gone entirely — is not
+achievable and was not attempted.
+
+### C5 note
+
+`generate-framework-schemas.ts` now uses `z.toJSONSchema({ target: 'draft-7', io: 'input' })`.
+Both emitted files changed shape — the old converter wrapped everything under
+`definitions.<Name>` behind a root `$ref`, zod 4 emits at the root — but **no leaf value changed**
+(+70/−74/~0 and +72/−73/~0). Nothing references `#/definitions/...`; these are YAML-authoring
+schemas whose consumers point at the file root.
 
 ## Tier D — TypeScript 7 + ESLint 10 (research only)
 

@@ -157,7 +157,10 @@ async function build() {
         minify: isProduction,
       });
       await esbuild.build(cliOptions);
-      checkCliBundleSize(cliOptions.outfile);
+      // Pass the minify flag: the shipped (minified) artifact and the dev one are held
+      // to different budgets, and omitting it silently graded the published bundle
+      // against the looser unminified ceiling.
+      checkCliBundleSize(cliOptions.outfile, Boolean(cliOptions.minify));
 
       // No declaration emit. This package ships a server binary and Python hooks, not a
       // library — nothing imports it, so the 405 .d.ts files this produced were read by
