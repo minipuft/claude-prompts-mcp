@@ -31,7 +31,7 @@ jobs:
           # For workflow_dispatch: use current ref
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: ".node-version"
           cache: npm
@@ -114,7 +114,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: ".node-version"
           cache: npm
@@ -299,7 +299,7 @@ jobs:
       # This job now runs npm (lockfile regeneration + the npm ci assertion below), so the
       # Node/npm version must be pinned rather than inherited from whatever the runner ships —
       # lockfileVersion differs across npm majors and would churn the downstream diff.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: upstream/.node-version
 
@@ -443,7 +443,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: ".node-version"
           cache: npm
