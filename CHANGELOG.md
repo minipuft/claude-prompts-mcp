@@ -7,22 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.0.0](https://github.com/minipuft/claude-prompts/compare/v2.1.0...v3.0.0) (2026-08-01)
 
-
-### ⚠ BREAKING CHANGES
-
-* **server:** the project is re-licensed from AGPL-3.0-only to MIT. Network use of modified versions no longer triggers the source-disclosure obligation of AGPL section 13; MIT imposes attribution only. Skills already exported by `skills:export` carry the old AGPL-3.0-only license field and must be regenerated to pick up MIT.
-* **mcp-tools:** resource_manager parameter `methodology` is now `framework`; FrameworkCreationData.methodology removed and `type` is now required.
-* **frameworks:** FrameworkDefinition.methodology removed; use `type`.
-* resource://methodology/ is now resource://framework/.
-* **prompts:** `>>create_methodology` is now `>>create_framework`.
-* **config:** the config.json section `methodologies` is now `frameworks`. Existing files are migrated in place on load; the legacy key is ignored after that and can be deleted.
-* **frameworks:** a framework.yaml with only `methodology:` and no `type:` no longer loads. All bundled definitions already declared both, so nothing shipped requires an edit; a hand-authored workspace definition may.
-* **mcp-tools:** resource_manager(resource_type: "methodology") is now resource_type: "framework". Existing version history for frameworks is discarded by the schema recreate rather than migrated; this is accepted for a pre-release project. The 'switch' action remains valid only for this type, now under its new name.
-* **resources:** workspace overlays under MCP_WORKSPACE/resources/methodologies/ will no longer resolve and must be renamed to resources/frameworks/ with their methodology.yaml renamed to framework.yaml. This fails silently - the resource simply stops being found - rather than raising an error. No overlay was present in this environment at the time of the rename.
-* **chains:** SCHEMA_VERSION 15 -> 16. Persisted step state values `rendered` and `response_captured` no longer exist and substate_json changed shape, so the first server start after this drops and recreates state.db. Any in-flight chain session is lost; run it between chains rather than mid-run.
-
 ### Added
 
+- **`cpm` CLI now ships with the npm package**: the workspace CLI is published as a second bin of `claude-prompts`, so it runs from any directory without cloning the repo or installing an MCP server — `npx -p claude-prompts cpm validate --all -w ./my-workspace`. Useful for scripting, CI, and for agents working outside a configured MCP client. The bundle is self-contained (no runtime dependencies) and is built from `cli/src` by `server/esbuild.config.mjs`, which imports `cli/esbuild.config.mjs` rather than duplicating it so the standalone and published bundles cannot drift. See [CLI Guide](docs/guides/cli.md).
+- **CLI validated in CI**: a `CLI` job now runs the CLI's typecheck, build, and integration suite on every run. `jest`/`ts-jest` were missing from `cli`'s devDependencies, so its 75 integration tests had never executed; six were failing against fixtures left stale by the `content_check` → `inline_guidance` and methodology → framework retirements. Fixtures corrected, suite green.
+- **Warnings for dropped inline gate definitions**: `normalizeInlineGateDefinitions` previously discarded malformed definitions in silence. Each drop now logs the prompt, the gate (by ID, else name, else position), and every field that disqualified it — all of them, not just the first, so one load cycle reports every mistake. Applies to YAML and markdown prompts. Malformed definitions are still dropped rather than failing the load, so a bad block costs one gate instead of the whole prompt. This is release N of the warn-then-arm migration described under Deprecated.
+- **Prompt-level injection control**: a prompt may declare an `injection` block in its `prompt.yaml` (`system-prompt`, `gate-guidance`, `style-guidance`, each accepting `enabled`, `frequency`, `target`). It resolves between step and chain config, taking the hierarchy to eight levels. Setting `system-prompt.enabled: false` also withholds gates that score methodology adherence, since scoring a methodology that was never injected is incoherent. See [Injection Control](docs/guides/injection-control.md).
+- **`session:cancel` action on `system_control`** (Tier 3): MCP clients can now cancel an active chain session via `system_control(action:"session", operation:"cancel", session_id:"chain-X#1")`. Transitions `runStatus` to `cancelled`; idempotent on already-cancelled sessions; refuses sessions in terminal `completed`/`failed` state. Use `operation:"cancel"` for soft-stop (preserves session for audit), `operation:"clear"` for hard removal (deletes session and chain history).
+- **`ExecutionRecord` persistence** (Tier 5): Pipeline stages 9 and 10 now emit append-only ledger rows to the `execution_records` table on every chain-step transition. Stage 9 emits a `working` record per render (with `substate.renderedAt`); stage 10 emits a `completed` record on chain terminal. Records carry SEP-1686-aligned `StepLifecycle` + `StepSubstate` + `GateVerdictSummary` shape. ULIDs (monotonic) preserve insertion order across rapid emissions. Emission is best-effort — failures log a warning and never break pipeline execution.
+- **`command-tokenizer.ts`**: Pure function `tokenizeCommand()` with quote-aware detection for all 8 operator types (chain, delegation, gate, parallel, repetition, conditional, framework, style). Includes delimiter overlap filtering to prevent `==>` from false-matching as gate operator
+- **`command-tokenizer.test.ts`**: 56 tests covering all operator types, quoted argument regression suite, mixed operators, prompt ID extraction, cleaned command generation, and edge cases
 * **execution:** execution ledger Tiers 1-5 + Phase 4 SQLite cleanup ([#131](https://github.com/minipuft/claude-prompts/issues/131)) ([9fd4520](https://github.com/minipuft/claude-prompts/commit/9fd45205771fae4c8d603bb32a2e0ed9956b51ad))
 * **gates:** add script_tool verification criteria and fix schema normalization ([d12c278](https://github.com/minipuft/claude-prompts/commit/d12c2789897d5365374c7e1d4d7e0e0268adc679))
 * **gates:** clarify gate vocabulary, add path-verification gate, documentation pass ([#132](https://github.com/minipuft/claude-prompts/issues/132)) ([7d46db0](https://github.com/minipuft/claude-prompts/commit/7d46db02e0d55a348372dc8a3181e7acb916c78a))
@@ -32,6 +26,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **server:** ship the cpm CLI as a second bin ([f9d9ec2](https://github.com/minipuft/claude-prompts/commit/f9d9ec25b6bd6315a8f6948ee38dc30771ff4bed))
 * **server:** unify contract-surface vocabulary on framework, add recurrence guard ([6b5b27a](https://github.com/minipuft/claude-prompts/commit/6b5b27a9a952b0faacd61cbbf7ddaec2090cfc2f))
 
+### Changed
+
+- **Downstream marketplace sync no longer hardcodes the license**: the `sync-downstream` job stamped `.license = "AGPL-3.0-only"` onto `minipuft-plugins`' `marketplace.json` as a literal, so it would have re-applied the pre-2.1.0 license on every release and silently reverted the MIT change above. The license is now read from `.claude-plugin/plugin.json` (one source of truth) and asserted in the job's validate step.
+- **Repository housekeeping**: removed `.actrc` (no workflow, script, or doc referenced it) and `.nvmrc` (no machine consumer; `.node-version` is the pinned file and is read by `setup-node` and the extension build). Publish workflows now resolve Node via `node-version-file: '.node-version'` instead of five hardcoded `24` literals. The `remotion/` product-demo tree moved out of the repository into a standalone local project, ending its dependency-bot churn; its commitlint scope was retired with it.
+- **Single active Renovate configuration**: the repo carried both a bare root `renovate.json` and a tuned `.github/renovate.json5`. Renovate resolves the root file first, so the tuned config — including the `zod <4` and `express <5` holds — had never taken effect. Confirmed by a `--dry-run=full` against `main`, which reported it would ensure a dashboard titled `Dependency Dashboard` (the default) rather than the `📦 Dependency Updates Dashboard` the json5 specifies. The root file is removed. Because the surviving config had never executed, it was audited before activation rather than trusted:
+  - Dropped `baseBranches: ["main", "develop"]` → `["main"]`; no `develop` branch exists on the remote.
+  - Dropped `postUpgradeTasks`; it requires self-hosted Renovate with `allowedPostUpgradeCommands` and is inert on the hosted app.
+  - **Dropped the `enabledManagers: ["npm"]` allowlist entirely.** A dry-run comparison showed activating it as written would have silently stopped updates for the `dockerfile` manager (`server/src/Dockerfile` base images) and `nodenv` (`.node-version` — the file every workflow now resolves Node from). Auto-detection is what had actually been running.
+  - Set `vulnerabilityAlerts.minimumReleaseAge: null`, overriding the global 3-day soak. With Dependabot security updates disabled, Renovate is the sole remediation path and CVE fixes must not wait three days. Dependabot _alerts_ remain enabled — Renovate reads that feed to detect vulnerabilities and would go blind without it.
+  - Automerge ships off pending one review cycle now that the config is live for the first time.
+- **Re-licensed from AGPL-3.0-only to MIT** to match the MCP ecosystem default and unblock corporate adoption. This reverses the 2.0.0 change that moved the project from MIT to AGPL-3.0-only. Network use of modified versions no longer triggers the source-disclosure obligation of AGPL Section 13; the MIT terms impose only attribution. `LICENSE`, `server/package.json`, `manifest.json`, and `.claude-plugin/plugin.json` now all declare MIT, as does the default `license` field stamped on skills exported by `skills:export` — regenerate exported skills to pick up the new value. Production dependencies were audited before the change: 109 MIT, 33 Apache-2.0, 14 BSD-3-Clause, 12 ISC, 2 BSD-2-Clause, 1 Python-2.0, and zero copyleft.
+- **`%lean` no longer keeps methodology-scoring gates**: `%lean` suppresses the methodology system prompt, so the gates that score adherence to it are now withheld too — today that is `framework-compliance` alone. Non-framework gates continue to run under `%lean` exactly as documented; the correction is narrower than the previous wording suggested. Same applies to `%clean` and to a prompt-level `system-prompt` opt-out. `%judge` forces the methodology in and therefore keeps the gates.
+- **`framework_gates: false` now takes effect**: the prompt-level opt-out was read from a field that had five readers and no writer, so it did nothing. It now withholds methodology gates across every tier, including registry-activated ones. A prompt already setting it will see those gates disappear — which is what the option has always promised.
+- **`gateConfiguration.exclude` now applies to registry-activated gates**: excludes were honoured during planning and then silently undone when the same gates were re-added by category activation. One veto set now covers every tier.
+- **`db_reader.py` migrated to `v_execution_status` SSOT view** (Tier 4): Python hook now reads chain state from the cross-language SSOT view introduced in Tier 1, using the canonical `run_status` column (Tier 2) for boundary detection. Falls back to `chain_sessions` per-row table, then `chain_run_registry` blob, for backward compatibility during rollout (Tier 10 will retire the blob fallback). Hook output shape unchanged — existing chain-stop integration is preserved.
+- **Consolidated four KV-blob tables into shared `kv_state`** (`SCHEMA_VERSION` 15 → 16): `framework_state`, `gate_system_state`, `argument_history`, and `resource_hash_cache` are now rows in a single `kv_state` table keyed on `(tenant_id, key)`. `SqliteStateStoreConfig` gains an optional discriminator `key` for shared tables. `state.db` is ephemeral, so the schema bump auto-recreates on next server start with no migration burden. Drops 4 tables and 5 indexes.
+- **Atomic dual-write to chain registry + hook view**: `persistSessions()` now wraps the `chain_run_registry` blob write and the derived `chain_sessions` projection inside a single transaction so the two can never diverge. Renamed `syncToSessionTable` → `projectToHookView` to reflect that `chain_sessions` is a read-only projection of the registry blob.
+- **`SqliteChainRunRegistry` class removed**: dead code with zero consumers. Single `DirectChainRunRegistry` implementation remains.
+- **Command tokenizer refactor**: Replaced duplicated operator detection across 3 parsing strategies with a single-pass, quote-aware `tokenizeCommand()` function
+  - `command-parser.ts`: 771→710 lines; symbolic `canHandle` reduced from 20 lines to 1; gate/framework/style stripping regex (~25 lines) replaced by `tokens.promptId`/`tokens.rawArgs`
+  - `parser-utils.ts`: 198→156 lines; removed `hasOperatorOutsideQuotes` and `stripFrameworkOperatorOutsideQuotes` (zero consumers — tokenizer subsumes)
+  - Strategies now consume `TokenizedCommand` instead of re-detecting operators: `canHandle(command, tokens)` reads `tokens.format` and `tokens.hasSymbolicOperators`
+  - Eliminates the class of bugs where special characters inside quoted arguments (e.g., `"R3F + Visx"`, `"modes: (1)"`) triggered false operator detection
+* **chains:** rename ChainSessionManager identifiers to ChainSessionStore ([6f9428a](https://github.com/minipuft/claude-prompts/commit/6f9428ade77f31a8220215383b1e1a823e8bbc6d))
+* **chains:** retire StepState enum for StepLifecycle + StepMilestone ([d617330](https://github.com/minipuft/claude-prompts/commit/d6173301d4f956677ed8d70fd6259256a2de631f))
+* **config:** separate authored framework settings from the resolved view ([0bc61f8](https://github.com/minipuft/claude-prompts/commit/0bc61f845e54a533e0df6e1f6ee6aa5ee4deb211))
+* **execution:** extract shared process utility with POSIX signal interpretation ([465bf53](https://github.com/minipuft/claude-prompts/commit/465bf5353da2b068d517f505aa6ce87d40adb3b3))
+* **frameworks:** dedup and disambiguate colliding framework types ([0b9d8c2](https://github.com/minipuft/claude-prompts/commit/0b9d8c24edf5105fcbf8ed91dd395458fafe49ac))
+* **frameworks:** delete the enableArgumentSuggestions flag ([4738763](https://github.com/minipuft/claude-prompts/commit/47387639708aa1ee7284a8b2d2afd89e63f1b0a9))
+* **frameworks:** move methodology-named files and directories ([12d2470](https://github.com/minipuft/claude-prompts/commit/12d2470e587a2c341169f0113d1064ddf4225559))
+* **frameworks:** remove the deprecated methodology field from definitions ([bb1f590](https://github.com/minipuft/claude-prompts/commit/bb1f590ac79bb2b44347b1179c8ee8929cf5f79a))
+* **frameworks:** rename internal methodology identifiers to framework ([4c49340](https://github.com/minipuft/claude-prompts/commit/4c4934022cc574190100c6e44988c099b92dc3e2))
+* **frameworks:** rename methodology to framework in comment prose ([ffd1033](https://github.com/minipuft/claude-prompts/commit/ffd1033612120a753b2c4fb69227222b057aefd1))
+* **frameworks:** rename the 16 exported Methodology* symbols ([7d16376](https://github.com/minipuft/claude-prompts/commit/7d16376f5ecc9bcc6f4a314b99a8d1208788c959))
+* **frameworks:** retire FrameworkDefinition.methodology ([a5ef404](https://github.com/minipuft/claude-prompts/commit/a5ef4043e23ee955209908694b012ac7d9983b88))
+* **frameworks:** unify methodology vocabulary on framework ([0393797](https://github.com/minipuft/claude-prompts/commit/03937972a418685dbd9f912ec1c0084893cfc349))
+* **gates:** rename gate source methodology to framework-guide ([4c83c66](https://github.com/minipuft/claude-prompts/commit/4c83c6697ce338088b76df63276c0a7d1e2f1826))
+* **mcp-tools:** delete the system_control tool-description sink ([0ad5769](https://github.com/minipuft/claude-prompts/commit/0ad5769ec65043aa0ccb64226ba486ae9adabd70))
+* **mcp-tools:** rename resource_type value methodology to framework ([916b61c](https://github.com/minipuft/claude-prompts/commit/916b61c04825ea2a8b5b6bf7578503c7967bec0f))
+* **parsers:** centralize operator detection in single-pass command tokenizer ([1dab41b](https://github.com/minipuft/claude-prompts/commit/1dab41bd182872178cd3bc7c4b365eda8445cc6d))
+* **prompts:** rename create_methodology to create_framework ([7d1c32e](https://github.com/minipuft/claude-prompts/commit/7d1c32e6d291a746f750a3d3010e5cb51f269bb7))
+* **remotion:** rename methodology to framework in the tutorial video ([5808785](https://github.com/minipuft/claude-prompts/commit/5808785258cb25d900188efb6deb9cd42f0fb682))
+* **resources:** consolidate write paths, remove dead JSON format ([4e8bdf6](https://github.com/minipuft/claude-prompts/commit/4e8bdf608cf4886b23c499b1bfab45383c82d9e3))
+* **resources:** rename methodologies resource dir to frameworks ([98b1fd9](https://github.com/minipuft/claude-prompts/commit/98b1fd900dd0a14fb618e8351cd089ba9b172145))
+* **server:** delete dead barrels and compat aliases ([837d847](https://github.com/minipuft/claude-prompts/commit/837d84795de6d43816aff8ad37baa66e9e1f14ab))
+* **server:** name the script-tool filter for triggers, not the retired mode field ([3ef5411](https://github.com/minipuft/claude-prompts/commit/3ef541191de7c7ef90bfd4eaa50e83b54b7959af))
+
+### Deprecated
+
+- **`inline_gate_definitions` will begin executing in the next release** — behavior change, action may be required. A prompt's `gateConfiguration.inline_gate_definitions` block has never executed: every consumer to date was display or analysis. Per [ADR 0001 (d)](docs/adr/0001-gate-resolution-precedence.md), the next release registers these definitions and schedules them as real gates, controlled by `gates.executeInlineGateDefinitions` (default `false` in this release, `true` in the next).
+  - **Why you may care**: a prompt in your workspace that declares inline definitions — possibly written before they were inert, or copied from the `create_prompt` scaffold — will start enforcing them. The bundled corpus is unaffected (no bundled prompt configures gates this way), but workspaces overlaid via `MCP_WORKSPACE` cannot be inventoried from here.
+  - **What to do this release**: watch the server log for `Dropped inline gate definition` warnings (new below) and check any prompt named there. Set `gates.executeInlineGateDefinitions: true` to opt in early and verify behavior before the default flips.
+  - When armed, definitions resolve at rank 60 (`prompt-config`) — below a caller-supplied gate, removable by a prompt-level `exclude` — and a definition whose ID matches a registered gate overrides that gate's body field by field, with arrays and objects replacing wholesale rather than merging.
 
 ### Fixed
 
@@ -60,34 +107,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **server:** set rootDir so the published types entry resolves ([741a384](https://github.com/minipuft/claude-prompts/commit/741a384ee8d3532e25fa3cf10057e79682692242))
 * **server:** survive EPIPE when a shell_verify child ignores stdin ([5bb0d05](https://github.com/minipuft/claude-prompts/commit/5bb0d0502dccb26bc1661d15198ef0b85ea7bee2))
 
-
-### Changed
-
-* **chains:** rename ChainSessionManager identifiers to ChainSessionStore ([6f9428a](https://github.com/minipuft/claude-prompts/commit/6f9428ade77f31a8220215383b1e1a823e8bbc6d))
-* **chains:** retire StepState enum for StepLifecycle + StepMilestone ([d617330](https://github.com/minipuft/claude-prompts/commit/d6173301d4f956677ed8d70fd6259256a2de631f))
-* **config:** separate authored framework settings from the resolved view ([0bc61f8](https://github.com/minipuft/claude-prompts/commit/0bc61f845e54a533e0df6e1f6ee6aa5ee4deb211))
-* **execution:** extract shared process utility with POSIX signal interpretation ([465bf53](https://github.com/minipuft/claude-prompts/commit/465bf5353da2b068d517f505aa6ce87d40adb3b3))
-* **frameworks:** dedup and disambiguate colliding framework types ([0b9d8c2](https://github.com/minipuft/claude-prompts/commit/0b9d8c24edf5105fcbf8ed91dd395458fafe49ac))
-* **frameworks:** delete the enableArgumentSuggestions flag ([4738763](https://github.com/minipuft/claude-prompts/commit/47387639708aa1ee7284a8b2d2afd89e63f1b0a9))
-* **frameworks:** move methodology-named files and directories ([12d2470](https://github.com/minipuft/claude-prompts/commit/12d2470e587a2c341169f0113d1064ddf4225559))
-* **frameworks:** remove the deprecated methodology field from definitions ([bb1f590](https://github.com/minipuft/claude-prompts/commit/bb1f590ac79bb2b44347b1179c8ee8929cf5f79a))
-* **frameworks:** rename internal methodology identifiers to framework ([4c49340](https://github.com/minipuft/claude-prompts/commit/4c4934022cc574190100c6e44988c099b92dc3e2))
-* **frameworks:** rename methodology to framework in comment prose ([ffd1033](https://github.com/minipuft/claude-prompts/commit/ffd1033612120a753b2c4fb69227222b057aefd1))
-* **frameworks:** rename the 16 exported Methodology* symbols ([7d16376](https://github.com/minipuft/claude-prompts/commit/7d16376f5ecc9bcc6f4a314b99a8d1208788c959))
-* **frameworks:** retire FrameworkDefinition.methodology ([a5ef404](https://github.com/minipuft/claude-prompts/commit/a5ef4043e23ee955209908694b012ac7d9983b88))
-* **frameworks:** unify methodology vocabulary on framework ([0393797](https://github.com/minipuft/claude-prompts/commit/03937972a418685dbd9f912ec1c0084893cfc349))
-* **gates:** rename gate source methodology to framework-guide ([4c83c66](https://github.com/minipuft/claude-prompts/commit/4c83c6697ce338088b76df63276c0a7d1e2f1826))
-* **mcp-tools:** delete the system_control tool-description sink ([0ad5769](https://github.com/minipuft/claude-prompts/commit/0ad5769ec65043aa0ccb64226ba486ae9adabd70))
-* **mcp-tools:** rename resource_type value methodology to framework ([916b61c](https://github.com/minipuft/claude-prompts/commit/916b61c04825ea2a8b5b6bf7578503c7967bec0f))
-* **parsers:** centralize operator detection in single-pass command tokenizer ([1dab41b](https://github.com/minipuft/claude-prompts/commit/1dab41bd182872178cd3bc7c4b365eda8445cc6d))
-* **prompts:** rename create_methodology to create_framework ([7d1c32e](https://github.com/minipuft/claude-prompts/commit/7d1c32e6d291a746f750a3d3010e5cb51f269bb7))
-* **remotion:** rename methodology to framework in the tutorial video ([5808785](https://github.com/minipuft/claude-prompts/commit/5808785258cb25d900188efb6deb9cd42f0fb682))
-* **resources:** consolidate write paths, remove dead JSON format ([4e8bdf6](https://github.com/minipuft/claude-prompts/commit/4e8bdf608cf4886b23c499b1bfab45383c82d9e3))
-* **resources:** rename methodologies resource dir to frameworks ([98b1fd9](https://github.com/minipuft/claude-prompts/commit/98b1fd900dd0a14fb618e8351cd089ba9b172145))
-* **server:** delete dead barrels and compat aliases ([837d847](https://github.com/minipuft/claude-prompts/commit/837d84795de6d43816aff8ad37baa66e9e1f14ab))
-* **server:** name the script-tool filter for triggers, not the retired mode field ([3ef5411](https://github.com/minipuft/claude-prompts/commit/3ef541191de7c7ef90bfd4eaa50e83b54b7959af))
-
-
 ### Documentation
 
 * add F5b — hooks diverge from the repo's own hook standard ([bf93ca7](https://github.com/minipuft/claude-prompts/commit/bf93ca7aa5a683ed43d96b6ffc136cf0bded23be))
@@ -115,6 +134,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * record the bb1f590a follow-up outcome ([ef4aa75](https://github.com/minipuft/claude-prompts/commit/ef4aa75640cfeb2168c2ba21a4982a9f8dbc7c60))
 * record the tier 4.3 outcome and the fourth falsified verdict ([41c84e0](https://github.com/minipuft/claude-prompts/commit/41c84e0edb79c1c966ca28297a3f27026f705439))
 
+### ⚠ BREAKING CHANGES
+
+* **server:** the project is re-licensed from AGPL-3.0-only to MIT. Network use of modified versions no longer triggers the source-disclosure obligation of AGPL section 13; MIT imposes attribution only. Skills already exported by `skills:export` carry the old AGPL-3.0-only license field and must be regenerated to pick up MIT.
+* **mcp-tools:** resource_manager parameter `methodology` is now `framework`; FrameworkCreationData.methodology removed and `type` is now required.
+* **frameworks:** FrameworkDefinition.methodology removed; use `type`.
+* resource://methodology/ is now resource://framework/.
+* **prompts:** `>>create_methodology` is now `>>create_framework`.
+* **config:** the config.json section `methodologies` is now `frameworks`. Existing files are migrated in place on load; the legacy key is ignored after that and can be deleted.
+* **frameworks:** a framework.yaml with only `methodology:` and no `type:` no longer loads. All bundled definitions already declared both, so nothing shipped requires an edit; a hand-authored workspace definition may.
+* **mcp-tools:** resource_manager(resource_type: "methodology") is now resource_type: "framework". Existing version history for frameworks is discarded by the schema recreate rather than migrated; this is accepted for a pre-release project. The 'switch' action remains valid only for this type, now under its new name.
+* **resources:** workspace overlays under MCP_WORKSPACE/resources/methodologies/ will no longer resolve and must be renamed to resources/frameworks/ with their methodology.yaml renamed to framework.yaml. This fails silently - the resource simply stops being found - rather than raising an error. No overlay was present in this environment at the time of the rename.
+* **chains:** SCHEMA_VERSION 15 -> 16. Persisted step state values `rendered` and `response_captured` no longer exist and substate_json changed shape, so the first server start after this drops and recreates state.db. Any in-flight chain session is lost; run it between chains rather than mid-run.
 
 ### Maintenance
 
@@ -122,54 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Deprecated
 
-- **`inline_gate_definitions` will begin executing in the next release** — behavior change, action may be required. A prompt's `gateConfiguration.inline_gate_definitions` block has never executed: every consumer to date was display or analysis. Per [ADR 0001 (d)](docs/adr/0001-gate-resolution-precedence.md), the next release registers these definitions and schedules them as real gates, controlled by `gates.executeInlineGateDefinitions` (default `false` in this release, `true` in the next).
-  - **Why you may care**: a prompt in your workspace that declares inline definitions — possibly written before they were inert, or copied from the `create_prompt` scaffold — will start enforcing them. The bundled corpus is unaffected (no bundled prompt configures gates this way), but workspaces overlaid via `MCP_WORKSPACE` cannot be inventoried from here.
-  - **What to do this release**: watch the server log for `Dropped inline gate definition` warnings (new below) and check any prompt named there. Set `gates.executeInlineGateDefinitions: true` to opt in early and verify behavior before the default flips.
-  - When armed, definitions resolve at rank 60 (`prompt-config`) — below a caller-supplied gate, removable by a prompt-level `exclude` — and a definition whose ID matches a registered gate overrides that gate's body field by field, with arrays and objects replacing wholesale rather than merging.
-
-### Added
-
-- **`cpm` CLI now ships with the npm package**: the workspace CLI is published as a second bin of `claude-prompts`, so it runs from any directory without cloning the repo or installing an MCP server — `npx -p claude-prompts cpm validate --all -w ./my-workspace`. Useful for scripting, CI, and for agents working outside a configured MCP client. The bundle is self-contained (no runtime dependencies) and is built from `cli/src` by `server/esbuild.config.mjs`, which imports `cli/esbuild.config.mjs` rather than duplicating it so the standalone and published bundles cannot drift. See [CLI Guide](docs/guides/cli.md).
-- **CLI validated in CI**: a `CLI` job now runs the CLI's typecheck, build, and integration suite on every run. `jest`/`ts-jest` were missing from `cli`'s devDependencies, so its 75 integration tests had never executed; six were failing against fixtures left stale by the `content_check` → `inline_guidance` and methodology → framework retirements. Fixtures corrected, suite green.
-
-- **Warnings for dropped inline gate definitions**: `normalizeInlineGateDefinitions` previously discarded malformed definitions in silence. Each drop now logs the prompt, the gate (by ID, else name, else position), and every field that disqualified it — all of them, not just the first, so one load cycle reports every mistake. Applies to YAML and markdown prompts. Malformed definitions are still dropped rather than failing the load, so a bad block costs one gate instead of the whole prompt. This is release N of the warn-then-arm migration described under Deprecated.
-- **Prompt-level injection control**: a prompt may declare an `injection` block in its `prompt.yaml` (`system-prompt`, `gate-guidance`, `style-guidance`, each accepting `enabled`, `frequency`, `target`). It resolves between step and chain config, taking the hierarchy to eight levels. Setting `system-prompt.enabled: false` also withholds gates that score methodology adherence, since scoring a methodology that was never injected is incoherent. See [Injection Control](docs/guides/injection-control.md).
-
-- **`session:cancel` action on `system_control`** (Tier 3): MCP clients can now cancel an active chain session via `system_control(action:"session", operation:"cancel", session_id:"chain-X#1")`. Transitions `runStatus` to `cancelled`; idempotent on already-cancelled sessions; refuses sessions in terminal `completed`/`failed` state. Use `operation:"cancel"` for soft-stop (preserves session for audit), `operation:"clear"` for hard removal (deletes session and chain history).
-- **`ExecutionRecord` persistence** (Tier 5): Pipeline stages 9 and 10 now emit append-only ledger rows to the `execution_records` table on every chain-step transition. Stage 9 emits a `working` record per render (with `substate.renderedAt`); stage 10 emits a `completed` record on chain terminal. Records carry SEP-1686-aligned `StepLifecycle` + `StepSubstate` + `GateVerdictSummary` shape. ULIDs (monotonic) preserve insertion order across rapid emissions. Emission is best-effort — failures log a warning and never break pipeline execution.
-
-### Changed
-
-- **Downstream marketplace sync no longer hardcodes the license**: the `sync-downstream` job stamped `.license = "AGPL-3.0-only"` onto `minipuft-plugins`' `marketplace.json` as a literal, so it would have re-applied the pre-2.1.0 license on every release and silently reverted the MIT change above. The license is now read from `.claude-plugin/plugin.json` (one source of truth) and asserted in the job's validate step.
-- **Repository housekeeping**: removed `.actrc` (no workflow, script, or doc referenced it) and `.nvmrc` (no machine consumer; `.node-version` is the pinned file and is read by `setup-node` and the extension build). Publish workflows now resolve Node via `node-version-file: '.node-version'` instead of five hardcoded `24` literals. The `remotion/` product-demo tree moved out of the repository into a standalone local project, ending its dependency-bot churn; its commitlint scope was retired with it.
-- **Single active Renovate configuration**: the repo carried both a bare root `renovate.json` and a tuned `.github/renovate.json5`. Renovate resolves the root file first, so the tuned config — including the `zod <4` and `express <5` holds — had never taken effect. Confirmed by a `--dry-run=full` against `main`, which reported it would ensure a dashboard titled `Dependency Dashboard` (the default) rather than the `📦 Dependency Updates Dashboard` the json5 specifies. The root file is removed. Because the surviving config had never executed, it was audited before activation rather than trusted:
-  - Dropped `baseBranches: ["main", "develop"]` → `["main"]`; no `develop` branch exists on the remote.
-  - Dropped `postUpgradeTasks`; it requires self-hosted Renovate with `allowedPostUpgradeCommands` and is inert on the hosted app.
-  - **Dropped the `enabledManagers: ["npm"]` allowlist entirely.** A dry-run comparison showed activating it as written would have silently stopped updates for the `dockerfile` manager (`server/src/Dockerfile` base images) and `nodenv` (`.node-version` — the file every workflow now resolves Node from). Auto-detection is what had actually been running.
-  - Set `vulnerabilityAlerts.minimumReleaseAge: null`, overriding the global 3-day soak. With Dependabot security updates disabled, Renovate is the sole remediation path and CVE fixes must not wait three days. Dependabot _alerts_ remain enabled — Renovate reads that feed to detect vulnerabilities and would go blind without it.
-  - Automerge ships off pending one review cycle now that the config is live for the first time.
-
-- **Re-licensed from AGPL-3.0-only to MIT** to match the MCP ecosystem default and unblock corporate adoption. This reverses the 2.0.0 change that moved the project from MIT to AGPL-3.0-only. Network use of modified versions no longer triggers the source-disclosure obligation of AGPL Section 13; the MIT terms impose only attribution. `LICENSE`, `server/package.json`, `manifest.json`, and `.claude-plugin/plugin.json` now all declare MIT, as does the default `license` field stamped on skills exported by `skills:export` — regenerate exported skills to pick up the new value. Production dependencies were audited before the change: 109 MIT, 33 Apache-2.0, 14 BSD-3-Clause, 12 ISC, 2 BSD-2-Clause, 1 Python-2.0, and zero copyleft.
-- **`%lean` no longer keeps methodology-scoring gates**: `%lean` suppresses the methodology system prompt, so the gates that score adherence to it are now withheld too — today that is `framework-compliance` alone. Non-framework gates continue to run under `%lean` exactly as documented; the correction is narrower than the previous wording suggested. Same applies to `%clean` and to a prompt-level `system-prompt` opt-out. `%judge` forces the methodology in and therefore keeps the gates.
-- **`framework_gates: false` now takes effect**: the prompt-level opt-out was read from a field that had five readers and no writer, so it did nothing. It now withholds methodology gates across every tier, including registry-activated ones. A prompt already setting it will see those gates disappear — which is what the option has always promised.
-- **`gateConfiguration.exclude` now applies to registry-activated gates**: excludes were honoured during planning and then silently undone when the same gates were re-added by category activation. One veto set now covers every tier.
-- **`db_reader.py` migrated to `v_execution_status` SSOT view** (Tier 4): Python hook now reads chain state from the cross-language SSOT view introduced in Tier 1, using the canonical `run_status` column (Tier 2) for boundary detection. Falls back to `chain_sessions` per-row table, then `chain_run_registry` blob, for backward compatibility during rollout (Tier 10 will retire the blob fallback). Hook output shape unchanged — existing chain-stop integration is preserved.
-- **Consolidated four KV-blob tables into shared `kv_state`** (`SCHEMA_VERSION` 15 → 16): `framework_state`, `gate_system_state`, `argument_history`, and `resource_hash_cache` are now rows in a single `kv_state` table keyed on `(tenant_id, key)`. `SqliteStateStoreConfig` gains an optional discriminator `key` for shared tables. `state.db` is ephemeral, so the schema bump auto-recreates on next server start with no migration burden. Drops 4 tables and 5 indexes.
-- **Atomic dual-write to chain registry + hook view**: `persistSessions()` now wraps the `chain_run_registry` blob write and the derived `chain_sessions` projection inside a single transaction so the two can never diverge. Renamed `syncToSessionTable` → `projectToHookView` to reflect that `chain_sessions` is a read-only projection of the registry blob.
-- **`SqliteChainRunRegistry` class removed**: dead code with zero consumers. Single `DirectChainRunRegistry` implementation remains.
-
-- **Command tokenizer refactor**: Replaced duplicated operator detection across 3 parsing strategies with a single-pass, quote-aware `tokenizeCommand()` function
-  - `command-parser.ts`: 771→710 lines; symbolic `canHandle` reduced from 20 lines to 1; gate/framework/style stripping regex (~25 lines) replaced by `tokens.promptId`/`tokens.rawArgs`
-  - `parser-utils.ts`: 198→156 lines; removed `hasOperatorOutsideQuotes` and `stripFrameworkOperatorOutsideQuotes` (zero consumers — tokenizer subsumes)
-  - Strategies now consume `TokenizedCommand` instead of re-detecting operators: `canHandle(command, tokens)` reads `tokens.format` and `tokens.hasSymbolicOperators`
-  - Eliminates the class of bugs where special characters inside quoted arguments (e.g., `"R3F + Visx"`, `"modes: (1)"`) triggered false operator detection
-
-### Added
-
-- **`command-tokenizer.ts`**: Pure function `tokenizeCommand()` with quote-aware detection for all 8 operator types (chain, delegation, gate, parallel, repetition, conditional, framework, style). Includes delimiter overlap filtering to prevent `==>` from false-matching as gate operator
-- **`command-tokenizer.test.ts`**: 56 tests covering all operator types, quoted argument regression suite, mixed operators, prompt ID extraction, cleaned command generation, and edge cases
 
 ## [2.1.0](https://github.com/minipuft/claude-prompts/compare/v2.0.0...v2.1.0) (2026-03-19)
 
