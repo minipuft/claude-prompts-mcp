@@ -1,17 +1,22 @@
-# Pipeline Defect Remediation — 6 Tiers
+# Pipeline Defect Remediation — 7 Tiers
 
-**Date**: 2026-08-01
+**Date**: 2026-08-01 (Tier 7 added 2026-08-02)
 **Area**: `server/src/engine/execution/pipeline/`
 **Work type**: refactor (secondary: bug_fix)
-**Confidence**: high — 18/18 symbol claims verified with zero drift (Phase 2.5)
+**Confidence**: high — 18/18 symbol claims verified with zero drift (Phase 2.5); Tier 7 re-verified
+12/12 on 2026-08-02
 
 ---
 
 ## Summary
 
 Six confirmed defects in the prompt execution pipeline, plus a fourth telemetry bug found during
-design. Folded into six independently shippable tiers. Touches 14 existing files, adds 3 new
-(2 are tests). Net ~-180 lines of source.
+design. Folded into independently shippable tiers. Touches 14 existing files, adds 5 new
+(3 are tests). Net ~-180 lines of source.
+
+**Tiers 1-5 are complete.** Tier 6 makes stage ordering mechanically enforced. Tier 7 was promoted
+from Deferred once measurement showed its bullet was both numerically wrong and mis-classified —
+it carries the file's four remaining complexity violations, one of them Critical.
 
 **The pipeline's shape is not the problem.** A linear stage sequence over a shared context with a
 uniform `execute(context)` interface is the right pattern; it buys per-stage spans, metrics, and
@@ -334,6 +339,85 @@ reject an order where a consumer precedes its producer; state = none; shape = fu
 
 T1-T5 create **zero** new source files.
 
+### Tier 7: Coordinator decomposition — the four unowned violations
+
+Promoted from Deferred. Flagged in the T1, T2 and T4 notes and survived all three because no tier
+owned it. Measured 2026-08-02, `npx eslint prompt-execution-pipeline.ts`:
+
+| Symbol                         | Line | Measured      | Limit |
+| ------------------------------ | ---- | ------------- | ----- |
+| `executePipelineStages`        | 87   | cyclomatic 17 | 10    |
+| `executePipelineStages`        | 87   | cognitive 29  | 15    |
+| `recordPipelineStageMetric`    | 316  | 8 params      | 4     |
+| `recordCommandExecutionMetric` | 360  | 5 params      | 4     |
+
+Cognitive 29 against a limit of 15 is **Critical** severity, where "deferred" is not an available
+resolution — which is why this is a tier and no longer a Deferred bullet.
+
+**Two structural defects, not four.** The parameter counts are symptoms:
+
+- The four memory deltas are derived **twice** from the same two `MemoryUsage` snapshots, at
+  `:250` (`logStageMetrics` → `StageMetricSummary`) and `:343` (`recordPipelineStageMetric` →
+  `metadata`). Two of the eight parameters exist only to recompute what the previous line in the
+  same `finally` already derived. This is the SSOT defect the parameter count was hiding.
+- `enrichRootSpan` → `endSpanWithStatus` → `return` repeats **verbatim three times**, at
+  `:182/183` (early exit), `:205/206` (completion) and `:220/221` (catch). This is the cyclomatic
+  driver and is invisible in the "unnamed locals" framing.
+
+#### Tier 7A — pure derivation, extracted before the coordinator is touched
+
+| #   | File                                          | Change                                                                                                                                                                              | ~Ln  | Dep |
+| --- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | --- |
+| 7.1 | `execution-metrics.ts` **NEW**                | `StageAttempt` + `CommandOutcome`; `summarizeStageAttempt`, `buildStageMetric`, `buildCommandMetric`; move `resolveExecutionMode` (:403) and `buildCommandMetricMetadata` (:417) in | +135 | —   |
+| 7.2 | `tests/.../execution-metrics.test.ts` **NEW** | Both payload shapes incl. the four optional-field branches — `sessionId` (:353-355, :396-398), `errorMessage` (:356-358, :399-401)                                                  | +90  | 7.1 |
+
+**Gate 7A**: `typecheck` + `npx eslint execution-metrics.ts` clean + `test:match execution-metrics`
+
+#### Tier 7B — coordinator consumes it
+
+| #   | File                                            | Change                                                                                                                               | ~Ln     | Dep      |
+| --- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------- | -------- |
+| 7.3 | `prompt-execution-pipeline.ts:104-166`          | Extract `runStage(stage, index, context): Promise<StageAttempt>`; loop keeps only the early-exit check                               | -70/+45 | 7.1      |
+| 7.4 | `prompt-execution-pipeline.ts:182-222`          | Extract `finishRootSpan(rootSpan, outcome)`; call at all three sites                                                                 | -18/+12 | —        |
+| 7.5 | `prompt-execution-pipeline.ts:239-256, 316-402` | Recorders to `(attempt, context)` / `(context, outcome)`. **Replace** `logStageMetrics` with `summarizeStageAttempt` — do NOT delete | -95     | 7.1, 7.3 |
+| 7.6 | this file                                       | Delete the Deferred bullet this tier replaces                                                                                        | ~-1     | 7.5      |
+
+**Gate 7B**: full suite **+** `validate:arch` **+** `verify:mcp`, plus the tier criterion —
+`npx eslint prompt-execution-pipeline.ts` reports **0** complexity/cognitive/max-params violations
+(from 4), `rg "heapUsedDelta"` on that file returns **0** hits (from 2), and
+`git diff --stat -- server/tests/` shows **no change to any existing test file**.
+
+7.4 is independent and may land first. 7.3-7.5 all edit one file, so they serialize.
+
+#### Why `logStageMetrics` is replaced, not deleted
+
+Its return value feeds the `stageMetrics[]` array that `enrichRootSpan` consumes at `:182`, `:205`
+and `:220`. The method and its debug-log side effect move to `execution-metrics.ts`; the returned
+`StageMetricSummary` has to survive as `summarizeStageAttempt` or the root span silently loses its
+`cpm.stages.slowest` and `cpm.stages.skipped` attributes.
+
+#### New file justification
+
+**`execution-metrics.ts` (+135)** — the Existing > New candidate was `execution-telemetry.ts`
+(135 ln, same directory, already imported by the coordinator, already exports `StageMetricSummary`).
+Rejected on **responsibility count**, not line count: that module builds OTel `Attributes` for the
+span exporter; these functions build `PipelineStageMetric`/`CommandExecutionMetric` for
+`MetricsCollector`. Different consumers, different contracts, different reasons to change. The
+resulting ~270 ln would also cross the 200-line utility ceiling, but that is the weaker argument.
+Identification: behavior = turn one stage's execution outcome into the payloads timing, logging,
+spans and metrics all read; state = none; shape = module of pure functions over a plain record
+(statelessness rules out a class); placement = beside `execution-telemetry.ts`, its sibling by
+construction. Rejected alternative: keep the builders private and collapse the parameter lists into
+an options object — satisfies `max-params` while leaving the duplicated derivation intact, i.e.
+turns the linter green and misses the defect.
+
+**Risk**: medium. Hot path for every `prompt_engine` call, and a changed emission shape would not
+fail `tsc`. Mitigated by `pipeline-telemetry.test.ts:86`, which captures the actual emitted
+`PipelineStageMetric` objects — the prohibition on editing that file is load-bearing, not stylistic.
+
+**Independent of T6**: T6 edits only the constructor; T7 touches `:104-402`. No shared line range,
+so order between them is free.
+
 ---
 
 ## Phase 4-6: Validation & Completion
@@ -421,7 +505,10 @@ T1-T5 create **zero** new source files.
 - Bags B/D/E/F (17 keys) — different owners, unrelated to `ExecutionContext`
 - Dead `ContextBuilder` class (zero instantiations) — separate `npx knip` sweep
 - 36 pre-existing eslint errors in touched files — ratchet holds the line
-- Coordinator stays >advisory at ~620 ln; extracting the telemetry half is a follow-up
+- ~~Coordinator stays >advisory at ~620 ln; extracting the telemetry half is a follow-up~~ —
+  promoted to **Tier 7**. The line count was wrong (measured 564, not ~620; T2-T4 shrank it after
+  this bullet was written) and the framing was wrong: cognitive 29 vs a limit of 15 is Critical,
+  which has no deferred resolution.
 
 ## Rollback protocol
 
