@@ -12,6 +12,9 @@ import type {
   Logger,
   HookRegistryPort,
   PipelineHookContext,
+  MetricsCollector,
+  PipelineStageMetric,
+  CommandExecutionMetric,
 } from '../../../../src/shared/types/index.js';
 
 // ===== Test Helpers =====
@@ -57,7 +60,45 @@ const createMockHookRegistry = (): HookRegistryPort & {
   return registry;
 };
 
-// Standard stage list (matching pipeline constructor order)
+interface CapturingMetricsCollector extends MetricsCollector {
+  stageMetrics: PipelineStageMetric[];
+  commandMetrics: CommandExecutionMetric[];
+}
+
+/**
+ * Captures the two payloads the pipeline emits. Every other `MetricsCollector`
+ * member is a no-op — the pipeline never calls them.
+ */
+const createCapturingMetricsCollector = (): CapturingMetricsCollector => {
+  const stageMetrics: PipelineStageMetric[] = [];
+  const commandMetrics: CommandExecutionMetric[] = [];
+  return {
+    stageMetrics,
+    commandMetrics,
+    recordPipelineStage: (metric) => {
+      stageMetrics.push(metric);
+    },
+    recordCommandExecutionMetric: (metric) => {
+      commandMetrics.push(metric);
+    },
+    recordExecution: jest.fn(),
+    recordExecutionError: jest.fn(),
+    recordGateValidation: jest.fn(),
+    recordGateUsage: jest.fn(),
+    recordFrameworkSwitch: jest.fn(),
+    trackExecution: jest.fn(),
+    trackError: jest.fn(),
+    getExecutionStats: jest.fn(),
+    getSystemMetrics: jest.fn(),
+    getFrameworkUsage: jest.fn(),
+    getAnalyticsSummary: jest.fn(),
+    resetAnalytics: jest.fn(),
+    shutdown: jest.fn(),
+  } as CapturingMetricsCollector;
+};
+
+// Standard stage list (matching pipeline constructor order).
+// Names are the production `readonly name` literals — `mapStageType` is keyed by them.
 const stageNames = [
   'RequestNormalization',
   'DependencyInjection',
@@ -71,7 +112,7 @@ const stageNames = [
   'GateEnhancement',
   'FrameworkResolution',
   'SessionManagement',
-  'FrameworkInjectionControl',
+  'InjectionControl',
   'PromptGuidance',
   'StepResponseCapture',
   'StepExecution',
@@ -80,11 +121,21 @@ const stageNames = [
   'PostFormattingCleanup',
 ] as const;
 
+// The four stages the builder may omit; passed as `null` unless a test opts in.
+const optionalStageNames = [
+  'ScriptExecution',
+  'ScriptAutoExecute',
+  'ShellVerification',
+  'PhaseGuardVerification',
+] as const;
+
 function createPipeline(options: {
   hookRegistry?: HookRegistryPort;
   stageOverrides?: Partial<Record<string, PipelineStage>>;
+  metricsProvider?: () => MetricsCollector | undefined;
+  includeOptionalStages?: boolean;
 }): PromptExecutionPipeline {
-  const stages = stageNames.map((name) => {
+  const build = (name: string): PipelineStage => {
     if (options.stageOverrides?.[name]) return options.stageOverrides[name]!;
     // Set response in LAST stage so all stages execute (no early exit)
     if (name === 'PostFormattingCleanup') {
@@ -95,7 +146,23 @@ function createPipeline(options: {
       });
     }
     return createStage(name);
-  });
+  };
+
+  const stages = stageNames.map(build);
+  const optional: [
+    PipelineStage | null,
+    PipelineStage | null,
+    PipelineStage | null,
+    PipelineStage | null,
+  ] =
+    options.includeOptionalStages === true
+      ? [
+          build(optionalStageNames[0]),
+          build(optionalStageNames[1]),
+          build(optionalStageNames[2]),
+          build(optionalStageNames[3]),
+        ]
+      : [null, null, null, null];
 
   return new PromptExecutionPipeline(
     stages[0]!, // requestStage
@@ -106,23 +173,23 @@ function createPipeline(options: {
     stages[5]!, // inlineGateStage
     stages[6]!, // operatorValidationStage
     stages[7]!, // planningStage
-    null, // scriptExecutionStage
-    null, // scriptAutoExecuteStage
+    optional[0], // scriptExecutionStage
+    optional[1], // scriptAutoExecuteStage
     stages[10]!, // frameworkStage
     stages[8]!, // judgeSelectionStage
     stages[13]!, // promptGuidanceStage
     stages[9]!, // gateStage
     stages[11]!, // sessionStage
-    stages[12]!, // frameworkInjectionControlStage
+    stages[12]!, // injectionControlStage
     stages[14]!, // responseCaptureStage
-    null, // shellVerificationStage
+    optional[2], // shellVerificationStage
     stages[15]!, // executionStage
-    null, // phaseGuardVerificationStage
+    optional[3], // phaseGuardVerificationStage
     stages[16]!, // gateReviewStage
     stages[17]!, // formattingStage
     stages[18]!, // postFormattingStage
     createLogger(),
-    () => undefined,
+    options.metricsProvider ?? (() => undefined),
     options.hookRegistry
   );
 }
@@ -456,5 +523,201 @@ describe('Pipeline Wide-Event Root Span Enrichment', () => {
     const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
     expect(rootSpan.attributes['cpm.stages.slowest']).toBe('ExecutionPlanning');
     expect(rootSpan.attributes['cpm.stages.slowest_ms']).toBeGreaterThanOrEqual(40);
+  });
+});
+
+/**
+ * Tier 1 — telemetry correctness.
+ *
+ * Four emissions were wrong in ways nothing asserted on:
+ *   - `cpm.stages.skipped` was built from a list that was never appended to
+ *   - `stageType` fell through to `'other'` for most stage names
+ *   - a `__probe__` span was exported on every request
+ *   - `temporaryGatesApplied` read a metadata key no writer sets any more
+ */
+describe('Pipeline Telemetry Correctness (Tier 1)', () => {
+  let exporter: InMemorySpanExporter;
+  let provider: NodeTracerProvider;
+
+  beforeEach(() => {
+    exporter = new InMemorySpanExporter();
+    provider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
+    provider.register();
+  });
+
+  afterEach(async () => {
+    await provider.shutdown();
+    exporter.reset();
+    trace.disable();
+  });
+
+  describe('cpm.stages.skipped', () => {
+    test('names the stages that never ran after an early exit', async () => {
+      const pipeline = createPipeline({
+        stageOverrides: {
+          CommandParsing: createStage('CommandParsing', (context) => {
+            context.setResponse({ content: [{ type: 'text', text: 'early' }] });
+          }),
+        },
+      });
+
+      await pipeline.execute({ command: 'test-skipped' });
+
+      const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+      const skipped = String(rootSpan.attributes['cpm.stages.skipped']).split(',');
+
+      // CommandParsing is index 4 — everything after it was skipped.
+      expect(skipped).toEqual([...stageNames.slice(5)]);
+      // The stages that did run are not in the skipped list.
+      expect(skipped).not.toContain('CommandParsing');
+      expect(skipped).not.toContain('RequestNormalization');
+    });
+
+    test('is empty when every stage runs', async () => {
+      const pipeline = createPipeline({});
+
+      await pipeline.execute({ command: 'test-no-skip' });
+
+      const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+      expect(rootSpan.attributes['cpm.stages.skipped']).toBe('');
+    });
+
+    test('names the unreached stages when a stage throws', async () => {
+      const pipeline = createPipeline({
+        stageOverrides: {
+          ExecutionPlanning: createStage('ExecutionPlanning', () => {
+            throw new Error('plan exploded');
+          }),
+        },
+      });
+
+      await expect(pipeline.execute({ command: 'test-throw' })).rejects.toThrow('plan exploded');
+
+      const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+      const skipped = String(rootSpan.attributes['cpm.stages.skipped']).split(',');
+
+      // ExecutionPlanning is index 7 — it ran (and failed), so it is not skipped.
+      expect(skipped).toEqual([...stageNames.slice(8)]);
+      expect(skipped).not.toContain('ExecutionPlanning');
+    });
+  });
+
+  describe('stageType classification', () => {
+    test('classifies every registered stage without falling through to "other"', async () => {
+      const metrics = createCapturingMetricsCollector();
+      const pipeline = createPipeline({
+        metricsProvider: () => metrics,
+        includeOptionalStages: true,
+      });
+
+      await pipeline.execute({ command: 'test-stage-types' });
+
+      const byName = new Map(metrics.stageMetrics.map((m) => [m.stageName, m.stageType]));
+
+      expect(byName.get('RequestNormalization')).toBe('normalization');
+      expect(byName.get('DependencyInjection')).toBe('lifecycle');
+      expect(byName.get('ExecutionLifecycle')).toBe('lifecycle');
+      expect(byName.get('IdentityResolution')).toBe('identity');
+      expect(byName.get('CommandParsing')).toBe('parsing');
+      expect(byName.get('InlineGateExtraction')).toBe('inline_gate');
+      expect(byName.get('OperatorValidation')).toBe('operator_validation');
+      expect(byName.get('ExecutionPlanning')).toBe('planning');
+      expect(byName.get('ScriptExecution')).toBe('script');
+      expect(byName.get('ScriptAutoExecute')).toBe('script');
+      expect(byName.get('JudgeSelection')).toBe('judge_selection');
+      expect(byName.get('GateEnhancement')).toBe('gate_enhancement');
+      expect(byName.get('FrameworkResolution')).toBe('framework');
+      expect(byName.get('SessionManagement')).toBe('session');
+      expect(byName.get('InjectionControl')).toBe('injection_control');
+      expect(byName.get('PromptGuidance')).toBe('prompt_guidance');
+      expect(byName.get('StepResponseCapture')).toBe('response_capture');
+      expect(byName.get('ShellVerification')).toBe('verification');
+      expect(byName.get('StepExecution')).toBe('execution');
+      expect(byName.get('PhaseGuardVerification')).toBe('verification');
+      expect(byName.get('GateReview')).toBe('gate_review');
+      expect(byName.get('ResponseFormatting')).toBe('post_processing');
+      expect(byName.get('PostFormattingCleanup')).toBe('post_processing');
+
+      // No registered stage may report the catch-all.
+      expect(metrics.stageMetrics.filter((m) => m.stageType === 'other')).toEqual([]);
+    });
+
+    test('still reports "other" for a name outside the registry', async () => {
+      const metrics = createCapturingMetricsCollector();
+      const pipeline = createPipeline({
+        metricsProvider: () => metrics,
+        stageOverrides: { CommandParsing: createStage('NotAStage') },
+      });
+
+      await pipeline.execute({ command: 'test-unknown-stage' });
+
+      expect(metrics.stageMetrics.find((m) => m.stageName === 'NotAStage')?.stageType).toBe(
+        'other'
+      );
+    });
+  });
+
+  describe('span hygiene', () => {
+    test('exports no probe span while detecting the registered provider', async () => {
+      const pipeline = createPipeline({});
+
+      await pipeline.execute({ command: 'test-probe' });
+
+      const names = exporter.getFinishedSpans().map((s) => s.name);
+      expect(names).not.toContain('__probe__');
+      // The real root span is still produced.
+      expect(names).toContain('prompt_engine.request');
+    });
+
+    test('exports no spans at all when no provider is registered', async () => {
+      await provider.shutdown();
+      trace.disable();
+
+      const isolated = new InMemorySpanExporter();
+      const pipeline = createPipeline({});
+      await pipeline.execute({ command: 'test-probe-noop' });
+
+      expect(isolated.getFinishedSpans()).toEqual([]);
+
+      // Restore a provider so afterEach's shutdown has something to close.
+      provider = new NodeTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(exporter)],
+      });
+      provider.register();
+    });
+  });
+
+  describe('temporaryGatesApplied', () => {
+    test('counts the gate ids the pipeline actually registered', async () => {
+      const metrics = createCapturingMetricsCollector();
+      const pipeline = createPipeline({
+        metricsProvider: () => metrics,
+        stageOverrides: {
+          InlineGateExtraction: createStage('InlineGateExtraction', (context) => {
+            context.state.gates.temporaryGateIds.push('tmp-gate-a', 'tmp-gate-b');
+          }),
+        },
+      });
+
+      await pipeline.execute({ command: 'test-temp-gates' });
+
+      expect(metrics.commandMetrics).toHaveLength(1);
+      expect(metrics.commandMetrics[0]!.temporaryGatesApplied).toBe(2);
+
+      // The span already reads the live slot — the metric must agree with it.
+      const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
+      expect(rootSpan.attributes['cpm.gates.names']).toBe('tmp-gate-a,tmp-gate-b');
+    });
+
+    test('is zero when no temporary gates are registered', async () => {
+      const metrics = createCapturingMetricsCollector();
+      const pipeline = createPipeline({ metricsProvider: () => metrics });
+
+      await pipeline.execute({ command: 'test-no-temp-gates' });
+
+      expect(metrics.commandMetrics[0]!.temporaryGatesApplied).toBe(0);
+    });
   });
 });

@@ -3,12 +3,12 @@ import { randomUUID } from 'crypto';
 
 import { trace, SpanStatusCode, context as otelContext } from '@opentelemetry/api';
 
+import { buildRootSpanAttributes, resolveStageType } from './execution-telemetry.js';
 import { ExecutionContext } from '../context/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type {
   MetricsCollector,
-  PipelineStageType,
   PipelineStageStatus,
   MetricStatus,
   CommandExecutionMetric,
@@ -18,6 +18,7 @@ import type {
   HookRegistryPort,
   PipelineHookContext,
 } from '#shared/types/index.js';
+import type { StageMetricSummary } from './execution-telemetry.js';
 import type { PipelineStage } from './stage.js';
 import type { Span } from '@opentelemetry/api';
 
@@ -94,7 +95,6 @@ export class PromptExecutionPipeline {
     const commandMetricId = this.createCommandMetricId();
     context.metadata['commandMetricId'] = commandMetricId;
     const stageMetrics: StageMetricSummary[] = [];
-    const skippedStages: string[] = [];
     let previousState = this.captureContextState(context);
     let commandStatus: MetricStatus = 'success';
     let commandError: string | undefined;
@@ -177,7 +177,7 @@ export class PromptExecutionPipeline {
             totalDurationMs: Date.now() - pipelineStart,
             stages: stageMetrics,
           });
-          this.enrichRootSpan(rootSpan, context, stageMetrics, skippedStages, pipelineStart);
+          this.enrichRootSpan(rootSpan, { context, stageMetrics, pipelineStart });
           this.endSpanWithStatus(
             rootSpan,
             commandStatus,
@@ -200,7 +200,7 @@ export class PromptExecutionPipeline {
         totalDurationMs: Date.now() - pipelineStart,
         stages: stageMetrics,
       });
-      this.enrichRootSpan(rootSpan, context, stageMetrics, skippedStages, pipelineStart);
+      this.enrichRootSpan(rootSpan, { context, stageMetrics, pipelineStart });
       this.endSpanWithStatus(
         rootSpan,
         commandStatus,
@@ -215,7 +215,7 @@ export class PromptExecutionPipeline {
         error: message,
         stages: stageMetrics,
       });
-      this.enrichRootSpan(rootSpan, context, stageMetrics, skippedStages, pipelineStart, message);
+      this.enrichRootSpan(rootSpan, { context, stageMetrics, pipelineStart, errorType: message });
       this.endSpanWithStatus(
         rootSpan,
         'error',
@@ -383,7 +383,7 @@ export class PromptExecutionPipeline {
     const metricPayload: PipelineStageMetric = {
       stageId: `${stage.name}:${context.getSessionId() ?? 'sessionless'}:${startTime}`,
       stageName: stage.name,
-      stageType: this.mapStageType(stage.name),
+      stageType: resolveStageType(stage.name),
       toolName: 'prompt_engine',
       startTime,
       endTime: startTime + durationMs,
@@ -423,9 +423,9 @@ export class PromptExecutionPipeline {
 
     const endTime = Date.now();
     const appliedGates = context.executionPlan?.gates ?? [];
-    const temporaryGateIds = Array.isArray(context.metadata['temporaryGateIds'])
-      ? (context.metadata['temporaryGateIds'] as string[])
-      : [];
+    // Typed slot, not `metadata` — every writer moved to `state.gates` and the
+    // metadata key stopped being set, which pinned this count at zero.
+    const temporaryGateIds = context.state.gates.temporaryGateIds;
 
     const metric: CommandExecutionMetric = {
       commandId,
@@ -533,22 +533,27 @@ export class PromptExecutionPipeline {
   // ===== Phase 1.4: OTel Span Instrumentation =====
 
   private startRootSpan(context: ExecutionContext): Span | undefined {
-    // OTel global API: returns real tracer when SDK is registered, no-op tracer otherwise.
-    // No DI needed — TelemetryRuntimeImpl.start() registers the global provider.
-    const tracer = trace.getTracer('prompt_engine');
-    // Check if the tracer is recording (SDK registered) by probing a span
-    const probeSpan = tracer.startSpan('__probe__');
-    const isRecording = probeSpan.isRecording();
-    probeSpan.end();
-    if (!isRecording) return undefined;
-
-    return tracer.startSpan('prompt_engine.request', {
+    // OTel global API: returns a real tracer when the SDK is registered, a no-op
+    // tracer otherwise. No DI needed — TelemetryRuntimeImpl.start() registers the
+    // global provider.
+    //
+    // The no-op tracer hands back a NonRecordingSpan that is never exported, so
+    // starting the real span and asking IT whether it records answers "is
+    // telemetry live?" without emitting anything. Sampling out the root also
+    // reports false here, which correctly suppresses the child stage spans.
+    const span = trace.getTracer('prompt_engine').startSpan('prompt_engine.request', {
       attributes: {
         'cpm.execution.id': (context.metadata['commandMetricId'] as string) ?? 'unknown',
         'cpm.command.type': context.mcpRequest.command ?? 'response-only',
         'cpm.execution.mode': context.isChainExecution() ? 'chain' : 'single',
       },
     });
+
+    if (!span.isRecording()) {
+      span.end();
+      return undefined;
+    }
+    return span;
   }
 
   private startStageSpan(stageName: string, stageIndex: number): Span | undefined {
@@ -568,59 +573,21 @@ export class PromptExecutionPipeline {
 
   private enrichRootSpan(
     span: Span | undefined,
-    context: ExecutionContext,
-    stageMetrics: StageMetricSummary[],
-    skippedStages: string[],
-    pipelineStart: number,
-    errorType?: string
+    execution: {
+      context: ExecutionContext;
+      stageMetrics: StageMetricSummary[];
+      pipelineStart: number;
+      errorType?: string;
+    }
   ): void {
-    if (!span?.isRecording()) return;
+    if (span?.isRecording() !== true) return;
 
-    // Determine early exit from whether all registered stages actually ran
-    const hadEarlyExit = stageMetrics.length < this.stages.length;
-
-    // Find slowest stage from timing data already collected
-    const slowest = stageMetrics.reduce((max, s) => (s.durationMs > max.durationMs ? s : max), {
-      stage: 'none',
-      durationMs: 0,
-    } as Pick<StageMetricSummary, 'stage' | 'durationMs'>);
-
-    // Aggregate gate state from pipeline internal state
-    const gateState = context.state.gates;
-    const allGateIds = [
-      ...gateState.temporaryGateIds,
-      ...gateState.frameworkGateIds,
-      ...gateState.registeredInlineGateIds,
-    ];
-    const failedCount = gateState.blockedGateIds?.length ?? 0;
-
-    span.setAttributes({
-      // Performance summary
-      'cpm.duration.total_ms': Date.now() - pipelineStart,
-      'cpm.stages.executed_count': stageMetrics.length,
-      'cpm.stages.skipped': skippedStages.join(','),
-      'cpm.stages.slowest': slowest.stage,
-      'cpm.stages.slowest_ms': slowest.durationMs,
-      'cpm.had_early_exit': hadEarlyExit,
-      // Gate summary
-      'cpm.gates.names': allGateIds.join(','),
-      'cpm.gates.passed_count': allGateIds.length - failedCount,
-      'cpm.gates.failed_count': failedCount,
-      'cpm.gates.blocked': gateState.responseBlocked ?? false,
-      'cpm.gates.retry_exhausted': gateState.retryLimitExceeded ?? false,
-      'cpm.gates.enforcement_mode': gateState.enforcementMode ?? 'standard',
-      // Chain context
-      'cpm.chain.is_chain': context.isChainExecution(),
-      'cpm.chain.step_index': context.sessionContext?.currentStep ?? 0,
-      'cpm.chain.id': context.sessionContext?.chainId ?? '',
-      // Framework
-      'cpm.framework.id': context.frameworkContext?.selectedFramework?.id ?? '',
-      'cpm.framework.enabled': Boolean(context.frameworkContext),
-      // Scope
-      'cpm.scope.source': context.state.scope.source ?? 'default',
-      // Error categorization
-      ...(errorType ? { 'cpm.error.type': errorType } : {}),
-    });
+    span.setAttributes(
+      buildRootSpanAttributes({
+        ...execution,
+        registeredStageNames: this.stages.map((stage) => stage.name),
+      })
+    );
   }
 
   private endSpanWithStatus(
@@ -637,36 +604,6 @@ export class PromptExecutionPipeline {
     }
     span.end();
   }
-
-  private mapStageType(stageName: string): PipelineStageType {
-    switch (stageName) {
-      case 'CommandParsing':
-        return 'parsing';
-      case 'ExecutionPlanning':
-        return 'planning';
-      case 'GateEnhancement':
-        return 'gate_enhancement';
-      case 'FrameworkResolution':
-        return 'framework';
-      case 'SessionManagement':
-        return 'session';
-      case 'StepExecution':
-        return 'execution';
-      case 'ResponseFormatting':
-        return 'post_processing';
-      default:
-        return 'other';
-    }
-  }
-}
-
-interface StageMetricSummary {
-  stage: string;
-  durationMs: number;
-  heapUsed: number;
-  rss: number;
-  heapUsedDelta: number;
-  rssDelta: number;
 }
 
 interface ContextStateSnapshot {
