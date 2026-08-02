@@ -10,6 +10,16 @@
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
 5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries.
 
+## Node.js Support Boundaries
+
+| Surface | Supported Node.js | Enforcement |
+|---------|-------------------|-------------|
+| MCP server and desktop extension | >=22.13.0 | `server/package.json`, `manifest.json`, CI on 22.13.0 and 24 |
+| Standalone CPM CLI | >=18.18.0 | `cli/package.json` and CLI runtime validation |
+| Local development and publishing | 24 | `.node-version` and publish workflows |
+
+The server floor is where `node:sqlite` is available without an experimental flag. The standalone CLI remains a separate, self-contained compatibility surface.
+
 ## Validation Gates (one contract, two subsets)
 
 **CI is the contract; every other gate is a documented strict subset of it.**
@@ -60,9 +70,10 @@ Read the relevant doc before editing. Update docs when behavior changes.
 |---------|---------|
 | `npm run build` | esbuild bundle -> `dist/index.js` |
 | `npm run verify:mcp` | Spawn a server from `dist/` and prove all 3 MCP tools answer — **use instead of restarting Claude Code to check a build**. Refuses to run against a stale `dist/` |
-| `npm run typecheck` | Strict TS type validation |
+| `npm run typecheck` | Strict TS type validation — **`src/` only**, `tsconfig.json` excludes `tests/` |
 | `npm test` | Full Jest suite |
 | `npm run lint:ratchet` | Fail if ESLint violations increased |
+| `npm run typecheck:tests:ratchet` | Fail if `tests/` type errors increased. Covers the call sites `typecheck` cannot see — a constructor change can otherwise land green against a test file that no longer compiles |
 | `npm run generate:contracts` | Regenerate MCP schemas from contracts |
 | `npm run validate:all` | Full validation suite |
 | `npm run validate:arch` | Dependency Cruiser architecture rules |
