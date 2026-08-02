@@ -15,13 +15,13 @@
  * ```
  */
 
+// The gate notification payloads (GateFailedNotification, ResponseBlockedNotification,
+// RetryExhaustedNotification) are declared in `#shared/types` with the port that
+// names them — import them from there.
 export type {
   ChainCompleteNotification,
   ChainStepCompleteNotification,
   FrameworkChangedNotification,
-  GateFailedNotification,
   McpNotificationServer,
-  ResponseBlockedNotification,
-  RetryExhaustedNotification,
 } from './mcp-notification-emitter.js';
 export { McpNotificationEmitter } from './mcp-notification-emitter.js';

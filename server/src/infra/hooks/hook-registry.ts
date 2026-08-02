@@ -14,38 +14,29 @@
 
 import { EventEmitter } from 'events';
 
-import type { GateDefinition, HookRegistryPort, Logger } from '#shared/types/index.js';
+import type {
+  GateDefinition,
+  GateHookEvaluationResult,
+  HookRegistryPort,
+  Logger,
+  PipelineHookContext,
+} from '#shared/types/index.js';
 
 /**
  * Minimal execution context for hook callbacks.
  * Provides read-only access to execution state.
+ *
+ * The hook-author-facing name for `PipelineHookContext`. It is an alias, not a
+ * second declaration: the two were byte-identical shapes maintained separately,
+ * and the port that carries this context is declared in `shared/types`.
  */
-export interface HookExecutionContext {
-  /** Unique ID for this execution */
-  readonly executionId: string;
-  /** Execution type (single prompt or chain) */
-  readonly executionType: 'single' | 'chain';
-  /** Chain ID if chain execution */
-  readonly chainId?: string;
-  /** Current step number if chain execution */
-  readonly currentStep?: number;
-  /** Whether framework enhancement is enabled */
-  readonly frameworkEnabled: boolean;
-  /** Active framework ID if any */
-  readonly frameworkId?: string;
-}
+export type HookExecutionContext = PipelineHookContext;
 
 /**
  * Result from gate evaluation for hook callbacks.
+ * Declared in `shared/types` because `HookRegistryPort` is.
  */
-export interface GateEvaluationResult {
-  /** Whether the gate passed */
-  readonly passed: boolean;
-  /** Reason for pass/fail */
-  readonly reason?: string;
-  /** Whether this gate has blockResponseOnFail enabled */
-  readonly blocksResponse: boolean;
-}
+export type GateEvaluationResult = GateHookEvaluationResult;
 
 /**
  * Pipeline hooks for intercepting stage execution.
