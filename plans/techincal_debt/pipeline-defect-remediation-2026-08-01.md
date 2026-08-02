@@ -222,17 +222,24 @@ of stale numbers that barely touch stage files.
 RED-first is mandatory — this surface has **zero** existing coverage, which is why all four bugs survived.
 Observed RED: 5 failures / 22 pre-existing passes. Observed GREEN: 1743/1743 across 146 suites.
 
-### Tier 2: Array constructor + de-null
+### Tier 2: Array constructor + de-null — ✓ COMPLETE (2026-08-02)
 
-| #   | File                                         | Change                                                                    | ~Ln | Dep |
-| --- | -------------------------------------------- | ------------------------------------------------------------------------- | --- | --- |
-| 2.1 | `prompt-execution-pipeline.ts:33-65,244-289` | 23 params → `stages: readonly PipelineStage[]`; delete `registerStages()` | -55 | T1  |
-| 2.2 | `pipeline-builder.ts:351-378`                | Pass one array literal; ordering rationale moves here                     | ~25 | 2.1 |
-| 2.3 | `pipeline-builder.ts:42-43,51,53`            | Drop `\| null`; delete `...(x ? [x] : [])` spreads                        | -8  | 2.1 |
-| 2.4 | `pipeline-orchestrator.test.ts:103-130`      | Positional + 4 nulls → ordered array                                      | ~30 | 2.1 |
-| 2.5 | `pipeline-telemetry.test.ts:100-128`         | Replace hand-scrambled index mapping                                      | ~30 | 2.1 |
+| #       | File                                         | Change                                                                         | ~Ln | Dep |
+| ------- | -------------------------------------------- | ------------------------------------------------------------------------------ | --- | --- |
+| ✓ 2.1   | `prompt-execution-pipeline.ts:33-65,244-289` | 23 params → `stages: readonly PipelineStage[]`; delete `registerStages()`      | -55 | T1  |
+| ✓ 2.2   | `pipeline-builder.ts:351-378`                | Pass one array literal; ordering rationale moves here                          | ~25 | 2.1 |
+| ✓ 2.3   | ~~`pipeline-builder.ts:42-43,51,53`~~        | Drop `\| null`; delete `...(x ? [x] : [])` spreads — **wrong file**, see notes | -8  | 2.1 |
+| ✓ 2.4   | `pipeline-orchestrator.test.ts:103-130`      | Positional + 4 nulls → ordered array                                           | ~30 | 2.1 |
+| ✓ 2.5   | `pipeline-telemetry.test.ts:100-128`         | Replace hand-scrambled index mapping                                           | ~30 | 2.1 |
+| ✓ 2.6\* | `pipeline-builder.ts`                        | Extract `createFrameworkStage` + `resolveResourceManagerHandler`               | ~30 | 2.2 |
+| ✓ 2.7\* | `prompt-execution-pipeline.ts`               | Delete dead `getStage()`; throw on empty stage array                           | -4  | 2.1 |
 
-**Gate**: full suite **+** `npx eslint src/mcp/tools/prompt-engine/core/pipeline-builder.ts` — `build()` complexity must be ≤10
+\* Unplanned — 2.6 is what the gate criterion actually required; 2.7 is dead code on the rewritten field. See `implementation-notes.md`.
+
+**Gate**: full suite **+** `npx eslint src/mcp/tools/prompt-engine/core/pipeline-builder.ts` — `build()` complexity must be ≤10 — **PASSED** (violation gone; measured on an isolated worktree, see notes)
+
+Measured: constructor `max-params` 26 → gone · `build()` complexity 12 → under limit ·
+coordinator 679 → 548 ln, 29 → 20 problems · ratchet 3463/1409 → 3459/1407 errors/warnings.
 
 ### Tier 3: Drain the metadata bag
 

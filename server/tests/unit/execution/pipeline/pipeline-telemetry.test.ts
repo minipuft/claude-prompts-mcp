@@ -97,9 +97,12 @@ const createCapturingMetricsCollector = (): CapturingMetricsCollector => {
   } as CapturingMetricsCollector;
 };
 
-// Standard stage list (matching pipeline constructor order).
-// Names are the production `readonly name` literals — `mapStageType` is keyed by them.
-const stageNames = [
+/**
+ * Every stage in execution order, matching `PipelineBuilder.build()`.
+ * Names are the production `readonly name` literals — `resolveStageType` is keyed
+ * by them, so a drift here would silently weaken the classification assertions.
+ */
+const allStageNames = [
   'RequestNormalization',
   'DependencyInjection',
   'ExecutionLifecycle',
@@ -108,6 +111,8 @@ const stageNames = [
   'InlineGateExtraction',
   'OperatorValidation',
   'ExecutionPlanning',
+  'ScriptExecution',
+  'ScriptAutoExecute',
   'JudgeSelection',
   'GateEnhancement',
   'FrameworkResolution',
@@ -115,19 +120,25 @@ const stageNames = [
   'InjectionControl',
   'PromptGuidance',
   'StepResponseCapture',
+  'ShellVerification',
   'StepExecution',
+  'PhaseGuardVerification',
   'GateReview',
   'ResponseFormatting',
   'PostFormattingCleanup',
 ] as const;
 
-// The four stages the builder may omit; passed as `null` unless a test opts in.
-const optionalStageNames = [
+// The four stages the builder may omit; excluded unless a test opts in.
+const optionalStageNames: readonly string[] = [
   'ScriptExecution',
   'ScriptAutoExecute',
   'ShellVerification',
   'PhaseGuardVerification',
-] as const;
+];
+
+const stageNames: readonly string[] = allStageNames.filter(
+  (name) => !optionalStageNames.includes(name)
+);
 
 function createPipeline(options: {
   hookRegistry?: HookRegistryPort;
@@ -148,46 +159,10 @@ function createPipeline(options: {
     return createStage(name);
   };
 
-  const stages = stageNames.map(build);
-  const optional: [
-    PipelineStage | null,
-    PipelineStage | null,
-    PipelineStage | null,
-    PipelineStage | null,
-  ] =
-    options.includeOptionalStages === true
-      ? [
-          build(optionalStageNames[0]),
-          build(optionalStageNames[1]),
-          build(optionalStageNames[2]),
-          build(optionalStageNames[3]),
-        ]
-      : [null, null, null, null];
+  const names = options.includeOptionalStages === true ? allStageNames : stageNames;
 
   return new PromptExecutionPipeline(
-    stages[0]!, // requestStage
-    stages[1]!, // dependencyStage
-    stages[2]!, // lifecycleStage
-    stages[3]!, // identityResolutionStage
-    stages[4]!, // parsingStage
-    stages[5]!, // inlineGateStage
-    stages[6]!, // operatorValidationStage
-    stages[7]!, // planningStage
-    optional[0], // scriptExecutionStage
-    optional[1], // scriptAutoExecuteStage
-    stages[10]!, // frameworkStage
-    stages[8]!, // judgeSelectionStage
-    stages[13]!, // promptGuidanceStage
-    stages[9]!, // gateStage
-    stages[11]!, // sessionStage
-    stages[12]!, // injectionControlStage
-    stages[14]!, // responseCaptureStage
-    optional[2], // shellVerificationStage
-    stages[15]!, // executionStage
-    optional[3], // phaseGuardVerificationStage
-    stages[16]!, // gateReviewStage
-    stages[17]!, // formattingStage
-    stages[18]!, // postFormattingStage
+    names.map(build),
     createLogger(),
     options.metricsProvider ?? (() => undefined),
     options.hookRegistry

@@ -121,3 +121,105 @@ tier of its own or an explicit deferral.
 | `npm run validate:arch`             | 438 modules, 0 errors (2 pre-existing warnings) |
 | `npm run verify:mcp`                | 11/11                                           |
 | `npx eslint execution-telemetry.ts` | 0 problems                                      |
+
+---
+
+## Tier 2 — Array constructor + de-null (2026-08-02)
+
+### Verified in isolation, not in the working tree
+
+A second session was editing this repo concurrently — 16 unrelated files modified
+(`framework-manager.ts`, `prompt-executor.ts`, `runtime/*`, `system-control/*`). The
+shared `lint:ratchet` was red on `import-x/order` (+2) from _their_ in-flight work, so a
+tree-wide gate run could neither pass nor be attributed.
+
+Tier 2 was therefore gated on a detached worktree at `HEAD` carrying only its four files.
+Every number below is from that run. Reproduce with:
+
+```
+git worktree add <dir> HEAD --detach
+# copy the 4 tier files in, then run the gate
+```
+
+Do not `git stash` to isolate work while another session is live — it moves their
+uncommitted changes too. (Learned the hard way; recovered intact.)
+
+### Deviations
+
+**D5 — step 2.3 named the wrong file.**
+The plan pointed at `pipeline-builder.ts:42-43,51,53` for "drop `| null`". Those lines are
+import specifiers (`FrameworkResolutionStage,` `JudgeSelectionStage,`). The four
+`PipelineStage | null` declarations were in `prompt-execution-pipeline.ts:43-44,52,54`,
+and they died with the constructor rewrite in 2.1 rather than needing a separate step.
+
+The builder never passed `null` for any of them: `ScriptExecutionStage`,
+`ScriptAutoExecuteStage`, `createShellVerificationStage`, and
+`createPhaseGuardVerificationStage` are all constructed unconditionally, and the two
+factories return non-nullable types. Finding 4 confirmed — the optionality was decorative.
+
+**D6 — the gate criterion needed an extraction the plan didn't budget.**
+`build()` measured cyclomatic 12 against a limit of 10, and the tier's gate demands ≤10.
+Moving the ordering into an array literal does not remove a single decision point, so
+steps 2.1-2.5 alone would have left the gate failing. Extracted two private methods:
+
+| Extracted                         | Removes                                                       |
+| --------------------------------- | ------------------------------------------------------------- |
+| `createFrameworkStage()`          | the manager-present ternary (-1)                              |
+| `resolveResourceManagerHandler()` | `mcpToolsManager?.getResourceManagerHandler?.() ?? null` (-3) |
+
+Both are private methods on a factory, which `architecture.md` permits (services orchestrate
+in public, stay pure in private) — unlike the same move on an orchestration stage.
+
+`build()` is still ~270 lines. No rule blocks it and the tier does not own it, but a
+factory method that long is a candidate for grouping along the section comments it already
+carries (`Stage 00`, `01-04`, `05-07`, `08-12`).
+
+**D7 — deleted `getStage()`.**
+Zero references in `src/`, `tests/`, or `docs/`. Its docstring claimed "for diagnostics and
+testing"; neither used it. It was the only reader of `this.stages` besides the executor, so
+leaving it beside a freshly rewritten field is the stale-breadcrumb pattern
+`cleanup-standards.md` names. Internal TS exports are outside the declared public API
+contract (project `CLAUDE.md`), so this is not a semver event.
+
+**D8 — added a construction-time guard.**
+`if (stages.length === 0) throw`. An empty array previously surfaced as "Pipeline completed
+without producing a response" at request time; now it fails where the mistake is.
+
+### Carry-over from Tier 1, resolved
+
+`pipeline-orchestrator.test.ts` built a fake stage named `FrameworkInjectionControl`;
+production is `InjectionControl` (`07b-injection-control-stage.ts:45`). Corrected.
+
+### Found during execution, not in the plan
+
+**`npm run typecheck` does not cover tests.** `tsconfig.json` sets
+`"exclude": ["node_modules", "dist", "tests"]`. Both test files called the constructor with
+26 positional arguments after 2.1 landed, and typecheck reported clean — only Jest caught
+it.
+
+This matters more than it looks for this tier specifically. Tier 2's premise is that 23
+type-identical positional parameters cannot be order-checked. An array does fix _arity_
+drift at production call sites, but test call sites get no compile-time check at all, and
+ordering is still unchecked everywhere — which is what Tier 6 exists for.
+
+Worth deciding separately: add a `tsconfig.test.json` plus a `typecheck:tests` script, or
+accept Jest as the only test-call-site check.
+
+### Not fixed — deliberately out of scope
+
+`executePipelineStages` remains at cyclomatic 17 / cognitive 29 against limits of 10 / 15.
+Flagged in Tier 1 as unowned; Tier 2 shrank the constructor, not this method. Still unowned.
+
+### Measured (isolated worktree at `2ddd763f` + 4 tier files)
+
+| Check                          | Before               | After                        |
+| ------------------------------ | -------------------- | ---------------------------- |
+| constructor `max-params`       | 26 (limit 4)         | **gone**                     |
+| `build()` complexity           | 12 (limit 10)        | **gone**                     |
+| `prompt-execution-pipeline.ts` | 679 ln, 29 problems  | 548 ln, 20 problems          |
+| `pipeline-builder.ts` problems | 13                   | 12                           |
+| `lint:ratchet`                 | 3463 err / 1409 warn | 3459 / 1407 — no regressions |
+| `npm run typecheck`            | clean                | clean                        |
+| `npm run test:ci`              | 1743 / 146 suites    | 1743 / 146 suites            |
+| `npm run validate:all`         | exit 0               | exit 0                       |
+| `npm run verify:mcp`           | 11/11                | 11/11                        |

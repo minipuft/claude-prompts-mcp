@@ -172,26 +172,14 @@ export class PipelineBuilder {
     );
 
     // Script auto-execute stage (04c)
-    const resourceManagerHandler = deps.mcpToolsManager?.getResourceManagerHandler?.() ?? null;
-    const scriptAutoExecuteStage = new ScriptAutoExecuteStage(resourceManagerHandler, deps.logger);
+    const scriptAutoExecuteStage = new ScriptAutoExecuteStage(
+      this.resolveResourceManagerHandler(),
+      deps.logger
+    );
 
     // ── Stage 05-07: Enhancement and Session ──
 
-    const frameworkStage: PipelineStage = deps.frameworkManager
-      ? new FrameworkResolutionStage(
-          deps.frameworkManager,
-          deps.getFrameworkStateEnabled,
-          deps.logger,
-          deps.lightweightGateSystem.gateLoader
-        )
-      : {
-          name: 'FrameworkResolution',
-          execute: async () => {
-            deps.logger.debug(
-              '[PipelineBuilder] Framework stage skipped (framework manager unavailable)'
-            );
-          },
-        };
+    const frameworkStage = this.createFrameworkStage();
 
     const frameworksProvider = () => {
       try {
@@ -348,7 +336,22 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    return new PromptExecutionPipeline(
+    // Execution order. The array IS the contract — the pipeline runs it front to
+    // back and does no reordering of its own.
+    //
+    // Constraints this order encodes, each of which breaks something if inverted:
+    //   - JudgeSelection before GateEnhancement and FrameworkResolution, so the
+    //     judge phase (%judge) returns a clean resource menu with no framework or
+    //     gate injection, and so the execution phase has clientFrameworkOverride
+    //     set before FrameworkResolution reads it.
+    //   - SessionManagement before InjectionControl, which needs currentStep.
+    //   - InjectionControl before PromptGuidance, which reads the injection
+    //     decisions InjectionControl writes to context.state.injection.
+    //   - ScriptExecution before ScriptAutoExecute, so auto-executed tool output
+    //     is available to the template context that follows.
+    //   - ShellVerification before StepExecution, enabling verify loops where a
+    //     shell command grades the previous response.
+    const stages: readonly PipelineStage[] = [
       requestStage,
       dependencyStage,
       lifecycleStage,
@@ -357,25 +360,60 @@ export class PipelineBuilder {
       inlineGateStage,
       operatorValidationStage,
       planningStage,
-      scriptExecutionStage, // 04b - Script tool execution
-      scriptAutoExecuteStage, // 04c - Script auto-execute
-      frameworkStage,
+      scriptExecutionStage,
+      scriptAutoExecuteStage,
       judgeSelectionStage,
-      promptGuidanceStage,
       gateStage,
+      frameworkStage,
       sessionStage,
       injectionControlStage,
+      promptGuidanceStage,
       responseCaptureStage,
-      shellVerificationStage, // 08b - Shell verification (Ralph Wiggum loops)
+      shellVerificationStage,
       executionStage,
-      phaseGuardVerificationStage, // 09b - Phase guard verification (framework phases)
+      phaseGuardVerificationStage,
       gateReviewStage,
       formattingStage,
       postFormattingStage,
+    ];
+
+    return new PromptExecutionPipeline(
+      stages,
       deps.logger,
       deps.getAnalyticsService,
       deps.hookRegistry
     );
+  }
+
+  /**
+   * Real framework stage when a manager is wired, otherwise an inert stage that
+   * keeps the position occupied so the order stays stable.
+   */
+  private createFrameworkStage(): PipelineStage {
+    const { deps } = this;
+    if (!deps.frameworkManager) {
+      return {
+        name: 'FrameworkResolution',
+        execute: async () => {
+          deps.logger.debug(
+            '[PipelineBuilder] Framework stage skipped (framework manager unavailable)'
+          );
+        },
+      };
+    }
+
+    return new FrameworkResolutionStage(
+      deps.frameworkManager,
+      deps.getFrameworkStateEnabled,
+      deps.logger,
+      deps.lightweightGateSystem.gateLoader
+    );
+  }
+
+  private resolveResourceManagerHandler(): ReturnType<
+    NonNullable<NonNullable<PipelineDependencies['mcpToolsManager']>['getResourceManagerHandler']>
+  > | null {
+    return this.deps.mcpToolsManager?.getResourceManagerHandler?.() ?? null;
   }
 
   private createGateService(): GateService {

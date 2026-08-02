@@ -26,43 +26,29 @@ import type { Span } from '@opentelemetry/api';
  * Canonical Prompt Execution Pipeline orchestrator.
  */
 export class PromptExecutionPipeline {
-  private stages: PipelineStage[] = [];
+  private readonly stages: readonly PipelineStage[];
   private readonly logger: Logger;
   private readonly metricsProvider: (() => MetricsCollector | undefined) | undefined;
   private readonly hookRegistry: HookRegistryPort | undefined;
 
+  /**
+   * @param stages Executed in array order. The caller owns the ordering and its
+   *   rationale — see `PipelineBuilder.build()`, which is the only production
+   *   construction site.
+   */
   constructor(
-    private readonly requestStage: PipelineStage,
-    private readonly dependencyStage: PipelineStage,
-    private readonly lifecycleStage: PipelineStage,
-    private readonly identityResolutionStage: PipelineStage,
-    private readonly parsingStage: PipelineStage,
-    private readonly inlineGateStage: PipelineStage,
-    private readonly operatorValidationStage: PipelineStage,
-    private readonly planningStage: PipelineStage,
-    private readonly scriptExecutionStage: PipelineStage | null, // 04b - Script tool execution
-    private readonly scriptAutoExecuteStage: PipelineStage | null, // 04c - Script auto-execute
-    private readonly frameworkStage: PipelineStage,
-    private readonly judgeSelectionStage: PipelineStage,
-    private readonly promptGuidanceStage: PipelineStage,
-    private readonly gateStage: PipelineStage,
-    private readonly sessionStage: PipelineStage,
-    private readonly frameworkInjectionControlStage: PipelineStage,
-    private readonly responseCaptureStage: PipelineStage,
-    private readonly shellVerificationStage: PipelineStage | null, // 08b - Shell verification (Ralph Wiggum)
-    private readonly executionStage: PipelineStage,
-    private readonly phaseGuardVerificationStage: PipelineStage | null, // 09b - Phase guard verification
-    private readonly gateReviewStage: PipelineStage,
-    private readonly formattingStage: PipelineStage,
-    private readonly postFormattingStage: PipelineStage,
+    stages: readonly PipelineStage[],
     logger: Logger,
     metricsProvider?: () => MetricsCollector | undefined,
     hookRegistry?: HookRegistryPort
   ) {
+    if (stages.length === 0) {
+      throw new Error('PromptExecutionPipeline requires at least one stage');
+    }
+    this.stages = stages;
     this.logger = logger;
     this.metricsProvider = metricsProvider;
     this.hookRegistry = hookRegistry;
-    this.registerStages();
   }
 
   /**
@@ -232,60 +218,6 @@ export class PromptExecutionPipeline {
       );
       await this.runLifecycleCleanupHandlers(context);
     }
-  }
-
-  /**
-   * Expose stage lookups for diagnostics and testing.
-   */
-  getStage(name: string): PipelineStage | undefined {
-    return this.stages.find((stage) => stage.name === name);
-  }
-
-  private registerStages(): void {
-    // Stage order is critical for the two-phase judge selection flow:
-    // JudgeSelectionStage must run BEFORE framework/gate stages so that:
-    // 1. Judge phase (%judge) returns clean resource menu without framework/gate injection
-    // 2. Execution phase with selections has clientFrameworkOverride set before FrameworkResolutionStage
-    //
-    // Stage ordering for injection control:
-    // 1. SessionStage MUST run before InjectionControlStage (provides currentStep)
-    // 2. InjectionControlStage MUST run before PromptGuidanceStage (decisions control injection)
-    // 3. PromptGuidanceStage reads context.state.injection to decide what to inject
-    //
-    // Script execution ordering:
-    // ScriptExecutionStage (04b) runs after planning, before auto-execute.
-    // ScriptAutoExecuteStage (04c) runs after script execution, before judge selection.
-    // This allows auto-executed tool outputs to be available in template context.
-    this.stages = [
-      this.requestStage,
-      this.dependencyStage,
-      this.lifecycleStage,
-      this.identityResolutionStage,
-      this.parsingStage,
-      this.inlineGateStage,
-      this.operatorValidationStage,
-      this.planningStage,
-      // 04b: Script execution (optional) - runs after planning
-      ...(this.scriptExecutionStage ? [this.scriptExecutionStage] : []),
-      // 04c: Script auto-execute (optional) - runs after script execution, before judge selection
-      ...(this.scriptAutoExecuteStage ? [this.scriptAutoExecuteStage] : []),
-      this.judgeSelectionStage, // Moved before framework/gate stages for two-phase flow
-      this.gateStage, // Now runs after judge decision
-      this.frameworkStage, // Now uses clientFrameworkOverride from judge flow
-      this.sessionStage, // MOVED: Session management (populates currentStep)
-      this.frameworkInjectionControlStage, // MOVED: Injection decisions (needs currentStep, controls guidance)
-      this.promptGuidanceStage, // NOW AFTER: Uses injection decisions from state.injection
-      this.responseCaptureStage,
-      // 08b: Shell verification (optional) - runs after response capture, before execution
-      // Enables Ralph Wiggum loops where shell commands validate Claude's work
-      ...(this.shellVerificationStage ? [this.shellVerificationStage] : []),
-      this.executionStage,
-      // 09b: Phase guard verification (optional) - structural checks before gate review
-      ...(this.phaseGuardVerificationStage ? [this.phaseGuardVerificationStage] : []),
-      this.gateReviewStage,
-      this.formattingStage,
-      this.postFormattingStage,
-    ];
   }
 
   private logStageMetrics(
