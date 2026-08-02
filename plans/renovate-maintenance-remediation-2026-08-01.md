@@ -196,10 +196,11 @@ remote workflows cannot satisfy.
 
 ### Phase 6 — Hosted rollout and full-SHA activation
 
-**Status:** in progress on 2026-08-02. The isolated branch contains one validated,
-tier-scoped commit on local base `467ee5a4`; do not push or open the PR until that base
-is an ancestor of remote `main`. The shared dirty worktree remains untouched by
-branch, index, or cleanup operations.
+**Status:** complete on 2026-08-02. Prerequisite PR #174 synchronized the finalized
+local base before the one-commit, 28-file Renovate PR #177 landed. Full-SHA enforcement
+is enabled and passed hosted reruns. Representative Renovate PR #178 now projects the
+new grouping, label, schedule, extraction, and protected-check policy; corrective PR
+#179 removed the validator false failure that PR #178 exposed.
 
 | #   | Target                     | Change                                                                                                                                                             | Depends | Verification                                   |
 | --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ---------------------------------------------- |

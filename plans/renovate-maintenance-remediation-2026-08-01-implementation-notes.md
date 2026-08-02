@@ -427,11 +427,11 @@ those guards.
   commit `467ee5a45bb0d4293907f8267258bae1900b26b4` on branch
   `fix/renovate-delivery-contract`. Only the 28 enumerated Phase 1–6 files were
   overlaid.
-- GitHub `main` remains at `0b17526640614d14328dc76b61023fa63b3358f5` and does not
-  contain the isolated branch base; the local base is 16 commits ahead. The branch
-  must not be pushed or opened as a PR until
-  `git merge-base --is-ancestor 467ee5a4 github/main` succeeds. Otherwise the PR
-  would falsely include the other session's commits.
+- GitHub `main` initially remained at `0b17526640614d14328dc76b61023fa63b3358f5`
+  and did not contain the isolated branch base. The guard held: no mixed PR was
+  opened. Prerequisite PR #174 landed the 17 finalized commits through `bd8095a7`
+  first, after all protected checks passed, so the Renovate branch could be replayed
+  from synchronized `main` as exactly one commit.
 
 ### Pre-PR local validation
 
@@ -455,12 +455,48 @@ validation attempt therefore failed closed on Renovate's RE2 fallback warning. T
 recorded strict/extraction evidence used Node 24.15.0, where RE2 installed and loaded;
 the hosted workflow's floating Node 24 pin must report its exact patch version.
 
+### Hosted rollout and policy activation
+
+- PR #177 replayed the validated Renovate change onto synchronized GitHub `main` as
+  commit `a5f152c0`: one commit, 28 files, and no concurrent-session work.
+- Before policy activation, both Renovate validation events and the full CI chain
+  passed, including `Lint & Validate`, `Build`, `CLI`, and `Test Suite`.
+- Repository Actions permissions preserved `enabled:true` and `allowed_actions:"all"`.
+  Only `sha_pinning_required` changed from false to true. The same PR runs were rerun
+  and passed with the policy enabled; the final read-back remains true.
+- PR #177 merged as `6ac5e873` only after its base, head, 28-file inventory, one-commit
+  count, and four protected contexts were rechecked. Post-merge CI, Renovate validation,
+  and Release Please all passed on `main`.
+
+### Hosted defect and corrective loop
+
+- The post-merge dashboard refreshed from the new policy: its header names the Monday
+  00:00-05:59 UTC window, server runtime updates use `fix(deps)`, Python validation
+  tools share `renovate/python-validation-tools`, all 41 external Action references
+  retain version metadata plus full digests, and the server Node constraint is
+  `>=22.13.0`.
+- The first representative PR #178 had the expected `chore(deps)` title,
+  `dependencies` label, grouped branch, stability status, and protected CI. Its two
+  Renovate validation runs failed because the new validator incorrectly included the
+  mutable `currentValue` in the custom-manager identity allowlist.
+- Corrective PR #179 changed identity to stable package-file + dependency-name pairs,
+  retained malformed-value rejection, and added a valid-version-update regression
+  fixture. Its two Renovate validations, four protected contexts, and complete CI
+  passed before merge as `927a816e`.
+- Renovate rebased PR #178 onto the corrective main. Both Renovate validation events,
+  `Lint & Validate`, `Build`, `CLI`, `Test Suite`, both Node matrix legs, PR Summary,
+  and `renovate/stability-days` now pass. The PR remains open and manual because
+  Phase 7 owns observation and any eventual automerge decision.
+
 ### Phase 6 checkpoint
 
-| Item                           | State       | Guard                                                                         |
-| ------------------------------ | ----------- | ----------------------------------------------------------------------------- |
-| 6.1 isolated implementation PR | `migrating` | local scoped commit created; wait for remote base synchronization before push |
-| 6.2 hosted pre-policy evidence | `pending`   | requires safe PR                                                              |
-| 6.3 full-SHA Actions policy    | `pending`   | requires 6.2 pass                                                             |
-| 6.4 protected PR landing       | `pending`   | requires policy reruns pass                                                   |
-| 6.5 hosted Renovate evidence   | `pending`   | requires merged policy                                                        |
+| Item                           | State       | Evidence                                                                  |
+| ------------------------------ | ----------- | ------------------------------------------------------------------------- |
+| 6.1 isolated implementation PR | `canonical` | PR #174 synchronized the base; PR #177 contained one commit and 28 files  |
+| 6.2 hosted pre-policy evidence | `canonical` | affected workflows and all four protected contexts passed                 |
+| 6.3 full-SHA Actions policy    | `canonical` | policy read-back is true and the same PR workflow reruns passed           |
+| 6.4 protected PR landing       | `canonical` | PR #177 merged as `6ac5e873`; post-merge main checks passed               |
+| 6.5 hosted Renovate evidence   | `canonical` | dashboard refreshed; corrected representative PR #178 has all checks pass |
+
+The Phase 6 gate is satisfied. Phase 7 may observe PR #178 and a second qualifying
+Renovate cycle; no automerge behavior was enabled during rollout.
