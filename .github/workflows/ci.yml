@@ -45,10 +45,10 @@ jobs:
         working-directory: server
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_LTS }}
           cache: npm
@@ -64,9 +64,13 @@ jobs:
       # ruff is installed here rather than via astral-sh/ruff-action because
       # `validate:python` (inside validate:all) is the single definition of the Python
       # gate — the action would have been a second, silently divergent one.
-      - name: Install pinned Python tooling
+      - name: Install Ruff
         working-directory: .
-        run: pip install ruff==0.16.0 pyrefly==1.1.1 --quiet
+        run: pip install ruff==0.16.0 --quiet
+
+      - name: Install Pyrefly
+        working-directory: .
+        run: pip install pyrefly==1.1.1 --quiet
 
       # The seven `validate:no-*` recurrence guards shell out to ripgrep, which the
       # GitHub runner image does not ship. This was latent until validate:all started
@@ -98,10 +102,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: ".node-version"
           cache: npm
@@ -140,10 +144,10 @@ jobs:
         working-directory: server
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_LTS }}
           cache: npm
@@ -168,7 +172,7 @@ jobs:
         run: npm run validate:tool-schemas
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist
           path: server/dist/
@@ -186,19 +190,19 @@ jobs:
     strategy:
       fail-fast: false
       # 24 is what actually ships: every publish path (npm, extension) reads
-      # .node-version, which is 24. Testing only 22.x meant a Node-24-specific regression
-      # passed CI and shipped. 22.x stays because engines.node is ">=22.0.0".
+      # .node-version, which is 24. Testing only the minimum meant a Node-24-specific
+      # regression passed CI and shipped. 22.13.0 proves the declared node:sqlite floor.
       matrix:
-        node: ["22.x", "24"]
+        node: ["22.13.0", "24"]
     defaults:
       run:
         working-directory: server
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -208,7 +212,7 @@ jobs:
         run: npm ci --prefer-offline --no-audit
 
       - name: Download build artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dist
           path: server/dist/
@@ -218,7 +222,7 @@ jobs:
         timeout-minutes: 15
 
       - name: Coverage threshold check
-        if: matrix.node == '22.x'
+        if: matrix.node == '22.13.0'
         run: npm run test:coverage
         timeout-minutes: 15
 
@@ -264,7 +268,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -279,7 +283,7 @@ jobs:
           fi
 
       - name: Comment PR with results
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           LINT_RESULT: ${{ needs.lint.result }}
           CLI_RESULT: ${{ needs.cli.result }}

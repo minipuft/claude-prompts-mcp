@@ -4,11 +4,33 @@ on:
   push:
     paths:
       - ".github/renovate.json5"
-      - ".github/workflows/renovate-config-validator.yml"
+      - ".github/actions/**/*.yml"
+      - ".github/actions/**/*.yaml"
+      - ".github/workflows/**/*.yml"
+      - ".github/workflows/**/*.yaml"
+      - ".node-version"
+      - "package.json"
+      - "package-lock.json"
+      - "cli/package.json"
+      - "server/package.json"
+      - "server/package-lock.json"
+      - "server/.npmrc"
+      - "server/scripts/validate-renovate-extraction.js"
   pull_request:
     paths:
       - ".github/renovate.json5"
-      - ".github/workflows/renovate-config-validator.yml"
+      - ".github/actions/**/*.yml"
+      - ".github/actions/**/*.yaml"
+      - ".github/workflows/**/*.yml"
+      - ".github/workflows/**/*.yaml"
+      - ".node-version"
+      - "package.json"
+      - "package-lock.json"
+      - "cli/package.json"
+      - "server/package.json"
+      - "server/package-lock.json"
+      - "server/.npmrc"
+      - "server/scripts/validate-renovate-extraction.js"
 
 jobs:
   validate-config:
@@ -17,10 +39,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: ".node-version"
 
@@ -28,7 +50,18 @@ jobs:
       # two runs of an unchanged file. Renovate proposes its own bumps here via the
       # customManagers regex in .github/renovate.json5.
       - name: Install Renovate
-        run: npm install -g renovate@44.5.2
+        run: npm install -g renovate@44.6.0
 
       - name: Validate Renovate config
         run: renovate-config-validator --strict .github/renovate.json5
+
+      - name: Validate resolved policy and extraction
+        env:
+          GITHUB_COM_TOKEN: ${{ github.token }}
+        run: |
+          extraction="$RUNNER_TEMP/renovate-extraction.jsonl"
+          if ! LOG_FORMAT=json LOG_LEVEL=debug renovate --platform=local --dry-run=extract --print-config > "$extraction" 2>&1; then
+            cat "$extraction"
+            exit 1
+          fi
+          node server/scripts/validate-renovate-extraction.js < "$extraction"

@@ -10,7 +10,7 @@
       "linux"
     ],
     "runtimes": {
-      "node": ">=18.18.0"
+      "node": ">=22.13.0"
     }
   },
   "description": "Hot-reloadable versioned prompts with easy tools for prompt engineering, chain workflows, quality gates, Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",

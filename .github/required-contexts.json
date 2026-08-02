@@ -9,7 +9,7 @@
     "`npm run validate:required-contexts` (in validate:all) fails when an entry below no longer",
     "matches a job `name:` in .github/workflows/, so a rename breaks CI instead of merges.",
     "Applying this list to the branch is a separate, deliberate step:",
-    "  jq -r '.contexts[]' .github/required-contexts.json |",
+    "  jq '{strict: true, contexts}' .github/required-contexts.json |",
     "  gh api -X PATCH repos/minipuft/claude-prompts/branches/main/protection/required_status_checks \\",
     "    --input -"
   ],

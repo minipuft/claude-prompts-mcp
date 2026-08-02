@@ -28,11 +28,15 @@ git commit -m "feat(server): add new capability"
 
 ## Development Environment
 
-| Requirement | Version           | Notes                              |
-| ----------- | ----------------- | ---------------------------------- |
-| **Node.js** | 18 -- 24          | `.node-version` pinned to 24       |
-| **npm**     | Bundled with Node | Run `npm install` inside `server/` |
-| **Git**     | Any recent        | Required for Husky hooks           |
+| Surface / requirement                | Version           | Notes                                         |
+| ------------------------------------ | ----------------- | --------------------------------------------- |
+| **MCP server and desktop extension** | Node.js >=22.13.0 | CI tests the minimum and Node 24              |
+| **Standalone CPM CLI runtime**       | Node.js >=18.18.0 | Separate self-contained compatibility surface |
+| **Local development and publishing** | Node.js 24        | `.node-version` is the repository pin         |
+| **npm**                              | Bundled with Node | Run `npm install` inside `server/`            |
+| **Git**                              | Any recent        | Required for Husky hooks                      |
+
+The server uses `node:sqlite` without an experimental flag, which sets its runtime floor. Use Node 24 for repository development so local builds match the publish workflows.
 
 <details>
 <summary><strong>Repo Structure</strong></summary>

@@ -22,7 +22,7 @@ The system is an **unopinionated engine for composability**:
 
 | Aspect            | Decision                 | Rationale                                                                                          |
 | ----------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
-| **Runtime**       | Node.js (v18+)           | I/O-bound workload (file watching, hot-reload). Mature `fs` ecosystem.                             |
+| **Runtime**       | Node.js (>=22.13.0)      | The server uses `node:sqlite` without an experimental flag; CI proves the minimum and Node 24.     |
 | **Language**      | TypeScript (strict mode) | Enables contract-driven development. Zod schemas bridge deterministic runtime ↔ probabilistic LLM. |
 | **Module System** | ESM                      | Modern, tree-shakeable, better tooling support.                                                    |
 

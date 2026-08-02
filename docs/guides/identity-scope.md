@@ -5,7 +5,7 @@ This guide shows you how to isolate state per workspace or organization when dep
 ## Prerequisites
 
 - Claude Prompts MCP server v1.7+
-- Node.js >= 22 (required for native SQLite)
+- Node.js >= 22.13.0 (required for unflagged native SQLite)
 - Understanding of your deployment transport (STDIO vs streamable-HTTP)
 
 ## How It Works
