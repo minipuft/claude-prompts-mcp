@@ -1,6 +1,6 @@
 # MCP SDK v2 + Spec 2026-07-28 Migration
 
-**Status**: Approved — D1 and D2 decided 2026-08-01 (operator confirmed both recommendations). Tier A in progress.
+**Status**: Approved — D1 and D2 decided 2026-08-01 (operator confirmed both recommendations). **Tiers A and A2 complete** (uncommitted). **Tier B scoped and blocked** — B0 added 2026-08-02 after ingestion found the tier had no package-swap row; see §"Tier B readiness" for the three conditions that gate its start.
 **Created**: 2026-08-01
 **Work type**: feature (secondary: refactor) · **Risk**: high · **Confidence**: high
 
@@ -84,12 +84,23 @@ Resolution — make the schema a **pure function of state**, evaluated at constr
 
 Executed. Gate passed. Scope was **wider than planned** and the tier **stopped short of A1-A4** for a reason discovered during execution (§"Why A1-A4 moved", below).
 
-| #   | Status | File                                      | Change                                                                                                                                                                                                                             | Verify result                                                                                                            |
-| --- | ------ | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| A0a | ✓      | `src/mcp/tools/index.ts:97,138,996`       | Type `mcpServer: any` → `McpServer` — **three sites, not one**: the class field (`:97`, the root cause), the constructor param (`:138`), and the factory param (`:996`). Added `McpServer` + `Implementation` imports.             | 7 unsafe-call/unsafe-member-access reports at `:757`, `:814`, `:899`, `:900` cleared                                     |
-| A0b | ✓      | `src/mcp/tools/index.ts:81-88`            | Replaced the string-indexed cast in `readClientVersion` with a typed call returning `Implementation \| undefined`; simplified `getDetectedClientInfo` (`:310`) whose defensive `as Record<string, unknown>` casts became redundant | `tsc --noEmit` green; the handshake path is now compiler-visible                                                         |
-| A0c | ✓      | `src/mcp/tools/index.ts:1021-1022`        | No change required — `McpToolRouter as McpToolsManager` and `createMcpToolsManager = createMcpToolRouter` inherit the now-typed symbols by construction                                                                            | `tsc --noEmit` green                                                                                                     |
-| A0d | ✓      | `src/infra/http/transport/index.ts:36,44` | **Not in the original plan.** A _fourth_ `mcpServer: any` — found because it is what concealed the transport/server coupling that blocks A1. Typed to `McpServer`.                                                                 | `tsc` now reports `'SSEServerTransport' is deprecated` at `:10`, `:39`, `:146` — three warnings the `any` had suppressed |
+| #   | Status | File                                                                                                                                        | Change                                                                                                                                                                                                                                                    | Verify result                                                                                                            |
+| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| A0a | ✓      | `src/mcp/tools/index.ts:97,138,996`                                                                                                         | Type `mcpServer: any` → `McpServer` — **three sites, not one**: the class field (`:97`, the root cause), the constructor param (`:138`), and the factory param (`:996`). Added `McpServer` + `Implementation` imports.                                    | 7 unsafe-call/unsafe-member-access reports at `:757`, `:814`, `:899`, `:900` cleared                                     |
+| A0b | ✓      | `src/mcp/tools/index.ts:81-88`                                                                                                              | Replaced the string-indexed cast in `readClientVersion` with a typed call returning `Implementation \| undefined`; simplified `getDetectedClientInfo` (`:310`) whose defensive `as Record<string, unknown>` casts became redundant                        | `tsc --noEmit` green; the handshake path is now compiler-visible                                                         |
+| A0c | ✓      | `src/mcp/tools/index.ts:1021-1022`                                                                                                          | No change required — `McpToolRouter as McpToolsManager` and `createMcpToolsManager = createMcpToolRouter` inherit the now-typed symbols by construction                                                                                                   | `tsc --noEmit` green                                                                                                     |
+| A0d | ✓      | `src/infra/http/transport/index.ts:36,44`                                                                                                   | **Not in the original plan.** A _fourth_ `mcpServer: any` — found because it is what concealed the transport/server coupling that blocks A1. Typed to `McpServer`.                                                                                        | `tsc` now reports `'SSEServerTransport' is deprecated` at `:10`, `:39`, `:146` — three warnings the `any` had suppressed |
+| A0e | ✓      | `transport/index.ts:410` · `system-control-router.ts:88,386` · `prompt-executor.ts:87,134,727` · `resource-manager/prompt/core/types.ts:56` | **Also not in the plan, and the reason Tier A was nearly declared done prematurely.** A sweep (`rg "mcpServer[?]?\s*:\s*any"`) found **seven more** untyped sites across four files — the first two commits had covered 2 of 9. All typed to `McpServer`. | Sweep returns zero; all 16 seams now `McpServer`                                                                         |
+
+**Dead seams recorded during A0e** — typed for consistency, but carrying no live value. A separate cleanup, not migration work:
+
+| Site                                       | Finding                                                                                                                                                                                             |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prompt-executor.ts:87`                    | Assigned at `:144`, never read. `tsc` confirms: _"'mcpServer' is declared but its value is never read"_ — along with three siblings (`semanticAnalyzer`, `conversationStore`, `textReferenceStore`) |
+| `system-control-router.ts:88`              | `_mcpServer` is discarded by the constructor; threaded in from `:386` for nothing                                                                                                                   |
+| `resource-manager/prompt/core/types.ts:56` | `PromptResourceDependencies.mcpServer` is neither set by any caller nor read by any consumer                                                                                                        |
+
+Removal was considered and deferred: it changes three factory/constructor signatures whose 6+ test call sites pass positional `mockMcpServer as any`. That is a signature change — a different class of work than Tier A's annotations — and bundling it would have cost the tier its attributability.
 
 **Tier A gate — PASSED**
 
@@ -105,12 +116,89 @@ Executed. Gate passed. Scope was **wider than planned** and the tier **stopped s
 
 > **The A0-before-A2 ordering was correct, and paid off immediately.** Typing the seams did not merely enable a later check — it surfaced the A1 blocker below, which the `any` had been hiding.
 
+### Tier A2 — dead wiring removal (inserted 2026-08-02, before Tier B)
+
+**Why before Tier B, not after.** Tier B builds `createMcpHandler(factory)`, where the factory constructs a fresh `McpServer` **per HTTP request** and wires it into the subsystems. Dead constructor parameters would mean threading a live per-request server through wiring nobody reads — inflating the apparent integration surface at exactly the moment it needs to be understood precisely. Cleaning first also touches these constructors once instead of twice.
+
+**Scope discipline.** A `tsc --noUnusedLocals --noUnusedParameters` sweep found **84 dead symbols repo-wide**; only **13** sit on the SDK-seam path. This tier takes the 13. The other 71 are a separate sweep — and are deliberately not touched now, because most live in `engine/frameworks/*` and `engine/execution/*` where a concurrent session is actively editing.
+
+Field-vs-parameter liveness was verified per symbol rather than assumed — they are not equivalent:
+
+| Symbol                                 | Field | Param                                                              | Action                                  |
+| -------------------------------------- | ----- | ------------------------------------------------------------------ | --------------------------------------- |
+| `prompt-executor` `mcpServer`          | dead  | dead                                                               | remove both + factory param + call site |
+| `prompt-executor` `conversationStore`  | dead  | dead                                                               | remove both + factory param + call site |
+| `prompt-executor` `semanticAnalyzer`   | dead  | **live** — `:152` `new ExecutionPlanner(semanticAnalyzer, logger)` | remove field only                       |
+| `prompt-executor` `textReferenceStore` | dead  | **live** — `:184`                                                  | remove field only                       |
+
+Removing all four parameters would have broken `ExecutionPlanner` construction.
+
+| #   | Site                                                            | Change                                                                                                       | Signature change? |
+| --- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------- |
+| A2a | `mcp/tools/index.ts:19,74,133-135`                              | Drop unused imports `path`, `ToolResponse`; drop dead fields `promptsData`, `convertedPrompts`, `categories` | no                |
+| A2b | `runtime/application.ts:44,61,353`                              | Drop unused import `notifyResourcesChanged`; drop write-only field `toolDescriptionLoader`                   | no                |
+| A2c | `prompt-executor.ts:90-92,147,149,190`                          | Drop write-only fields `semanticAnalyzer`, `textReferenceStore`; drop local `gatesDirectory`                 | no                |
+| A2d | `resource-manager/prompt/core/types.ts:56`                      | Drop `PromptResourceDependencies.mcpServer` — never set, never read                                          | no                |
+| A2e | `prompt-executor.ts:87,133,144,726,738` · `:91,137,148,730,742` | Drop fully dead `mcpServer` and `conversationStore` (field + ctor param + factory param + call site)         | **yes**           |
+| A2f | `system-control-router.ts:88,386,387`                           | Drop discarded `_mcpServer` param                                                                            | **yes**           |
+
+**Excluded deliberately**: `transport/index.ts` `configManager` (`:36,44,49,409,413`) is dead through the whole chain, but Tier B rewrites that file wholesale — cleaning it now is churn Tier B overwrites.
+
+**Gate — PASSED (2026-08-02)**: typecheck green · test:ci **146 suites / 1756 tests, all pass** · lint:ratchet **3451→3442 errors, 1409→1406 warnings** · build green · verify:mcp 11/11 · targeted sweep returns empty (all 13 resolved) · repo-wide dead symbols **84 → 72**.
+
+**A cascade the plan did not predict.** Removing `PromptExecutor`'s dead `conversationStore` parameter made `McpToolRouter.conversationStore` dead in turn, which made it dead in `ModuleInitParams`, which made `application.ts` stop passing it. Four files, followed to its natural end rather than left half-done. The chain stopped on evidence, not fatigue: `ConversationStore` is still live in five other files (`application.ts` ×11, `prompts/registry.ts` ×9, `prompts/index.ts` ×6, `converter.ts` ×1), so the service itself stays — only this one wiring branch was dead.
+
+**Test call sites updated**: 5 system-control action tests (uniform `{ sendNotification: jest.fn() } as any` argument removed), `consolidated-tools.test.ts`, `prompt-engine-validation.test.ts`, plus the mock fixtures those removals orphaned (`mockMcpServer`, `mockConversationStore`).
+
+**Config hole closed (2026-08-02), cleanup deferred** — see §Deferred Tiers D1/D2. The original note follows.
+
+**Found**: `npm run typecheck:tests` is structurally broken — `tsconfig.test.json` includes `tests/**/*` while `rootDir` is `src`, so every test file errors `TS6059`. That is why `prompt-engine-validation.test.ts` carries type errors (`ConfigManager` not exported, `never` argument mismatches) that nothing catches. Pre-existing and unrelated to this tier; worth its own fix, since it means the test suite has no type gate at all.
+
+### Deferred Tiers — surfaced by this work, deliberately not bundled
+
+Both were found while executing Tier A2. Neither belongs in the SDK migration: bundling either would cost the migration tiers their attributability, and both are large enough to deserve their own gate.
+
+#### D1 — Remaining dead symbols (72)
+
+A `tsc --noUnusedLocals --noUnusedParameters` sweep found **84** dead symbols repo-wide. Tier A2 removed the **12** on the SDK-seam path (84 → 72 measured after). The remaining 72 are concentrated in:
+
+| Area                  | Approx. count | Note                                                                                                 |
+| --------------------- | ------------- | ---------------------------------------------------------------------------------------------------- |
+| `engine/frameworks/*` | ~20           | `framework-semantic-integration.ts`, `generic-framework-guide.ts`, `template-enhancer.ts`            |
+| `engine/execution/*`  | ~15           | `execution-planner.ts`, `argument-parser.ts`, `context-resolver.ts`, `injection-decision-service.ts` |
+| `engine/gates/*`      | ~5            | `temporary-gate-registry.ts`, `gate-provider-adapter.ts`, `semantic-gate-service.ts`                 |
+| remainder             | ~32           | `infra/*`, `mcp/http/api.ts`, misc                                                                   |
+
+**Do not start this during Tier B.** A concurrent session has been editing `engine/frameworks/*` and `engine/execution/pipeline/*` throughout 2026-08-01/02; a sweep there would collide. Re-measure the count before executing — it will have drifted.
+
+**Method that worked in A2, reuse it**: verify field-vs-parameter liveness per symbol rather than trusting the sweep. In A2, two of four symbols had dead fields but _live_ parameters; removing both would have broken `ExecutionPlanner` construction. Also expect cascades — one removal made three upstream layers dead in turn.
+
+#### D2 — Test-suite type errors (865)
+
+`tsconfig.test.json` extended a base config pinning `rootDir` to `./src` while itself including `tests/**/*`, so every test file failed `TS6059` before any real checking began. `npm run typecheck:tests` reported nothing but config noise, and — critically — **the script is referenced nowhere**: not in `validate:all`, not in `.husky/*`, not in CI. That is how it stayed broken. The test suite has had no type gate at all.
+
+**Fixed now** (one line, zero risk since no gate runs it): `rootDir: "."` override in `tsconfig.test.json`, with a comment explaining why. TS6059 count is now 0, so the script measures something real.
+
+**Deferred**: the 865 errors it now reports.
+
+| Code      | Count | Meaning                                                             |
+| --------- | ----- | ------------------------------------------------------------------- |
+| TS2532    | 315   | Object possibly `undefined` — strict null checks against test mocks |
+| TS4111    | 145   | Index-signature property needs `obj['key']` access                  |
+| TS2345    | 99    | Argument type mismatch                                              |
+| TS2322    | 57    | Assignment type mismatch                                            |
+| TS2339    | 50    | Property does not exist                                             |
+| TS2353    | 43    | Unknown object-literal property                                     |
+| remainder | 156   | TS2305, TS2554, TS7006, TS2459, …                                   |
+
+**Do not wire `typecheck:tests` into `validate:all` until this reaches zero** — CI runs `validate:all` whole, so adding it now turns CI red. The repo already has the right pattern for driving a number down under enforcement: `scripts/eslint-ratchet.js`. A parallel ratchet is likely the cheaper path than an 865-error cleanup, and would let the gate be enforced immediately at its current baseline.
+
 ### Why A1-A4 moved to Tier B
 
 The plan assumed the codemod could run standalone against a v1→v2 package swap. Execution disproved that. Measured facts:
 
 - The SDK import surface is **14 files, 5 import paths** — smaller than feared.
-- **No test file imports the SDK** (`tests/e2e/helpers/http-mcp-client.ts` hand-rolls JSON-RPC over `node:http`). So `@modelcontextprotocol/client@2.0.0` is **not** needed. A1's open question is resolved: three packages, not four.
+- **No test file imports the SDK** (`tests/e2e/helpers/http-mcp-client.ts` hand-rolls JSON-RPC over `node:http`). So `@modelcontextprotocol/client@2.0.0` is **not** needed. A1's open question is resolved: ~~three packages, not four~~ — **corrected 2026-08-02 by direct measurement: two packages.** See §B0.
 - v2 has **no `SSEServerTransport`** (expected) **and no `StreamableHTTPServerTransport`** (not anticipated) — it offers `PerRequestHTTPServerTransport` and `WebStandardStreamableHTTPServerTransport` instead.
 - `transport/index.ts:90,158` calls `this.mcpServer.connect(transport)` on the **same instance** `application.ts` constructs. Server and transports must therefore come from the same SDK major.
 
@@ -122,18 +210,55 @@ The plan assumed the codemod could run standalone against a v1→v2 package swap
 
 ### Tier B — spec 2026-07-28 support
 
-| #   | File                                                               | Change                                                                                                  | ~Lines | Depends | Verify                                                        |
-| --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | ------ | ------- | ------------------------------------------------------------- |
-| B1  | `src/runtime/application.ts:235-265`                               | Extract `McpServerFactory` closure over existing singletons                                             | ~60    | A gate  | factory returns a working `McpServer`                         |
-| B2  | `src/infra/http/transport/index.ts`                                | `createMcpHandler(factory, { legacy: 'stateless' })` + `toNodeHandler` into Express                     | ~80    | B1      | dual-era smoke test                                           |
-| B3  | `src/infra/http/transport/index.ts:9,38,145-234,**372,386-387**`   | **Delete SSE** (pending D1)                                                                             | −150   | B2, D1  | `rg 'sseTransports'` → empty                                  |
-| B4  | `src/infra/http/transport/index.ts:39,252-296,**274**,392`         | Delete session registry + `sessionIdGenerator`                                                          | −60    | B2      | `rg 'sessionIdGenerator'` → empty                             |
-| B5  | `src/runtime/startup-server.ts`                                    | `serveStdio(factory)`                                                                                   | ~20    | B1      | `verify:mcp` on stdio                                         |
-| B6  | `src/mcp/tools/index.ts:86,305-339`                                | Identity: `getClientVersion()` → `ctx.mcpReq.envelope`                                                  | ~40    | B1, A0b | `request-identity-resolver` + `identity-policy-boundary` pass |
-| B7  | `src/mcp/tools/index.ts:899`, `src/modules/resources/index.ts:131` | `sendToolListChanged`/`sendResourceListChanged` → `handler.notify.toolsChanged()`/`.resourcesChanged()` | ~25    | B2      | subscriber receives event                                     |
-| B8  | `src/runtime/application.ts:241-244`                               | `capabilities` block → `server/discover`                                                                | ~15    | B1      | discover advertises all three surfaces                        |
-| B9  | `tests/e2e/helpers/http-mcp-client.ts`                             | Dual-protocol fixture                                                                                   | ~120   | B2      | drives both revisions against one build                       |
-| B10 | —                                                                  | Cache posture: keep `tools/list` at `ttlMs: 0` (SDK default), recorded as a deliberate choice           | doc    | B2      | stated in this file                                           |
+#### B0 — the package swap (added 2026-08-02; the table below could not execute without it)
+
+**A plan defect, found at Tier B ingestion.** §"Why A1-A4 moved to Tier B" states that A1-A4 "fold into Tier B as its opening steps" and are "atomic with B1-B5" — but the table started at B1, which constructs an `McpServerFactory`, a **v2-only type**. No row installed the packages or rewrote the imports. As tabulated, Tier B's first step could not compile. B0 below is that missing work, now scoped against measurement rather than estimate.
+
+Probed 2026-08-02 by installing `@modelcontextprotocol/{core,server,node}@2.0.0` into a scratch tree and grepping the shipped `.d.cts` files — the same "declarations are the authority" move that resolved the earlier unknowns.
+
+**Two direct packages, not three.** `@modelcontextprotocol/server` declares `dependencies: {"zod":"^4.2.0","@modelcontextprotocol/core":"2.0.0"}`, and no file in this repo imports from `core` directly. `core` therefore arrives transitively and does not belong in `package.json`. `@modelcontextprotocol/node` is needed only for `toNodeHandler` (it pulls `@hono/node-server`).
+
+**Five v1 subpaths collapse to three v2 specifiers** — every symbol this repo imports survives, at a new address:
+
+| v1 import (uses)                   | Symbols                                                          | v2 home                                       |
+| ---------------------------------- | ---------------------------------------------------------------- | --------------------------------------------- |
+| `sdk/server/mcp.js` (17)           | `McpServer` ×13, `ResourceTemplate` ×4                           | `@modelcontextprotocol/server`                |
+| `sdk/types.js` (6)                 | `ReadResourceResult` ×4, `isInitializeRequest`, `Implementation` | `@modelcontextprotocol/server`                |
+| `sdk/server/stdio.js` (1)          | `StdioServerTransport`                                           | `@modelcontextprotocol/server/stdio`          |
+| `sdk/server/streamableHttp.js` (1) | `StreamableHTTPServerTransport`                                  | **removed** → `PerRequestHTTPServerTransport` |
+| `sdk/server/sse.js` (1)            | `SSEServerTransport`                                             | **removed** → deleted per D1                  |
+
+So 14 of 16 files migrate by rewriting a specifier string; only `transport/index.ts` and `startup-server.ts` change shape.
+
+**Machinery for B2/B6 confirmed present** (all exported from `@modelcontextprotocol/server`): `createMcpHandler`, `McpServerFactory` (`:3810`), `serveStdio`, `PerRequestHTTPServerTransport`, `WebStandardStreamableHTTPServerTransport`, `RegisteredTool` (`:3463`, with `update()`), plus the dual-era set `legacyStatelessFallback` · `classifyInboundRequest` · `isLegacyRequest` · `ProtocolEra` · `SUPPORTED_PROTOCOL_VERSIONS`, and the B6 identity set `RequestMetaEnvelope` · `CLIENT_INFO_META_KEY` · `CLIENT_CAPABILITIES_META_KEY` · `PROTOCOL_VERSION_META_KEY`.
+
+`legacy?: 'stateless' | 'reject'` verified at `createMcpHandler-dBHMsxwf.d.cts:3854` — the plan's `legacy: 'stateless'` is the real option name and value.
+
+#### Tier B readiness — NOT MET as of 2026-08-02
+
+Tier B is the plan's highest-risk tier (a breaking transport rewrite, ~−210 lines, `feat(runtime)!`). Three conditions block a responsible start. None are about the migration being wrong; all are about the tree it would land on.
+
+| Blocker                                                                                                                                                                                                                                                                                                                            | Evidence                                            | What clears it                                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Nothing is committed.** Tiers A + A2 sit uncommitted on `main` alongside a second session's work — 43 modified files, interleaved.                                                                                                                                                                                               | `git status --short`                                | Commit Tiers A + A2. The plan's own rollback for B3 reads "restore from the B3 commit; it is a single deletion commit by design" — that rollback does not exist without a commit boundary beneath it. |
+| **B6 rewrites a subsystem another session is mid-edit on.** B6 replaces `getClientVersion()` with the `_meta` envelope; the concurrent session has +234 uncommitted lines across `runtime/context.ts`, `runtime/options.ts`, both identity test files, and `docs/guides/identity-scope.md`.                                        | `git diff --stat` on those paths                    | Their identity work lands, or B6 defers to a follow-up tier.                                                                                                                                          |
+| **B0 deletes a dependency another session is writing policy for.** `.github/renovate.json5` is +149/−75 uncommitted and contains `matchPackageNames: ["@modelcontextprotocol/sdk"]` / `groupName: "MCP SDK"` at `:112-116`; their acceptance criterion 8 names "MCP SDK" in the automerge exclusion list. B0 removes that package. | `rg -n modelcontextprotocol .github/renovate.json5` | Coordinate: their rule must name the two scoped packages instead. Cheap if done together, a silent policy hole if not.                                                                                |
+
+**Baseline is otherwise healthy**: `npm run typecheck` green at ingestion.
+
+| #   | File                                                               | Change                                                                                                                                          | ~Lines    | Depends | Verify                                                         |
+| --- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------- | -------------------------------------------------------------- |
+| B0  | `package.json`, 16 files across `src/` + 2 in `scripts/`           | Swap `@modelcontextprotocol/sdk@^1.25.2` → `@modelcontextprotocol/server@2.0.0` + `node@2.0.0`; rewrite 5 subpaths → 3 specifiers (table above) | ~16 files | A gate  | `rg '@modelcontextprotocol/sdk'` → empty; `tsc --noEmit` green |
+| B1  | `src/runtime/application.ts:235-265`                               | Extract `McpServerFactory` closure over existing singletons                                                                                     | ~60       | **B0**  | factory returns a working `McpServer`                          |
+| B2  | `src/infra/http/transport/index.ts`                                | `createMcpHandler(factory, { legacy: 'stateless' })` + `toNodeHandler` into Express                                                             | ~80       | B1      | dual-era smoke test                                            |
+| B3  | `src/infra/http/transport/index.ts:9,38,145-234,**372,386-387**`   | **Delete SSE** (pending D1)                                                                                                                     | −150      | B2, D1  | `rg 'sseTransports'` → empty                                   |
+| B4  | `src/infra/http/transport/index.ts:39,252-296,**274**,392`         | Delete session registry + `sessionIdGenerator`                                                                                                  | −60       | B2      | `rg 'sessionIdGenerator'` → empty                              |
+| B5  | `src/runtime/startup-server.ts`                                    | `serveStdio(factory)`                                                                                                                           | ~20       | B1      | `verify:mcp` on stdio                                          |
+| B6  | `src/mcp/tools/index.ts:86,305-339`                                | Identity: `getClientVersion()` → `ctx.mcpReq.envelope`                                                                                          | ~40       | B1, A0b | `request-identity-resolver` + `identity-policy-boundary` pass  |
+| B7  | `src/mcp/tools/index.ts:899`, `src/modules/resources/index.ts:131` | `sendToolListChanged`/`sendResourceListChanged` → `handler.notify.toolsChanged()`/`.resourcesChanged()`                                         | ~25       | B2      | subscriber receives event                                      |
+| B8  | `src/runtime/application.ts:241-244`                               | `capabilities` block → `server/discover`                                                                                                        | ~15       | B1      | discover advertises all three surfaces                         |
+| B9  | `tests/e2e/helpers/http-mcp-client.ts`                             | Dual-protocol fixture                                                                                                                           | ~120      | B2      | drives both revisions against one build                        |
+| B10 | —                                                                  | Cache posture: keep `tools/list` at `ttlMs: 0` (SDK default), recorded as a deliberate choice                                                   | doc       | B2      | stated in this file                                            |
 
 **Tier B gate**: a `2026-07-28` client and a `2025-11-25` client both complete a chain run against one build.
 
