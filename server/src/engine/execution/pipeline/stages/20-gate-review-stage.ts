@@ -14,7 +14,7 @@ import type { ChainOperatorExecutor } from '../../operators/chain-operator-execu
 type GatesConfigProvider = () => GatesConfig | undefined;
 
 /**
- * Pipeline Stage: Gate Review Rendering
+ * Pipeline Stage 20: Gate Review Rendering
  *
  * Renders synthetic gate review steps when a session has a pending review.
  * When gates have `shell_verify` criteria, runs actual commands and enriches

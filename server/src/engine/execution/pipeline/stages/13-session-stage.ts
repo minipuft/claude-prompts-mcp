@@ -10,7 +10,7 @@ import type { ExecutionPlan } from '../../types.js';
 import type { CreateReviewOptions } from '../decisions/gates/gate-enforcement-types.js';
 
 /**
- * Pipeline Stage 7: Session Management
+ * Pipeline Stage 13: Session Management
  *
  * Manages chain execution sessions, handling session creation, resumption,
  * and state persistence for multi-step workflows.

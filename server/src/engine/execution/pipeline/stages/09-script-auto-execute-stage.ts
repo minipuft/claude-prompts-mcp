@@ -1,11 +1,11 @@
 // @lifecycle canonical - Pipeline stage for script tool auto-execution.
 /**
- * Pipeline Stage 4c: Script Auto-Execute
+ * Pipeline Stage 09: Script Auto-Execute
  *
  * Detects script results with `auto_execute` metadata and internally
  * calls the appropriate MCP tool handler, storing results for downstream use.
  *
- * Position: After Script Execution (04b), before Judge Selection (06a)
+ * Position: After ScriptExecutionStage, before JudgeSelectionStage
  *
  * Dependencies:
  * - context.state.scripts.results (from ScriptExecutionStage)
@@ -64,7 +64,7 @@ export type AutoExecuteHandler = (
 ) => Promise<ToolResponse>;
 
 /**
- * Pipeline Stage 4c: Script Auto-Execute
+ * Pipeline Stage 09: Script Auto-Execute
  *
  * Detects auto_execute metadata in script outputs and calls
  * the appropriate MCP tool handler internally, avoiding LLM round-trips.

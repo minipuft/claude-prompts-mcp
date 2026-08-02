@@ -15,7 +15,7 @@ import type { FrameworkDecisionInput } from '../decisions/index.js';
 type FrameworkEnabledProvider = () => boolean;
 
 /**
- * Pipeline Stage 6: Framework Resolution
+ * Pipeline Stage 12: Framework Resolution
  *
  * Injects framework-specific system prompts and framework context,
  * supporting both default framework and temporary overrides via symbolic operators (@).
@@ -231,7 +231,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     // Coordination flag: system prompt already applied via framework context for single prompts
     context.state.framework.systemPromptApplied = true;
 
-    // Note: InjectionControlStage (07b) now controls system prompt injection.
+    // Note: InjectionControlStage now controls system prompt injection.
     // Downstream stages read from context.state.injection for injection decisions.
 
     return {
@@ -244,7 +244,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   /**
    * Resolve framework context for chain steps.
    * Generates framework context for each step but does NOT make injection decisions.
-   * Injection frequency control is handled by InjectionControlStage (07b)
+   * Injection frequency control is handled by InjectionControlStage
    * which runs after Session Stage when currentStep is known.
    *
    * @param context - Execution context
@@ -295,8 +295,8 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       }
     }
 
-    // InjectionControlStage (07b) controls injection frequency for chains.
-    // It runs after SessionStage (07) when currentStep is known.
+    // InjectionControlStage controls injection frequency for chains.
+    // It runs after SessionManagementStage when currentStep is known.
 
     return {
       chainSteps: steps.length,

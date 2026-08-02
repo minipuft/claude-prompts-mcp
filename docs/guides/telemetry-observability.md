@@ -55,7 +55,7 @@ Note: `telemetry.mode` and `telemetry.exporterEndpoint` changes require server r
 | Span Name                    | Type  | Description                                                  |
 | ---------------------------- | ----- | ------------------------------------------------------------ |
 | `prompt_engine.request`      | Root  | Wraps entire pipeline execution                              |
-| `pipeline.stage.<StageName>` | Child | Per-stage timing (19-23 stages depending on pipeline config) |
+| `pipeline.stage.<StageName>` | Child | Per-stage timing (18-22 stages depending on pipeline config) |
 
 ### Events
 

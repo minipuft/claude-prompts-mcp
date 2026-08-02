@@ -1,11 +1,11 @@
 // @lifecycle canonical - Pipeline stage for script tool execution.
 /**
- * Pipeline Stage 4b: Script Execution
+ * Pipeline Stage 08: Script Execution
  *
  * Detects and executes prompt-scoped script tools based on user input,
  * enriching the template context with script outputs.
  *
- * Position: After Planning Stage (04), before Gate Enhancement (05)
+ * Position: After ExecutionPlanningStage, before GateEnhancementStage
  *
  * Dependencies:
  * - context.parsedCommand (from ParsingStage)
@@ -16,7 +16,7 @@
  * - context.state.scripts.toolsSkipped (string[]) - `trigger: explicit` tools without an explicit request
  * - context.state.scripts.toolsPendingConfirmation (string[]) - Confirm mode tools awaiting approval
  *
- * The script results are later merged into template context in ExecutionStage (09)
+ * The script results are later merged into template context in StepExecutionStage
  * as {{tool_<id>}} variables.
  *
  * @see plans/script-tools-implementation.md for the full implementation plan
@@ -37,7 +37,7 @@ import type {
 import type { ExecutionContext } from '../../context/index.js';
 
 /**
- * Pipeline Stage 4b: Script Execution
+ * Pipeline Stage 08: Script Execution
  *
  * Detects matching script tools from user input/args and executes them,
  * storing results in pipeline state for template rendering.

@@ -29,7 +29,7 @@ export interface VerdictProcessingResult {
  * Processes gate verdicts, handles gate actions (retry/skip/abort),
  * and emits gate lifecycle events via hooks and notifications.
  *
- * Extracted from StepResponseCaptureStage (pipeline stage 08).
+ * Extracted from StepResponseCaptureStage.
  */
 export class GateVerdictProcessor {
   constructor(

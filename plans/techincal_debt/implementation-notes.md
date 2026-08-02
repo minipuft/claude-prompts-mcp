@@ -447,3 +447,85 @@ Suite counts drop by one file and two tests — that is the deleted
 `dependency-injection-stage.test.ts`, not lost coverage: its two assertions covered the
 `pipelineDependencies` write (now deleted) and `gateEnforcement` initialization (now covered
 by every pipeline test, since the pipeline assigns it on every request).
+
+---
+
+## Tier 5 — Renumber 22 files to execution order (2026-08-02)
+
+### D14 — the rename table was correct; the "Plus" list was not
+
+The 22-row rename table was verified against the `stages` array in
+`pipeline-builder.ts:355-378` before any file moved: 22 entries, same sequence, no
+drift. That part of the tier executed as written.
+
+The three follow-on items listed after the table did not survive contact:
+
+| Plan said                                                       | Measured                                                                                                                                                                                                  |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| strip `MOVED:` / `NOW AFTER:` / `Now runs after judge decision` | **zero** such comments exist in `stages/`. The only `src/` matches are `REMOVED:` markers in `mcp/tools/index.ts`, `chainUtils.ts`, `monitor.ts` about the deleted modular-chain system — unrelated scope |
+| `CLAUDE.md:100` → 22 stages                                     | the line is 111, and it already said 22 — no work                                                                                                                                                         |
+| `docs/architecture/overview.md`                                 | three stale counts, only one of them in this file                                                                                                                                                         |
+
+### D15 — ~90 numeric stage references the plan did not account for
+
+The tier's real cost was not the renames. Comments across ten modules name stages by
+number (`Stage 09b`, `pipeline stage 08`, `InjectionControlStage (07b)`). Renaming the
+files does not make these stale — it makes them **wrong**, pointing at a different
+stage than before. Leaving them would have made the tree less accurate than it was
+before the tier ran.
+
+Resolved by replacing the number with the **stage name**, not the new number. A
+positional number is the thing this tier exists to stop trusting; re-numbering the
+prose would re-arm the same trap for the next reorder. `StepResponseCaptureStage` is
+stable and greppable, `Stage 08` is neither.
+
+Two classes needed judgment rather than substitution, because the old scheme was
+ambiguous: `00` covered three stages and `10` covered two. Each of the 23 sites was
+resolved by locating the behaviour the comment described:
+
+- `metadata.judge`, `shellVerifyPassedForGates` auto-pass, `pendingReview` feedback
+  rendering, `formatGateShellVerifySection` → all `GateReviewStage`
+- `buildGateValidationInfo` caller, chain-terminal execution record → `ResponseFormattingStage`
+  (`StepExecutionStage` emits the per-step record)
+- `normalizedCommand` / command-string baking → `RequestNormalizationStage`
+
+### D16 — near-miss: `Stage 1` / `Stage 2` in gate-set-resolver is a different concept
+
+`gate-set-resolver.ts` and its test describe gate resolution as "Stage 1 (additive
+union) then Stage 2 (veto set)". Nine sites, nothing to do with the pipeline. A
+blind numeric sed across `src/` would have corrupted them silently — they type-check
+and pass either way, so no gate would have caught it. The sweep matched two-digit
+forms only and these were reviewed out by hand.
+
+### D17 — the stage-order doc had been wrong since Tier 4
+
+`docs/architecture/overview.md` listed `DependencyInjection` at position 2 (deleted in
+T4) and omitted `IdentityResolution` entirely. The two errors cancelled in the total,
+so the block still said 22 and read as correct. Also carried `AssertionVerification`,
+renamed to `PhaseGuardVerification` at some earlier point. T4's gate did not catch
+this and T5's file list would not have either — it named `CLAUDE.md:100`, which was
+already right.
+
+Also corrected the claim that "execution order is determined by the pipeline
+orchestrator, not file names". That was true when file numbers were arbitrary; now
+they match, and the honest statement is that the `stages` array is the contract and
+a renamed file changes nothing on its own.
+
+### Gate
+
+| Check                             | Result                                      |
+| --------------------------------- | ------------------------------------------- |
+| `npm run typecheck`               | clean                                       |
+| `npm run lint:ratchet`            | 3437 errors / 1405 warnings, no regressions |
+| `npm run typecheck:tests:ratchet` | 395 in `tests/`, no regressions             |
+| `npm run test:ci`                 | 145 suites / 1754 tests                     |
+| `npm run test:integration`        | 33 suites / 430 tests                       |
+| `npm run validate:all`            | exit 0                                      |
+| `npm run validate:format`         | all files match                             |
+| `npm run validate:arch`           | 437 modules, 2 pre-existing warnings        |
+| `npm run verify:mcp`              | 11/11                                       |
+
+51 import paths were checked programmatically against the filesystem before the gate
+ran: all 51 resolve. The tests-typecheck ratchet added earlier this session earned its
+keep here — it is the check that proves 28 rewritten test files still compile, which
+`npm run typecheck` cannot see.

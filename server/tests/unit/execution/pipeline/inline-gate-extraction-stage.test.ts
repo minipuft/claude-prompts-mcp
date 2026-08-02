@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { InlineGateExtractionStage } from '../../../../src/engine/execution/pipeline/stages/02-inline-gate-stage.js';
+import { InlineGateExtractionStage } from '../../../../src/engine/execution/pipeline/stages/05-inline-gate-stage.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
 
 import type { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
@@ -259,8 +259,8 @@ describe('InlineGateExtractionStage', () => {
 
     await stage.execute(context);
 
-    // Stage 02 now focuses only on inline :: gates
-    // All gates from the 'gates' parameter are handled by Stage 05 (GateEnhancementStage)
+    // InlineGateExtractionStage now focuses only on inline :: gates
+    // All gates from the 'gates' parameter are handled by GateEnhancementStage (GateEnhancementStage)
     expect(createTemporaryGate).not.toHaveBeenCalled();
     expect(context.state.gates.temporaryGateIds).toEqual([]);
   });
@@ -293,16 +293,16 @@ describe('InlineGateExtractionStage', () => {
 
     await stage.execute(context);
 
-    // Stage 02 now focuses only on inline :: gates
+    // InlineGateExtractionStage now focuses only on inline :: gates
     // ALL gates from the 'gates' parameter (strings, CustomChecks, and TemporaryGateInputs)
-    // are handled by Stage 05 (GateEnhancementStage) for unified processing
+    // are handled by GateEnhancementStage (GateEnhancementStage) for unified processing
     expect(createTemporaryGate).not.toHaveBeenCalled();
     expect(context.state.gates.temporaryGateIds).toEqual([]);
   });
 
   // NOTE: Tests for canonical gate handling from 'gates' parameter were removed.
-  // This functionality is now consolidated in Stage 05 (GateEnhancementStage).
-  // Stage 02 focuses solely on extracting inline gates from the :: operator.
+  // This functionality is now consolidated in GateEnhancementStage (GateEnhancementStage).
+  // InlineGateExtractionStage focuses solely on extracting inline gates from the :: operator.
   // See tests/unit/execution/pipeline/gate-enhancement-stage.test.ts for canonical gate tests.
 
   test('creates named inline gates with explicit IDs from symbolic syntax', async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
-import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/07-session-stage.js';
+import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 
 import type { ChainSession, ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import type { Logger } from '../../../src/infra/logging/index.js';

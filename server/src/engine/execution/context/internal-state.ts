@@ -182,8 +182,8 @@ export interface PipelineInternalState {
       outcome?: string;
     };
     /**
-     * Set by Stage 08 when a verdict clears a phase-guard-created review.
-     * Stage 09b checks this to skip re-evaluation on the same request turn.
+     * Set by StepResponseCaptureStage when a verdict clears a phase-guard-created review.
+     * PhaseGuardVerificationStage checks this to skip re-evaluation on the same request turn.
      */
     phaseGuardReviewCleared?: boolean;
     /**
@@ -205,8 +205,8 @@ export interface PipelineInternalState {
       message: string;
     };
     /**
-     * Gate IDs whose shell_verify criteria passed (exit 0) during Stage 08b.
-     * Downstream stages (10) use this to auto-clear gate reviews for these gates.
+     * Gate IDs whose shell_verify criteria passed (exit 0) during ShellVerificationStage.
+     * GateReviewStage uses this to auto-clear gate reviews for these gates.
      */
     shellVerifyPassedForGates?: string[];
     /**

@@ -145,12 +145,12 @@ describe('ExecutionRecordStore (integration)', () => {
     expect(records[0].errorMessage).toBeUndefined();
   });
 
-  test('AC1: stage 09-style per-step + stage 10-style chain-terminal records both persist', () => {
+  test('AC1: StepExecutionStage-style per-step + ResponseFormattingStage-style chain-terminal records both persist', () => {
     const t1 = Date.now();
     const t2 = t1 + 10;
     const t3 = t2 + 10;
 
-    // Two step-level records (stage 09 emission shape)
+    // Two step-level records (StepExecutionStage emission shape)
     store.append({
       sessionId: 'sess-multi',
       chainId: 'chain-multi#1',
@@ -169,7 +169,7 @@ describe('ExecutionRecordStore (integration)', () => {
       substate: { renderedAt: t2 },
       startedAt: t2,
     });
-    // Chain-terminal record (stage 10 emission shape — no stepNumber/promptId)
+    // Chain-terminal record (ResponseFormattingStage emission shape — no stepNumber/promptId)
     store.append({
       sessionId: 'sess-multi',
       chainId: 'chain-multi#1',

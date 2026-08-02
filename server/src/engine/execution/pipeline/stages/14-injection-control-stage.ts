@@ -17,7 +17,7 @@ import type { ExecutionContext } from '../../context/index.js';
 type InjectionConfigProvider = () => InjectionConfig;
 
 /**
- * Pipeline Stage 07b: Injection Control
+ * Pipeline Stage 14: Injection Control
  *
  * Controls when system prompts, gate guidance, and style guidance are injected
  * during prompt and chain execution. Uses a modular design with
@@ -37,7 +37,7 @@ type InjectionConfigProvider = () => InjectionConfig;
  * For single prompts:
  * - Always inject unless modifiers (%clean, %lean) disable it
  *
- * Dependencies: context.sessionContext.currentStep (from Session Stage 07)
+ * Dependencies: context.sessionContext.currentStep (from Session SessionManagementStage)
  * Output: context.state.injection (InjectionState)
  * Can Early Exit: No
  */

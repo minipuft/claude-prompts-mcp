@@ -8,7 +8,7 @@ import type { StepCaptureService } from '../../capture/step-capture-service.js';
 import type { ExecutionContext, SessionContext } from '../../context/index.js';
 
 /**
- * Pipeline Stage 8: Step Response Capture
+ * Pipeline Stage 16: Step Response Capture
  *
  * Thin orchestrator that delegates verdict processing and step capture to domain services.
  *

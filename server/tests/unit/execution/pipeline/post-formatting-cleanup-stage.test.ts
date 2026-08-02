@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { PostFormattingCleanupStage } from '../../../../src/engine/execution/pipeline/stages/12-post-formatting-cleanup-stage.js';
+import { PostFormattingCleanupStage } from '../../../../src/engine/execution/pipeline/stages/22-post-formatting-cleanup-stage.js';
 
 const logger = {
   debug: jest.fn(),

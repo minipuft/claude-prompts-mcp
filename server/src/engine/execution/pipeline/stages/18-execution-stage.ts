@@ -14,7 +14,7 @@ import type { PromptReferenceResolver } from '../../reference/prompt-reference-r
 import { processTemplateWithRefs } from '#shared/utils/jsonUtils.js';
 
 /**
- * Pipeline Stage 9: Step Execution
+ * Pipeline Stage 18: Step Execution
  *
  * Executes prompts and chain steps with template rendering, framework injection,
  * and gate-enhanced content for quality validation.

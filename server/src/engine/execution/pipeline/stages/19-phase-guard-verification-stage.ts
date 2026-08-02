@@ -1,11 +1,11 @@
 // @lifecycle canonical - Enforces framework phase-guard verification in the execution pipeline.
 /**
- * Pipeline Stage 09b: Phase Guard Verification
+ * Pipeline Stage 19: Phase Guard Verification
  *
  * Deterministic structural validation of LLM output against framework phase guards.
  * Evaluates phase markers and content rules (min_length, contains_any, etc.) without LLM cost.
  *
- * Position: After StepExecutionStage (09), before GateReviewStage (10-gate)
+ * Position: After StepExecutionStage, before GateReviewStage
  *
  * Integration: On failure, creates a PendingGateReview via the gate enforcement authority
  * so the existing gate lifecycle handles persistence, advancement blocking, retry tracking,
@@ -106,7 +106,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     }
 
     // 6b. Skip if a phase guard review was just cleared by a verdict this turn.
-    // Without this, Stage 08 clears the review → this stage re-evaluates the
+    // Without this, StepResponseCaptureStage clears the review → this stage re-evaluates the
     // new user_response (e.g. a gate verdict) → fails → recreates the review → loop.
     if (context.state.gates.phaseGuardReviewCleared) {
       this.logExit({ skipped: 'Phase guard review cleared by verdict this turn' });
@@ -164,8 +164,8 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       return;
     }
 
-    // Enforce: create a pending gate review so Stage 10 renders feedback
-    // and Stage 08 blocks advancement on the next request.
+    // Enforce: create a pending gate review so GateReviewStage renders feedback
+    // and StepResponseCaptureStage blocks advancement on the next request.
     const review = {
       combinedPrompt: result.retryFeedback,
       gateIds: [PHASE_GUARD_GATE_ID],
@@ -189,7 +189,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
 
     await this.chainSessionStore.setPendingGateReview(sessionId, review);
 
-    // Update context so Stage 10 sees the pending review this request
+    // Update context so GateReviewStage sees the pending review this request
     if (context.sessionContext) {
       context.sessionContext = {
         ...context.sessionContext,
@@ -208,9 +208,9 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
   /**
    * Resolve the active framework ID from context or cached authority decision.
    *
-   * On first request: Stage 06 populates frameworkContext → read from there.
-   * On chain continuation: Stage 06 skips (blueprint-restored) → fall back to
-   * FrameworkDecisionAuthority which was populated by Stage 05.
+   * On first request: FrameworkResolutionStage populates frameworkContext → read from there.
+   * On chain continuation: FrameworkResolutionStage skips (blueprint-restored) → fall back to
+   * FrameworkDecisionAuthority which was populated by GateEnhancementStage.
    */
   private resolveFrameworkId(context: ExecutionContext): string | undefined {
     const fromContext = context.frameworkContext?.selectedFramework?.id;
@@ -247,7 +247,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    *
    * Reads `user_response` from the MCP request — the LLM's actual output
    * from the previous turn. This is what guards should validate (did the
-   * LLM follow framework phases?), NOT the rendered template from Stage 09.
+   * LLM follow framework phases?), NOT the rendered template from StepExecutionStage.
    */
   private extractOutputText(context: ExecutionContext): string | undefined {
     const userResponse = context.mcpRequest.user_response?.trim();

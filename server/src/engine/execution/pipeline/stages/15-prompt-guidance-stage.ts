@@ -15,7 +15,7 @@ import type { FrameworkDecisionInput } from '../decisions/index.js';
 type GuidanceStore = Record<string, ServicePromptGuidanceResult>;
 
 /**
- * Pipeline Stage: Prompt Guidance
+ * Pipeline Stage 15: Prompt Guidance
  *
  * Applies framework-driven system prompt injection and template enhancement
  * using the centralized PromptGuidanceService. In the two-phase client-driven

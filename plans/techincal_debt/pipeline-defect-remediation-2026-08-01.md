@@ -285,7 +285,7 @@ typecheck clean · ratchet 3454/1406 no regressions · unit 1741/145 · integrat
 
 `ExecutionContext.metadata` no longer exists. The pipeline runs **22** stages.
 
-### Tier 5: Renumber 22 files to execution order
+### Tier 5: Renumber 22 files to execution order — ✓ COMPLETE (2026-08-02)
 
 `git mv` to sequential `01-`…`22-`, no letter suffixes:
 

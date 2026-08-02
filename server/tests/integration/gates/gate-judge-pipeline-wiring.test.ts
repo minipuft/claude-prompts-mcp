@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
-import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/10-gate-review-stage.js';
+import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { GATE_VERDICT_REQUIRED_FORMAT } from '../../../src/engine/gates/core/gate-verdict-contract.js';
 
 import type { LightweightGateDefinition } from '../../../src/engine/gates/types.js';
@@ -11,7 +11,7 @@ import type { GateDefinitionProvider } from '../../../src/engine/gates/core/gate
  * Integration test: Judge gate evaluation pipeline wiring.
  *
  * Verifies that gates with `evaluation: { mode: 'judge' }` flow through
- * the pipeline (loader → Stage 10 → response metadata) correctly.
+ * the pipeline (loader → GateReviewStage → response metadata) correctly.
  * Uses real review-utils/judge-prompt-builder modules with mock I/O.
  */
 
@@ -120,7 +120,7 @@ function createStageWithGates(
 }
 
 describe('Judge Gate Pipeline Wiring', () => {
-  test('Stage 10 produces metadata.judge when judge gates are active', async () => {
+  test('GateReviewStage produces metadata.judge when judge gates are active', async () => {
     const judgeGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'judge-gate',
@@ -138,7 +138,7 @@ describe('Judge Gate Pipeline Wiring', () => {
     expect(metadata.judge.judgePrompt).toContain('## Judge Evaluation');
   });
 
-  test('Stage 10 omits metadata.judge when all gates are self mode', async () => {
+  test('GateReviewStage omits metadata.judge when all gates are self mode', async () => {
     const selfGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'self-gate',
@@ -290,9 +290,9 @@ describe('Shell Verify Auto-Pass', () => {
     expect(chainOperatorExecutor.renderStep).toHaveBeenCalled();
   });
 
-  test('includes Stage 08b shellVerifyPassedForGates in coverage check', async () => {
+  test('includes ShellVerificationStage shellVerifyPassedForGates in coverage check', async () => {
     // Gate has no shell_verify criteria in its definition,
-    // but Stage 08b already verified it via inline :: verify
+    // but ShellVerificationStage already verified it via inline :: verify
     const nonShellGate: LightweightGateDefinition = {
       ...baseGate,
       id: 'test-suite',
@@ -303,15 +303,15 @@ describe('Shell Verify Auto-Pass', () => {
       'test-suite': nonShellGate,
     });
 
-    // Simulate Stage 08b having verified this gate via inline :: verify
+    // Simulate ShellVerificationStage having verified this gate via inline :: verify
     context.state.gates.shellVerifyPassedForGates = ['test-suite'];
 
     await stage.execute(context);
 
     const metadata = context.executionResults?.metadata as any;
-    // Shell results from Stage 10 runner are empty (no shell_verify criteria on gate),
+    // Shell results from the GateReviewStage runner are empty (no shell_verify criteria on gate),
     // so allShellPassed is false — falls through to normal review.
-    // Stage 08b signal alone is insufficient without Stage 10 shell results.
+    // ShellVerificationStage signal alone is insufficient without GateReviewStage shell results.
     expect(metadata.gateReview.autoCleared).toBeUndefined();
     expect(chainOperatorExecutor.renderStep).toHaveBeenCalled();
   });

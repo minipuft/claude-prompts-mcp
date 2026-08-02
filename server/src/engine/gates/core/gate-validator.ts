@@ -210,7 +210,7 @@ export class GateValidator {
    * The only valuable runtime validations for LLM output are:
    * - LLM-based evaluation (llm_self_check) - semantic understanding (runner pending)
    * - Shell verification (shell_verify) - ground truth via exit codes
-   * - Framework phase guards (stage 09b) - section presence + min_length
+   * - Framework phase guards - section presence + min_length
    *   + forbidden_terms per active framework's phases.yaml
    */
   private async runValidationCheck(

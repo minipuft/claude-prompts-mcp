@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/index.js';
-import { SessionManagementStage } from '../../../../src/engine/execution/pipeline/stages/07-session-stage.js';
+import { SessionManagementStage } from '../../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 
 import type { ChainSession, ChainSessionService } from '../../../../src/modules/chains/types.js';
 import type {

@@ -11,7 +11,7 @@ import type { ExecutionContext } from '../../context/index.js';
 type GatesConfigProvider = () => GatesConfig | undefined;
 
 /**
- * Pipeline Stage 5: Gate Enhancement
+ * Pipeline Stage 11: Gate Enhancement
  *
  * Thin orchestrator that delegates gate enrichment logic to domain services.
  *

@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { PromptGuidanceStage } from '../../../../src/engine/execution/pipeline/stages/06b-prompt-guidance-stage.js';
+import { PromptGuidanceStage } from '../../../../src/engine/execution/pipeline/stages/15-prompt-guidance-stage.js';
 
 import type { PromptGuidanceService } from '../../../../src/engine/frameworks/prompt-guidance/index.js';
 import type { ConvertedPrompt, ExecutionPlan } from '../../../../src/shared/types/index.js';

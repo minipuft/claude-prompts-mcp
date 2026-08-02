@@ -16,7 +16,7 @@ type ToolRouter = (
 ) => Promise<ToolResponse>;
 
 /**
- * Canonical Pipeline Stage 0.1: Request Normalization
+ * Pipeline Stage 01: Request Normalization
  *
  * Validates MCP tool requests, captures session metadata, and routes
  * management/help/list commands before the parsing stages execute.

@@ -29,7 +29,7 @@ export interface OperatorContext {
  * Formats collected resources as structured menus and builds judge responses
  * for the two-phase client-driven selection flow.
  *
- * Extracted from JudgeSelectionStage (pipeline stage 06a).
+ * Extracted from JudgeSelectionStage.
  */
 export class JudgeMenuFormatter {
   constructor(

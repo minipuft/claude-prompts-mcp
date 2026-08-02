@@ -14,7 +14,7 @@ import type { SinglePromptFormattingContext } from '../../formatting/formatting-
 import type { ResponseAssembler } from '../../formatting/response-assembler.js';
 
 /**
- * Pipeline Stage 10: Response Formatting
+ * Pipeline Stage 21: Response Formatting
  *
  * Assembles final ToolResponse payloads with metadata, session information,
  * and progress tracking for different execution types (prompt/chain/template).
@@ -23,7 +23,7 @@ import type { ResponseAssembler } from '../../formatting/response-assembler.js';
  * - ResponseAssembler: section assembly, footer building, gate validation info
  * - formatting-context.ts: type guards for discriminated union
  *
- * Dependencies: context.executionPlan, rendered content from Stage 9
+ * Dependencies: context.executionPlan, rendered content from StepExecutionStage
  * Output: context.response (final ToolResponse)
  */
 export class ResponseFormattingStage extends BasePipelineStage {

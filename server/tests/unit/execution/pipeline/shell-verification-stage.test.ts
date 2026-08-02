@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { ShellVerificationStage } from '../../../../src/engine/execution/pipeline/stages/08b-shell-verification-stage.js';
+import { ShellVerificationStage } from '../../../../src/engine/execution/pipeline/stages/17-shell-verification-stage.js';
 
 import type {
   ShellVerifyExecutor,

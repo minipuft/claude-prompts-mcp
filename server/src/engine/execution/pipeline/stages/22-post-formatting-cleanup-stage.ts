@@ -12,7 +12,7 @@ type TrackedScope = {
 };
 
 /**
- * Pipeline Stage 12: Post-Formatting Cleanup
+ * Pipeline Stage 22: Post-Formatting Cleanup
  *
  * Persists inline gate metadata back into the session blueprint and cleans up
  * temporary gates so resumed executions rebuild the same inline requirements.

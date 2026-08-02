@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { OperatorValidationStage } from '../../../../src/engine/execution/pipeline/stages/03-operator-validation-stage.js';
+import { OperatorValidationStage } from '../../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
 
 import type { FrameworkValidator } from '../../../../src/engine/frameworks/framework-validator.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';

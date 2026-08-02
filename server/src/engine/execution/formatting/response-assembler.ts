@@ -2,7 +2,7 @@
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
-import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/09b-phase-guard-verification-stage.js';
+import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
 
 import type { GateReviewPrompt } from '#shared/types/chain-execution.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
@@ -25,7 +25,7 @@ const MAX_GATE_VERDICT_ENTRIES = 10;
  * single prompt responses, blocked responses, script confirmations, validation
  * errors, gate validation info, and legacy footer building.
  *
- * Extracted from ResponseFormattingStage (pipeline stage 10).
+ * Extracted from ResponseFormattingStage.
  */
 export class ResponseAssembler {
   constructor() {}
@@ -76,7 +76,7 @@ export class ResponseAssembler {
     }
 
     // Operator layer: inject handoff CTA when next step is delegated.
-    // Detects from Stage 09 metadata OR parsed steps (when pendingReview blocked Stage 09).
+    // Detects from StepExecutionStage metadata OR parsed steps (when pendingReview blocked StepExecutionStage).
     if (this.isNextStepDelegated(context)) {
       const handoffCTA = this.buildHandoffSection(context);
       if (handoffCTA != null) {
@@ -270,14 +270,14 @@ export class ResponseAssembler {
    * Builds a handoff section using DelegationRenderer with an ExecutionEnvelope
    * containing gate instructions and framework context for sub-agent isolation.
    *
-   * Reads from Stage 09 metadata when available, falls back to parsed step metadata
-   * when pendingReview blocked Stage 09 execution.
+   * Reads from StepExecutionStage metadata when available, falls back to parsed step metadata
+   * when pendingReview blocked StepExecutionStage execution.
    */
   private buildHandoffSection(context: ExecutionContext): string | null {
     const metadata = context.executionResults?.metadata ?? {};
     const envelope = this.buildHandoffEnvelope(context);
 
-    // Read step info from metadata (Stage 09) or fall back to parsed steps
+    // Read step info from metadata (StepExecutionStage) or fall back to parsed steps
     const stepNumber =
       (metadata['stepNumber'] as number | undefined) ?? context.sessionContext?.currentStep ?? 0;
     const totalSteps =
@@ -401,8 +401,8 @@ export class ResponseAssembler {
 
   /**
    * Detects whether the next step is delegated.
-   * Checks Stage 09 metadata first, falls back to parsed step `delegated` flag
-   * (always available from Stage 01, even when pendingReview blocked Stage 09).
+   * Checks StepExecutionStage metadata first, falls back to parsed step `delegated` flag
+   * (always available from CommandParsingStage, even when pendingReview blocked StepExecutionStage).
    */
   private isNextStepDelegated(context: ExecutionContext): boolean {
     const metadata = context.executionResults?.metadata ?? {};
@@ -563,7 +563,7 @@ export class ResponseAssembler {
    * directly — the orchestrator decides, sub-methods obey.
    *
    * Entry points: formatChainResponse, formatSinglePromptResponse (top-level),
-   *               buildGateValidationInfo (external entry from Stage 10)
+   *               buildGateValidationInfo (external entry from ResponseFormattingStage)
    */
   private isGateContentSuppressed(context: ExecutionContext): boolean {
     return context.state.session.chainComplete === true;

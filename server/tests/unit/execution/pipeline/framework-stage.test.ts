@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { FrameworkResolutionStage } from '../../../../src/engine/execution/pipeline/stages/06-framework-stage.js';
+import { FrameworkResolutionStage } from '../../../../src/engine/execution/pipeline/stages/12-framework-stage.js';
 
 import type { FrameworkManager } from '../../../../src/engine/frameworks/framework-manager.js';
 import type {
@@ -350,7 +350,7 @@ describe('FrameworkResolutionStage', () => {
       await stage.execute(context);
 
       // Framework Stage generates context but does NOT control injection frequency
-      // FrameworkInjectionControlStage (07b) handles that after Session Stage
+      // InjectionControlStage handles that after SessionManagementStage
       // systemPromptApplied defaults to false (from state initialization)
       expect(context.state.framework.systemPromptApplied).toBe(false);
       expect(context.frameworkContext).toBe(frameworkContext);

@@ -8,7 +8,7 @@ import type { ChainStepPrompt } from '../../operators/types.js';
 import type { ChainOperator, SymbolicOperator } from '../../parsers/types/operator-types.js';
 
 /**
- * Pipeline Stage 3: Operator Validation
+ * Pipeline Stage 06: Operator Validation
  *
  * Validates and normalizes symbolic operators from parsed commands,
  * ensuring framework overrides are valid before execution planning.

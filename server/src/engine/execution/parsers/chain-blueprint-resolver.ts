@@ -11,7 +11,7 @@ import type { ExecutionPlan } from '../types.js';
  * the blueprint is restored from the session store so downstream stages
  * see the same parsedCommand/executionPlan as the original invocation.
  *
- * Extracted from CommandParsingStage (pipeline stage 01).
+ * Extracted from CommandParsingStage.
  */
 export class ChainBlueprintResolver {
   constructor(

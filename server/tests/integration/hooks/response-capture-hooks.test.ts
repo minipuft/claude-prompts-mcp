@@ -14,7 +14,7 @@ import {
   type McpNotificationServer,
 } from '../../../src/infra/observability/notifications/index.js';
 import { noopLogger } from '../../../src/infra/logging/index.js';
-import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/08-response-capture-stage.js';
+import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/index.js';

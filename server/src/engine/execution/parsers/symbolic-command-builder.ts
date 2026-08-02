@@ -46,7 +46,7 @@ export type PromptLookup = (idOrName: string) => ConvertedPrompt | undefined;
  * Handles single-prompt and chain-based symbolic commands, resolving
  * arguments, collecting gate criteria, and linking converted prompts.
  *
- * Extracted from CommandParsingStage (pipeline stage 01).
+ * Extracted from CommandParsingStage.
  */
 export class SymbolicCommandBuilder {
   constructor(

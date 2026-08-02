@@ -107,7 +107,7 @@ export class ExecutionContext {
       // Lifecycle state for execution timing and cleanup
       lifecycle: {},
 
-      // Modular injection state - controlled by InjectionControlStage (07b)
+      // Modular injection state - controlled by InjectionControlStage
       injection: {},
 
       // Framework state for judge selection and style guidance

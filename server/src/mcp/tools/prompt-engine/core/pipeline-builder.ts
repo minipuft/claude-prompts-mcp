@@ -10,7 +10,7 @@
  *   PromptExecutor (orchestration)
  *     └── PipelineBuilder (factory)
  *           └── PromptExecutionPipeline (coordinator)
- *                 └── PipelineStage[] (stages 00-11)
+ *                 └── PipelineStage[] (22 stages)
  */
 
 import * as path from 'node:path';
@@ -26,25 +26,25 @@ import {
   // Core pipeline
   PromptExecutionPipeline,
   type PipelineStage,
-  // Stage 00: Initialization
+  // Stages 01-03: Initialization
   RequestNormalizationStage,
   ExecutionLifecycleStage,
   IdentityResolutionStage,
-  // Stage 01-04: Parsing and Planning
+  // Stages 04-09: Parsing, Planning, Scripts
   CommandParsingStage,
   InlineGateExtractionStage,
   OperatorValidationStage,
   ExecutionPlanningStage,
   ScriptExecutionStage,
   ScriptAutoExecuteStage,
-  // Stage 05-07: Enhancement and Session
+  // Stages 10-15: Judge, Gates, Framework, Session, Injection
   GateEnhancementStage,
   FrameworkResolutionStage,
   JudgeSelectionStage,
   PromptGuidanceStage,
   SessionManagementStage,
   InjectionControlStage,
-  // Stage 08-12: Execution and Formatting
+  // Stages 16-22: Capture, Execution, Review, Formatting
   StepResponseCaptureStage,
   createShellVerificationStage,
   StepExecutionStage,
@@ -93,7 +93,7 @@ export class PipelineBuilder {
       throw new Error('Temporary gate registry unavailable');
     }
 
-    // ── Stage 00: Initialization ──
+    // ── Stages 01-03: Initialization ──
 
     const requestStage = new RequestNormalizationStage(
       deps.chainSessionRouter ?? null,
@@ -124,7 +124,7 @@ export class PipelineBuilder {
       };
     }, deps.logger);
 
-    // ── Stage 01-04: Parsing and Planning ──
+    // ── Stages 04-09: Parsing, Planning, Scripts ──
 
     const symbolicCommandBuilder = new SymbolicCommandBuilder(
       deps.parsingSystem.argumentParser,
@@ -156,7 +156,7 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    // Script execution stage (04b)
+    // Script execution stage
     const scriptExecutor = createScriptExecutor({ debug: false });
     const toolDetectionService = createToolDetectionService({ debug: false });
     const toolTriggerFilter = createToolTriggerFilter({ debug: false });
@@ -167,13 +167,13 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    // Script auto-execute stage (04c)
+    // Script auto-execute stage
     const scriptAutoExecuteStage = new ScriptAutoExecuteStage(
       this.resolveResourceManagerHandler(),
       deps.logger
     );
 
-    // ── Stage 05-07: Enhancement and Session ──
+    // ── Stages 10-15: Judge, Gates, Framework, Session, Injection ──
 
     const frameworkStage = this.createFrameworkStage();
 
@@ -264,7 +264,7 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    // ── Stage 08-12: Execution and Formatting ──
+    // ── Stages 16-22: Capture, Execution, Review, Formatting ──
 
     const gateVerdictProcessor = new GateVerdictProcessor(
       deps.chainSessionStore,
@@ -280,7 +280,7 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    // Shell verification stage (08b)
+    // Shell verification stage
     const shellVerifyExecutor = createShellVerifyExecutor({ debug: false });
     const verifyActiveStateStore = createVerifyActiveStateStore(deps.logger, {
       runtimeStateDir: path.join(deps.serverRoot, 'runtime-state'),
@@ -308,7 +308,7 @@ export class PipelineBuilder {
       deps.executionRecordStore
     );
 
-    // Phase guard verification stage (09b)
+    // Phase guard verification stage
     const phaseGuardVerificationStage = createPhaseGuardVerificationStage(
       () => deps.frameworkManager,
       () =>

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { ExecutionPlanningStage } from '../../../../src/engine/execution/pipeline/stages/04-planning-stage.js';
+import { ExecutionPlanningStage } from '../../../../src/engine/execution/pipeline/stages/07-planning-stage.js';
 
 import type { ExecutionPlan } from '../../../../src/engine/execution/context/execution-context.js';
 import type { ExecutionPlanner } from '../../../../src/engine/execution/planning/execution-planner.js';

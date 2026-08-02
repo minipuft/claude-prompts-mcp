@@ -68,7 +68,7 @@ export function hasInlineGateCriteria(step: ChainStepPrompt): step is ChainStepP
  * registers named gates (`:: security:"criteria"`),
  * and sets up shell verification for `:: verify:"command"` syntax.
  *
- * Extracted from InlineGateExtractionStage (pipeline stage 02).
+ * Extracted from InlineGateExtractionStage.
  */
 export class InlineGateProcessor {
   constructor(

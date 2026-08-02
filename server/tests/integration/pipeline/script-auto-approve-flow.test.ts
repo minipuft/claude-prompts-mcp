@@ -20,7 +20,7 @@
 
 import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 
-import { ScriptExecutionStage } from '../../../src/engine/execution/pipeline/stages/04b-script-execution-stage.js';
+import { ScriptExecutionStage } from '../../../src/engine/execution/pipeline/stages/08-script-execution-stage.js';
 import { ToolDetectionService } from '../../../src/modules/automation/detection/tool-detection-service.js';
 import { ToolTriggerFilter } from '../../../src/modules/automation/execution/tool-trigger-filter.js';
 import { resetDefaultPendingConfirmationTracker } from '../../../src/modules/automation/execution/pending-confirmation-tracker.js';
