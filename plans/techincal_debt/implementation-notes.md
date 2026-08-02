@@ -223,3 +223,115 @@ Flagged in Tier 1 as unowned; Tier 2 shrank the constructor, not this method. St
 | `npm run test:ci`              | 1743 / 146 suites    | 1743 / 146 suites            |
 | `npm run validate:all`         | exit 0               | exit 0                       |
 | `npm run verify:mcp`           | 11/11                | 11/11                        |
+
+---
+
+## Tier 3 — Drain the metadata bag (2026-08-02)
+
+Gated on a detached worktree at `094baec6` carrying only the seven tier files, same
+procedure as Tier 2 — a concurrent session still holds ~30 unrelated files in the shared tree.
+
+### Step 3.0 rewrote the tier
+
+3.0 was marked mandatory because Phase 1's grep was unsound. It was right to be. Re-running
+the census receiver-scoped changed three of the tier's premises:
+
+**The bag was 4 keys, not 5.** Tier 1 already retired `temporaryGateIds` when it moved the
+`temporaryGatesApplied` read to `state.gates`. Nothing referenced it any more.
+
+**Two of the four had zero production readers.**
+
+| Key                    | Writers                    | Production readers                | Disposition                  |
+| ---------------------- | -------------------------- | --------------------------------- | ---------------------------- |
+| `commandMetricId`      | pipeline:82                | pipeline:425, 478                 | → `state.lifecycle.metricId` |
+| `operatorValidation`   | 03-operator-validation:69  | **none** (3 test assertions only) | → `context.diagnostics`      |
+| `executionOptions`     | 00-dependency-injection:67 | **none** (own guard only)         | deleted                      |
+| `pipelineDependencies` | 00-dependency-injection:57 | gate-verdict-processor:478        | Tier 4                       |
+
+`operatorValidation` was write-only state — a stage computing a value, storing it in a shared
+bag, and nothing ever branching on it. That is what `DiagnosticAccumulator` already exists for,
+so it became `context.diagnostics.debug(...)` rather than a typed slot nothing would read.
+
+**There are nine unrelated `metadata` bags, not seven.** The Tier 1 correction undercounted.
+Two more surfaced here, both of which a name-only grep reports as hits on the bag being drained:
+
+- `gates/core/index.ts:202` — `context.metadata = validationContext.metadata` assigns a **local
+  `ValidationContext`**, declared four lines above. Reads as a wholesale clobber of the
+  `ExecutionContext` bag; is not.
+- `mcp/tools/prompt-engine/utils/context-builder.ts:314,326,331` — `EnhancedExecutionContext`,
+  a separate shape. It reads `metadata['executionId']`, a key no writer in the repo sets.
+
+Neither was touched. The lesson holds from Tier 1: grep the receiver, never the key name.
+
+### Deviations
+
+**D9 — `operatorValidation` routed to diagnostics, and its "absence" assertion had to change
+shape.** `operator-validation-stage.test.ts:43` asserted
+`expect(context.metadata.operatorValidation).toBeUndefined()`. The diagnostics equivalent is
+`expect(context.diagnostics.getByStage('OperatorValidation')).toEqual([])` — an empty
+accumulator rather than an absent key. Same guarantee, different assertion shape.
+
+**D10 — updated the `@deprecated` docblock on `ExecutionContext.metadata`.** It listed
+`executionOptions` as one of the "infrastructure keys that remain", which this tier deleted.
+Left alone it would have been a stale breadcrumb pointing at a key that no longer exists.
+It now names the single remaining key and says the field can be deleted with it.
+
+### Found during execution, not in the plan
+
+**`framework-stage.test.ts:415-429` contained a commented-out test carrying the author's
+unresolved reasoning** — `// This seems wrong in the original test if it expects skip? Ah,
+no, ...`, `// Wait, let's look at the original test.` — wrapped around a dead
+`expect(context.metadata['frameworkSystemPromptApplied']).toBeUndefined()`.
+**Cleaned up on request; see the Tier 3 addendum below.**
+
+### Measured (isolated worktree at `094baec6` + 7 tier files)
+
+| Check                      | Result                                |
+| -------------------------- | ------------------------------------- |
+| `npm run typecheck`        | clean                                 |
+| `npm run lint:ratchet`     | 3454 err / 1407 warn — no regressions |
+| `npm run test:ci`          | 1743 passed / 146 suites              |
+| `npm run test:integration` | 426 passed / 33 suites                |
+| `npm run validate:all`     | exit 0                                |
+| `npm run verify:mcp`       | 11/11                                 |
+
+Integration was run explicitly this tier: `response-capture-hooks.test.ts` writes
+`pipelineDependencies` at three sites, so the bag has integration-level coverage that the
+unit suite does not exercise. Relevant to Tier 4, which removes that writer.
+
+### Addendum — `framework-stage.test.ts` cleanup
+
+The comment block was the symptom; the cause was a fixture that contradicted its own test name.
+
+`test('skips framework resolution when system disabled and no override provided')` set
+`frameworkOverride: 'SCAMPER'` in its setup. That reads as a direct contradiction — and as a
+contradiction of its sibling three lines up,
+`test('applies framework override even when framework system is disabled')`. The original
+author noticed, reasoned in a `/* */` block, and left the reasoning in the file unresolved.
+
+Both tests are correct. The override each sets lives on a **different object**:
+
+| Field                                                   | Read by production code |
+| ------------------------------------------------------- | ----------------------- |
+| `context.parsedCommand.executionPlan.frameworkOverride` | yes — every site        |
+| `context.executionPlan.frameworkOverride`               | **no site anywhere**    |
+
+Probe: `rg -n "frameworkOverride" src/` — all seven read sites go through
+`parsedCommand?.executionPlan?.frameworkOverride` (`06-framework-stage.ts:99,192`,
+`06b-prompt-guidance-stage.ts:328`, `judge-menu-formatter.ts:145`,
+`execution-planner.ts:140`, `framework-decision-authority.ts:43`).
+
+So the "skips" test set an override the stage cannot see, took the skip branch for the reason
+its name claims, and passed — while reading as though it asserted the opposite. Removing that
+one line makes the fixture match the name. A comment now records which field the stage reads,
+since that is the non-obvious part that caused the confusion.
+
+The sibling "applies" test sets the override on **both** objects and was left alone: that
+mirrors a real run, where planning populates `context.executionPlan` from the parsed command.
+
+Verified: `framework-stage.test.ts` 10/10, full unit suite 1756/146 suites, typecheck clean.
+
+**Left standing** — `framework-stage.test.ts` types `strategy: 'prompt'` at four sites, which
+is not a member of `ExecutionStrategyType`. Invisible to `npm run typecheck` for the reason
+Tier 2 recorded: `tsconfig.json` excludes `tests`. Same root cause, different file; not fixed
+here.
