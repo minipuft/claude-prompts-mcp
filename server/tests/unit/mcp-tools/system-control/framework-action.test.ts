@@ -27,11 +27,7 @@ describe('System Control framework action scope propagation', () => {
       listFrameworks: jest.fn().mockReturnValue([]),
     };
 
-    const systemControl = createConsolidatedSystemControl(
-      createLogger(),
-      { sendNotification: jest.fn() } as any,
-      () => Promise.resolve()
-    );
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
     systemControl.setFrameworkManager(frameworkManager as any);
 
     // Identity is read from token claims and request headers — a bare
@@ -73,11 +69,7 @@ describe('System Control framework action scope propagation', () => {
       listFrameworks: jest.fn().mockReturnValue([]),
     };
 
-    const systemControl = createConsolidatedSystemControl(
-      createLogger(),
-      { sendNotification: jest.fn() } as any,
-      () => Promise.resolve()
-    );
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
     systemControl.setFrameworkManager(frameworkManager as any);
     systemControl.setFrameworkStateStore(frameworkStateStore as any);
 

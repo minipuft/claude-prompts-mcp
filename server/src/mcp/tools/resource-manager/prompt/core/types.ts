@@ -50,7 +50,6 @@ export interface SmartFilters {
 
 export interface PromptResourceDependencies {
   logger: Logger;
-  mcpServer?: any;
   configManager: ConfigManager;
   semanticAnalyzer: ContentAnalyzer;
   frameworkStateStore?: FrameworkStateStore;

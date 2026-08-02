@@ -13,11 +13,7 @@ const createLogger = (): Logger => ({
 
 describe('System Control legacy whoami action', () => {
   test('rejects deprecated whoami action with current action list', async () => {
-    const systemControl = createConsolidatedSystemControl(
-      createLogger(),
-      { sendNotification: jest.fn() } as any,
-      () => Promise.resolve()
-    );
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
 
     await expect(systemControl.handleAction({ action: 'whoami' }, {})).rejects.toThrow(
       /Unknown action: whoami/
@@ -25,11 +21,7 @@ describe('System Control legacy whoami action', () => {
   });
 
   test('guide action remains canonical for discoverability', async () => {
-    const systemControl = createConsolidatedSystemControl(
-      createLogger(),
-      { sendNotification: jest.fn() } as any,
-      () => Promise.resolve()
-    );
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
 
     const response = await systemControl.handleAction({ action: 'guide' }, {});
     const text = response.content?.[0]?.text ?? '';

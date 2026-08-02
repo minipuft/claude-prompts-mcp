@@ -6,7 +6,6 @@ import type { ConfigManager } from '../../../../src/infra/config/index.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { PromptAssetManager } from '../../../../src/modules/prompts/index.js';
 import type { ContentAnalyzer as SemanticAnalyzer } from '../../../../src/modules/semantic/configurable-semantic-analyzer.js';
-import type { ConversationStore } from '../../../../src/modules/text-refs/conversation.js';
 import type { TextReferenceStore } from '../../../../src/modules/text-refs/index.js';
 
 const mockLogger: Logger = {
@@ -58,26 +57,6 @@ const mockTextReferenceStore: TextReferenceStore = {
   getStats: jest.fn().mockReturnValue({ totalChains: 0, totalSteps: 0, chainsWithSteps: [] }),
 } as any;
 
-const mockConversationStore: ConversationStore = {
-  addToConversationHistory: jest.fn(),
-  getConversationHistory: jest.fn().mockReturnValue([]),
-  getPreviousMessage: jest.fn().mockReturnValue(''),
-  clearHistory: jest.fn(),
-  getConversationStats: jest.fn().mockReturnValue({
-    totalMessages: 0,
-    userMessages: 0,
-    assistantMessages: 0,
-    processedTemplates: 0,
-    oldestMessage: undefined,
-    newestMessage: undefined,
-  }),
-} as any;
-
-const mockMcpServer = {
-  registerTool: jest.fn(),
-  setRequestHandler: jest.fn(),
-} as any;
-
 const mockFrameworkManager = {
   generateExecutionContext: jest.fn().mockReturnValue({
     selectedFramework: { framework: 'CAGEERF', name: 'CAGEERF' },
@@ -102,13 +81,11 @@ describe('PromptEngine Validation', () => {
     jest.clearAllMocks();
     engine = new PromptExecutor(
       mockLogger,
-      mockMcpServer,
       mockPromptAssetManager,
       mockConfigManager,
       mockSemanticAnalyzer,
-      mockConversationStore,
       mockTextReferenceStore,
-      undefined // mcpToolsManager
+      undefined // gateManager
     );
   });
 

@@ -10,7 +10,7 @@
  *   PromptExecutor (this file — orchestration)
  *     └── PipelineBuilder (pipeline-builder.ts — factory)
  *           └── PromptExecutionPipeline (coordinator)
- *                 └── PipelineStage[] (stages 00-11)
+ *                 └── PipelineStage[] (22 stages)
  */
 
 import * as path from 'node:path';
@@ -65,7 +65,6 @@ import { createChainSessionStore } from '#modules/chains/manager.js';
 import { StyleManager, createStyleManager } from '#modules/formatting/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { ContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
-import { ConversationStore } from '#modules/text-refs/conversation.js';
 import { TextReferenceStore, ArgumentHistoryTracker } from '#modules/text-refs/index.js';
 import {
   type Logger,
@@ -82,12 +81,8 @@ export class PromptExecutor {
   public readonly inlineGateParser: ReturnType<typeof createSymbolicCommandParser>;
 
   private readonly logger: Logger;
-  private readonly mcpServer: any;
   private readonly promptManager: PromptAssetManager;
   private readonly configManager: ConfigManager;
-  private readonly semanticAnalyzer: ContentAnalyzer;
-  private readonly conversationStore: ConversationStore;
-  private readonly textReferenceStore: TextReferenceStore;
   private readonly responseFormatter: ResponseFormatter;
   private readonly executionPlanner: ExecutionPlanner;
   private readonly parsingSystem: ParsingSystem;
@@ -128,23 +123,17 @@ export class PromptExecutor {
 
   constructor(
     logger: Logger,
-    mcpServer: any,
     promptManager: PromptAssetManager,
     configManager: ConfigManager,
     semanticAnalyzer: ContentAnalyzer,
-    conversationStore: ConversationStore,
     textReferenceStore: TextReferenceStore,
     gateManager: GateManager,
     mcpToolsManager?: any,
     promptGuidanceService?: PromptGuidanceService
   ) {
     this.logger = logger;
-    this.mcpServer = mcpServer;
     this.promptManager = promptManager;
     this.configManager = configManager;
-    this.semanticAnalyzer = semanticAnalyzer;
-    this.conversationStore = conversationStore;
-    this.textReferenceStore = textReferenceStore;
     this.gateManager = gateManager; // Store for registry-based gate selection
     this.responseFormatter = new ResponseFormatter();
     this.executionPlanner = new ExecutionPlanner(semanticAnalyzer, logger);
@@ -185,12 +174,6 @@ export class PromptExecutor {
       this.argumentHistoryTracker
     );
     const config = configManager.getConfig();
-    const gatesDirectory = config.gates?.definitionsDirectory
-      ? path.isAbsolute(config.gates.definitionsDirectory)
-        ? config.gates.definitionsDirectory
-        : path.resolve(this.serverRoot, config.gates.definitionsDirectory)
-      : path.resolve(this.serverRoot, 'gates');
-
     const llmConfig = config.analysis?.semanticAnalysis?.llmIntegration;
 
     const temporaryGateRegistry = createTemporaryGateRegistry(logger, {
@@ -721,11 +704,9 @@ export class PromptExecutor {
 
 export function createPromptExecutor(
   logger: Logger,
-  mcpServer: any,
   promptManager: PromptAssetManager,
   configManager: ConfigManager,
   semanticAnalyzer: ContentAnalyzer,
-  conversationStore: ConversationStore,
   textReferenceStore: TextReferenceStore,
   gateManager: GateManager,
   mcpToolsManager?: any,
@@ -733,11 +714,9 @@ export function createPromptExecutor(
 ): PromptExecutor {
   return new PromptExecutor(
     logger,
-    mcpServer,
     promptManager,
     configManager,
     semanticAnalyzer,
-    conversationStore,
     textReferenceStore,
     gateManager,
     mcpToolsManager,

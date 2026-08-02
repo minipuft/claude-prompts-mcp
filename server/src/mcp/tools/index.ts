@@ -16,8 +16,6 @@
  * - Improved maintainability and clear separation of concerns
  */
 
-import * as path from 'node:path';
-
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Implementation } from '@modelcontextprotocol/sdk/types.js';
 
@@ -63,7 +61,6 @@ import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
 import { createContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
 import { createSemanticIntegrationFactory } from '#modules/semantic/integrations/index.js';
-import { ConversationStore } from '#modules/text-refs/conversation.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import {
   type ConfigManager,
@@ -71,7 +68,6 @@ import {
   type Logger,
   type HookRegistryPort,
   type McpNotificationEmitterPort,
-  ToolResponse,
 } from '#shared/types/index.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
 
@@ -118,7 +114,6 @@ export class McpToolRouter {
   private frameworkManager?: FrameworkManager;
   // ChainSessionStore is owned by PromptExecutor, accessed via getter
   // REMOVED: chainOrchestrator - modular chain system removed
-  private conversationStore: ConversationStore;
   private textReferenceStore: TextReferenceStore;
   private toolDescriptionLoader?: ToolDescriptionLoader;
   private gateStateStore?: GateStateStore;
@@ -129,11 +124,6 @@ export class McpToolRouter {
   // Callback references
   private onRestart?: (reason: string) => Promise<void>;
 
-  // Data references
-  private promptsData: PromptData[] = [];
-  private convertedPrompts: ConvertedPrompt[] = [];
-  private categories: Category[] = [];
-
   // Pending analytics queue for initialization race condition
   private pendingAnalytics: any[] = [];
   private toolsInitialized = false;
@@ -143,7 +133,6 @@ export class McpToolRouter {
     mcpServer: McpServer,
     promptManager: PromptAssetManager,
     configManager: ConfigManager,
-    conversationStore: ConversationStore,
     textReferenceStore: TextReferenceStore,
     gateManager: GateManager
   ) {
@@ -151,7 +140,6 @@ export class McpToolRouter {
     this.mcpServer = mcpServer;
     this.promptManager = promptManager;
     this.configManager = configManager;
-    this.conversationStore = conversationStore;
     this.textReferenceStore = textReferenceStore;
     this.gateManager = gateManager;
   }
@@ -184,11 +172,9 @@ export class McpToolRouter {
     // Note: ChainSessionStore is created inside PromptExecutor and exposed via getter
     this.promptExecutor = createPromptExecutor(
       this.logger,
-      this.mcpServer,
       this.promptManager,
       this.configManager,
       this.semanticAnalyzer,
-      this.conversationStore,
       this.textReferenceStore,
       this.gateManager,
       this // Pass manager reference for analytics data flow
@@ -210,7 +196,7 @@ export class McpToolRouter {
 
     // Initialize 5 core consolidated tools
 
-    this.systemControl = createConsolidatedSystemControl(this.logger, this.mcpServer, onRestart);
+    this.systemControl = createConsolidatedSystemControl(this.logger, onRestart);
 
     // Set managers in system control
     this.systemControl.setGateStateStore(this.gateStateStore);
@@ -930,10 +916,6 @@ export class McpToolRouter {
     convertedPrompts: ConvertedPrompt[],
     categories: Category[]
   ): void {
-    this.promptsData = promptsData;
-    this.convertedPrompts = convertedPrompts;
-    this.categories = categories;
-
     // Update all consolidated tools with new data
     this.promptExecutor.updateData(promptsData, convertedPrompts);
     this.promptResourceHandler.updateData(promptsData, convertedPrompts, categories);
@@ -1003,7 +985,6 @@ export async function createMcpToolRouter(
   mcpServer: McpServer,
   promptManager: PromptAssetManager,
   configManager: ConfigManager,
-  conversationStore: ConversationStore,
   textReferenceStore: TextReferenceStore,
   onRefresh: () => Promise<void>,
   onRestart: (reason: string) => Promise<void>,
@@ -1015,7 +996,6 @@ export async function createMcpToolRouter(
     mcpServer,
     promptManager,
     configManager,
-    conversationStore,
     textReferenceStore,
     gateManager
   );

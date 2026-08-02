@@ -20,11 +20,7 @@ describe('System Control gate action scope propagation', () => {
       enableGateSystem: jest.fn().mockResolvedValue(undefined),
     };
 
-    const systemControl = createConsolidatedSystemControl(
-      createLogger(),
-      { sendNotification: jest.fn() } as any,
-      () => Promise.resolve()
-    );
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
     systemControl.setGateStateStore(gateStateStore as any);
 
     await systemControl.handleAction(
@@ -53,11 +49,7 @@ describe('System Control gate action scope propagation', () => {
       }),
     };
 
-    const systemControl = createConsolidatedSystemControl(
-      createLogger(),
-      { sendNotification: jest.fn() } as any,
-      () => Promise.resolve()
-    );
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
     systemControl.setGateStateStore(gateStateStore as any);
 
     await systemControl.handleAction(

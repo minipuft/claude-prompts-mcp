@@ -407,7 +407,7 @@ export class TransportRouter {
 export function createTransportRouter(
   logger: Logger,
   configManager: ConfigLoader,
-  mcpServer: any,
+  mcpServer: McpServer,
   transport: TransportMode
 ): TransportRouter {
   const transportRouter = new TransportRouter(logger, configManager, mcpServer, transport);
