@@ -22,6 +22,7 @@ import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import { SqliteEngine } from '#infra/database/sqlite-engine.js';
 import { SqliteStateStore } from '#infra/database/stores/sqlite-store.js';
 import { Logger } from '#infra/logging/index.js';
+import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 /**
@@ -108,28 +109,31 @@ export class FrameworkStateStore extends EventEmitter {
   };
   private isInitialized: boolean = false;
   private readonly serverRoot: string;
+  private readonly defaultFramework: string;
   private stateStore?: SqliteStateStore<PersistedFrameworkState>;
 
   constructor(
     logger: Logger,
     serverRoot: string,
-    injectedStore?: SqliteStateStore<PersistedFrameworkState>
+    injectedStore?: SqliteStateStore<PersistedFrameworkState>,
+    defaultFramework: string = DEFAULT_FRAMEWORK_ID
   ) {
     super();
     this.logger = logger;
     this.serverRoot = serverRoot;
+    this.defaultFramework = defaultFramework;
 
     if (injectedStore) {
       this.stateStore = injectedStore;
     }
 
     // Initialize default scope with default framework state
-    this.scopedStates.set('default', FrameworkStateStore.createDefaultState());
+    this.scopedStates.set('default', FrameworkStateStore.createDefaultState(defaultFramework));
   }
 
-  private static createDefaultState(): FrameworkState {
+  private static createDefaultState(defaultFramework: string): FrameworkState {
     return {
-      activeFramework: 'CAGEERF',
+      activeFramework: defaultFramework,
       previousFramework: null,
       switchedAt: new Date(),
       switchReason: 'Initial framework selection',
@@ -151,7 +155,7 @@ export class FrameworkStateStore extends EventEmitter {
     const key = this.resolveStateKey(scope);
     let state = this.scopedStates.get(key);
     if (!state) {
-      state = FrameworkStateStore.createDefaultState();
+      state = FrameworkStateStore.createDefaultState(this.defaultFramework);
       this.scopedStates.set(key, state);
     }
     return state;
@@ -173,7 +177,9 @@ export class FrameworkStateStore extends EventEmitter {
 
     try {
       // Initialize framework manager
-      this.frameworkManager = await createFrameworkManager(this.logger);
+      this.frameworkManager = await createFrameworkManager(this.logger, {
+        defaultFramework: this.defaultFramework,
+      });
 
       const defaultState = this.getOrCreateScopedState();
 
@@ -247,7 +253,7 @@ export class FrameworkStateStore extends EventEmitter {
           defaultState: () => ({
             version: '1.0.0',
             frameworkSystemEnabled: false,
-            activeFramework: 'CAGEERF',
+            activeFramework: this.defaultFramework,
             lastSwitchedAt: new Date().toISOString(),
             switchReason: 'Initial framework selection',
           }),
@@ -666,9 +672,10 @@ export class FrameworkStateStore extends EventEmitter {
 export async function createFrameworkStateStore(
   logger: Logger,
   serverRoot: string,
-  stateStore?: SqliteStateStore<PersistedFrameworkState>
+  stateStore?: SqliteStateStore<PersistedFrameworkState>,
+  defaultFramework: string = DEFAULT_FRAMEWORK_ID
 ): Promise<FrameworkStateStore> {
-  const manager = new FrameworkStateStore(logger, serverRoot, stateStore);
+  const manager = new FrameworkStateStore(logger, serverRoot, stateStore, defaultFramework);
   await manager.initialize();
   return manager;
 }

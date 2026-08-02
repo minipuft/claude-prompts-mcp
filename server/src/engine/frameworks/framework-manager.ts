@@ -25,6 +25,7 @@ import type { ConvertedPrompt } from '../execution/types.js';
 
 import { Logger } from '#infra/logging/index.js';
 import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
+import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 
 /**
  * Framework switch request (matches FrameworkStateStore interface)
@@ -102,7 +103,7 @@ export class FrameworkManager extends BaseResourceHandler<
 > {
   private frameworks: Map<string, FrameworkDefinition> = new Map();
   private frameworkRegistry: FrameworkRegistry | null = null;
-  private defaultFramework: string = 'CAGEERF';
+  private defaultFramework: string = DEFAULT_FRAMEWORK_ID;
   private frameworkStateStore?: FrameworkStateAccessor;
 
   constructor(logger: Logger, config: FrameworkManagerConfig = {}) {
@@ -134,7 +135,7 @@ export class FrameworkManager extends BaseResourceHandler<
 
   protected applyDefaultConfig(config: FrameworkManagerConfig): FrameworkManagerConfig {
     return {
-      defaultFramework: config.defaultFramework ?? 'CAGEERF',
+      defaultFramework: config.defaultFramework ?? DEFAULT_FRAMEWORK_ID,
       debug: config.debug ?? false,
     };
   }

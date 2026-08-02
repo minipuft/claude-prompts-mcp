@@ -136,10 +136,17 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     typeof configManager.getServerRoot === 'function'
       ? configManager.getServerRoot()
       : path.dirname(configManager.getConfigPath());
-  const frameworkStateStore = await createFrameworkStateStore(logger, frameworkStateRoot);
+  const currentFrameworkConfig = configManager.getFrameworksConfig();
+  // Read before construction: the store seeds its in-memory default state from this value,
+  // so supplying it afterwards would leave the seed on the built-in fallback.
+  const frameworkStateStore = await createFrameworkStateStore(
+    logger,
+    frameworkStateRoot,
+    undefined,
+    currentFrameworkConfig.defaultFramework
+  );
   if (isVerbose) logger.info('✅ FrameworkStateStore initialized successfully');
 
-  const currentFrameworkConfig = configManager.getFrameworksConfig();
   callbacks.handleFrameworkConfigChange(currentFrameworkConfig);
 
   // Initialize Gate Manager (Phase 4 - registry-based gate system)

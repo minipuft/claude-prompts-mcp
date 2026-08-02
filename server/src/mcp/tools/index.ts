@@ -419,7 +419,10 @@ export class McpToolRouter {
     if (this.frameworkManager == null) {
       // Use provided framework manager or create a new one
       this.frameworkManager =
-        existingFrameworkManager ?? (await createFrameworkManager(this.logger));
+        existingFrameworkManager ??
+        (await createFrameworkManager(this.logger, {
+          defaultFramework: this.configManager.getFrameworksConfig().defaultFramework,
+        }));
 
       // FIX: Connect frameworkStateStore if it was set before frameworkManager was created
       // This handles the startup order where setFrameworkStateStore() is called first

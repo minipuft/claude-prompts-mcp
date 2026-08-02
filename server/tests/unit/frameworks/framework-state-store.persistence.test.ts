@@ -51,4 +51,27 @@ describe('FrameworkStateStore (persistence)', () => {
 
     await mgrB.shutdown();
   });
+
+  // Uses an unseen scope rather than a fresh root: SqliteEngine is a process-wide singleton
+  // with no reset, so a second temp root would silently reuse this suite's first database.
+  test('a scope with no persisted row resolves to the configured default framework', async () => {
+    const logger = createLogger();
+    const mgr = await createFrameworkStateStore(logger, tmpRoot, undefined, 'radiant');
+
+    // Without the config wiring this reported the built-in CAGEERF fallback.
+    const unseen = { workspaceId: 'workspace-with-no-persisted-framework' };
+    expect(mgr.getCurrentState(unseen).activeFramework.toLowerCase()).toBe('radiant');
+
+    await mgr.shutdown();
+  });
+
+  test('the configured default does not override a scope that already persisted a switch', async () => {
+    const logger = createLogger();
+    // tmpRoot still holds the 'react' row written by the restoration test above.
+    const mgr = await createFrameworkStateStore(logger, tmpRoot, undefined, 'radiant');
+
+    expect(mgr.getCurrentState().activeFramework.toLowerCase()).toBe('react');
+
+    await mgr.shutdown();
+  });
 });
