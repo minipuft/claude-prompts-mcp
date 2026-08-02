@@ -263,19 +263,27 @@ unrelated `metadata` bags surfaced — nine total, not seven. See `implementatio
 
 **Gate**: full suite. 3.0 is mandatory — Phase 1's grep missed the spread write.
 
-### Tier 4: Delete DependencyInjectionStage (23 → 22)
+### Tier 4: Delete DependencyInjectionStage (23 → 22) — ✓ COMPLETE (2026-08-02)
 
-| #   | File                                              | Change                                                                 | ~Ln | Dep     |
-| --- | ------------------------------------------------- | ---------------------------------------------------------------------- | --- | ------- |
-| 4.1 | `gate-verdict-processor.ts:31-34,478-482`         | Add ctor params 3&4; replace the `as` cast                             | ~12 | T3      |
-| 4.2 | `pipeline-builder.ts:285`                         | Pass `hookRegistry`, `notificationEmitter`                             | +2  | 4.1     |
-| 4.3 | builder + `prompt-execution-pipeline.ts:70-82`    | Construct `GateEnforcementAuthority` in builder; assign in `execute()` | ~14 | 4.1     |
-| 4.4 | `00-dependency-injection-stage.ts`                | **DELETE FILE**                                                        | -80 | 4.1-4.3 |
-| 4.5 | `pipeline/index.ts:10` + `pipeline-builder.ts:30` | Remove export + import                                                 | -2  | 4.4     |
-| 4.6 | `dependency-injection-stage.test.ts`              | **DELETE FILE**                                                        | -70 | 4.4     |
-| 4.7 | `execution-context.ts:70-90`                      | Delete `metadata` field + `@deprecated` block                          | -22 | 4.4     |
+| #       | File                                              | Change                                                                   | ~Ln | Dep     |
+| ------- | ------------------------------------------------- | ------------------------------------------------------------------------ | --- | ------- |
+| ✓ 4.1   | `gate-verdict-processor.ts:31-34,478-482`         | Add ctor params 3&4; replace the `as` cast                               | ~12 | T3      |
+| ✓ 4.2   | `pipeline-builder.ts:285`                         | Pass `hookRegistry`, `notificationEmitter`                               | +2  | 4.1     |
+| ✓ 4.3   | builder + `prompt-execution-pipeline.ts:70-82`    | Construct `GateEnforcementAuthority` in builder; assign in `execute()`   | ~14 | 4.1     |
+| ✓ 4.4   | `00-dependency-injection-stage.ts`                | **DELETE FILE**                                                          | -80 | 4.1-4.3 |
+| ✓ 4.5   | `pipeline/index.ts:10` + `pipeline-builder.ts:30` | Remove export + import                                                   | -2  | 4.4     |
+| ✓ 4.6   | `dependency-injection-stage.test.ts`              | **DELETE FILE**                                                          | -70 | 4.4     |
+| ✓ 4.7   | `execution-context.ts:70-90`                      | Delete `metadata` field + `@deprecated` block                            | -22 | 4.4     |
+| ✓ 4.8\* | `prompt-execution-pipeline.ts` ctor               | Positional ports → `PipelinePorts` object (a 5th param broke max-params) | ~20 | 4.3     |
+| ✓ 4.9\* | `execution-telemetry.ts` + 2 pipeline tests       | Drop the deleted stage from `STAGE_TYPES` and both fixtures              | ~10 | 4.4     |
 
-**Gate**: full suite **+** `npm run validate:arch`
+\* Unplanned. 4.8 is forced by Tier 2's own max-params fix; 4.9 is the fallout of 23 → 22. See `implementation-notes.md`.
+
+**Gate**: full suite **+** `npm run validate:arch` — **PASSED**
+typecheck clean · ratchet 3454/1406 no regressions · unit 1741/145 · integration 426/33 ·
+`validate:arch` 437 modules (was 438) · `validate:all` exit 0 · `verify:mcp` 11/11.
+
+`ExecutionContext.metadata` no longer exists. The pipeline runs **22** stages.
 
 ### Tier 5: Renumber 22 files to execution order
 

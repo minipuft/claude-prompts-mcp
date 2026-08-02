@@ -18,6 +18,7 @@ import type {
   HookRegistryPort,
   PipelineHookContext,
 } from '#shared/types/index.js';
+import type { GateEnforcementAuthority } from './decisions/index.js';
 import type { StageMetricSummary } from './execution-telemetry.js';
 import type { PipelineStage } from './stage.js';
 import type { Span } from '@opentelemetry/api';
@@ -25,30 +26,42 @@ import type { Span } from '@opentelemetry/api';
 /**
  * Canonical Prompt Execution Pipeline orchestrator.
  */
+/** Everything the pipeline needs that is not a stage. */
+export interface PipelinePorts {
+  logger: Logger;
+  metricsProvider?: () => MetricsCollector | undefined;
+  hookRegistry?: HookRegistryPort;
+  /**
+   * Assigned onto every ExecutionContext before the first stage runs. Built once
+   * by `PipelineBuilder` — it depends only on construction-time services, so it
+   * has no reason to be rebuilt per request.
+   */
+  gateEnforcement?: GateEnforcementAuthority;
+}
+
 export class PromptExecutionPipeline {
   private readonly stages: readonly PipelineStage[];
   private readonly logger: Logger;
   private readonly metricsProvider: (() => MetricsCollector | undefined) | undefined;
   private readonly hookRegistry: HookRegistryPort | undefined;
+  private readonly gateEnforcement: GateEnforcementAuthority | undefined;
 
   /**
    * @param stages Executed in array order. The caller owns the ordering and its
    *   rationale — see `PipelineBuilder.build()`, which is the only production
    *   construction site.
+   * @param ports Grouped rather than positional: this list has grown twice, and
+   *   four positional parameters is the lint ceiling.
    */
-  constructor(
-    stages: readonly PipelineStage[],
-    logger: Logger,
-    metricsProvider?: () => MetricsCollector | undefined,
-    hookRegistry?: HookRegistryPort
-  ) {
+  constructor(stages: readonly PipelineStage[], ports: PipelinePorts) {
     if (stages.length === 0) {
       throw new Error('PromptExecutionPipeline requires at least one stage');
     }
     this.stages = stages;
-    this.logger = logger;
-    this.metricsProvider = metricsProvider;
-    this.hookRegistry = hookRegistry;
+    this.logger = ports.logger;
+    this.metricsProvider = ports.metricsProvider;
+    this.hookRegistry = ports.hookRegistry;
+    this.gateEnforcement = ports.gateEnforcement;
   }
 
   /**
@@ -56,6 +69,9 @@ export class PromptExecutionPipeline {
    */
   async execute(mcpRequest: McpToolRequest): Promise<ToolResponse> {
     const context = new ExecutionContext(mcpRequest, this.logger);
+    if (this.gateEnforcement !== undefined) {
+      context.gateEnforcement = this.gateEnforcement;
+    }
     const rootSpan = this.startRootSpan(context);
 
     // If telemetry active, wrap execution in root span context

@@ -59,32 +59,25 @@ export class ExecutionContext {
   /**
    * Gate enforcement authority - single source of truth for gate enforcement decisions.
    * Handles verdict parsing, enforcement mode resolution, retry tracking, and gate actions.
-   * Initialized by DependencyInjectionStage (requires ChainSessionService).
+   * Assigned by PromptExecutionPipeline before the first stage runs; the instance is
+   * built once by PipelineBuilder.
    */
   public gateEnforcement?: GateEnforcementAuthority;
 
   /**
    * Typed internal state for pipeline coordination.
-   * Replaces ad-hoc metadata for structured properties.
-   */
-  public readonly state: PipelineInternalState;
-
-  /**
-   * Legacy metadata bag - INFRASTRUCTURE USE ONLY.
    *
-   * @deprecated Pipeline coordination properties have moved to `state`.
-   * One key remains: `pipelineDependencies`, written by DependencyInjectionStage
-   * and read by GateVerdictProcessor. Both go away with that stage, at which
-   * point this field can be deleted outright — do not add keys here.
-   *
-   * For typed state access, use:
-   * - `state.lifecycle` - Execution timing and cleanup handlers
+   * This is the only place to put cross-stage state. The untyped `metadata` bag
+   * that used to sit beside it is gone:
+   * - `state.lifecycle` - Execution timing, metric id, and cleanup handlers
    * - `state.injection` - System prompt/gate/style injection control
    * - `state.framework` - Framework selection and guidance results
    * - `state.session` - Chain session and lifecycle decisions
    * - `state.gates` - Gate enforcement and validation state
+   *
+   * One-off, non-branching observations belong in `diagnostics`, not here.
    */
-  public metadata: Record<string, unknown> = {};
+  public readonly state: PipelineInternalState;
 
   /**
    * Creates a new ExecutionContext with validated request data

@@ -21,13 +21,13 @@ import type { PipelineDependencies } from './pipeline-dependencies.js';
 import { StepCaptureService } from '#engine/execution/capture/step-capture-service.js';
 import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
 import { ChainBlueprintResolver, SymbolicCommandBuilder } from '#engine/execution/parsers/index.js';
+import { GateEnforcementAuthority } from '#engine/execution/pipeline/decisions/index.js';
 import {
   // Core pipeline
   PromptExecutionPipeline,
   type PipelineStage,
   // Stage 00: Initialization
   RequestNormalizationStage,
-  DependencyInjectionStage,
   ExecutionLifecycleStage,
   IdentityResolutionStage,
   // Stage 01-04: Parsing and Planning
@@ -101,15 +101,11 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    const dependencyStage = new DependencyInjectionStage(
-      temporaryGateRegistry,
+    // Depends only on services this builder already holds, so it is built once
+    // here and handed to the pipeline rather than reconstructed per request.
+    const gateEnforcement = new GateEnforcementAuthority(
       deps.chainSessionStore,
-      deps.getFrameworkStateEnabled,
-      deps.getAnalyticsService,
-      'canonical-stage-0',
       deps.logger,
-      deps.hookRegistry,
-      deps.notificationEmitter,
       deps.lightweightGateSystem.gateLoader
     );
 
@@ -270,7 +266,12 @@ export class PipelineBuilder {
 
     // ── Stage 08-12: Execution and Formatting ──
 
-    const gateVerdictProcessor = new GateVerdictProcessor(deps.chainSessionStore, deps.logger);
+    const gateVerdictProcessor = new GateVerdictProcessor(
+      deps.chainSessionStore,
+      deps.logger,
+      deps.hookRegistry,
+      deps.notificationEmitter
+    );
     const stepCaptureService = new StepCaptureService(deps.chainSessionStore, deps.logger);
     const responseCaptureStage = new StepResponseCaptureStage(
       gateVerdictProcessor,
@@ -353,7 +354,6 @@ export class PipelineBuilder {
     //     shell command grades the previous response.
     const stages: readonly PipelineStage[] = [
       requestStage,
-      dependencyStage,
       lifecycleStage,
       identityResolutionStage,
       commandParsingStage,
@@ -377,12 +377,12 @@ export class PipelineBuilder {
       postFormattingStage,
     ];
 
-    return new PromptExecutionPipeline(
-      stages,
-      deps.logger,
-      deps.getAnalyticsService,
-      deps.hookRegistry
-    );
+    return new PromptExecutionPipeline(stages, {
+      logger: deps.logger,
+      metricsProvider: deps.getAnalyticsService,
+      hookRegistry: deps.hookRegistry,
+      gateEnforcement,
+    });
   }
 
   /**

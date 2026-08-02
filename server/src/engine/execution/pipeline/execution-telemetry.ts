@@ -24,7 +24,6 @@ export interface StageMetricSummary {
  */
 const STAGE_TYPES: Readonly<Record<string, PipelineStageType>> = {
   RequestNormalization: 'normalization',
-  DependencyInjection: 'lifecycle',
   ExecutionLifecycle: 'lifecycle',
   IdentityResolution: 'identity',
   CommandParsing: 'parsing',

@@ -4,7 +4,12 @@ import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 import type { HookRegistry, HookExecutionContext } from '#infra/hooks/index.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
-import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
+import type {
+  ChainSession,
+  ChainSessionService,
+  HookRegistryPort,
+  McpNotificationEmitterPort,
+} from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
 import type { GateAction } from '../../execution/pipeline/decisions/index.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
@@ -27,10 +32,32 @@ export interface VerdictProcessingResult {
  *
  * Extracted from StepResponseCaptureStage (pipeline stage 08).
  */
+/**
+ * The gate-event surface this processor needs from the hook registry.
+ *
+ * `HookRegistryPort` — the type that actually reaches us from `mcp/` — declares
+ * only the per-stage hooks, not the gate ones, so the value has to be narrowed
+ * to the concrete registry it is at runtime. Widening the port instead would
+ * make `shared/types` import from both `engine/gates` and `infra/hooks`,
+ * inverting the layer graph; the contract's real home is an open question.
+ */
+type GateEventHooks = Pick<
+  HookRegistry,
+  'emitGateEvaluated' | 'emitGateFailed' | 'emitRetryExhausted' | 'emitResponseBlocked'
+>;
+
+/** Same narrowing, for the notification emitter. */
+type GateEventNotifications = Pick<
+  McpNotificationEmitter,
+  'emitGateFailed' | 'emitRetryExhausted' | 'emitResponseBlocked'
+>;
+
 export class GateVerdictProcessor {
   constructor(
     private readonly chainSessionStore: ChainSessionService,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly hookRegistry?: HookRegistryPort,
+    private readonly notificationEmitter?: McpNotificationEmitterPort
   ) {}
 
   /**
@@ -475,10 +502,8 @@ export class GateVerdictProcessor {
     gateIds: string[],
     reason?: string
   ): Promise<void> {
-    const deps = context.metadata['pipelineDependencies'] as
-      { hookRegistry?: HookRegistry; notificationEmitter?: McpNotificationEmitter } | undefined;
-    const hooks = deps?.hookRegistry;
-    const notifications = deps?.notificationEmitter;
+    const hooks = this.hookRegistry as GateEventHooks | undefined;
+    const notifications = this.notificationEmitter as GateEventNotifications | undefined;
 
     if (!hooks && !notifications) return;
 

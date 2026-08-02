@@ -335,3 +335,115 @@ Verified: `framework-stage.test.ts` 10/10, full unit suite 1756/146 suites, type
 is not a member of `ExecutionStrategyType`. Invisible to `npm run typecheck` for the reason
 Tier 2 recorded: `tsconfig.json` excludes `tests`. Same root cause, different file; not fixed
 here.
+
+---
+
+## Tier 4 — Delete DependencyInjectionStage (2026-08-02)
+
+Gated on a detached worktree at `6c499633`. This tier snapshots `node_modules` into the
+worktree instead of symlinking it: mid-tier the shared `node_modules` was torn down and
+rebuilt by the concurrent session, and typecheck started reporting `Cannot find name 'Array'`
+— TypeScript's own lib files were briefly absent. A symlinked worktree inherits that.
+
+### What the stage actually did
+
+Two things per request, neither of them request-dependent:
+
+1. `context.gateEnforcement = new GateEnforcementAuthority(chainSessionStore, logger, gateLoader)`
+   — all three inputs are constructor-injected, so the same object was rebuilt on every request.
+2. Wrote `pipelineDependencies`, a **6-field object of which 2 fields had a reader**.
+   `frameworkEnabled`, `analyticsService`, `temporaryGateRegistry`, and `pipelineVersion` were
+   write-only; only `hookRegistry` and `notificationEmitter` were ever read, at exactly one
+   site (`gate-verdict-processor.ts:478`).
+
+Finding 3 confirmed, and stronger than recorded: the stage did no work any consumer observed.
+
+### The bag was laundering a type across a layer boundary
+
+This is the part the plan did not anticipate, and it is the reason the tier was not mechanical.
+
+`emitGateEvents` calls seven methods — `emitGateEvaluated`, `emitGateFailed`,
+`emitRetryExhausted`, `emitResponseBlocked` on the hook registry, and three more on the
+notification emitter. **None of them are declared on `HookRegistryPort` or
+`McpNotificationEmitterPort`**, which declare only `emitBeforeStage`/`emitAfterStage`/
+`emitStageError` and `canSend`/`setServer` respectively.
+
+The value's static type is narrowed to the port at the `mcp/` boundary
+(`prompt-executor.ts:289`, `mcp/tools/index.ts:281`) while the runtime object stays the
+concrete `HookRegistry` created in `application.ts`. The metadata bag — being
+`Record<string, unknown>` — let `engine/` cast it back with `as` and call methods the
+declared type does not have. Remove the bag and the hole becomes a compile error.
+
+Widening the ports would make `shared/types/index.ts` import `GateDefinition` from
+`engine/gates/types.ts`, plus `GateEvaluationResult`/`HookExecutionContext` from `infra/hooks`
+and three notification payload types from `infra/observability` — `shared` is the bottom
+layer, so that inverts the graph. **Out of scope for this tier; the contract's home is an
+open question.**
+
+Interim: the constructor takes the honest port types, and `emitGateEvents` narrows once with
+two `Pick<>` aliases naming exactly the methods it needs. Same single cast as before, but now
+compile-time visible, documented, and adjacent to the call instead of hidden in a bag read.
+
+### Deviations
+
+**D11 — the pipeline constructor became an options object (4.8).**
+Plan step 4.3 has the builder construct `GateEnforcementAuthority` and the pipeline assign it
+per request. That needs the pipeline to receive it — a 5th positional parameter, which
+re-breaks the `max-params` limit Tier 2 had just cleared on this exact constructor.
+
+Introduced `PipelinePorts { logger, metricsProvider?, hookRegistry?, gateEnforcement? }`;
+the constructor is now `(stages, ports)`. Two parameters, and the list can grow again without
+another round of this. Cost: the same three construction sites Tier 2 rewrote get rewritten
+again — the plan assumed T2 would leave five positional params, so the collision was
+structural, not a mistake in either tier.
+
+Assignment happens at the top of `execute()`, before `startRootSpan`, so it is set earlier
+than the old stage-2 assignment. No reader can observe it unset.
+
+**D12 — `STAGE_TYPES` lost its `DependencyInjection` row (4.9).**
+Tier 1 deliberately mapped that stage to `'lifecycle'` rather than minting a union member for
+a stage due to be deleted. That decision paid off here: removing the stage needed only a row
+deletion, no change to `PipelineStageType`.
+
+**D13 — the integration test's three metadata writes became constructor injection.**
+`response-capture-hooks.test.ts` built its stage in `beforeEach` with a hookless processor and
+then smuggled hooks in per test via `context.metadata['pipelineDependencies']`. Both
+`hookRegistry` and `notificationEmitter` are already constructed in the same `beforeEach`
+above the stage, so they now go straight into the processor and all three writes are gone.
+
+### Found during execution
+
+**Two of my own Tier 1 tests broke on hardcoded indices.** `cpm.stages.skipped` assertions used
+`stageNames.slice(5)` and `slice(8)`, derived from `CommandParsing` being index 4 and
+`ExecutionPlanning` index 7. Removing a stage shifted both by one.
+
+That is the same brittleness class this whole plan is about, reproduced in the tests written to
+verify the fix. Replaced with a `stagesAfter(name)` helper that derives the slice point from
+`indexOf`, so the assertions survive the Tier 5 renumber and any future stage change.
+
+**One import-order violation was mine**, caught only because the tier was gated in isolation —
+in the shared tree it would have been indistinguishable from the concurrent session's
+pre-existing `import-x/order` noise. `npx eslint --fix` on the one file.
+
+### Not fixed — deliberately out of scope
+
+- The port/concrete gap above.
+- `executePipelineStages` at cyclomatic 17 / cognitive 29. Flagged in Tiers 1 and 2; still
+  unowned by any tier.
+
+### Measured (isolated worktree at `6c499633` + 9 tier files, 2 deletions)
+
+| Check                      | Result                                |
+| -------------------------- | ------------------------------------- |
+| `npm run typecheck`        | clean                                 |
+| `npm run lint:ratchet`     | 3454 err / 1406 warn — no regressions |
+| `npm run test:ci`          | 1741 passed / 145 suites              |
+| `npm run test:integration` | 426 passed / 33 suites                |
+| `npm run validate:arch`    | 437 modules (was 438), 0 errors       |
+| `npm run validate:all`     | exit 0                                |
+| `npm run verify:mcp`       | 11/11                                 |
+
+Suite counts drop by one file and two tests — that is the deleted
+`dependency-injection-stage.test.ts`, not lost coverage: its two assertions covered the
+`pipelineDependencies` write (now deleted) and `gateEnforcement` initialization (now covered
+by every pipeline test, since the pipeline assigns it on every request).

@@ -12,7 +12,6 @@ import type { Logger } from '../../../../src/infra/logging/index.js';
 // short-circuit behaviour, neither of which depends on them.
 const stageOrder = [
   'RequestNormalization',
-  'DependencyInjection',
   'ExecutionLifecycle',
   'IdentityResolution',
   'CommandParsing',
@@ -78,7 +77,10 @@ const createPipeline = (
     )
   );
 
-  const pipeline = new PromptExecutionPipeline(stageInstances, createLogger(), () => undefined);
+  const pipeline = new PromptExecutionPipeline(stageInstances, {
+    logger: createLogger(),
+    metricsProvider: () => undefined,
+  });
 
   return { pipeline, tracker };
 };

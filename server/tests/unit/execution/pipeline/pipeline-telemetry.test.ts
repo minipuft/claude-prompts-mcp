@@ -104,7 +104,6 @@ const createCapturingMetricsCollector = (): CapturingMetricsCollector => {
  */
 const allStageNames = [
   'RequestNormalization',
-  'DependencyInjection',
   'ExecutionLifecycle',
   'IdentityResolution',
   'CommandParsing',
@@ -140,6 +139,9 @@ const stageNames: readonly string[] = allStageNames.filter(
   (name) => !optionalStageNames.includes(name)
 );
 
+/** Stages that run strictly after `name` — the set `cpm.stages.skipped` should report. */
+const stagesAfter = (name: string): string[] => stageNames.slice(stageNames.indexOf(name) + 1);
+
 function createPipeline(options: {
   hookRegistry?: HookRegistryPort;
   stageOverrides?: Partial<Record<string, PipelineStage>>;
@@ -161,12 +163,11 @@ function createPipeline(options: {
 
   const names = options.includeOptionalStages === true ? allStageNames : stageNames;
 
-  return new PromptExecutionPipeline(
-    names.map(build),
-    createLogger(),
-    options.metricsProvider ?? (() => undefined),
-    options.hookRegistry
-  );
+  return new PromptExecutionPipeline(names.map(build), {
+    logger: createLogger(),
+    metricsProvider: options.metricsProvider ?? (() => undefined),
+    ...(options.hookRegistry !== undefined ? { hookRegistry: options.hookRegistry } : {}),
+  });
 }
 
 // ===== Tests =====
@@ -346,7 +347,7 @@ describe('Pipeline OTel Span Instrumentation (Phase 1.4)', () => {
   test('stage spans end on early exit', async () => {
     const pipeline = createPipeline({
       stageOverrides: {
-        DependencyInjection: createStage('DependencyInjection', (context) => {
+        ExecutionLifecycle: createStage('ExecutionLifecycle', (context) => {
           context.setResponse({ content: [{ type: 'text', text: 'early' }] });
         }),
       },
@@ -543,8 +544,8 @@ describe('Pipeline Telemetry Correctness (Tier 1)', () => {
       const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
       const skipped = String(rootSpan.attributes['cpm.stages.skipped']).split(',');
 
-      // CommandParsing is index 4 — everything after it was skipped.
-      expect(skipped).toEqual([...stageNames.slice(5)]);
+      // Everything after the stage that short-circuited was skipped.
+      expect(skipped).toEqual(stagesAfter('CommandParsing'));
       // The stages that did run are not in the skipped list.
       expect(skipped).not.toContain('CommandParsing');
       expect(skipped).not.toContain('RequestNormalization');
@@ -573,8 +574,8 @@ describe('Pipeline Telemetry Correctness (Tier 1)', () => {
       const rootSpan = exporter.getFinishedSpans().find((s) => s.name === 'prompt_engine.request')!;
       const skipped = String(rootSpan.attributes['cpm.stages.skipped']).split(',');
 
-      // ExecutionPlanning is index 7 — it ran (and failed), so it is not skipped.
-      expect(skipped).toEqual([...stageNames.slice(8)]);
+      // ExecutionPlanning ran (and failed), so it is not itself skipped.
+      expect(skipped).toEqual(stagesAfter('ExecutionPlanning'));
       expect(skipped).not.toContain('ExecutionPlanning');
     });
   });
@@ -592,7 +593,6 @@ describe('Pipeline Telemetry Correctness (Tier 1)', () => {
       const byName = new Map(metrics.stageMetrics.map((m) => [m.stageName, m.stageType]));
 
       expect(byName.get('RequestNormalization')).toBe('normalization');
-      expect(byName.get('DependencyInjection')).toBe('lifecycle');
       expect(byName.get('ExecutionLifecycle')).toBe('lifecycle');
       expect(byName.get('IdentityResolution')).toBe('identity');
       expect(byName.get('CommandParsing')).toBe('parsing');

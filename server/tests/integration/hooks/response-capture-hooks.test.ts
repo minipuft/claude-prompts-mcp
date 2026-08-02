@@ -56,7 +56,14 @@ describe('ResponseCaptureStage Hook Emission', () => {
     // a mocked processor would make these assertions vacuous. The session store stays mocked —
     // it is the I/O boundary.
     stage = new StepResponseCaptureStage(
-      new GateVerdictProcessor(mockChainSessionStore, noopLogger),
+      // Hooks and notifications reach the processor by constructor injection —
+      // they used to be smuggled in per-test via context.metadata.
+      new GateVerdictProcessor(
+        mockChainSessionStore,
+        noopLogger,
+        hookRegistry,
+        notificationEmitter
+      ),
       new StepCaptureService(mockChainSessionStore, noopLogger),
       mockChainSessionStore,
       noopLogger
@@ -97,13 +104,6 @@ describe('ResponseCaptureStage Hook Emission', () => {
       sessionId,
       isChainExecution: true,
       currentStep: 1,
-    };
-
-    // Inject hook registry into context metadata
-    context.metadata['pipelineDependencies'] = {
-      hookRegistry,
-      notificationEmitter,
-      frameworkEnabled: false,
     };
 
     // Execute stage
@@ -147,12 +147,6 @@ describe('ResponseCaptureStage Hook Emission', () => {
       isChainExecution: true,
       currentStep: 1,
     };
-    context.metadata['pipelineDependencies'] = {
-      hookRegistry,
-      notificationEmitter,
-      frameworkEnabled: false,
-    };
-
     // Track notification calls
     const failedNotifications: unknown[] = [];
     mockServer.notification.mockImplementation((params) => {
@@ -203,12 +197,6 @@ describe('ResponseCaptureStage Hook Emission', () => {
       isChainExecution: true,
       currentStep: 1,
     };
-    context.metadata['pipelineDependencies'] = {
-      hookRegistry,
-      notificationEmitter,
-      frameworkEnabled: false,
-    };
-
     await stage.execute(context);
 
     // Verify retry exhausted state was set

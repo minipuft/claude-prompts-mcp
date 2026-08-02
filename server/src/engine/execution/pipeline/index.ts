@@ -6,7 +6,6 @@ export { BasePipelineStage, type PipelineStage } from './stage.js';
 
 // Stage 00: Initialization
 export { RequestNormalizationStage } from './stages/00-request-normalization-stage.js';
-export { DependencyInjectionStage } from './stages/00-dependency-injection-stage.js';
 export { ExecutionLifecycleStage } from './stages/00-execution-lifecycle-stage.js';
 export { IdentityResolutionStage } from './stages/00-identity-resolution-stage.js';
 
