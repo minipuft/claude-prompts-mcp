@@ -18,10 +18,27 @@ import { readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { zodLocalesTrimPlugin } from './esbuild-plugins/zod-locales-trim.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
 
-export const BUNDLE_BUDGET_BYTES = 512_000; // 500KB
+/**
+ * Size budgets for the `cpm` bundle. Two numbers because two artifacts exist.
+ *
+ * `prepublishOnly` runs `build:prod`, so the artifact that reaches npm is minified —
+ * that is the one 500KB governs. A plain `npm run build` (CI, pre-push, local) emits
+ * the unminified bundle, which is legitimately larger and gets its own ceiling rather
+ * than being waved through.
+ *
+ * Both are enforced. Skipping the check when unminified would make the common path a
+ * check that cannot fail, and CI runs exactly that path.
+ *
+ * Measured 2026-08-01 on zod 4.4.3 with the locale trim: 294.9 KB minified,
+ * 565.4 KB unminified. The headroom is deliberate, not slack to spend.
+ */
+export const BUNDLE_BUDGET_BYTES = 512_000; // 500KB — shipped (minified)
+export const DEV_BUNDLE_BUDGET_BYTES = 640_000; // 625KB — unminified dev build
 
 /** Absolute path to the server source tree the CLI shares code with. */
 const SERVER_SRC = join(__dirname, '..', 'server', 'src');
@@ -87,6 +104,10 @@ const require = __createRequire(import.meta.url);`,
     treeShaking: true,
     logLevel: 'info',
     metafile: true,
+
+    // zod 4 re-exports all 53 locales as a namespace, which tree shaking cannot
+    // eliminate — 279KB of an 842KB bundle. See esbuild-plugins/zod-locales-trim.mjs.
+    plugins: [zodLocalesTrimPlugin()],
   };
 }
 
@@ -100,14 +121,17 @@ const require = __createRequire(import.meta.url);`,
  * @param {{ outfile?: string, minify?: boolean }} [overrides]
  * @returns {Promise<string>} absolute path to the emitted bundle
  */
-export function checkCliBundleSize(outfile) {
+export function checkCliBundleSize(outfile, minified = false) {
   const bytes = statSync(outfile).size;
   const sizeKB = (bytes / 1024).toFixed(1);
-  console.log(`  cpm bundle: ${sizeKB} KB -> ${outfile}`);
+  const budget = minified ? BUNDLE_BUDGET_BYTES : DEV_BUNDLE_BUDGET_BYTES;
+  const label = minified ? 'minified' : 'unminified';
 
-  if (bytes > BUNDLE_BUDGET_BYTES) {
+  console.log(`  cpm bundle: ${sizeKB} KB (${label}) -> ${outfile}`);
+
+  if (bytes > budget) {
     throw new Error(
-      `cpm bundle exceeds ${BUNDLE_BUDGET_BYTES / 1024}KB budget (${sizeKB} KB)`,
+      `cpm bundle exceeds ${budget / 1024}KB ${label} budget (${sizeKB} KB)`,
     );
   }
   return bytes;
@@ -123,7 +147,7 @@ export async function buildCli(overrides = {}) {
   const esbuild = await import('esbuild');
   const options = createCliBuildOptions(overrides);
   await esbuild.build(options);
-  checkCliBundleSize(options.outfile);
+  checkCliBundleSize(options.outfile, Boolean(options.minify));
   return options.outfile;
 }
 

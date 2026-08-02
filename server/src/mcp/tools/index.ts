@@ -679,7 +679,7 @@ export class McpToolRouter {
                     normalized['apply_to_steps'] = gate['apply_to_steps'];
                   }
 
-                  return normalized as GateSpecification;
+                  return normalized;
                 })
                 .filter((entry): entry is GateSpecification => entry !== null);
               normalizedArgs.gates = normalizedGates;

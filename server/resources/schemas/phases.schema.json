@@ -1,197 +1,196 @@
 {
-  "$ref": "#/definitions/PhasesDefinition",
-  "definitions": {
-    "PhasesDefinition": {
-      "type": "object",
-      "properties": {
-        "processingSteps": {
-          "type": "array",
-          "items": {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "processingSteps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "frameworkBasis": {
+            "type": "string",
+            "minLength": 1
+          },
+          "order": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "section_header": {
+            "type": "string"
+          },
+          "guards": {
             "type": "object",
             "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "description": {
-                "type": "string",
-                "minLength": 1
-              },
-              "frameworkBasis": {
-                "type": "string",
-                "minLength": 1
-              },
-              "order": {
-                "type": "integer",
-                "exclusiveMinimum": 0
-              },
               "required": {
                 "type": "boolean"
               },
-              "section_header": {
-                "type": "string"
+              "min_length": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
-              "guards": {
-                "type": "object",
-                "properties": {
-                  "required": {
-                    "type": "boolean"
-                  },
-                  "min_length": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0
-                  },
-                  "max_length": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0
-                  },
-                  "contains_any": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "contains_all": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  },
-                  "matches_pattern": {
-                    "type": "string"
-                  },
-                  "forbidden_terms": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    }
-                  }
-                },
-                "additionalProperties": false
-              }
-            },
-            "required": [
-              "id",
-              "name",
-              "description",
-              "frameworkBasis",
-              "order",
-              "required"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "executionSteps": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
+              "max_length": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               },
-              "name": {
-                "type": "string",
-                "minLength": 1
-              },
-              "action": {
-                "type": "string",
-                "minLength": 1
-              },
-              "frameworkPhase": {
-                "type": "string",
-                "minLength": 1
-              },
-              "dependencies": {
+              "contains_any": {
                 "type": "array",
                 "items": {
-                  "type": "string"
-                },
-                "default": []
+                  "type": "string",
+                  "minLength": 1
+                }
               },
-              "expected_output": {
-                "type": "string",
-                "minLength": 1
+              "contains_all": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "matches_pattern": {
+                "type": "string"
+              },
+              "forbidden_terms": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
-            },
-            "required": [
-              "id",
-              "name",
-              "action",
-              "frameworkPhase",
-              "expected_output"
-            ],
-            "additionalProperties": false
+            }
           }
         },
-        "templateEnhancements": {
-          "type": "object",
-          "properties": {
-            "systemPromptAdditions": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "userPromptModifications": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "contextualHints": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+        "required": [
+          "id",
+          "name",
+          "description",
+          "frameworkBasis",
+          "order",
+          "required"
+        ]
+      }
+    },
+    "executionSteps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "frameworkPhase": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dependencies": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
-          "additionalProperties": false
+          "expected_output": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "executionFlow": {
-          "type": "object",
-          "properties": {
-            "preProcessingSteps": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "postProcessingSteps": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "validationSteps": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "additionalProperties": false
+        "required": [
+          "id",
+          "name",
+          "action",
+          "frameworkPhase",
+          "expected_output"
+        ]
+      }
+    },
+    "templateEnhancements": {
+      "type": "object",
+      "properties": {
+        "systemPromptAdditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
-        "qualityIndicators": {
-          "type": "object",
-          "additionalProperties": {}
+        "userPromptModifications": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
-        "executionTypeEnhancements": {
-          "type": "object",
-          "additionalProperties": {}
+        "contextualHints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
+      }
+    },
+    "executionFlow": {
+      "type": "object",
+      "properties": {
+        "preProcessingSteps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "postProcessingSteps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "validationSteps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "qualityIndicators": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
       },
-      "additionalProperties": true
+      "additionalProperties": {}
+    },
+    "executionTypeEnhancements": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
     }
   },
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": {},
   "title": "Phases Definition",
   "description": "Schema for phases.yaml — defines processing steps, execution steps, assertions, and quality indicators for a framework."
 }

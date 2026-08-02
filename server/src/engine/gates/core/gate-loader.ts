@@ -101,7 +101,7 @@ export class GateLoader implements GateDefinitionProvider {
       }
 
       // Normalize to lightweight shape used by existing pipeline
-      const gate = this.toLightweightGate(definition as GateDefinitionYaml);
+      const gate = this.toLightweightGate(definition);
 
       this.gateCache.set(gateId, gate);
       this.lastModified.set(gateId, Date.now());

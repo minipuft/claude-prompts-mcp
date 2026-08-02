@@ -6,7 +6,7 @@
  * Permissive to avoid rejecting legacy fields but enforces required keys.
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import type {
   GateDefinitionYaml,
@@ -38,7 +38,7 @@ const lightweightGateSchema = z
     id: z.string().min(1, 'Gate ID is required'),
     name: z.string().min(1, 'Gate name is required'),
     type: z.enum(['validation', 'guidance'], {
-      errorMap: () => ({ message: 'Gate type is required' }),
+      error: () => 'Gate type is required',
     }),
     description: z.string().optional(),
     severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),

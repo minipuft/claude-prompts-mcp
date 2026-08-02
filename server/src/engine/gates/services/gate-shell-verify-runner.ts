@@ -130,7 +130,7 @@ export async function runGateShellVerifications(
     }
 
     for (const criteria of shellCriteria) {
-      const gateConfig = buildGateConfig(criteria as ShellVerifyCriteria, runContext);
+      const gateConfig = buildGateConfig(criteria, runContext);
       if (gateConfig === null) {
         continue;
       }

@@ -13,7 +13,7 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { createTwoFilesPatch } from 'diff';
 
 import { computeContentHash } from '#shared/utils/hash.js';

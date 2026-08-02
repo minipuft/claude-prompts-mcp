@@ -12,7 +12,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import {
   validateFrameworkSchema,
   validatePhasesSchema,

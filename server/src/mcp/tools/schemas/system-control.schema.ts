@@ -6,7 +6,7 @@
  * parameter validation — replaces the generated mcp-schemas.ts.
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import type { DescriptionResolver } from './prompt-engine.schema.js';
 

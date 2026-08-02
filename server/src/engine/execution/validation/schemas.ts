@@ -5,17 +5,17 @@
  * Comprehensive validation schemas for all execution-related types,
  * providing runtime type safety and clear error messages.
  */
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 /**
  * Zod schema for GateScope validation
  */
 export const gateScopeSchema = z.enum(['execution', 'session', 'chain', 'step'], {
-  errorMap: (issue, ctx) => {
-    if (issue.code === z.ZodIssueCode.invalid_enum_value) {
-      return { message: 'Gate scope must be one of: execution, session, chain, step' };
+  error: (issue) => {
+    if (issue.code === 'invalid_value') {
+      return 'Gate scope must be one of: execution, session, chain, step';
     }
-    return { message: ctx.defaultError };
+    return undefined;
   },
 });
 
@@ -28,11 +28,11 @@ export const customCheckSchema = z.object(
     description: z.string().min(1, 'Custom check description cannot be empty'),
   },
   {
-    errorMap: (issue, ctx) => {
-      if (issue.code === z.ZodIssueCode.invalid_type) {
-        return { message: 'Custom check must be an object with name and description' };
+    error: (issue) => {
+      if (issue.code === 'invalid_type') {
+        return 'Custom check must be an object with name and description';
       }
-      return { message: ctx.defaultError };
+      return undefined;
     },
   }
 );
@@ -58,15 +58,15 @@ const temporaryGateObjectSchema = z
       guidance: z.string().optional(),
       description: z.string().optional(),
       severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
-      context: z.record(z.any()).optional(),
+      context: z.record(z.string(), z.any()).optional(),
       source: z.enum(['manual', 'automatic', 'analysis']).optional(),
     },
     {
-      errorMap: (issue, ctx) => {
-        if (issue.code === z.ZodIssueCode.invalid_type) {
-          return { message: 'Temporary gate definition must be an object or string reference' };
+      error: (issue) => {
+        if (issue.code === 'invalid_type') {
+          return 'Temporary gate definition must be an object or string reference';
         }
-        return { message: ctx.defaultError };
+        return undefined;
       },
     }
   )
@@ -102,14 +102,11 @@ export const gateSpecificationSchema = z.union(
     temporaryGateObjectSchema,
   ],
   {
-    errorMap: (issue, ctx) => {
-      if (issue.code === z.ZodIssueCode.invalid_union) {
-        return {
-          message:
-            'Gate specification must be a string ID, custom check object, or full gate definition',
-        };
+    error: (issue) => {
+      if (issue.code === 'invalid_union') {
+        return 'Gate specification must be a string ID, custom check object, or full gate definition';
       }
-      return { message: ctx.defaultError };
+      return undefined;
     },
   }
 );
@@ -119,11 +116,11 @@ export const gateSpecificationSchema = z.union(
  * Used when retry limit is exceeded to let user choose: retry, skip, or abort
  */
 export const gateActionSchema = z.enum(['retry', 'skip', 'abort'], {
-  errorMap: (issue, ctx) => {
-    if (issue.code === z.ZodIssueCode.invalid_enum_value) {
-      return { message: 'Gate action must be one of: retry, skip, abort' };
+  error: (issue) => {
+    if (issue.code === 'invalid_value') {
+      return 'Gate action must be one of: retry, skip, abort';
     }
-    return { message: ctx.defaultError };
+    return undefined;
   },
 });
 
@@ -146,14 +143,14 @@ export const mcpToolRequestSchema = z
       user_response: z.string().trim().optional(),
       force_restart: z.boolean().optional(),
       gates: z.array(gateSpecificationSchema).optional(),
-      options: z.record(z.any()).optional(),
+      options: z.record(z.string(), z.any()).optional(),
     },
     {
-      errorMap: (issue, ctx) => {
-        if (issue.code === z.ZodIssueCode.invalid_type) {
-          return { message: 'MCP tool request must be a valid object' };
+      error: (issue) => {
+        if (issue.code === 'invalid_type') {
+          return 'MCP tool request must be a valid object';
         }
-        return { message: ctx.defaultError };
+        return undefined;
       },
     }
   )

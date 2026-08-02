@@ -12,7 +12,7 @@
  * @see gate-schema.ts for the pattern this follows
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // ============================================
 // Tool Description Overlay Schema
@@ -27,7 +27,7 @@ export const StyleToolDescriptionSchema = z.object({
   /** Override tool description text */
   description: z.string().optional(),
   /** Override individual parameter descriptions */
-  parameters: z.record(z.string()).optional(),
+  parameters: z.record(z.string(), z.string()).optional(),
   /** Response format guidance woven into tool description */
   responseFormat: z.string().optional(),
 });
@@ -109,7 +109,7 @@ export const StyleDefinitionSchema = z
 
     // Tool description overlays
     /** Per-tool description overlays when this style is active */
-    toolDescriptions: z.record(StyleToolDescriptionSchema).optional(),
+    toolDescriptions: z.record(z.string(), StyleToolDescriptionSchema).optional(),
   })
   .passthrough(); // Allow additional fields for extensibility
 

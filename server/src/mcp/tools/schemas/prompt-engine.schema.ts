@@ -9,7 +9,7 @@
  * a resolver callback so framework overlays can customize what the LLM sees.
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // ---------------------------------------------------------------------------
 // Gate sub-schemas (shared with resource_manager)
@@ -35,7 +35,7 @@ export const temporaryGateObjectSchema = z
     pass_criteria: z.array(z.string().min(1)).optional(),
     severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
     source: z.enum(['manual', 'automatic', 'analysis']).optional(),
-    context: z.record(z.any()).optional(),
+    context: z.record(z.string(), z.any()).optional(),
     target_step_number: z.number().int().positive().optional(),
     apply_to_steps: z.array(z.number().int().positive()).optional(),
   })
@@ -149,7 +149,10 @@ export function buildPromptEngineSchema(
 
     gates: z.array(gateSpecUnionSchema).optional().describe(resolve('gates', PARAM_DEFAULTS.gates)),
 
-    options: z.record(z.any()).optional().describe(resolve('options', PARAM_DEFAULTS.options)),
+    options: z
+      .record(z.string(), z.any())
+      .optional()
+      .describe(resolve('options', PARAM_DEFAULTS.options)),
   });
 }
 

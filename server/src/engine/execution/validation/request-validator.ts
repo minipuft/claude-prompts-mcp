@@ -5,7 +5,7 @@
  * Provides comprehensive validation for McpToolRequest objects with
  * detailed error handling and type safety.
  */
-import { ZodError } from 'zod';
+import { ZodError } from 'zod/v4';
 
 import { mcpToolRequestSchema } from './schemas.js';
 import { isValidGateVerdict } from '../../gates/core/gate-verdict-contract.js';
@@ -35,19 +35,19 @@ export class McpToolRequestValidator {
       const sanitized: MutableMcpToolRequest = result;
 
       // Freeze to enforce immutability
-      return Object.freeze(sanitized) as McpToolRequest;
+      return Object.freeze(sanitized);
     } catch (error) {
       if (error instanceof ZodError) {
-        const errorMessages = error.errors
+        const errorMessages = error.issues
           .map((err) => `${err.path.join('.')}: ${err.message}`)
           .join('; ');
         recordParameterIssue('prompt_engine', 'mcp_request', errorMessages, {
-          issues: error.errors.map((err) => ({
+          issues: error.issues.map((err) => ({
             path: err.path.join('.') || '(root)',
             code: err.code,
           })),
         });
-        throw new Error(`McpToolRequest validation failed: ${errorMessages}`);
+        throw new Error(`McpToolRequest validation failed: ${errorMessages}`, { cause: error });
       }
       throw error;
     }

@@ -75,7 +75,7 @@ export function filterMetricLabels(
     }
   }
 
-  return result as Record<AllowedMetricLabel, string | number | boolean>;
+  return result;
 }
 
 /**

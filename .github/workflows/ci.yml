@@ -158,6 +158,15 @@ jobs:
       - name: Startup smoke test
         run: npm run start:test
 
+      # Guards the published MCP tool surface, which CLAUDE.md places inside the Public
+      # API Contract. The SDK selects its JSON Schema converter from the installed zod
+      # major, so a dependency bump alone can rewrite every tool's inputSchema with no
+      # typecheck or test failure — that is how the zod 3 -> 4 move produced 39 schema
+      # changes. Lives here rather than in validate:all because it spawns the built
+      # server, and validate:all runs before the build.
+      - name: MCP tool schema snapshot
+        run: npm run validate:tool-schemas
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:

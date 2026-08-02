@@ -666,7 +666,7 @@ export class PromptExecutor {
     try {
       const activeFramework = this.frameworkStateStore.getActiveFramework();
       return this.frameworkManager.generateExecutionContext(prompt, {
-        userPreference: activeFramework.type as any,
+        userPreference: activeFramework.type,
       });
     } catch (error) {
       this.logger.warn('[PromptExecutor] Failed to generate framework execution context', {

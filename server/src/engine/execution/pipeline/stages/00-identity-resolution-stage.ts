@@ -91,10 +91,7 @@ export class IdentityResolutionStage extends BasePipelineStage {
       transportMode: identityOptions?.transportMode,
       ...(requestHint != null ? { requestClientProfileHint: requestHint } : {}),
     };
-    const identityContext = resolveRequestIdentityContext(
-      sdkExtra as Parameters<typeof resolveRequestIdentityContext>[0],
-      effectiveOptions
-    );
+    const identityContext = resolveRequestIdentityContext(sdkExtra, effectiveOptions);
     const scopeId = resolveContinuityScopeId(identityContext.identity);
 
     context.state.identity.resolved = true;

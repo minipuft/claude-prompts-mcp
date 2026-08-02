@@ -16,7 +16,6 @@ import type { GateRegistry } from '../registry/gate-registry.js';
 import type {
   GateActivationRules,
   GateDefinitionYaml,
-  GateEnforcementMode,
   GatePassCriteria,
   GateRetryConfig,
 } from '../types.js';
@@ -219,7 +218,7 @@ export class GateHotReloadCoordinator {
         type: definition.type,
         description: definition.description,
         severity: definition.severity,
-        enforcementMode: definition.enforcementMode ?? ('informational' as GateEnforcementMode),
+        enforcementMode: definition.enforcementMode ?? 'informational',
         gate_type: definition.gate_type,
       };
 

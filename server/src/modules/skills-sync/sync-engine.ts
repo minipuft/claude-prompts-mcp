@@ -1,5 +1,5 @@
 // @lifecycle canonical - Sync reconciliation + safe-prune planning for skills-sync.
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 export const SKILLS_SYNC_MANAGED_BY = 'claude-prompts-skills-sync';
 

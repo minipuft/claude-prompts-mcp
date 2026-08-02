@@ -6,7 +6,7 @@
  * and (optionally) tool registration. Kept standalone so runtime integration
  * can opt in incrementally without touching existing hand-written descriptors.
  */
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import type { ToolContract, ParameterDefinition } from './types.js';
 import type { ParameterDescriptor, CommandDescriptor } from '../../metadata/definitions/types.js';
@@ -70,7 +70,7 @@ function toZodType(typeString: string): z.ZodTypeAny {
   if (typeString === 'string') return z.string();
   if (typeString === 'boolean') return z.boolean();
   if (typeString === 'number') return z.number();
-  if (typeString === 'record') return z.record(z.any());
+  if (typeString === 'record') return z.record(z.string(), z.any());
   if (typeString === 'array<string>') return z.array(z.string());
   if (typeString === 'array<{name,description}>') {
     return z.array(z.object({ name: z.string(), description: z.string() }));

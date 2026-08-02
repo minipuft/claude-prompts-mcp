@@ -218,7 +218,7 @@ export class FrameworkFileWriter {
     if (typeof rawType === 'string') data.type = rawType;
     if (typeof rawEnabled === 'boolean') data.enabled = rawEnabled;
     if (rawGates !== undefined && rawGates !== null) {
-      data.gates = rawGates as NonNullable<FrameworkCreationData['gates']>;
+      data.gates = rawGates;
     }
     if (rawToolDescriptions !== undefined && rawToolDescriptions !== null) {
       data.tool_descriptions = rawToolDescriptions as NonNullable<
@@ -277,14 +277,10 @@ export class FrameworkFileWriter {
       >;
     }
     if (rawTemplateEnhancements !== undefined && rawTemplateEnhancements !== null) {
-      data.template_enhancements = rawTemplateEnhancements as NonNullable<
-        FrameworkCreationData['template_enhancements']
-      >;
+      data.template_enhancements = rawTemplateEnhancements;
     }
     if (rawExecutionFlow !== undefined && rawExecutionFlow !== null) {
-      data.execution_flow = rawExecutionFlow as NonNullable<
-        FrameworkCreationData['execution_flow']
-      >;
+      data.execution_flow = rawExecutionFlow;
     }
     if (rawFrameworkElements !== undefined && rawFrameworkElements !== null) {
       data.framework_elements = rawFrameworkElements as NonNullable<

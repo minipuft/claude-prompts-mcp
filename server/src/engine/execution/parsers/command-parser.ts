@@ -386,8 +386,10 @@ export class UnifiedCommandParser {
         let data = parseResult.data;
 
         // Handle different JSON formats
-        let actualCommand = '';
-        let confidence = 0.8;
+        // No initializers: every branch below assigns both, and the final `else` returns.
+        // Dead initializers hid that invariant; definite-assignment analysis now enforces it.
+        let actualCommand: string;
+        let confidence: number;
 
         if (data.command) {
           actualCommand = data.command;

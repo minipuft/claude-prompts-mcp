@@ -310,7 +310,7 @@ export class PromptDiscoveryProcessor {
         });
 
         const allPromptIds = this.getConvertedPrompts().map((p) => p.id);
-        const refValidation = validateChainStepReferences(steps as unknown[], allPromptIds);
+        const refValidation = validateChainStepReferences(steps, allPromptIds);
         if (!refValidation.valid) {
           response += `\n**Chain Integrity**:\n`;
           for (const warning of refValidation.warnings) {

@@ -87,7 +87,7 @@
       "errors": 0,
       "warnings": 79
     },
-    "import/order": {
+    "import-x/order": {
       "errors": 7,
       "warnings": 0
     },
@@ -103,7 +103,7 @@
       "errors": 0,
       "warnings": 1
     },
-    "import/no-duplicates": {
+    "import-x/no-duplicates": {
       "errors": 2,
       "warnings": 0
     }

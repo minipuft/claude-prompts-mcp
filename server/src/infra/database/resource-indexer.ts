@@ -29,7 +29,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 /** Injected tool loader — avoids direct import from modules layer. */
 export type ToolLoaderFn = (promptDir: string, promptId: string) => LoadedScriptTool[];
@@ -306,14 +306,17 @@ function buildMetadata(
       const name = (data['name'] as string) || '';
       const description = (data['description'] as string) || '';
       return {
-        type: (data['type'] as string) || 'validation',
+        // Explicit rather than `||`: `data` is Record<string, unknown>, and the empty-string
+        // fallback is intentional (an absent OR blank `type` indexes as 'validation'), which
+        // `??` would not preserve.
+        type: typeof data['type'] === 'string' && data['type'] ? data['type'] : 'validation',
         triggers: extractKeywords(`${name} ${description}`, 10),
       };
     }
     case 'framework':
     case 'style': {
       return {
-        enabled: (data['enabled'] as boolean) ?? true,
+        enabled: data['enabled'] ?? true,
       };
     }
     case 'tool': {

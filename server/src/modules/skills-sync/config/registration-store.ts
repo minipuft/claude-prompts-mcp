@@ -1,7 +1,7 @@
 // @lifecycle canonical - skills-sync registration config persistence helpers.
 import { readFile, writeFile } from 'node:fs/promises';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 export type RegistrationScope = 'user' | 'project';
 
@@ -39,7 +39,7 @@ function parseConfig(raw: string): SkillsSyncConfigFile {
   if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return {};
   }
-  return parsed as SkillsSyncConfigFile;
+  return parsed;
 }
 
 function normalizeList(values: string[] | undefined): string[] {

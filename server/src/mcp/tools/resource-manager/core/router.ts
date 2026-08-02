@@ -17,7 +17,6 @@ import type {
   ResourceAction,
   ActionValidationResult,
 } from './types.js';
-import type { PromptResourceActionId } from '../../../metadata/definitions/prompt-resource.js';
 import type {
   FrameworkManagerActionId,
   FrameworkManagerInput,
@@ -150,7 +149,7 @@ export class ResourceManagerRouter {
     // Transform args to prompt resource format
     // Action is validated before reaching here, so cast is safe
     const promptArgs: Record<string, unknown> = {
-      action: args.action as PromptResourceActionId,
+      action: args.action,
       id: args.id,
       name: args.name,
       description: args.description,

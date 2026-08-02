@@ -169,7 +169,8 @@ function evaluateStepGuards(
   // matches_pattern: content must match regex
   if (guards.matches_pattern) {
     let passed = false;
-    let feedback = '';
+    // No initializer: both the try and the catch assign it.
+    let feedback: string;
     try {
       const regex = new RegExp(guards.matches_pattern, 'i');
       passed = regex.test(content);

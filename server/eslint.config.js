@@ -1,6 +1,11 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
-import importPlugin from 'eslint-plugin-import';
+// import-x, not eslint-plugin-import. The latter has no ESLint 10 release and does not merely
+// warn under it — `import/order` throws `sourceCode.getTokenOrCommentAfter is not a function`
+// at rule setup, which takes the whole lint run down. import-x is the maintained fork and
+// declares eslint ^10. The rule IDs change with the plugin name (`import/*` -> `import-x/*`),
+// so the ratchet baseline keys were renamed in place to carry their counts across the swap.
+import importPlugin from 'eslint-plugin-import-x';
 import prettierPlugin from 'eslint-plugin-prettier';
 import prettierConfig from 'eslint-config-prettier';
 import sonarjs from 'eslint-plugin-sonarjs';
@@ -43,7 +48,7 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tseslint.plugin,
-      import: importPlugin,
+      'import-x': importPlugin,
       prettier: prettierPlugin,
       claude: claudePlugin,
       sonarjs: sonarjs,
@@ -91,7 +96,7 @@ export default [
       '@typescript-eslint/no-unsafe-return': 'warn',
 
       // Import rules
-      'import/order': [
+      'import-x/order': [
         'error',
         {
           groups: [
@@ -120,9 +125,9 @@ export default [
           },
         },
       ],
-      'import/no-duplicates': 'error',
-      'import/no-cycle': 'error',
-      'import/newline-after-import': 'error',
+      'import-x/no-duplicates': 'error',
+      'import-x/no-cycle': 'error',
+      'import-x/newline-after-import': 'error',
 
       // Cross-layer relative imports are enforced by `validate:no-crosslayer-relative`,
       // NOT by no-restricted-imports. A textual `../../*` ban flags 197 legitimate deep
@@ -220,7 +225,7 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tseslint.plugin,
-      import: importPlugin,
+      'import-x': importPlugin,
       prettier: prettierPlugin,
       claude: claudePlugin,
       sonarjs: sonarjs,
@@ -266,7 +271,7 @@ export default [
       '@typescript-eslint/no-unsafe-call': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'warn',
       '@typescript-eslint/no-unsafe-return': 'warn',
-      'import/order': [
+      'import-x/order': [
         'error',
         {
           groups: [
@@ -295,9 +300,9 @@ export default [
           },
         },
       ],
-      'import/no-duplicates': 'error',
-      'import/no-cycle': 'error',
-      'import/newline-after-import': 'error',
+      'import-x/no-duplicates': 'error',
+      'import-x/no-cycle': 'error',
+      'import-x/newline-after-import': 'error',
       // Complexity enforcement (relaxed for tests)
       'sonarjs/cognitive-complexity': ['warn', 20],
       complexity: ['warn', 15],

@@ -59,7 +59,8 @@ function getPromptTemplatesPath(): string {
     // No fallback - environment must support either __dirname (CommonJS/Jest) or import.meta.url (ESM)
     throw new Error(
       'Cannot determine prompt templates path: neither __dirname nor import.meta.url available. ' +
-        'Set PROMPTS_PATH environment variable explicitly.'
+        'Set PROMPTS_PATH environment variable explicitly.',
+      { cause: error }
     );
   }
 }

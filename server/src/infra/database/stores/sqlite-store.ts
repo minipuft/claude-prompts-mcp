@@ -204,14 +204,14 @@ export class SqliteStateStore<T> implements StateStore<T> {
    * Useful for domain-specific queries beyond simple CRUD
    */
   query<R>(sql: string, params?: unknown[]): R[] {
-    return this.db.query<R>(sql, params as (string | number | boolean | null | undefined)[]);
+    return this.db.query<R>(sql, params);
   }
 
   /**
    * Execute a custom query returning a single result
    */
   queryOne<R>(sql: string, params?: unknown[]): R | null {
-    return this.db.queryOne<R>(sql, params as (string | number | boolean | null | undefined)[]);
+    return this.db.queryOne<R>(sql, params);
   }
 
   private normalizeScopeComponent(value: unknown): string | undefined {

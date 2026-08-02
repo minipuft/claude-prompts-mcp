@@ -318,7 +318,8 @@ export class FrameworkLifecycleProcessor {
       return this.error('Framework state manager not initialized');
     }
 
-    let switchSuccess = false;
+    // No initializer: the try assigns it and the catch returns early.
+    let switchSuccess: boolean;
     try {
       switchSuccess = await this.ctx.frameworkStateStore.switchFramework({
         targetFramework: targetFramework.id,

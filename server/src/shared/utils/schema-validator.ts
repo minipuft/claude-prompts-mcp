@@ -6,7 +6,7 @@
  * error formatting across loaders (gates, frameworks, prompts).
  */
 
-import type { ZodError, ZodIssue, ZodSchema } from 'zod';
+import type { ZodError, ZodIssue, ZodSchema } from 'zod/v4';
 
 export interface SchemaValidationResult<T> {
   success: boolean;

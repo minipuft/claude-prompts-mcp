@@ -294,7 +294,7 @@ export class FrameworkSemanticIntegration {
 
     // Apply user preference if provided
     if (userPreference) {
-      enhanced.userPreference = userPreference as any;
+      enhanced.userPreference = userPreference;
     }
 
     // Handle analysis mode specific logic
@@ -690,7 +690,7 @@ export class FrameworkSemanticIntegration {
 
     return {
       semanticAnalysis,
-      frameworkContext: null as any, // No framework context when disabled
+      frameworkContext: null, // No framework context when disabled
       integration: {
         frameworkSelectionReason: 'Framework system disabled',
         semanticFrameworkAlignment: 0,

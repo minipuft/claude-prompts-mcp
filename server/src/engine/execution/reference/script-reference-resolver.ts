@@ -252,7 +252,7 @@ export class ScriptReferenceResolver {
       typeof parsedOutput === 'object' &&
       parsedOutput !== null &&
       'output' in parsedOutput &&
-      Object.keys(parsedOutput as object).length === 1
+      Object.keys(parsedOutput).length === 1
     ) {
       // Try to parse the inner output as JSON
       const innerOutput = (parsedOutput as { output: string }).output;

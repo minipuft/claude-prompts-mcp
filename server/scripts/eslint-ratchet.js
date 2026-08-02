@@ -30,14 +30,10 @@ function runEslintJsonReport() {
   const reportPath = path.join(os.tmpdir(), `eslint-ratchet-${Date.now()}.json`);
   const eslintBin = getEslintBinPath();
 
-  const result = spawnSync(
-    eslintBin,
-    ['src', '--format', 'json', '--output-file', reportPath],
-    {
-      stdio: 'inherit',
-      encoding: 'utf8',
-    }
-  );
+  const result = spawnSync(eslintBin, ['src', '--format', 'json', '--output-file', reportPath], {
+    stdio: 'inherit',
+    encoding: 'utf8',
+  });
 
   // ESLint exit codes:
   // 0 -> no problems
@@ -80,8 +76,28 @@ function summarizeEslintReport(results) {
   return summary;
 }
 
+/**
+ * Compare a baseline summary against the current one.
+ *
+ * Returns two independent findings:
+ *
+ * - `regressions` — a rule's count went UP. The original purpose of the ratchet.
+ * - `vanished`    — a rule the baseline knew about produced no report at all.
+ *
+ * The second exists because the first cannot see it. A rule that stops running reports
+ * zero, and `0 > N` is false, so a plugin that was renamed, removed, or silently failed
+ * to load reads as an improvement and the totals drop. That is indistinguishable from
+ * progress if you only watch the totals — which is exactly how a lint rule can quietly
+ * stop protecting anything while CI stays green.
+ *
+ * A rule also vanishes when every one of its violations is genuinely fixed, and counts
+ * alone cannot separate that from a rule that died. Both are reported, because both
+ * require the baseline to be updated deliberately rather than drifting; the printed
+ * message names both readings so the reader can tell which one they are looking at.
+ */
 function compareSummaries(baseline, current) {
   const regressions = [];
+  const vanished = [];
 
   const allRuleIds = new Set([
     ...Object.keys(baseline.byRule ?? {}),
@@ -91,6 +107,18 @@ function compareSummaries(baseline, current) {
   for (const ruleId of allRuleIds) {
     const baselineCounts = baseline.byRule?.[ruleId] ?? { errors: 0, warnings: 0 };
     const currentCounts = current.byRule?.[ruleId] ?? { errors: 0, warnings: 0 };
+
+    const wasTracked = Object.hasOwn(baseline.byRule ?? {}, ruleId);
+    const stillReports = Object.hasOwn(current.byRule ?? {}, ruleId);
+    const hadFindings = baselineCounts.errors > 0 || baselineCounts.warnings > 0;
+
+    if (wasTracked && !stillReports && hadFindings) {
+      vanished.push({
+        ruleId,
+        errors: baselineCounts.errors,
+        warnings: baselineCounts.warnings,
+      });
+    }
 
     if (currentCounts.errors > baselineCounts.errors) {
       regressions.push({
@@ -111,7 +139,7 @@ function compareSummaries(baseline, current) {
     }
   }
 
-  return regressions;
+  return { regressions, vanished };
 }
 
 async function loadJson(filePath) {
@@ -139,7 +167,7 @@ async function handleUpdateBaseline() {
   await writeBaseline(summary);
 
   // Provide quick visibility for reviewers.
-   
+
   console.log(
     `[eslint-ratchet] Baseline updated: ${summary.totals.errors} errors, ${summary.totals.warnings} warnings`
   );
@@ -159,30 +187,49 @@ async function handleCheck() {
   const results = await loadJson(reportPath);
   const current = summarizeEslintReport(results);
 
-  const regressions = compareSummaries(baseline, current);
-  if (regressions.length === 0) {
-     
+  const { regressions, vanished } = compareSummaries(baseline, current);
+  if (regressions.length === 0 && vanished.length === 0) {
     console.log(
       `[eslint-ratchet] OK: ${current.totals.errors} errors, ${current.totals.warnings} warnings (no regressions)`
     );
     return;
   }
 
-  const lines = [
-    `[eslint-ratchet] FAIL: ${regressions.length} rule regressions detected.`,
-    '',
-    'Rules that increased (fix these or intentionally regenerate the baseline):',
-    ...regressions
-      .sort((a, b) => a.ruleId.localeCompare(b.ruleId) || a.type.localeCompare(b.type))
-      .map(
-        (r) =>
-          `- ${r.ruleId} (${r.type}): baseline=${r.baseline} current=${r.current} (+${
-            r.current - r.baseline
-          })`
-      ),
-  ];
+  const problems = regressions.length + vanished.length;
+  const lines = [`[eslint-ratchet] FAIL: ${problems} rule problems detected.`];
 
-   
+  if (regressions.length > 0) {
+    lines.push(
+      '',
+      'Rules that increased (fix these or intentionally regenerate the baseline):',
+      ...regressions
+        .sort((a, b) => a.ruleId.localeCompare(b.ruleId) || a.type.localeCompare(b.type))
+        .map(
+          (r) =>
+            `- ${r.ruleId} (${r.type}): baseline=${r.baseline} current=${r.current} (+${
+              r.current - r.baseline
+            })`
+        )
+    );
+  }
+
+  if (vanished.length > 0) {
+    lines.push(
+      '',
+      'Rules that stopped reporting entirely (the baseline tracked them, this run did not):',
+      ...vanished
+        .sort((a, b) => a.ruleId.localeCompare(b.ruleId))
+        .map((r) => `- ${r.ruleId}: baseline=${r.errors} errors, ${r.warnings} warnings -> absent`),
+      '',
+      'Two readings, and the counts cannot tell them apart:',
+      '  1. The violations were fixed. Good — run `npm run lint:ratchet:baseline` to lock it in.',
+      '  2. The rule stopped running (plugin renamed, removed, or failed to load). The debt is',
+      '     still in the code and nothing is watching it. Restore the rule before re-baselining.',
+      'Renaming a plugin is case 2 even though it looks like case 1: rename the baseline keys',
+      'in place so the counts carry over, rather than regenerating.'
+    );
+  }
+
   console.error(lines.join('\n'));
   process.exitCode = 1;
 }
@@ -200,7 +247,6 @@ try {
     );
   }
 } catch (error) {
-   
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 }

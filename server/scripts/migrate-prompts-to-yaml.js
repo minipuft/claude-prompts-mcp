@@ -28,17 +28,11 @@
 import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROMPTS_DIR = join(__dirname, '..', 'prompts');
-const DIST_SCHEMA_PATH = join(
-  __dirname,
-  '..',
-  'dist',
-  'prompts',
-  'prompt-schema.js'
-);
+const DIST_SCHEMA_PATH = join(__dirname, '..', 'dist', 'prompts', 'prompt-schema.js');
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -92,7 +86,9 @@ function parseMarkdownSections(content) {
     if (gateMatch) {
       try {
         sections.gateConfiguration = JSON.parse(gateMatch[1].trim());
-        userContent = userContent.replace(/## Gate Configuration\s*\n```json\s*\n[\s\S]*?\n```\s*/, '').trim();
+        userContent = userContent
+          .replace(/## Gate Configuration\s*\n```json\s*\n[\s\S]*?\n```\s*/, '')
+          .trim();
       } catch (e) {
         console.warn(`  ⚠️ Could not parse gate configuration: ${e.message}`);
       }
@@ -245,7 +241,12 @@ function migratePrompt(categoryDir, promptDef, validateSchema) {
     if (sections.systemMessage) console.log(`     - system-message.md`);
     if (VERBOSE) {
       console.log(`     YAML content preview:`);
-      console.log(yamlContent.split('\n').map((l) => `       ${l}`).join('\n'));
+      console.log(
+        yamlContent
+          .split('\n')
+          .map((l) => `       ${l}`)
+          .join('\n')
+      );
     }
     results.success = true;
     results.files = ['prompt.yaml'];
@@ -264,21 +265,13 @@ function migratePrompt(categoryDir, promptDef, validateSchema) {
 
     // Write user-message.md
     if (sections.userMessageTemplate) {
-      writeFileSync(
-        join(promptDir, 'user-message.md'),
-        sections.userMessageTemplate,
-        'utf-8'
-      );
+      writeFileSync(join(promptDir, 'user-message.md'), sections.userMessageTemplate, 'utf-8');
       results.files.push('user-message.md');
     }
 
     // Write system-message.md
     if (sections.systemMessage) {
-      writeFileSync(
-        join(promptDir, 'system-message.md'),
-        sections.systemMessage,
-        'utf-8'
-      );
+      writeFileSync(join(promptDir, 'system-message.md'), sections.systemMessage, 'utf-8');
       results.files.push('system-message.md');
     }
 
@@ -373,7 +366,9 @@ async function main() {
     process.exit(0);
   }
 
-  console.log(`Found ${categories.length} categor${categories.length === 1 ? 'y' : 'ies'} to process\n`);
+  console.log(
+    `Found ${categories.length} categor${categories.length === 1 ? 'y' : 'ies'} to process\n`
+  );
 
   const allResults = [];
   let totalMigrated = 0;

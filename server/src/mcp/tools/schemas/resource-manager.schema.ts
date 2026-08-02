@@ -6,7 +6,7 @@
  * Uses .passthrough() to allow framework fields to flow through for advanced scenarios.
  */
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { ChainStepSchema } from '#modules/prompts/prompt-schema.js';
 
@@ -86,7 +86,7 @@ export const resourceManagerInputSchema = z
     /** [Prompt] Script tools to create with the prompt. */
     tools: z.array(z.unknown()).optional(),
     /** [Prompt] Gate configuration: include, exclude, framework_gates. */
-    gate_configuration: z.record(z.unknown()).optional(),
+    gate_configuration: z.record(z.string(), z.unknown()).optional(),
     /** [Prompt] Hint for execution type on creation. */
     execution_hint: z.enum(['single', 'chain']).optional(),
     /** [Prompt] List filter query. */
@@ -106,9 +106,9 @@ export const resourceManagerInputSchema = z
     /** [Gate] Structured pass criteria definitions. */
     pass_criteria: z.array(z.unknown()).optional(),
     /** [Gate] Activation rules. */
-    activation: z.record(z.unknown()).optional(),
+    activation: z.record(z.string(), z.unknown()).optional(),
     /** [Gate] Retry configuration. */
-    retry_config: z.record(z.unknown()).optional(),
+    retry_config: z.record(z.string(), z.unknown()).optional(),
 
     // ── Framework parameters ─────────────────────────────────────────────
     /** [Framework] Framework type identifier (e.g. 'CAGEERF', 'ReACT'). */
@@ -118,9 +118,9 @@ export const resourceManagerInputSchema = z
     /** [Framework] Phase definitions. */
     phases: z.array(z.unknown()).optional(),
     /** [Framework] Gate configuration: include, exclude arrays. */
-    gates: z.record(z.unknown()).optional(),
+    gates: z.record(z.string(), z.unknown()).optional(),
     /** [Framework] Tool description overlays when active. */
-    tool_descriptions: z.record(z.unknown()).optional(),
+    tool_descriptions: z.record(z.string(), z.unknown()).optional(),
     /** [Framework] Whether the framework is enabled. */
     enabled: z.boolean().optional(),
     /** [Framework] For switch: persist the change to config. */

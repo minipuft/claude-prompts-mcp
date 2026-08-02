@@ -61,7 +61,7 @@ export class TransportRouter {
       const value = transportArg.split('=')[1];
       // Validate CLI arg - include streamable-http
       if (value === 'stdio' || value === 'sse' || value === 'streamable-http' || value === 'both') {
-        return value as TransportMode;
+        return value;
       }
       // Use stderr to avoid corrupting STDIO protocol
       console.error(

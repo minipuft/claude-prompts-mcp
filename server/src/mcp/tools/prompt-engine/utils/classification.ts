@@ -90,7 +90,8 @@ export class PromptClassifier {
   ): PromptClassification {
     const reasoning: string[] = [];
     let confidence = 100;
-    let executionType: 'single' | 'chain' = 'single';
+    // No initializer: the if / else-if / else chain below assigns every path.
+    let executionType: 'single' | 'chain';
     let requiresExecution = true;
     const suggestedGates: string[] = [];
     let framework: string | undefined;
