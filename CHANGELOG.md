@@ -8,9 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.0.2](https://github.com/minipuft/claude-prompts/compare/v3.0.1...v3.0.2) (2026-08-02)
 
 
-### ⚠ BREAKING CHANGES
+### Changed
 
-* **deps:** the published MCP inputSchema changed in 39 places. The SDK picks its JSON Schema converter from the installed zod major (zod-json-schema-compat.js:19-28), so this bump swaps the engine that produces the tool surface CLAUDE.md places inside the Public API Contract. The plan pre-committed the rule "empty diff -> minor, non-empty -> major" before the diff was taken; it is non-empty.
+* **deps:** the published MCP `inputSchema` changed in 39 places, all of them **permissive**. `@modelcontextprotocol/sdk` selects its JSON Schema converter from the installed zod major (`zod-json-schema-compat.js:19-28`), so upgrading to zod 4 swapped the engine that produces the tool surface. The principal difference is that `additionalProperties: false` is now emitted as `additionalProperties: {}`. **No consumer action is required**: every request that validated under zod 3 still validates under zod 4 — the surface changed shape without narrowing what it accepts, which is why this ships as a patch rather than the major Release Please computed. The surface is now pinned by `server/tests/snapshots/mcp-input-schemas.json` and checked in CI, so a future converter change cannot land unnoticed.
 
 ### Fixed
 
