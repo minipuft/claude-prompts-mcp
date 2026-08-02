@@ -9,7 +9,7 @@ import type { ExecutionContext } from '../../context/index.js';
 import type { CleanupHandler } from '../../context/internal-state.js';
 
 /**
- * Canonical Pipeline Stage 0.3: Execution Lifecycle
+ * Pipeline Stage 02: Execution Lifecycle
  *
  * Establishes per-request scope identifiers and cleanup hooks so temporary
  * gates, inline guidance, and other execution-scoped resources are removed

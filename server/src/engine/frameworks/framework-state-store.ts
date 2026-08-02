@@ -22,6 +22,7 @@ import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import { SqliteEngine } from '#infra/database/sqlite-engine.js';
 import { SqliteStateStore } from '#infra/database/stores/sqlite-store.js';
 import { Logger } from '#infra/logging/index.js';
+import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
 /**
@@ -33,6 +34,22 @@ export interface PersistedFrameworkState {
   activeFramework: string;
   lastSwitchedAt: string;
   switchReason: string;
+}
+
+/**
+ * Construction options for {@link FrameworkStateStore}.
+ *
+ * An object rather than positional parameters: the constructor reached the 4-parameter
+ * limit, and callers previously had to pass `undefined` for an injected store just to
+ * reach the argument after it.
+ */
+export interface FrameworkStateStoreOptions {
+  /** Pre-built store; supply to inject a test double or share an engine. */
+  stateStore?: SqliteStateStore<PersistedFrameworkState>;
+  /** Framework for scopes with no persisted row. Defaults to {@link DEFAULT_FRAMEWORK_ID}. */
+  defaultFramework?: string;
+  /** Scope applied when a caller supplies none — the project this process serves. */
+  defaultScope?: StateStoreOptions;
 }
 
 /**
@@ -108,28 +125,43 @@ export class FrameworkStateStore extends EventEmitter {
   };
   private isInitialized: boolean = false;
   private readonly serverRoot: string;
+  private readonly defaultFramework: string;
+  private readonly defaultScope?: StateStoreOptions;
   private stateStore?: SqliteStateStore<PersistedFrameworkState>;
 
-  constructor(
-    logger: Logger,
-    serverRoot: string,
-    injectedStore?: SqliteStateStore<PersistedFrameworkState>
-  ) {
+  constructor(logger: Logger, serverRoot: string, options: FrameworkStateStoreOptions = {}) {
     super();
     this.logger = logger;
     this.serverRoot = serverRoot;
+    this.defaultFramework = options.defaultFramework ?? DEFAULT_FRAMEWORK_ID;
+    this.defaultScope = options.defaultScope;
 
-    if (injectedStore) {
-      this.stateStore = injectedStore;
+    if (options.stateStore) {
+      this.stateStore = options.stateStore;
     }
 
-    // Initialize default scope with default framework state
-    this.scopedStates.set('default', FrameworkStateStore.createDefaultState());
+    // Seed the process's own scope, not the literal 'default' bucket — otherwise the
+    // first read would miss it and re-seed under the real key.
+    this.scopedStates.set(
+      resolveContinuityScopeId(this.defaultScope),
+      FrameworkStateStore.createDefaultState(this.defaultFramework)
+    );
   }
 
-  private static createDefaultState(): FrameworkState {
+  /**
+   * Scope to use when a caller supplies none.
+   *
+   * One server process serves one project, so an absent scope means "this project",
+   * not "the global bucket". Without this every unscoped read — which is most of the
+   * execution path — would share one row across every project.
+   */
+  private effectiveScope(scope?: StateStoreOptions): StateStoreOptions | undefined {
+    return scope ?? this.defaultScope;
+  }
+
+  private static createDefaultState(defaultFramework: string): FrameworkState {
     return {
-      activeFramework: 'CAGEERF',
+      activeFramework: defaultFramework,
       previousFramework: null,
       switchedAt: new Date(),
       switchReason: 'Initial framework selection',
@@ -144,14 +176,14 @@ export class FrameworkStateStore extends EventEmitter {
   }
 
   private resolveStateKey(scope?: StateStoreOptions): string {
-    return resolveContinuityScopeId(scope);
+    return resolveContinuityScopeId(this.effectiveScope(scope));
   }
 
   private getOrCreateScopedState(scope?: StateStoreOptions): FrameworkState {
     const key = this.resolveStateKey(scope);
     let state = this.scopedStates.get(key);
     if (!state) {
-      state = FrameworkStateStore.createDefaultState();
+      state = FrameworkStateStore.createDefaultState(this.defaultFramework);
       this.scopedStates.set(key, state);
     }
     return state;
@@ -173,7 +205,9 @@ export class FrameworkStateStore extends EventEmitter {
 
     try {
       // Initialize framework manager
-      this.frameworkManager = await createFrameworkManager(this.logger);
+      this.frameworkManager = await createFrameworkManager(this.logger, {
+        defaultFramework: this.defaultFramework,
+      });
 
       const defaultState = this.getOrCreateScopedState();
 
@@ -247,7 +281,7 @@ export class FrameworkStateStore extends EventEmitter {
           defaultState: () => ({
             version: '1.0.0',
             frameworkSystemEnabled: false,
-            activeFramework: 'CAGEERF',
+            activeFramework: this.defaultFramework,
             lastSwitchedAt: new Date().toISOString(),
             switchReason: 'Initial framework selection',
           }),
@@ -258,10 +292,20 @@ export class FrameworkStateStore extends EventEmitter {
 
     const currentState = this.getOrCreateScopedState(scope);
 
-    try {
-      const persistedState = await this.stateStore.load(scope);
+    // Must be the effective scope, not the raw argument: startup calls this with none, and
+    // reading the unscoped row there would load the global default while switches write to
+    // the project's own row — state would diverge silently across restarts.
+    const effective = this.effectiveScope(scope);
 
-      if (this.isValidPersistedState(persistedState)) {
+    try {
+      // `load()` synthesizes a valid-looking default when no row exists, so it cannot answer
+      // "has this scope ever been written?". Only `exists()` can, and that answer is what
+      // decides between using this scope's state and adopting the pre-scoping global row.
+      const persistedState = (await this.stateStore.exists(effective))
+        ? await this.stateStore.load(effective)
+        : undefined;
+
+      if (persistedState != null && this.isValidPersistedState(persistedState)) {
         currentState.frameworkSystemEnabled = persistedState.frameworkSystemEnabled;
         currentState.activeFramework = persistedState.activeFramework;
         currentState.switchedAt = new Date(persistedState.lastSwitchedAt);
@@ -284,8 +328,63 @@ export class FrameworkStateStore extends EventEmitter {
       );
     }
 
+    if (await this.adoptLegacyGlobalState(currentState, scope)) {
+      return;
+    }
+
     this.logger.info('📁 No framework state found, using defaults');
     await this.saveStateToFile(scope);
+  }
+
+  /**
+   * Adopt the pre-scoping global row the first time a real scope loads.
+   *
+   * Before scope ids existed every project shared one row written under `default`. A
+   * scoped lookup cannot match it (`findRowByScope` only queries its own scope), so
+   * without this the first launch after upgrading would silently revert to the config
+   * default and read as a reset. Copied rather than moved: other scopes may not have
+   * migrated yet, and the row is small.
+   *
+   * @returns true if legacy state was adopted and persisted under the scope.
+   */
+  private async adoptLegacyGlobalState(
+    currentState: FrameworkState,
+    scope?: StateStoreOptions
+  ): Promise<boolean> {
+    const effective = this.effectiveScope(scope);
+    // Nothing to migrate from when the caller already IS the global scope.
+    if (this.stateStore == null || resolveContinuityScopeId(effective) === 'default') {
+      return false;
+    }
+
+    try {
+      if (!(await this.stateStore.exists())) {
+        return false;
+      }
+
+      const legacyState = await this.stateStore.load();
+      if (!this.isValidPersistedState(legacyState)) {
+        return false;
+      }
+
+      currentState.frameworkSystemEnabled = legacyState.frameworkSystemEnabled;
+      currentState.activeFramework = legacyState.activeFramework;
+      currentState.switchedAt = new Date(legacyState.lastSwitchedAt);
+      currentState.switchReason = legacyState.switchReason;
+
+      await this.saveStateToFile(scope);
+      this.logger.info(
+        `✅ Adopted pre-scoping framework state (${legacyState.activeFramework}) for this project`
+      );
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `⚠️ Could not adopt pre-scoping framework state: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return false;
+    }
   }
 
   /**
@@ -306,7 +405,7 @@ export class FrameworkStateStore extends EventEmitter {
       switchReason: currentState.switchReason,
     };
 
-    await this.stateStore.save(persistedState, scope);
+    await this.stateStore.save(persistedState, this.effectiveScope(scope));
     this.logger.debug('Framework state persisted to SQLite');
   }
 
@@ -666,9 +765,9 @@ export class FrameworkStateStore extends EventEmitter {
 export async function createFrameworkStateStore(
   logger: Logger,
   serverRoot: string,
-  stateStore?: SqliteStateStore<PersistedFrameworkState>
+  options: FrameworkStateStoreOptions = {}
 ): Promise<FrameworkStateStore> {
-  const manager = new FrameworkStateStore(logger, serverRoot, stateStore);
+  const manager = new FrameworkStateStore(logger, serverRoot, options);
   await manager.initialize();
   return manager;
 }

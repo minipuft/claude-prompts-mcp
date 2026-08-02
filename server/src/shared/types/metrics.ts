@@ -159,16 +159,32 @@ export interface AnalyticsSummary {
   recommendations: string[];
 }
 
+/**
+ * Classification for a pipeline stage metric.
+ *
+ * Every registered stage maps to a specific member; `'other'` is the fallback
+ * for a name the registry does not know. The mapping lives in
+ * `engine/execution/pipeline/stage-types.ts`.
+ */
 export type PipelineStageType =
+  | 'normalization'
+  | 'lifecycle'
+  | 'identity'
   | 'parsing'
   | 'inline_gate'
   | 'operator_validation'
   | 'planning'
+  | 'script'
+  | 'judge_selection'
   | 'gate_enhancement'
   | 'framework'
   | 'session'
+  | 'injection_control'
+  | 'prompt_guidance'
   | 'response_capture'
+  | 'verification'
   | 'execution'
+  | 'gate_review'
   | 'post_processing'
   | 'other';
 

@@ -1,12 +1,12 @@
 // @lifecycle canonical - Shell verification gate execution for Ralph Wiggum loops.
 /**
- * Pipeline Stage 8b: Shell Verification
+ * Pipeline Stage 17: Shell Verification
  *
  * Executes shell verification gates that enable "Ralph Wiggum" style autonomous loops
  * where Claude's work is validated by real shell command execution (ground truth)
  * rather than LLM self-evaluation.
  *
- * Position: After StepResponseCaptureStage (08), before ExecutionStage (09)
+ * Position: After StepResponseCaptureStage, before StepExecutionStage
  *
  * Flow:
  * 1. Check for pendingShellVerification in state
@@ -60,7 +60,7 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     let pending = context.state.gates.pendingShellVerification;
 
-    // Restore from session on response-only resume (Stage 02 is skipped, so pending is undefined)
+    // Restore from session on response-only resume (InlineGateExtractionStage is skipped, so pending is undefined)
     if (pending === undefined) {
       pending = this.restoreFromSession(context);
     }
@@ -129,7 +129,7 @@ export class ShellVerificationStage extends BasePipelineStage {
       await this.stateManager.clearState(this.resolveVerifyStateKey(context));
     }
 
-    // Signal which gates' shell criteria passed (for Stage 10 auto-pass)
+    // Signal which gates' shell criteria passed (for GateReviewStage auto-pass)
     if (pending.sourceGateIds && pending.sourceGateIds.length > 0) {
       context.state.gates.shellVerifyPassedForGates = pending.sourceGateIds;
     }
@@ -213,7 +213,7 @@ export class ShellVerificationStage extends BasePipelineStage {
 
   /**
    * Restore pendingShellVerification from the chain session (for response-only resume).
-   * On resume, Stage 02 is skipped so the ephemeral context has no pending state.
+   * On resume, InlineGateExtractionStage is skipped so the ephemeral context has no pending state.
    */
   private restoreFromSession(context: ExecutionContext): PendingShellVerification | undefined {
     const sessionId = context.getSessionId();

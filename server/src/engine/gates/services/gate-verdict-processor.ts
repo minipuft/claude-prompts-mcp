@@ -1,10 +1,14 @@
 // @lifecycle canonical - Processes gate verdicts, actions, and hook events for chain sessions.
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
-import type { HookRegistry, HookExecutionContext } from '#infra/hooks/index.js';
 import type { Logger } from '#infra/logging/index.js';
-import type { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
-import type { ChainSession, ChainSessionService } from '#shared/types/index.js';
+import type {
+  ChainSession,
+  ChainSessionService,
+  HookRegistryPort,
+  McpNotificationEmitterPort,
+  PipelineHookContext,
+} from '#shared/types/index.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
 import type { GateAction } from '../../execution/pipeline/decisions/index.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
@@ -25,12 +29,14 @@ export interface VerdictProcessingResult {
  * Processes gate verdicts, handles gate actions (retry/skip/abort),
  * and emits gate lifecycle events via hooks and notifications.
  *
- * Extracted from StepResponseCaptureStage (pipeline stage 08).
+ * Extracted from StepResponseCaptureStage.
  */
 export class GateVerdictProcessor {
   constructor(
     private readonly chainSessionStore: ChainSessionService,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly hookRegistry?: HookRegistryPort,
+    private readonly notificationEmitter?: McpNotificationEmitterPort
   ) {}
 
   /**
@@ -448,7 +454,7 @@ export class GateVerdictProcessor {
   /**
    * Create hook execution context from the current execution state.
    */
-  private createHookContext(context: ExecutionContext): HookExecutionContext {
+  private createHookContext(context: ExecutionContext): PipelineHookContext {
     const executionId =
       context.sessionContext?.sessionId ??
       context.state.session.executionScopeId ??
@@ -475,10 +481,8 @@ export class GateVerdictProcessor {
     gateIds: string[],
     reason?: string
   ): Promise<void> {
-    const deps = context.metadata['pipelineDependencies'] as
-      { hookRegistry?: HookRegistry; notificationEmitter?: McpNotificationEmitter } | undefined;
-    const hooks = deps?.hookRegistry;
-    const notifications = deps?.notificationEmitter;
+    const hooks = this.hookRegistry;
+    const notifications = this.notificationEmitter;
 
     if (!hooks && !notifications) return;
 

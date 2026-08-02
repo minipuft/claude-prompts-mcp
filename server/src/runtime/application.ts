@@ -28,7 +28,6 @@ import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ServerLifecycle, TransportRouter } from '#infra/http/index.js';
 import type { ApiRouter } from '#mcp/http/api.js';
 import type { McpToolRouter } from '#mcp/tools/index.js';
-import type { ToolDescriptionLoader } from '#mcp/tools/tool-description-loader.js';
 import type { HotReloadEvent } from '#modules/hot-reload/hot-reload-observer.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { PathResolver } from './paths.js';
@@ -41,7 +40,7 @@ import { EnhancedLogger, Logger } from '#infra/logging/index.js';
 import { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { reloadPromptData } from '#modules/prompts/prompt-refresh-service.js';
-import { registerResources, notifyResourcesChanged } from '#modules/resources/index.js';
+import { registerResources } from '#modules/resources/index.js';
 import { ConversationStore, createConversationStore } from '#modules/text-refs/conversation.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import { ResolvedFrameworkConfig, TransportMode } from '#shared/types/index.js';
@@ -58,7 +57,6 @@ export class Application {
   private conversationStore!: ConversationStore;
   private promptManager!: PromptAssetManager;
   private mcpToolsManager!: McpToolRouter;
-  private toolDescriptionLoader!: ToolDescriptionLoader;
   private frameworkStateStore!: FrameworkStateStore;
   private gateManager?: GateManager;
   private hookRegistry!: HookRegistry;
@@ -332,7 +330,6 @@ export class Application {
       categories: this._categories,
       convertedPrompts: this._convertedPrompts,
       promptManager: this.promptManager,
-      conversationStore: this.conversationStore,
       textReferenceStore: this.textReferenceStore,
       mcpServer: this.mcpServer,
       serverRoot: this.serverRoot,
@@ -350,7 +347,6 @@ export class Application {
     this.frameworkStateStore = result.frameworkStateStore;
     this.gateManager = result.gateManager;
     this.mcpToolsManager = result.mcpToolsManager;
-    this.toolDescriptionLoader = result.toolDescriptionLoader;
 
     const currentFrameworkConfig = this.configManager.getFrameworksConfig();
     this.syncFrameworkSystemStateFromConfig(

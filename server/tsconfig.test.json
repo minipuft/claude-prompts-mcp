@@ -2,7 +2,25 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["node", "jest"],
-    "noEmit": true
+    "noEmit": true,
+    // The base config pins rootDir to ./src so the build cannot silently widen its
+    // output tree. This config also includes tests/, which sits outside that root, so
+    // without an override every test file failed TS6059 before any real checking began
+    // -- this script reported nothing but config noise. rootDir carries no output
+    // meaning here (noEmit is on); it is purely a validation constraint.
+    "rootDir": ".",
+    // Relaxed for tests only. Both flags are about proving an index access is
+    // populated before use — a burden that pays off in src/, where the value flows
+    // on, and mostly does not in a test, where `result[0].id` is the assertion and
+    // an undefined element fails the test by throwing anyway.
+    //
+    // Measured: they account for 455 of the 864 diagnostics this project reports
+    // (315 TS2532 + 140 TS4111), and none of them is the class of defect this
+    // config exists to catch. Leaving them on buries the 20 wrong-arity call sites
+    // — the ones that let a constructor change land green against a test file that
+    // no longer compiled — under noise nobody will read.
+    "noUncheckedIndexedAccess": false,
+    "noPropertyAccessFromIndexSignature": false
   },
   "include": ["src/**/*", "tests/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -12,11 +12,7 @@ const createLogger = (): Logger => ({
 });
 
 const createSystemControl = () => {
-  return createConsolidatedSystemControl(
-    createLogger(),
-    { sendNotification: jest.fn() } as any,
-    () => Promise.resolve()
-  );
+  return createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
 };
 
 describe('System Control guide action', () => {

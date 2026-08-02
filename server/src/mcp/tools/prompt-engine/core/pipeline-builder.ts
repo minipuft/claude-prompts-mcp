@@ -10,7 +10,7 @@
  *   PromptExecutor (orchestration)
  *     └── PipelineBuilder (factory)
  *           └── PromptExecutionPipeline (coordinator)
- *                 └── PipelineStage[] (stages 00-11)
+ *                 └── PipelineStage[] (22 stages)
  */
 
 import * as path from 'node:path';
@@ -21,30 +21,30 @@ import type { PipelineDependencies } from './pipeline-dependencies.js';
 import { StepCaptureService } from '#engine/execution/capture/step-capture-service.js';
 import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
 import { ChainBlueprintResolver, SymbolicCommandBuilder } from '#engine/execution/parsers/index.js';
+import { GateEnforcementAuthority } from '#engine/execution/pipeline/decisions/index.js';
 import {
   // Core pipeline
   PromptExecutionPipeline,
   type PipelineStage,
-  // Stage 00: Initialization
+  // Stages 01-03: Initialization
   RequestNormalizationStage,
-  DependencyInjectionStage,
   ExecutionLifecycleStage,
   IdentityResolutionStage,
-  // Stage 01-04: Parsing and Planning
+  // Stages 04-09: Parsing, Planning, Scripts
   CommandParsingStage,
   InlineGateExtractionStage,
   OperatorValidationStage,
   ExecutionPlanningStage,
   ScriptExecutionStage,
   ScriptAutoExecuteStage,
-  // Stage 05-07: Enhancement and Session
+  // Stages 10-15: Judge, Gates, Framework, Session, Injection
   GateEnhancementStage,
   FrameworkResolutionStage,
   JudgeSelectionStage,
   PromptGuidanceStage,
   SessionManagementStage,
   InjectionControlStage,
-  // Stage 08-12: Execution and Formatting
+  // Stages 16-22: Capture, Execution, Review, Formatting
   StepResponseCaptureStage,
   createShellVerificationStage,
   StepExecutionStage,
@@ -93,7 +93,7 @@ export class PipelineBuilder {
       throw new Error('Temporary gate registry unavailable');
     }
 
-    // ── Stage 00: Initialization ──
+    // ── Stages 01-03: Initialization ──
 
     const requestStage = new RequestNormalizationStage(
       deps.chainSessionRouter ?? null,
@@ -101,15 +101,11 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    const dependencyStage = new DependencyInjectionStage(
-      temporaryGateRegistry,
+    // Depends only on services this builder already holds, so it is built once
+    // here and handed to the pipeline rather than reconstructed per request.
+    const gateEnforcement = new GateEnforcementAuthority(
       deps.chainSessionStore,
-      deps.getFrameworkStateEnabled,
-      deps.getAnalyticsService,
-      'canonical-stage-0',
       deps.logger,
-      deps.hookRegistry,
-      deps.notificationEmitter,
       deps.lightweightGateSystem.gateLoader
     );
 
@@ -128,7 +124,7 @@ export class PipelineBuilder {
       };
     }, deps.logger);
 
-    // ── Stage 01-04: Parsing and Planning ──
+    // ── Stages 04-09: Parsing, Planning, Scripts ──
 
     const symbolicCommandBuilder = new SymbolicCommandBuilder(
       deps.parsingSystem.argumentParser,
@@ -160,7 +156,7 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    // Script execution stage (04b)
+    // Script execution stage
     const scriptExecutor = createScriptExecutor({ debug: false });
     const toolDetectionService = createToolDetectionService({ debug: false });
     const toolTriggerFilter = createToolTriggerFilter({ debug: false });
@@ -171,27 +167,15 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    // Script auto-execute stage (04c)
-    const resourceManagerHandler = deps.mcpToolsManager?.getResourceManagerHandler?.() ?? null;
-    const scriptAutoExecuteStage = new ScriptAutoExecuteStage(resourceManagerHandler, deps.logger);
+    // Script auto-execute stage
+    const scriptAutoExecuteStage = new ScriptAutoExecuteStage(
+      this.resolveResourceManagerHandler(),
+      deps.logger
+    );
 
-    // ── Stage 05-07: Enhancement and Session ──
+    // ── Stages 10-15: Judge, Gates, Framework, Session, Injection ──
 
-    const frameworkStage: PipelineStage = deps.frameworkManager
-      ? new FrameworkResolutionStage(
-          deps.frameworkManager,
-          deps.getFrameworkStateEnabled,
-          deps.logger,
-          deps.lightweightGateSystem.gateLoader
-        )
-      : {
-          name: 'FrameworkResolution',
-          execute: async () => {
-            deps.logger.debug(
-              '[PipelineBuilder] Framework stage skipped (framework manager unavailable)'
-            );
-          },
-        };
+    const frameworkStage = this.createFrameworkStage();
 
     const frameworksProvider = () => {
       try {
@@ -280,9 +264,14 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    // ── Stage 08-12: Execution and Formatting ──
+    // ── Stages 16-22: Capture, Execution, Review, Formatting ──
 
-    const gateVerdictProcessor = new GateVerdictProcessor(deps.chainSessionStore, deps.logger);
+    const gateVerdictProcessor = new GateVerdictProcessor(
+      deps.chainSessionStore,
+      deps.logger,
+      deps.hookRegistry,
+      deps.notificationEmitter
+    );
     const stepCaptureService = new StepCaptureService(deps.chainSessionStore, deps.logger);
     const responseCaptureStage = new StepResponseCaptureStage(
       gateVerdictProcessor,
@@ -291,7 +280,7 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    // Shell verification stage (08b)
+    // Shell verification stage
     const shellVerifyExecutor = createShellVerifyExecutor({ debug: false });
     const verifyActiveStateStore = createVerifyActiveStateStore(deps.logger, {
       runtimeStateDir: path.join(deps.serverRoot, 'runtime-state'),
@@ -319,7 +308,7 @@ export class PipelineBuilder {
       deps.executionRecordStore
     );
 
-    // Phase guard verification stage (09b)
+    // Phase guard verification stage
     const phaseGuardVerificationStage = createPhaseGuardVerificationStage(
       () => deps.frameworkManager,
       () =>
@@ -348,34 +337,83 @@ export class PipelineBuilder {
       deps.logger
     );
 
-    return new PromptExecutionPipeline(
+    // Execution order. The array IS the contract — the pipeline runs it front to
+    // back and does no reordering of its own.
+    //
+    // Constraints this order encodes, each of which breaks something if inverted:
+    //   - JudgeSelection before GateEnhancement and FrameworkResolution, so the
+    //     judge phase (%judge) returns a clean resource menu with no framework or
+    //     gate injection, and so the execution phase has clientFrameworkOverride
+    //     set before FrameworkResolution reads it.
+    //   - SessionManagement before InjectionControl, which needs currentStep.
+    //   - InjectionControl before PromptGuidance, which reads the injection
+    //     decisions InjectionControl writes to context.state.injection.
+    //   - ScriptExecution before ScriptAutoExecute, so auto-executed tool output
+    //     is available to the template context that follows.
+    //   - ShellVerification before StepExecution, enabling verify loops where a
+    //     shell command grades the previous response.
+    const stages: readonly PipelineStage[] = [
       requestStage,
-      dependencyStage,
       lifecycleStage,
       identityResolutionStage,
       commandParsingStage,
       inlineGateStage,
       operatorValidationStage,
       planningStage,
-      scriptExecutionStage, // 04b - Script tool execution
-      scriptAutoExecuteStage, // 04c - Script auto-execute
-      frameworkStage,
+      scriptExecutionStage,
+      scriptAutoExecuteStage,
       judgeSelectionStage,
-      promptGuidanceStage,
       gateStage,
+      frameworkStage,
       sessionStage,
       injectionControlStage,
+      promptGuidanceStage,
       responseCaptureStage,
-      shellVerificationStage, // 08b - Shell verification (Ralph Wiggum loops)
+      shellVerificationStage,
       executionStage,
-      phaseGuardVerificationStage, // 09b - Phase guard verification (framework phases)
+      phaseGuardVerificationStage,
       gateReviewStage,
       formattingStage,
       postFormattingStage,
+    ];
+
+    return new PromptExecutionPipeline(stages, {
+      logger: deps.logger,
+      metricsProvider: deps.getAnalyticsService,
+      hookRegistry: deps.hookRegistry,
+      gateEnforcement,
+    });
+  }
+
+  /**
+   * Real framework stage when a manager is wired, otherwise an inert stage that
+   * keeps the position occupied so the order stays stable.
+   */
+  private createFrameworkStage(): PipelineStage {
+    const { deps } = this;
+    if (!deps.frameworkManager) {
+      return {
+        name: 'FrameworkResolution',
+        execute: async () => {
+          deps.logger.debug(
+            '[PipelineBuilder] Framework stage skipped (framework manager unavailable)'
+          );
+        },
+      };
+    }
+
+    return new FrameworkResolutionStage(
+      deps.frameworkManager,
+      deps.getFrameworkStateEnabled,
       deps.logger,
-      deps.getAnalyticsService,
-      deps.hookRegistry
+      deps.lightweightGateSystem.gateLoader
     );
+  }
+
+  private resolveResourceManagerHandler(): ReturnType<
+    NonNullable<NonNullable<PipelineDependencies['mcpToolsManager']>['getResourceManagerHandler']>
+  > | null {
+    return this.deps.mcpToolsManager?.getResourceManagerHandler?.() ?? null;
   }
 
   private createGateService(): GateService {

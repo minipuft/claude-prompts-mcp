@@ -24,7 +24,7 @@ export interface FrameworkInjectionSignals {
  * ## Why a projection and not the decision
  *
  * `InjectionDecisionService` writes the authoritative decision to `context.state.injection` in
- * stage 07b. Gate resolution happens in stages 04 and 05 — measured from the stage list in
+ * InjectionControlStage. Gate resolution happens in ExecutionPlanningStage and 05 — measured from the stage list in
  * `prompt-execution-pipeline.ts`, injection control runs after both, because it needs the
  * `currentStep` that the session stage supplies. So a gate-resolution caller reading
  * `state.injection` would read a value that does not exist yet.

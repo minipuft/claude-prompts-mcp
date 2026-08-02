@@ -3,12 +3,12 @@ import { randomUUID } from 'crypto';
 
 import { trace, SpanStatusCode, context as otelContext } from '@opentelemetry/api';
 
+import { buildRootSpanAttributes, resolveStageType } from './execution-telemetry.js';
 import { ExecutionContext } from '../context/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type {
   MetricsCollector,
-  PipelineStageType,
   PipelineStageStatus,
   MetricStatus,
   CommandExecutionMetric,
@@ -18,50 +18,50 @@ import type {
   HookRegistryPort,
   PipelineHookContext,
 } from '#shared/types/index.js';
+import type { GateEnforcementAuthority } from './decisions/index.js';
+import type { StageMetricSummary } from './execution-telemetry.js';
 import type { PipelineStage } from './stage.js';
 import type { Span } from '@opentelemetry/api';
 
 /**
  * Canonical Prompt Execution Pipeline orchestrator.
  */
+/** Everything the pipeline needs that is not a stage. */
+export interface PipelinePorts {
+  logger: Logger;
+  metricsProvider?: () => MetricsCollector | undefined;
+  hookRegistry?: HookRegistryPort;
+  /**
+   * Assigned onto every ExecutionContext before the first stage runs. Built once
+   * by `PipelineBuilder` — it depends only on construction-time services, so it
+   * has no reason to be rebuilt per request.
+   */
+  gateEnforcement?: GateEnforcementAuthority;
+}
+
 export class PromptExecutionPipeline {
-  private stages: PipelineStage[] = [];
+  private readonly stages: readonly PipelineStage[];
   private readonly logger: Logger;
   private readonly metricsProvider: (() => MetricsCollector | undefined) | undefined;
   private readonly hookRegistry: HookRegistryPort | undefined;
+  private readonly gateEnforcement: GateEnforcementAuthority | undefined;
 
-  constructor(
-    private readonly requestStage: PipelineStage,
-    private readonly dependencyStage: PipelineStage,
-    private readonly lifecycleStage: PipelineStage,
-    private readonly identityResolutionStage: PipelineStage,
-    private readonly parsingStage: PipelineStage,
-    private readonly inlineGateStage: PipelineStage,
-    private readonly operatorValidationStage: PipelineStage,
-    private readonly planningStage: PipelineStage,
-    private readonly scriptExecutionStage: PipelineStage | null, // 04b - Script tool execution
-    private readonly scriptAutoExecuteStage: PipelineStage | null, // 04c - Script auto-execute
-    private readonly frameworkStage: PipelineStage,
-    private readonly judgeSelectionStage: PipelineStage,
-    private readonly promptGuidanceStage: PipelineStage,
-    private readonly gateStage: PipelineStage,
-    private readonly sessionStage: PipelineStage,
-    private readonly frameworkInjectionControlStage: PipelineStage,
-    private readonly responseCaptureStage: PipelineStage,
-    private readonly shellVerificationStage: PipelineStage | null, // 08b - Shell verification (Ralph Wiggum)
-    private readonly executionStage: PipelineStage,
-    private readonly phaseGuardVerificationStage: PipelineStage | null, // 09b - Phase guard verification
-    private readonly gateReviewStage: PipelineStage,
-    private readonly formattingStage: PipelineStage,
-    private readonly postFormattingStage: PipelineStage,
-    logger: Logger,
-    metricsProvider?: () => MetricsCollector | undefined,
-    hookRegistry?: HookRegistryPort
-  ) {
-    this.logger = logger;
-    this.metricsProvider = metricsProvider;
-    this.hookRegistry = hookRegistry;
-    this.registerStages();
+  /**
+   * @param stages Executed in array order. The caller owns the ordering and its
+   *   rationale — see `PipelineBuilder.build()`, which is the only production
+   *   construction site.
+   * @param ports Grouped rather than positional: this list has grown twice, and
+   *   four positional parameters is the lint ceiling.
+   */
+  constructor(stages: readonly PipelineStage[], ports: PipelinePorts) {
+    if (stages.length === 0) {
+      throw new Error('PromptExecutionPipeline requires at least one stage');
+    }
+    this.stages = stages;
+    this.logger = ports.logger;
+    this.metricsProvider = ports.metricsProvider;
+    this.hookRegistry = ports.hookRegistry;
+    this.gateEnforcement = ports.gateEnforcement;
   }
 
   /**
@@ -69,6 +69,9 @@ export class PromptExecutionPipeline {
    */
   async execute(mcpRequest: McpToolRequest): Promise<ToolResponse> {
     const context = new ExecutionContext(mcpRequest, this.logger);
+    if (this.gateEnforcement !== undefined) {
+      context.gateEnforcement = this.gateEnforcement;
+    }
     const rootSpan = this.startRootSpan(context);
 
     // If telemetry active, wrap execution in root span context
@@ -92,9 +95,8 @@ export class PromptExecutionPipeline {
 
     const pipelineStart = Date.now();
     const commandMetricId = this.createCommandMetricId();
-    context.metadata['commandMetricId'] = commandMetricId;
+    context.state.lifecycle.metricId = commandMetricId;
     const stageMetrics: StageMetricSummary[] = [];
-    const skippedStages: string[] = [];
     let previousState = this.captureContextState(context);
     let commandStatus: MetricStatus = 'success';
     let commandError: string | undefined;
@@ -177,7 +179,7 @@ export class PromptExecutionPipeline {
             totalDurationMs: Date.now() - pipelineStart,
             stages: stageMetrics,
           });
-          this.enrichRootSpan(rootSpan, context, stageMetrics, skippedStages, pipelineStart);
+          this.enrichRootSpan(rootSpan, { context, stageMetrics, pipelineStart });
           this.endSpanWithStatus(
             rootSpan,
             commandStatus,
@@ -200,7 +202,7 @@ export class PromptExecutionPipeline {
         totalDurationMs: Date.now() - pipelineStart,
         stages: stageMetrics,
       });
-      this.enrichRootSpan(rootSpan, context, stageMetrics, skippedStages, pipelineStart);
+      this.enrichRootSpan(rootSpan, { context, stageMetrics, pipelineStart });
       this.endSpanWithStatus(
         rootSpan,
         commandStatus,
@@ -215,7 +217,7 @@ export class PromptExecutionPipeline {
         error: message,
         stages: stageMetrics,
       });
-      this.enrichRootSpan(rootSpan, context, stageMetrics, skippedStages, pipelineStart, message);
+      this.enrichRootSpan(rootSpan, { context, stageMetrics, pipelineStart, errorType: message });
       this.endSpanWithStatus(
         rootSpan,
         'error',
@@ -232,60 +234,6 @@ export class PromptExecutionPipeline {
       );
       await this.runLifecycleCleanupHandlers(context);
     }
-  }
-
-  /**
-   * Expose stage lookups for diagnostics and testing.
-   */
-  getStage(name: string): PipelineStage | undefined {
-    return this.stages.find((stage) => stage.name === name);
-  }
-
-  private registerStages(): void {
-    // Stage order is critical for the two-phase judge selection flow:
-    // JudgeSelectionStage must run BEFORE framework/gate stages so that:
-    // 1. Judge phase (%judge) returns clean resource menu without framework/gate injection
-    // 2. Execution phase with selections has clientFrameworkOverride set before FrameworkResolutionStage
-    //
-    // Stage ordering for injection control:
-    // 1. SessionStage MUST run before InjectionControlStage (provides currentStep)
-    // 2. InjectionControlStage MUST run before PromptGuidanceStage (decisions control injection)
-    // 3. PromptGuidanceStage reads context.state.injection to decide what to inject
-    //
-    // Script execution ordering:
-    // ScriptExecutionStage (04b) runs after planning, before auto-execute.
-    // ScriptAutoExecuteStage (04c) runs after script execution, before judge selection.
-    // This allows auto-executed tool outputs to be available in template context.
-    this.stages = [
-      this.requestStage,
-      this.dependencyStage,
-      this.lifecycleStage,
-      this.identityResolutionStage,
-      this.parsingStage,
-      this.inlineGateStage,
-      this.operatorValidationStage,
-      this.planningStage,
-      // 04b: Script execution (optional) - runs after planning
-      ...(this.scriptExecutionStage ? [this.scriptExecutionStage] : []),
-      // 04c: Script auto-execute (optional) - runs after script execution, before judge selection
-      ...(this.scriptAutoExecuteStage ? [this.scriptAutoExecuteStage] : []),
-      this.judgeSelectionStage, // Moved before framework/gate stages for two-phase flow
-      this.gateStage, // Now runs after judge decision
-      this.frameworkStage, // Now uses clientFrameworkOverride from judge flow
-      this.sessionStage, // MOVED: Session management (populates currentStep)
-      this.frameworkInjectionControlStage, // MOVED: Injection decisions (needs currentStep, controls guidance)
-      this.promptGuidanceStage, // NOW AFTER: Uses injection decisions from state.injection
-      this.responseCaptureStage,
-      // 08b: Shell verification (optional) - runs after response capture, before execution
-      // Enables Ralph Wiggum loops where shell commands validate Claude's work
-      ...(this.shellVerificationStage ? [this.shellVerificationStage] : []),
-      this.executionStage,
-      // 09b: Phase guard verification (optional) - structural checks before gate review
-      ...(this.phaseGuardVerificationStage ? [this.phaseGuardVerificationStage] : []),
-      this.gateReviewStage,
-      this.formattingStage,
-      this.postFormattingStage,
-    ];
   }
 
   private logStageMetrics(
@@ -383,7 +331,7 @@ export class PromptExecutionPipeline {
     const metricPayload: PipelineStageMetric = {
       stageId: `${stage.name}:${context.getSessionId() ?? 'sessionless'}:${startTime}`,
       stageName: stage.name,
-      stageType: this.mapStageType(stage.name),
+      stageType: resolveStageType(stage.name),
       toolName: 'prompt_engine',
       startTime,
       endTime: startTime + durationMs,
@@ -423,9 +371,9 @@ export class PromptExecutionPipeline {
 
     const endTime = Date.now();
     const appliedGates = context.executionPlan?.gates ?? [];
-    const temporaryGateIds = Array.isArray(context.metadata['temporaryGateIds'])
-      ? (context.metadata['temporaryGateIds'] as string[])
-      : [];
+    // Typed slot, not `metadata` — every writer moved to `state.gates` and the
+    // metadata key stopped being set, which pinned this count at zero.
+    const temporaryGateIds = context.state.gates.temporaryGateIds;
 
     const metric: CommandExecutionMetric = {
       commandId,
@@ -490,7 +438,7 @@ export class PromptExecutionPipeline {
 
   private buildHookContext(context: ExecutionContext): PipelineHookContext {
     return {
-      executionId: String(context.metadata['commandMetricId'] || 'unknown'),
+      executionId: context.state.lifecycle.metricId ?? 'unknown',
       executionType: context.isChainExecution() ? 'chain' : 'single',
       chainId: context.getSessionId(),
       currentStep: context.sessionContext?.currentStep,
@@ -533,22 +481,27 @@ export class PromptExecutionPipeline {
   // ===== Phase 1.4: OTel Span Instrumentation =====
 
   private startRootSpan(context: ExecutionContext): Span | undefined {
-    // OTel global API: returns real tracer when SDK is registered, no-op tracer otherwise.
-    // No DI needed — TelemetryRuntimeImpl.start() registers the global provider.
-    const tracer = trace.getTracer('prompt_engine');
-    // Check if the tracer is recording (SDK registered) by probing a span
-    const probeSpan = tracer.startSpan('__probe__');
-    const isRecording = probeSpan.isRecording();
-    probeSpan.end();
-    if (!isRecording) return undefined;
-
-    return tracer.startSpan('prompt_engine.request', {
+    // OTel global API: returns a real tracer when the SDK is registered, a no-op
+    // tracer otherwise. No DI needed — TelemetryRuntimeImpl.start() registers the
+    // global provider.
+    //
+    // The no-op tracer hands back a NonRecordingSpan that is never exported, so
+    // starting the real span and asking IT whether it records answers "is
+    // telemetry live?" without emitting anything. Sampling out the root also
+    // reports false here, which correctly suppresses the child stage spans.
+    const span = trace.getTracer('prompt_engine').startSpan('prompt_engine.request', {
       attributes: {
-        'cpm.execution.id': (context.metadata['commandMetricId'] as string) ?? 'unknown',
+        'cpm.execution.id': context.state.lifecycle.metricId ?? 'unknown',
         'cpm.command.type': context.mcpRequest.command ?? 'response-only',
         'cpm.execution.mode': context.isChainExecution() ? 'chain' : 'single',
       },
     });
+
+    if (!span.isRecording()) {
+      span.end();
+      return undefined;
+    }
+    return span;
   }
 
   private startStageSpan(stageName: string, stageIndex: number): Span | undefined {
@@ -568,59 +521,21 @@ export class PromptExecutionPipeline {
 
   private enrichRootSpan(
     span: Span | undefined,
-    context: ExecutionContext,
-    stageMetrics: StageMetricSummary[],
-    skippedStages: string[],
-    pipelineStart: number,
-    errorType?: string
+    execution: {
+      context: ExecutionContext;
+      stageMetrics: StageMetricSummary[];
+      pipelineStart: number;
+      errorType?: string;
+    }
   ): void {
-    if (!span?.isRecording()) return;
+    if (span?.isRecording() !== true) return;
 
-    // Determine early exit from whether all registered stages actually ran
-    const hadEarlyExit = stageMetrics.length < this.stages.length;
-
-    // Find slowest stage from timing data already collected
-    const slowest = stageMetrics.reduce((max, s) => (s.durationMs > max.durationMs ? s : max), {
-      stage: 'none',
-      durationMs: 0,
-    } as Pick<StageMetricSummary, 'stage' | 'durationMs'>);
-
-    // Aggregate gate state from pipeline internal state
-    const gateState = context.state.gates;
-    const allGateIds = [
-      ...gateState.temporaryGateIds,
-      ...gateState.frameworkGateIds,
-      ...gateState.registeredInlineGateIds,
-    ];
-    const failedCount = gateState.blockedGateIds?.length ?? 0;
-
-    span.setAttributes({
-      // Performance summary
-      'cpm.duration.total_ms': Date.now() - pipelineStart,
-      'cpm.stages.executed_count': stageMetrics.length,
-      'cpm.stages.skipped': skippedStages.join(','),
-      'cpm.stages.slowest': slowest.stage,
-      'cpm.stages.slowest_ms': slowest.durationMs,
-      'cpm.had_early_exit': hadEarlyExit,
-      // Gate summary
-      'cpm.gates.names': allGateIds.join(','),
-      'cpm.gates.passed_count': allGateIds.length - failedCount,
-      'cpm.gates.failed_count': failedCount,
-      'cpm.gates.blocked': gateState.responseBlocked ?? false,
-      'cpm.gates.retry_exhausted': gateState.retryLimitExceeded ?? false,
-      'cpm.gates.enforcement_mode': gateState.enforcementMode ?? 'standard',
-      // Chain context
-      'cpm.chain.is_chain': context.isChainExecution(),
-      'cpm.chain.step_index': context.sessionContext?.currentStep ?? 0,
-      'cpm.chain.id': context.sessionContext?.chainId ?? '',
-      // Framework
-      'cpm.framework.id': context.frameworkContext?.selectedFramework?.id ?? '',
-      'cpm.framework.enabled': Boolean(context.frameworkContext),
-      // Scope
-      'cpm.scope.source': context.state.scope.source ?? 'default',
-      // Error categorization
-      ...(errorType ? { 'cpm.error.type': errorType } : {}),
-    });
+    span.setAttributes(
+      buildRootSpanAttributes({
+        ...execution,
+        registeredStageNames: this.stages.map((stage) => stage.name),
+      })
+    );
   }
 
   private endSpanWithStatus(
@@ -637,36 +552,6 @@ export class PromptExecutionPipeline {
     }
     span.end();
   }
-
-  private mapStageType(stageName: string): PipelineStageType {
-    switch (stageName) {
-      case 'CommandParsing':
-        return 'parsing';
-      case 'ExecutionPlanning':
-        return 'planning';
-      case 'GateEnhancement':
-        return 'gate_enhancement';
-      case 'FrameworkResolution':
-        return 'framework';
-      case 'SessionManagement':
-        return 'session';
-      case 'StepExecution':
-        return 'execution';
-      case 'ResponseFormatting':
-        return 'post_processing';
-      default:
-        return 'other';
-    }
-  }
-}
-
-interface StageMetricSummary {
-  stage: string;
-  durationMs: number;
-  heapUsed: number;
-  rss: number;
-  heapUsedDelta: number;
-  rssDelta: number;
 }
 
 interface ContextStateSnapshot {

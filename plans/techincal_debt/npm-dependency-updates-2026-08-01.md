@@ -481,12 +481,51 @@ file changed by exactly two key renames, counts preserved; `update-baseline` was
 
 | Predicate                             | Check                                                    | Currently                                                                      |
 | ------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| dependency-cruiser cruises >0 modules | `npm run validate:arch` prints a non-zero module count   | **0 modules, exits 0** — false green                                           |
+| dependency-cruiser cruises >0 modules | `npm run validate:arch` prints a non-zero module count   | **0 modules, exits 0** — false green. Now mechanically enforced, see below     |
 | ts-jest admits TS 7                   | `npm view ts-jest peerDependencies.typescript`           | `>=4.3 <7`; hard runtime guard, all suites fail to run                         |
 | typescript-eslint admits TS 7         | `npm view typescript-eslint peerDependencies.typescript` | `<6.1.0`; explicit `versionMajor >= 7` throw, upstream #10940 targets **≥7.1** |
 
 All three must pass. Note the ts-jest error message suggests installing `@typescript/native` —
 **that package does not exist on npm** (404), so the documented escape hatch is partly bogus.
+
+### Why all three blockers are one blocker (measured 2026-08-02)
+
+TypeScript 7 is the Go-native compiler and it **removed the JS compiler API**:
+
+|                         | TS 6.0.3     | TS 7.0.2                               |
+| ----------------------- | ------------ | -------------------------------------- |
+| `require('typescript')` | 2248 symbols | **2** (`version`, `versionMajorMinor`) |
+| `ts.createProgram`      | function     | `undefined`                            |
+| `lib/`                  | 24 MB        | 24 KB (`tsc.js`, `getExePath.js`)      |
+
+The API moved behind `./unstable/sync`, `./unstable/ast`, … — upstream's own naming. So ts-jest,
+typescript-eslint and dependency-cruiser are not three independent laggards; each has to be
+rewritten against an API its author labels unstable. Realistic unblock is TS 7.1+.
+
+### The deferral is now enforced, not remembered
+
+`scripts/validate-arch.js` wraps dependency-cruiser and asserts it cruised at least 400 modules
+(today: 438). Verified end-to-end, not just by self-test: with `typescript@7.0.2` actually
+installed, `validate:arch` exits **1** and `validate:all` exits **1**; restored to 6.0.3 both
+return 0. The floor only trips on a drop, so `src/` growth needs no maintenance.
+
+`.github/renovate.json5` carries the three predicates as `prBodyNotes` on the TypeScript rule, so
+they appear in the PR body itself. Deliberately **not** an `allowedVersions` pin: both former
+holds were retired by finishing their migrations rather than relaxing a rule, and a pin would
+also block the TS 6.x patches we want.
+
+### Also found while measuring — not TS 7 related
+
+`tsconfig.json:18` sets `isolatedModules: true`, and ts-jest branches on exactly that
+(`ts-compiler.js:78`) into `transpileModule`, never building a language service. **ts-jest
+type-checks nothing here** — a `const n: number = 'a string'` in a test file passes. Meanwhile
+`typecheck:tests` inherits `rootDir: "./src"` while including `tests/**/*`, so it dies on TS6059,
+and it is gated nowhere. Fixing `rootDir` reveals **974 errors (869 in `tests/`, 0 in `src/`)`.
+
+Consequence for the swap: `@swc/jest` was measured at full parity (146/146 suites, 1732/1732
+tests, ~34.5s vs ~36.2s) and depends on no `typescript` package at all — but it would replace a
+transpiler with a transpiler, so it does not unblock TS 7 and loses no type safety, because there
+is none to lose. Deferred; the test-typecheck gap is the larger and more valuable item.
 
 ### Risks
 

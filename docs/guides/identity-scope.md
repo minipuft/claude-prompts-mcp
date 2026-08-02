@@ -130,12 +130,41 @@ CLI launch flags (`--workspace-id`, `--organization-id`, `--client`) override `i
 
 The server resolves identity through this hierarchy (first match wins):
 
-| Source                                | Transport | When Used                   |
-| ------------------------------------- | --------- | --------------------------- |
-| OAuth token claims (`authInfo.extra`) | HTTP      | Gateway forwards JWT claims |
-| Request headers (`x-workspace-id`)    | HTTP      | Gateway injects headers     |
-| Launch defaults (`--workspace-id`)    | Both      | CLI flags or config         |
-| Default (`"default"`)                 | Both      | No identity provided        |
+| Source                                             | Transport | When Used                       |
+| -------------------------------------------------- | --------- | ------------------------------- |
+| OAuth token claims (`authInfo.extra`)              | HTTP      | Gateway forwards JWT claims     |
+| Request headers (`x-workspace-id`)                 | HTTP      | Gateway injects headers         |
+| Launch defaults (`--workspace-id`)                 | Both      | CLI flags or config             |
+| Derived project scope (`CLAUDE_PROJECT_DIR` → cwd) | Both      | Nothing explicit was configured |
+| Default (`"default"`)                              | Both      | No directory yields a basename  |
+
+### Derived Project Scope
+
+When neither a CLI flag nor `identity.launchDefaults.workspaceId` supplies a workspace, the server
+derives one from its launch environment: `CLAUDE_PROJECT_DIR` if set, otherwise the working
+directory. The value is reduced to a **basename** — `/home/dev/spicetify-theme` becomes
+`spicetify-theme` — so a full home-directory path is not written into `kv_state.workspace_id` or
+printed in logs.
+
+Explicit configuration always outranks derivation, so setting `--workspace-id` cannot be
+overwritten by the directory the server happens to start in.
+
+The resolved value and its source are reported once at startup:
+
+```
+[INFO] Project scope id: spicetify-theme (source: CLAUDE_PROJECT_DIR)
+[INFO] Project scope id: claude-prompts-mcp (source: cwd)
+[INFO] Project scope id: workspace-a (source: explicit configuration)
+```
+
+**Check this line before trusting isolation.** If two projects report the same scope id, they share
+one row and a framework switch in either is visible to both. That happens when the launcher gives
+every server the same working directory and does not set `CLAUDE_PROJECT_DIR` — the fix is to pass
+`--workspace-id` explicitly in the MCP server registration.
+
+Scopes that have never been written adopt the configured `frameworks.defaultFramework`, not
+whatever another workspace is currently using. One exception covers upgrades: the first scoped load
+adopts a pre-scoping `default` row if one exists, so an existing install does not appear to reset.
 
 ### Client Profile Resolution Priority (Handoff Routing)
 
@@ -188,7 +217,7 @@ In practice:
    npm run test:integration -- --testPathPattern=tenant
    ```
 
-   Expected: 14 tests passing (workspace continuity + tenant isolation).
+   Expected: 16 tests passing (workspace continuity + tenant isolation).
 
 ## What Gets Isolated
 

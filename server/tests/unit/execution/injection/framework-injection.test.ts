@@ -81,7 +81,7 @@ describe('isFrameworkInjected', () => {
 
   describe('direction of error', () => {
     it('defaults to injected, so gates are withheld only on positive suppression', () => {
-      // The tiers this projection cannot see before stage 07b runs — runtime overrides,
+      // The tiers this projection cannot see before InjectionControlStage runs — runtime overrides,
       // chain/category/global enabled flags, frequency — can only make the real answer more
       // restrictive. Defaulting to `true` means no gate is ever dropped on a guess.
       expect(isFrameworkInjected({})).toBe(true);

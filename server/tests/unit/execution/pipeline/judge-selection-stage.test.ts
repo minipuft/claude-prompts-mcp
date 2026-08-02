@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { JudgeSelectionStage } from '../../../../src/engine/execution/pipeline/stages/06a-judge-selection-stage.js';
+import { JudgeSelectionStage } from '../../../../src/engine/execution/pipeline/stages/10-judge-selection-stage.js';
 
 import type { ConfigManager } from '../../../../src/infra/config/index.js';
 import type { JudgeMenuFormatter } from '../../../../src/engine/gates/judge/judge-menu-formatter.js';

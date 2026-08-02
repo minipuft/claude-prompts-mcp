@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from '@jest/globals';
 
 import { parseServerCliArgs } from '../../../src/runtime/cli.js';
-import { resolveRuntimeLaunchOptions } from '../../../src/runtime/options.js';
+import { deriveProjectScopeId, resolveRuntimeLaunchOptions } from '../../../src/runtime/options.js';
 
 describe('runtime identity launch options', () => {
   const originalWorkspaceId = process.env['MCP_WORKSPACE_ID'];
@@ -109,5 +109,52 @@ describe('runtime identity launch options', () => {
     );
 
     expect(options.identityDefaults).toBeUndefined();
+  });
+});
+
+describe('deriveProjectScopeId', () => {
+  test('prefers CLAUDE_PROJECT_DIR over the working directory', () => {
+    const derived = deriveProjectScopeId(
+      { CLAUDE_PROJECT_DIR: '/home/dev/spicetify-theme' },
+      '/home/dev/some-other-place'
+    );
+
+    expect(derived).toEqual({ value: 'spicetify-theme', source: 'CLAUDE_PROJECT_DIR' });
+  });
+
+  test('falls back to the working directory when CLAUDE_PROJECT_DIR is absent', () => {
+    const derived = deriveProjectScopeId({}, '/home/dev/claude-prompts-mcp');
+
+    expect(derived).toEqual({ value: 'claude-prompts-mcp', source: 'cwd' });
+  });
+
+  test('reduces a path to its basename so raw paths stay out of state and logs', () => {
+    const derived = deriveProjectScopeId({ CLAUDE_PROJECT_DIR: '/a/deeply/nested/project' }, '/x');
+
+    expect(derived?.value).toBe('project');
+  });
+
+  test('treats trailing separators as equivalent to none', () => {
+    const withSlash = deriveProjectScopeId({ CLAUDE_PROJECT_DIR: '/home/dev/theme/' }, '/x');
+    const withoutSlash = deriveProjectScopeId({ CLAUDE_PROJECT_DIR: '/home/dev/theme' }, '/x');
+
+    expect(withSlash).toEqual(withoutSlash);
+  });
+
+  test('ignores a blank CLAUDE_PROJECT_DIR rather than deriving an empty id', () => {
+    const derived = deriveProjectScopeId({ CLAUDE_PROJECT_DIR: '   ' }, '/home/dev/fallback');
+
+    expect(derived).toEqual({ value: 'fallback', source: 'cwd' });
+  });
+
+  test('returns undefined when no directory yields a basename', () => {
+    expect(deriveProjectScopeId({}, '/')).toBeUndefined();
+  });
+
+  test('distinguishes two different project directories', () => {
+    const a = deriveProjectScopeId({ CLAUDE_PROJECT_DIR: '/home/dev/claude-prompts-mcp' }, '/x');
+    const b = deriveProjectScopeId({ CLAUDE_PROJECT_DIR: '/home/dev/spicetify-theme' }, '/x');
+
+    expect(a?.value).not.toBe(b?.value);
   });
 });

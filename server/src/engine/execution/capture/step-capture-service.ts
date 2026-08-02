@@ -23,7 +23,7 @@ export interface StepCaptureInput {
  * in downstream steps. Handles both placeholder capture (no user response)
  * and real response capture (user provided content).
  *
- * Extracted from StepResponseCaptureStage (pipeline stage 08).
+ * Extracted from StepResponseCaptureStage.
  */
 export class StepCaptureService {
   constructor(

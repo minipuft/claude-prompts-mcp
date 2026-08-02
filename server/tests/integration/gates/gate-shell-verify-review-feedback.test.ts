@@ -442,7 +442,7 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
       const results = await runGateShellVerifications(['test-gate'], provider);
       const section = formatGateShellVerifySection(results);
 
-      // Simulate what Stage 10 does
+      // Simulate what GateReviewStage does
       const combined = section !== '' ? `${reviewContent}\n\n${section}` : reviewContent;
 
       // Review content preserved

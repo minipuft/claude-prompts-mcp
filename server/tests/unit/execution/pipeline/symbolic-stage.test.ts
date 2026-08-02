@@ -1,9 +1,9 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { InlineGateExtractionStage } from '../../../../src/engine/execution/pipeline/stages/02-inline-gate-stage.js';
-import { OperatorValidationStage } from '../../../../src/engine/execution/pipeline/stages/03-operator-validation-stage.js';
-import { SessionManagementStage } from '../../../../src/engine/execution/pipeline/stages/07-session-stage.js';
+import { InlineGateExtractionStage } from '../../../../src/engine/execution/pipeline/stages/05-inline-gate-stage.js';
+import { OperatorValidationStage } from '../../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
+import { SessionManagementStage } from '../../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 import { FrameworkValidator } from '../../../../src/engine/frameworks/framework-validator.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
 
@@ -260,9 +260,9 @@ describe('Symbolic pipeline coverage', () => {
     await operatorStage.execute(context);
 
     expect(context.parsedCommand?.executionPlan?.frameworkOverride).toBe('SCAMPER');
-    expect(context.metadata.operatorValidation).toMatchObject({
-      normalizedFrameworkOperators: 1,
-    });
+    expect(context.diagnostics.getByStage('OperatorValidation')).toMatchObject([
+      { level: 'debug', context: { normalizedFrameworkOperators: 1 } },
+    ]);
   });
 
   test('session stage stores symbolic blueprint with inline gates', async () => {

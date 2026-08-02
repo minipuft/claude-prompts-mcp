@@ -82,7 +82,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   // ── Private tracking ────────────────────────────────────────────────
   private lastMemoryUsage: number = 0;
 
-  constructor(logger: Logger, _mcpServer: any, onRestart?: (reason: string) => Promise<void>) {
+  constructor(logger: Logger, onRestart?: (reason: string) => Promise<void>) {
     this.logger = logger;
     if (onRestart) {
       this.onRestart = onRestart;
@@ -381,8 +381,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
 export function createConsolidatedSystemControl(
   logger: Logger,
-  mcpServer: any,
   onRestart?: (reason: string) => Promise<void>
 ): ConsolidatedSystemControl {
-  return new ConsolidatedSystemControl(logger, mcpServer, onRestart);
+  return new ConsolidatedSystemControl(logger, onRestart);
 }

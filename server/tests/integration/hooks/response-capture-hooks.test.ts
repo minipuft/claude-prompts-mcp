@@ -14,12 +14,17 @@ import {
   type McpNotificationServer,
 } from '../../../src/infra/observability/notifications/index.js';
 import { noopLogger } from '../../../src/infra/logging/index.js';
-import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/08-response-capture-stage.js';
+import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/index.js';
 import type { ChainSessionService } from '../../../src/shared/types/chain-session.js';
-import type { McpToolRequest } from '../../../src/shared/types/index.js';
+import type {
+  GateFailedNotification,
+  HookRegistryPort,
+  McpNotificationEmitterPort,
+  McpToolRequest,
+} from '../../../src/shared/types/index.js';
 
 describe('ResponseCaptureStage Hook Emission', () => {
   let hookRegistry: HookRegistry;
@@ -56,7 +61,14 @@ describe('ResponseCaptureStage Hook Emission', () => {
     // a mocked processor would make these assertions vacuous. The session store stays mocked —
     // it is the I/O boundary.
     stage = new StepResponseCaptureStage(
-      new GateVerdictProcessor(mockChainSessionStore, noopLogger),
+      // Hooks and notifications reach the processor by constructor injection —
+      // they used to be smuggled in per-test via context.metadata.
+      new GateVerdictProcessor(
+        mockChainSessionStore,
+        noopLogger,
+        hookRegistry,
+        notificationEmitter
+      ),
       new StepCaptureService(mockChainSessionStore, noopLogger),
       mockChainSessionStore,
       noopLogger
@@ -97,13 +109,6 @@ describe('ResponseCaptureStage Hook Emission', () => {
       sessionId,
       isChainExecution: true,
       currentStep: 1,
-    };
-
-    // Inject hook registry into context metadata
-    context.metadata['pipelineDependencies'] = {
-      hookRegistry,
-      notificationEmitter,
-      frameworkEnabled: false,
     };
 
     // Execute stage
@@ -147,12 +152,6 @@ describe('ResponseCaptureStage Hook Emission', () => {
       isChainExecution: true,
       currentStep: 1,
     };
-    context.metadata['pipelineDependencies'] = {
-      hookRegistry,
-      notificationEmitter,
-      frameworkEnabled: false,
-    };
-
     // Track notification calls
     const failedNotifications: unknown[] = [];
     mockServer.notification.mockImplementation((params) => {
@@ -203,15 +202,113 @@ describe('ResponseCaptureStage Hook Emission', () => {
       isChainExecution: true,
       currentStep: 1,
     };
-    context.metadata['pipelineDependencies'] = {
-      hookRegistry,
-      notificationEmitter,
-      frameworkEnabled: false,
-    };
-
     await stage.execute(context);
 
     // Verify retry exhausted state was set
     expect(context.state.gates.retryLimitExceeded).toBe(true);
+  });
+});
+
+describe('gate events reach a port-only collaborator', () => {
+  // GateVerdictProcessor receives the registry as HookRegistryPort and the emitter as
+  // McpNotificationEmitterPort. Those ports once declared only the per-stage hooks, so
+  // the processor cast them back to the concrete classes to call the gate methods —
+  // a cast TypeScript permits between object types with no members in common. Anything
+  // implementing the port but not extending the concrete class therefore lost every
+  // gate event to a caught TypeError, reported only as a logged warning.
+  //
+  // These stubs are typed as the ports and are deliberately NOT instances of
+  // HookRegistry / McpNotificationEmitter, so they only compile and only receive
+  // events while the ports themselves declare the gate surface.
+  const createPortStubs = (): {
+    hooks: HookRegistryPort;
+    notifications: McpNotificationEmitterPort;
+    gateFailures: Array<{ gateId: string; reason: string }>;
+    notified: GateFailedNotification[];
+  } => {
+    const gateFailures: Array<{ gateId: string; reason: string }> = [];
+    const notified: GateFailedNotification[] = [];
+
+    const hooks: HookRegistryPort = {
+      getCounts: () => ({ pipeline: 0, gate: 0, chain: 0 }),
+      clearAll: () => {},
+      emitBeforeStage: async () => {},
+      emitAfterStage: async () => {},
+      emitStageError: async () => {},
+      emitGateEvaluated: async () => {},
+      emitGateFailed: async (gate, reason) => {
+        gateFailures.push({ gateId: gate.id, reason });
+      },
+      emitRetryExhausted: async () => {},
+      emitResponseBlocked: async () => {},
+    };
+
+    const notifications: McpNotificationEmitterPort = {
+      canSend: () => true,
+      setServer: () => {},
+      emitGateFailed: (notification) => {
+        notified.push(notification);
+      },
+      emitResponseBlocked: () => {},
+      emitRetryExhausted: () => {},
+    };
+
+    return { hooks, notifications, gateFailures, notified };
+  };
+
+  test('a FAIL verdict emits to a stub that implements only the ports', async () => {
+    const { hooks, notifications, gateFailures, notified } = createPortStubs();
+
+    const sessionId = 'port-only-session';
+    const sessionStore = {
+      getSession: jest.fn().mockReturnValue({
+        sessionId,
+        chainId: 'test-chain',
+        state: { currentStep: 1, totalSteps: 2 },
+        pendingGateReview: { gateIds: ['code-quality'], attemptCount: 1, maxAttempts: 2 },
+      }),
+      getPendingGateReview: jest.fn().mockReturnValue({
+        combinedPrompt: 'Review against code-quality.',
+        gateIds: ['code-quality'],
+        prompts: [],
+        createdAt: 1_700_000_000_000,
+        attemptCount: 2,
+        maxAttempts: 2,
+      }),
+      isRetryLimitExceeded: jest.fn().mockReturnValue(false),
+      // `jest.fn(impl)` infers its signature; the bare `jest.fn().mockResolvedValue(x)`
+      // form used above resolves to `never` under the tests tsconfig.
+      recordGateReviewOutcome: jest.fn(async () => 'pending'),
+      advanceStep: jest.fn(async () => 2),
+      clearPendingGateReview: jest.fn(),
+      resetRetryCount: jest.fn(),
+      updateSessionState: jest.fn(),
+      completeStep: jest.fn(),
+      getStepState: jest.fn(),
+      getChainContext: jest.fn(),
+    } as unknown as jest.Mocked<ChainSessionService>;
+
+    const stage = new StepResponseCaptureStage(
+      new GateVerdictProcessor(sessionStore, noopLogger, hooks, notifications),
+      new StepCaptureService(sessionStore, noopLogger),
+      sessionStore,
+      noopLogger
+    );
+
+    const context = new ExecutionContext(
+      {
+        chain_id: sessionId,
+        gate_verdict: 'GATE_REVIEW: FAIL - Missing test coverage',
+      } as McpToolRequest,
+      noopLogger
+    );
+    context.sessionContext = { sessionId, isChainExecution: true, currentStep: 1 };
+
+    await stage.execute(context);
+
+    expect(gateFailures).toEqual([{ gateId: 'code-quality', reason: 'Missing test coverage' }]);
+    expect(notified).toEqual([
+      { gateId: 'code-quality', reason: 'Missing test coverage', chainId: sessionId },
+    ]);
   });
 });

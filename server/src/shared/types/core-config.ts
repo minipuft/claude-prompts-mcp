@@ -146,6 +146,12 @@ export interface FrameworkInjectionConfig {
 export interface ResolvedFrameworkConfig {
   /** Enable dynamic tool descriptions per framework */
   dynamicToolDescriptions: boolean;
+  /**
+   * Framework a scope falls back to when it has no persisted state row.
+   * Set per project to pin a repo to one framework. This is the floor: a runtime
+   * `system_control framework:switch` overrides it for that scope and persists.
+   */
+  defaultFramework: string;
   /** Injection control for framework content */
   injection?: FrameworkInjectionConfig;
 }
@@ -229,6 +235,8 @@ export interface FrameworkSettings {
   enabled?: boolean;
   /** Adapt MCP tool descriptions based on active framework */
   dynamicToolDescriptions?: boolean;
+  /** Framework a scope falls back to with no persisted state (default: 'CAGEERF') */
+  defaultFramework?: string;
   /** Inject framework guidance every N chain steps (default: 2) */
   systemPromptFrequency?: number;
   /** Where to inject system prompt: 'steps', 'gates', or 'both' (default: 'steps') */

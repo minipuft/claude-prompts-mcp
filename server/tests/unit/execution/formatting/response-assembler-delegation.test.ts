@@ -26,7 +26,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
     };
     context.executionResults = {
       content: 'Step 1 rendered content',
-      metadata: {}, // No nextStepDelegated from Stage 09 (pendingReview blocked it)
+      metadata: {}, // No nextStepDelegated from StepExecutionStage (pendingReview blocked it)
       generatedAt: Date.now(),
     };
 
@@ -40,7 +40,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
     expect(result).toContain('Handoff via Task tool');
   });
 
-  test('injects delegation CTA from Stage 09 metadata when available', () => {
+  test('injects delegation CTA from StepExecutionStage metadata when available', () => {
     const context = new ExecutionContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-2',
@@ -264,7 +264,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
         { stepNumber: 2, promptId: 'delegated-step', args: {}, delegated: true },
       ],
     };
-    // Gate instructions from Stage 05
+    // Gate instructions from GateEnhancementStage
     context.gateInstructions = '### Quality Gates\nEnsure code quality meets criteria.';
     context.executionResults = {
       content: 'Step 1 with gates',

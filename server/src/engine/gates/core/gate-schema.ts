@@ -20,7 +20,7 @@
  * |----------------------------|-----------------------------------------------|-----------------------------------------------------------------------|
  * | `inline_guidance`          | **None** — rendered as agent-facing checklist | Soft criteria the agent self-assesses (style, completeness reminders) |
  * | `llm_self_check`           | **Reserved** — runner not yet implemented     | (Not usable today)                                                    |
- * | `framework_compliance`     | **None** — auto-passed by GateValidator       | Declares intent only. Stage 09b enforces framework phase guards      |
+ * | `framework_compliance`     | **None** — auto-passed by GateValidator       | Declares intent only. PhaseGuardVerificationStage enforces framework phase guards      |
  * |                            | (see gate-validator.ts default branch)        | from `phases.yaml`, independently of this criteria type              |
  * | `shell_verify`             | **Hard** — runs shell command, exit 0 = pass  | Ground-truth checks: tests passing, files existing, content claims    |
  * |                            | (supports `shell_stdin_source: agent_response`) | matching reality (file paths, line counts, symbol locations)        |
@@ -62,7 +62,7 @@ export const GatePassCriteriaSchema = z
      *   intentionally skipped by GateValidator — see gate-validator.ts).
      * - `llm_self_check`: type declared, runner not yet implemented. Reserved.
      * - `framework_compliance`: declarative only. GateValidator has no branch
-     *   for it, so it falls through to the auto-pass default. Stage 09b does
+     *   for it, so it falls through to the auto-pass default. PhaseGuardVerificationStage does
      *   check section presence + min_length + forbidden_terms, but it triggers
      *   on the active framework's `phases.yaml` guards — not on this value.
      * - `shell_verify`: runs `shell_command`, exit 0 = pass. Hard enforcement.

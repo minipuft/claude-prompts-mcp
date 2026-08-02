@@ -10,6 +10,16 @@
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
 5. **Validation Discipline** -- `npm run typecheck && npm run lint:ratchet && npm run test:ci` minimum. Add `validate:arch` for module boundaries.
 
+## Node.js Support Boundaries
+
+| Surface | Supported Node.js | Enforcement |
+|---------|-------------------|-------------|
+| MCP server and desktop extension | >=22.13.0 | `server/package.json`, `manifest.json`, CI on 22.13.0 and 24 |
+| Standalone CPM CLI | >=18.18.0 | `cli/package.json` and CLI runtime validation |
+| Local development and publishing | 24 | `.node-version` and publish workflows |
+
+The server floor is where `node:sqlite` is available without an experimental flag. The standalone CLI remains a separate, self-contained compatibility surface.
+
 ## Validation Gates (one contract, two subsets)
 
 **CI is the contract; every other gate is a documented strict subset of it.**
@@ -60,9 +70,10 @@ Read the relevant doc before editing. Update docs when behavior changes.
 |---------|---------|
 | `npm run build` | esbuild bundle -> `dist/index.js` |
 | `npm run verify:mcp` | Spawn a server from `dist/` and prove all 3 MCP tools answer — **use instead of restarting Claude Code to check a build**. Refuses to run against a stale `dist/` |
-| `npm run typecheck` | Strict TS type validation |
+| `npm run typecheck` | Strict TS type validation — **`src/` only**, `tsconfig.json` excludes `tests/` |
 | `npm test` | Full Jest suite |
 | `npm run lint:ratchet` | Fail if ESLint violations increased |
+| `npm run typecheck:tests:ratchet` | Fail if `tests/` type errors increased. Covers the call sites `typecheck` cannot see — a constructor change can otherwise land green against a test file that no longer compiles |
 | `npm run generate:contracts` | Regenerate MCP schemas from contracts |
 | `npm run validate:all` | Full validation suite |
 | `npm run validate:arch` | Dependency Cruiser architecture rules |
@@ -121,6 +132,8 @@ system_control → SystemControl Router → 10 action handlers
 | `resource_index` | Resource discovery cache |
 
 State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. `SCHEMA_VERSION` bump triggers drop-and-recreate; no migration code since `state.db` is ephemeral.
+
+**Rows are workspace-scoped, and `state.db` is shared across projects.** One file serves every project, so isolation comes from `workspace_id`, not from separate databases. A scope with no row falls back to `frameworks.defaultFramework`; the scope id itself is derived from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing `kv_state` without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
 
 ## Public API Contract (what a major version protects)
 

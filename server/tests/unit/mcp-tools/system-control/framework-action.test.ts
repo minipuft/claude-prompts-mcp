@@ -27,21 +27,22 @@ describe('System Control framework action scope propagation', () => {
       listFrameworks: jest.fn().mockReturnValue([]),
     };
 
-    const systemControl = createConsolidatedSystemControl(
-      createLogger(),
-      { sendNotification: jest.fn() } as any,
-      () => Promise.resolve()
-    );
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
     systemControl.setFrameworkManager(frameworkManager as any);
 
+    // Identity is read from token claims and request headers — a bare
+    // { organizationId, workspaceId } object carries no identity and resolves to no scope.
     await systemControl.handleAction(
       { action: 'framework', operation: 'switch', framework: 'react' },
-      { organizationId: 'org-a', workspaceId: 'workspace-a' }
+      { requestInfo: { headers: { 'x-workspace-id': 'workspace-a' } } }
     );
 
+    // The scope argument is the point: without it every workspace's switch landed on
+    // one shared row. Asserted explicitly so a regression cannot pass silently.
     expect(frameworkManager.switchFramework).toHaveBeenCalledWith(
       'react',
-      expect.stringContaining('react')
+      expect.stringContaining('react'),
+      { continuityScopeId: 'workspace-a' }
     );
   });
 
@@ -68,11 +69,7 @@ describe('System Control framework action scope propagation', () => {
       listFrameworks: jest.fn().mockReturnValue([]),
     };
 
-    const systemControl = createConsolidatedSystemControl(
-      createLogger(),
-      { sendNotification: jest.fn() } as any,
-      () => Promise.resolve()
-    );
+    const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
     systemControl.setFrameworkManager(frameworkManager as any);
     systemControl.setFrameworkStateStore(frameworkStateStore as any);
 

@@ -21,10 +21,12 @@ import {
   FrameworkGuide,
 } from './types/index.js';
 
+import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { ConvertedPrompt } from '../execution/types.js';
 
 import { Logger } from '#infra/logging/index.js';
 import { BaseResourceHandler } from '#shared/core/resource-manager/index.js';
+import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 
 /**
  * Framework switch request (matches FrameworkStateStore interface)
@@ -40,7 +42,7 @@ interface FrameworkSwitchRequest {
 interface FrameworkStateAccessor {
   isFrameworkSystemEnabled(): boolean;
   getActiveFramework(): { id: string; type: string } | null | undefined;
-  switchFramework(request: FrameworkSwitchRequest): Promise<boolean>;
+  switchFramework(request: FrameworkSwitchRequest, scope?: StateStoreOptions): Promise<boolean>;
 }
 
 /**
@@ -102,7 +104,7 @@ export class FrameworkManager extends BaseResourceHandler<
 > {
   private frameworks: Map<string, FrameworkDefinition> = new Map();
   private frameworkRegistry: FrameworkRegistry | null = null;
-  private defaultFramework: string = 'CAGEERF';
+  private defaultFramework: string = DEFAULT_FRAMEWORK_ID;
   private frameworkStateStore?: FrameworkStateAccessor;
 
   constructor(logger: Logger, config: FrameworkManagerConfig = {}) {
@@ -134,7 +136,7 @@ export class FrameworkManager extends BaseResourceHandler<
 
   protected applyDefaultConfig(config: FrameworkManagerConfig): FrameworkManagerConfig {
     return {
-      defaultFramework: config.defaultFramework ?? 'CAGEERF',
+      defaultFramework: config.defaultFramework ?? DEFAULT_FRAMEWORK_ID,
       debug: config.debug ?? false,
     };
   }
@@ -264,9 +266,19 @@ export class FrameworkManager extends BaseResourceHandler<
    * @param reason - Optional reason for the switch
    * @returns Result object with success status, framework definition, or error message
    */
+  /**
+   * Switch the active framework.
+   *
+   * @param frameworkId - Target framework; normalized to lowercase at this boundary.
+   * @param reason - Audit-friendly explanation recorded with the switch.
+   * @param scope - Continuity scope to persist under. Omit to use the store's process
+   *   default (the project this server serves); supply it to honour a caller's explicit
+   *   scope, which is what keeps concurrent workspaces from overwriting each other.
+   */
   async switchFramework(
     frameworkId: string,
-    reason?: string
+    reason?: string,
+    scope?: StateStoreOptions
   ): Promise<{ success: boolean; framework?: FrameworkDefinition; error?: string }> {
     this.ensureInitialized();
 
@@ -295,10 +307,13 @@ export class FrameworkManager extends BaseResourceHandler<
     }
 
     try {
-      const success = await this.frameworkStateStore.switchFramework({
-        targetFramework: normalizedId,
-        reason: reason || `Switched to ${framework.name}`,
-      });
+      const success = await this.frameworkStateStore.switchFramework(
+        {
+          targetFramework: normalizedId,
+          reason: reason || `Switched to ${framework.name}`,
+        },
+        scope
+      );
 
       if (success) {
         this.logger.info(`Framework switched to '${framework.name}' (${framework.id})`);

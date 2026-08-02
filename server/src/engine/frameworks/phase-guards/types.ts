@@ -3,7 +3,7 @@
  * Phase Guard Evaluation Types
  *
  * Result types for deterministic framework phase guard evaluation.
- * Used by the phase guard evaluator and pipeline Stage 09b.
+ * Used by the phase guard evaluator and pipeline PhaseGuardVerificationStage.
  */
 
 /**

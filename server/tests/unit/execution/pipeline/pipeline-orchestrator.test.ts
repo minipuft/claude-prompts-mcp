@@ -6,24 +6,24 @@ import type { ExecutionContext } from '../../../../src/engine/execution/context/
 import type { PipelineStage } from '../../../../src/engine/execution/pipeline/stage.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 
-// Stage order matches registerStages() in prompt-execution-pipeline.ts
-// JudgeSelection runs BEFORE GateEnhancement and FrameworkResolution for two-phase judge flow
-// FrameworkInjectionControl runs AFTER SessionManagement to access currentStep
+// Stage order matches the array PipelineBuilder.build() hands the constructor.
+// Optional stages (ScriptExecution, ScriptAutoExecute, ShellVerification,
+// PhaseGuardVerification) are omitted — this suite asserts sequencing and
+// short-circuit behaviour, neither of which depends on them.
 const stageOrder = [
   'RequestNormalization',
-  'DependencyInjection',
   'ExecutionLifecycle',
   'IdentityResolution',
   'CommandParsing',
   'InlineGateExtraction',
   'OperatorValidation',
   'ExecutionPlanning',
-  'JudgeSelection', // Moved before framework/gate stages
-  'GateEnhancement', // Now runs after judge decision
-  'FrameworkResolution', // Now uses clientFrameworkOverride from judge flow
-  'SessionManagement',
-  'FrameworkInjectionControl', // Controls injection frequency after session provides currentStep
-  'PromptGuidance',
+  'JudgeSelection', // before framework/gate stages, for the two-phase judge flow
+  'GateEnhancement', // after the judge decision
+  'FrameworkResolution', // reads clientFrameworkOverride set by the judge flow
+  'SessionManagement', // populates currentStep
+  'InjectionControl', // needs currentStep; writes state.injection
+  'PromptGuidance', // reads state.injection
   'StepResponseCapture',
   'StepExecution',
   'GateReview',
@@ -77,56 +77,10 @@ const createPipeline = (
     )
   );
 
-  // Destructuring order must match stageOrder array
-  const [
-    requestStage,
-    dependencyStage,
-    lifecycleStage,
-    identityResolutionStage,
-    parsingStage,
-    inlineGateStage,
-    operatorValidationStage,
-    planningStage,
-    judgeSelectionStage, // position 9 (before gate/framework)
-    gateStage, // position 10
-    frameworkStage, // position 11
-    sessionStage, // position 12
-    frameworkInjectionControlStage, // position 13
-    promptGuidanceStage, // position 14
-    responseCaptureStage, // position 15
-    executionStage, // position 16
-    gateReviewStage, // position 17
-    formattingStage, // position 18
-    postFormattingStage, // position 19
-  ] = stageInstances;
-
-  const pipeline = new PromptExecutionPipeline(
-    requestStage,
-    dependencyStage,
-    lifecycleStage,
-    identityResolutionStage,
-    parsingStage,
-    inlineGateStage,
-    operatorValidationStage,
-    planningStage,
-    null, // scriptExecutionStage (optional - null to skip)
-    null, // scriptAutoExecuteStage (optional - null to skip)
-    frameworkStage,
-    judgeSelectionStage,
-    promptGuidanceStage,
-    gateStage,
-    sessionStage,
-    frameworkInjectionControlStage,
-    responseCaptureStage,
-    null, // shellVerificationStage (optional - null to skip)
-    executionStage,
-    null, // phaseGuardVerificationStage (optional - null to skip)
-    gateReviewStage,
-    formattingStage,
-    postFormattingStage,
-    createLogger(),
-    () => undefined
-  );
+  const pipeline = new PromptExecutionPipeline(stageInstances, {
+    logger: createLogger(),
+    metricsProvider: () => undefined,
+  });
 
   return { pipeline, tracker };
 };

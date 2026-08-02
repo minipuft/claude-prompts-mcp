@@ -28,7 +28,7 @@ type FrameworkResourceProvider = () => Promise<ConvertedPrompt[]> | ConvertedPro
  * Collects all available resources from styles, frameworks, and gates
  * for the judge selection menu.
  *
- * Extracted from JudgeSelectionStage (pipeline stage 06a).
+ * Extracted from JudgeSelectionStage.
  */
 export class JudgeResourceCollector {
   constructor(

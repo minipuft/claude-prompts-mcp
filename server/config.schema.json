@@ -128,6 +128,11 @@
           "default": true,
           "description": "Adapt MCP tool descriptions based on active framework"
         },
+        "defaultFramework": {
+          "type": "string",
+          "default": "CAGEERF",
+          "description": "Framework a scope falls back to when it has no persisted state row. Set per project to pin a repo to one framework (e.g. 'RADIANT' for design work). A runtime framework switch overrides this for that scope and persists."
+        },
         "systemPromptFrequency": {
           "type": "integer",
           "default": 2,

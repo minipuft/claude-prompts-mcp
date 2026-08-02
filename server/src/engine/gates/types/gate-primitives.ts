@@ -46,7 +46,7 @@ export interface GatePassCriteria {
    *   `content_check` and `pattern_check`; both were inert at runtime)
    * - `llm_self_check`: reserved, runner not yet implemented
    * - `framework_compliance`: declarative only — GateValidator auto-passes it.
-   *   Stage 09b enforces phase guards from `phases.yaml`, not from this value.
+   *   PhaseGuardVerificationStage enforces phase guards from `phases.yaml`, not from this value.
    * - `shell_verify`: exit-code ground truth (supports response injection)
    * - `script_tool`: registered script with JSON stdin
    */

@@ -30,6 +30,11 @@ function createRuntimeOptions(overrides: Partial<RuntimeLaunchOptions> = {}): Ru
   };
 }
 
+// Derivation is injected so these assertions do not depend on the directory the
+// suite happens to run from.
+const deriveNothing = (): undefined => undefined;
+const deriveProject = () => ({ value: 'derived-project', source: 'cwd' as const });
+
 describe('applyRuntimeIdentityOverrides', () => {
   test('applies runtime client defaults when config has no identity section', () => {
     const config = createBaseConfig();
@@ -41,7 +46,7 @@ describe('applyRuntimeIdentityOverrides', () => {
       },
     });
 
-    applyRuntimeIdentityOverrides(config, runtimeOptions);
+    applyRuntimeIdentityOverrides(config, runtimeOptions, deriveNothing);
 
     expect(config.identity).toEqual({
       launchDefaults: {
@@ -71,7 +76,7 @@ describe('applyRuntimeIdentityOverrides', () => {
       },
     });
 
-    applyRuntimeIdentityOverrides(config, runtimeOptions);
+    applyRuntimeIdentityOverrides(config, runtimeOptions, deriveProject);
 
     expect(config.identity).toEqual({
       mode: 'locked',
@@ -82,5 +87,46 @@ describe('applyRuntimeIdentityOverrides', () => {
         delegationProfile: 'spawn_agent_v1',
       },
     });
+  });
+
+  test('derives a workspaceId when neither CLI nor config supplies one', () => {
+    const config = createBaseConfig();
+
+    const derived = applyRuntimeIdentityOverrides(config, createRuntimeOptions(), deriveProject);
+
+    expect(config.identity?.launchDefaults?.workspaceId).toBe('derived-project');
+    expect(derived).toEqual({ value: 'derived-project', source: 'cwd' });
+  });
+
+  test('config workspaceId outranks the derived one', () => {
+    const config = createBaseConfig();
+    config.identity = { launchDefaults: { workspaceId: 'workspace-from-config' } };
+
+    const derived = applyRuntimeIdentityOverrides(config, createRuntimeOptions(), deriveProject);
+
+    expect(config.identity?.launchDefaults?.workspaceId).toBe('workspace-from-config');
+    // Nothing was derived, so startup reports the id as explicitly configured.
+    expect(derived).toBeUndefined();
+  });
+
+  test('CLI workspaceId outranks both config and the derived one', () => {
+    const config = createBaseConfig();
+    config.identity = { launchDefaults: { workspaceId: 'workspace-from-config' } };
+    const runtimeOptions = createRuntimeOptions({
+      identityDefaults: { workspaceId: 'workspace-from-cli' },
+    });
+
+    applyRuntimeIdentityOverrides(config, runtimeOptions, deriveProject);
+
+    expect(config.identity?.launchDefaults?.workspaceId).toBe('workspace-from-cli');
+  });
+
+  test('a blank configured workspaceId does not suppress derivation', () => {
+    const config = createBaseConfig();
+    config.identity = { launchDefaults: { workspaceId: '   ' } };
+
+    applyRuntimeIdentityOverrides(config, createRuntimeOptions(), deriveProject);
+
+    expect(config.identity?.launchDefaults?.workspaceId).toBe('derived-project');
   });
 });

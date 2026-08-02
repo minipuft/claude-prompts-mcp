@@ -10,7 +10,7 @@ import { ExecutionContext } from '../../../../src/engine/execution/context/execu
 import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 import { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/command-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
-import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/01-parsing-stage.js';
+import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 import { createSimpleLogger } from '../../../../src/infra/logging/index.js';
 
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';

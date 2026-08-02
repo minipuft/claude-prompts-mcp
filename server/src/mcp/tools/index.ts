@@ -16,7 +16,8 @@
  * - Improved maintainability and clear separation of concerns
  */
 
-import * as path from 'node:path';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { Implementation } from '@modelcontextprotocol/sdk/types.js';
 
 import { FrameworkToolHandler, createFrameworkToolHandler } from './framework-manager/index.js';
 import { GateToolHandler, createGateToolHandler } from './gate-manager/index.js';
@@ -60,7 +61,6 @@ import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
 import { createContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
 import { createSemanticIntegrationFactory } from '#modules/semantic/integrations/index.js';
-import { ConversationStore } from '#modules/text-refs/conversation.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import {
   type ConfigManager,
@@ -68,7 +68,6 @@ import {
   type Logger,
   type HookRegistryPort,
   type McpNotificationEmitterPort,
-  ToolResponse,
 } from '#shared/types/index.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
 
@@ -77,14 +76,16 @@ import {
 // Consolidated tools
 // Gate system management integration
 
-/** Safely read clientVersion from McpServer.server (typed as any in our codebase). */
-function readClientVersion(mcpServer: unknown): unknown {
-  const server = (mcpServer as { server?: unknown })?.server;
-  if (server == null || typeof server !== 'object') {
-    return undefined;
-  }
-  const fn = (server as Record<string, unknown>)['getClientVersion'];
-  return typeof fn === 'function' ? (fn as () => unknown).call(server) : undefined;
+/**
+ * Read the client identity captured during the `initialize` handshake.
+ *
+ * Protocol revision 2026-07-28 removes that handshake — client identity moves to
+ * per-request `_meta` (`io.modelcontextprotocol/clientInfo`). This function is the
+ * single seam that migration has to replace, so it is typed rather than cast: the
+ * compiler must be able to see it break.
+ */
+function readClientVersion(mcpServer: McpServer): Implementation | undefined {
+  return mcpServer.server?.getClientVersion();
 }
 
 /**
@@ -94,7 +95,7 @@ function readClientVersion(mcpServer: unknown): unknown {
  */
 export class McpToolRouter {
   private logger: Logger;
-  private mcpServer: any;
+  private mcpServer: McpServer;
   private promptManager: PromptAssetManager;
   private configManager: ConfigManager;
 
@@ -113,7 +114,6 @@ export class McpToolRouter {
   private frameworkManager?: FrameworkManager;
   // ChainSessionStore is owned by PromptExecutor, accessed via getter
   // REMOVED: chainOrchestrator - modular chain system removed
-  private conversationStore: ConversationStore;
   private textReferenceStore: TextReferenceStore;
   private toolDescriptionLoader?: ToolDescriptionLoader;
   private gateStateStore?: GateStateStore;
@@ -124,21 +124,15 @@ export class McpToolRouter {
   // Callback references
   private onRestart?: (reason: string) => Promise<void>;
 
-  // Data references
-  private promptsData: PromptData[] = [];
-  private convertedPrompts: ConvertedPrompt[] = [];
-  private categories: Category[] = [];
-
   // Pending analytics queue for initialization race condition
   private pendingAnalytics: any[] = [];
   private toolsInitialized = false;
 
   constructor(
     logger: Logger,
-    mcpServer: any,
+    mcpServer: McpServer,
     promptManager: PromptAssetManager,
     configManager: ConfigManager,
-    conversationStore: ConversationStore,
     textReferenceStore: TextReferenceStore,
     gateManager: GateManager
   ) {
@@ -146,7 +140,6 @@ export class McpToolRouter {
     this.mcpServer = mcpServer;
     this.promptManager = promptManager;
     this.configManager = configManager;
-    this.conversationStore = conversationStore;
     this.textReferenceStore = textReferenceStore;
     this.gateManager = gateManager;
   }
@@ -179,11 +172,9 @@ export class McpToolRouter {
     // Note: ChainSessionStore is created inside PromptExecutor and exposed via getter
     this.promptExecutor = createPromptExecutor(
       this.logger,
-      this.mcpServer,
       this.promptManager,
       this.configManager,
       this.semanticAnalyzer,
-      this.conversationStore,
       this.textReferenceStore,
       this.gateManager,
       this // Pass manager reference for analytics data flow
@@ -205,7 +196,7 @@ export class McpToolRouter {
 
     // Initialize 5 core consolidated tools
 
-    this.systemControl = createConsolidatedSystemControl(this.logger, this.mcpServer, onRestart);
+    this.systemControl = createConsolidatedSystemControl(this.logger, onRestart);
 
     // Set managers in system control
     this.systemControl.setGateStateStore(this.gateStateStore);
@@ -305,14 +296,13 @@ export class McpToolRouter {
   private getDetectedClientInfo(): { name: string; version?: string } | undefined {
     try {
       const impl = readClientVersion(this.mcpServer);
-      if (impl == null) {
+      // `name` is typed as a required string, but it arrives off the wire — an
+      // empty one is still possible and is treated as "no client detected".
+      const name = impl?.name.trim();
+      if (name == null || name.length === 0) {
         return undefined;
       }
-      const name = (impl as Record<string, unknown>)['name'];
-      const version = (impl as Record<string, unknown>)['version'];
-      return typeof name === 'string' && name.trim().length > 0
-        ? { name: name.trim(), version: typeof version === 'string' ? version : undefined }
-        : undefined;
+      return { name, version: impl?.version };
     } catch {
       return undefined;
     }
@@ -419,7 +409,10 @@ export class McpToolRouter {
     if (this.frameworkManager == null) {
       // Use provided framework manager or create a new one
       this.frameworkManager =
-        existingFrameworkManager ?? (await createFrameworkManager(this.logger));
+        existingFrameworkManager ??
+        (await createFrameworkManager(this.logger, {
+          defaultFramework: this.configManager.getFrameworksConfig().defaultFramework,
+        }));
 
       // FIX: Connect frameworkStateStore if it was set before frameworkManager was created
       // This handles the startup order where setFrameworkStateStore() is called first
@@ -923,10 +916,6 @@ export class McpToolRouter {
     convertedPrompts: ConvertedPrompt[],
     categories: Category[]
   ): void {
-    this.promptsData = promptsData;
-    this.convertedPrompts = convertedPrompts;
-    this.categories = categories;
-
     // Update all consolidated tools with new data
     this.promptExecutor.updateData(promptsData, convertedPrompts);
     this.promptResourceHandler.updateData(promptsData, convertedPrompts, categories);
@@ -993,10 +982,9 @@ export class McpToolRouter {
  */
 export async function createMcpToolRouter(
   logger: Logger,
-  mcpServer: any,
+  mcpServer: McpServer,
   promptManager: PromptAssetManager,
   configManager: ConfigManager,
-  conversationStore: ConversationStore,
   textReferenceStore: TextReferenceStore,
   onRefresh: () => Promise<void>,
   onRestart: (reason: string) => Promise<void>,
@@ -1008,7 +996,6 @@ export async function createMcpToolRouter(
     mcpServer,
     promptManager,
     configManager,
-    conversationStore,
     textReferenceStore,
     gateManager
   );

@@ -16,7 +16,12 @@
  * - notifications/chain/failed - Chain failed with error
  */
 
-import type { McpNotificationEmitterPort } from '#shared/types/index.js';
+import type {
+  GateFailedNotification,
+  McpNotificationEmitterPort,
+  ResponseBlockedNotification,
+  RetryExhaustedNotification,
+} from '#shared/types/index.js';
 import type { Logger } from '../../logging/index.js';
 
 /**
@@ -27,41 +32,11 @@ export interface McpNotificationServer {
   notification(params: { method: string; params?: Record<string, unknown> }): void;
 }
 
-/**
- * Gate failure notification payload.
- */
-export interface GateFailedNotification {
-  /** Gate ID that failed */
-  gateId: string;
-  /** Reason for failure */
-  reason: string;
-  /** Chain ID if this occurred during chain execution */
-  chainId?: string;
-  /** Step index where failure occurred */
-  stepIndex?: number;
-}
-
-/**
- * Response blocked notification payload.
- */
-export interface ResponseBlockedNotification {
-  /** Gate IDs that triggered the block */
-  gateIds: string[];
-  /** Chain ID if this occurred during chain execution */
-  chainId?: string;
-}
-
-/**
- * Retry exhausted notification payload.
- */
-export interface RetryExhaustedNotification {
-  /** Gate IDs that exhausted retries */
-  gateIds: string[];
-  /** Chain ID where this occurred */
-  chainId: string;
-  /** Maximum attempts that were allowed */
-  maxAttempts: number;
-}
+// The three gate notification payloads are declared in `shared/types` alongside
+// `McpNotificationEmitterPort`, which names them: `engine/gates` builds these
+// values while holding the emitter as the port, so the port has to spell out
+// their shape. The framework and chain payloads below stay local — no other
+// layer constructs them.
 
 /**
  * Framework changed notification payload.

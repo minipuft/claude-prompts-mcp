@@ -38,6 +38,34 @@ The active framework applies to all subsequent prompts in the session:
 system_control(action: "framework", operation: "switch", framework: "cageerf")
 ```
 
+### Pin a Framework Per Project
+
+A switch persists to the calling project's scope, so different repositories can sit on different
+frameworks at the same time — CAGEERF for a server codebase, RADIANT for a Spicetify theme.
+
+Declare the starting point in that project's `config.json`:
+
+```json
+{
+  "frameworks": {
+    "defaultFramework": "RADIANT"
+  }
+}
+```
+
+This is the **floor**, not a lock. It applies to any scope with no persisted state; a runtime
+`system_control` switch overrides it for that project and survives restarts. A project that
+declares nothing falls back to `CAGEERF`.
+
+Isolation depends on each project resolving a distinct scope id. Confirm it in the startup log:
+
+```
+[INFO] Project scope id: spicetify-theme (source: CLAUDE_PROJECT_DIR)
+```
+
+If two projects report the same id they share one row, and switching in either changes both.
+→ [Identity & Scope](identity-scope.md#derived-project-scope) for the resolution order and the fix.
+
 ### Per-Request Override
 
 Use the `@` operator to apply a specific framework to a single prompt without changing the session default:

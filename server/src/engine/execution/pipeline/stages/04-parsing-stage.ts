@@ -24,7 +24,7 @@ import { PromptError } from '#shared/utils/index.js';
 type PromptsProvider = () => ConvertedPrompt[];
 
 /**
- * Canonical Pipeline Stage 1: Command Parsing
+ * Pipeline Stage 04: Command Parsing
  *
  * Parses incoming commands using UnifiedCommandParser, resolves arguments,
  * and builds symbolic chains for operator-based workflows.
@@ -136,7 +136,7 @@ export class CommandParsingStage extends BasePipelineStage {
       promptArgs: (argResult as any).processedArgs,
     };
 
-    // Options already baked into command string by Stage 00 (normalizedCommand).
+    // Options already baked into command string by RequestNormalizationStage (normalizedCommand).
     // mergeRequestOptions only needed for symbolic path (line 91).
 
     if (convertedPrompt.chainSteps?.length) {

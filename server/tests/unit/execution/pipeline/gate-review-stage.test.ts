@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { GateReviewStage } from '../../../../src/engine/execution/pipeline/stages/10-gate-review-stage.js';
+import { GateReviewStage } from '../../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 
 const createExecutionResult = () => ({
   stepNumber: 2,

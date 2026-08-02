@@ -6,7 +6,7 @@ import type { InlineGateProcessor } from '../../../gates/services/inline-gate-pr
 import type { ExecutionContext } from '../../context/index.js';
 
 /**
- * Pipeline Stage 2: Inline Gate Extraction
+ * Pipeline Stage 05: Inline Gate Extraction
  *
  * Thin orchestrator that delegates inline gate processing to the InlineGateProcessor.
  *

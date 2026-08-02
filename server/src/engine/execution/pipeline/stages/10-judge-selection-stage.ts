@@ -8,7 +8,7 @@ import type { JudgeResourceCollector } from '../../../gates/judge/judge-resource
 import type { ExecutionContext } from '../../context/index.js';
 
 /**
- * Pipeline Stage 6a: Judge Selection (Two-Phase Client-Driven Flow)
+ * Pipeline Stage 10: Judge Selection (Two-Phase Client-Driven Flow)
  *
  * Judge Phase (triggered by `%judge`):
  * - Collects all available resources (styles, frameworks, gates)

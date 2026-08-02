@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { ScriptExecutionStage } from '../../../../src/engine/execution/pipeline/stages/04b-script-execution-stage.js';
+import { ScriptExecutionStage } from '../../../../src/engine/execution/pipeline/stages/08-script-execution-stage.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ToolDetectionService } from '../../../../src/modules/automation/detection/tool-detection-service.js';

@@ -651,7 +651,8 @@ export interface TelemetryRuntimePort {
 
 /**
  * Lightweight hook execution context for pipeline emissions.
- * Compatible with HookExecutionContext in infra/hooks/.
+ * `infra/hooks` aliases this as `HookExecutionContext` — the hook-author-facing
+ * name — rather than redeclaring the shape, so the two cannot drift.
  */
 export interface PipelineHookContext {
   readonly executionId: string;
@@ -663,9 +664,31 @@ export interface PipelineHookContext {
 }
 
 /**
+ * Outcome passed to gate hook callbacks.
+ *
+ * Distinct from `GateEvaluationResultContract` (per-requirement scoring) and
+ * `engine/gates` `GateEvaluationResult` (requirement-level detail): this is the
+ * whole-gate verdict a hook observer sees.
+ */
+export interface GateHookEvaluationResult {
+  /** Whether the gate passed */
+  readonly passed: boolean;
+  /** Reason for pass/fail */
+  readonly reason?: string;
+  /** Whether this gate has blockResponseOnFail enabled */
+  readonly blocksResponse: boolean;
+}
+
+/**
  * Hook registry interface (mcp/ contract).
  * mcp/ stores and forwards to engine/ pipeline stages.
  * Concrete: infra/hooks/hook-registry.ts HookRegistry
+ *
+ * The gate emissions belong here, not only on the concrete class: `engine/gates`
+ * receives the registry as this port and calls them. Declaring only the stage
+ * hooks meant the sole caller had to cast the port back to the concrete type,
+ * which type-checks between object types with no overlap and would have degraded
+ * to a caught TypeError for any implementation that is not `HookRegistry`.
  */
 export interface HookRegistryPort {
   getCounts(): { pipeline: number; gate: number; chain: number };
@@ -673,18 +696,66 @@ export interface HookRegistryPort {
   emitBeforeStage(stage: string, context: PipelineHookContext): Promise<void>;
   emitAfterStage(stage: string, context: PipelineHookContext): Promise<void>;
   emitStageError(stage: string, error: Error, context: PipelineHookContext): Promise<void>;
+  emitGateEvaluated(
+    gate: GateDefinition,
+    result: GateHookEvaluationResult,
+    context: PipelineHookContext
+  ): Promise<void>;
+  emitGateFailed(gate: GateDefinition, reason: string, context: PipelineHookContext): Promise<void>;
+  emitRetryExhausted(
+    gateIds: string[],
+    chainId: string,
+    context: PipelineHookContext
+  ): Promise<void>;
+  emitResponseBlocked(gateIds: string[], context: PipelineHookContext): Promise<void>;
+}
+
+/** Gate failure notification payload. */
+export interface GateFailedNotification {
+  /** Gate ID that failed */
+  gateId: string;
+  /** Reason for failure */
+  reason: string;
+  /** Chain ID if this occurred during chain execution */
+  chainId?: string;
+  /** Step index where failure occurred */
+  stepIndex?: number;
+}
+
+/** Response blocked notification payload. */
+export interface ResponseBlockedNotification {
+  /** Gate IDs that triggered the block */
+  gateIds: string[];
+  /** Chain ID if this occurred during chain execution */
+  chainId?: string;
+}
+
+/** Retry exhausted notification payload. */
+export interface RetryExhaustedNotification {
+  /** Gate IDs that exhausted retries */
+  gateIds: string[];
+  /** Chain ID where this occurred */
+  chainId: string;
+  /** Maximum attempts that were allowed */
+  maxAttempts: number;
 }
 
 /**
  * MCP notification emitter interface (mcp/ contract).
  * mcp/ stores and forwards to engine/ pipeline stages.
  * Concrete: infra/observability/notifications/mcp-notification-emitter.ts McpNotificationEmitter
+ *
+ * Carries the gate notifications for the same reason `HookRegistryPort` carries
+ * the gate hooks — `engine/gates` holds the value as this port and emits them.
  */
 export interface McpNotificationEmitterPort {
   canSend(): boolean;
   setServer(server: {
     notification(params: { method: string; params?: Record<string, unknown> }): void;
   }): void;
+  emitGateFailed(notification: GateFailedNotification): void;
+  emitResponseBlocked(notification: ResponseBlockedNotification): void;
+  emitRetryExhausted(notification: RetryExhaustedNotification): void;
 }
 
 // ===== Hot Reload Types =====

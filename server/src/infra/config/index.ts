@@ -43,6 +43,7 @@ import {
   type ConfigManager,
   type GatesConfig,
 } from '#shared/types/index.js';
+import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
 
@@ -64,6 +65,9 @@ const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
 
 const DEFAULT_FRAMEWORKS_CONFIG: ResolvedFrameworkConfig = {
   dynamicToolDescriptions: true,
+  // FrameworkManager and FrameworkStateStore both receive this value rather than carrying
+  // their own literal, so the two cannot drift from the configured framework.
+  defaultFramework: DEFAULT_FRAMEWORK_ID,
   injection: {
     systemPrompt: { enabled: true, frequency: 2, target: 'steps' },
     gateGuidance: { frequency: 0, target: 'both' },
@@ -267,6 +271,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     return {
       dynamicToolDescriptions:
         m?.dynamicToolDescriptions ?? DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
+      defaultFramework: m?.defaultFramework ?? DEFAULT_FRAMEWORKS_CONFIG.defaultFramework,
       injection: {
         systemPrompt: {
           enabled: m?.enabled ?? true,
@@ -587,6 +592,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       this.config.frameworks = {
         enabled: true,
         dynamicToolDescriptions: DEFAULT_FRAMEWORKS_CONFIG.dynamicToolDescriptions,
+        defaultFramework: DEFAULT_FRAMEWORKS_CONFIG.defaultFramework,
         systemPromptFrequency: DEFAULT_FRAMEWORKS_CONFIG.injection?.systemPrompt?.frequency ?? 2,
         styleGuidance: DEFAULT_FRAMEWORKS_CONFIG.injection?.styleGuidance?.enabled ?? true,
       };

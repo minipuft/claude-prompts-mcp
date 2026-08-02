@@ -19,6 +19,7 @@ import type { PromptReferenceResolver } from '../reference/index.js';
 import type { ConvertedPrompt } from '../types.js';
 
 import { Logger } from '#infra/logging/index.js';
+import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { processTemplate, processTemplateWithRefs } from '#shared/utils/jsonUtils.js';
 
 /**
@@ -163,12 +164,12 @@ export class ChainOperatorExecutor {
     let gateGuidance = '';
     if (gateGuidanceEnabled && gateIdsToRender.length > 0) {
       // Get framework and category context if available
-      let frameworkType = 'CAGEERF';
+      let frameworkType: string = DEFAULT_FRAMEWORK_ID;
       let category = 'general';
 
       const reviewStepContext = await this.resolveFrameworkContext(targetStep ?? undefined);
       if (reviewStepContext) {
-        frameworkType = reviewStepContext.selectedFramework?.type || 'CAGEERF';
+        frameworkType = reviewStepContext.selectedFramework?.type || DEFAULT_FRAMEWORK_ID;
         category = reviewStepContext.category || 'general';
       }
 

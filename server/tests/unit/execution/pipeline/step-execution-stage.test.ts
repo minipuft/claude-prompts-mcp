@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { StepExecutionStage } from '../../../../src/engine/execution/pipeline/stages/09-execution-stage.js';
+import { StepExecutionStage } from '../../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
 
 import type { ChainSessionService } from '../../../../src/modules/chains/types.js';
 import type {

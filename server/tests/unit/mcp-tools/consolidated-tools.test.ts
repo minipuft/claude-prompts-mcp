@@ -72,21 +72,6 @@ describe('Consolidated MCP tool factories', () => {
       on: () => {},
     };
 
-    const mockConversationStore = {
-      addToConversationHistory: () => {},
-      getConversationHistory: () => [],
-      getPreviousMessage: () => '',
-      clearHistory: () => {},
-      getConversationStats: () => ({
-        totalMessages: 0,
-        userMessages: 0,
-        assistantMessages: 0,
-        processedTemplates: 0,
-        oldestMessage: undefined,
-        newestMessage: undefined,
-      }),
-    };
-
     const mockTextReferenceStore = {
       storeChainStepResult: () => {},
       getChainStepResults: () => ({}),
@@ -122,11 +107,9 @@ describe('Consolidated MCP tool factories', () => {
 
     promptEngine = createPromptExecutor(
       logger as any,
-      mockMcpServer as any,
       mockPromptAssetComponent as any,
       mockConfigManager as any,
       mockSemanticAnalyzer as any,
-      mockConversationStore as any,
       mockTextReferenceStore as any,
       stubGateManager,
       mockMcpToolsManager
@@ -142,9 +125,7 @@ describe('Consolidated MCP tool factories', () => {
       () => Promise.resolve()
     );
 
-    systemControl = createConsolidatedSystemControl(logger as any, mockMcpServer as any, () =>
-      Promise.resolve()
-    );
+    systemControl = createConsolidatedSystemControl(logger as any, () => Promise.resolve());
   });
 
   afterEach(async () => {

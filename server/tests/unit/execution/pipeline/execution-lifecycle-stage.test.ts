@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { ExecutionLifecycleStage } from '../../../../src/engine/execution/pipeline/stages/00-execution-lifecycle-stage.js';
+import { ExecutionLifecycleStage } from '../../../../src/engine/execution/pipeline/stages/02-execution-lifecycle-stage.js';
 
 const createLogger = () => ({
   info: jest.fn(),

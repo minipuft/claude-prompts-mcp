@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { GateEnhancementStage } from '../../../../src/engine/execution/pipeline/stages/05-gate-enhancement-stage.js';
+import { GateEnhancementStage } from '../../../../src/engine/execution/pipeline/stages/11-gate-enhancement-stage.js';
 import { GateEnhancementService } from '../../../../src/engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-metrics-recorder.js';
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';

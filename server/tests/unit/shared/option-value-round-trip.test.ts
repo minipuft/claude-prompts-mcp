@@ -5,7 +5,7 @@ import { parseQuotedValue, serializeOptionValue } from '../../../src/shared/util
 
 /**
  * Simulate the full wire path for a value passed via the `options` parameter:
- * stage 00 serializes it into the command string, the argument parser captures the inside of
+ * RequestNormalizationStage serializes it into the command string, the argument parser captures the inside of
  * the quotes, and `parseQuotedValue` decodes it before the prompt sees it.
  */
 const roundTrip = (value: string): string => {

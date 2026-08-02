@@ -23,7 +23,7 @@ import { describe, expect, test, jest, beforeEach } from '@jest/globals';
 
 import { createParsingSystem } from '../../../src/engine/execution/parsers/index.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
-import { OperatorValidationStage } from '../../../src/engine/execution/pipeline/stages/03-operator-validation-stage.js';
+import { OperatorValidationStage } from '../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -100,7 +100,7 @@ describe('Delegation Operator (==>) Flow', () => {
       expect(chainOp!.steps[0].delegated).not.toBe(true);
       expect(chainOp!.steps[1].delegated).toBe(true);
 
-      // Step 3: Build step prompts (mimicking Stage 01 buildSymbolicChain)
+      // Step 3: Build step prompts (mimicking CommandParsingStage buildSymbolicChain)
       const stepPrompts: ChainStepPrompt[] = chainOp!.steps.map((step, index) => ({
         stepNumber: index + 1,
         promptId: step.promptId,
@@ -233,7 +233,7 @@ describe('Delegation Operator (==>) Flow', () => {
     });
   });
 
-  describe('Stage 03 silent normalization → CTA flow', () => {
+  describe('OperatorValidationStage silent normalization → CTA flow', () => {
     test('prompt-level delegation:true normalizes all steps and propagates to step prompts', async () => {
       // Parse a NORMAL chain (no ==>) for a prompt that has delegation:true
       const parseResult = await parsingSystem.commandParser.parseCommand(
@@ -270,7 +270,7 @@ describe('Delegation Operator (==>) Flow', () => {
         steps: stepPrompts,
       };
 
-      // Run Stage 03 normalization (real stage, stub framework validator)
+      // Run OperatorValidationStage normalization (real stage, stub framework validator)
       const stubValidator = { validateAndNormalize: jest.fn() } as unknown as FrameworkValidator;
       const stage = new OperatorValidationStage(stubValidator, mockLogger);
       await stage.execute(context);
@@ -337,8 +337,8 @@ describe('Delegation Operator (==>) Flow', () => {
     });
   });
 
-  describe('subagentModel → automatic delegation via Stage 03', () => {
-    test('step with subagentModel gets delegated:true after Stage 03 normalization', async () => {
+  describe('subagentModel → automatic delegation via OperatorValidationStage', () => {
+    test('step with subagentModel gets delegated:true after OperatorValidationStage normalization', async () => {
       // Parse a NORMAL chain (no ==>) — no delegation from parser
       const parseResult = await parsingSystem.commandParser.parseCommand(
         '>>research topic:"test" --> >>summarize --> >>review',
@@ -374,7 +374,7 @@ describe('Delegation Operator (==>) Flow', () => {
         steps: stepPrompts,
       };
 
-      // Run Stage 03 normalization
+      // Run OperatorValidationStage normalization
       const stubValidator = { validateAndNormalize: jest.fn() } as unknown as FrameworkValidator;
       const stage = new OperatorValidationStage(stubValidator, mockLogger);
       await stage.execute(context);

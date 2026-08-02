@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { FrameworkResolutionStage } from '../../../../src/engine/execution/pipeline/stages/06-framework-stage.js';
+import { FrameworkResolutionStage } from '../../../../src/engine/execution/pipeline/stages/12-framework-stage.js';
 
 import type { FrameworkManager } from '../../../../src/engine/frameworks/framework-manager.js';
 import type {
@@ -350,7 +350,7 @@ describe('FrameworkResolutionStage', () => {
       await stage.execute(context);
 
       // Framework Stage generates context but does NOT control injection frequency
-      // FrameworkInjectionControlStage (07b) handles that after Session Stage
+      // InjectionControlStage handles that after SessionManagementStage
       // systemPromptApplied defaults to false (from state initialization)
       expect(context.state.framework.systemPromptApplied).toBe(false);
       expect(context.frameworkContext).toBe(frameworkContext);
@@ -405,6 +405,9 @@ describe('FrameworkResolutionStage', () => {
       expect(context.state.framework.systemPromptApplied).toBe(true);
     });
 
+    // Counterpart to the test above: same disabled system, but no override anywhere.
+    // The stage reads `parsedCommand.executionPlan.frameworkOverride` (06-framework-stage.ts:99),
+    // so "no override" means leaving that unset — omitting `executionPlan` from parsedCommand.
     test('skips framework resolution when system disabled and no override provided', async () => {
       frameworkEnabled.mockReturnValue(false);
 
@@ -414,19 +417,6 @@ describe('FrameworkResolutionStage', () => {
         gates: [],
         requiresFramework: true,
         requiresSession: false,
-        frameworkOverride: 'SCAMPER', // This seems wrong in the original test if it expects skip? Ah, no, the test creates context with override but expects skip?
-        // Wait, let's look at the original test.
-        // Original test:
-        /*
-        test('skips framework resolution when system disabled and no override provided', async () => {
-          frameworkEnabled.mockReturnValue(false);
-          const context = new ExecutionContext({ command: '>>demo' } as any);
-          ...
-          // NO frameworkOverride in executionPlan
-          ...
-          expect(context.metadata['frameworkSystemPromptApplied']).toBeUndefined();
-        });
-        */
       };
       context.parsedCommand = {
         promptId: 'demo',

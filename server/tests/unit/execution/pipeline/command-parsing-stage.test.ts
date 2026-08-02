@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/01-parsing-stage.js';
+import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 
 import type {
   ArgumentParser,

@@ -2,7 +2,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
-import { ResponseFormattingStage } from '../../../../src/engine/execution/pipeline/stages/10-formatting-stage.js';
+import { ResponseFormattingStage } from '../../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { ResponseFormatter } from '../../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';

@@ -6,6 +6,7 @@
 
 import { randomUUID } from 'node:crypto';
 
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -33,7 +34,7 @@ export enum TransportType {
 export class TransportRouter {
   private logger: Logger;
   private configManager: ConfigLoader;
-  private mcpServer: any;
+  private mcpServer: McpServer;
   private transport: TransportMode;
   private sseTransports: Map<string, SSEServerTransport> = new Map();
   private streamableHttpTransports: Map<string, StreamableHTTPServerTransport> = new Map();
@@ -41,7 +42,7 @@ export class TransportRouter {
   constructor(
     logger: Logger,
     configManager: ConfigLoader,
-    mcpServer: any,
+    mcpServer: McpServer,
     transport: TransportMode
   ) {
     this.logger = logger;
@@ -406,7 +407,7 @@ export class TransportRouter {
 export function createTransportRouter(
   logger: Logger,
   configManager: ConfigLoader,
-  mcpServer: any,
+  mcpServer: McpServer,
   transport: TransportMode
 ): TransportRouter {
   const transportRouter = new TransportRouter(logger, configManager, mcpServer, transport);

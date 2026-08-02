@@ -26,7 +26,7 @@ function normalizeString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-// Parsing protocol hints is centralized here to keep Stage 00 request handling local.
+// Parsing protocol hints is centralized here to keep RequestNormalizationStage request handling local.
 // eslint-disable-next-line complexity
 function extractClientProfileHintFromOptions(
   options?: Record<string, unknown>
@@ -60,13 +60,13 @@ function extractClientProfileHintFromOptions(
 }
 
 /**
- * Pipeline Stage: Identity Resolution
+ * Pipeline Stage 03: Identity Resolution
  *
  * Reads the MCP SDK `extra` payload from the request and resolves
  * workspace/organization identity. Populates `context.state.identity`
  * with the resolved scope for downstream state store isolation.
  *
- * Runs between ExecutionLifecycleStage (00.3) and CommandParsingStage (01).
+ * Runs between ExecutionLifecycleStage and CommandParsingStage.
  */
 export class IdentityResolutionStage extends BasePipelineStage {
   readonly name = 'IdentityResolution';

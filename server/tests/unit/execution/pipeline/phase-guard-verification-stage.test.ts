@@ -5,7 +5,7 @@ import {
   PhaseGuardVerificationStage,
   PHASE_GUARD_GATE_ID,
   createPhaseGuardVerificationStage,
-} from '../../../../src/engine/execution/pipeline/stages/09b-phase-guard-verification-stage.js';
+} from '../../../../src/engine/execution/pipeline/stages/19-phase-guard-verification-stage.js';
 
 import type { PhaseGuardsConfig } from '../../../../src/shared/types/core-config.js';
 import type { ChainSessionService } from '../../../../src/shared/types/chain-session.js';
@@ -148,8 +148,8 @@ describe('PhaseGuardVerificationStage', () => {
       logger
     );
     const ctx = withSession(createContext(createMcpRequest('>>test', 'No context section here.')));
-    // Simulate chain continuation: no frameworkContext (Stage 06 skipped)
-    // but authority has cached decision from Stage 05
+    // Simulate chain continuation: no frameworkContext (FrameworkResolutionStage skipped)
+    // but authority has cached decision from GateEnhancementStage
     ctx.frameworkAuthority.decide({
       globalActiveFramework: 'cageerf',
     });
@@ -281,7 +281,7 @@ describe('PhaseGuardVerificationStage', () => {
       )
     );
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
-    // Simulate existing gate review from Stage 08 (LLM quality gate)
+    // Simulate existing gate review from StepResponseCaptureStage (LLM quality gate)
     ctx.sessionContext!.pendingReview = {
       combinedPrompt: 'Review against content-structure',
       gateIds: ['content-structure'],
@@ -398,7 +398,7 @@ describe('PhaseGuardVerificationStage', () => {
     expect(review.metadata.source).toBe('phase-guard-verification');
     expect(review.metadata.failedPhases).toContain('context');
 
-    // Should also update context so Stage 10 sees pending review
+    // Should also update context so GateReviewStage sees pending review
     expect(ctx.sessionContext!.pendingReview).toBeDefined();
     expect(ctx.sessionContext!.pendingReview!.gateIds).toEqual([PHASE_GUARD_GATE_ID]);
   });
@@ -504,7 +504,7 @@ describe('PhaseGuardVerificationStage', () => {
       createContext(createMcpRequest('>>test', 'GATE_REVIEW: PASS - looks good'))
     );
     ctx.frameworkContext = { selectedFramework: { id: 'cageerf', name: 'CAGEERF' } } as any;
-    // Stage 08 set this flag after clearing an phase guard review via verdict
+    // StepResponseCaptureStage set this flag after clearing an phase guard review via verdict
     ctx.state.gates.phaseGuardReviewCleared = true;
 
     await stage.execute(ctx);

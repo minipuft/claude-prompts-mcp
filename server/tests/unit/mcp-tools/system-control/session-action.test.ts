@@ -40,11 +40,7 @@ const createSessionStore = () => {
 };
 
 const createSystemControl = (chainSessionStore: ChainSessionService) => {
-  const systemControl = createConsolidatedSystemControl(
-    createLogger(),
-    { sendNotification: jest.fn() } as any,
-    () => Promise.resolve()
-  );
+  const systemControl = createConsolidatedSystemControl(createLogger(), () => Promise.resolve());
   systemControl.setChainSessionStore(chainSessionStore);
   return systemControl;
 };

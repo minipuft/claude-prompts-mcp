@@ -32,7 +32,7 @@ flowchart LR
         B[STDIO/SSE]
     end
 
-    subgraph Pipeline["PromptExecutionPipeline (23 stages)"]
+    subgraph Pipeline["PromptExecutionPipeline (22 stages)"]
         direction TB
         C1[Parse & Validate]
         C2[Plan & Enhance]
@@ -252,19 +252,19 @@ server/resources/               # Hot-reloaded resource definitions
 
 ## Execution Pipeline
 
-Every `prompt_engine` call flows through up to 22 stages. Stage files are numbered for organization, but **execution order is determined by the pipeline orchestrator**, not file names.
+Every `prompt_engine` call flows through up to 22 stages. Stage file numbers `01-`…`22-` match this order, but the **`stages` array in `pipeline-builder.ts` is the contract** — the pipeline runs it front to back and does no reordering, so a renamed file changes nothing on its own.
 
 ### Stage Execution Order
 
-The pipeline registers stages in this order (from `prompt-execution-pipeline.ts`):
+The pipeline runs stages in this order (from the `stages` array in `pipeline-builder.ts`):
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        INITIALIZE & PARSE                           │
 ├─────────────────────────────────────────────────────────────────────┤
 │ 1. RequestNormalization      Consolidate deprecated params → `gates`│
-│ 2. DependencyInjection       Inject framework manager, services     │
-│ 3. ExecutionLifecycle        Initialize execution tracking          │
+│ 2. ExecutionLifecycle        Initialize execution tracking          │
+│ 3. IdentityResolution        Resolve the workspace continuity scope │
 │ 4. CommandParsing            Parse command, extract arguments       │
 │ 5. InlineGate                Register `::` criteria as temp gates   │
 │ 6. OperatorValidation        Validate `@framework` overrides        │
@@ -286,13 +286,13 @@ The pipeline registers stages in this order (from `prompt-execution-pipeline.ts`
 │16. ResponseCapture           Capture previous step results          │
 │17. ShellVerification*        Run shell commands to validate work    │
 │18. StepExecution             Execute prompts with Nunjucks          │
-│19. AssertionVerification*    Check framework phase assertions     │
+│19. PhaseGuardVerification*   Check framework phase guards          │
 │20. GateReview                Validate gate verdicts (PASS/FAIL)     │
 │21. ResponseFormatting        Assemble response + usage CTA          │
 │22. PostFormattingCleanup     Clean up temporary state               │
 └─────────────────────────────────────────────────────────────────────┘
 
-* Stages 8-9 (Script), 17 (ShellVerification), 19 (AssertionVerification) are optional
+* Stages 8-9 (Script), 17 (ShellVerification), 19 (PhaseGuardVerification) are optional
 ```
 
 ### Pipeline Behavior
@@ -829,7 +829,7 @@ See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for 
 
 ### Execution (`src/execution/`)
 
-- **Pipeline**: 23-stage sequential processing (see [Stage Execution Order](#stage-execution-order))
+- **Pipeline**: 22-stage sequential processing (see [Stage Execution Order](#stage-execution-order))
 - **Parsers**: Multi-format (symbolic `-->`, JSON, key=value)
 - **Context**: `ExecutionContext` with type guards for chain vs single execution
 - **Validation**: Request schema validation via generated Zod schemas

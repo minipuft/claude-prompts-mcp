@@ -9,7 +9,7 @@ import type { ExecutionPlan } from '../../types.js';
 type FrameworkEnabledProvider = () => boolean;
 
 /**
- * Pipeline Stage 4: Execution Planning
+ * Pipeline Stage 07: Execution Planning
  *
  * Determines execution strategy (prompt/chain/workflow), identifies required gates,
  * and plans session requirements based on command structure.

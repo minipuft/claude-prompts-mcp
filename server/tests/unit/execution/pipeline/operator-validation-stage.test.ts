@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
-import { OperatorValidationStage } from '../../../../src/engine/execution/pipeline/stages/03-operator-validation-stage.js';
+import { OperatorValidationStage } from '../../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
 
 import type { FrameworkValidator } from '../../../../src/engine/frameworks/framework-validator.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
@@ -40,7 +40,7 @@ describe('OperatorValidationStage', () => {
     await stage.execute(context);
 
     expect(validator.validateAndNormalize).not.toHaveBeenCalled();
-    expect(context.metadata.operatorValidation).toBeUndefined();
+    expect(context.diagnostics.getByStage('OperatorValidation')).toEqual([]);
   });
 
   describe('subagentModel → delegated normalization', () => {
@@ -189,8 +189,8 @@ describe('OperatorValidationStage', () => {
       normalizedId: 'CAGEERF',
     });
     expect(context.parsedCommand?.executionPlan?.frameworkOverride).toBe('CAGEERF');
-    expect(context.metadata.operatorValidation).toMatchObject({
-      normalizedFrameworkOperators: 1,
-    });
+    expect(context.diagnostics.getByStage('OperatorValidation')).toMatchObject([
+      { level: 'debug', context: { normalizedFrameworkOperators: 1 } },
+    ]);
   });
 });
