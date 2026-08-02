@@ -107,11 +107,11 @@ Found 2026-07-28 while authoring a prompt with `inline_gate_definitions`. All re
 - [x] Add a lint ratchet strategy: keep `tests/**` excluded initially, fail CI on new violations (`server/.eslint-ratchet-baseline.json`), and tighten scope once baseline is reduced.
 - [x] Align core CI gates with server scripts: `npm run typecheck` + `npm run lint:ratchet` + tests in CI/PR workflows.
 - [x] Ensure build output is exercised in CI: run `npm run build` and `npm run start:test` across the Node matrix.
-- [x] Add toolchain pinning for developers: commit `.nvmrc` + `.node-version` aligned with `server/package.json#engines`.
+- [x] Add toolchain pinning for developers: commit `.node-version` for the Node 24 development and publish toolchain.
 - [x] Align rule docs with the new workflow: update `AGENTS.md` and `CLAUDE.md` to match scripts, docs taxonomy, and the ESLint ratchet approach.
 - [ ] Ensure PR workflows run the architecture gates: `npm run validate:arch` and decide whether warnings should fail the build once cycles are resolved.
 - [x] Ensure generated artifacts stay in sync in CI: `npm run validate:contracts` and `npm run validate:metadata`.
-- [x] Decide support policy and enforce via CI matrix (Node versions / OS): CI verifies Node 18→24 on `ubuntu-latest`. (OS matrix can be added later if scripts are made cross-platform.)
+- [x] Decide support policy and enforce via CI matrix (Node versions / OS): server CI verifies Node 22.13.0 and 24 on `ubuntu-latest`; the standalone CLI runtime remains >=18.18.0. (An OS matrix can be added later if scripts are made cross-platform.)
 
 ### Test Modernization
 

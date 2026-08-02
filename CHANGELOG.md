@@ -188,7 +188,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
 
+- **Dependency delivery contract:** Renovate now preserves semantic release types, validates extraction, uses the committed MCPB resolution path, and limits future automerge to observed low-risk development updates.
+- **Supply-chain controls:** GitHub Actions use immutable full commit SHAs with readable release comments, backed by a repository validator.
+- **Runtime support:** The server and desktop extension require Node.js >=22.13.0; server CI covers 22.13.0 and 24, the standalone CPM CLI remains >=18.18.0, and local/publish tooling uses Node 24.
 
 ## [2.1.0](https://github.com/minipuft/claude-prompts/compare/v2.0.0...v2.1.0) (2026-03-19)
 

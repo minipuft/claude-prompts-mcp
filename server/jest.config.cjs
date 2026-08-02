@@ -62,7 +62,8 @@ module.exports = {
     '^#cli-shared/(.*)\\.js$': '<rootDir>/src/cli-shared/$1',
     '^(?:\\.{1,2}/)+dist/(.*)\\.js$': '<rootDir>/src/$1',
     '^(\\.{1,2}/.*)\\.js$': '$1',
-    // node:sqlite is a native Node.js built-in (>=22); shim for Jest's module resolver
+    // node:sqlite is an unflagged Node.js built-in at the server floor (>=22.13.0);
+    // shim for Jest's module resolver
     '^node:sqlite$': '<rootDir>/tests/helpers/node-sqlite-shim.cjs'
   },
   // Transform ES modules from node_modules if needed

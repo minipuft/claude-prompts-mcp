@@ -2,15 +2,15 @@
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   description: "Renovate Bot configuration for automated dependency updates",
 
-  // Extend from recommended presets
+  // Start from Renovate's recommended policy, then opt into the targeted parts of
+  // config:best-practices that match this repository's release and support model.
   extends: [
     "config:recommended",
-    ":dependencyDashboard",
-    ":semanticCommits",
+    ":configMigration",
+    "helpers:pinGitHubActionDigests",
+    "abandonments:recommended",
     ":preserveSemverRanges",
-    "group:monorepos",
-    "group:recommended",
-    "workarounds:all",
+    ":maintainLockFilesWeekly",
   ],
 
   // Repository-specific settings
@@ -25,17 +25,28 @@
   prCreation: "immediate",
   prHourlyLimit: 2,
 
+  // Regular updates run in a six-hour hosted-app window. Vulnerability alerts
+  // override this schedule below.
+  schedule: ["* 0-5 * * 1"],
+
   // Auto-merge configuration
   platformAutomerge: false,
   automerge: false,
   automergeType: "pr",
   automergeStrategy: "squash",
 
-  // PR title and body formatting
-  commitMessagePrefix: "chore(deps):",
+  // PR title and body formatting. Server runtime dependencies are overridden to
+  // `fix` below because Release Please treats them as patch-release inputs.
+  semanticCommits: "enabled",
+  semanticCommitType: "chore",
+  semanticCommitScope: "deps",
   commitMessageAction: "update",
   commitMessageTopic: "{{depName}}",
   commitMessageExtra: "to {{#if isPinDigest}}{{{newDigestShort}}}{{else}}{{#if isMajor}}{{prettyNewMajor}}{{else}}{{#if isSingleVersion}}{{prettyNewVersion}}{{else}}{{newValue}}{{/if}}{{/if}}{{/if}}",
+
+  // Keep one repository label on every dependency PR. Matched rules append only
+  // labels that exist in the repository.
+  labels: ["dependencies"],
 
   // Package file detection: no `enabledManagers` allowlist on purpose.
   // This config was inert until 2026-07-31, so its `["npm"]` allowlist had never
@@ -44,51 +55,34 @@
   // `github-actions` manager. Auto-detection is what has actually been running; keep it.
   packageRules: [
     {
-      description: "Security updates - immediate and auto-merge",
-      matchUpdateTypes: ["patch"],
-      matchDepTypes: ["dependencies", "devDependencies"],
-      matchCurrentVersion: "!/^0/",
-      automerge: false,
-      schedule: ["at any time"],
-      labels: ["dependencies", "security", "auto-merge"],
-      groupName: "Security patches",
+      description: "Default dependency PRs remain maintenance-only",
+      matchPackageNames: ["*"],
+      semanticCommitType: "chore",
     },
     {
-      description: "Production dependencies - patch and minor updates",
+      description: "Server runtime dependencies trigger patch releases",
+      matchFileNames: ["server/package.json"],
+      matchDepTypes: ["dependencies"],
+      semanticCommitType: "fix",
+    },
+    {
+      description: "Group nonbreaking server runtime updates",
+      matchFileNames: ["server/package.json"],
       matchDepTypes: ["dependencies"],
       matchUpdateTypes: ["minor", "patch"],
-      automerge: false,
-      schedule: ["before 3am on Monday"],
-      labels: ["dependencies", "production", "auto-merge"],
-      groupName: "Production dependencies (minor & patch)",
+      groupName: "Server runtime dependencies",
     },
     {
-      description: "Production dependencies - major updates",
-      matchDepTypes: ["dependencies"],
+      description: "Group nonbreaking development updates",
+      matchDepTypes: ["devDependencies"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "Development dependencies",
+    },
+    {
+      description: "Isolate major updates for manual review",
       matchUpdateTypes: ["major"],
-      automerge: false,
-      schedule: ["before 3am on Monday"],
-      labels: ["dependencies", "production", "major-update", "needs-review"],
-      groupName: "Production dependencies (major)",
+      groupName: null,
       reviewers: ["minipuft"],
-    },
-    {
-      description: "Dev dependencies - patch and minor updates",
-      matchDepTypes: ["devDependencies"],
-      matchUpdateTypes: ["minor", "patch"],
-      automerge: false,
-      schedule: ["before 3am on Monday"],
-      labels: ["dependencies", "dev", "auto-merge"],
-      groupName: "Dev dependencies (minor & patch)",
-    },
-    {
-      description: "Dev dependencies - major updates",
-      matchDepTypes: ["devDependencies"],
-      matchUpdateTypes: ["major"],
-      automerge: false,
-      schedule: ["before 3am on Monday"],
-      labels: ["dependencies", "dev", "major-update", "needs-review"],
-      groupName: "Dev dependencies (major)",
     },
     {
       // No `allowedVersions` pin here on purpose. Both holds this file used to carry were
@@ -98,10 +92,8 @@
       // rather than in a plan file nobody opens during review.
       description: "TypeScript - require manual review",
       matchPackageNames: ["typescript"],
-      automerge: false,
-      schedule: ["before 3am on Monday"],
-      labels: ["dependencies", "typescript", "needs-review"],
       reviewers: ["minipuft"],
+      groupName: "TypeScript",
       prBodyNotes: [
         "### TypeScript 7 is BLOCKED — close this PR unless all three boxes tick",
         "",
@@ -119,38 +111,37 @@
     {
       description: "MCP SDK - critical dependency",
       matchPackageNames: ["@modelcontextprotocol/sdk"],
-      automerge: false,
       schedule: ["at any time"],
-      labels: ["dependencies", "mcp-sdk", "critical", "needs-review"],
       reviewers: ["minipuft"],
-      groupName: "MCP SDK updates",
+      groupName: "MCP SDK",
     },
     {
       description: "Testing frameworks - require validation",
-      matchPackageNames: ["jest", "ts-jest", "@types/jest"],
-      automerge: false,
-      schedule: ["before 3am on Monday"],
-      labels: ["dependencies", "testing", "needs-review"],
-      groupName: "Testing framework updates",
+      matchPackageNames: ["jest", "ts-jest", "@types/jest", "@jest/**"],
+      groupName: "Testing frameworks",
     },
     {
       description: "ESLint and Prettier - require validation",
       matchPackageNames: [
         "eslint",
         "prettier",
-        "@typescript-eslint/eslint-plugin",
-        "@typescript-eslint/parser",
+        "@eslint/**",
+        "typescript-eslint",
+        "eslint-config-*",
+        "eslint-plugin-*",
       ],
-      automerge: false,
-      schedule: ["before 3am on Monday"],
-      labels: ["dependencies", "linting", "needs-review"],
       groupName: "Linting and formatting tools",
     },
     {
-      description: "Vulnerability fixes - high priority",
-      matchUpdateTypes: ["patch", "minor"],
-      isVulnerabilityAlert: true,
-      prPriority: 10,
+      description: "GitHub Actions - one executable supply-chain boundary",
+      matchManagers: ["github-actions"],
+      groupName: "GitHub Actions",
+    },
+    {
+      description: "Pinned Python validation tools",
+      matchDatasources: ["pypi"],
+      matchPackageNames: ["ruff", "pyrefly"],
+      groupName: "Python validation tools",
     },
     // The zod <4.0.0 hold was removed on 2026-08-01, together with the migration it was
     // deferring. What satisfied it: @modelcontextprotocol/sdk 1.30.0 accepts ^3.25 || ^4.0,
@@ -175,19 +166,20 @@
   // Vulnerability alerts
   // Renovate is the sole remediation path since Dependabot security updates were
   // disabled (2026-07-31). Dependabot *alerts* stay on — Renovate reads that feed
-  // to populate these. `minimumReleaseAge: 0` overrides the global 3-day soak,
+  // to populate these. `minimumReleaseAge: null` overrides the global 3-day soak,
   // which would otherwise delay every CVE fix by three days.
   vulnerabilityAlerts: {
-    labels: ["security", "vulnerability"],
+    enabled: true,
     automerge: false,
     schedule: ["at any time"],
     minimumReleaseAge: null,
+    addLabels: ["security", "vulnerability"],
   },
 
   // Dependency dashboard
   dependencyDashboard: true,
   dependencyDashboardTitle: "📦 Dependency Updates Dashboard",
-  dependencyDashboardHeader: "This dashboard tracks all pending dependency updates. Security updates are processed immediately, while regular updates run Monday mornings.",
+  dependencyDashboardHeader: "This dashboard tracks all pending dependency updates. Vulnerability alerts run immediately; regular updates and lock maintenance run Mondays from 00:00 through 05:59 UTC.",
   dependencyDashboardApproval: false,
 
   // Stability - wait for package to stabilize (renamed from stabilityDays)
@@ -201,10 +193,9 @@
   // Lockfile maintenance
   lockFileMaintenance: {
     enabled: true,
-    schedule: ["before 3am on the first day of the month"],
+    schedule: ["* 0-5 * * 1"],
     automerge: false,
     commitMessageAction: "refresh",
-    labels: ["dependencies", "lockfile-maintenance"],
   },
 
   // PR body template
@@ -215,32 +206,43 @@
   branchPrefix: "renovate/",
   branchConcurrentLimit: 10,
 
-  // Respect package.json version ranges
-  rangeStrategy: "auto",
   respectLatest: true,
 
   // Tool versions pinned inside workflow `run:` steps are invisible to every built-in
-  // manager — nothing parses a shell line. Leaving them unpinned is the alternative, and
-  // that is what turned an untouched branch red on 2026-07-31 when `pip install pyrefly`
-  // silently moved 0.55.x -> 1.1.1. These two regexes are what make pinning sustainable
-  // rather than a version that rots because no one is watching it.
+  // manager — nothing parses a shell line. MCPB is deliberately absent here because its
+  // exact root devDependency is the sole update path. The three remaining workflow tools
+  // need exact regex managers so their pins stay maintainable.
   customManagers: [
     {
       customType: "regex",
-      description: "Pinned PyPI tools installed in workflow run steps",
-      managerFilePatterns: ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      description: "Pinned Ruff version in the CI workflow",
+      managerFilePatterns: ["/^\\.github\\/workflows\\/ci\\.yml$/"],
       matchStrings: [
-        "pip install (?<depName>[a-zA-Z0-9._-]+)==(?<currentValue>[0-9][^\\s\"']*)",
+        "run: pip install ruff==(?<currentValue>[0-9][^\\s\"']*) --quiet",
       ],
+      depNameTemplate: "ruff",
       datasourceTemplate: "pypi",
     },
     {
       customType: "regex",
-      description: "Pinned npm tools installed globally in workflow run steps",
-      managerFilePatterns: ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      description: "Pinned Pyrefly version in the CI workflow",
+      managerFilePatterns: ["/^\\.github\\/workflows\\/ci\\.yml$/"],
       matchStrings: [
-        "npm install -g (?<depName>@?[a-zA-Z0-9._/-]+)@(?<currentValue>[0-9][^\\s\"']*)",
+        "run: pip install pyrefly==(?<currentValue>[0-9][^\\s\"']*) --quiet",
       ],
+      depNameTemplate: "pyrefly",
+      datasourceTemplate: "pypi",
+    },
+    {
+      customType: "regex",
+      description: "Pinned Renovate version in its validator workflow",
+      managerFilePatterns: [
+        "/^\\.github\\/workflows\\/renovate-config-validator\\.yml$/",
+      ],
+      matchStrings: [
+        "npm install -g renovate@(?<currentValue>[0-9][^\\s\"']*)",
+      ],
+      depNameTemplate: "renovate",
       datasourceTemplate: "npm",
     },
   ],

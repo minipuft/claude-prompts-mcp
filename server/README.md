@@ -2,9 +2,11 @@
 
 [![npm version](https://img.shields.io/npm/v/claude-prompts.svg)](https://www.npmjs.com/package/claude-prompts)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18.18-brightgreen.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)](https://nodejs.org/)
 
 MCP server for prompt management, thinking frameworks, and quality gates. Hot-reloads prompts, injects structured reasoning, enforces output validation—all through MCP tools Claude can call directly.
+
+The server and desktop extension require Node.js >=22.13.0 because the runtime uses `node:sqlite` without an experimental flag. The separately packaged CPM CLI supports Node.js >=18.18.0.
 
 ## Quick Start
 

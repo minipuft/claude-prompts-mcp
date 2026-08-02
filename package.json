@@ -9,12 +9,14 @@
   ],
   "scripts": {
     "prepare": "husky || true",
+    "mcpb:validate": "mcpb validate manifest.json",
     "sync": "bash scripts/sync-to-cache.sh",
     "dev": "npm run sync && echo 'Restart Claude Code to apply hook changes'",
     "dev:claude": "bash scripts/dev-claude.sh",
     "dev:claude:resume": "bash scripts/dev-claude.sh --resume"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "husky": "^9.1.7"
