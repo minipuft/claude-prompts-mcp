@@ -14,6 +14,11 @@ const ACTION_FILES = [
 ];
 const PACKAGE_FILES = ['cli/package.json', 'package.json', 'server/package.json'];
 const EXPECTED_COUNTS = { 'github-actions': 7, nodenv: 1, npm: 3, regex: 3 };
+const EXPECTED_REGEX_IDENTITIES = [
+  ['pyrefly', '.github/workflows/ci.yml'],
+  ['renovate', '.github/workflows/renovate-config-validator.yml'],
+  ['ruff', '.github/workflows/ci.yml'],
+];
 const RULES = [
   ['Default dependency PRs remain maintenance-only', { semanticCommitType: 'chore' }],
   ['Server runtime dependencies trigger patch releases', { semanticCommitType: 'fix' }],
@@ -108,10 +113,21 @@ function validateExtraction(stats, extracted, errors) {
   }
   const regexDeps = dependencies
     .filter((dependency) => dependency.manager === 'regex')
-    .map((dependency) => `${dependency.depName}@${dependency.currentValue}`)
+    .map((dependency) => `${dependency.file}:${dependency.depName}`)
     .sort();
-  if (!same(regexDeps, ['pyrefly@1.1.1', 'renovate@44.6.0', 'ruff@0.16.0'])) {
+  const expectedRegexDeps = EXPECTED_REGEX_IDENTITIES.map(
+    ([depName, file]) => `${file}:${depName}`
+  ).sort();
+  if (!same(regexDeps, expectedRegexDeps)) {
     errors.push(`custom-manager identities changed: [${regexDeps}]`);
+  }
+  for (const dependency of dependencies.filter(({ manager }) => manager === 'regex')) {
+    if (
+      typeof dependency.currentValue !== 'string' ||
+      !/^[0-9][^\s"'=]*$/.test(dependency.currentValue)
+    ) {
+      errors.push(`custom-manager value is invalid: ${dependency.depName}`);
+    }
   }
 }
 
@@ -137,10 +153,11 @@ function fixtureRows() {
   const emptyEntries = (files) => files.map((packageFile) => ({ packageFile, deps: [] }));
   const packageEntries = emptyEntries(PACKAGE_FILES);
   packageEntries[1].deps.push({ depName: '@anthropic-ai/mcpb', currentValue: '2.1.2' });
-  const regex = ['ruff@0.16.0', 'pyrefly@1.1.1', 'renovate@44.6.0'].map((value) => {
-    const [depName, currentValue] = value.split('@');
-    return { packageFile: 'fixture', deps: [{ depName, currentValue }] };
-  });
+  const versions = { pyrefly: '1.1.1', renovate: '44.6.0', ruff: '0.16.0' };
+  const regex = EXPECTED_REGEX_IDENTITIES.map(([depName, packageFile]) => ({
+    packageFile,
+    deps: [{ depName, currentValue: versions[depName] }],
+  }));
   const config = {
     labels: ['dependencies'],
     automerge: false,
@@ -184,8 +201,15 @@ function main() {
     if (validateRows(fixture).length) throw new Error('healthy extraction fixture failed');
     if (!validateRows([...fixture, { level: 40, msg: 'warning' }]).length)
       throw new Error('warning passed');
-    fixture[2].packageFiles.npm[1].deps = [];
-    if (!validateRows(fixture).length) throw new Error('missing MCPB passed');
+    const updatedDependency = fixtureRows();
+    updatedDependency[2].packageFiles.regex[2].deps[0].currentValue = '0.16.1';
+    if (validateRows(updatedDependency).length) throw new Error('valid dependency update failed');
+    const missingMcpb = fixtureRows();
+    missingMcpb[2].packageFiles.npm[1].deps = [];
+    if (!validateRows(missingMcpb).length) throw new Error('missing MCPB passed');
+    const invalidRegexValue = fixtureRows();
+    invalidRegexValue[2].packageFiles.regex[0].deps[0].currentValue = '';
+    if (!validateRows(invalidRegexValue).length) throw new Error('invalid regex value passed');
     console.log('PASSED: Renovate extraction validator self-test');
     return;
   }
