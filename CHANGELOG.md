@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.2](https://github.com/minipuft/claude-prompts/compare/v3.0.1...v3.0.2) (2026-08-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** the published MCP inputSchema changed in 39 places. The SDK picks its JSON Schema converter from the installed zod major (zod-json-schema-compat.js:19-28), so this bump swaps the engine that produces the tool surface CLAUDE.md places inside the Public API Contract. The plan pre-committed the rule "empty diff -> minor, non-empty -> major" before the diff was taken; it is non-empty.
+
+### Fixed
+
+* **scripts:** check gemini's dependency range, not its own version ([#170](https://github.com/minipuft/claude-prompts/issues/170)) ([adee76c](https://github.com/minipuft/claude-prompts/commit/adee76c2a28c65c00e9989df466fc071a0110ba6))
+
+
+### Maintenance
+
+* **deps:** dependency modernization — Tiers A–D (zod 4, js-yaml 5, TypeScript 6, ESLint 10) ([#172](https://github.com/minipuft/claude-prompts/issues/172)) ([a28119c](https://github.com/minipuft/claude-prompts/commit/a28119cf859a3ba34b32aa7fa92092b767236847))
+* release 3.0.2 rather than the computed 4.0.0 ([#173](https://github.com/minipuft/claude-prompts/issues/173)) ([550b2e4](https://github.com/minipuft/claude-prompts/commit/550b2e455275ddb5c7f870f7651e1cae76659556))
+
 ## [3.0.1](https://github.com/minipuft/claude-prompts/compare/v3.0.0...v3.0.1) (2026-08-01)
 
 
