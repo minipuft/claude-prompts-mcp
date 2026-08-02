@@ -256,3 +256,43 @@ Triggered by a roleplay UX test of the post-B3 README using a `general-purpose` 
 ### Recommended follow-up (optional)
 
 Spawn a fresh Maya agent against the post-B3.5 README, compare verdict against the original roleplay transcript. If Maya now reaches "Install" instead of "Deeper eval", the iteration is empirically validated.
+
+---
+
+## Adoption Signal (Track A8)
+
+**Baseline recorded 2026-08-02** — two days after MIT restore (2026-07-31). Observation window: ~2026-08-14 to 08-28. No README/metadata changes until it closes. Follow-up work: `plans/acquisition-recovery.md`.
+
+**Timeline correction**: Track A/B order inverted in practice — README rework shipped ~2026-05-15 under AGPL; MIT restored 2026-07-31. Variables still isolated, opposite order: May 15–Jul 31 = new README + AGPL · Aug 1+ = new README + MIT.
+
+### npm monthly downloads (`claude-prompts`)
+
+| Month   | Downloads | Event                                                      |
+| ------- | --------- | ---------------------------------------------------------- |
+| 2025-12 | 401       |                                                            |
+| 2026-01 | 996       | peak — likely discovery event                              |
+| 2026-02 | 297       | decline starts (pre-AGPL)                                  |
+| 2026-03 | 670       | AGPL lands Mar 11                                          |
+| 2026-04 | 134       |                                                            |
+| 2026-05 | 171       | README rework lands May 15 — no measurable change          |
+| 2026-06 | 171       |                                                            |
+| 2026-07 | 148       | MIT restored Jul 31                                        |
+| 2026-08 | 341       | **Aug 1 alone** — watch whether post-MIT signal or one-off |
+
+**Reading**: decline began before AGPL; AGPL plausibly suppressed recovery rather than caused the drop. New README moved nothing May–Jul → bottleneck is acquisition, not conversion.
+
+### GitHub (2026-08-02 snapshot)
+
+- **Stars**: 182
+- **Views** (14d ending Jul 31): 175 total / 78 unique
+- **Clones** (14d): 21,917 total / 205 unique — daily 1,100–1,900 with ~25 uniques ⇒ dominated by CI/bots; track _uniques_ only
+- **Top referrers** (14d): Google 49/28 · github.com 45/20 · Bing 5/1 · Brave 2/2 · DuckDuckGo 1/1 · context7.com 1/1 — **Google is already the top channel**; search works, funnel is small
+- **Top content paths**: Overview 78/45 · `docs/architecture/overview.md` 20/11 · `docs/tutorials/build-first-prompt.md` 12/11
+
+**Traffic API retains only 14 days** — re-snapshot views/clones/referrers at least fortnightly during the window (next: ~2026-08-14).
+
+### Window-close checklist
+
+- [ ] Re-snapshot npm monthlies + GitHub traffic (~Aug 14 and ~Aug 28)
+- [ ] Judge: did MIT restore move downloads/stars/uniques?
+- [ ] Record verdict here; then unblock `acquisition-recovery.md` Tiers 1–3
