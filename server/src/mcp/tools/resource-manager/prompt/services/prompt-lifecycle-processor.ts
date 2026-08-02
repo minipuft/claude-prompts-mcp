@@ -312,7 +312,7 @@ export class PromptLifecycleProcessor {
       const versionResult = await this.context.versionHistoryService.saveVersion(
         'prompt',
         promptData.id,
-        beforeContent as Record<string, unknown>,
+        beforeContent,
         {
           description: args.version_description ?? 'Update via resource_manager',
           diff_summary: diffSummary,

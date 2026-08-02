@@ -345,39 +345,174 @@ Both emitted files changed shape — the old converter wrapped everything under
 (+70/−74/~0 and +72/−73/~0). Nothing references `#/definitions/...`; these are YAML-authoring
 schemas whose consumers point at the file root.
 
-## Tier D — TypeScript 7 + ESLint 10 (research only)
+## Tier D — four sub-tiers, three executable and one blocked
 
-**No implementation steps.** These are coupled through `typescript-eslint` 8.53.0 → 8.65.0 and
-likely have to move together.
+Planned 2026-08-01 via `>>implementation_plan`, then **substantially corrected** by a
+high-effort research agent that ran the migrations in a scratch copy. The corrections are
+recorded below rather than silently folded in, because two of them invalidate claims this
+plan made confidently.
 
-| Package                 | Current → Latest             |
-| ----------------------- | ---------------------------- |
-| `typescript`            | 5.9.3 → **7.0.2**            |
-| `eslint` + `@eslint/js` | 9.39.5 → **10.8.0** / 10.0.1 |
-| `typescript-eslint`     | 8.53.0 → 8.65.0              |
+### Corrections to the first pass
 
-### What must be investigated
+| I claimed                                       | Actually                                                           | Consequence                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| "TypeScript went 5.9 → 7.0 with no 6.x"         | **TypeScript 6.0.3 exists** and is verified green on this codebase | The whole tier was mis-shaped. TS 6 is a shippable step, not a gap to jump                           |
+| The import→import-x swap keeps counts unchanged | The swap **renames every rule ID** `import/*` → `import-x/*`       | The ratchet reads a rename as "7 fixed + N new". Needs a key-rename strategy, not a count comparison |
+| TS 7 is blocked by two pins                     | **Three** — dependency-cruiser is the third                        | And its failure mode is the worst of the three                                                       |
+| typescript-eslint gains eslint 10 at 8.65       | It lands at **8.60.0**                                             | 8.60 is the floor, not 8.65                                                                          |
 
-1. **Does TS 7 change `tsc --noEmit` semantics on this codebase?** The Go-native rewrite is
-   advertised as compatible; the only evidence that counts is a run against `strict` source.
-2. **What happens to the ratchet?** `lint:ratchet` compares against exactly **3475 errors /
-   1434 warnings**. ESLint 10 and a new TS parser will move that number in both directions at
-   once, and the ratchet cannot distinguish "fixed" from "no longer detected."
-3. **Does `typescript-eslint` 8.65 support both?** It is the joint on which the pair pivots.
-4. **Does ts-jest support TS 7?** 146 suites / 1732 tests depend on it.
-5. **Does esbuild care?** It strips types rather than typechecking, so probably not — worth a
-   single build to confirm rather than assume.
+### The severe finding: TS 7 false-greens `validate:arch`
 
-### Evidence that would unblock
+Measured, same config, two TypeScript versions:
 
-- A branch where `npx tsc --noEmit` under TS 7 produces a diffable error list against the 5.9.3 run
-- `typescript-eslint` release notes confirming a version supporting ESLint 10 **and** TS 7
-- A decision on how the ratchet baseline is re-established — regenerate wholesale, or hold the old
-  number and treat every delta as a review item
+```
+TS 5.9.3   x 2 dependency violations (0 errors, 2 warnings). 438 modules, 1792 dependencies cruised.
+TS 7.0.2   ✔ no dependency violations found (0 modules, 0 dependencies cruised)
+           warning missing-typescript-transpiler: not a compatible TypeScript compiler
+                   (typescript: >=2.0.0 <7.0.0)
+```
 
-Until items 1-3 are answered, this tier has no steps and should not acquire any.
+**`validate:arch` exits 0 while enforcing nothing.** `validate:all` and CI go green with every
+layer boundary and cycle rule silently switched off — a warning, not an error. This is the same
+shape as the `|| true` that hid a missing `skills/` directory for months, and it is exactly why
+TS 7 must not be attempted opportunistically.
 
----
+### D-1 — TypeScript 5.9.3 → 6.0.3 · **verified green in scratch**
+
+| #    | Status | File                                   | Change                                                                                        | ~Lines | Depends    | Verify                                                                                                                            |
+| ---- | ------ | -------------------------------------- | --------------------------------------------------------------------------------------------- | ------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| D1.1 | ✓      | `server/jest.config.cjs:17`            | `moduleResolution: 'node'` → `'bundler'`                                                      | 1      | —          | Without it every suite dies on `TS5107: Option 'moduleResolution=node10' is deprecated`. Measured: fails before, 29/29 pass after |
+| D1.2 | ✓      | `server/package.json`                  | `typescript-eslint` 8.53.0 → ^8.60.0 (peers `<6.1.0`)                                         | 1      | —          | `npm ls` clean — 8.53 peers `<6.0.0` and would go invalid                                                                         |
+| D1.3 | ✓      | `server/package.json`                  | `typescript` → ^6.0.3                                                                         | 1      | D1.1, D1.2 | `npx tsc --noEmit` 0 errors                                                                                                       |
+| D1.4 | ✓      | `server/.eslint-ratchet-baseline.json` | Re-baseline **only** `@typescript-eslint/no-unnecessary-type-assertion` 0 → 33, or fix the 33 | ~2     | D1.2       | See the re-baselining rule below — prefer fixing                                                                                  |
+
+Agent-measured on the scratch copy: `tsc --noEmit` 0 errors · `validate:arch` **438 modules,
+1792 deps** (unchanged, so no false green) · full lint **3477e/1432w, zero per-rule delta** ·
+**146 suites / 1732 tests passed**.
+
+**Gate**: `validate:all` 0 · `lint:ratchet` no regressions · `test:ci` 1732 · `test:integration`
+426 · `test:e2e` 36 · `verify:mcp` 11/11 · `validate:tool-schemas` 0 · `validate:arch` still
+cruising 438 modules — assert the module count, not just the exit code.
+
+### D-2 — ratchet: detect a vanished rule (do this before D-3)
+
+| #    | Status | File                                      | Change                                                                                             | ~Lines | Depends | Verify                                                                                                                |
+| ---- | ------ | ----------------------------------------- | -------------------------------------------------------------------------------------------------- | ------ | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| D2.1 | ✓      | `server/scripts/eslint-ratchet.js:83-114` | In `compareSummaries`, add: baseline has the rule ID, current does not → push a `vanished` finding | ~15    | —       | **Force a failure**: delete a rule ID from the baseline, run `lint:ratchet`, confirm non-zero exit naming it; restore |
+| D2.2 | ✓      | `server/scripts/eslint-ratchet.js`        | Print vanished rules under their own heading                                                       | ~8     | D2.1    | The D2.1 probe shows the rule under the new heading                                                                   |
+
+`compareSummaries` (`:83`) **already unions** baseline and current rule IDs at 86-89. The gap is
+at 92-93: the absent current side defaults to `{errors: 0, warnings: 0}` and the only test is
+`current > baseline`, so `0 > N` never fires.
+
+The agent found **zero rules vanish** under eslint 10 itself — but D-3's plugin swap renames four
+rule IDs, which is a vanish by any other name. This check is what makes that rename reviewable.
+
+### D-3 — ESLint 9 → 10 + `eslint-plugin-import` → `import-x`
+
+`eslint-plugin-import@2.32.0` does not merely warn under ESLint 10 — it **crashes**:
+
+```
+TypeError: sourceCode.getTokenOrCommentAfter is not a function
+  Rule: "import/order"   at eslint-plugin-import/lib/rules/order.js:31
+```
+
+2.32.0 is the latest and there is no eslint-10 release. `eslint-plugin-import-x@4.17.1` declares
+`^10.0.0` — but it is a **plugin swap, so rule IDs become `import-x/*`**.
+
+| #    | Status | File                                                            | Change                                                                                                                                   | ~Lines | Depends | Verify                                                                                                                          |
+| ---- | ------ | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| D3.1 | ✓      | `server/package.json`                                           | `eslint-plugin-import` → `eslint-plugin-import-x@^4.17.1`                                                                                | 1      | D2.1    | `npm ci` clean                                                                                                                  |
+| D3.2 | ✓      | `server/eslint.config.js:3, 46, 223`                            | Swap import and **both** registrations; `plugins: { 'import-x': … }`                                                                     | 3      | D3.1    | Plugin resolves                                                                                                                 |
+| D3.3 | ✓      | `server/eslint.config.js:94,123,124,125` and `:269,298,299,300` | Rename all 8 rule references `import/*` → `import-x/*`                                                                                   | 8      | D3.2    | No "Definition for rule not found"                                                                                              |
+| D3.4 | ✓      | `server/.eslint-ratchet-baseline.json`                          | Rename the four `import/*` keys to `import-x/*` **in place, preserving counts**, then run `lint:ratchet check` — never `update-baseline` | ~4     | D3.3    | Passes → coverage transferred. Fails → import-x found more. Passes with slack → it found **less**, investigate before accepting |
+| D3.5 | ✓      | `server/package.json`                                           | `eslint` ^10.8.0 + `@eslint/js` ^10.0.1 (locked together — `@eslint/js` peers `^10.0.0`)                                                 | 2      | D3.4    | `npx eslint --version` → 10.x                                                                                                   |
+| D3.6 | ✓      | `server/eslint-rules/claude-plugin.js`                          | Verify all **four** local rules still fire                                                                                               | 0-20   | D3.5    | One violating fixture per rule, each reported                                                                                   |
+| D3.7 | ✓      | `server/.eslint-ratchet-baseline.json`                          | `no-useless-assignment` 0 → 8 and `preserve-caught-error` 0 → 4 — **fix, do not baseline**                                               | ~12    | D3.6    | `lint:ratchet` 0                                                                                                                |
+
+`eslint-config-prettier`, `eslint-plugin-prettier` and `eslint-plugin-sonarjs` need **no** bump —
+sonarjs 4.2.0 already declares `^10.0.0`.
+
+**Gate**: as D-1, plus zero vanished rules that are not the four deliberate `import-x` renames.
+
+### What execution corrected in D-1..D-3
+
+Recorded as corrections rather than folded in silently — four of these contradict what this
+section asserted before it was run.
+
+| The plan said                                      | Execution measured                                                                                                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D3.4 renames **four** `import/*` baseline keys     | **Two** — `import/order` and `import/no-duplicates`. The "8 rule references" in D3.3 was right; the key count was not                                |
+| D2.1's probe: "delete a rule ID from the baseline" | That produces an **increase**, which the old code already caught. A vanish needs a rule **added** to the baseline that the current run cannot emit   |
+| D3.7: fix `preserve-caught-error`                  | Needs `tsconfig.json` `lib: ES2020` → **ES2022** — `cause` is an ES2022 signature, so the fix does not compile without it                            |
+| import-x behavioural equivalence "unmeasured"      | **Measured equivalent.** `import/order` actual was **5** (the baseline's 7 was stale slack); `import-x/order` is also 5. `no-duplicates` 2 both ways |
+
+**Two latent defects found by D3.6, both pre-existing and neither caught by any gate:**
+
+1. `eslint-rules/claude-plugin.js:245` called `context.getFilename?.()`. **ESLint 10 removed
+   `context.getFilename()` and `context.getSourceCode()`** (verified against the Linter API). The
+   optional call yielded `undefined`, `?? ''` made it an empty string, and the `allowInternal`
+   exemption silently stopped applying. Line 50's `context.sourceCode ?? context.getSourceCode()`
+   was safe only because `??` short-circuits.
+2. The same guard tested for `/src/execution/context/`, but the layer restructure moved that
+   directory to `/src/engine/execution/context/`. So `allowInternal: true` had been dead **twice
+   over**, and fixing only the API would not have revived it. Zero current violations, so the
+   correction changed no counts; verified both ways — flagged outside the directory, exempt inside.
+
+**`claude/no-emojis` is dead config**: the plugin defines and exports it, and no ESLint config
+anywhere enables it. Three local rules are live, not four. Left as-is — enabling it is a separate
+decision with its own violation backlog.
+
+**Not a gate problem, but present**: `server/undefined/tmp/repro.mjs` exists (dated 2026-08-01
+03:52, origin unknown) and contributes 78 of the problems in `npm run lint`. It is invisible to
+`git status` because its only content sits under a gitignored `tmp/`. No gate sees it —
+`lint:ratchet` scopes to `src` — but `npm run lint` output is polluted until it is removed.
+
+**Final counts**: 3471 errors / 1428 warnings, **zero rules increased** against the pre-tier
+actual (3477/1432). Every decrease is attributable to this tier: −33 `no-unnecessary-type-assertion`
+(fixed, not baselined), −4 `no-explicit-any` and −4 `no-unsafe-assignment` from the four `as any`
+sites the cleanup removed, −1 `no-unnecessary-condition`, −1 `no-unused-vars`. The ratchet baseline
+file changed by exactly two key renames, counts preserved; `update-baseline` was never run.
+
+### D-4 — TypeScript 7 · **BLOCKED, no steps**
+
+`tsc` itself is ready — TS 7.0.2 typechecks this codebase with **0 errors in 0.71s** (vs 3.87s on
+5.9.3), and `--project tsconfig.json` works verbatim. Everything downstream of it is not:
+
+| Predicate                             | Check                                                    | Currently                                                                      |
+| ------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| dependency-cruiser cruises >0 modules | `npm run validate:arch` prints a non-zero module count   | **0 modules, exits 0** — false green                                           |
+| ts-jest admits TS 7                   | `npm view ts-jest peerDependencies.typescript`           | `>=4.3 <7`; hard runtime guard, all suites fail to run                         |
+| typescript-eslint admits TS 7         | `npm view typescript-eslint peerDependencies.typescript` | `<6.1.0`; explicit `versionMajor >= 7` throw, upstream #10940 targets **≥7.1** |
+
+All three must pass. Note the ts-jest error message suggests installing `@typescript/native` —
+**that package does not exist on npm** (404), so the documented escape hatch is partly bogus.
+
+### Risks
+
+| Risk                                                                    | Impact                                                              | Mitigation                                                                                      | Rollback                      |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------- |
+| TS 7 attempted opportunistically                                        | `validate:arch` silently enforces nothing while CI is green         | D-4's first predicate asserts a non-zero module count, not exit 0                               | Revert TypeScript             |
+| The `import-x` rename reads as 7 fixed + N new                          | Coverage loss laundered as improvement                              | D2.1 lands first; D3.4 renames baseline keys in place and uses `check`, never `update-baseline` | Restore the baseline from git |
+| Baselining the 45 new errors instead of fixing them                     | A one-time cleanup becomes permanent debt the ratchet then protects | D1.4/D3.7 say fix; baseline only what is consciously declined, and say so in the commit         | n/a                           |
+| Committed ceiling (3596/1541) has 119/109 slack over actual (3477/1432) | A decrease from lost detection hides inside the slack               | Compare against the **actual** prior run, not the committed ceiling                             | n/a                           |
+| The 4 local plugin rules break on the ESLint 10 API                     | Custom invariants stop firing with no error                         | D3.6 forces a violation per rule                                                                | Pin eslint back to ^9         |
+
+### Not verified — carry into execution
+
+- `eslint-plugin-import-x` behavioural equivalence on this config. The `import/order` group config
+  at `eslint.config.js:94-122` is nontrivial and post-swap counts are **unmeasured**. D3.4 is
+  designed so this surfaces rather than passes silently.
+- Integration (426) and e2e (36) suites under TS 6 — only the 146 unit suites were run.
+- The `cli` workspace under TS 6. It declares its own `typescript: ^5.9.3` and CI runs
+  `npm -w cli run typecheck` (`ci.yml:120`). Untouched by the scratch run.
+- Full eslint-10 counts with import rules enabled — impossible while the old plugin crashes.
+- `ts-morph` / `madge` under TS 6 (neither is in `validate:all`).
+
+### Release
+
+- **commit_convention**: `chore(deps): …` for D-1 and D-3 · `refactor(server): …` for D-2
+- **scope**: `server`, `deps`, `scripts`
 
 ## Sequencing
 
@@ -394,12 +529,12 @@ and zero js-yaml importers under `server/src/engine/execution/pipeline/`.
 
 ## Changelog
 
-| Tier | Section                   | Entry                                                                                                                                                                       |
-| ---- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A    | Maintenance               | commitlint 21, lint-staged 17, dependency-cruiser 18, knip 6                                                                                                                |
-| B    | Changed                   | js-yaml 5 — `load` now defaults to `CORE_SCHEMA`; workspace-overlay YAML relying on `!!merge` or empty documents may need review. `@types/diff` removed; diff v9 self-types |
-| C    | Changed _or_ **BREAKING** | decided by C7's schema diff — not before                                                                                                                                    |
-| D    | —                         | none                                                                                                                                                                        |
+| Tier | Section                   | Entry                                                                                                                                                                                                                                               |
+| ---- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A    | Maintenance               | commitlint 21, lint-staged 17, dependency-cruiser 18, knip 6                                                                                                                                                                                        |
+| B    | Changed                   | js-yaml 5 — `load` now defaults to `CORE_SCHEMA`; workspace-overlay YAML relying on `!!merge` or empty documents may need review. `@types/diff` removed; diff v9 self-types                                                                         |
+| C    | Changed _or_ **BREAKING** | decided by C7's schema diff — not before                                                                                                                                                                                                            |
+| D    | Maintenance _and_ Changed | TypeScript 6.0.3, ESLint 10, `eslint-plugin-import` → `import-x`. **Changed**: `tsconfig.json` `lib` ES2020 → ES2022 (required for `Error(msg, { cause })`); 33 redundant type assertions and 12 new ESLint 10 findings fixed rather than baselined |
 
 ---
 

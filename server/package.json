@@ -172,16 +172,16 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
+    "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.5.0",
     "@types/nunjucks": "^3.2.6",
     "dependency-cruiser": "^18.1.0",
     "esbuild": "^0.28.0",
-    "eslint": "^9.39.2",
+    "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-import-x": "^4.17.1",
     "eslint-plugin-prettier": "^5.5.5",
     "eslint-plugin-sonarjs": "^4.0.2",
     "jest": "^30.3.0",
@@ -192,7 +192,7 @@
     "ts-jest": "^29.1.2",
     "ts-morph": "^27.0.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "8.53.0"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.60.0"
   }
 }

@@ -1038,7 +1038,9 @@ export class ChainSessionStore implements ChainSessionService {
     const chainVariables = this.textReferenceStore.buildChainVariables(session.chainId);
 
     // Get original arguments + previous results from ArgumentHistoryTracker (with graceful fallback)
-    let argumentContext = {};
+    // No initializer: all three paths below (tracker success, tracker failure, no tracker)
+    // assign it. `= {}` also pinned the type to `{}`, so the annotation is explicit now.
+    let argumentContext: Record<string, unknown>;
     let reviewContext:
       | {
           originalArgs: Record<string, unknown>;

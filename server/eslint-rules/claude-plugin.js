@@ -43,7 +43,9 @@ const normalizePatterns = (patterns = DEFAULT_FORBIDDEN_PATTERNS) => {
       };
     }
 
-    throw new Error(`Invalid pattern configuration supplied to claude/no-legacy-imports: ${pattern}`);
+    throw new Error(
+      `Invalid pattern configuration supplied to claude/no-legacy-imports: ${pattern}`
+    );
   });
 };
 
@@ -56,10 +58,13 @@ const matchesRegex = (regex, codePoint) => {
   }
   return regex.test(String.fromCodePoint(codePoint));
 };
-const isEmojiStart = (codePoint) => matchesRegex(EXTENDED_PICTOGRAPHIC_REGEX, codePoint) || matchesRegex(EMOJI_COMPONENT_REGEX, codePoint);
+const isEmojiStart = (codePoint) =>
+  matchesRegex(EXTENDED_PICTOGRAPHIC_REGEX, codePoint) ||
+  matchesRegex(EMOJI_COMPONENT_REGEX, codePoint);
 const isEmojiComponent = (codePoint) => matchesRegex(EMOJI_COMPONENT_REGEX, codePoint);
 const isEmojiModifier = (codePoint) => matchesRegex(EMOJI_MODIFIER_REGEX, codePoint);
-const isVariationSelector = (codePoint) => (codePoint !== undefined ? VARIATION_SELECTORS.has(codePoint) : false);
+const isVariationSelector = (codePoint) =>
+  codePoint !== undefined ? VARIATION_SELECTORS.has(codePoint) : false;
 
 // Walks the UTF-16 string to capture emoji grapheme clusters (base + modifiers + joiners).
 const collectEmojiRanges = (text) => {
@@ -85,7 +90,11 @@ const collectEmojiRanges = (text) => {
 
         const nextLength = codeUnitLength(nextCodePoint);
 
-        if (isVariationSelector(nextCodePoint) || isEmojiModifier(nextCodePoint) || isEmojiComponent(nextCodePoint)) {
+        if (
+          isVariationSelector(nextCodePoint) ||
+          isEmojiModifier(nextCodePoint) ||
+          isEmojiComponent(nextCodePoint)
+        ) {
           end += nextLength;
           continue;
         }
@@ -242,9 +251,15 @@ const noContextDeepImportsRule = {
       if (!allowInternal) {
         return false;
       }
-      const filename = context.getFilename?.() ?? '';
+      // `context.filename` first: ESLint 10 REMOVED `context.getFilename()`, so the old
+      // `getFilename?.() ?? ''` silently produced '' and this exemption never applied.
+      // The optional call is kept only as an ESLint 8/9 fallback.
+      const filename = context.filename ?? context.getFilename?.() ?? '';
       const normalized = normalizePath(filename);
-      return normalized.includes('/src/execution/context/');
+      // `engine/` is part of the path. The literal used to read '/src/execution/context/',
+      // which stopped matching when the layer restructure moved the directory under
+      // src/engine/ — so this exemption was dead twice over.
+      return normalized.includes('/src/engine/execution/context/');
     };
 
     const reportIfDeepImport = (sourceNode) => {
@@ -318,15 +333,18 @@ const requireLifecycleRule = {
       },
     ],
     messages: {
-      missingLifecycle: 'Files in guarded folders must declare a @lifecycle annotation (one of: {{allowed}}).',
-      invalidLifecycle: 'Lifecycle status "{{status}}" is not allowed here (expected one of: {{allowed}}).',
-      missingDescription: 'Lifecycle annotations must include a short description (e.g. "@lifecycle canonical - gate entrypoint").',
+      missingLifecycle:
+        'Files in guarded folders must declare a @lifecycle annotation (one of: {{allowed}}).',
+      invalidLifecycle:
+        'Lifecycle status "{{status}}" is not allowed here (expected one of: {{allowed}}).',
+      missingDescription:
+        'Lifecycle annotations must include a short description (e.g. "@lifecycle canonical - gate entrypoint").',
     },
   },
   create(context) {
     const options = context.options[0] ?? {};
-    const allowed = (options.allowedStatuses ?? ['canonical', 'migrating', 'legacy']).map((status) =>
-      status.toLowerCase(),
+    const allowed = (options.allowedStatuses ?? ['canonical', 'migrating', 'legacy']).map(
+      (status) => status.toLowerCase()
     );
     const allowedDisplay = allowed.join(', ');
     const requireDescription = options.requireDescription === true;
@@ -340,7 +358,11 @@ const requireLifecycleRule = {
           : sourceCode.getAllComments();
 
         if (!leadingComments || leadingComments.length === 0) {
-          context.report({ node, messageId: 'missingLifecycle', data: { allowed: allowedDisplay } });
+          context.report({
+            node,
+            messageId: 'missingLifecycle',
+            data: { allowed: allowedDisplay },
+          });
           return;
         }
 
@@ -354,7 +376,11 @@ const requireLifecycleRule = {
         }
 
         if (!annotation) {
-          context.report({ node, messageId: 'missingLifecycle', data: { allowed: allowedDisplay } });
+          context.report({
+            node,
+            messageId: 'missingLifecycle',
+            data: { allowed: allowedDisplay },
+          });
           return;
         }
 
@@ -386,7 +412,8 @@ const noEmojiCharactersRule = {
   meta: {
     type: 'problem',
     docs: {
-      description: 'Prevents emoji characters from entering source files (removes them automatically).',
+      description:
+        'Prevents emoji characters from entering source files (removes them automatically).',
     },
     fixable: 'code',
     schema: [

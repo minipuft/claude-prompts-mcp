@@ -442,7 +442,7 @@ export class FrameworkStateStore extends EventEmitter {
 
     // Use framework manager to generate context with active framework
     const mergedCriteria: FrameworkSelectionCriteria = {
-      userPreference: defaultState.activeFramework as any,
+      userPreference: defaultState.activeFramework,
       ...criteria,
     };
 

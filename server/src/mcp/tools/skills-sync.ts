@@ -94,7 +94,8 @@ export class ConsolidatedSkillsSync {
 
   private async getStatus(): Promise<ToolResponse> {
     const configPath = getSkillsSyncConfigPath();
-    let configExists = false;
+    // No initializer: the try assigns true, the catch assigns false.
+    let configExists: boolean;
     let selectionSource: SkillsSyncStatus['selectionSource'] = 'none';
     let configuredCount = 0;
     let registrations: Record<string, unknown> | null = null;

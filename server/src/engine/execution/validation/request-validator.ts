@@ -35,7 +35,7 @@ export class McpToolRequestValidator {
       const sanitized: MutableMcpToolRequest = result;
 
       // Freeze to enforce immutability
-      return Object.freeze(sanitized) as McpToolRequest;
+      return Object.freeze(sanitized);
     } catch (error) {
       if (error instanceof ZodError) {
         const errorMessages = error.issues
@@ -47,7 +47,7 @@ export class McpToolRequestValidator {
             code: err.code,
           })),
         });
-        throw new Error(`McpToolRequest validation failed: ${errorMessages}`);
+        throw new Error(`McpToolRequest validation failed: ${errorMessages}`, { cause: error });
       }
       throw error;
     }

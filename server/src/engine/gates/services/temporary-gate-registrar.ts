@@ -296,8 +296,7 @@ export class TemporaryGateRegistrar {
     }
 
     if (canonicalGateIds.size > 0) {
-      const overrides = context.state.gates.requestedOverrides as
-        Record<string, unknown> | undefined;
+      const overrides = context.state.gates.requestedOverrides;
 
       const existingGates = (overrides?.['gates'] as any[]) ?? [];
       const existingGateStrings = existingGates.filter((g): g is string => typeof g === 'string');

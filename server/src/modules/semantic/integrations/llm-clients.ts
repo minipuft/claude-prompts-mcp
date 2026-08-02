@@ -341,7 +341,8 @@ export class LLMClientFactory {
           `Please ensure the endpoint URL is valid and follows the format: ` +
           `"https://api.openai.com/v1/chat/completions" for OpenAI, ` +
           `"https://api.anthropic.com/v1/messages" for Anthropic, ` +
-          `or a custom endpoint URL for other providers.`
+          `or a custom endpoint URL for other providers.`,
+        { cause: error }
       );
     }
   }

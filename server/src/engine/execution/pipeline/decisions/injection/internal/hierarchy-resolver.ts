@@ -103,10 +103,7 @@ export class HierarchyResolver {
       });
 
       return {
-        config: this.mergeWithDefaults(
-          injectionType,
-          stepConfig[injectionType] as InjectionTypeConfig | undefined
-        ),
+        config: this.mergeWithDefaults(injectionType, stepConfig[injectionType]),
         source: 'step-config',
         resolutionPath,
       };
@@ -140,10 +137,7 @@ export class HierarchyResolver {
       });
 
       return {
-        config: this.mergeWithDefaults(
-          injectionType,
-          chainConfig[injectionType] as InjectionTypeConfig | undefined
-        ),
+        config: this.mergeWithDefaults(injectionType, chainConfig[injectionType]),
         source: 'chain-config',
         resolutionPath,
       };
@@ -160,10 +154,7 @@ export class HierarchyResolver {
       });
 
       return {
-        config: this.mergeWithDefaults(
-          injectionType,
-          categoryConfig[injectionType] as InjectionTypeConfig | undefined
-        ),
+        config: this.mergeWithDefaults(injectionType, categoryConfig[injectionType]),
         source: 'category-config',
         resolutionPath,
       };

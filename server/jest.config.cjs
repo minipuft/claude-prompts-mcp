@@ -14,7 +14,12 @@ module.exports = {
       tsconfig: {
         module: 'esnext',
         target: 'es2020',
-        moduleResolution: 'node',
+        // 'bundler', not 'node'. TypeScript 6 deprecated `moduleResolution: node10`
+        // (which is what 'node' resolves to) into a hard TS5107 error, so every suite
+        // fails to compile under TS 6 with the old value. 'bundler' matches how this
+        // code is actually consumed — esbuild bundles it — and resolves package.json
+        // "imports" subpaths the same way tsconfig.json already does.
+        moduleResolution: 'bundler',
         allowSyntheticDefaultImports: true,
         esModuleInterop: true
       }

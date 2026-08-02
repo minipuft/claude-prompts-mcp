@@ -5,7 +5,6 @@ import { ActionHandler } from '../core/action-handler-base.js';
 import { createStructuredResponse } from '../core/response-utils.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
-import type { ConfigKey } from '../../config-utils.js';
 
 import { handleError as utilsHandleError } from '#shared/utils/index.js';
 
@@ -134,7 +133,7 @@ export class ConfigActionHandler extends ActionHandler {
 
   private async handleConfigValidate(key: string, value: string): Promise<ToolResponse> {
     if (!this.configManager) throw new Error('Config manager unavailable');
-    const validation = validateConfigInput(key as ConfigKey, value);
+    const validation = validateConfigInput(key, value);
     return this.createMinimalSystemResponse(
       validation.valid
         ? `✅ Configuration valid for **${key}**`

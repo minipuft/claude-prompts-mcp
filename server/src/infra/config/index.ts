@@ -440,19 +440,19 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       'system-prompt': {
         enabled: systemPromptEnabled,
         frequency: toFrequency(inj?.systemPrompt?.frequency, 'every', 2),
-        target: (inj?.systemPrompt?.target ?? 'steps') as 'steps' | 'gates' | 'both',
+        target: inj?.systemPrompt?.target ?? 'steps',
       },
       'gate-guidance': {
         ...DEFAULT_INJECTION_CONFIG['gate-guidance'],
         enabled: gatesEnabled,
         frequency: toFrequency(inj?.gateGuidance?.frequency, 'first-only'),
-        target: (inj?.gateGuidance?.target ?? 'both') as 'steps' | 'gates' | 'both',
+        target: inj?.gateGuidance?.target ?? 'both',
       },
       'style-guidance': {
         ...DEFAULT_INJECTION_CONFIG['style-guidance'],
         enabled: styleEnabled,
         frequency: toFrequency(inj?.styleGuidance?.frequency, 'first-only'),
-        target: (inj?.styleGuidance?.target ?? 'steps') as 'steps' | 'gates' | 'both',
+        target: inj?.styleGuidance?.target ?? 'steps',
       },
     };
   }
@@ -568,6 +568,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     // Same rename one level down: `resources.methodologies` -> `resources.frameworks`. Without
     // this the old key is read as undefined and silently falls back to the default, so a user who
     // had deliberately disabled framework resources would find them re-enabled with no error.
+    // Widening, not redundant: `methodologies` is the removed legacy key and is absent from
+    // ResourcesConfig by design, so this intersection is what makes the two reads below compile.
+    // TS 6's no-unnecessary-type-assertion reports it as unnecessary (the assignability check
+    // passes trivially for an intersection) and `--fix` deletes it, which breaks the migration
+    // with TS2339. Verified 2026-08-01: removing the assertion fails typecheck.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     const legacyResources = this.config.resources as
       (ResourcesConfig & { methodologies?: { enabled?: boolean } }) | undefined;
     if (legacyResources?.methodologies && !legacyResources.frameworks) {

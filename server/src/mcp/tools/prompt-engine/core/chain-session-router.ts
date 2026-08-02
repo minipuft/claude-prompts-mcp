@@ -34,7 +34,8 @@ export function detectChainManagementCommand(command: string): ChainManagementCo
         const parts = normalized.split(/\s+/);
         const actionIndex = parts.indexOf(action);
         const indicatorIndex = parts.indexOf(indicator);
-        let target = '';
+        // No initializer: both branches below assign it.
+        let target: string;
 
         if (actionIndex < indicatorIndex) {
           target = parts.slice(indicatorIndex + 1).join(' ');

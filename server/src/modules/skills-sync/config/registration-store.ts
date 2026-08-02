@@ -39,7 +39,7 @@ function parseConfig(raw: string): SkillsSyncConfigFile {
   if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return {};
   }
-  return parsed as SkillsSyncConfigFile;
+  return parsed;
 }
 
 function normalizeList(values: string[] | undefined): string[] {

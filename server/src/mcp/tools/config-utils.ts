@@ -338,7 +338,7 @@ export class SafeConfigWriter {
       };
     } catch (error) {
       this.logger.error(`Failed to create config backup:`, error);
-      throw new Error(`Backup creation failed: ${error}`);
+      throw new Error(`Backup creation failed: ${error}`, { cause: error });
     }
   }
 
