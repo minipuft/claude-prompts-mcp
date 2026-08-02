@@ -177,7 +177,7 @@ function sortDeep(value) {
 /**
  * Replace every `description` VALUE with a presence marker.
  *
- * Parameter descriptions inside `inputSchema` are resolved through the methodology overlay
+ * Parameter descriptions inside `inputSchema` are resolved through the framework overlay
  * (`prompt-engine.schema.ts` DescriptionResolver), so their text depends on which framework
  * happens to be active in `state.db`. A developer machine with a framework selected and a
  * clean CI runner with none produce different strings for identical code — which made the
