@@ -22,6 +22,7 @@ import type { ContentAnalysisResult } from '#shared/types/index.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
 
 import { Logger } from '#infra/logging/index.js';
+import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 
 export interface PromptGuidanceServiceConfig {
   systemPromptInjection: {
@@ -241,7 +242,7 @@ export class PromptGuidanceService {
 
       return {
         originalPrompt: prompt,
-        activeFrameworkType: 'CAGEERF',
+        activeFrameworkType: DEFAULT_FRAMEWORK_ID,
         guidanceApplied: false,
         processingTimeMs: Date.now() - startTime,
         metadata: {

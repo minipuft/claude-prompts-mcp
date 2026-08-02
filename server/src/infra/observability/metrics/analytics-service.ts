@@ -27,6 +27,7 @@ import {
   type CommandExecutionMetric,
   type CommandExecutionMode,
 } from '#shared/types/metrics.js';
+import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 
 /**
  * Centralized Metrics Collector
@@ -96,7 +97,7 @@ export class InMemoryMetricsCollector extends EventEmitter implements MetricsCol
     };
 
     this.frameworkUsage = {
-      currentFramework: 'CAGEERF', // Default framework
+      currentFramework: DEFAULT_FRAMEWORK_ID,
       frameworkSwitches: 0,
       frameworkUsageTime: {},
       frameworkSwitchHistory: [],

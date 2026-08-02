@@ -1,7 +1,7 @@
 # Per-Project Framework Selection
 
 **Date**: 2026-08-01
-**Status**: Tiers 1-4 complete + T2.5 confirmed (T1.6 open)
+**Status**: Complete — all tiers landed
 **Approach**: Both layers — `config.json` declares the per-project floor; a scoped runtime switch overrides it and persists per-workspace.
 
 ## Motivation
@@ -83,11 +83,21 @@ decide a default today (F5, F6).
 | T1.3 | ✓      | Add to `DEFAULT_FRAMEWORKS_CONFIG`, return it from `getFrameworksConfig()`, and include it in the `!this.config.frameworks` backfill block                                     | `server/src/infra/config/index.ts`                                                                                                                                                                                                                         | T1.1    | `npm test -- config`          |
 | T1.4 | ✓      | Pass `{ defaultFramework }` to `createFrameworkManager` at **both** construction sites; give `FrameworkStateStore` access to the resolved config so its own site can supply it | `server/src/mcp/tools/index.ts`, `server/src/engine/frameworks/framework-state-store.ts`                                                                                                                                                                   | T1.3    | `npm run typecheck`           |
 | T1.5 | ✓      | Replace the hardcoded `'CAGEERF'` in the store's `defaultState()` with the configured default (F6)                                                                             | `server/src/engine/frameworks/framework-state-store.ts`                                                                                                                                                                                                    | T1.4    | `npm test -- framework-state` |
-| T1.6 | ☐      | Route the four remaining fallback literals through `DEFAULT_FRAMEWORK_ID` — the fifth (`framework-action-handler.ts:83`) landed in T3.2                                        | `server/src/infra/observability/metrics/analytics-service.ts`, `server/src/engine/frameworks/prompt-guidance/service.ts`, `server/src/engine/execution/operators/chain-operator-executor.ts`, `server/src/mcp/tools/prompt-engine/utils/classification.ts` | T1.3    | `rg "'CAGEERF'" src/`         |
+| T1.6 | ✓      | Route the four remaining fallback literals through `DEFAULT_FRAMEWORK_ID` — the fifth (`framework-action-handler.ts:83`) landed in T3.2                                        | `server/src/infra/observability/metrics/analytics-service.ts`, `server/src/engine/frameworks/prompt-guidance/service.ts`, `server/src/engine/execution/operators/chain-operator-executor.ts`, `server/src/mcp/tools/prompt-engine/utils/classification.ts` | T1.3    | `rg "'CAGEERF'" src/`         |
 
 **Gate**: a `frameworks.defaultFramework` set in `config.json` is the framework a fresh state row
 resolves to, via both construction sites; no literal `'CAGEERF'` default remains outside the single
 config default constant.
+
+**Gate result (2026-08-02, T1.6)**: clause 2 now **PASS**. Three fallback defaults route through
+`DEFAULT_FRAMEWORK_ID` (`chain-operator-executor.ts` ×2, `analytics-service.ts`,
+`prompt-guidance/service.ts`). Two of the four the plan listed were **misclassified and left
+alone**: `classification.ts:190` returns `'CAGEERF'` from `suggestFramework()`, a keyword heuristic
+whose sibling returns `'ReACT'` — it means "this content looks CAGEERF-shaped", not "use the
+default", and routing it through the constant would silently change the suggestion if the default
+were repointed. `llm-clients.ts:365` is fixture input for a connectivity self-test. Every remaining
+literal is a `case` discriminator, a type comparison, `BUILTIN_FRAMEWORK_TYPES`, a doc example, or
+the constant itself.
 
 **Gate result (2026-08-01)**: clause 1 **PASS** — verified by
 `framework-state-store.persistence.test.ts` ("a scope with no persisted row resolves to the
