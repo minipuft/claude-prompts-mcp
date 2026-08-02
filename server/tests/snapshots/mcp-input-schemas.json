@@ -3,30 +3,30 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "properties": {
       "chain_id": {
-        "description": "Resume token (e.g., `chain-demo#2`). RESUME: chain_id + user_response only. Omit command.",
+        "description": "<present>",
         "pattern": "^chain-[a-zA-Z0-9_-]+(?:#\\d+)?$",
         "type": "string"
       },
       "command": {
-        "description": "Prompt ID to expand. Resulting prompt will include CAGEERF phase guidance for you to apply.",
+        "description": "<present>",
         "minLength": 1,
         "type": "string"
       },
       "force_restart": {
-        "description": "Create a new chain execution (increments chain ID). Use `command`.",
+        "description": "<present>",
         "type": "boolean"
       },
       "gate_action": {
-        "description": "User choice after gate retry limit exhaustion. \"retry\" resets attempt count, \"skip\" bypasses the gate, \"abort\" stops execution.",
+        "description": "<present>",
         "enum": ["retry", "skip", "abort"],
         "type": "string"
       },
       "gate_verdict": {
-        "description": "Send PASS/FAIL verdicts when resuming after gate reviews (e.g., \"GATE_REVIEW: PASS - rationale\"). Keep user_response for actual step output.",
+        "description": "<present>",
         "type": "string"
       },
       "gates": {
-        "description": "Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions. Supports mixed types in single array for maximum flexibility. Canonical parameter for all gate specification (v3.0.0+).",
+        "description": "<present>",
         "items": {
           "anyOf": [
             {
@@ -125,14 +125,14 @@
       },
       "options": {
         "additionalProperties": {},
-        "description": "Additional execution options (key-value pairs) passed through to execution.",
+        "description": "<present>",
         "propertyNames": {
           "type": "string"
         },
         "type": "object"
       },
       "user_response": {
-        "description": "Your Step output to capture before advancing. Supply the same text you would reply with during manual execution.",
+        "description": "<present>",
         "minLength": 1,
         "type": "string"
       }
@@ -422,47 +422,47 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "properties": {
       "action": {
-        "description": "Use 'guide' with topic:'framework' for phase-specific operation guidance.",
+        "description": "<present>",
         "type": "string"
       },
       "framework": {
-        "description": "Framework identifier when switching. Use framework:list to see available options.",
+        "description": "<present>",
         "type": "string"
       },
       "include_history": {
-        "description": "Include historical entries (where supported).",
+        "description": "<present>",
         "type": "boolean"
       },
       "include_metrics": {
-        "description": "Include detailed metrics output (where supported).",
+        "description": "<present>",
         "type": "boolean"
       },
       "operation": {
-        "description": "Sub-command for the selected action (e.g. framework: switch|list|enable|disable, analytics: view|reset|history).",
+        "description": "<present>",
         "type": "string"
       },
       "persist": {
-        "description": "When true, gate/framework enable/disable changes are also written to config.json.",
+        "description": "<present>",
         "type": "boolean"
       },
       "reason": {
-        "description": "Audit-friendly explanation for switches, config changes, or restarts.",
+        "description": "<present>",
         "type": "string"
       },
       "search_query": {
-        "description": "Filter gates by keyword (matches ID, name, or description). Use with gates:list action.",
+        "description": "<present>",
         "type": "string"
       },
       "session_id": {
-        "description": "Target session ID or chain ID for session operations.",
+        "description": "<present>",
         "type": "string"
       },
       "show_details": {
-        "description": "Request an expanded response for list/status style commands.",
+        "description": "<present>",
         "type": "boolean"
       },
       "topic": {
-        "description": "Guide topic when requesting guidance.",
+        "description": "<present>",
         "type": "string"
       }
     },

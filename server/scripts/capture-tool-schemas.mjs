@@ -175,6 +175,38 @@ function sortDeep(value) {
 }
 
 /**
+ * Replace every `description` VALUE with a presence marker.
+ *
+ * Parameter descriptions inside `inputSchema` are resolved through the methodology overlay
+ * (`prompt-engine.schema.ts` DescriptionResolver), so their text depends on which framework
+ * happens to be active in `state.db`. A developer machine with a framework selected and a
+ * clean CI runner with none produce different strings for identical code — which made the
+ * first version of this snapshot fail in CI while passing locally.
+ *
+ * The text is not what this snapshot is for. The SDK picks its JSON Schema converter by zod
+ * major, and what a converter changes is STRUCTURE: types, `required`, `additionalProperties`,
+ * `$ref` inlining, enum placement. Description prose is contract-owned and already covered by
+ * `validate:contracts`.
+ *
+ * A marker rather than deletion, so "the converter stopped emitting descriptions at all"
+ * still shows up as a diff — that is a structural change, and dropping the key would hide it.
+ */
+function normalizeDescriptions(value) {
+  if (Array.isArray(value)) return value.map(normalizeDescriptions);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [
+        key,
+        key === 'description' && typeof child === 'string'
+          ? '<present>'
+          : normalizeDescriptions(child),
+      ])
+    );
+  }
+  return value;
+}
+
+/**
  * Tool descriptions carry the active framework overlay and resource counts, which move
  * for reasons unrelated to zod. Only `inputSchema` is captured — widening this would make
  * the diff noisy exactly where it needs to be trustworthy.
@@ -190,7 +222,7 @@ function extractSchemas(toolsListResponse) {
     if (!tool.inputSchema) {
       throw new Error(`tool ${tool.name} has no inputSchema`);
     }
-    captured[tool.name] = sortDeep(tool.inputSchema);
+    captured[tool.name] = sortDeep(normalizeDescriptions(tool.inputSchema));
   }
   return sortDeep(captured);
 }
