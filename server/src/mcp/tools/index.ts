@@ -18,6 +18,9 @@
 
 import * as path from 'node:path';
 
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { Implementation } from '@modelcontextprotocol/sdk/types.js';
+
 import { FrameworkToolHandler, createFrameworkToolHandler } from './framework-manager/index.js';
 import { GateToolHandler, createGateToolHandler } from './gate-manager/index.js';
 import { PromptExecutor, createPromptExecutor } from './prompt-engine/index.js';
@@ -77,14 +80,16 @@ import {
 // Consolidated tools
 // Gate system management integration
 
-/** Safely read clientVersion from McpServer.server (typed as any in our codebase). */
-function readClientVersion(mcpServer: unknown): unknown {
-  const server = (mcpServer as { server?: unknown })?.server;
-  if (server == null || typeof server !== 'object') {
-    return undefined;
-  }
-  const fn = (server as Record<string, unknown>)['getClientVersion'];
-  return typeof fn === 'function' ? (fn as () => unknown).call(server) : undefined;
+/**
+ * Read the client identity captured during the `initialize` handshake.
+ *
+ * Protocol revision 2026-07-28 removes that handshake — client identity moves to
+ * per-request `_meta` (`io.modelcontextprotocol/clientInfo`). This function is the
+ * single seam that migration has to replace, so it is typed rather than cast: the
+ * compiler must be able to see it break.
+ */
+function readClientVersion(mcpServer: McpServer): Implementation | undefined {
+  return mcpServer.server?.getClientVersion();
 }
 
 /**
@@ -94,7 +99,7 @@ function readClientVersion(mcpServer: unknown): unknown {
  */
 export class McpToolRouter {
   private logger: Logger;
-  private mcpServer: any;
+  private mcpServer: McpServer;
   private promptManager: PromptAssetManager;
   private configManager: ConfigManager;
 
@@ -135,7 +140,7 @@ export class McpToolRouter {
 
   constructor(
     logger: Logger,
-    mcpServer: any,
+    mcpServer: McpServer,
     promptManager: PromptAssetManager,
     configManager: ConfigManager,
     conversationStore: ConversationStore,
@@ -305,14 +310,13 @@ export class McpToolRouter {
   private getDetectedClientInfo(): { name: string; version?: string } | undefined {
     try {
       const impl = readClientVersion(this.mcpServer);
-      if (impl == null) {
+      // `name` is typed as a required string, but it arrives off the wire — an
+      // empty one is still possible and is treated as "no client detected".
+      const name = impl?.name.trim();
+      if (name == null || name.length === 0) {
         return undefined;
       }
-      const name = (impl as Record<string, unknown>)['name'];
-      const version = (impl as Record<string, unknown>)['version'];
-      return typeof name === 'string' && name.trim().length > 0
-        ? { name: name.trim(), version: typeof version === 'string' ? version : undefined }
-        : undefined;
+      return { name, version: impl?.version };
     } catch {
       return undefined;
     }
@@ -996,7 +1000,7 @@ export class McpToolRouter {
  */
 export async function createMcpToolRouter(
   logger: Logger,
-  mcpServer: any,
+  mcpServer: McpServer,
   promptManager: PromptAssetManager,
   configManager: ConfigManager,
   conversationStore: ConversationStore,
