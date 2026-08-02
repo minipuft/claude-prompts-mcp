@@ -122,6 +122,8 @@ system_control → SystemControl Router → 10 action handlers
 
 State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. `SCHEMA_VERSION` bump triggers drop-and-recreate; no migration code since `state.db` is ephemeral.
 
+**Rows are workspace-scoped, and `state.db` is shared across projects.** One file serves every project, so isolation comes from `workspace_id`, not from separate databases. A scope with no row falls back to `frameworks.defaultFramework`; the scope id itself is derived from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing `kv_state` without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
+
 ## Public API Contract (what a major version protects)
 
 **Declared surface over "anything that feels significant"; consumer-observable over internal.**

@@ -9,7 +9,12 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 
-import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
+import {
+  deriveProjectScopeId,
+  resolveRuntimeLaunchOptions,
+  type ProjectScopeDerivation,
+  type RuntimeLaunchOptions,
+} from './options.js';
 import { PathResolver } from './paths.js';
 import { resolvePackageRoot } from './startup.js';
 
@@ -40,22 +45,31 @@ export interface RuntimeFoundationDependencies {
 
 export function applyRuntimeIdentityOverrides(
   config: Config,
-  runtimeOptions: RuntimeLaunchOptions
-): void {
+  runtimeOptions: RuntimeLaunchOptions,
+  derive: () => ProjectScopeDerivation | undefined = deriveProjectScopeId
+): ProjectScopeDerivation | undefined {
   const hasIdentityModeOverride = runtimeOptions.identityMode != null;
-  const hasIdentityDefaultsOverride =
-    runtimeOptions.identityDefaults != null &&
-    Object.keys(runtimeOptions.identityDefaults).length > 0;
-
-  if (!hasIdentityModeOverride && !hasIdentityDefaultsOverride) {
-    return;
-  }
 
   const identityConfig = config.identity ?? {};
   const mergedLaunchDefaults = {
     ...(identityConfig.launchDefaults ?? {}),
     ...(runtimeOptions.identityDefaults ?? {}),
   };
+
+  // Precedence: --workspace-id > identity.launchDefaults.workspaceId > derived.
+  // Both explicit rungs are already folded into mergedLaunchDefaults, so deriving only
+  // when that is empty is what keeps an operator's choice from being overwritten by cwd.
+  let derived: ProjectScopeDerivation | undefined;
+  if (normalizeWorkspaceId(mergedLaunchDefaults.workspaceId) == null) {
+    derived = derive();
+    if (derived != null) {
+      mergedLaunchDefaults.workspaceId = derived.value;
+    }
+  }
+
+  if (!hasIdentityModeOverride && Object.keys(mergedLaunchDefaults).length === 0) {
+    return undefined;
+  }
 
   config.identity = {
     ...identityConfig,
@@ -64,6 +78,16 @@ export function applyRuntimeIdentityOverrides(
       ? { launchDefaults: mergedLaunchDefaults }
       : {}),
   };
+
+  return derived;
+}
+
+function normalizeWorkspaceId(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 export async function createRuntimeFoundation(
@@ -88,7 +112,7 @@ export async function createRuntimeFoundation(
 
   const configManager = dependencies.configManager ?? new ConfigLoader(configPath);
   await configManager.loadConfig();
-  applyRuntimeIdentityOverrides(configManager.getConfig(), options);
+  const derivedProjectScope = applyRuntimeIdentityOverrides(configManager.getConfig(), options);
 
   const serviceOrchestrator = dependencies.serviceOrchestrator ?? new ServiceOrchestrator();
 
@@ -130,6 +154,15 @@ export async function createRuntimeFoundation(
   if (options.verbose) {
     logger.info('PathResolver resolved paths:', pathResolver.getAllPaths());
   }
+
+  // State isolation depends entirely on this id, and a wrong one fails silently by
+  // sharing state between projects — so report it and its source unconditionally.
+  const activeScopeId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
+  logger.info(
+    `Project scope id: ${activeScopeId ?? 'default'} (source: ${
+      derivedProjectScope?.source ?? 'explicit configuration'
+    })`
+  );
 
   // Expose resolved prompts path for stateless utilities (jsonUtils template rendering)
   // This bridges PathResolver with utilities that can't receive dependency injection

@@ -1,7 +1,7 @@
 # Per-Project Framework Selection
 
 **Date**: 2026-08-01
-**Status**: Planned
+**Status**: Tiers 1-4 complete + T2.5 confirmed (T1.6 open)
 **Approach**: Both layers — `config.json` declares the per-project floor; a scoped runtime switch overrides it and persists per-workspace.
 
 ## Motivation
@@ -83,7 +83,7 @@ decide a default today (F5, F6).
 | T1.3 | ✓      | Add to `DEFAULT_FRAMEWORKS_CONFIG`, return it from `getFrameworksConfig()`, and include it in the `!this.config.frameworks` backfill block                                     | `server/src/infra/config/index.ts`                                                                                                                                                                                                                         | T1.1    | `npm test -- config`          |
 | T1.4 | ✓      | Pass `{ defaultFramework }` to `createFrameworkManager` at **both** construction sites; give `FrameworkStateStore` access to the resolved config so its own site can supply it | `server/src/mcp/tools/index.ts`, `server/src/engine/frameworks/framework-state-store.ts`                                                                                                                                                                   | T1.3    | `npm run typecheck`           |
 | T1.5 | ✓      | Replace the hardcoded `'CAGEERF'` in the store's `defaultState()` with the configured default (F6)                                                                             | `server/src/engine/frameworks/framework-state-store.ts`                                                                                                                                                                                                    | T1.4    | `npm test -- framework-state` |
-| T1.6 | ☐      | Route the five residual fallback literals through `DEFAULT_FRAMEWORK_ID` (see Deviations)                                                                                      | `server/src/infra/observability/metrics/analytics-service.ts`, `server/src/engine/frameworks/prompt-guidance/service.ts`, `server/src/engine/execution/operators/chain-operator-executor.ts`, `server/src/mcp/tools/prompt-engine/utils/classification.ts` | T1.3    | `rg "'CAGEERF'" src/`         |
+| T1.6 | ☐      | Route the four remaining fallback literals through `DEFAULT_FRAMEWORK_ID` — the fifth (`framework-action-handler.ts:83`) landed in T3.2                                        | `server/src/infra/observability/metrics/analytics-service.ts`, `server/src/engine/frameworks/prompt-guidance/service.ts`, `server/src/engine/execution/operators/chain-operator-executor.ts`, `server/src/mcp/tools/prompt-engine/utils/classification.ts` | T1.3    | `rg "'CAGEERF'" src/`         |
 
 **Gate**: a `frameworks.defaultFramework` set in `config.json` is the framework a fresh state row
 resolves to, via both construction sites; no literal `'CAGEERF'` default remains outside the single
@@ -127,34 +127,166 @@ configured default framework"), typecheck, 1734 unit tests, `validate:all` exit 
 
 | ID   | Status | Step                                                                                                                                                                                                                        | Files                                                   | Depends | Verification                       |
 | ---- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------- | ---------------------------------- |
-| T2.1 | ☐      | Derive a project scope id — precedence `--workspace-id` / `identity.launchDefaults.workspaceId` → `CLAUDE_PROJECT_DIR` → `process.cwd()`; reduce to **basename** so raw paths stay out of logs and persisted state          | `server/src/runtime/options.ts`                         | T1 gate | unit test on precedence + basename |
-| T2.2 | ☐      | Log the resolved scope id and which source produced it at startup                                                                                                                                                           | `server/src/runtime/application.ts`                     | T2.1    | `npm run verify:mcp`               |
-| T2.3 | ☐      | Give `FrameworkStateStore` a process-level default scope used whenever `scope` is absent — covers `getOrCreateScopedState`, `loadPersistedState`, `saveStateToFile`. Resolves F4 without touching the ten read-path callers | `server/src/engine/frameworks/framework-state-store.ts` | T2.1    | `npm test -- framework-state`      |
-| T2.4 | ☐      | On first scoped load with no row, seed from the existing unscoped `default` row when present, then write scoped — so upgrades do not appear to reset                                                                        | `server/src/engine/frameworks/framework-state-store.ts` | T2.3    | migration unit test                |
+| T2.1 | ✓      | Derive a project scope id — precedence `--workspace-id` / `identity.launchDefaults.workspaceId` → `CLAUDE_PROJECT_DIR` → `process.cwd()`; reduce to **basename** so raw paths stay out of logs and persisted state          | `server/src/runtime/options.ts`                         | T1 gate | unit test on precedence + basename |
+| T2.2 | ✓      | Log the resolved scope id and which source produced it at startup                                                                                                                                                           | `server/src/runtime/application.ts`                     | T2.1    | `npm run verify:mcp`               |
+| T2.3 | ✓      | Give `FrameworkStateStore` a process-level default scope used whenever `scope` is absent — covers `getOrCreateScopedState`, `loadPersistedState`, `saveStateToFile`. Resolves F4 without touching the ten read-path callers | `server/src/engine/frameworks/framework-state-store.ts` | T2.1    | `npm test -- framework-state`      |
+| T2.4 | ✓      | On first scoped load with no row, seed from the existing unscoped `default` row when present, then write scoped — so upgrades do not appear to reset                                                                        | `server/src/engine/frameworks/framework-state-store.ts` | T2.3    | migration unit test                |
 
 **Gate**: two different project directories resolve to two different scope ids; an existing global
 `default` row is inherited once by the first project that loads, and neither project's later switch
 is visible to the other.
 
+**Gate result (2026-08-01)**: clauses 2 and 3 **PASS** — proven by
+`framework-state-store.persistence.test.ts` ("two project scopes switch independently", "a new
+project scope adopts the pre-scoping global row instead of resetting"). Clause 1 **PASS at the
+function level, UNVERIFIED end-to-end** — see Deviations D4. Suite: typecheck clean, 1756 unit +
+426 integration tests, ratchet 3451/1409 no regressions, `verify:mcp` 11/11, `validate:arch` and
+five other guards pass.
+
+### Deviations (Tier 2)
+
+1. **`context.ts` joined T2.1's Files column.** The derivation could not live in
+   `resolveRuntimeLaunchOptions`: an existing test (`options.identity.test.ts`, "does not hydrate
+   from environment variables") asserts `identityDefaults` carries no `workspaceId`, and
+   `applyRuntimeIdentityOverrides` spreads runtime defaults _over_ config — so deriving there would
+   have silently outranked an operator's configured `identity.launchDefaults.workspaceId`. The pure
+   derivation stays in `options.ts` (T2.1's file, unit-tested); the precedence is applied in
+   `context.ts`, where config is known.
+
+2. **Constructor converted to an options object.** `FrameworkStateStore` was already at 4
+   parameters after Tier 1; `defaultScope` would have been a fifth, over the `max-params ≤4` hard
+   limit. `FrameworkStateStoreOptions` also retires the `undefined` positional Tier 1 introduced.
+
+3. **T2.4 kept small deliberately.** `framework-state-store.ts` was 681 lines against a 600 max
+   before this tier. Answering the question project CLAUDE.md requires — _how many responsibilities?_
+   — it holds four (scoped state map, SQLite persistence, switch history/metrics, health). Decomposing
+   it is out of scope here, so `adoptLegacyGlobalState` is one focused method rather than a spread of
+   inline logic. **The file is a decomposition candidate for a later tier.**
+
+4. **The end-to-end discriminator is unproven.** `CLAUDE_PROJECT_DIR` is unset in this environment,
+   so derivation falls to `process.cwd()`. Under `verify:mcp` that produced `server`, because the
+   harness spawns from `server/`. Whether Claude Code's plugin launch supplies a per-project cwd (or
+   sets `CLAUDE_PROJECT_DIR`) is **not verified from here** — if it supplies neither, every project
+   derives the same id and no isolation occurs. The startup log line added in T2.2 exists precisely
+   to make this checkable: restart in two projects and compare `Project scope id: … (source: …)`.
+   Tracked as **T2.5**.
+
+5. **`validate:format` failed on another session's file.** `plans/mcp-sdk-v2-spec-2026-07-28-migration.md`
+   was being edited concurrently during this tier. Not touched; every Tier 2 file passes
+   `prettier --check`.
+
+| ID   | Status | Step                                                                                                                 | Files       | Depends | Verification                                           |
+| ---- | ------ | -------------------------------------------------------------------------------------------------------------------- | ----------- | ------- | ------------------------------------------------------ |
+| T2.5 | ✓      | Confirm the launcher supplies a per-project discriminator; if not, pass `--workspace-id` explicitly from `.mcp.json` | `.mcp.json` | T2 gate | Compare startup `Project scope id` across two projects |
+
+**T2.5 result (2026-08-02) — CONFIRMED, no `.mcp.json` change needed.** Servers spawned from
+`dist/` with two different working directories derived distinct ids and stayed isolated:
+
+```
+cwd=/home/minipuft/Applications/cloudySky           → Project scope id: cloudySky (source: cwd)
+cwd=/home/minipuft/Applications/claude-prompts-mcp  → Project scope id: claude-prompts-mcp (source: cwd)
+```
+
+Switching cloudySky to RADIANT over MCP left this repo on CAGEERF, and both survived restart:
+
+```
+kv_state key='framework':  default → CAGEERF | cloudySky → radiant | claude-prompts-mcp → CAGEERF
+```
+
+`CLAUDE_PROJECT_DIR` is unset in this environment, so `cwd` is the operative rung. Still unverified:
+whether the **plugin launcher** gives each project a distinct cwd — the evidence above is
+direct-spawn. If a real restart shows two projects reporting the same id, pass `--workspace-id` in
+`.mcp.json`.
+
+**F7 — the load path ignored scope (found by this test, fixed 2026-08-02).**
+`loadPersistedState` called `this.stateStore.load(scope)` with the raw argument. T2.3 applied
+`effectiveScope` to `resolveStateKey` and `saveStateToFile` but **missed the load call**, so every
+startup read the global `default` row while switches wrote the project's row. Live evidence:
+`cloudySky → radiant` sat in `kv_state` while the server reported CAGEERF.
+
+Fixing that exposed a second defect: `SqliteStateStore.load()` synthesizes a valid-looking default
+when no row exists, so it cannot distinguish "never written" from "written". The load is now gated
+on `exists()`, without which T2.4's adoption could never fire.
+
+**Both defects were invisible to the unit tests**, which asserted through `getCurrentState(scope)` —
+the in-memory map — and never round-tripped a process-default scope through SQLite across two store
+instances. The T2.4 adoption test had been passing for the wrong reason: the always-read-`default`
+bug returned the legacy row regardless. Covered now by "a process-scoped switch survives a restart
+of that project" in `workspace-continuity.test.ts`.
+
 ### Tier 3 — Switch path
 
 | ID   | Status | Step                                                                                                                                 | Files                                                                      | Depends | Verification        |
 | ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- | ------- | ------------------- |
-| T3.1 | ☐      | Thread `StateStoreOptions` through `FrameworkManager.switchFramework` → `FrameworkStateStore.switchFramework`                        | `server/src/engine/frameworks/framework-manager.ts`                        | T2 gate | `npm run typecheck` |
-| T3.2 | ☐      | Pass `this.requestScope` at the switch call and change the unscoped `getCurrentState()` to `getCurrentState(this.requestScope)` (F3) | `server/src/mcp/tools/system-control/handlers/framework-action-handler.ts` | T3.1    | integration test    |
+| T3.1 | ✓      | Thread `StateStoreOptions` through `FrameworkManager.switchFramework` → `FrameworkStateStore.switchFramework`                        | `server/src/engine/frameworks/framework-manager.ts`                        | T2 gate | `npm run typecheck` |
+| T3.2 | ✓      | Pass `this.requestScope` at the switch call and change the unscoped `getCurrentState()` to `getCurrentState(this.requestScope)` (F3) | `server/src/mcp/tools/system-control/handlers/framework-action-handler.ts` | T3.1    | integration test    |
 
 **Gate**: a `system_control framework:switch` persists to the calling project's scoped row only.
 
+**Gate result (2026-08-02)**: **PASS**, with the scope-source correction in D3 below. Proven by
+`framework-action.test.ts` ("delegates framework switch through framework manager", now asserting
+the scope argument) and `workspace-continuity.test.ts` ("a scoped FrameworkManager switch persists
+to that workspace only"). typecheck exit 0, ratchet 3442/1406 no regressions, 15 suites / 131 tests
+across every suite this plan touches.
+
+### Deviations (Tier 3)
+
+1. **`FrameworkStateAccessor` had to widen too.** `framework-manager.ts:41` declares the narrowing
+   interface FrameworkManager holds the store through, and its `switchFramework(request)` had no
+   scope parameter — so threading scope would not have typechecked without changing it.
+
+2. **A pre-existing test asserted the defect.** `framework-action.test.ts` (from `913c2d9d`)
+   asserted `switchFramework` receives exactly two arguments. Updated to assert the scope argument
+   explicitly, turning it into an F3 regression test. Its sibling case is still named "reads state
+   store without identity-scoped args" — that name is now stale, but the assertion passes because
+   `system-control-router.ts:149` independently calls `getCurrentState()` unscoped, and
+   `toHaveBeenCalledWith` matches any call.
+
+3. **Tier 3 does not deliver STDIO per-project scoping — Tier 2 does.** `extractScope` calls
+   `resolveRequestIdentity`, which reads identity only from token claims and request headers
+   (`x-workspace-id`, `x-org-id`, …) and **never consults `identity.launchDefaults`**. Under STDIO
+   there are no headers, so `this.requestScope` is `undefined` on every request and the write falls
+   through to the store's process-level `defaultScope` from T2.3. Tier 3's value is the HTTP /
+   multi-client path, where an explicit per-request scope now stops one workspace's switch from
+   overwriting another's. The test proves it by supplying a real `x-workspace-id` header.
+
+4. **`npm test` does not pass tree-wide, for unrelated reasons.** Five failures in "Consolidated MCP
+   tool factories" and "PromptEngine Validation" come from `PromptExecutor requires serverRoot`
+   thrown at `prompt-executor.ts:148` — a guard a concurrent session added while this tier ran, in
+   files this tier never touched. Typecheck also failed transiently mid-edit on their
+   `pipeline-builder.ts` and recovered on its own.
+
 ### Tier 4 — Validation & docs
 
-| ID   | Status | Step                                                                                                                                  | Files                                                   | Depends | Verification              |
-| ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------- | ------------------------- |
-| T4.1 | ☐      | Isolation test: two scopes switch independently; an unset workspace inherits the config floor rather than the other workspace's value | `server/tests/`                                         | T3 gate | `npm run test:ci`         |
-| T4.2 | ☐      | Document the real scope source and the per-project framework workflow                                                                 | `docs/guides/identity-scope.md`, `docs/guides/gates.md` | T3 gate | `npm run validate:format` |
-| T4.3 | ☐      | Note in the Runtime State table that `kv_state key='framework'` is workspace-scoped                                                   | `CLAUDE.md`                                             | T3 gate | `npm run validate:format` |
+| ID   | Status | Step                                                                                                                                  | Files                                                        | Depends | Verification              |
+| ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------- | ------------------------- |
+| T4.1 | ✓      | Isolation test: two scopes switch independently; an unset workspace inherits the config floor rather than the other workspace's value | `server/tests/`                                              | T3 gate | `npm run test:ci`         |
+| T4.2 | ✓      | Document the real scope source and the per-project framework workflow                                                                 | `docs/guides/identity-scope.md`, `docs/guides/frameworks.md` | T3 gate | `npm run validate:format` |
+| T4.3 | ✓      | Note in the Runtime State table that `kv_state key='framework'` is workspace-scoped                                                   | `CLAUDE.md`                                                  | T3 gate | `npm run validate:format` |
 
 **Gate**: `npm run typecheck && npm run lint:ratchet && npm run test:ci` and `npm run validate:all`
 pass; `npm run verify:mcp` answers on all three tools.
+
+**Gate result (2026-08-02)**: `typecheck` **exit 0** · `lint:ratchet` **exit 0** (3442/1406, no
+regressions) · `test:ci` **exit 0** (146 suites, 1756 tests) · `verify:mcp` **11/11** ·
+`validate:all` **exit 123 — blocked on a file this plan does not own** (see D3).
+
+### Deviations (Tier 4)
+
+1. **`gates.md` was the wrong doc.** That guide covers gate criteria and enforcement modes; it has
+   no framework-selection content. The per-project workflow went to `docs/guides/frameworks.md`,
+   beside its existing "Switch the Active Framework" section, with a cross-link to the scope
+   resolution order in `identity-scope.md`.
+
+2. **A stale count in `identity-scope.md` was corrected.** It promised "14 tests passing" for the
+   tenant suite; the actual figure was 15 before this tier and 16 after. Caught by running the
+   suite rather than trusting the doc — the kind of drift the docs/code lockstep rule exists for.
+
+3. **`validate:all` cannot pass from here.** Its `validate:format` step fails on
+   `plans/mcp-sdk-v2-spec-2026-07-28-migration.md`, a file a concurrent session has been editing
+   throughout this work. Every file this plan touches passes `prettier --check`. Formatting theirs
+   while they hold it open risks losing their edits, so it is left alone — **whoever commits that
+   file must format it first, or CI's `validate:format` will fail.**
 
 ---
 

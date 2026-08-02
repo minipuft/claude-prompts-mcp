@@ -5,6 +5,7 @@ import { ActionHandler } from '../core/action-handler-base.js';
 import type { ToolResponse } from '#shared/types/index.js';
 
 import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/index.js';
+import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 
 export class FrameworkActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
@@ -53,9 +54,12 @@ export class FrameworkActionHandler extends ActionHandler {
       throw new Error('Framework parameter is required for switch operation');
     }
 
+    // Scope the write to the caller's workspace. Without it every project's switch
+    // landed on one shared row, so switching here changed the framework everywhere.
     const result = await this.frameworkManager.switchFramework(
       args.framework,
-      args.reason || `User requested switch to ${args.framework}`
+      args.reason || `User requested switch to ${args.framework}`,
+      this.requestScope
     );
 
     if (!result.success) {
@@ -79,8 +83,8 @@ export class FrameworkActionHandler extends ActionHandler {
     }
 
     const frameworks = this.frameworkManager.listFrameworks();
-    const currentState = this.frameworkStateStore?.getCurrentState();
-    const activeFramework = currentState?.activeFramework || 'CAGEERF';
+    const currentState = this.frameworkStateStore?.getCurrentState(this.requestScope);
+    const activeFramework = currentState?.activeFramework || DEFAULT_FRAMEWORK_ID;
 
     const runtimeLoader = getDefaultRuntimeLoader();
     const frameworkIds = runtimeLoader.discoverFrameworks();

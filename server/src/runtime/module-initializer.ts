@@ -139,12 +139,12 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   const currentFrameworkConfig = configManager.getFrameworksConfig();
   // Read before construction: the store seeds its in-memory default state from this value,
   // so supplying it afterwards would leave the seed on the built-in fallback.
-  const frameworkStateStore = await createFrameworkStateStore(
-    logger,
-    frameworkStateRoot,
-    undefined,
-    currentFrameworkConfig.defaultFramework
-  );
+  const workspaceId = configManager.getConfig().identity?.launchDefaults?.workspaceId;
+  const frameworkStateStore = await createFrameworkStateStore(logger, frameworkStateRoot, {
+    defaultFramework: currentFrameworkConfig.defaultFramework,
+    // Every unscoped read and write in this process now resolves to this project.
+    ...(workspaceId != null ? { defaultScope: { workspaceId } } : {}),
+  });
   if (isVerbose) logger.info('✅ FrameworkStateStore initialized successfully');
 
   callbacks.handleFrameworkConfigChange(currentFrameworkConfig);
