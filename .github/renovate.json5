@@ -91,12 +91,30 @@
       groupName: "Dev dependencies (major)",
     },
     {
+      // No `allowedVersions` pin here on purpose. Both holds this file used to carry were
+      // retired on 2026-08-01 by finishing the migrations they deferred, not by relaxing a
+      // rule, and a pin would also block the TS 6.x patches we do want. The 7.x blockers are
+      // stated in the PR body instead, so the reasoning arrives where the decision is made
+      // rather than in a plan file nobody opens during review.
       description: "TypeScript - require manual review",
       matchPackageNames: ["typescript"],
       automerge: false,
       schedule: ["before 3am on Monday"],
       labels: ["dependencies", "typescript", "needs-review"],
       reviewers: ["minipuft"],
+      prBodyNotes: [
+        "### TypeScript 7 is BLOCKED — close this PR unless all three boxes tick",
+        "",
+        "TS 7 is the Go-native compiler. `require('typescript')` exposes **2** symbols instead of 2248 and `lib/` drops from 24MB to 24KB — the JS compiler API moved behind `./unstable/*`. Every tool that does type-aware work has to be rewritten against it, so this is one upstream cause, not three lagging libraries.",
+        "",
+        "- [ ] `npm view ts-jest peerDependencies.typescript` admits 7 — today `>=4.3 <7`, and it is a hard guard: **no test suite runs at all**",
+        "- [ ] `npm view typescript-eslint peerDependencies.typescript` admits 7 — today `<6.1.0` (this also gates TS **6.1**)",
+        "- [ ] `npm run validate:arch` prints a NON-ZERO module count — under TS 7 dependency-cruiser cruises **0 modules and exits 0**",
+        "",
+        "The third one is why this note exists. dependency-cruiser does not fail on an unsupported TypeScript; it emits a `warn`, finds nothing to parse, and reports success over an empty graph — green CI with every layer and cycle rule switched off. `scripts/validate-arch.js` now asserts a module floor so that state fails instead of passing, but read the checklist before trusting a green run on a TypeScript major.",
+        "",
+        "Minor and patch updates within TS 6.x are fine and need none of this.",
+      ],
     },
     {
       description: "MCP SDK - critical dependency",
