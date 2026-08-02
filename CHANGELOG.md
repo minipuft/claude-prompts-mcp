@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.2](https://github.com/minipuft/claude-prompts/compare/v3.0.1...v3.0.2) (2026-08-02)
+
+
+### Changed
+
+* **deps:** the published MCP `inputSchema` changed in 39 places, all of them **permissive**. `@modelcontextprotocol/sdk` selects its JSON Schema converter from the installed zod major (`zod-json-schema-compat.js:19-28`), so upgrading to zod 4 swapped the engine that produces the tool surface. The principal difference is that `additionalProperties: false` is now emitted as `additionalProperties: {}`. **No consumer action is required**: every request that validated under zod 3 still validates under zod 4 — the surface changed shape without narrowing what it accepts, which is why this ships as a patch rather than the major Release Please computed. The surface is now pinned by `server/tests/snapshots/mcp-input-schemas.json` and checked in CI, so a future converter change cannot land unnoticed.
+
+### Fixed
+
+* **scripts:** check gemini's dependency range, not its own version ([#170](https://github.com/minipuft/claude-prompts/issues/170)) ([adee76c](https://github.com/minipuft/claude-prompts/commit/adee76c2a28c65c00e9989df466fc071a0110ba6))
+
+
+### Maintenance
+
+* **deps:** dependency modernization — Tiers A–D (zod 4, js-yaml 5, TypeScript 6, ESLint 10) ([#172](https://github.com/minipuft/claude-prompts/issues/172)) ([a28119c](https://github.com/minipuft/claude-prompts/commit/a28119cf859a3ba34b32aa7fa92092b767236847))
+* release 3.0.2 rather than the computed 4.0.0 ([#173](https://github.com/minipuft/claude-prompts/issues/173)) ([550b2e4](https://github.com/minipuft/claude-prompts/commit/550b2e455275ddb5c7f870f7651e1cae76659556))
+
 ## [3.0.1](https://github.com/minipuft/claude-prompts/compare/v3.0.0...v3.0.1) (2026-08-01)
 
 
