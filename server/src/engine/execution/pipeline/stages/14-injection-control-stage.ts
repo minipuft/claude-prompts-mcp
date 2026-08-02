@@ -37,7 +37,7 @@ type InjectionConfigProvider = () => InjectionConfig;
  * For single prompts:
  * - Always inject unless modifiers (%clean, %lean) disable it
  *
- * Dependencies: context.sessionContext.currentStep (from Session SessionManagementStage)
+ * Dependencies: context.sessionContext.currentStep (from SessionManagementStage)
  * Output: context.state.injection (InjectionState)
  * Can Early Exit: No
  */
