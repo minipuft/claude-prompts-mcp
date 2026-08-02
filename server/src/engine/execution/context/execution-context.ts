@@ -73,9 +73,9 @@ export class ExecutionContext {
    * Legacy metadata bag - INFRASTRUCTURE USE ONLY.
    *
    * @deprecated Pipeline coordination properties have moved to `state`.
-   * Only infrastructure keys remain here:
-   * - `pipelineDependencies` - Runtime dependency injection
-   * - `executionOptions` - Request-level options passed through
+   * One key remains: `pipelineDependencies`, written by DependencyInjectionStage
+   * and read by GateVerdictProcessor. Both go away with that stage, at which
+   * point this field can be deleted outright — do not add keys here.
    *
    * For typed state access, use:
    * - `state.lifecycle` - Execution timing and cleanup handlers

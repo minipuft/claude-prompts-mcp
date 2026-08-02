@@ -241,7 +241,16 @@ Observed RED: 5 failures / 22 pre-existing passes. Observed GREEN: 1743/1743 acr
 Measured: constructor `max-params` 26 → gone · `build()` complexity 12 → under limit ·
 coordinator 679 → 548 ln, 29 → 20 problems · ratchet 3463/1409 → 3459/1407 errors/warnings.
 
-### Tier 3: Drain the metadata bag
+### Tier 3: Drain the metadata bag — ✓ COMPLETE (2026-08-02)
+
+**Gate**: full suite — **PASSED**. typecheck clean · ratchet 3454/1407 no regressions ·
+unit 1743/146 · integration 426/33 · `validate:all` exit 0 · `verify:mcp` 11/11.
+
+3.0 changed the tier: the bag was **4 keys, not 5** (T1 already retired `temporaryGateIds`),
+`operatorValidation` and `executionOptions` had **zero production readers**, and two more
+unrelated `metadata` bags surfaced — nine total, not seven. See `implementation-notes.md`.
+
+`ExecutionContext.metadata` now holds exactly one key: `pipelineDependencies` (T4).
 
 | #   | File                                      | Change                                                               | ~Ln | Dep |
 | --- | ----------------------------------------- | -------------------------------------------------------------------- | --- | --- |

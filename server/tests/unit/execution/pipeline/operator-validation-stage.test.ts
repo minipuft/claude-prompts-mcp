@@ -40,7 +40,7 @@ describe('OperatorValidationStage', () => {
     await stage.execute(context);
 
     expect(validator.validateAndNormalize).not.toHaveBeenCalled();
-    expect(context.metadata.operatorValidation).toBeUndefined();
+    expect(context.diagnostics.getByStage('OperatorValidation')).toEqual([]);
   });
 
   describe('subagentModel → delegated normalization', () => {
@@ -189,8 +189,8 @@ describe('OperatorValidationStage', () => {
       normalizedId: 'CAGEERF',
     });
     expect(context.parsedCommand?.executionPlan?.frameworkOverride).toBe('CAGEERF');
-    expect(context.metadata.operatorValidation).toMatchObject({
-      normalizedFrameworkOperators: 1,
-    });
+    expect(context.diagnostics.getByStage('OperatorValidation')).toMatchObject([
+      { level: 'debug', context: { normalizedFrameworkOperators: 1 } },
+    ]);
   });
 });

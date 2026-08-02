@@ -63,12 +63,6 @@ export class DependencyInjectionStage extends BasePipelineStage {
       notificationEmitter: this.notificationEmitter,
     };
 
-    if (!context.metadata['executionOptions']) {
-      context.metadata['executionOptions'] = {
-        options: context.mcpRequest.options,
-      };
-    }
-
     this.logExit({
       frameworkEnabled,
       analyticsAttached: Boolean(analyticsService),

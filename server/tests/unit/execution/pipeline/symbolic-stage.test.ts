@@ -260,9 +260,9 @@ describe('Symbolic pipeline coverage', () => {
     await operatorStage.execute(context);
 
     expect(context.parsedCommand?.executionPlan?.frameworkOverride).toBe('SCAMPER');
-    expect(context.metadata.operatorValidation).toMatchObject({
-      normalizedFrameworkOperators: 1,
-    });
+    expect(context.diagnostics.getByStage('OperatorValidation')).toMatchObject([
+      { level: 'debug', context: { normalizedFrameworkOperators: 1 } },
+    ]);
   });
 
   test('session stage stores symbolic blueprint with inline gates', async () => {

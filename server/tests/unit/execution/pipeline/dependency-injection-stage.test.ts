@@ -44,8 +44,6 @@ describe('DependencyInjectionStage', () => {
       temporaryGateRegistry: registry,
       pipelineVersion: 'canonical-stage-0',
     });
-
-    expect(context.metadata.executionOptions).toBeDefined();
   });
 
   test('initializes gate enforcement authority', async () => {

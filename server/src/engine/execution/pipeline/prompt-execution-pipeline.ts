@@ -79,7 +79,7 @@ export class PromptExecutionPipeline {
 
     const pipelineStart = Date.now();
     const commandMetricId = this.createCommandMetricId();
-    context.metadata['commandMetricId'] = commandMetricId;
+    context.state.lifecycle.metricId = commandMetricId;
     const stageMetrics: StageMetricSummary[] = [];
     let previousState = this.captureContextState(context);
     let commandStatus: MetricStatus = 'success';
@@ -422,7 +422,7 @@ export class PromptExecutionPipeline {
 
   private buildHookContext(context: ExecutionContext): PipelineHookContext {
     return {
-      executionId: String(context.metadata['commandMetricId'] || 'unknown'),
+      executionId: context.state.lifecycle.metricId ?? 'unknown',
       executionType: context.isChainExecution() ? 'chain' : 'single',
       chainId: context.getSessionId(),
       currentStep: context.sessionContext?.currentStep,
@@ -475,7 +475,7 @@ export class PromptExecutionPipeline {
     // reports false here, which correctly suppresses the child stage spans.
     const span = trace.getTracer('prompt_engine').startSpan('prompt_engine.request', {
       attributes: {
-        'cpm.execution.id': (context.metadata['commandMetricId'] as string) ?? 'unknown',
+        'cpm.execution.id': context.state.lifecycle.metricId ?? 'unknown',
         'cpm.command.type': context.mcpRequest.command ?? 'response-only',
         'cpm.execution.mode': context.isChainExecution() ? 'chain' : 'single',
       },
