@@ -12,6 +12,11 @@ registrations:
       # diagnose deregistered 2026-07-12: dispatch overlap with /debugging skill
       # and built-in /code-review. All three remain available as MCP prompts:
       # >>review, >>validate_work, >>diagnose.
-      - prompt:development/dev_workflow
+      - prompt:development/dev-workflow
+    project:
+      - prompt:examples/reference_demo
+  codex:
+    user:
+      - prompt:development/dev-workflow
     project:
       - prompt:examples/reference_demo
