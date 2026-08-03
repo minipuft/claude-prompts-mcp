@@ -56,34 +56,15 @@ describe('buildLauncherMessages', () => {
     expect(text).toContain('• role (optional) — Target role');
   });
 
-  test('renders gate hints from prompt-declared gates', () => {
-    const messages = buildLauncherMessages(
-      makePrompt({
-        gates: [
-          {
-            id: 'code-quality',
-            name: 'Code Quality',
-            type: 'validation',
-            requirements: [],
-            failureAction: 'retry',
-          },
-        ],
-      }),
-      {}
-    );
-
-    const text = textOf(messages);
-    expect(text).toContain('Quality gates that will be enforced:');
-    expect(text).toContain('• Code Quality (validation)');
-  });
-
   test('renders gate hints from gateConfiguration.include', () => {
     const messages = buildLauncherMessages(
       makePrompt({ gateConfiguration: { include: ['security-review'] } }),
       {}
     );
 
-    expect(textOf(messages)).toContain('• security-review');
+    const text = textOf(messages);
+    expect(text).toContain('Quality gates that will be enforced:');
+    expect(text).toContain('• security-review');
   });
 
   test('omits the Arguments and gates sections when none are declared', () => {

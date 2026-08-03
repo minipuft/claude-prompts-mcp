@@ -32,7 +32,6 @@ function createPrompt(partial: Partial<ConvertedPrompt>): ConvertedPrompt {
     category: 'analysis',
     userMessageTemplate: 'Hello {{name}}',
     arguments: [{ name: 'name', type: 'string', required: true }],
-    requiresExecution: true,
     ...partial,
   };
 }

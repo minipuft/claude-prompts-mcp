@@ -389,23 +389,10 @@ function buildModifierVeto(modifiers: ExecutionModifiers | undefined): GateVeto 
  */
 function collectPromptConfigGateIds(input: GateResolutionInput): string[] {
   return [
-    ...declaredGateIds(input.prompt),
     ...autoAssignedGateIds(input.prompt),
     ...(input.prompt.gateConfiguration?.include ?? []),
     ...(input.categoryGateConfig?.include ?? []),
   ];
-}
-
-/** Ids from `prompt.gates` definitions, falling back from `id` to `name`. */
-function declaredGateIds(prompt: ConvertedPrompt): string[] {
-  const ids: string[] = [];
-  for (const gate of prompt.gates ?? []) {
-    const id = gate.id ?? gate.name;
-    if (id !== undefined) {
-      ids.push(id);
-    }
-  }
-  return ids;
 }
 
 /** Ids from gates pre-assigned by upstream analysis. */

@@ -342,11 +342,13 @@ describe('ToolTriggerFilter', () => {
 });
 
 describe('partitionAutoApprove', () => {
-  const match = (toolId) => ({ toolId, confidence: 1, extractedInputs: {} });
-  const tool = (id, autoApproveOnValid) => ({
-    id,
-    ...(autoApproveOnValid === undefined ? {} : { execution: { autoApproveOnValid } }),
-  });
+  const match = (toolId: string): ToolDetectionMatch =>
+    ({ toolId, confidence: 1, extractedInputs: {} }) as unknown as ToolDetectionMatch;
+  const tool = (id: string, autoApproveOnValid?: boolean): LoadedScriptTool =>
+    ({
+      id,
+      ...(autoApproveOnValid === undefined ? {} : { execution: { autoApproveOnValid } }),
+    }) as unknown as LoadedScriptTool;
 
   test('routes tools declaring autoApproveOnValid away from the confirmation flow', () => {
     const filter = new ToolTriggerFilter();

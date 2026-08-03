@@ -6,7 +6,6 @@ import { ScriptExecutionStage } from '../../../../src/engine/execution/pipeline/
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ToolDetectionService } from '../../../../src/modules/automation/detection/tool-detection-service.js';
-import type { ToolTriggerFilter } from '../../../../src/modules/automation/execution/tool-trigger-filter.js';
 import type { ScriptExecutor } from '../../../../src/modules/automation/execution/script-executor.js';
 import type {
   LoadedScriptTool,
@@ -83,7 +82,10 @@ describe('ScriptExecutionStage', () => {
       partitionAutoApprove: jest
         .fn()
         .mockImplementation((matches, tools) =>
-          new ToolTriggerFilter().partitionAutoApprove(matches, tools)
+          new ToolTriggerFilter().partitionAutoApprove(
+            matches as ToolDetectionMatch[],
+            tools as LoadedScriptTool[]
+          )
         ),
       filterByTrigger: jest.fn().mockReturnValue({
         readyForExecution: [],

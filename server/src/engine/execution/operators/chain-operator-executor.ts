@@ -612,8 +612,7 @@ export class ChainOperatorExecutor {
     gateGuidanceEnabled: boolean,
     chainContext: Record<string, unknown>
   ): string {
-    const agentType =
-      nextStep.agentType ?? nextStep.convertedPrompt?.delegationAgent ?? 'chain-executor';
+    const agentType = nextStep.agentType ?? 'chain-executor';
     const subagentModel = nextStep.subagentModel ?? nextStep.convertedPrompt?.subagentModel;
     const clientProfile = this.extractClientProfile(chainContext);
 

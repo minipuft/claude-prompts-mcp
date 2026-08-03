@@ -302,7 +302,7 @@ describe('FrameworkResolutionStage', () => {
     test('no framework configured and nothing requires one — skips', async () => {
       const context = new ExecutionContext({ command: '>>demo' } as any);
       context.executionPlan = {
-        strategy: 'prompt',
+        strategy: 'single',
         gates: [],
         requiresFramework: false,
         requiresSession: false,
@@ -318,7 +318,7 @@ describe('FrameworkResolutionStage', () => {
     test('no framework configured but the plan requires one — resolves', async () => {
       const context = new ExecutionContext({ command: '>>demo' } as any);
       context.executionPlan = {
-        strategy: 'prompt',
+        strategy: 'single',
         gates: [],
         requiresFramework: true,
         requiresSession: false,
@@ -334,7 +334,7 @@ describe('FrameworkResolutionStage', () => {
     test('no framework configured but an inline framework gate requires one — resolves', async () => {
       const context = new ExecutionContext({ command: '>>demo' } as any);
       context.executionPlan = {
-        strategy: 'prompt',
+        strategy: 'single',
         gates: [],
         requiresFramework: false,
         requiresSession: false,
@@ -352,7 +352,7 @@ describe('FrameworkResolutionStage', () => {
     test('a non-framework inline gate does not require one — skips', async () => {
       const context = new ExecutionContext({ command: '>>demo' } as any);
       context.executionPlan = {
-        strategy: 'prompt',
+        strategy: 'single',
         gates: [],
         requiresFramework: false,
         requiresSession: false,
@@ -391,7 +391,7 @@ describe('FrameworkResolutionStage', () => {
             args: {},
             convertedPrompt: createConvertedPrompt({ id: 'first' }),
             executionPlan: {
-              strategy: 'prompt',
+              strategy: 'single',
               gates: ['code-quality'],
               requiresFramework: false,
               requiresSession: false,
@@ -412,14 +412,14 @@ describe('FrameworkResolutionStage', () => {
     test('@ operator applies a framework even when nothing requires one — resolves', async () => {
       const context = new ExecutionContext({ command: '>>demo' } as any);
       context.executionPlan = {
-        strategy: 'prompt',
+        strategy: 'single',
         gates: [],
         requiresFramework: false,
         requiresSession: false,
       };
       context.parsedCommand = singleCommand({
         executionPlan: {
-          strategy: 'prompt',
+          strategy: 'single',
           gates: [],
           requiresFramework: false,
           requiresSession: false,
@@ -444,7 +444,7 @@ describe('FrameworkResolutionStage', () => {
     test('honours a decision already cached by an earlier stage', async () => {
       const context = new ExecutionContext({ command: '>>demo' } as any);
       context.executionPlan = {
-        strategy: 'prompt',
+        strategy: 'single',
         gates: [],
         requiresFramework: false,
         requiresSession: false,

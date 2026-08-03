@@ -114,9 +114,7 @@ export class ExecutionPlanner {
     }
     const strategyInfo = this.resolveStrategy(strategyInput);
 
-    const modifierResolution = this.normalizeModifiers(
-      parsedCommand?.modifiers ?? convertedPrompt.executionModifiers
-    );
+    const modifierResolution = this.normalizeModifiers(parsedCommand?.modifiers);
 
     // Apply script-tools default: clean mode if prompt has script tools and no explicit overrides
     this.applyScriptToolDefaults(modifierResolution, convertedPrompt, parsedCommand, gateOverrides);

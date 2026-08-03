@@ -13,7 +13,6 @@ import type {
   ExecutionModifiers,
   ExecutionPlan,
   ExecutionStrategyType,
-  GateDefinition,
   LoadedScriptTool,
   PromptArgument,
   PromptInjectionConfig,
@@ -44,8 +43,6 @@ export interface ConvertedPrompt {
   arguments: PromptArgument[];
   // Chain-related properties (isChain removed - now derived from chainSteps presence)
   chainSteps?: ChainStep[];
-  // Gate validation properties
-  gates?: GateDefinition[];
   /** Whether to register this prompt with MCP. Resolved from prompt/category/global defaults. */
   registerWithMcp?: boolean;
   /**
@@ -67,19 +64,15 @@ export interface ConvertedPrompt {
    * whether framework-scoring gates are coherent for this execution.
    */
   injection?: PromptInjectionConfig;
-  executionModifiers?: ExecutionModifiers; // Optional default modifiers applied when executing this prompt
-  requiresExecution?: boolean; // Whether this prompt should be executed rather than returned
   // Script tools
-  /** Loaded script tools for this prompt (populated by loader when tools declared in prompt.yaml) */
+  /**
+   * Loaded script tools for this prompt. The converter reads the YAML `tools:` id list and
+   * resolves it to these loaded definitions; the raw id list is not carried forward, so this
+   * is the only script-tool channel on a converted prompt.
+   */
   scriptTools?: LoadedScriptTool[];
-  /** Raw tool IDs from prompt definition (before loading) */
-  tools?: string[];
   /** Directory path for prompt-local script resolution (populated during conversion) */
   promptDir?: string;
-  /** When true, all chain steps for this prompt are delegated to sub-agents */
-  delegation?: boolean;
-  /** Default agent type for delegation (overridden by step-level agentType) */
-  delegationAgent?: string;
   /** Client-agnostic capability hint for delegation model selection */
   subagentModel?: 'heavy' | 'standard' | 'fast';
 }

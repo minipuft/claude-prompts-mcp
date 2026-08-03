@@ -476,23 +476,6 @@ describe('GateSetResolver — refactor baseline', () => {
 
     expect(result.gateIds).toEqual(['code-quality']);
   });
-
-  test('reads prompt.gates definitions and falls back from id to name', async () => {
-    const resolver = buildResolver(createLogger(), createGateManager());
-
-    const result = await resolver.resolve(
-      baseInput({
-        prompt: makePrompt({
-          gates: [
-            { id: 'code-quality', name: 'Code Quality' },
-            { name: 'test-coverage' },
-          ] as ConvertedPrompt['gates'],
-        }),
-      })
-    );
-
-    expect(sorted(result.gateIds)).toEqual(['code-quality', 'test-coverage']);
-  });
 });
 
 describe('GateSetResolver — framework nesting driven by the real signal (plan item 2.4)', () => {
