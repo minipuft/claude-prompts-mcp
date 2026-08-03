@@ -29,5 +29,3 @@ export { ResponseFormatter } from './processors/response-formatter.js';
 export { PromptClassifier } from './utils/classification.js';
 
 export { EngineValidator } from './utils/validation.js';
-
-export { ContextBuilder } from './utils/context-builder.js';
