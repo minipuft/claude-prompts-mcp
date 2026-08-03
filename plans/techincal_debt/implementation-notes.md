@@ -762,3 +762,56 @@ worktree. **17 → 13** — `sonarjs/cognitive-complexity` (23 → under 15) and
 `@typescript-eslint/no-unused-vars` (the unused deprecated `FrameworkSelection` import)
 cleared, `no-unnecessary-condition` and `strict-boolean-expressions` each down one, nothing
 added.
+
+## Tier 13 — shell-verify coverage decision (2026-08-02)
+
+### Deviations
+
+- **D29 — the tier's named owner was right; its prescribed mechanism was a regression.**
+  F3 said to extend `GateEnforcementAuthority` because it is "already called elsewhere in the
+  pipeline". Written that way, the stage reads
+  `context.gateEnforcement?.resolveShellVerificationCoverage(...)` — and `gateEnforcement` is
+  optional on the pipeline port (`prompt-execution-pipeline.ts:45`, assigned under a guard at
+  line 85). Wherever it is unset, a pending review that used to auto-clear on passing shell
+  verification would silently stop clearing. No test wires the pipeline without an authority,
+  so nothing would have caught it; it was caught by asking what `?.` returns on the failure
+  path before running anything.
+
+  The fix names the real mismatch: the authority is **stateful and optional**, this decision
+  is **stateless**. `architecture.md` imports pure functions directly instead of injecting
+  them, so it became an exported function in `decisions/gates/` — the owner _module_, reachable
+  with no instance and no nullable branch. Ownership as F3 intended, mechanism as the layer
+  model requires. Generalises: "extend the existing service" is the right instinct, but check
+  whether the service's _lifecycle_ fits the thing being added, not just its domain.
+
+- **D30 — an uncalled authority method was written and then deleted the same pass.** The first
+  attempt left `resolveShellVerificationCoverage` on the authority. Once the stage stopped
+  calling it, nothing did — and an uncalled method on a canonical class is precisely the
+  residue Tier 9 and the ContextBuilder deletion cleared earlier in this session. Removed
+  rather than left "for symmetry".
+
+- **D31 — a refusal reason was added, which is scope the tier did not ask for.** The original
+  code decided not-cleared silently: a chain that fell through to full review left no record
+  of whether that was because nothing ran, something failed, or coverage was partial. The
+  decision now returns a `reason` and the stage logs it on the not-cleared path. Justified by
+  the same argument the tier rests on — if this is a gate-verdict decision, its outcome is
+  worth a diagnostic, and the three refusal causes are genuinely different operator problems.
+
+- **D32 — complexity moved but did not clear the bar, and was not chased.** Stage cognitive
+  21 → 17, still over 15. 8.4 states the exit criterion is ownership, not score, and predicts
+  Tiers 12-14 may leave their stage above threshold. The remaining points are in the judge-gate
+  composition and render paths, which belong to a different owner than this tier's.
+
+### Lint accounting
+
+Same method as Tiers 11-12: eslint over the four touched files plus the new one, against a
+detached `HEAD` worktree. **28 → 28, per-rule identical** — nothing added, nothing cleared. The
+`sonarjs/cognitive-complexity` warning survives at 17. No existing test file was modified;
+the three suites covering this path pass 19/19 on both sides.
+
+### Not mine
+
+`npm run typecheck` failed once mid-tier with `TS2304: Cannot find name
+'assertTransportSupported'` in `src/infra/http/transport/index.ts` — a concurrent session's
+uncommitted transport work, caught mid-save. Clean on re-run, and the file is not in this
+tier's scope.

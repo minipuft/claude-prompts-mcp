@@ -98,6 +98,42 @@ export interface CreateReviewOptions {
 }
 
 /**
+ * One gate's shell-verification result, reduced to what the coverage decision reads.
+ *
+ * Structurally a subset of `GateShellVerifyResult` from the shell-verify runner, declared
+ * here so the authority does not depend on the gates/shell module to answer a question
+ * about its own domain.
+ */
+export interface ShellVerificationOutcome {
+  readonly gateId: string;
+  readonly passed: boolean;
+}
+
+/**
+ * Inputs to the shell-verification coverage decision.
+ */
+export interface ShellVerificationCoverageInput {
+  /** Gate ids the pending review is still waiting on. */
+  readonly requiredGateIds: readonly string[];
+  /** Results produced by running this request's `shell_verify` criteria. */
+  readonly results: readonly ShellVerificationOutcome[];
+  /** Gate ids an earlier stage in this same request already shell-verified. */
+  readonly priorVerifiedGateIds?: readonly string[];
+}
+
+/**
+ * Whether shell verification alone clears a pending gate review.
+ */
+export interface ShellVerificationCoverage {
+  /** True when every required gate is covered by a passing verification. */
+  readonly satisfied: boolean;
+  /** This request's and earlier stages' verified gate ids, deduplicated. */
+  readonly verifiedGateIds: readonly string[];
+  /** Why the review was or was not cleared, for diagnostics. */
+  readonly reason: string;
+}
+
+/**
  * Re-export PendingGateReview for convenience.
  */
 export type { PendingGateReview };

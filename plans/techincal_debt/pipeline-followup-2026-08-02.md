@@ -11,7 +11,7 @@ tags: []
 **Area**: `server/src/engine/execution/pipeline/`, `server/src/engine/gates/`
 **Work type**: Tier 8 = explore, review only (**✓ complete 2026-08-02**) · Tier 9 = bug_fix
 (**✓ complete 2026-08-02**, `76630b73`) · Tier 10 = explore → tooling (raised by Tier 9) ·
-**Tiers 11-14 = refactor, scoped by Tier 8** — Tiers 11-12 ✓ complete 2026-08-02; 13-14 open
+**Tiers 11-14 = refactor, scoped by Tier 8** — Tiers 11-13 ✓ complete 2026-08-02; 14 open
 **Predecessor**: [`pipeline-defect-remediation-2026-08-01.md`](./pipeline-defect-remediation-2026-08-01.md) (Tiers 1-7, complete)
 **Confidence**: high on Tier 9 findings (probed 2026-08-02) · Tier 8 is scoped to produce a
 finding, not a fix
@@ -519,6 +519,69 @@ in orchestration. They read the request-scoped framework-gate set this stage loa
 moving them without moving that load would put an async dependency behind a synchronous call.
 F2's ownership complaint is answered by the cache finding above, not by relocating three
 predicates.
+
+---
+
+## Tier 13: shell-verify coverage decision — ✓ COMPLETE 2026-08-02
+
+Scoped by Tier 8 F3.
+
+> **It went to the gates decisions module, not onto `GateEnforcementAuthority` — and the
+> first attempt to put it on the authority was a live regression.** F3 named the authority as
+> the owner and noted it is "already called elsewhere in the pipeline, so this is an
+> extension, not a new service". Implementing that literally produced
+> `context.gateEnforcement?.resolveShellVerificationCoverage(...)`, and `gateEnforcement` is
+> **optional** — `PipelineDependencies.gateEnforcement?` at `prompt-execution-pipeline.ts:45`,
+> assigned only under `if (this.gateEnforcement !== undefined)` at line 85. Wherever that port
+> is unset, a review that previously auto-cleared would silently stop clearing and fall
+> through to a full LLM review. Caught before commit by asking what `?.` returns rather than
+> by a test, since no test wires the pipeline without the authority.
+>
+> The mismatch is the lesson: the authority is **stateful** (caches an enforcement decision,
+> holds the session store) and optional; this decision is **stateless**. `architecture.md`
+> puts pure functions behind direct imports, not injection — so the decision is an exported
+> function in `decisions/gates/`, which is the owner _module_, reached without an instance.
+> F3's ownership claim is satisfied; its "extend the class" prescription is not, and should
+> not be.
+
+> **Complexity moved the right way but did not clear the bar, as 8.4 predicted.** The stage
+> went 21 → 17, still above 15. 8.4 states the exit criterion is domain logic sitting with its
+> owner, not a score, and that Tiers 12-14 may legitimately leave their stage above threshold.
+> Recorded rather than chased: shaving the remaining 2 points would mean decomposing the
+> judge-gate and render paths, which is a different tier with a different owner.
+
+### Subtiers
+
+| #    | Status | Step                                                                         | Files                                                                           | Depends | Verification                                                          |
+| ---- | ------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------- |
+| 13.1 | ✓      | Type the decision's inputs and result                                        | `decisions/gates/gate-enforcement-types.ts`                                     | —       | `ShellVerificationOutcome/CoverageInput/Coverage`, no gates/shell dep |
+| 13.2 | ✓      | Place the decision with its owner — as a function, not an authority method   | `decisions/gates/shell-verification-coverage.ts` (new), `index.ts`              | 13.1    | **Rejected the method form**: optional port would break auto-clear    |
+| 13.3 | ✓      | Stage calls it; running commands, writing results, and the early return stay | `stages/20-gate-review-stage.ts`                                                | 13.2    | cognitive 21 → 17; early return unmoved                               |
+| 13.4 | ✓      | Add a refusal reason so a review that does not clear says why                | `stages/20-gate-review-stage.ts`                                                | 13.3    | new `diagnostics.info` on the not-cleared path                        |
+| 13.5 | ✓      | Unit-test the decision, weighted toward the cases where it must refuse       | `tests/unit/execution/pipeline/state/shell-verification-coverage.test.ts` (new) | 13.2    | 9/9                                                                   |
+
+**Gate**: deciding a gate is cleared happens in the gates decisions module; the stage keeps
+only what needs I/O and control flow.
+
+| Check                        | Result                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| `npm run typecheck`          | clean                                                                   |
+| eslint, 5 files vs `HEAD`    | 28 → 28 — no rule added, none removed (cognitive stays a warning at 17) |
+| existing gate tests          | **unmodified**; 19/19 against `HEAD` and 19/19 after                    |
+| `npm run test:unit`          | 151 suites / 1839 tests                                                 |
+| `npm run test:integration`   | 34 suites / 434 tests                                                   |
+| `npm run validate:arch`      | 442 modules                                                             |
+| `npm run validate:contracts` | in sync                                                                 |
+| `npm run verify:mcp`         | 11/11                                                                   |
+
+**Behaviour preserved exactly**: no existing test was touched. The auto-clear path is covered
+by `gate-judge-pipeline-wiring.test.ts` ("includes ShellVerificationStage
+shellVerifyPassedForGates in coverage check"), which passes unchanged on both sides.
+
+**Left alone deliberately**: the stage calls `chainSessionStore.clearPendingGateReview`
+directly rather than `authority.clearPendingReview`, which is a pure delegation to the same
+call. Routing it through the optional authority would reintroduce exactly the nullable branch
+13.2 removed, to change nothing.
 
 ---
 

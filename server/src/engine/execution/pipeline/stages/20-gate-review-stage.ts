@@ -2,6 +2,7 @@
 import { resolveJudgeGates, composeJudgeReviewPrompt } from '../../../gates/core/review-utils.js';
 import { runGateShellVerifications } from '../../../gates/services/gate-shell-verify-runner.js';
 import { formatGateShellVerifySection } from '../../../gates/shell/shell-verify-message-formatter.js';
+import { resolveShellVerificationCoverage } from '../decisions/gates/shell-verification-coverage.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -76,41 +77,44 @@ export class GateReviewStage extends BasePipelineStage {
         );
         shellSection = formatGateShellVerifySection(shellResults);
 
-        // Auto-pass: when all gates have shell_verify criteria and all passed (exit 0),
-        // clear the review without LLM evaluation — ground-truth validated.
-        if (shellResults.length > 0 && shellResults.every((r) => r.passed)) {
-          const shellVerifiedGateIds = [...new Set(shellResults.map((r) => r.gateId))];
-          const priorVerified = context.state.gates.shellVerifyPassedForGates ?? [];
-          const allVerifiedGateIds = [...new Set([...shellVerifiedGateIds, ...priorVerified])];
-          const allGatesCovered = pendingReview.gateIds.every((id) =>
-            allVerifiedGateIds.includes(id)
-          );
+        // Whether ground truth clears the review is a gate-enforcement decision, so the
+        // authority makes it. The stage keeps what only it can do: running the commands
+        // above, writing the result, and returning early.
+        const coverage = resolveShellVerificationCoverage({
+          requiredGateIds: pendingReview.gateIds,
+          results: shellResults,
+          priorVerifiedGateIds: context.state.gates.shellVerifyPassedForGates ?? [],
+        });
 
-          if (allGatesCovered) {
-            await this.chainSessionStore.clearPendingGateReview(sessionId);
+        if (coverage.satisfied) {
+          await this.chainSessionStore.clearPendingGateReview(sessionId);
 
-            context.executionResults = {
-              content: shellSection,
-              metadata: {
-                gateReview: {
-                  gateIds: pendingReview.gateIds,
-                  attemptCount: pendingReview.attemptCount,
-                  maxAttempts: pendingReview.maxAttempts,
-                  autoCleared: true,
-                  verifiedBy: 'shell_verify',
-                },
+          context.executionResults = {
+            content: shellSection,
+            metadata: {
+              gateReview: {
+                gateIds: pendingReview.gateIds,
+                attemptCount: pendingReview.attemptCount,
+                maxAttempts: pendingReview.maxAttempts,
+                autoCleared: true,
+                verifiedBy: 'shell_verify',
               },
-              generatedAt: Date.now(),
-            };
+            },
+            generatedAt: Date.now(),
+          };
 
-            context.diagnostics.info(this.name, 'Gate review auto-cleared by shell verification', {
-              sessionId,
-              verifiedGates: allVerifiedGateIds,
-            });
-            this.logExit({ autoCleared: true, verifiedGates: allVerifiedGateIds });
-            return;
-          }
+          context.diagnostics.info(this.name, 'Gate review auto-cleared by shell verification', {
+            sessionId,
+            verifiedGates: coverage.verifiedGateIds,
+          });
+          this.logExit({ autoCleared: true, verifiedGates: coverage.verifiedGateIds });
+          return;
         }
+
+        context.diagnostics.info(this.name, 'Gate review not cleared by shell verification', {
+          sessionId,
+          reason: coverage.reason,
+        });
       }
 
       const chainContext = this.chainSessionStore.getChainContext(
