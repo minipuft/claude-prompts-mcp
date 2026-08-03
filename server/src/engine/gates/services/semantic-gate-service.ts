@@ -10,7 +10,6 @@ import type {
 } from './gate-service-interface.js';
 import type { ConvertedPrompt } from '../../execution/types.js';
 import type { GateContext } from '../core/gate-definitions.js';
-import type { GateValidator } from '../core/gate-validator.js';
 import type { GateGuidanceRenderer } from '../guidance/GateGuidanceRenderer.js';
 
 const DEFAULT_SEMANTIC_CONFIG: GateServiceConfig = {
@@ -24,23 +23,26 @@ const DEFAULT_SEMANTIC_CONFIG: GateServiceConfig = {
 };
 
 /**
- * Semantic Gate Service - Template rendering + server-side validation (future work)
+ * Semantic Gate Service - Template rendering.
+ *
+ * Server-side validation is still unimplemented. A `GateValidator` used to be
+ * injected here for it and was never called; the seam was removed rather than
+ * kept as speculative wiring, since re-adding a constructor argument when the
+ * validation actually lands is a smaller cost than a dependency that lies about
+ * what this service does.
  */
 export class SemanticGateService implements GateService {
   readonly serviceType = 'semantic' as const;
   private readonly logger: Logger;
-  private readonly gateValidator: GateValidator;
   private readonly compositionalService: CompositionalGateService;
   private config: GateServiceConfig;
 
   constructor(
     logger: Logger,
     gateGuidanceRenderer: GateGuidanceRenderer,
-    gateValidator: GateValidator,
     config?: Partial<GateServiceConfig>
   ) {
     this.logger = logger;
-    this.gateValidator = gateValidator;
     this.config = { ...DEFAULT_SEMANTIC_CONFIG, ...config };
     this.compositionalService = new CompositionalGateService(
       logger,

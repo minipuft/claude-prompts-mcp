@@ -131,7 +131,7 @@ export class PromptLifecycleProcessor {
       ).warnings;
     }
 
-    const result = await this.fileOperations.updatePromptImplementation(promptData);
+    await this.fileOperations.updatePromptImplementation(promptData);
     const analysis = await this.promptAnalyzer.analyzePromptIntelligence(promptData);
 
     let response = `✅ **Prompt Created**: ${args.name} (${args.id})\n`;

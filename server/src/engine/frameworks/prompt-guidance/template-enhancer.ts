@@ -11,8 +11,6 @@
 
 import type { ConvertedPrompt } from '../../execution/types.js';
 
-import { Logger } from '#infra/logging/index.js';
-
 /**
  * Template enhancement configuration
  */
@@ -27,11 +25,9 @@ export interface TemplateEnhancerConfig {
  * Applies lightweight structure improvements to user templates.
  */
 export class TemplateEnhancer {
-  private logger: Logger;
   private config: TemplateEnhancerConfig;
 
-  constructor(logger: Logger, config?: Partial<TemplateEnhancerConfig>) {
-    this.logger = logger;
+  constructor(config?: Partial<TemplateEnhancerConfig>) {
     this.config = {
       enableStructureOptimization: true,
       ...config,
@@ -44,7 +40,7 @@ export class TemplateEnhancer {
    */
   async enhanceTemplate(
     template: string,
-    prompt: ConvertedPrompt,
+    _prompt: ConvertedPrompt,
     // Legacy args kept for interface compatibility but unused
     _frameworkGuide?: any,
     _framework?: any,
@@ -87,9 +83,6 @@ export class TemplateEnhancer {
 /**
  * Create and configure a TemplateEnhancer instance
  */
-export function createTemplateEnhancer(
-  logger: Logger,
-  config?: Partial<TemplateEnhancerConfig>
-): TemplateEnhancer {
-  return new TemplateEnhancer(logger, config);
+export function createTemplateEnhancer(config?: Partial<TemplateEnhancerConfig>): TemplateEnhancer {
+  return new TemplateEnhancer(config);
 }

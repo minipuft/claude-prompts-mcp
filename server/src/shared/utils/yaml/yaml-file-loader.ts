@@ -6,7 +6,7 @@
  * directory discovery, and error recovery patterns.
  */
 
-import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join, extname, basename } from 'path';
 

@@ -336,7 +336,7 @@ export class FrameworkSemanticIntegration {
   private selectOptimalFramework(
     prompt: ConvertedPrompt,
     criteria: FrameworkSelectionCriteria,
-    semanticAnalysis: ContentAnalysisResult
+    _semanticAnalysis: ContentAnalysisResult
   ): FrameworkExecutionContext {
     // Use framework manager's selection logic
     const frameworkContext = this.frameworkManager.generateExecutionContext(prompt, criteria);
@@ -389,9 +389,9 @@ export class FrameworkSemanticIntegration {
    * Generate alternative framework options for consensus
    */
   private generateAlternativeFrameworks(
-    criteria: FrameworkSelectionCriteria,
+    _criteria: FrameworkSelectionCriteria,
     currentContext: FrameworkExecutionContext,
-    semanticAnalysis?: ContentAnalysisResult
+    _semanticAnalysis?: ContentAnalysisResult
   ): FrameworkDefinition[] {
     const allFrameworks = this.frameworkManager.listFrameworks(true);
     const currentFramework = currentContext.selectedFramework;
@@ -525,7 +525,7 @@ export class FrameworkSemanticIntegration {
 
   private generateOptimizationSuggestions(
     semanticAnalysis: ContentAnalysisResult,
-    frameworkContext: FrameworkExecutionContext,
+    _frameworkContext: FrameworkExecutionContext,
     alignment: FrameworkAlignmentResult
   ): string[] {
     const suggestions: string[] = [];
@@ -662,7 +662,7 @@ export class FrameworkSemanticIntegration {
   }
 
   private estimateImprovementPotential(
-    currentFramework: FrameworkDefinition,
+    _currentFramework: FrameworkDefinition,
     alternativeFramework: FrameworkDefinition,
     semanticAnalysis: ContentAnalysisResult
   ): number {
@@ -683,7 +683,7 @@ export class FrameworkSemanticIntegration {
 
   private async createNonFrameworkIntegratedResult(
     prompt: ConvertedPrompt,
-    startTime: number
+    _startTime: number
   ): Promise<IntegratedAnalysisResult> {
     // When framework system is disabled, provide semantic analysis without framework integration
     const semanticAnalysis = await this.semanticAnalyzer.analyzePrompt(prompt);
@@ -770,8 +770,6 @@ export class FrameworkSemanticIntegration {
     prompt: ConvertedPrompt,
     startTime: number
   ): IntegratedAnalysisResult {
-    const fallbackFramework = this.frameworkManager.listFrameworks(true)[0];
-
     return {
       semanticAnalysis: {
         executionType: 'single',

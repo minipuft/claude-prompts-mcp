@@ -148,7 +148,7 @@ export class GateManagerProvider implements GateDefinitionProvider {
     return gate?.gate_type === 'framework';
   }
 
-  isFrameworkGateCached(gateId: string): boolean {
+  isFrameworkGateCached(_gateId: string): boolean {
     return false; // registry does not expose cache state; defer to isFrameworkGate for accuracy
   }
 

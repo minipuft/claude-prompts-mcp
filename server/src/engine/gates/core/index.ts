@@ -9,7 +9,7 @@
  */
 
 import { GateStateStore } from '../gate-state-store.js';
-import { GateLoader, createGateLoader } from './gate-loader.js';
+import { createGateLoader } from './gate-loader.js';
 import { GateValidator, createGateValidator } from './gate-validator.js';
 import {
   TemporaryGateRegistry,

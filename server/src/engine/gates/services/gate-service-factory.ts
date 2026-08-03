@@ -41,7 +41,7 @@ export class GateServiceFactory {
         normalizedIntegration.temperature = llmIntegration.temperature;
       }
       this.logger.info('[GateServiceFactory] Semantic layer enabled via configuration');
-      return new SemanticGateService(this.logger, this.gateGuidanceRenderer, this.gateValidator, {
+      return new SemanticGateService(this.logger, this.gateGuidanceRenderer, {
         llmIntegration: normalizedIntegration,
       });
     }

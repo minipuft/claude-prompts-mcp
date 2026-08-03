@@ -9,8 +9,6 @@
  *  of Chain System Migration (2025-01-30)
  */
 
-import * as path from 'node:path';
-
 import { ValidationError } from './errorHandling.js';
 // REMOVED: All types from deleted chain-scaffolding.ts
 // Modular chain system has been completely deprecated
@@ -22,11 +20,6 @@ import { ValidationError } from './errorHandling.js';
  * both named `CHAIN_ID_PATTERN` in this directory until 2026-08-02.
  */
 const CHAIN_SLUG_PATTERN = /^[a-z0-9_-]+$/i;
-
-function isPathInside(basePath: string, targetPath: string): boolean {
-  const relative = path.relative(basePath, targetPath);
-  return !relative.startsWith('..') && !path.isAbsolute(relative);
-}
 
 export function normalizeChainId(chainId: string): string {
   if (typeof chainId !== 'string') {

@@ -21,7 +21,6 @@ export { TransportRouter, createTransportRouter, TransportType };
  */
 export class ServerLifecycle {
   private logger: Logger;
-  private configManager: ConfigLoader;
   private transportRouter: TransportRouter;
   private apiRouter: ApiRouterPort | undefined;
   private httpServer?: Server;
@@ -34,7 +33,6 @@ export class ServerLifecycle {
     apiRouter?: ApiRouterPort
   ) {
     this.logger = logger;
-    this.configManager = configManager;
     this.transportRouter = transportRouter;
     this.apiRouter = apiRouter;
     this.port = configManager.getPort();

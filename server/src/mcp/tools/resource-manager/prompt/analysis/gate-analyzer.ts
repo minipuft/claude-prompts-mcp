@@ -66,13 +66,11 @@ export class GateAnalyzer {
     // Generate temporary gate suggestions
     const temporaryGates = this.generateTemporaryGateSuggestions(context, contentAnalysis);
 
-    // TODO: Confidence calculation requires semantic LLM layer (future feature)
-    // const confidence = this.calculateConfidence(
-    //   context,
-    //   contentAnalysis,
-    //   recommendedGates.length + temporaryGates.length
-    // );
-    const confidence = 0.0; // Placeholder until semantic LLM integration
+    // Confidence scoring is not implemented: it needs the semantic LLM layer.
+    // A `calculateConfidence` method existed here, commented out of its only
+    // call site, and was removed — a scoring function nothing could reach was
+    // not a head start on the feature, just a second thing to keep compiling.
+    const confidence = 0.0;
 
     // Create reasoning
     const reasoning = this.generateReasoning(
@@ -299,38 +297,6 @@ export class GateAnalyzer {
   }
 
   /**
-   * Calculate confidence score
-   */
-  private calculateConfidence(
-    context: {
-      executionType: 'single' | 'chain';
-      category: string;
-      framework?: string;
-      intentKeywords?: string[];
-      complexity: 'low' | 'medium' | 'high';
-    },
-    contentAnalysis: any,
-    totalGatesRecommended: number
-  ): number {
-    let confidence = 0.5; // Base confidence
-
-    // Increase confidence for clear indicators
-    const indicators = Object.values(contentAnalysis).filter(Boolean).length;
-    confidence += indicators * 0.05;
-
-    // Adjust for context clarity
-    if (context.category !== 'general') confidence += 0.1;
-    if (context.framework) confidence += 0.1;
-    if (context.intentKeywords && context.intentKeywords.length > 0) confidence += 0.1;
-
-    // Adjust for recommendation count
-    if (totalGatesRecommended > 0) confidence += 0.1;
-    if (totalGatesRecommended > 3) confidence += 0.1;
-
-    return Math.min(confidence, 1.0);
-  }
-
-  /**
    * Generate reasoning for recommendations
    */
   private generateReasoning(
@@ -420,27 +386,6 @@ export class GateAnalyzer {
   }
 
   /**
-   * Get intent-based gate recommendations
-   */
-  private getIntentBasedGates(intentKeywords: string[]): string[] {
-    const intentGateMapping: Record<string, string[]> = {
-      analysis: ['research-quality', 'technical-accuracy'],
-      creation: ['content-structure', 'code-quality'],
-      explanation: ['educational-clarity', 'content-structure'],
-      validation: ['technical-accuracy'],
-      optimization: ['code-quality', 'technical-accuracy'],
-    };
-
-    const gates: string[] = [];
-    for (const intent of intentKeywords) {
-      const intentGates = intentGateMapping[intent] || [];
-      gates.push(...intentGates);
-    }
-
-    return [...new Set(gates)];
-  }
-
-  /**
    * Get category-based gate mapping
    */
   private getCategoryGateMapping(): Record<string, string[]> {
@@ -454,19 +399,5 @@ export class GateAnalyzer {
       content_processing: ['content-structure'],
       general: ['content-structure'],
     };
-  }
-
-  /**
-   * Get framework-specific gates
-   */
-  private getFrameworkGates(framework: string): string[] {
-    const frameworkGateMapping: Record<string, string[]> = {
-      CAGEERF: ['framework-compliance', 'content-structure'],
-      ReACT: ['technical-accuracy', 'research-quality'],
-      '5W1H': ['content-structure', 'research-quality'],
-      SCAMPER: ['educational-clarity'],
-    };
-
-    return frameworkGateMapping[framework] || ['framework-compliance'];
   }
 }

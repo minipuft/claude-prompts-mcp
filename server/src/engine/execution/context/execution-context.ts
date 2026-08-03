@@ -8,12 +8,7 @@ import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { ToolResponse, McpToolRequest } from '#shared/types/index.js';
 import type { RequestIdentitySource } from '#shared/types/request-identity.js';
-import type {
-  NamedInlineGate,
-  ParsedCommand,
-  SessionContext,
-  ExecutionResults,
-} from './context-types.js';
+import type { ParsedCommand, SessionContext, ExecutionResults } from './context-types.js';
 import type { InitializedScriptState, PipelineInternalState } from './internal-state.js';
 import type { FrameworkExecutionContext } from '../../frameworks/types/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
@@ -254,7 +249,6 @@ export class ExecutionContext {
   isResponseOnlyMode(): boolean {
     const hasCommand =
       typeof this.mcpRequest.command === 'string' && this.mcpRequest.command.length > 0;
-    const response = this.mcpRequest.user_response?.trim();
     const hasResumeToken = Boolean(this.mcpRequest.chain_id);
     return !hasCommand && hasResumeToken;
   }

@@ -7,7 +7,7 @@ tags: []
 
 # MCP SDK v2 + Spec 2026-07-28 Migration
 
-**Status**: **Tier E COMPLETE** (2026-08-03) — E1-E6 landed; Tiers A, A2, B, C complete. Both protocol eras are served on both transports, `prompt_engine` advertises a state-dependent parameter surface, and gate verdicts are structurally validated rather than regex-parsed. Next: Tier D (documentation reconciliation), plus the deferred D1 dead-symbol sweep.
+**Status**: **MIGRATION COMPLETE** (2026-08-03) — Tiers A, A2, B, C, E, D all landed. Both protocol eras are served over STDIO and Streamable HTTP, `prompt_engine` advertises a state-dependent parameter surface, gate verdicts are structurally validated, and no SSE parity claim survives in the docs. Remaining: the deferred D1 dead-symbol sweep (76 symbols), which is tracked separately and was never part of this migration.
 **Created**: 2026-08-01
 **Work type**: feature (secondary: refactor) · **Risk**: high · **Confidence**: high
 
@@ -179,6 +179,53 @@ A `tsc --noUnusedLocals --noUnusedParameters` sweep found **84** dead symbols re
 **Do not start this during Tier B.** A concurrent session has been editing `engine/frameworks/*` and `engine/execution/pipeline/*` throughout 2026-08-01/02; a sweep there would collide. Re-measure the count before executing — it will have drifted.
 
 **Method that worked in A2, reuse it**: verify field-vs-parameter liveness per symbol rather than trusting the sweep. In A2, two of four symbols had dead fields but _live_ parameters; removing both would have broken `ExecutionPlanner` construction. Also expect cascades — one removal made three upstream layers dead in turn.
+
+**Executed 2026-08-03 — COMPLETE, 76 → 0. Gate met: the sweep returns empty.** Reached in two passes: 76 → 9 while the framework session was mid-refactor, then 9 → 0 once it finalized (`a25aaf25`, `8a4c0660`).
+
+Re-measured first: 76 confirmed (the plan's 72 had drifted). The plan's "do not start, a concurrent session is editing `engine/frameworks/*` and `engine/execution/pipeline/*`" warning was **stale** — cross-referencing the 76 against that session's 14 dirty/new source files returned **zero overlap**; they had moved to `modules/prompts/`, `cli-shared/`, and specific stages.
+
+**A wrong tool first.** `npx knip` reported 1184 findings across 178 files, dominated by barrel re-exports (`cli-shared/index.ts` alone: 113). That is unused _exports_; this tier's recorded method is `tsc --noUnusedLocals --noUnusedParameters`, which measures unused _locals and parameters_. Different question, different answer. Acting on the knip number would have stripped module public surfaces that `CLAUDE.md` explicitly permits.
+
+**Removed (67), by treatment — one sweep does not fit them:**
+
+| Kind                           | Count | Treatment                                                  |
+| ------------------------------ | ----- | ---------------------------------------------------------- |
+| Unused imports incl. type-only | 15    | delete specifier                                           |
+| Dead locals                    | 13    | delete binding, **preserve side-effecting RHS**            |
+| Dead private methods           | 7     | delete whole function                                      |
+| Cascades from the above        | 3     | re-measure after each batch                                |
+| Unused parameters              | 29    | `_`-prefix (project convention, `argsIgnorePattern: '^_'`) |
+
+**Two locals whose calls had to survive.** `const expiredCleaned = this.cleanupExpiredGates()` and `const result = await this.fileOperations.updatePromptImplementation(promptData)` — the first cleans state, the second **writes a file**. Deleting the statement rather than the binding would have silently dropped a persistence call.
+
+**Cascades were real, as predicted.** Deleting `getDormantSessionForBaseChain` orphaned `getDormantSessionForChain`; deleting `isPathInside` orphaned a `path` import. Each batch was re-measured rather than planned once.
+
+**One duplicate found.** `unescapeJsonFromNunjucks` existed twice — a dead private copy in `shared/utils/jsonUtils.ts` and the live exported one in `shared/utils/index.ts:130`. The dead copy went.
+
+**A method-deletion script broke a file and was reverted, not patched.** Brace-matching mis-handled multi-line parameter lists in `gate-analyzer.ts`, cutting declarations and orphaning bodies. Restored from HEAD and redone against verified line anchors. Worth recording because the dead-count briefly read **0** — tsc had bailed on the parse error, so the metric looked like success. A sweep count is only meaningful when typecheck is green.
+
+**The final 9, resolved after the framework session finalized.**
+
+_Was the "deriving twice" fixed?_ Yes, but it was a different defect than the one left here. `a25aaf25` removed the **stage** independently deriving the requirement — stage 15 now only reads `plan.requiresFramework`. The surviving `this.requiresFramework(...)` → `resolveFrameworkRequirement(modifiers, base)` pair is a _composition_ (base answer, then `%clean`/`%lean`/`%framework`/`%judge`), not a duplicate. What remained was that `requiresFramework` declared **six** parameters and read **two** — a signature advertising dependencies on `strategy`, `prompt`, `analysis` and `gates` that the body never had. Narrowed to the two it uses.
+
+_API shape._ Three constructor-injected dependencies were never used, and they were not the same case. `TemplateEnhancer.logger` and `PromptRegistry.configManager` are vestigial from an earlier consolidation (both files still carry the `templateProcessor removed - functionality consolidated` marker). `SemanticGateService.gateValidator` was a deliberate placeholder for "server-side validation (future work)" on an `@lifecycle migrating` file. All three removed: speculative wiring is debt under `cleanup-standards.md`, and re-adding a constructor argument when validation actually lands costs less than a dependency that misrepresents what a service does. Its test was updated, not deleted — and `supportsValidation()` is unaffected, since it has always reported `config.llmIntegration.enabled` and never consulted the validator.
+
+_The two dead channels, audited._ Both were writer-with-no-reader, and the rule says that means either a missing consumer or a redundant channel — the wiring decides which.
+
+- `hot-reload-observer.onGateReloadCallback`: **redundant**. Its two siblings are invoked (`onReloadCallback` at `:539`, `onFrameworkReloadCallback` at `:367`), but gate reload had migrated to the auxiliary mechanism — `buildGateAuxiliaryReloadConfig` → `application.ts:834` → `setAuxiliaryReloads`. The only reference to `setGateReloadCallback` outside the class was a doc-comment example. Its JSDoc claimed "This callback is invoked when gate YAML files change", which was false. Removed.
+- `ExecutionPlanner.frameworkManager`: **redundant**. Unlike the above it had a live writer (`prompt-executor.ts:260`), but framework _selection_ belongs to `FrameworkManager` per the Domain Ownership Matrix, and the planner's output is a boolean. Field, setter, and call site removed.
+
+**Previous pass left these 9, and why (retained for the record):**
+
+| Remaining                                                                                         | Count | Why not removed                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution-planner.ts` `requiresFramework` params                                                 | 4     | Its call sites at `:141`/`:149` **are** the "deriving twice" that the concurrent session's commit `6479ab15` and untracked `decisions/framework/framework-requirement.ts` are consolidating. Editing that signature mid-refactor collides.                                                      |
+| `template-enhancer` `logger`, `semantic-gate-service` `gateValidator`, `registry` `configManager` | 3     | Each constructor parameter exists **solely** to feed the dead field, so removal changes a public constructor and its factory. That is an API change, not a dead-symbol sweep.                                                                                                                   |
+| `hot-reload-observer` `onGateReloadCallback`, `execution-planner` `frameworkManager`              | 2     | **Dead channels**: a setter writes, nothing reads. Per the zero-writers/zero-readers rule that shape means either a missing consumer or a redundant setter, and the user-facing behavior decides which. Deleting blind would erase the evidence of a possibly-missing gate-reload notification. |
+
+**Three fields removed safely by distinguishing field from parameter** — the A2 trap. `infra/http` `configManager` and `telemetry-lifecycle` `logger` had **live** parameters (`configManager.getPort()`, `createTelemetryRuntime(config, logger, …)`) and only dead fields; removing the parameters would have broken construction. `manager.ts` `serverRoot` is now assigned from an option nothing reads — the `ChainSessionStoreOptions.serverRoot` option is itself a candidate for the next pass.
+
+**Measured after (final):** sweep **0** · typecheck green · lint ratchet **3352 → 3288 errors**, 1069 → 1066 warnings · tests-type ratchet 391, no regressions · 158 suites / 1901 unit · 35 suites / 443 integration · 3 suites / 42 e2e · `verify:mcp` 11/11 · `validate:arch` 0 errors, 447 modules.
 
 #### D2 — Test-suite type errors (865)
 
@@ -448,12 +495,33 @@ Render-then-parse is only sound if it is lossless, so that is the gate, asserted
 
 ### Tier D — documentation reconciliation
 
-| #   | File                                                                                                                                                                                                                     | Change                                     | Depends |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ | ------- |
-| D1a | `CLAUDE.md`                                                                                                                                                                                                              | Core Principle 3 → STDIO + Streamable HTTP | D1      |
-| D1b | `CONTRIBUTING.md:102`, `project-decisions.md:143-156,325`, `docs/adr/README.md:13`, `docs/adr/0000-template.md:53`, `docs/adr/0001-*.md:35,319`                                                                          | Reconcile SSE-parity statements            | D1      |
-| D1c | `docs/architecture/overview.md:32,154,781-782`, `docs/portfolio/design-decisions.md:29-37`, `docs/reference/mcp-tools.md:1008-1011`, `docs/guides/troubleshooting.md:225`, `docs/TODO.md:17,124`, `server/README.md:394` | Same                                       | D1      |
-| D2a | `CHANGELOG.md`                                                                                                                                                                                                           | Entry (below)                              | C gate  |
+| #   | Status | File                                                                                                                                                                                             | Change                                     | Depends |
+| --- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ | ------- |
+| D1a | ✓      | `CLAUDE.md`                                                                                                                                                                                      | Core Principle 3 → STDIO + Streamable HTTP | D1      |
+| D1b | ✓      | `CONTRIBUTING.md`, `project-decisions.md`, `docs/adr/README.md`, `docs/adr/0000-template.md`, `docs/adr/0001-*.md`                                                                               | Reconcile SSE-parity statements            | D1      |
+| D1c | ✓      | `docs/architecture/overview.md`, `docs/portfolio/design-decisions.md`, `docs/reference/mcp-tools.md`, `docs/guides/troubleshooting.md`, `docs/TODO.md`                                           | Same                                       | D1      |
+| D1d | ✓      | `server/config.schema.json`, `src/runtime/application.ts`, `scripts/verify-mcp-surface.mjs`, `tests/e2e/helpers/http-mcp-client.ts`, `tests/e2e/README.md`, `tests/e2e/mcp-server-smoke.test.ts` | Source/script/test references (found here) | D1      |
+| D2a | ✓      | `CHANGELOG.md`                                                                                                                                                                                   | Entry                                      | C gate  |
+
+**Tier D gate** (met): `rg '\bSSE\b'` over the repo leaves only three legitimate classes — statements that the transport _was removed_, `text/event-stream` framing inside Streamable HTTP, and two parser-test fixture strings where "SSE" is arbitrary feature text. Zero parity claims survive (`rg -i 'STDIO.{0,4}(and|/|\+).{0,4}SSE'` → none), and `--transport=sse` is documented nowhere as usable.
+
+**Executed 2026-08-03.**
+
+**The plan's inventory was wrong, in both directions.** It listed ~15 doc files; the measured sweep found **26**. `server/README.md:394` had no SSE reference at all, and every line number in D1b/D1c had drifted. Re-measuring first is why the next two findings surfaced.
+
+**"SSE" means two different things, and a blind sweep would have broken the correct ones.** The deleted _transport_ versus `text/event-stream` _framing_, which Streamable HTTP still uses for responses. Eight hits in the e2e helper, one in `capture-tool-schemas.mjs`, and the "HTTP POST/GET with SSE streams" cell in two transport tables are all the framing sense and were kept — with a note added at the helper's top so the distinction is not re-litigated. Two parser-test fixtures where "SSE" is just feature text in a prompt argument were also left alone.
+
+**Dead transport code Tier B missed.** `tests/e2e/helpers/http-mcp-client.ts` still carried `sendMcpRequestWithSse` and `sendMcpRequestsOverSseSession` — 251 lines of working client for the deleted transport, with zero callers. Deleted (D1 = delete, and `cleanup-standards.md` §Removal Checklist says delete the source, not just references). `sendMcpRequestViaHttp` and `sendMcpRequestWithStreamableHttp` are also caller-free but are not SSE-specific; they belong to the deferred D1 dead-symbol sweep, not here.
+
+**Three stale claims about live behavior, not just naming:**
+
+- `config.schema.json` described `port` as "Port for SSE transport" — a user-facing schema pointing at a transport that no longer exists.
+- `application.ts:771` claimed the API router is "only available for the SSE transport"; it is the Streamable HTTP one.
+- `docs/architecture/overview.md:790` documented "Sessions tracked via `mcp-session-id` header" — sessions were removed in Tier B. Caught only because Tier D reads the surrounding prose rather than grepping one token.
+
+**One rationale rewritten rather than reworded.** `verify-mcp-surface.mjs` justified its separate client with "WHY streamable-http AND NOT THE E2E SSE HELPER", and that argument is now void — the helper drives streamable-http too. Rewritten to say so plainly, keep the measured hang data as history so nobody re-derives it as a live constraint, and name the unclaimed consolidation instead of implying the split is still forced.
+
+**Measured after:** typecheck green · lint ratchet 3352 / 1069, no regressions · tests-type ratchet 391, no regressions · 158 suites / 1901 unit · 3 suites / 42 e2e · `verify:mcp` 11/11 · `node dist/index.js --transport=sse` exits 1 naming `streamable-http`.
 
 ---
 

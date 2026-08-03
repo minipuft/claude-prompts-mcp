@@ -123,8 +123,6 @@ export class PromptAnalyzer {
    */
   createDisabledAnalysisFallback(prompt: ConvertedPrompt): PromptClassification {
     const hasChainSteps = Boolean(prompt.chainSteps?.length);
-    const hasComplexArgs = (prompt.arguments?.length || 0) > 2;
-    const hasTemplateVars = /\{\{.*?\}\}/g.test(prompt.userMessageTemplate || '');
 
     // Basic execution type detection without semantic analysis
     let executionType: 'single' | 'chain' = 'single';
@@ -185,31 +183,6 @@ export class PromptAnalyzer {
       default:
         return '🧠'; // Default intelligent analysis
     }
-  }
-
-  /**
-   * Generate capability-aware suggestions
-   */
-  private generateSuggestions(classification: PromptClassification): string[] {
-    const suggestions: string[] = [];
-
-    if (!this.semanticAnalyzer.isLLMEnabled()) {
-      suggestions.push('💡 Enable semantic analysis for enhanced capabilities');
-      suggestions.push('🎯 Framework recommendation unavailable');
-    } else if (classification.analysisMode === 'structural') {
-      suggestions.push('💡 Configure LLM integration for intelligent analysis');
-    } else if (
-      classification.analysisMode === 'fallback' ||
-      classification.framework === 'fallback'
-    ) {
-      suggestions.push('🚨 Fix analysis configuration');
-    }
-
-    if (!classification.capabilities?.canRecommendFramework) {
-      suggestions.push('🎯 Framework recommendation unavailable');
-    }
-
-    return suggestions;
   }
 
   /**

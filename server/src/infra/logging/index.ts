@@ -437,9 +437,6 @@ export function createSimpleLogger(transport: string = 'stdio'): Logger {
  * This prevents log messages from interfering with JSON MCP messages
  */
 export function setupConsoleRedirection(logger: Logger): void {
-  const originalConsoleLog = console.log;
-  const originalConsoleError = console.error;
-
   console.log = (...args) => {
     logger.debug('CONSOLE: ' + args.join(' '));
   };

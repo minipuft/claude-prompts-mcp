@@ -12,7 +12,6 @@
 
 import {
   BaseFrameworkGuide,
-  type FrameworkSelection,
   type FrameworkType,
   type PromptCreationGuidance,
   type ProcessingGuidance,
@@ -24,18 +23,9 @@ import {
   type QualityGate,
   type TemplateEnhancement,
 } from '../types/framework-types.js';
+import { validateCompliance, getCombinedText } from '../utils/compliance-validator.js';
+import { createProcessingGuidance, createStepGuidance } from '../utils/step-generator.js';
 import {
-  validateCompliance,
-  getCombinedText,
-  type PhaseQualityIndicators,
-} from '../utils/compliance-validator.js';
-import {
-  createProcessingGuidance,
-  createStepGuidance,
-  type PhasesDefinition,
-} from '../utils/step-generator.js';
-import {
-  createFrameworkEnhancement,
   convertTemplateSuggestions,
   convertFrameworkGates,
   convertProcessingSteps,
@@ -76,7 +66,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   /**
    * Guide prompt creation using the framework's structure
    */
-  guidePromptCreation(intent: string, context?: Record<string, unknown>): PromptCreationGuidance {
+  guidePromptCreation(_intent: string, _context?: Record<string, unknown>): PromptCreationGuidance {
     const elements = this.definition.frameworkElements;
     const argumentSuggestions = this.definition.argumentSuggestions || [];
 
@@ -173,7 +163,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
    * Guide execution steps using framework phases
    */
   guideExecutionSteps(
-    prompt: ConvertedPrompt,
+    _prompt: ConvertedPrompt,
     semanticAnalysis: ContentAnalysisResult
   ): StepGuidance {
     const phases = this.definition.phases;
@@ -194,7 +184,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
    * Enhance execution with framework-specific improvements
    */
   enhanceWithFramework(
-    prompt: ConvertedPrompt,
+    _prompt: ConvertedPrompt,
     context: Record<string, unknown>
   ): FrameworkEnhancement {
     // Convert framework gates from definition
@@ -255,7 +245,7 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   /**
    * Get framework-specific system prompt guidance
    */
-  getSystemPromptGuidance(context: Record<string, unknown>): string {
+  getSystemPromptGuidance(_context: Record<string, unknown>): string {
     return this.definition.systemPromptGuidance;
   }
 

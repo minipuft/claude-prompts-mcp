@@ -65,7 +65,7 @@ export class PromptAssetManager {
     );
 
     if (mcpServer) {
-      this.registry = new PromptRegistry(logger, mcpServer, configManager, this.conversationStore);
+      this.registry = new PromptRegistry(logger, mcpServer, this.conversationStore);
 
       this.hotReloadObserver = createHotReloadObserver(
         logger,

@@ -1,10 +1,7 @@
 // @lifecycle canonical - Prompt engine helper that exposes action metadata guide.
 import { promptEngineMetadata } from '../../../metadata/definitions/prompt-engine.js';
 
-import type {
-  ParameterDescriptor,
-  CommandDescriptor,
-} from '../../../metadata/definitions/types.js';
+import type { ParameterDescriptor } from '../../../metadata/definitions/types.js';
 
 export function renderPromptEngineGuide(goal?: string): string {
   const normalizedGoal = typeof goal === 'string' ? goal.trim() : '';

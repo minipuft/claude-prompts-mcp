@@ -522,7 +522,7 @@ export class InMemoryMetricsCollector extends EventEmitter implements MetricsCol
   /**
    * Get comprehensive analytics summary
    */
-  getAnalyticsSummary(options?: AnalyticsQueryOptions): AnalyticsSummary {
+  getAnalyticsSummary(_options?: AnalyticsQueryOptions): AnalyticsSummary {
     const gateStats = {
       totalValidations: this.gateValidationStats.totalValidations,
       validationSuccessRate: this.getGateValidationSuccessRate(),

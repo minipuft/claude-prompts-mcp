@@ -86,7 +86,7 @@ export class ApiRouter {
     app.use(express.json());
 
     // Add request logging middleware
-    app.use((req, res, next) => {
+    app.use((req, _res, next) => {
       this.logger.debug(`${req.method} ${req.url} - Headers: ${JSON.stringify(req.headers)}`);
       next();
     });
@@ -340,7 +340,6 @@ export class ApiRouter {
       this.logger.info('API request to reload prompts');
 
       const shouldRestart = req.body?.restart === true;
-      const reason = req.body?.reason ? req.body.reason : 'Manual reload requested';
 
       try {
         await this.reloadPromptData();

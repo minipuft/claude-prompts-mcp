@@ -257,7 +257,6 @@ export class PromptExecutor {
 
   setFrameworkManager(frameworkManager: FrameworkManager): void {
     this.frameworkManager = frameworkManager;
-    this.executionPlanner.setFrameworkManager(frameworkManager);
     this.rebuildFrameworkValidator();
     this.chainOperatorExecutor = this.createChainOperatorExecutor();
     this.resetPipeline();

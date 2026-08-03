@@ -12,7 +12,6 @@
  */
 
 import type {
-  FrameworkSelection,
   FrameworkType,
   JudgePromptDefinition,
   FrameworkToolDescriptions,

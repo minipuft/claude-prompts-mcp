@@ -425,7 +425,7 @@ export class TemporaryGateRegistry {
     this.logger.debug('[TEMP GATE REGISTRY] Performing forced cleanup');
 
     // First try cleaning expired gates
-    const expiredCleaned = this.cleanupExpiredGates();
+    this.cleanupExpiredGates();
 
     // If still at capacity, remove oldest gates
     if (this.temporaryGates.size >= this.maxMemoryGates) {

@@ -128,7 +128,7 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
       action: PromptResourceActionId;
       [key: string]: any;
     },
-    extra: any
+    _extra: any
   ): Promise<ToolResponse> {
     const { action } = args;
     this.logger.info(`📝 Prompt Resource: Executing action "${action}"`);

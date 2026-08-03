@@ -85,7 +85,11 @@ describe('CompositionalGateService', () => {
 
 describe('SemanticGateService', () => {
   test('gracefully degrades when validation not implemented', async () => {
-    const service = new SemanticGateService(createLogger(), fakeRenderer, fakeValidator, {
+    // No validator argument: the service never called the `GateValidator` it used
+    // to be handed, so the parameter was removed rather than kept as wiring that
+    // implied validation this service does not perform. `supportsValidation()`
+    // has always reported `config.llmIntegration.enabled` and is unaffected.
+    const service = new SemanticGateService(createLogger(), fakeRenderer, {
       llmIntegration: {
         enabled: true,
       },

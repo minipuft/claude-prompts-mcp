@@ -20,16 +20,6 @@ function escapeJsonForNunjucks(jsonStr: string): string {
     .replace(/#\}/g, '\\#\\}'); // Escape Nunjucks comment syntax
 }
 
-function unescapeJsonFromNunjucks(escapedStr: string): string {
-  return escapedStr
-    .replace(/\\{\\{/g, '{{') // Unescape Nunjucks variable syntax
-    .replace(/\\}\\}/g, '}}') // Unescape Nunjucks variable syntax
-    .replace(/\\{\\%/g, '{%') // Unescape Nunjucks tag syntax
-    .replace(/\\%\\}/g, '%}') // Unescape Nunjucks tag syntax
-    .replace(/\\{\\#/g, '{#') // Unescape Nunjucks comment syntax
-    .replace(/\\#\\}/g, '#}'); // Unescape Nunjucks comment syntax
-}
-
 // Lazy initialization to avoid Jest import.meta.url issues
 let nunjucksEnv: nunjucks.Environment | null = null;
 

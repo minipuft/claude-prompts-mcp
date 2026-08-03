@@ -87,7 +87,7 @@ export class PromptGuidanceService {
       ...config,
     };
 
-    this.templateEnhancer = createTemplateEnhancer(logger, this.config.templateEnhancement);
+    this.templateEnhancer = createTemplateEnhancer(this.config.templateEnhancement);
   }
 
   /**

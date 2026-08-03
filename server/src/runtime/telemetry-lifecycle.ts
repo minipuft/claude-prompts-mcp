@@ -41,12 +41,10 @@ export interface TelemetryLifecycleParams {
 export class TelemetryLifecycle {
   private readonly runtime: TelemetryRuntimeImpl;
   private readonly observer: TelemetryHookObserver;
-  private readonly logger: Logger;
   private started = false;
 
   constructor(params: TelemetryLifecycleParams) {
     const { config, logger, hookRegistry, serviceName, serviceVersion } = params;
-    this.logger = logger;
 
     // Create runtime (does not start — start() is called separately)
     this.runtime = createTelemetryRuntime(config, logger, serviceName, serviceVersion);

@@ -32,8 +32,6 @@ import {
   TransportMode,
   VersioningConfig,
   FrameworkSettings,
-  VerificationConfig,
-  AdvancedConfig,
   ResourcesConfig,
   TelemetryConfig,
   DEFAULT_VERSIONING_CONFIG,

@@ -90,7 +90,6 @@ export class ChainSessionStore implements ChainSessionService {
   private runChainToBase: Map<string, string> = new Map(); // runChainId -> baseChainId
   private runRegistry!: ChainRunRegistry;
   private readonly sessionClearedCallbacks: SessionClearedCallback[] = [];
-  private readonly serverRoot: string;
   private readonly defaultSessionTimeoutMs: number;
   private readonly reviewSessionTimeoutMs: number;
   private readonly cleanupIntervalMs: number;
@@ -118,7 +117,6 @@ export class ChainSessionStore implements ChainSessionService {
       this.injectedDbEngine = dbEngineOrTracker;
     }
 
-    this.serverRoot = options.serverRoot ?? '';
     this.defaultSessionTimeoutMs = options.defaultSessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
     this.reviewSessionTimeoutMs =
       options.reviewSessionTimeoutMs ?? DEFAULT_REVIEW_SESSION_TIMEOUT_MS;
@@ -1884,38 +1882,6 @@ export class ChainSessionStore implements ChainSessionService {
       `[ChainSessionStore] Promoted session ${session.sessionId} to canonical (${reason})`
     );
     this.persistSessionsAsync('lifecycle-promotion');
-  }
-
-  private getDormantSessionForChain(chainId: string): ChainSession | undefined {
-    const sessionIds = this.chainSessionMapping.get(chainId);
-    if (!sessionIds) {
-      return undefined;
-    }
-
-    for (const sessionId of sessionIds) {
-      const session = this.activeSessions.get(sessionId);
-      if (session && this.isDormantSession(session)) {
-        return session;
-      }
-    }
-    return undefined;
-  }
-
-  private getDormantSessionForBaseChain(baseChainId: string): ChainSession | undefined {
-    const normalized = stripRunNumber(baseChainId);
-    const history = this.baseChainMapping.get(normalized) ?? [];
-    for (let idx = history.length - 1; idx >= 0; idx -= 1) {
-      const runChainId = history[idx];
-      if (runChainId === undefined) {
-        continue;
-      }
-      const dormantSession = this.getDormantSessionForChain(runChainId);
-      if (dormantSession) {
-        return dormantSession;
-      }
-    }
-
-    return this.getDormantSessionForChain(normalized);
   }
 
   private buildChainMetadata(session: ChainSession): Record<string, any> | undefined {
