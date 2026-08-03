@@ -29,6 +29,7 @@ Top-level properties for `prompt.yaml`.
 | `gateConfiguration`       | `object`   | No       | Quality gate settings.                                            |
 | `injection`               | `object`   | No       | Per-prompt injection control. See [Injection](#injection).        |
 | `subagentModel`           | `enum`     | No       | Model tier hint for delegation: `heavy`, `standard`, `fast`.      |
+| `agentType`               | `string`   | No       | Default agent for delegated steps. A step may override it.        |
 | `chainSteps`              | `object[]` | No       | Multi-step chain definition. See [Chain Schema](chain-schema.md). |
 
 ### Example
@@ -41,6 +42,7 @@ userMessageTemplateFile: user-message.md
 registerWithMcp: true
 tools: [csv_validator]
 subagentModel: fast # delegated steps use a lightweight model
+agentType: Explore # ...and spawn this agent unless a step says otherwise
 ```
 
 ---

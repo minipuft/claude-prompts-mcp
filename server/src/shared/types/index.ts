@@ -857,6 +857,8 @@ export interface ChainStep {
   retries?: number;
   /** Client-agnostic capability hint for delegation model selection (per-step override) */
   subagentModel?: 'heavy' | 'standard' | 'fast';
+  /** Host agent to spawn for this step, overriding the prompt-level default */
+  agentType?: string;
 }
 
 /**
@@ -902,6 +904,8 @@ export interface PromptData {
   tools?: string[];
   /** Client-agnostic capability hint for delegation model selection */
   subagentModel?: 'heavy' | 'standard' | 'fast';
+  /** Default host agent for this prompt's delegated steps (a step may override it) */
+  agentType?: string;
 }
 
 // ===== End of Type Definitions =====

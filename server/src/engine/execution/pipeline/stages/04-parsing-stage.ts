@@ -159,6 +159,9 @@ export class CommandParsingStage extends BasePipelineStage {
           ...(step.subagentModel != null || stepConverted.subagentModel != null
             ? { subagentModel: step.subagentModel ?? stepConverted.subagentModel }
             : {}),
+          ...(step.agentType != null || stepConverted.agentType != null
+            ? { agentType: step.agentType ?? stepConverted.agentType }
+            : {}),
         } as ChainStepPrompt;
       });
     }

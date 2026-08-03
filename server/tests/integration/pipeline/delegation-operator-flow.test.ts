@@ -411,6 +411,53 @@ describe('Delegation Operator (==>) Flow', () => {
       expect(result.callToAction).not.toContain('chain-executor');
     });
 
+    test('prompt-level agentType applies when the step declares none', async () => {
+      const stepPrompts: ChainStepPrompt[] = [
+        { stepNumber: 1, promptId: 'research', args: {} },
+        {
+          stepNumber: 2,
+          promptId: 'summarize',
+          args: {},
+          delegated: true,
+          convertedPrompt: { ...testPrompts[1]!, agentType: 'Explore' },
+        },
+      ];
+
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts,
+        currentStepIndex: 0,
+      });
+
+      expect(result.callToAction).toContain('subagent_type: "claude-prompts:Explore"');
+      expect(result.callToAction).not.toContain('chain-executor');
+    });
+
+    test('a step agentType overrides the prompt-level default', async () => {
+      // The whole point of the two levels: a prompt sets the agent its steps usually want,
+      // and one step that needs a different one says so without restating the rest.
+      const stepPrompts: ChainStepPrompt[] = [
+        { stepNumber: 1, promptId: 'research', args: {} },
+        {
+          stepNumber: 2,
+          promptId: 'summarize',
+          args: {},
+          delegated: true,
+          agentType: 'code-reviewer',
+          convertedPrompt: { ...testPrompts[1]!, agentType: 'Explore' },
+        },
+      ];
+
+      const result = await executor.renderStep({
+        executionType: 'normal',
+        stepPrompts,
+        currentStepIndex: 0,
+      });
+
+      expect(result.callToAction).toContain('subagent_type: "claude-prompts:code-reviewer"');
+      expect(result.callToAction).not.toContain('Explore');
+    });
+
     test('defaults to namespaced chain-executor when no overrides', async () => {
       const stepPrompts: ChainStepPrompt[] = [
         { stepNumber: 1, promptId: 'research', args: {} },

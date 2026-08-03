@@ -1,7 +1,7 @@
 ---
 title: "Pipeline Follow-up — Tiers 15-16"
 date: 2026-08-03
-status: active
+status: done
 tags: []
 ---
 
@@ -212,11 +212,11 @@ the caller fetches.
 
 | #    | Status | Step                                                                              | Files                               | Depends | Verification                                            |
 | ---- | ------ | --------------------------------------------------------------------------------- | ----------------------------------- | ------- | ------------------------------------------------------- |
-| 16.1 | ☐      | Confirm the three predicates read nothing but their arguments and the gate-id set | `12-framework-stage.ts`             | —       | No `this.` other than `currentRequestFrameworkGates`    |
-| 16.2 | ☐      | Choose the home under the layer rules before writing — `validate:arch` decides    | —                                   | 16.1    | Named target that the engine may import as a value      |
-| 16.3 | ☐      | Extract as pure functions taking the gate-id set; delete the private methods      | new module, `12-framework-stage.ts` | 16.2    | `validate:arch` clean; stage keeps the async load       |
-| 16.4 | ☐      | Unit-test the predicates directly                                                 | `tests/unit/`                       | 16.3    | Step-level requirement, inline gates, and the empty set |
-| 16.5 | ☐      | Differential over the stage's existing suite                                      | `framework-stage.test.ts`           | 16.3    | Unchanged assertions pass before and after              |
+| 16.1 | ✓      | Confirm the three predicates read nothing but their arguments and the gate-id set | `12-framework-stage.ts`             | —       | No `this.` other than `currentRequestFrameworkGates`    |
+| 16.2 | ✓      | Choose the home under the layer rules before writing — `validate:arch` decides    | —                                   | 16.1    | Named target that the engine may import as a value      |
+| 16.3 | ✓      | Extract as pure functions taking the gate-id set; delete the private methods      | new module, `12-framework-stage.ts` | 16.2    | `validate:arch` clean; stage keeps the async load       |
+| 16.4 | ✓      | Unit-test the predicates directly                                                 | `tests/unit/`                       | 16.3    | Step-level requirement, inline gates, and the empty set |
+| 16.5 | ✓      | Differential over the stage's existing suite                                      | `framework-stage.test.ts`           | 16.3    | Unchanged assertions pass before and after              |
 
 **Gate**: the stage holds no private domain predicate, and the async gate-id load still happens
 exactly once per request in the stage.
@@ -243,3 +243,56 @@ rather than where the engine may import it.
 - **Treat Tier 16 as complexity work** — `12-framework-stage.ts` is already under the cognitive
   limit after Tier 12. This is a layer-boundary fix with no complexity motive, and framing it as
   a score would reintroduce the refactoring-toward-a-number the predecessor rejected twice.
+
+---
+
+## Tier 16 resolution (executed 2026-08-03)
+
+### There were four predicates, not three
+
+16.1 confirmed the three named predicates read only their arguments and
+`currentRequestFrameworkGates` — and found a fourth in the same class,
+`stepHasDisablingModifiers`. The tier gate is "the stage holds no private domain predicate",
+so leaving it would have failed the gate on a technicality while leaving the defect. It was
+extracted with the others.
+
+### The instance field went away entirely
+
+The plan proposed passing the gate-id set as a parameter instead of closing over instance
+state. Doing that made `currentRequestFrameworkGates` unreachable, so it was deleted rather
+than kept unused.
+
+Worth recording: its doc comment claimed it was "Reset to null after execute completes to
+prevent stale data across requests" — **it never was.** No assignment set it back to null. The
+stage is constructed once and reused, so a request whose gate-loader call failed would have
+silently reused the previous request's set. The parameterization removes the seam rather than
+fixing the reset, which is the stronger outcome: there is no longer a field that _could_ go
+stale.
+
+### Home selection went the easy way for once
+
+16.2 checked `.dependency-cruiser.cjs` before writing, per the note added after Tier 14 lost a
+round to `engine-no-modules-or-mcp-value`. No rule constrains intra-`engine/` imports, so
+`decisions/framework/` — beside `framework-decision-authority.ts`, same domain — was legal as
+well as correct. `validate:arch` clean at 447 modules on the first run.
+
+The predicates import `ChainStepPrompt` directly rather than declaring a local structural type
+as `FrameworkDecisionAuthority` does. The authority's local interface exists to decouple from
+`ExecutionContext`; `ChainStepPrompt` is a plain data type, and duplicating it would create a
+shape that can drift from the one the stage actually passes.
+
+### What remains private on the stage
+
+Four methods: `loadFrameworkGateIds` (the async I/O this tier deliberately left in place),
+`buildDecisionInput` (maps context onto the authority's input), and the two
+`resolve*Framework` methods (call `frameworkManager`, mutate step state). None is a domain
+predicate. Read strictly, `architecture.md`'s "no private helper methods" would also forbid
+these — but that reading forbids any decomposition inside a stage at all, including the async
+load this tier was explicitly told to keep there. The gate as written is satisfied.
+
+### Verification
+
+`validate:arch` clean (447 modules) · lint differential over `12-framework-stage.ts` **identical
+to HEAD**, new module adds zero · 158 suites / 1901 unit · 35 / 443 integration · both ratchets
+green · `framework-stage.test.ts` unchanged (`git diff` empty) and passing, which is the 16.5
+differential.

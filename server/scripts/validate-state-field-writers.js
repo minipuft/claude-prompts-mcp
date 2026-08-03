@@ -25,6 +25,25 @@
  * Required fields are out of scope: TypeScript already requires them at every construction
  * site, so "declared and never written" cannot arise without a type error.
  *
+ * KNOWN BLIND SPOT — writes routed through a structural alias:
+ *
+ *   type Target = { field?: string[] };            // a second declaration of `field`
+ *   function write(t: Target) { t.field = [...]; } // resolves to Target.field
+ *   write(realStep);                               // ...not to ChainStepPrompt.field
+ *
+ * Symbol resolution is what makes the name-matching failure above impossible, and it is also
+ * what makes this one possible: the assignment resolves to the alias's own declaration, so the
+ * real interface shows no writer. `ChainStepPrompt.inlineGateIds` was reported unwritten for
+ * exactly this reason while a producer had been running on every chain step carrying
+ * `:: "criteria"` syntax (`inline-gate-processor.ts`).
+ *
+ * The fix belongs at the call site, not here: name the concrete types the parameter actually
+ * receives (`ChainStepPrompt | ParsedCommand`) instead of their shared shape. Widening this
+ * script to chase structurally-assignable types would reintroduce the false positives that
+ * symbol resolution exists to prevent, and an allowlist entry would silence one instance while
+ * leaving the class live. If a finding here looks wrong, check whether the writer goes through
+ * a structural alias before concluding the field is dead.
+ *
  * RETIREMENT CONDITION: none expected. This encodes an invariant, not a migration.
  */
 
@@ -67,6 +86,16 @@ const WATCHED = [
     file: 'src/engine/execution/pipeline/decisions/framework/framework-decision-authority.ts',
     interfaces: ['FrameworkDecisionInput'],
     reason: 'Assembled by several callers; a field no caller sets is a channel with no producer.',
+  },
+  {
+    file: 'src/engine/execution/operators/types.ts',
+    interfaces: ['ChainStepPrompt'],
+    reason:
+      'Built by two independent step builders (symbolic-command-builder and 04-parsing-stage), ' +
+      'so a field wired in one and missed in the other has a producer on only one entry path. ' +
+      '`agentType` was declared and read here with no writer at all through Tier 15B, surviving ' +
+      'that sweep because the watched set stopped at ConvertedPrompt — the sibling half of the ' +
+      'same field.',
   },
 ];
 

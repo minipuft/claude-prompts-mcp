@@ -75,6 +75,11 @@ export interface ConvertedPrompt {
   promptDir?: string;
   /** Client-agnostic capability hint for delegation model selection */
   subagentModel?: 'heavy' | 'standard' | 'fast';
+  /**
+   * Default host agent for this prompt's delegated steps, from the YAML `agentType:` key.
+   * A step's own `agentType` overrides it; neither present falls back to 'chain-executor'.
+   */
+  agentType?: string;
 }
 
 /**

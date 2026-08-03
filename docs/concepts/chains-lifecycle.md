@@ -84,6 +84,24 @@ Each prompt (or individual chain step) can declare a `subagentModel` to control 
 
 Set in `prompt.yaml` at the prompt level or per chain step. See the [Chain Schema Reference](../reference/chain-schema.md) for details.
 
+### Agent Selection
+
+`subagentModel` chooses how capable the sub-agent is. `agentType` chooses which agent it is —
+useful when a step wants a specialist rather than the generic chain runner.
+
+```yaml
+agentType: Explore # every delegated step in this prompt
+chainSteps:
+  - promptId: gather
+    stepName: "Gather (1/2)"
+  - promptId: review
+    stepName: "Review (2/2)"
+    agentType: code-reviewer # ...except this one
+```
+
+**Resolution priority**: step-level `agentType` > prompt-level `agentType` > `chain-executor`.
+Names are host-defined and are not validated by the server.
+
 ---
 
 ## See Also

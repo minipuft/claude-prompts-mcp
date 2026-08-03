@@ -230,6 +230,7 @@ export class SymbolicCommandBuilder {
         inlineGateCriteria: resolvedArgs.inlineCriteria,
         ...(step.delegated === true ? { delegated: true } : {}),
         subagentModel: convertedPrompt.subagentModel,
+        agentType: convertedPrompt.agentType,
       });
     }
 
