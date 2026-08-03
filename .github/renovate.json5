@@ -122,6 +122,23 @@
       ],
     },
     {
+      // The server has completed its TypeScript 6 migration, but the standalone CLI
+      // still fails its hosted validation on 6. Keep CLI patches on 5.x until a
+      // dedicated migration makes its typecheck, build, and integration suite pass.
+      description: "CLI TypeScript 6 requires a dedicated migration",
+      matchPackageNames: ["typescript"],
+      matchFileNames: ["cli/package.json"],
+      allowedVersions: "<6.0.0",
+      reviewers: ["minipuft"],
+      groupName: "CLI TypeScript",
+      automerge: false,
+      prBodyNotes: [
+        "### CLI TypeScript 6 hold",
+        "",
+        "Remove the CLI-specific `<6.0.0` hold only in a dedicated migration where CLI typecheck, build, integration tests, and the full protected matrix pass with TypeScript 6.",
+      ],
+    },
+    {
       description: "MCP SDK - critical dependency",
       matchPackageNames: ["@modelcontextprotocol/sdk"],
       schedule: ["at any time"],
@@ -191,9 +208,9 @@
     // ^5.2.1. The migration the hold existed to defer had already happened, so all the
     // rule still did was block v5.x PATCH updates — including any security fix.
     //
-    // Both holds are now gone; there are no `allowedVersions` pins left in this file.
-    // Neither was retired by relaxing a rule — each was retired by finishing the
-    // migration it was deferring.
+    // Both historical zod/express holds are gone. The guarded TypeScript holds above
+    // are active migrations with explicit removal evidence; do not conflate them with
+    // the retired compatibility pins.
   ],
 
   // Vulnerability alerts
