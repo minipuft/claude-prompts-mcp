@@ -6,6 +6,8 @@ export {
   gateSpecUnionSchema,
   type PromptEngineInput,
   type DescriptionResolver,
+  type ToolSurfaceResolver,
+  type ToolSurfaceState,
 } from './prompt-engine.schema.js';
 
 export { buildSystemControlSchema, type SystemControlInput } from './system-control.schema.js';

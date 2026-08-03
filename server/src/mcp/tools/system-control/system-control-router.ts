@@ -63,6 +63,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   configManager?: ConfigManager;
   safeConfigWriter?: SafeConfigWriter;
   onRestart?: (reason: string) => Promise<void>;
+  onToolSurfaceChanged?: () => Promise<void>;
   mcpToolsManager?: any;
   analyticsService?: MetricsCollector;
   promptGuidanceService?: PromptGuidanceService;
@@ -120,6 +121,10 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   setRestartCallback(onRestart: (reason: string) => Promise<void>): void {
     this.onRestart = onRestart;
     this.logger.debug('Restart callback configured for system control');
+  }
+
+  setToolSurfaceChangedHandler(handler: () => Promise<void>): void {
+    this.onToolSurfaceChanged = handler;
   }
 
   setMCPToolsManager(mcpToolsManager: any): void {

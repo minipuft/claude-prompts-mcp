@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-07-30T22:50:15.986Z",
+  "lastUpdated": "2026-08-03T07:43:56.042Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -11,7 +11,7 @@
         "command": "Prompt ID to expand. Format: >>prompt_id key=\"value\" | Chains: >>s1 --> >>s2 | Modifiers first: @Framework :: \"criteria\" %clean/%lean | Shell verify: :: verify:\"cmd\" :preset",
         "chain_id": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command.",
         "user_response": "Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming.",
-        "gate_verdict": "Gate review verdict with flexible format support. Primary: 'GATE_REVIEW: PASS|FAIL - reason'. Also accepts: 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason' (minimal).",
+        "gate_verdict": "Gate review result. PREFERRED structured object: {overall:'PASS'|'FAIL', rationale:'...', per_gate:[{index:1, passed:true, rationale:'...'}]} — validated by the schema, so it cannot be malformed. Legacy string still accepted: 'GATE_REVIEW: PASS|FAIL - reason' (also 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason').",
         "gate_action": "User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely.",
         "gates": {
           "type": "array",

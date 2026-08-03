@@ -167,6 +167,14 @@ only while the gate system is enabled. The contract is the **union of every reac
 removing a union member is. The alternative reading (contract = shape at current state) makes
 every state change a major bump, which drains the major version of meaning.
 
+**`gate_verdict` accepts two shapes, and one of them is retiring.** The structured object
+(`{overall, rationale, per_gate[]}`) is schema-validated and cannot be malformed; the legacy
+`"GATE_REVIEW: PASS - reason"` string is read back by five regexes and can fail to parse. Both are
+in the union, so accepting the object was not breaking. **Retirement**: the string branch and the
+four non-primary patterns in `resources/gates/config/verdict-patterns.yaml` are deleted once no
+client has submitted a string verdict for one release cycle -- measurable via the `source` field
+already on `ParsedGateVerdict`. That deletion IS breaking and needs a major bump.
+
 **This package is a binary distribution** -- an MCP server, the `cpm` CLI, and Python hooks.
 It publishes no library API: `src/index.ts` exports only `startServer`, `gracefulShutdown`,
 `getApplicationHealth`, `getDetailedDiagnostics` (server lifecycle). Consumers run it; they do not

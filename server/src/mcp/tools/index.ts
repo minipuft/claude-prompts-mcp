@@ -31,8 +31,10 @@ import {
   buildPromptEngineSchema,
   buildSystemControlSchema,
   resourceManagerInputSchema,
+  type DescriptionResolver,
   type PromptEngineInput,
   type SystemControlInput,
+  type ToolSurfaceState,
   type ResourceManagerInput as ResourceManagerSchemaInput,
 } from './schemas/index.js';
 import {
@@ -46,6 +48,14 @@ import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ChainSessionStore } from '#modules/chains/manager.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { GateSpecification } from '#shared/types/execution.js';
+import type {
+  StateStoreOptions,
+  ConfigManager,
+  MetricsCollector,
+  Logger,
+  HookRegistryPort,
+  McpNotificationEmitterPort,
+} from '#shared/types/index.js';
 import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
 import type { ResourceManagerInput } from './resource-manager/core/types.js';
 import type { Implementation } from '@modelcontextprotocol/server';
@@ -56,19 +66,16 @@ import {
   isValidGateVerdict,
   GATE_VERDICT_VALIDATION_MESSAGE,
 } from '#engine/gates/core/gate-verdict-contract.js';
+import {
+  isGateVerdictSubmission,
+  renderGateVerdict,
+} from '#engine/gates/core/gate-verdict-renderer.js';
 import { GateStateStore, createGateStateStore } from '#engine/gates/gate-state-store.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
 import { createContentAnalyzer } from '#modules/semantic/configurable-semantic-analyzer.js';
 import { createSemanticIntegrationFactory } from '#modules/semantic/integrations/index.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
-import {
-  type ConfigManager,
-  type MetricsCollector,
-  type Logger,
-  type HookRegistryPort,
-  type McpNotificationEmitterPort,
-} from '#shared/types/index.js';
 // Schemas now hand-written in ./schemas/ (replaced generated mcp-schemas.ts)
 
 // REMOVED: ExecutionCoordinator and ChainOrchestrator - modular chain system removed
@@ -160,6 +167,20 @@ export class McpToolRouter {
   // Callback references
   private onRestart?: (reason: string) => Promise<void>;
   private toolsChangedNotifier?: () => Promise<void>;
+  /**
+   * Handle to the registered `prompt_engine`, kept only for the STDIO reshape.
+   *
+   * On the HTTP path this is overwritten by every per-request registration and
+   * is never the one a later reshape would want — which is harmless, because
+   * that path rebuilds from state per request and never calls `update()`.
+   */
+  private promptEngineTool?: ReturnType<McpServer['registerTool']>;
+  /**
+   * The workspace this serving unit was built for, or undefined for the
+   * process default. Gate state is workspace-scoped, so the surface has to be
+   * read for the same workspace whose toggle would change it.
+   */
+  private servingUnitScope?: StateStoreOptions;
 
   // Pending analytics queue for initialization race condition
   private pendingAnalytics: any[] = [];
@@ -352,6 +373,66 @@ export class McpToolRouter {
   }
 
   /**
+   * Read the runtime state the `prompt_engine` parameter shape depends on.
+   *
+   * `isGateSystemEnabled()` is the master switch: with it off, `GateService`
+   * short-circuits guidance and validation for every gate id whatever rank
+   * contributed it, so the three gate parameters cannot affect an execution.
+   *
+   * The adjacent `gatesConfig.enableFrameworkGates` switch is deliberately not
+   * consulted. It vetoes only the `framework-guide` rank — gates the server
+   * loads from the active methodology — and leaves client-supplied gates fully
+   * functional, so reading it here would withdraw a parameter that still works.
+   *
+   * Read from the state store rather than `GateManager.isGateSystemEnabled()`,
+   * which is the same source `GateService` consults. `GateManager` has a
+   * `setStateManager()` seam that nothing calls, so its check falls through to
+   * its "no state manager, assume enabled" default and reports `true` however
+   * the switch is set — a surface built on it would never narrow.
+   *
+   * Read for {@link servingUnitScope}, the workspace this instance serves.
+   * Reading unscoped would resolve to the process default while a client's
+   * toggle wrote to its own workspace row, so the surface would never narrow
+   * for that client — and a toggle of the default row would reshape everyone's.
+   *
+   * Absent store means enabled, matching the store-less default everywhere else.
+   */
+  private readToolSurfaceState(): ToolSurfaceState {
+    return {
+      gateSystemEnabled: this.gateStateStore?.isGateSystemEnabled(this.servingUnitScope) ?? true,
+    };
+  }
+
+  /**
+   * Build the `prompt_engine` input schema from current runtime state.
+   *
+   * Shared by registration and by the STDIO reshape, so both read the same
+   * state through the same path. Framework state is read here rather than
+   * captured by the caller because the reshape happens *after* a framework
+   * switch, when the values the caller once held are stale.
+   */
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  private buildPromptEngineSurface() {
+    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled() ?? false;
+    const activeFramework = this.frameworkStateStore?.getActiveFramework();
+    const activeFrameworkType = activeFramework?.type ?? activeFramework?.id;
+
+    const describe: DescriptionResolver = (paramName, fallback) =>
+      this.toolDescriptionLoader?.getParameterDescription(
+        'prompt_engine',
+        paramName,
+        frameworkEnabled,
+        activeFrameworkType,
+        { applyFrameworkOverride: true }
+      ) ?? fallback;
+
+    return buildPromptEngineSchema(isValidGateVerdict, GATE_VERDICT_VALIDATION_MESSAGE, {
+      describe,
+      state: this.readToolSurfaceState(),
+    });
+  }
+
+  /**
    * Read client info for the request being handled.
    *
    * Two eras, in priority order. Revision 2026-07-28 removed the `initialize`
@@ -533,6 +614,11 @@ export class McpToolRouter {
 
       // Set MCPToolsManager reference for dynamic tool updates
       this.systemControl.setMCPToolsManager(this);
+      // Toggling the gate system changes which parameters `prompt_engine`
+      // advertises, so it refreshes the surface exactly as a framework switch does.
+      this.systemControl.setToolSurfaceChangedHandler(async () => {
+        await this.reregisterToolsWithUpdatedDescriptions();
+      });
 
       // Enhanced tool delegation removed (.2)
       // Using core tools directly without delegation patterns
@@ -600,7 +686,11 @@ export class McpToolRouter {
    * for the life of the connection. The handlers close over this router's
    * singletons either way, so only the registration target varies.
    */
-  async registerAllTools(target: McpServer): Promise<void> {
+  async registerAllTools(target: McpServer, scope?: StateStoreOptions): Promise<void> {
+    // Held for the STDIO reshape, which happens long after this returns and has
+    // no context of its own. STDIO serves one workspace per process, so the
+    // value it records is the default scope — which is the correct one there.
+    this.servingUnitScope = scope;
     this.logger.info('Registering consolidated MCP tools with server (centralized)...');
 
     // Get current framework state for dynamic descriptions
@@ -630,15 +720,6 @@ export class McpToolRouter {
           { applyFrameworkOverride: true }
         ) ?? '';
 
-      const getPromptEngineParamDescription = (paramName: string, fallback: string) =>
-        this.toolDescriptionLoader?.getParameterDescription(
-          'prompt_engine',
-          paramName,
-          frameworkEnabled,
-          activeFrameworkType,
-          { applyFrameworkOverride: true }
-        ) ?? fallback;
-
       // Log which description source is being used for transparency
       if (this.toolDescriptionLoader != null) {
         this.logger.info(
@@ -650,14 +731,9 @@ export class McpToolRouter {
         );
       }
 
-      // Build schema with framework-aware parameter descriptions
-      const promptEngineSchema = buildPromptEngineSchema(
-        isValidGateVerdict,
-        GATE_VERDICT_VALIDATION_MESSAGE,
-        getPromptEngineParamDescription
-      );
+      const promptEngineSchema = this.buildPromptEngineSurface();
 
-      target.registerTool(
+      this.promptEngineTool = target.registerTool(
         'prompt_engine',
         {
           title: 'Prompt Engine',
@@ -670,7 +746,14 @@ export class McpToolRouter {
             const trimmedCommand = args.command?.trim();
             const trimmedChainId = args.chain_id?.trim();
             const trimmedUserResponse = args.user_response?.trim();
-            const trimmedGateVerdict = args.gate_verdict?.trim();
+            // A structured submission is rendered to the canonical form here,
+            // at the boundary, so the pipeline keeps receiving a `string`.
+            // Widening `gate_verdict` downstream would touch execution-context,
+            // validation/schemas, and request-validator for no gain — each
+            // already consumes a verdict that has been parsed.
+            const trimmedGateVerdict = isGateVerdictSubmission(args.gate_verdict)
+              ? renderGateVerdict(args.gate_verdict)
+              : args.gate_verdict?.trim();
             const trimmedGateAction = args.gate_action?.trim();
 
             const extraPayload = trimmedUserResponse
@@ -954,12 +1037,26 @@ export class McpToolRouter {
   }
 
   /**
-   * Update tool descriptions for framework switching without re-registering tools.
-   * The MCP SDK does not support re-registering already registered tools.
-   * Instead, we sync the description manager and notify clients of the change.
+   * Refresh the advertised tool surface after a state change.
+   *
+   * The real constraint is instance lifetime, not SDK capability. An earlier
+   * comment here claimed the SDK cannot re-register a registered tool;
+   * `RegisteredTool.update({ paramsSchema })` has always existed, and the
+   * parameter *shape* is mutable through it, not only description text.
+   *
+   * What actually differs is how long a server instance lives:
+   *
+   * - HTTP builds a fresh instance per request from the factory, so it already
+   *   reflects current state by the time this runs. Mutating here would touch
+   *   an instance belonging to a finished request — which is why the schema is
+   *   a pure function of state rather than an accumulation of mutations.
+   * - STDIO keeps one instance for the connection, so it is the only path with
+   *   anything to reshape, and `update()` is how that happens.
+   *
+   * Either way the notification is what tells opted-in subscribers to re-list.
    */
   async reregisterToolsWithUpdatedDescriptions(): Promise<void> {
-    this.logger.info('🔄 Updating tool descriptions for framework switch...');
+    this.logger.info('🔄 Refreshing tool surface after state change...');
 
     try {
       // Sync tool description manager with new framework state
@@ -967,6 +1064,14 @@ export class McpToolRouter {
       if (this.toolDescriptionLoader != null) {
         await this.toolDescriptionLoader.reload();
         this.logger.info('✅ Tool description manager synchronized');
+      }
+
+      // Reshape the long-lived STDIO instance. Rebuilt from current state, so
+      // it picks up both the new descriptions and any change to which
+      // parameters are reachable.
+      if (this.promptEngineTool != null) {
+        this.promptEngineTool.update({ paramsSchema: this.buildPromptEngineSurface() });
+        this.logger.info('✅ prompt_engine input schema rebuilt for current state');
       }
 
       // Notify MCP clients that the tool list changed. The routing lives in the

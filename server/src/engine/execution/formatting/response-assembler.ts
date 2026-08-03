@@ -477,12 +477,12 @@ export class ResponseAssembler {
       gatesLine = '';
     }
 
-    const verdictTemplate = this.buildGateVerdictTemplate(
+    const structuredTemplate = this.buildStructuredVerdictTemplate(
       pendingReview.gateIds ?? [],
       pendingReview.prompts
     );
 
-    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict="GATE_REVIEW: PASS - [your assessment]"\n\`\`\`\n\nOr if gates are not met:\n\n\`\`\`\ngate_verdict="GATE_REVIEW: FAIL - [what needs improvement]"\n\`\`\`\n\nInclude per-gate delivery assessment:\n\n\`\`\`\n${verdictTemplate}\n\`\`\``;
+    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
   }
 
   /**
@@ -518,26 +518,37 @@ export class ResponseAssembler {
   }
 
   /**
-   * Builds a dynamic GATE_VERDICTS template keyed to actual gate names.
+   * Builds the structured `gate_verdict` template keyed to actual gate names.
+   *
+   * Offered ahead of the string template because a structured submission is
+   * validated by the tool schema and cannot be malformed, whereas the string
+   * form is a format the model has to reproduce and the server then reads back
+   * with five fallback regexes. Advertising the fragile form first would keep
+   * steering clients into the path that can fail.
+   *
+   * Rendered as JSON rather than prose so it can be copied into the call
+   * directly. Rationale placeholders are single-line, which is what the
+   * schema requires.
    */
-  private buildGateVerdictTemplate(
+  private buildStructuredVerdictTemplate(
     gateIds: readonly string[],
     prompts: readonly GateReviewPrompt[]
   ): string {
-    if (gateIds.length === 0) {
-      return 'GATE_VERDICTS:\n[1] PASS|FAIL - rationale';
-    }
-
     const promptMap = this.buildPromptLookup(prompts);
     const entries = gateIds.slice(0, MAX_GATE_VERDICT_ENTRIES).map((gateId, index) => {
       const prompt = promptMap.get(gateId);
       const label = prompt?.gateName ?? gateId;
+      // Criteria carry the reviewer's actual checklist; dropping them would
+      // make the structured form less informative than the string form it
+      // replaces. Quotes are escaped because this lands inside a JSON string.
       const criteria = prompt?.criteriaSummary;
-      const suffix = criteria ? ` — ${criteria}` : '';
-      return `[${index + 1}] PASS|FAIL - ${label}${suffix}: rationale`;
+      const suffix = criteria != null && criteria.length > 0 ? ` — ${criteria}` : '';
+      const rationale = `${label}${suffix}: <why>`.replace(/"/g, '\\"');
+      return `    {"index": ${index + 1}, "passed": true, "rationale": "${rationale}"}`;
     });
 
-    return `GATE_VERDICTS:\n${entries.join('\n')}`;
+    const perGate = entries.length > 0 ? `,\n  "per_gate": [\n${entries.join(',\n')}\n  ]` : '';
+    return `{\n  "overall": "PASS",\n  "rationale": "<overall assessment>"${perGate}\n}`;
   }
 
   /**
@@ -632,7 +643,10 @@ export class ResponseAssembler {
     if (gateIds.length === 0 || chainId == null || chainId.length === 0) return false;
 
     const pendingReview = context.sessionContext?.pendingReview;
-    const verdictTemplate = this.buildGateVerdictTemplate(gateIds, pendingReview?.prompts ?? []);
+    const structuredTemplate = this.buildStructuredVerdictTemplate(
+      gateIds,
+      pendingReview?.prompts ?? []
+    );
 
     lines.push('**Review Required**');
     lines.push('');
@@ -642,7 +656,7 @@ export class ResponseAssembler {
     lines.push('');
     lines.push('```');
     lines.push(`chain_id="${chainId}"`);
-    lines.push(`gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>\\n\\n${verdictTemplate}"`);
+    lines.push(`gate_verdict=${structuredTemplate}`);
     lines.push('```');
     return true;
   }

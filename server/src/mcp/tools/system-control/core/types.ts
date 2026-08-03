@@ -58,6 +58,14 @@ export interface SystemControlContext {
   readonly configManager?: ConfigManager;
   readonly safeConfigWriter?: SafeConfigWriter;
   readonly onRestart?: (reason: string) => Promise<void>;
+  /**
+   * Rebuild and re-advertise the tool surface after a state change that alters
+   * it. The `prompt_engine` parameter shape is a function of the gate system
+   * switch, so toggling gates has to refresh the surface the same way a
+   * framework switch does — otherwise a long-lived STDIO connection keeps
+   * advertising parameters that no longer do anything.
+   */
+  readonly onToolSurfaceChanged?: () => Promise<void>;
   readonly mcpToolsManager?: any;
   readonly analyticsService?: MetricsCollector;
   readonly promptGuidanceService?: PromptGuidanceService;

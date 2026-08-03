@@ -7,7 +7,7 @@ tags: []
 
 # MCP SDK v2 + Spec 2026-07-28 Migration
 
-**Status**: **Tier B COMPLETE** (2026-08-02) — B0-B10 all landed. Tiers A and A2 complete. Both protocol eras are served on both transports, guarded by e2e fixtures. Next: Tier C (dynamic tool-schema reconfiguration), which depended on B7.
+**Status**: **Tier E COMPLETE** (2026-08-03) — E1-E6 landed; Tiers A, A2, B, C complete. Both protocol eras are served on both transports, `prompt_engine` advertises a state-dependent parameter surface, and gate verdicts are structurally validated rather than regex-parsed. Next: Tier D (documentation reconciliation), plus the deferred D1 dead-symbol sweep.
 **Created**: 2026-08-01
 **Work type**: feature (secondary: refactor) · **Risk**: high · **Confidence**: high
 
@@ -371,17 +371,80 @@ The deletion was also the wrong call on the merits. Resources project `_converte
 
 ### Tier C — dynamic tool-schema reconfiguration
 
-| #   | File                                                | Change                                                                                       | ~Lines | Depends | Verify                                         |
-| --- | --------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------ | ------- | ---------------------------------------------- |
-| C1  | `src/mcp/tools/schemas/prompt-engine.schema.ts:69`  | `DescriptionResolver` → `ToolSurfaceResolver` (state → shape + description)                  | ~50    | B gate  | same state ⇒ identical schema, twice           |
-| C2  | `src/mcp/tools/schemas/prompt-engine.schema.ts:43`  | Decompose the cyclomatic-13 builder while widening                                           | ~30    | C1      | `npx eslint` clean on that function            |
-| C3  | `src/mcp/tools/schemas/prompt-engine.schema.ts:160` | `PromptEngineInput` re-inference (`z.infer<ReturnType<…>>`) + its consumer at `index.ts:593` | ~10    | C1      | `tsc --noEmit`                                 |
-| C4  | `src/runtime/` factory                              | Factory calls builder per request                                                            | ~15    | C1      | request under framework X advertises X's shape |
-| C5  | `src/mcp/tools/index.ts:887-916`                    | STDIO path: `update({ paramsSchema })` + `notify.toolsChanged()`                             | ~30    | C1, B7  | live reshape on one connection                 |
-| C6  | `src/mcp/tools/index.ts:883-885`                    | Replace the stale comment with the real constraint (per-request vs long-lived)               | 5      | C5      | no future reader re-derives the wrong limit    |
-| C7  | `tooling/contracts/prompt-engine.json`, `CLAUDE.md` | Reconcile contract SSOT with a state-dependent surface; record the D2 ruling                 | ~40    | C1, D2  | `validate:contracts` green                     |
+| #   | File   | Change                                              | ~Lines                                                                                       | Depends | Verify  |
+| --- | ------ | --------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------- | ------- |
+| #   | Status | File                                                | Change                                                                                       | ~Lines  | Depends | Verify                                         |
+| --- | ------ | --------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------  | ------- | ---------------------------------------------- |
+| C1  | ✓      | `src/mcp/tools/schemas/prompt-engine.schema.ts:69`  | `DescriptionResolver` → `ToolSurfaceResolver` (state → shape + description)                  | ~50     | B gate  | same state ⇒ identical schema, twice           |
+| C2  | ✓      | `src/mcp/tools/schemas/prompt-engine.schema.ts:43`  | Decompose the builder while widening                                                         | ~30     | C1      | `npx eslint` clean on that function            |
+| C3  | ✓      | `src/mcp/tools/schemas/prompt-engine.schema.ts:160` | `PromptEngineInput` re-inference (`z.infer<ReturnType<…>>`) + its consumer at `index.ts:593` | ~10     | C1      | `tsc --noEmit`                                 |
+| C4  | ✓      | `src/mcp/tools/index.ts`                            | Builder called per serving unit, from current state                                          | ~15     | C1      | request under state X advertises X's shape     |
+| C5  | ✓      | `src/mcp/tools/index.ts`                            | STDIO path: `update({ paramsSchema })` + `toolsChanged()`                                    | ~30     | C1, B7  | live reshape on one connection                 |
+| C6  | ✓      | `src/mcp/tools/index.ts`                            | Replace the stale comment with the real constraint (per-request vs long-lived)               | 5       | C5      | no future reader re-derives the wrong limit    |
+| C7  | ✓      | `tooling/contracts/prompt-engine.json`, `CLAUDE.md` | Reconcile contract SSOT with a state-dependent surface; record the D2 ruling                 | ~40     | C1, D2  | `validate:contracts` green                     |
 
-**Tier C gate**: diffing `tools/list` across a framework switch shows a changed `inputSchema` — not merely a changed description string.
+**Tier C gate** (met): diffing `tools/list` across a state change shows a changed `inputSchema` — not merely a changed description string. Proven end-to-end in `tests/e2e/mcp-server-smoke.test.ts` ("reshapes the advertised inputSchema when gate state changes").
+
+**Gate criterion corrected during execution.** It read "across a **framework** switch". The operator selected the **gate system** switch as the state axis (2026-08-03), so the criterion now names a state change. The framework axis was rejected on the merits: gate ids are open-ended, so constraining `gates` to the active methodology's declared ids would structurally reject a user's own gate id — a cosmetic narrowing bought with a real regression. The gate-system axis had a defect to fix instead: `GateService` already ignores every gate id from every rank while the system is off, so the tool advertised three parameters that provably did nothing.
+
+**What reshapes.** `gates`, `gate_verdict`, and `gate_action` are advertised only while the gate system is enabled. `command`, `chain_id`, `force_restart`, `user_response`, and `options` are present in every state.
+
+**What deliberately does not.** `gatesConfig.enableFrameworkGates` is a veto over the `framework-guide` rank only (`gate-set-resolver.ts:288`); it withholds gates the server loads from the active methodology and never touches client-supplied ones. Reading it would withdraw a parameter that still works. `ToolSurfaceState` carries exactly one field so this cannot be wired in by accident.
+
+**Narrowing is at the advertised surface, not the wire.** Zod strips unknown keys rather than rejecting them, and that default is kept: a client holding a stale `tools/list` has its leftover `gates` dropped, not errored. Strict mode would make a narrowed state reject calls a wide state accepts, punishing exactly the clients a cached list makes stale. This is weaker than the "structural — it cannot" framing in §The capability unlock; the accurate claim is that a current client never constructs the call.
+
+**Two defects found and fixed while wiring.**
+
+`GateManager.isGateSystemEnabled()` reports `true` however the switch is set. Its `setStateManager()` seam is called from nowhere in `src/`, so the check falls through to its "no state manager, assume enabled" default. A surface built on it would never have narrowed — the first e2e run failed exactly this way. `readToolSurfaceState()` reads `gateStateStore` instead, the same source `GateService` consults. **The dead seam itself is left standing: its blast radius is every `GateManager` consumer, which is not Tier C's to change.** Filed for the deferred sweep.
+
+`onToolsUpdate` fired only from the framework manager tool, so toggling gates changed the schema with nothing to rebuild or re-announce. HTTP would have self-corrected per request; a long-lived STDIO connection would have kept advertising withdrawn parameters until reconnect. `system_control action='gates'` now refreshes the surface through a narrowly-typed `onToolSurfaceChanged` callback — added rather than reaching through the `any`-typed `mcpToolsManager` already on that context. Best-effort: the state change already succeeded and is authoritative, so a failed notification warns rather than reporting the toggle as failed.
+
+**Scope: the surface reads the workspace it serves.** Gate state is workspace-scoped, and the first cut read it unscoped — so a client's toggle wrote to its own workspace row while the schema was built from the process default. The surface would never have narrowed for the client that asked, and a toggle of the default row would have reshaped everyone's. Invisible in tests, because the e2e client resolves to `default` and read and write land on the same row.
+
+`runtime/serving-unit-scope.ts` derives the scope from the factory's `McpRequestContext` — the only signal available, since the schema is built before any call is dispatched and the per-call `extra` the rest of the server reads does not exist yet. It reuses `resolveRequestIdentity` → `resolveContinuityScopeId` rather than reimplementing the precedence, so the surface and the state it describes cannot drift. Auth claims **and** headers both work (`x-workspace-id`, `x-organization-id`); `Headers` needs converting first, since it is iterable but has no enumerable own properties and would otherwise read as empty. STDIO sets neither field and serves one workspace per process, so it resolves to the default — correct there.
+
+**Known limit of the state axis.** The gate system is enabled in normal operation, so the narrowed shape is the rare case and this capability is dormant most of the time. The reusable assets are the plumbing (`ToolSurfaceResolver`, per-serving-unit build, `update({ paramsSchema })`, scope derivation, the refresh wiring) and the two defects it exposed — not the narrowing itself. A framework axis was considered and rejected above on the merits; note that framework-driven variation already exists at the _description_ level via `ToolDescriptionLoader` overlays, so the shape level would need a parameter that genuinely varies by methodology, which none currently does.
+
+**Measured after:** typecheck green · lint ratchet 3355 errors / 1068 warnings, no regressions · 155 suites / 1879 unit · 34 suites / 434 integration · 3 suites / 42 e2e · `verify:mcp` 11/11 · `validate:arch`, `validate:contracts`, `validate:filesize`, `validate:metadata`, `validate:frameworks`, `validate:gate-index`, `validate:required-contexts`, `validate:no-crosslayer-reexport`, `validate:state-field-writers` all green.
+
+**Not green, and not from this tier:** `typecheck:tests:ratchet` regressions in `framework-stage.test.ts` (+6), `script-execution-stage.test.ts` (+3), `tool-trigger-filter.test.ts` (+8); `validate:format` on `README.md` and four `plans/**` files; `validate:documented-options` on `docs/guides/{release-process,cli}.md`. All belong to the concurrent session's in-flight work. This tier's files pass both.
+
+### Tier E — structured gate verdicts (corrects Tier C's aim)
+
+**Why this exists.** Tier C narrowed the parameters that do nothing and left the one that does everything advisory. `gate_verdict` is free text: `response-assembler.ts:528` writes a prose template into the server's own response asking the model to echo a format back, and five regex patterns in `resources/gates/config/verdict-patterns.yaml` (`full-hyphen` → `full-colon` → `simple-hyphen` → `simple-colon` → `minimal`) try to parse the reply, with a sixth regex in `gate-enforcement-authority.ts:153` for the nested `GATE_VERDICTS` block. Parse failure returns `null`. That is the "advisory — the client can still construct an invalid call" problem §The capability unlock set out to fix; Tier C never touched it.
+
+**Design: normalize at the boundary, do not thread a union through the pipeline.** `gate_verdict` is typed `string` at `execution-context.ts:171`, `validation/schemas.ts:137`, and `request-validator.ts:148`. Widening that type across the pipeline is a large blast radius for no gain, because everything downstream already consumes a parsed verdict. Instead the MCP tool accepts a structured submission, Zod validates it structurally, and it is rendered to the canonical `full-hyphen` form before entering the pipeline.
+
+Render-then-parse is only sound if it is lossless, so that is the gate, asserted as a property rather than by example: for every valid submission, `parse(render(x))` returns exactly `x`. A round-trip that silently dropped a rationale would be worse than the regex it replaces.
+
+**What this does and does not buy.** New callers cannot emit an unparseable verdict — there is no format to get wrong. The five fallback patterns survive for legacy string callers and are not dead code. **Retirement condition** (per `cleanup-standards.md` §"Parity Gates Are Debt"): the string branch and the four non-primary patterns are deleted when no client has submitted a string verdict for one release cycle, measured by the `source` field already recorded on `ParsedGateVerdict`.
+
+**Out of scope, and why.** Shaping the schema to enumerate _the gates currently awaiting review_ is not achievable with this mechanism: the schema is built when the server instance is constructed, before the call arrives, so it cannot know which `chain_id` the request will name — and active gates are per-chain-run, so concurrent runs disagree. Per-process state (gate system on/off, workspace) can shape a schema; per-call state cannot. One tool per gate is rejected separately: it churns the tool list every chain step and makes the model choose between near-identical tools for no added enforcement.
+
+| #   | Status | File                                                    | Change                                                                                      | ~Lines | Depends | Verify                                         |
+| --- | ------ | ------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------ | ------- | ---------------------------------------------- |
+| E1  | ✓      | `src/mcp/tools/schemas/prompt-engine.schema.ts`         | `gate_verdict` accepts `string \| GateVerdictSubmission`; keep the string branch for compat | ~40    | C1      | both forms accepted; malformed object rejected |
+| E2  | ✓      | `src/engine/gates/core/gate-verdict-renderer.ts` (new)  | Structured submission → canonical `full-hyphen` string + `GATE_VERDICTS` block              | ~60    | E1      | `parse(render(x)) === x` for all valid `x`     |
+| E3  | ✓      | `src/mcp/tools/index.ts`                                | Normalize at the tool boundary before `normalizedArgs`                                      | ~20    | E1, E2  | object input reaches the pipeline as canonical |
+| E4  | ✓      | `src/engine/execution/formatting/response-assembler.ts` | Advertise the structured form in the resume template                                        | ~25    | E3      | template names the object form first           |
+| E5  | ✓      | `tooling/contracts/prompt-engine.json`, `CLAUDE.md`     | Document the union; record the retirement condition                                         | ~25    | E1      | `validate:contracts` green                     |
+| E6  | ✓      | `tests/unit/gates/`, `tests/integration/`               | Round-trip property, schema acceptance, gated chain resumed by object                       | ~150   | E2, E3  | suites green                                   |
+
+**Tier E gate** (met): the round-trip property holds across 17 unit cases and the schema→render→parse chain of custody across 10 integration cases, including multi-gate (1/2/5/12/40 entries), rationales bearing hyphens, colons, a leading separator, and the literal text `GATE_VERDICTS`, plus rejection of every input the round trip could not preserve.
+
+**Executed 2026-08-03.**
+
+**What the round trip forced.** Losslessness is not free — it constrains the _input_, and the constraints are enforced in the schema rather than repaired in the renderer, because a renderer that rewrote a rationale would lose the reviewer's words quietly. Multi-line rationales are **rejected, not collapsed**: `parseGateVerdict` reads only the first non-empty line and the pattern's `(.+)$` carries no `s` flag, so the remainder would vanish with no error anywhere. Rationales are trimmed on the way in because the parser trims its capture. Hyphens, colons, and a leading `-` inside a rationale need no escaping — `\s*-\s*` is not greedy past the first separator and `(.+)$` takes the rest verbatim — and each is pinned by a test so a future "safety" escape cannot be added silently.
+
+**One thing deleted, not deprecated.** `buildGateVerdictTemplate` — the free-text `GATE_VERDICTS:` template — went with the change rather than being left standing. Once both call sites advertise the structured form it had no caller, and `cleanup-standards.md` §"Cleanup in separate PR" says the removal ships with the replacement. The legacy _parsing_ path is untouched; only the advertisement moved.
+
+**A regression the tests caught.** The first structured template dropped `criteriaSummary`, making the new form less informative than the one it replaced — the reviewer's actual checklist stopped appearing. Restored, with quote-escaping since it now lands inside a JSON string.
+
+**Two CTA tests updated, not suppressed.** `response-assembler-cta.test.ts` asserted `gate_verdict="GATE_REVIEW: PASS` — the format deliberately replaced. Rewritten to assert the structured form _and_ that the string template is gone, so a silent revert fails.
+
+**Measured after:** typecheck green · lint ratchet 3352 errors / 1069 warnings, no regressions · 157 suites / 1883 unit · 35 suites / 441 integration · 3 suites / 42 e2e · `verify:mcp` 11/11 · `validate:arch` 0 errors, 446 modules · `validate:contracts`, `validate:filesize`, `validate:metadata`, `validate:frameworks`, `validate:gate-index`, `validate:state-field-writers`, `validate:no-crosslayer-reexport`, `validate:required-contexts` green.
+
+**Known gap.** No test drives a real gated chain end-to-end through the MCP wire with a structured verdict; the integration test composes the production units instead. Closing it needs an e2e fixture with a gated prompt, which is a larger harness change than this tier. The live proof is available cheaply once the MCP server is restarted on this build: submitting a `tier_execute` gate verdict as an object exercises the whole path.
 
 ### Tier D — documentation reconciliation
 
@@ -430,7 +493,7 @@ Chain/SQLite redesign (unaffected) · Roots/Sampling/Logging adoption (unused, d
 | Tier B complete                    | dual-protocol e2e fixture                                                            | a `2026-07-28` and a `2025-11-25` client each complete a chain run against one build |
 | SSE fully removed (if D1 = delete) | `rg 'sseTransports\|SSEServerTransport\|transport=sse'`                              | zero hits in `server/src/` and `server/package.json` scripts                         |
 | Sessions fully removed             | `rg 'sessionIdGenerator\|Mcp-Session-Id'`                                            | zero hits in `server/src/`                                                           |
-| Tier C complete                    | diff `tools/list` across a framework switch                                          | `inputSchema` differs, not only `description`                                        |
+| Tier C complete                    | diff `tools/list` across a gate-system toggle                                        | `inputSchema` differs, not only `description`                                        |
 | Contracts in sync                  | `npm run validate:contracts`                                                         | green; no diff under `_generated/`                                                   |
 | Docs consistent                    | `rg -n '\bSSE\b' --glob '!node_modules'`                                             | every remaining hit reflects the D1 decision; no parity claims survive               |
 

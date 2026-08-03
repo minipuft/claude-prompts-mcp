@@ -580,5 +580,57 @@ describe('MCP Server Smoke Tests', () => {
 
       await legacyClient.close();
     }, 30000);
+
+    /**
+     * The tool surface is a function of runtime state, not a constant.
+     *
+     * `prompt_engine` advertises its three gate parameters only while the gate
+     * system is enabled. Proving that end-to-end needs a live state change and
+     * two `tools/list` calls, because the property that matters is what reaches
+     * the wire: an in-process assertion cannot distinguish a schema that was
+     * rebuilt from one that was merely re-described.
+     *
+     * Over HTTP there is no long-lived instance — each request builds a fresh
+     * server from the factory — so this also proves the reshape is not a
+     * mutation that would have been lost with the request that made it.
+     */
+    it('reshapes the advertised inputSchema when gate state changes', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const gateParamsFor = async (id: number): Promise<string[]> => {
+        const listed = (await client.request('tools/list', {}, id)) as {
+          tools: Array<{ name: string; inputSchema?: { properties?: Record<string, unknown> } }>;
+        };
+        const engine = listed.tools.find((t) => t.name === 'prompt_engine');
+        const props = Object.keys(engine?.inputSchema?.properties ?? {});
+        return props.filter((p) => p.startsWith('gate')).sort();
+      };
+
+      const setGateSystem = async (operation: 'enable' | 'disable', id: number): Promise<void> => {
+        const response = (await client.callTool(
+          'system_control',
+          { action: 'gates', operation, reason: 'tool surface e2e' },
+          id
+        )) as { isError?: boolean };
+        expect(response.isError ?? false).toBe(false);
+      };
+
+      await setGateSystem('enable', 1);
+      const enabled = await gateParamsFor(2);
+      expect(enabled).toEqual(['gate_action', 'gate_verdict', 'gates']);
+
+      await setGateSystem('disable', 3);
+      const disabled = await gateParamsFor(4);
+
+      // The tier's gate criterion: the *shape* changed, not only description
+      // text. Asserting the parameter set rather than a deep-equality diff is
+      // what separates the two — a re-described schema keeps its keys.
+      expect(disabled).toEqual([]);
+      expect(disabled).not.toEqual(enabled);
+
+      // Restore, and confirm the narrowing is reversible rather than one-way.
+      await setGateSystem('enable', 5);
+      expect(await gateParamsFor(6)).toEqual(enabled);
+    }, 40000);
   });
 });

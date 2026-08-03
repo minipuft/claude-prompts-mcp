@@ -23,6 +23,7 @@ import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js'
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
 import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
 import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
+import { resolveServingUnitScope } from './serving-unit-scope.js';
 import { startServerWithManagers } from './startup-server.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
 
@@ -400,9 +401,13 @@ export class Application {
    * binding step rather than a second startup.
    */
   createMcpServerFactory(): McpServerFactory {
-    return async () => {
+    return async (ctx) => {
       const server = this.constructMcpServer();
-      await this.mcpToolsManager.registerAllTools(server);
+      // The advertised tool surface is state-dependent, and that state is
+      // workspace-scoped. `ctx` is the only scope signal available here: the
+      // schema is built now, before any call has been dispatched, so the
+      // per-call `extra` the rest of the server reads does not exist yet.
+      await this.mcpToolsManager.registerAllTools(server, resolveServingUnitScope(ctx));
       this.registerMcpResources(server);
       return server;
     };

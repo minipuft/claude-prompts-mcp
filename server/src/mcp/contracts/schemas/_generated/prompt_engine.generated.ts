@@ -75,9 +75,14 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'gate_verdict',
     type: 'string',
     description:
-      "Gate review verdict with flexible format support. Primary: 'GATE_REVIEW: PASS|FAIL - reason'. Also accepts: 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason' (minimal).",
+      "Gate review result. PREFERRED structured object: {overall:'PASS'|'FAIL', rationale:'...', per_gate:[{index:1, passed:true, rationale:'...'}]} — validated by the schema, so it cannot be malformed. Legacy string still accepted: 'GATE_REVIEW: PASS|FAIL - reason' (also 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason').",
     status: 'working',
     compatibility: 'canonical',
+    notes: [
+      'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
+      'Rationales are single-line and trimmed. Multi-line is rejected rather than collapsed: only the first non-empty line is parsed, so the remainder would be lost silently.',
+      'The legacy string branch and the four non-primary verdict patterns are retired once no client has submitted a string verdict for one release cycle, measured via the `source` field on ParsedGateVerdict.',
+    ],
   },
   {
     name: 'gate_action',
@@ -86,6 +91,9 @@ export const prompt_engineParameters: ToolParameter[] = [
       "User choice after gate retry limit exhaustion. 'retry' resets attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely.",
     status: 'working',
     compatibility: 'canonical',
+    notes: [
+      'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
+    ],
     enum: ['retry', 'skip', 'abort'],
   },
   {
@@ -103,6 +111,7 @@ export const prompt_engineParameters: ToolParameter[] = [
       'RECOMMENDED: Quick Gates {name, description} auto-default to severity:medium, type:validation.',
       'Full schema: id, name, severity, criteria[], pass_criteria[], guidance, apply_to_steps[].',
       'Shell Verification: Use presets for common patterns. loop:true enables autonomous retry until pass.',
+      'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
     ],
   },
   {
