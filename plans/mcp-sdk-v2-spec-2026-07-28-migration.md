@@ -7,7 +7,7 @@ tags: []
 
 # MCP SDK v2 + Spec 2026-07-28 Migration
 
-**Status**: Approved — D1 and D2 decided 2026-08-01. **Tiers A, A2 complete.** **Tier B: B0-B4, B8, B10 landed 2026-08-02; B5, B6, B7 deferred, B9 partial.** The tier gate is met — a 2026-07-28 client and a 2024-11-05 client both drive tools against one build. See §"Tier B execution record".
+**Status**: Approved — D1 and D2 decided 2026-08-01. **Tiers A, A2 complete.** **Tier B: B0-B4, B6, B8, B9, B10 landed 2026-08-02; B5 and B7 remain, to be done together.** The tier gate is now an automated e2e fixture, not a manual probe.
 **Created**: 2026-08-01
 **Work type**: feature (secondary: refactor) · **Risk**: high · **Confidence**: high
 
@@ -261,10 +261,10 @@ Tier B is the plan's highest-risk tier (a breaking transport rewrite, ~−210 li
 | ✓ B3  | `src/infra/http/transport/index.ts:9,38,145-234,**372,386-387**`   | **Delete SSE** (pending D1)                                                                                                                     | −150      | B2, D1  | `rg 'sseTransports'` → empty                                   |
 | ✓ B4  | `src/infra/http/transport/index.ts:39,252-296,**274**,392`         | Delete session registry + `sessionIdGenerator`                                                                                                  | −60       | B2      | `rg 'sessionIdGenerator'` → empty                              |
 | ☐ B5  | `src/runtime/startup-server.ts`                                    | `serveStdio(factory)`                                                                                                                           | ~20       | B1      | `verify:mcp` on stdio                                          |
-| ☐ B6  | `src/mcp/tools/index.ts:86,305-339`                                | Identity: `getClientVersion()` → `ctx.mcpReq.envelope`                                                                                          | ~40       | B1, A0b | `request-identity-resolver` + `identity-policy-boundary` pass  |
+| ✓ B6  | `src/mcp/tools/index.ts:86,305-339`                                | Identity: `getClientVersion()` → `ctx.mcpReq.envelope`                                                                                          | ~40       | B1, A0b | `request-identity-resolver` + `identity-policy-boundary` pass  |
 | ☐ B7  | `src/mcp/tools/index.ts:899`, `src/modules/resources/index.ts:131` | `sendToolListChanged`/`sendResourceListChanged` → `handler.notify.toolsChanged()`/`.resourcesChanged()`                                         | ~25       | B2      | subscriber receives event                                      |
 | ✓ B8  | `src/runtime/application.ts:241-244`                               | `capabilities` block → `server/discover`                                                                                                        | ~15       | B1      | discover advertises all three surfaces                         |
-| ~ B9  | `tests/e2e/helpers/http-mcp-client.ts`                             | Dual-protocol fixture                                                                                                                           | ~120      | B2      | drives both revisions against one build                        |
+| ✓ B9  | `tests/e2e/helpers/http-mcp-client.ts`                             | Dual-protocol fixture                                                                                                                           | ~120      | B2      | drives both revisions against one build                        |
 | ✓ B10 | —                                                                  | Cache posture: keep `tools/list` at `ttlMs: 0` (SDK default), recorded as a deliberate choice                                                   | doc       | B2      | stated in this file                                            |
 
 **Tier B gate**: a `2026-07-28` client and a `2025-11-25` client both complete a chain run against one build.
@@ -300,6 +300,28 @@ Tier B is the plan's highest-risk tier (a breaking transport rewrite, ~−210 li
 **Two `validate:all` members fail on another session's uncommitted work, not this tier**: `validate:format` (6 files under `.github/`, `README.md`, `docs/guides/release-process.md`, `plans/acquisition-recovery.md`) and `validate:documented-options` (`docs/guides/cli.md`, `docs/guides/release-process.md` documenting their new `prepare:release-artifacts --output-dir`).
 
 **Package count confirmed at two.** `@modelcontextprotocol/server@2.0.0` + `@modelcontextprotocol/node@2.0.0`; `core` arrives transitively and is not a direct dependency.
+
+#### B9 + B6 (2026-08-02, second pass)
+
+**B9 — the gate is now a test.** The dual-era proof was a manual `curl` probe; it is now six e2e cases in `mcp-server-smoke.test.ts` backed by a `ModernMcpClient` in the helper. The last one _is_ the tier gate: one server process, a 2025-era client and a 2026-07-28 client, asserting they see the same tool surface and that both complete a `tools/call`.
+
+The header contract the first pass discovered is encoded in the client rather than in prose: `Mcp-Method` on every call, `Mcp-Name` on `tools/call`, and a `_meta` envelope carrying `clientInfo` / `clientCapabilities` / `protocolVersion`. Those key strings are **spelled out in the fixture rather than imported from the SDK** — importing them would make the test agree with the server by construction even if both drifted from the spec.
+
+Two negative cases guard the edge: a request missing `Mcp-Method` is rejected before dispatch, and a _partial_ envelope is rejected naming the missing key.
+
+**A wrong assumption the fixture corrected.** The first draft asserted that a request with no `_meta` is rejected. It is not — absence of an envelope is simply a 2025-era request, and `legacy: 'stateless'` serves it. That is the behavior that lets one build answer both revisions, so it now has its own passing test instead of a wrong failing one. Distinguishing "no envelope" (legacy) from "partial envelope" (modern, malformed) is the distinction that matters.
+
+**B6 — identity, and a real gap it closed.** `getDetectedClientInfo()` now takes the per-request `extra` and reads `ctx.mcpReq.envelope['io.modelcontextprotocol/clientInfo']` first, falling back to the handshake value.
+
+The envelope is not merely the newer source — **it is the only correct one over HTTP.** Since B1, every HTTP request is served by its own `McpServer`, so `this.mcpServer` is the STDIO instance and holds no handshake for that request. The pre-B6 code would have read identity off the wrong instance. Statelessness introduced that gap and B6 closes it; the deprecation warning was the visible symptom, not the substance.
+
+`readEnvelopeClientInfo` is exported and unit-tested directly (13 cases) because it parses untrusted wire data the SDK does not validate: a non-string `version` is dropped rather than passed through to identity resolution.
+
+**Measured after:** typecheck green · lint ratchet 3413 / 1090, no regressions · tests-type ratchet 395, no regressions · 148 suites / 1798 unit · 34 suites / 434 integration · 3 suites / 41 e2e · `verify:mcp` 11/11 · `validate:arch` 0 errors · `validate:contracts` green.
+
+**Also fixed:** `startServerWithHttp` still defaulted to `transport: 'sse'`, a dangling reference to the transport B3 deleted. Now defaults to `streamable-http`.
+
+**Remaining: B5 + B7 together.** The open decision is where notifications bind once `serveStdio(factory)` removes the long-lived instance `McpNotificationEmitter.setServer()` targets. `TransportRouter.getHttpHandler()` already exposes the `notify` facade for the HTTP half.
 
 ### Tier C — dynamic tool-schema reconfiguration
 

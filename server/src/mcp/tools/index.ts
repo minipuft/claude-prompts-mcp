@@ -88,6 +88,42 @@ function readClientVersion(mcpServer: McpServer): Implementation | undefined {
   return mcpServer.server?.getClientVersion();
 }
 
+/** Envelope key carrying client identity under protocol revision 2026-07-28. */
+const CLIENT_INFO_META_KEY = 'io.modelcontextprotocol/clientInfo';
+
+/**
+ * Read client identity from the per-request `_meta` envelope.
+ *
+ * The SDK lifts the reserved `io.modelcontextprotocol/*` keys onto
+ * `ctx.mcpReq.envelope`, but types that envelope as an empty shape, so the key
+ * is read by name and narrowed here rather than by the compiler.
+ */
+export function readEnvelopeClientInfo(extra: unknown): Implementation | undefined {
+  if (extra == null || typeof extra !== 'object') {
+    return undefined;
+  }
+  const mcpReq = (extra as { mcpReq?: unknown }).mcpReq;
+  if (mcpReq == null || typeof mcpReq !== 'object') {
+    return undefined;
+  }
+  const envelope = (mcpReq as { envelope?: unknown }).envelope;
+  if (envelope == null || typeof envelope !== 'object') {
+    return undefined;
+  }
+  const info = (envelope as Record<string, unknown>)[CLIENT_INFO_META_KEY];
+  if (info == null || typeof info !== 'object') {
+    return undefined;
+  }
+  const { name, version } = info as { name?: unknown; version?: unknown };
+  if (typeof name !== 'string') {
+    return undefined;
+  }
+  return {
+    name,
+    ...(typeof version === 'string' ? { version } : {}),
+  } as Implementation;
+}
+
 /**
  * MCP Tool Router
  *
@@ -290,12 +326,20 @@ export class McpToolRouter {
   }
 
   /**
-   * Read client info detected from the MCP initialize handshake.
-   * Returns { name, version } if available, undefined otherwise.
+   * Read client info for the request being handled.
+   *
+   * Two eras, in priority order. Revision 2026-07-28 removed the `initialize`
+   * handshake and moved identity into a per-request `_meta` envelope, so that
+   * is read first. A 2025-era STDIO client has no envelope, and for it the
+   * handshake value captured on the connected instance still applies.
+   *
+   * The envelope is not merely the newer source — it is the only correct one
+   * over HTTP. Each request there is served by its own `McpServer`, so
+   * `this.mcpServer` is the STDIO instance and holds no handshake for it.
    */
-  private getDetectedClientInfo(): { name: string; version?: string } | undefined {
+  private getDetectedClientInfo(extra: unknown): { name: string; version?: string } | undefined {
     try {
-      const impl = readClientVersion(this.mcpServer);
+      const impl = readEnvelopeClientInfo(extra) ?? readClientVersion(this.mcpServer);
       // `name` is typed as a required string, but it arrives off the wire — an
       // empty one is still possible and is treated as "no client detected".
       const name = impl?.name.trim();
@@ -309,12 +353,14 @@ export class McpToolRouter {
   }
 
   /**
-   * Enrich the MCP SDK extra with clientInfo from the initialize handshake.
-   * The SDK does not forward clientInfo to tool handler extras, so we inject it
-   * from server.getClientVersion() to enable automatic client detection.
+   * Enrich the MCP SDK extra with a normalized `clientInfo`.
+   *
+   * The SDK surfaces client identity on `mcpReq.envelope` under a reserved
+   * namespaced key rather than as `clientInfo`, so downstream consumers get a
+   * flat, era-independent shape injected here.
    */
   private enrichExtraWithClientInfo(extra: unknown): unknown {
-    const detected = this.getDetectedClientInfo();
+    const detected = this.getDetectedClientInfo(extra);
     if (detected == null) {
       return extra;
     }

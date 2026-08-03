@@ -43,7 +43,8 @@ export function startServerWithHttp(
   port: number,
   options: { transport?: string; quiet?: boolean; debug?: boolean } = {}
 ): ChildProcess {
-  const transport = options.transport || 'sse';
+  // 'sse' was the default until the HTTP+SSE transport was removed with SDK v2.
+  const transport = options.transport || 'streamable-http';
   const args = [SERVER_PATH, `--transport=${transport}`];
 
   if (options.quiet !== false) {
@@ -765,3 +766,124 @@ export async function killServer(proc: ChildProcess, timeout = 5000): Promise<vo
 }
 
 export { PROJECT_ROOT, SERVER_PATH };
+
+// ─── Protocol revision 2026-07-28 ───────────────────────────────────────────
+
+/** Protocol revision that removed the `initialize` handshake and sessions. */
+export const MODERN_PROTOCOL_VERSION = '2026-07-28';
+
+/**
+ * `_meta` envelope keys the revision requires on every request.
+ *
+ * Duplicated from `@modelcontextprotocol/server` rather than imported: this
+ * fixture exists to prove the wire contract, so it has to state the strings a
+ * third-party client would send. Importing the SDK's constants would make the
+ * test agree with the server by construction even if both drifted from spec.
+ */
+export const MODERN_META_KEYS = {
+  clientInfo: 'io.modelcontextprotocol/clientInfo',
+  clientCapabilities: 'io.modelcontextprotocol/clientCapabilities',
+  protocolVersion: 'io.modelcontextprotocol/protocolVersion',
+} as const;
+
+/**
+ * A 2026-07-28 client.
+ *
+ * Two things separate it from {@link StreamableHttpMcpClient}: there is no
+ * `initialize` handshake and no session, and the edge rejects any request whose
+ * headers and body disagree — so `Mcp-Method` accompanies every call and
+ * `Mcp-Name` accompanies `tools/call`.
+ */
+export class ModernMcpClient {
+  private baseUrl: string;
+  private clientName: string;
+
+  constructor(baseUrl: string, clientName = 'e2e-modern-client') {
+    this.baseUrl = baseUrl;
+    this.clientName = clientName;
+  }
+
+  private envelope(): Record<string, unknown> {
+    return {
+      [MODERN_META_KEYS.clientInfo]: { name: this.clientName, version: '1.0.0' },
+      [MODERN_META_KEYS.clientCapabilities]: {},
+      [MODERN_META_KEYS.protocolVersion]: MODERN_PROTOCOL_VERSION,
+    };
+  }
+
+  /**
+   * `partialMeta` drops `clientCapabilities` while keeping the rest. That is a
+   * request declaring modern intent but violating the envelope contract — a
+   * distinct case from omitting `_meta` entirely, which is simply a 2025-era
+   * request and is served by the stateless fallback.
+   */
+  private metaFor(options: { partialMeta?: boolean }): Record<string, unknown> {
+    const meta = this.envelope();
+    if (options.partialMeta) {
+      delete meta[MODERN_META_KEYS.clientCapabilities];
+    }
+    return meta;
+  }
+
+  /**
+   * Send a request, returning the raw HTTP response so callers can assert on
+   * status and error bodies as well as results.
+   */
+  async send(
+    method: string,
+    params: Record<string, unknown> = {},
+    requestId = 1,
+    options: {
+      toolName?: string;
+      omitMethodHeader?: boolean;
+      omitMeta?: boolean;
+      partialMeta?: boolean;
+    } = {}
+  ): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
+    const headers: Record<string, string> = {
+      Accept: 'application/json, text/event-stream',
+    };
+    if (!options.omitMethodHeader) {
+      headers['Mcp-Method'] = method;
+    }
+    if (options.toolName) {
+      headers['Mcp-Name'] = options.toolName;
+    }
+
+    const body = {
+      jsonrpc: '2.0',
+      id: requestId,
+      method,
+      params: options.omitMeta ? params : { ...params, _meta: this.metaFor(options) },
+    };
+
+    return httpPost(`${this.baseUrl}/mcp`, body, headers);
+  }
+
+  /** Send a request and unwrap its JSON-RPC result, throwing on error. */
+  async request(
+    method: string,
+    params: Record<string, unknown> = {},
+    requestId = 1,
+    options: { toolName?: string } = {}
+  ): Promise<unknown> {
+    const response = await this.send(method, params, requestId, options);
+    if (response.status !== 200) {
+      throw new Error(`Request failed: HTTP ${response.status}: ${response.body}`);
+    }
+    const parsed = parseJsonOrSse(response.body, requestId);
+    if (parsed.error) {
+      throw new Error(JSON.stringify(parsed.error));
+    }
+    return parsed.result;
+  }
+
+  /** `tools/call`, which additionally requires the `Mcp-Name` header. */
+  async callTool(
+    name: string,
+    args: Record<string, unknown> = {},
+    requestId = 1
+  ): Promise<unknown> {
+    return this.request('tools/call', { name, arguments: args }, requestId, { toolName: name });
+  }
+}

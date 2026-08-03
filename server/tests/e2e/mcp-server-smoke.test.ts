@@ -18,6 +18,8 @@ import {
   StreamableHttpMcpClient,
   httpPost,
   parseJsonOrSse,
+  ModernMcpClient,
+  MODERN_PROTOCOL_VERSION,
   PROJECT_ROOT as HTTP_PROJECT_ROOT,
   SERVER_PATH as HTTP_SERVER_PATH,
 } from './helpers/http-mcp-client.js';
@@ -431,5 +433,152 @@ describe('MCP Server Smoke Tests', () => {
       const result = parseJsonOrSse(response.body, 1);
       expect(result.error).toBeUndefined();
     }, 20000);
+  });
+
+  /**
+   * Protocol revision 2026-07-28 and dual-era serving.
+   *
+   * The revision removes the `initialize` handshake, so a modern client's first
+   * request is a real call carrying a `_meta` envelope. The edge also rejects
+   * any request whose headers and body disagree, which is why every call sends
+   * `Mcp-Method` and `tools/call` additionally sends `Mcp-Name`.
+   *
+   * The last test is the migration's actual gate: one build, both eras.
+   */
+  describe('MCP Protocol revision 2026-07-28', () => {
+    async function startModernServer(): Promise<string> {
+      streamableHttpServerPort = await getAvailablePort();
+      const baseUrl = `http://localhost:${streamableHttpServerPort}`;
+      streamableHttpServerProcess = startServerWithHttp(streamableHttpServerPort, {
+        transport: 'streamable-http',
+        debug: true,
+      });
+      await waitForHealth(baseUrl, { timeout: 15000, interval: 200 });
+      return baseUrl;
+    }
+
+    it('lists tools with no initialize handshake', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const result = (await client.request('tools/list', {}, 1)) as {
+        tools: Array<{ name: string }>;
+      };
+
+      const toolNames = result.tools.map((t) => t.name);
+      expect(toolNames).toContain('prompt_engine');
+      expect(toolNames).toContain('resource_manager');
+      expect(toolNames).toContain('system_control');
+    }, 25000);
+
+    it('answers server/discover with the advertised surface and cache posture', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const result = (await client.request('server/discover', {}, 1)) as {
+        supportedVersions: string[];
+        capabilities: Record<string, unknown>;
+        ttlMs: number;
+        cacheScope: string;
+      };
+
+      expect(result.supportedVersions).toContain(MODERN_PROTOCOL_VERSION);
+      expect(Object.keys(result.capabilities).sort()).toEqual(['prompts', 'resources', 'tools']);
+      // Deliberate posture: a tool surface that varies with framework state must
+      // not be cached by clients. `ttlMs: 0` is the SDK default, asserted here so
+      // a future change to it is a visible decision rather than a silent one.
+      expect(result.ttlMs).toBe(0);
+      expect(result.cacheScope).toBe('private');
+    }, 25000);
+
+    it('executes a tool call', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const result = (await client.callTool('system_control', { action: 'status' }, 1)) as {
+        isError: boolean;
+        content: Array<{ type: string; text: string }>;
+      };
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0]?.text).toContain('System Status');
+    }, 25000);
+
+    it('rejects a request whose headers omit the method', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const response = await client.send('tools/list', {}, 1, { omitMethodHeader: true });
+
+      // The edge classifies before dispatch, so this never reaches a handler.
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      const parsed = parseJsonOrSse(response.body, 1) as { error?: { message: string } };
+      expect(parsed.error?.message).toContain('Mcp-Method');
+    }, 25000);
+
+    it('rejects a request whose _meta envelope is incomplete', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      const response = await client.send('tools/list', {}, 1, { partialMeta: true });
+
+      const parsed = parseJsonOrSse(response.body, 1) as { error?: { message: string } };
+      expect(parsed.error).toBeDefined();
+      expect(parsed.error?.message).toMatch(/envelope/i);
+      expect(parsed.error?.message).toContain('clientCapabilities');
+    }, 25000);
+
+    it('serves a request carrying no envelope as a 2025-era client', async () => {
+      const client = new ModernMcpClient(await startModernServer());
+
+      // No `_meta` is not an error: it is what a 2025-era client sends, and
+      // `legacy: 'stateless'` serves it per-request rather than rejecting it.
+      // This is the behavior that lets one build answer both revisions.
+      const response = await client.send('tools/list', {}, 1, { omitMeta: true });
+
+      expect(response.status).toBe(200);
+      const parsed = parseJsonOrSse(response.body, 1) as {
+        error?: unknown;
+        result?: { tools: Array<{ name: string }> };
+      };
+      expect(parsed.error).toBeUndefined();
+      expect(parsed.result?.tools.map((t) => t.name)).toContain('prompt_engine');
+    }, 25000);
+
+    it('serves a 2026-07-28 client and a 2025-era client from one build', async () => {
+      const baseUrl = await startModernServer();
+
+      // 2025-era: handshake first, then a call.
+      const legacyClient = new StreamableHttpMcpClient(baseUrl);
+      const { capabilities } = await legacyClient.initialize();
+      expect(capabilities).toHaveProperty('protocolVersion');
+      const legacyTools = (await legacyClient.request('tools/list', {}, 2)) as {
+        tools: Array<{ name: string }>;
+      };
+
+      // 2026-07-28: no handshake, envelope on every call.
+      const modernClient = new ModernMcpClient(baseUrl);
+      const modernTools = (await modernClient.request('tools/list', {}, 3)) as {
+        tools: Array<{ name: string }>;
+      };
+
+      // Same surface, both eras, same process.
+      expect(modernTools.tools.map((t) => t.name).sort()).toEqual(
+        legacyTools.tools.map((t) => t.name).sort()
+      );
+
+      const legacyCall = (await legacyClient.request(
+        'tools/call',
+        { name: 'system_control', arguments: { action: 'status' } },
+        4
+      )) as { isError: boolean };
+      const modernCall = (await modernClient.callTool(
+        'system_control',
+        { action: 'status' },
+        5
+      )) as {
+        isError: boolean;
+      };
+
+      expect(legacyCall.isError).toBe(false);
+      expect(modernCall.isError).toBe(false);
+
+      await legacyClient.close();
+    }, 30000);
   });
 });
