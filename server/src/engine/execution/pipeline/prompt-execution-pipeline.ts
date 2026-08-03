@@ -3,7 +3,14 @@ import { randomUUID } from 'crypto';
 
 import { trace, SpanStatusCode, context as otelContext } from '@opentelemetry/api';
 
-import { buildRootSpanAttributes, resolveStageType } from './execution-telemetry.js';
+import {
+  buildCommandMetric,
+  buildStageMetric,
+  summarizeStageAttempt,
+  type CommandOutcome,
+  type StageAttempt,
+} from './execution-metrics.js';
+import { buildRootSpanAttributes } from './execution-telemetry.js';
 import { formatStageOrderViolations, validateStageOrder } from './validate-stage-order.js';
 import { ExecutionContext } from '../context/index.js';
 
@@ -12,8 +19,6 @@ import type {
   MetricsCollector,
   PipelineStageStatus,
   MetricStatus,
-  CommandExecutionMetric,
-  PipelineStageMetric,
   McpToolRequest,
   ToolResponse,
   HookRegistryPort,
@@ -103,98 +108,15 @@ export class PromptExecutionPipeline {
     const pipelineStart = Date.now();
     const commandMetricId = this.createCommandMetricId();
     context.state.lifecycle.metricId = commandMetricId;
+    // Owned here rather than by `runStages` because the catch and finally blocks
+    // below report whatever ran before a failure — an accumulator returned only on
+    // success would be empty in exactly the case the metrics matter most.
     const stageMetrics: StageMetricSummary[] = [];
-    let previousState = this.captureContextState(context);
     let commandStatus: MetricStatus = 'success';
     let commandError: string | undefined;
 
     try {
-      for (let i = 0; i < this.stages.length; i++) {
-        const stage = this.stages[i] as PipelineStage;
-        const stageStart = Date.now();
-        const memoryBefore = process.memoryUsage();
-        let stageStatus: PipelineStageStatus = 'success';
-        let stageError: string | undefined;
-        const stageSpan = this.startStageSpan(stage.name, i);
-
-        this.logger.info('[Pipeline] -> Stage start', {
-          stage: stage.name,
-          sessionId: context.getSessionId(),
-        });
-
-        try {
-          await this.emitBeforeStage(stage.name, context);
-          await stage.execute(context);
-          await this.emitAfterStage(stage.name, context);
-        } catch (error) {
-          const durationMs = Date.now() - stageStart;
-          const message = error instanceof Error ? error.message : String(error);
-          stageStatus = 'error';
-          stageError = message;
-          await this.emitStageError(
-            stage.name,
-            error instanceof Error ? error : new Error(message),
-            context
-          );
-          this.logger.error('[Pipeline] Stage failed', {
-            stage: stage.name,
-            durationMs,
-            error: message,
-          });
-          throw error;
-        } finally {
-          const durationMs = Date.now() - stageStart;
-          const memoryAfter = process.memoryUsage();
-          stageMetrics.push(
-            this.logStageMetrics(stage.name, durationMs, memoryBefore, memoryAfter)
-          );
-          this.recordPipelineStageMetric(
-            stage,
-            context,
-            stageStart,
-            durationMs,
-            stageStatus,
-            stageError,
-            memoryBefore,
-            memoryAfter
-          );
-          this.endSpanWithStatus(
-            stageSpan,
-            stageStatus,
-            stageError ? new Error(stageError) : undefined
-          );
-
-          const currentState = this.captureContextState(context);
-          this.logContextTransitions(stage.name, previousState, currentState);
-          previousState = currentState;
-
-          this.logger.info('[Pipeline] <- Stage complete', {
-            stage: stage.name,
-            durationMs,
-            responseReady: Boolean(context.response),
-          });
-        }
-
-        if (context.response) {
-          if (context.response.isError) {
-            commandStatus = 'error';
-            commandError = this.extractResponseError(context.response);
-          }
-          this.logger.info('[Pipeline] Early termination', {
-            stage: stage.name,
-            reason: 'Response already available',
-            totalDurationMs: Date.now() - pipelineStart,
-            stages: stageMetrics,
-          });
-          this.enrichRootSpan(rootSpan, { context, stageMetrics, pipelineStart });
-          this.endSpanWithStatus(
-            rootSpan,
-            commandStatus,
-            commandError ? new Error(commandError) : undefined
-          );
-          return context.response;
-        }
-      }
+      const earlyExitStage = await this.runStages(context, stageMetrics);
 
       if (!context.response) {
         throw new Error('Pipeline completed without producing a response');
@@ -205,61 +127,165 @@ export class PromptExecutionPipeline {
         commandError = this.extractResponseError(context.response);
       }
 
-      this.logger.info('[Pipeline] Execution complete', {
-        totalDurationMs: Date.now() - pipelineStart,
-        stages: stageMetrics,
+      this.logCompletion(earlyExitStage, pipelineStart, stageMetrics);
+      this.finishRootSpan(rootSpan, {
+        context,
+        stageMetrics,
+        pipelineStart,
+        status: commandStatus,
+        error: messageAsError(commandError),
       });
-      this.enrichRootSpan(rootSpan, { context, stageMetrics, pipelineStart });
-      this.endSpanWithStatus(
-        rootSpan,
-        commandStatus,
-        commandError ? new Error(commandError) : undefined
-      );
       return context.response;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const failure = toError(error);
       commandStatus = 'error';
-      commandError = message;
+      commandError = failure.message;
       this.logger.error('[Pipeline] Execution failed', {
-        error: message,
+        error: failure.message,
         stages: stageMetrics,
       });
-      this.enrichRootSpan(rootSpan, { context, stageMetrics, pipelineStart, errorType: message });
-      this.endSpanWithStatus(
-        rootSpan,
-        'error',
-        error instanceof Error ? error : new Error(message)
-      );
-      throw error instanceof Error ? error : new Error(message);
-    } finally {
-      this.recordCommandExecutionMetric(
+      this.finishRootSpan(rootSpan, {
         context,
+        stageMetrics,
         pipelineStart,
-        commandMetricId,
-        commandStatus,
-        commandError
-      );
+        status: 'error',
+        error: failure,
+        errorType: failure.message,
+      });
+      throw failure;
+    } finally {
+      this.recordCommandExecutionMetric(context, {
+        commandId: commandMetricId,
+        startTime: pipelineStart,
+        endTime: Date.now(),
+        status: commandStatus,
+        errorMessage: commandError,
+      });
       await this.runLifecycleCleanupHandlers(context);
     }
   }
 
-  private logStageMetrics(
-    stage: string,
-    durationMs: number,
-    memoryBefore: NodeJS.MemoryUsage,
-    memoryAfter: NodeJS.MemoryUsage
-  ): StageMetricSummary {
-    const metrics: StageMetricSummary = {
-      stage,
-      durationMs,
-      heapUsed: memoryAfter.heapUsed,
-      rss: memoryAfter.rss,
-      heapUsedDelta: memoryAfter.heapUsed - memoryBefore.heapUsed,
-      rssDelta: memoryAfter.rss - memoryBefore.rss,
+  /**
+   * Run stages in order until one produces a response.
+   *
+   * @returns the name of the stage that short-circuited, or undefined if every stage ran.
+   */
+  private async runStages(
+    context: ExecutionContext,
+    stageMetrics: StageMetricSummary[]
+  ): Promise<string | undefined> {
+    let previousState = this.captureContextState(context);
+
+    for (let i = 0; i < this.stages.length; i++) {
+      const stage = this.stages[i] as PipelineStage;
+      const { summary, failure } = await this.runStage(stage, i, context);
+      stageMetrics.push(summary);
+
+      const currentState = this.captureContextState(context);
+      this.logContextTransitions(stage.name, previousState, currentState);
+      previousState = currentState;
+
+      // Rethrown here rather than inside `runStage` so a failed stage still records
+      // its metrics, span and context transition before the error propagates.
+      if (failure !== undefined) {
+        throw failure.error;
+      }
+
+      if (context.response) {
+        return stage.name;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Execute one stage and report what it did.
+   *
+   * Reports a thrown error rather than rethrowing it: the caller owns control flow, and
+   * every stage that starts gets a metric entry whether or not it completed.
+   */
+  private async runStage(
+    stage: PipelineStage,
+    index: number,
+    context: ExecutionContext
+  ): Promise<StageRunResult> {
+    const startTime = Date.now();
+    const memoryBefore = process.memoryUsage();
+    const stageSpan = this.startStageSpan(stage.name, index);
+
+    this.logger.info('[Pipeline] -> Stage start', {
+      stage: stage.name,
+      sessionId: context.getSessionId(),
+    });
+
+    let failure: StageFailure | undefined;
+    let status: PipelineStageStatus = 'success';
+    let errorMessage: string | undefined;
+
+    try {
+      await this.emitBeforeStage(stage.name, context);
+      await stage.execute(context);
+      await this.emitAfterStage(stage.name, context);
+    } catch (error) {
+      const stageError = toError(error);
+      status = 'error';
+      errorMessage = stageError.message;
+      failure = { error };
+      await this.emitStageError(stage.name, stageError, context);
+      this.logger.error('[Pipeline] Stage failed', {
+        stage: stage.name,
+        durationMs: Date.now() - startTime,
+        error: stageError.message,
+      });
+    }
+
+    const attempt: StageAttempt = {
+      stageName: stage.name,
+      startTime,
+      durationMs: Date.now() - startTime,
+      status,
+      errorMessage,
+      memoryBefore,
+      memoryAfter: process.memoryUsage(),
     };
 
-    this.logger.debug('[Pipeline] Stage metrics', metrics);
-    return metrics;
+    const summary = summarizeStageAttempt(attempt);
+    this.logger.debug('[Pipeline] Stage metrics', summary);
+    this.recordPipelineStageMetric(attempt, context);
+    this.endSpanWithStatus(stageSpan, status, messageAsError(errorMessage));
+
+    this.logger.info('[Pipeline] <- Stage complete', {
+      stage: stage.name,
+      durationMs: attempt.durationMs,
+      responseReady: Boolean(context.response),
+    });
+
+    return failure !== undefined ? { summary, failure } : { summary };
+  }
+
+  /** Early exit and full completion are distinct events, so they log distinct payloads. */
+  private logCompletion(
+    earlyExitStage: string | undefined,
+    pipelineStart: number,
+    stageMetrics: readonly StageMetricSummary[]
+  ): void {
+    const totalDurationMs = Date.now() - pipelineStart;
+
+    if (earlyExitStage !== undefined) {
+      this.logger.info('[Pipeline] Early termination', {
+        stage: earlyExitStage,
+        reason: 'Response already available',
+        totalDurationMs,
+        stages: stageMetrics,
+      });
+      return;
+    }
+
+    this.logger.info('[Pipeline] Execution complete', {
+      totalDurationMs,
+      stages: stageMetrics,
+    });
   }
 
   private captureContextState(context: ExecutionContext): ContextStateSnapshot {
@@ -320,116 +346,22 @@ export class PromptExecutionPipeline {
     return `cmd_${randomUUID()}`;
   }
 
-  private recordPipelineStageMetric(
-    stage: PipelineStage,
-    context: ExecutionContext,
-    startTime: number,
-    durationMs: number,
-    status: PipelineStageStatus,
-    errorMessage: string | undefined,
-    memoryBefore: NodeJS.MemoryUsage,
-    memoryAfter: NodeJS.MemoryUsage
-  ): void {
+  private recordPipelineStageMetric(attempt: StageAttempt, context: ExecutionContext): void {
     const metrics = this.getMetricsCollector();
     if (!metrics) {
       return;
     }
 
-    const metricPayload: PipelineStageMetric = {
-      stageId: `${stage.name}:${context.getSessionId() ?? 'sessionless'}:${startTime}`,
-      stageName: stage.name,
-      stageType: resolveStageType(stage.name),
-      toolName: 'prompt_engine',
-      startTime,
-      endTime: startTime + durationMs,
-      durationMs,
-      status,
-      metadata: {
-        heapUsed: memoryAfter.heapUsed,
-        rss: memoryAfter.rss,
-        heapUsedDelta: memoryAfter.heapUsed - memoryBefore.heapUsed,
-        rssDelta: memoryAfter.rss - memoryBefore.rss,
-        responseReady: Boolean(context.response),
-      },
-    };
-
-    const sessionId = context.getSessionId();
-    if (sessionId !== undefined) {
-      metricPayload.sessionId = sessionId;
-    }
-    if (errorMessage !== undefined) {
-      metricPayload.errorMessage = errorMessage;
-    }
-
-    metrics.recordPipelineStage(metricPayload);
+    metrics.recordPipelineStage(buildStageMetric(attempt, context));
   }
 
-  private recordCommandExecutionMetric(
-    context: ExecutionContext,
-    startTime: number,
-    commandId: string,
-    status: MetricStatus,
-    errorMessage?: string
-  ): void {
+  private recordCommandExecutionMetric(context: ExecutionContext, outcome: CommandOutcome): void {
     const metrics = this.getMetricsCollector();
     if (!metrics) {
       return;
     }
 
-    const endTime = Date.now();
-    const appliedGates = context.executionPlan?.gates ?? [];
-    // Typed slot, not `metadata` — every writer moved to `state.gates` and the
-    // metadata key stopped being set, which pinned this count at zero.
-    const temporaryGateIds = context.state.gates.temporaryGateIds;
-
-    const metric: CommandExecutionMetric = {
-      commandId,
-      commandName: context.mcpRequest.command ?? '<response-only>',
-      toolName: 'prompt_engine',
-      executionMode: this.resolveExecutionMode(context),
-      startTime,
-      endTime,
-      durationMs: endTime - startTime,
-      status,
-      appliedGates,
-      temporaryGatesApplied: temporaryGateIds.length,
-      metadata: this.buildCommandMetricMetadata(context),
-    };
-
-    const sessionId = context.getSessionId();
-    if (sessionId !== undefined) {
-      metric.sessionId = sessionId;
-    }
-    if (errorMessage !== undefined) {
-      metric.errorMessage = errorMessage;
-    }
-
-    metrics.recordCommandExecutionMetric(metric);
-  }
-
-  private resolveExecutionMode(context: ExecutionContext): CommandExecutionMetric['executionMode'] {
-    if (context.isChainExecution()) {
-      return 'chain';
-    }
-
-    const strategy = context.executionPlan?.strategy;
-    if (strategy === 'single' || strategy === 'chain') {
-      return strategy;
-    }
-
-    // Default to 'single' for metrics when strategy is not yet determined
-    return 'single';
-  }
-
-  private buildCommandMetricMetadata(context: ExecutionContext): Record<string, unknown> {
-    return {
-      strategy: context.executionPlan?.strategy,
-      category: context.executionPlan?.category,
-      hasSessionContext: Boolean(context.sessionContext),
-      isChainExecution: context.isChainExecution(),
-      frameworkEnabled: Boolean(context.frameworkContext),
-      responseReady: Boolean(context.response),
-    };
+    metrics.recordCommandExecutionMetric(buildCommandMetric(context, outcome));
   }
 
   private extractResponseError(response?: ToolResponse): string | undefined {
@@ -530,7 +462,7 @@ export class PromptExecutionPipeline {
     span: Span | undefined,
     execution: {
       context: ExecutionContext;
-      stageMetrics: StageMetricSummary[];
+      stageMetrics: readonly StageMetricSummary[];
       pipelineStart: number;
       errorType?: string;
     }
@@ -543,6 +475,17 @@ export class PromptExecutionPipeline {
         registeredStageNames: this.stages.map((stage) => stage.name),
       })
     );
+  }
+
+  /**
+   * Attach the wide-event attributes and close the root span.
+   *
+   * One method rather than the enrich/end pair repeated at each exit, so a new exit path
+   * cannot close the span without first enriching it.
+   */
+  private finishRootSpan(span: Span | undefined, outcome: RootSpanOutcome): void {
+    this.enrichRootSpan(span, outcome);
+    this.endSpanWithStatus(span, outcome.status, outcome.error);
   }
 
   private endSpanWithStatus(
@@ -559,6 +502,42 @@ export class PromptExecutionPipeline {
     }
     span.end();
   }
+}
+
+/** A stage's thrown value, held so the caller can rethrow it after recording. */
+interface StageFailure {
+  readonly error: unknown;
+}
+
+interface StageRunResult {
+  readonly summary: StageMetricSummary;
+  /** Absent when the stage completed. */
+  readonly failure?: StageFailure;
+}
+
+interface RootSpanOutcome {
+  readonly context: ExecutionContext;
+  readonly stageMetrics: readonly StageMetricSummary[];
+  readonly pipelineStart: number;
+  readonly status: MetricStatus;
+  readonly error: Error | undefined;
+  /** Set only when the pipeline threw, which the span reports separately from a failed response. */
+  readonly errorType?: string;
+}
+
+/** Normalize a thrown value, which JavaScript does not guarantee is an Error. */
+function toError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value));
+}
+
+/**
+ * A non-empty message as an Error, or undefined.
+ *
+ * An empty message yields undefined so `endSpanWithStatus` records no exception for it —
+ * an Error carrying no message tells a reader nothing the status code does not.
+ */
+function messageAsError(message: string | undefined): Error | undefined {
+  return message !== undefined && message.length > 0 ? new Error(message) : undefined;
 }
 
 interface ContextStateSnapshot {

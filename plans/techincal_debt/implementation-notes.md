@@ -1,3 +1,10 @@
+---
+title: "Implementation Notes — Pipeline Defect Remediation"
+date: 2026-08-01
+status: reference
+tags: []
+---
+
 # Implementation notes — pipeline defect remediation
 
 Companion to `pipeline-defect-remediation-2026-08-01.md`. Records where execution
@@ -593,3 +600,67 @@ First draft of `validateStageOrder` measured **cyclomatic 11 against a limit of 
 control flow. Decomposed into `indexFirstProducers` + `toViolation` + the loop. eslint
 reports it only as a warning; the refactoring rule treats it as blocking, which is why it
 was fixed rather than accepted at 11.
+
+---
+
+## D19 — T7: the estimate said the code would shrink; it grew (2026-08-02)
+
+The tier's own criterion was violation count, and it was met exactly: complexity /
+cognitive / max-params on `prompt-execution-pipeline.ts` **4 → 0**, `heapUsedDelta` in
+that file **2 → 0**, no existing test file modified.
+
+But the plan's row estimates summed to roughly **-126** lines in the coordinator. Measured:
+**571 → 550, i.e. -21**, against **+171** in the new `execution-metrics.ts` and **+218** in
+its spec. The estimates counted the lines an extraction deletes and skipped the named
+types, doc comments and guards that replacing an inline block requires — a `StageAttempt`
+record, a `StageRunResult`, a `RootSpanOutcome`, and three module-level helpers did not
+exist to be estimated.
+
+The same error is in the plan's Summary at whole-plan scale: it claimed "net ~-180 lines
+of source" across all seven tiers. Measured on completion, `server/src/` is **+524**
+(1206 insertions / 859 deletions across 67 files, plus the untracked 177-line
+`execution-metrics.ts`). Both numbers are now struck through in place rather than
+amended, because the estimate was an input to sizing.
+
+Generalizes: **an extraction estimate that only counts the source block is a floor, not a
+figure.** Worth stating because "decomposition shrinks the codebase" is the intuition the
+estimate encoded, and it was false here. The work was still correct — the defect was a
+duplicated derivation and a thrice-repeated tail, neither of which is a size problem.
+
+### Two design corrections found while implementing
+
+**`runStage` cannot return `Promise<StageAttempt>`.** The plan's signature has no way to
+express a stage that threw. The original `finally` recorded the failing stage's metrics
+_before_ the throw propagated, so a rethrowing `runStage` would either drop that entry or
+need the accumulator threaded in. It returns `{ summary, failure? }` and `runStages`
+rethrows after recording — control flow stays in the loop that owns it.
+
+**One extraction was not enough.** 7.3 named `runStage` alone; with the loop still inline,
+`executePipelineStages` stayed over the cyclomatic limit. The loop became `runStages` and
+the two exit-log payloads became `logCompletion`. Early exit and full completion were
+deliberately _not_ merged into one log call: they are different events with different
+payloads, and collapsing them to satisfy a linter is the failure mode the tier's own
+rejected-alternative note warns about.
+
+### Two behavioral edges preserved on purpose, both invisible to tsc
+
+- `messageAsError` returns `undefined` for an empty string, matching the original truthy
+  check. A `!== undefined` test would newly call `span.recordException` for an
+  empty-message error.
+- `buildStageMetric` reads the four memory values off the summary individually instead of
+  spreading it. Spreading would add `stage` and `durationMs` keys to the emitted
+  `metadata`, which `pipeline-telemetry.test.ts:86` captures — the emission shape is
+  asserted, and `tsc` would not have caught the change.
+
+### Gate
+
+| Check                             | Result                                   |
+| --------------------------------- | ---------------------------------------- |
+| `npm run typecheck`               | clean                                    |
+| `npx eslint execution-metrics.ts` | 0 problems                               |
+| `npm run lint:ratchet`            | 3433 / 1401, no regressions (down 4 / 4) |
+| `npm run typecheck:tests:ratchet` | 395 in `tests/`, no regressions          |
+| `npm test`                        | 147 suites / 1788 tests                  |
+| `npm run test:integration`        | 33 suites / 430 tests                    |
+| `npm run validate:arch`           | 439 modules, 2 pre-existing warnings     |
+| `npm run verify:mcp`              | 11/11                                    |
