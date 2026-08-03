@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0](https://github.com/minipuft/claude-prompts/compare/v3.0.2...v3.1.0) (2026-08-03)
+
+
+### Added
+
+* **frameworks:** make the default framework config-declarable per project ([8b948fb](https://github.com/minipuft/claude-prompts/commit/8b948fbc78fbd8cf1fd92f45405e17419e59b009))
+* **frameworks:** scope framework state per project ([905c926](https://github.com/minipuft/claude-prompts/commit/905c92614eac6896cfb74fa1746b63116123902a))
+
+
+### Fixed
+
+* **ci:** allow Renovate validator to inspect updates ([927a816](https://github.com/minipuft/claude-prompts/commit/927a816e4ae27784cc0dffc017d8309d339d1cf6))
+* **ci:** allow Renovate validator to inspect updates ([3bac454](https://github.com/minipuft/claude-prompts/commit/3bac454135714d6df0aeef30ac51d577586c927d))
+* **deps:** align Renovate with delivery contracts ([6ac5e87](https://github.com/minipuft/claude-prompts/commit/6ac5e87338a815ae16d1d575e280058c3d613adf))
+* **deps:** align Renovate with delivery contracts ([a5f152c](https://github.com/minipuft/claude-prompts/commit/a5f152c0612100d45670b2586f0e1ee3e8a26990))
+* **deps:** enforce Renovate release-age gate ([#187](https://github.com/minipuft/claude-prompts/issues/187)) ([c091bbf](https://github.com/minipuft/claude-prompts/commit/c091bbfde5bc89fd2497098283818e577b40216b))
+* **gates:** declare the gate surface on the hook and notification ports ([d4a5360](https://github.com/minipuft/claude-prompts/commit/d4a5360fa546eae5336af5d0759067431ec4d74c))
+* **pipeline:** derive skipped stages instead of accumulating them ([cd7abc0](https://github.com/minipuft/claude-prompts/commit/cd7abc0775acdbb39c2c0809e048141daf2de548))
+
+
+### Changed
+
+* **ci:** route validation by change impact ([#183](https://github.com/minipuft/claude-prompts/issues/183)) ([c7509c2](https://github.com/minipuft/claude-prompts/commit/c7509c2b56e9266d9ac0c70dd8f2c89f6e3f3f19))
+* **frameworks:** route fallback defaults through DEFAULT_FRAMEWORK_ID ([b41adc4](https://github.com/minipuft/claude-prompts/commit/b41adc438cd577e22663550c1055747f8fce761a))
+* **mcp-tools:** drop dead wiring from the tool constructor seams ([6642c04](https://github.com/minipuft/claude-prompts/commit/6642c049586b6ac7990fa5b133c6d0f080de4e39))
+* **pipeline:** construct the pipeline from an ordered stage array ([094baec](https://github.com/minipuft/claude-prompts/commit/094baec62523e99ae86f73191661696e81917f95))
+* **pipeline:** delete DependencyInjectionStage and the metadata bag ([af8401a](https://github.com/minipuft/claude-prompts/commit/af8401ada25dea7e827a9409647a127f1d43d21a))
+* **pipeline:** drain the execution context metadata bag to one key ([b29dff2](https://github.com/minipuft/claude-prompts/commit/b29dff2b422252695d56d54b45a682d29687be0f))
+* **pipeline:** renumber the 22 stage files to execution order ([467ee5a](https://github.com/minipuft/claude-prompts/commit/467ee5a45bb0d4293907f8267258bae1900b26b4))
+* **server:** land finalized pipeline and framework remediation ([67e905e](https://github.com/minipuft/claude-prompts/commit/67e905e49f2bfc8b045b7aa787738e70496fe75e))
+* **server:** type McpToolRouter's mcpServer as McpServer ([2ddd763](https://github.com/minipuft/claude-prompts/commit/2ddd763fc46977631633b62572d31c2fa19fb67d))
+* **server:** type TransportRouter's mcpServer as McpServer ([4feaab2](https://github.com/minipuft/claude-prompts/commit/4feaab29e93698eb24865f7dc924db48f4288eaa))
+
+
+### Documentation
+
+* **deps:** close Phase 6 Renovate rollout ([a785167](https://github.com/minipuft/claude-prompts/commit/a78516776979df4ba51f62cb8a256c8026188b22))
+* **deps:** close Phase 6 Renovate rollout ([3c2a28d](https://github.com/minipuft/claude-prompts/commit/3c2a28db4ea4efa042adfda84f50b0369895610e))
+* **deps:** scope the SDK v2 package swap and record Tier B's blockers ([59dfdee](https://github.com/minipuft/claude-prompts/commit/59dfdee762262cdcf840ce8da98762f8c80a7c77))
+* **docs:** record acquisition recovery baseline ([8bfd41b](https://github.com/minipuft/claude-prompts/commit/8bfd41b8622c8361e1fe337533180ece6c88a19c))
+* **docs:** record acquisition recovery baseline ([c06067f](https://github.com/minipuft/claude-prompts/commit/c06067fadc54df1937ffb68f7f244bdd52b7c475))
+* **pipeline:** add coordinator decomposition tier ([41cbbb9](https://github.com/minipuft/claude-prompts/commit/41cbbb91ddeadeb96adb19f6fb83e8b0eb2d936f))
+* **pipeline:** add coordinator decomposition tier ([e841e1d](https://github.com/minipuft/claude-prompts/commit/e841e1d8d22721f55b76bb75e979b20a44d6ceab))
+* **pipeline:** drop a doubled stage name left by the renumber sweep ([bd8095a](https://github.com/minipuft/claude-prompts/commit/bd8095a73c8a17ccfabae5287fec36a2f1f99edd))
+
 ## [3.0.2](https://github.com/minipuft/claude-prompts/compare/v3.0.1...v3.0.2) (2026-08-02)
 
 
