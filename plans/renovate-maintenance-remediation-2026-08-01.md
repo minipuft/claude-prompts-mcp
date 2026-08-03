@@ -219,11 +219,11 @@ hosted evidence; a Renovate PR cannot merge until all four protected checks pass
 | #   | Target                   | Change                                                                                                                                               | Depends | Verification                                  |
 | --- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------- |
 | 7.1 | Observation ledger       | Record the Phase 6 hosted cycle and the maintainer's explicit decision to accelerate the second-cycle guard based on prior dependency-bot operation. | Phase 6 | Dated PR/check evidence plus deviation record |
-| 7.2 | `.github/renovate.json5` | Enable platform PR automerge only for stable nonmajor dev dependencies and lock maintenance, with 14-day age and explicit high-risk exclusions.      | 7.1     | Resolved config plus canary dev patch         |
+| 7.2 | `.github/renovate.json5` | Enable Renovate-controlled PR automerge only for stable nonmajor dev dependencies and lock maintenance, with 14-day age and explicit exclusions.     | 7.1     | Resolved config plus canary dev patch         |
 | 7.3 | `.github/renovate.json5` | Delete rollout-only `automerge:false` fields from the eligible rules once 7.2 is canonical; retain durable manual exclusions.                        | 7.2     | Config search and resolved config             |
 | 7.4 | Plan and notes           | Mark every superseded path removed and the new path canonical. Do not close with a migrating item.                                                   | 7.2–7.3 | Final removal matrix and clean tree           |
 
-**Gate:** canary merges only after four checks; full validation passes; removal searches are clean; lifecycle table contains only `canonical` or `removed`.
+**Gate:** canary merges only after four checks and its Renovate stability status pass; full validation passes; removal searches are clean; lifecycle table contains only `canonical` or `removed`.
 
 ## 5. Validation Strategy
 

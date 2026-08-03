@@ -76,10 +76,10 @@ function validateConfig(config, errors) {
   if (!same(config.labels, ['dependencies'])) errors.push('resolved labels must be [dependencies]');
   if (
     config.automerge !== false ||
-    config.platformAutomerge !== true ||
+    config.platformAutomerge !== false ||
     config.automergeType !== 'pr'
   ) {
-    errors.push('resolved global automerge policy must be fail-closed and use platform PR merge');
+    errors.push('resolved global automerge policy must be fail-closed and use Renovate PR merge');
   }
   if (!same(config.schedule, ['* 0-5 * * 1'])) errors.push('resolved maintenance schedule changed');
   if (config.lockFileMaintenance?.automerge !== true) {
@@ -212,7 +212,7 @@ function fixtureRows() {
   const config = {
     labels: ['dependencies'],
     automerge: false,
-    platformAutomerge: true,
+    platformAutomerge: false,
     automergeType: 'pr',
     schedule: ['* 0-5 * * 1'],
     lockFileMaintenance: { automerge: true },
@@ -266,6 +266,10 @@ function main() {
     const broadAutomerge = fixtureRows();
     broadAutomerge[0].config.automerge = true;
     if (!validateRows(broadAutomerge).length) throw new Error('broad automerge passed');
+    const platformAutomerge = fixtureRows();
+    platformAutomerge[0].config.platformAutomerge = true;
+    if (!validateRows(platformAutomerge).length)
+      throw new Error('platform automerge bypass passed');
     const missingExclusion = fixtureRows();
     const typescriptRule = missingExclusion[0].config.packageRules.find((rule) =>
       rule.description.includes('TypeScript - require manual review')

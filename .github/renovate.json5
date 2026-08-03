@@ -29,9 +29,11 @@
   // override this schedule below.
   schedule: ["* 0-5 * * 1"],
 
-  // GitHub-native PR automerge is available only to the narrowly eligible rules
-  // below. The global false remains the fail-closed default for every other update.
-  platformAutomerge: true,
+  // Renovate owns the merge decision for the narrowly eligible rules below. GitHub
+  // platform automerge can merge while Renovate's stability-days status is pending,
+  // so it must remain disabled for minimumReleaseAge to be an effective guard.
+  // The global false remains the fail-closed default for every other update.
+  platformAutomerge: false,
   automerge: false,
   automergeType: "pr",
   automergeStrategy: "squash",
