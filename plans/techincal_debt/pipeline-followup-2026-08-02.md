@@ -11,7 +11,7 @@ tags: []
 **Area**: `server/src/engine/execution/pipeline/`, `server/src/engine/gates/`
 **Work type**: Tier 8 = explore, review only (**✓ complete 2026-08-02**) · Tier 9 = bug_fix
 (**✓ complete 2026-08-02**, `76630b73`) · Tier 10 = explore → tooling (raised by Tier 9) ·
-**Tiers 11-14 = refactor, scoped by Tier 8** — Tier 11 ✓ complete 2026-08-02; 12-14 open
+**Tiers 11-14 = refactor, scoped by Tier 8** — Tiers 11-12 ✓ complete 2026-08-02; 13-14 open
 **Predecessor**: [`pipeline-defect-remediation-2026-08-01.md`](./pipeline-defect-remediation-2026-08-01.md) (Tiers 1-7, complete)
 **Confidence**: high on Tier 9 findings (probed 2026-08-02) · Tier 8 is scoped to produce a
 finding, not a fix
@@ -403,7 +403,7 @@ Scoped by Tier 8 F1. Executed first per 8.4.
 > - Worse for the "no owner" claim: `shared/utils/constants.ts:8` already exported a
 >   `CHAIN_ID_PATTERN` holding that exact regex, and two call sites already imported it. A
 >   partial owner existed. Creating a fresh codec without absorbing it would have added a
->   *seventh* literal — this is the `defined` pre-flight check earning its place.
+>   _seventh_ literal — this is the `defined` pre-flight check earning its place.
 > - A fifth prose site the plan missed: `shared/types/execution.ts:105`. And a sixth
 >   inconsistency: the `constants.ts` doc called `N` a **version**; everything else calls it
 >   a **run number**.
@@ -421,27 +421,27 @@ Scoped by Tier 8 F1. Executed first per 8.4.
 
 ### Subtiers
 
-| #    | Status | Step                                                                                        | Files                                                                                      | Depends | Verification                                                             |
-| ---- | ------ | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------ |
-| 11.1 | ✓      | Re-measure the format's real footprint by behaviour, not by name                            | —                                                                                          | —       | 6 executable literals + 5 prose sites + 1 name collision (plan said 2+4) |
-| 11.2 | ✓      | Create the codec, absorbing the existing `CHAIN_ID_PATTERN` rather than duplicating it      | `shared/utils/chain-id-codec.ts` (new), `shared/utils/constants.ts`, `shared/utils/index.ts` | 11.1    | one `RUN_SUFFIX_PATTERN` literal serves strip, parse, and format         |
-| 11.3 | ✓      | Delete both private copies and rewire all 16 call sites                                     | `stages/13-session-stage.ts` (−39 ln), `modules/chains/manager.ts` (−43 ln)                 | 11.2    | `rg extractBaseChainId\|getRunNumber\|stripRunCounter` → 0 outside docs |
-| 11.4 | ✓      | Point the two inlined Zod regexes and the three prose assertions at the codec               | `validation/schemas.ts`, `prompt-engine.schema.ts`, `request-validator.ts`, `types/execution.ts` | 11.2    | `rg 'chain-\[a-zA-Z0-9_-\]'` → 1 hit, the codec                        |
-| 11.5 | ✓      | Break the `CHAIN_ID_PATTERN` name collision inside `shared/utils/`                          | `shared/utils/chainUtils.ts`                                                                | 11.2    | renamed `CHAIN_SLUG_PATTERN`, both meanings documented against each other |
-| 11.6 | ✓      | Unit-test the codec, encoding what the deleted copies did rather than a new contract        | `tests/unit/shared/chain-id-codec.test.ts` (new)                                            | 11.3    | 18/18                                                                    |
+| #    | Status | Step                                                                                   | Files                                                                                            | Depends | Verification                                                              |
+| ---- | ------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------- | ------------------------------------------------------------------------- |
+| 11.1 | ✓      | Re-measure the format's real footprint by behaviour, not by name                       | —                                                                                                | —       | 6 executable literals + 5 prose sites + 1 name collision (plan said 2+4)  |
+| 11.2 | ✓      | Create the codec, absorbing the existing `CHAIN_ID_PATTERN` rather than duplicating it | `shared/utils/chain-id-codec.ts` (new), `shared/utils/constants.ts`, `shared/utils/index.ts`     | 11.1    | one `RUN_SUFFIX_PATTERN` literal serves strip, parse, and format          |
+| 11.3 | ✓      | Delete both private copies and rewire all 16 call sites                                | `stages/13-session-stage.ts` (−39 ln), `modules/chains/manager.ts` (−43 ln)                      | 11.2    | `rg extractBaseChainId\|getRunNumber\|stripRunCounter` → 0 outside docs   |
+| 11.4 | ✓      | Point the two inlined Zod regexes and the three prose assertions at the codec          | `validation/schemas.ts`, `prompt-engine.schema.ts`, `request-validator.ts`, `types/execution.ts` | 11.2    | `rg 'chain-\[a-zA-Z0-9_-\]'` → 1 hit, the codec                           |
+| 11.5 | ✓      | Break the `CHAIN_ID_PATTERN` name collision inside `shared/utils/`                     | `shared/utils/chainUtils.ts`                                                                     | 11.2    | renamed `CHAIN_SLUG_PATTERN`, both meanings documented against each other |
+| 11.6 | ✓      | Unit-test the codec, encoding what the deleted copies did rather than a new contract   | `tests/unit/shared/chain-id-codec.test.ts` (new)                                                 | 11.3    | 18/18                                                                     |
 
 **Gate**: the format has one owner, and the stage no longer computes chain identity.
 
-| Check                             | Result                                                             |
-| --------------------------------- | ------------------------------------------------------------------ |
-| `npm run typecheck`               | clean                                                              |
-| eslint, my 11 files vs `HEAD`     | 329 vs 332 — **−3 `strict-boolean-expressions`, no rule added**    |
-| `npm run typecheck:tests:ratchet` | 395 in `tests/`, no regressions                                     |
-| `npm run test:unit`               | 149 suites / 1816 tests                                             |
-| `npm run test:integration`        | 34 suites / 434 tests                                               |
-| `npm run validate:arch`           | 440 modules, 2 pre-existing warnings                                |
-| `npm run validate:contracts`      | in sync                                                            |
-| `npm run verify:mcp`              | 11/11                                                              |
+| Check                             | Result                                                          |
+| --------------------------------- | --------------------------------------------------------------- |
+| `npm run typecheck`               | clean                                                           |
+| eslint, my 11 files vs `HEAD`     | 329 vs 332 — **−3 `strict-boolean-expressions`, no rule added** |
+| `npm run typecheck:tests:ratchet` | 395 in `tests/`, no regressions                                 |
+| `npm run test:unit`               | 149 suites / 1816 tests                                         |
+| `npm run test:integration`        | 34 suites / 434 tests                                           |
+| `npm run validate:arch`           | 440 modules, 2 pre-existing warnings                            |
+| `npm run validate:contracts`      | in sync                                                         |
+| `npm run verify:mcp`              | 11/11                                                           |
 
 **Deliberately left duplicated**: `tooling/contracts/prompt-engine.json:44` states the format in
 the `chain_id` tool description, which regenerates `_generated/prompt_engine.generated.ts:62`.
@@ -452,6 +452,75 @@ call, so the format belongs inline there. It is a duplicate by design, and the o
 
 ---
 
+## Tier 12: framework-requirement derivation — ✓ COMPLETE 2026-08-02
+
+Scoped by Tier 8 F2.
+
+> **The stated approach is rejected on evidence; the deliverable stands.** 8.4 scoped this
+> tier as "fold framework-requirement derivation into `FrameworkDecisionAuthority`" and rated
+> the risk as "changes decision-cache timing; needs a Tier-7-style differential". The risk is
+> worse than that, and it is not a timing question — the fold would be **silently inert**:
+>
+> - `FrameworkDecisionAuthority.decide()` caches on first call and returns the cached value
+>   thereafter, ignoring later input.
+> - `GateEnhancementService.getActiveFrameworkId()` calls it via `getFrameworkId()` on the
+>   main path for both single prompts and chains — from **stage 11**, before this stage runs.
+>   `19-phase-guard-verification-stage.ts:213` already documents this ("populated by
+>   GateEnhancementStage").
+> - So a requirement folded into `decide()` would be evaluated at stage 11 — before
+>   `currentRequestFrameworkGates` is loaded here in stage 12's `execute`, and from a service
+>   with no access to the framework-gate set. `hasFrameworkGate` would see an empty set and
+>   every gate-derived requirement would read false.
+>
+> The derivation therefore stays in the stage, with the reason recorded in the code beside it.
+> The tier's actual deliverable — kill the duplicated block — is unaffected and was done.
+
+> **The duplicate was not merely duplicated; it was unreachable-as-distinct.** The first block
+> (old lines 118-136) ran only when `!decision.shouldApply`, which makes the second block's
+> extra `|| decision.shouldApply` term a no-op in exactly that state. Both blocks computed the
+> same value from the same inputs and took the same branch with the same log message, so the
+> first could never change an outcome. Deletion is subsumption, not equivalence-under-change.
+
+> **A third finding, of the Tier 9 class.** The stage's `buildDecisionInput` passed
+> `globalActiveFramework: context.frameworkContext?.selectedFramework?.id`. `rg` for writers of
+> `context.frameworkContext` returns **two, both in this stage, both downstream of that read** —
+> so the field was structurally always `undefined` and the authority's Priority 3 could never
+> fire from here. Not observable, because `FrameworkManager.selectFramework({})` independently
+> consults the same framework state store, and because `GateEnhancementService` supplies the
+> field for real from its own provider. Removed rather than repaired: adding a provider
+> fallback here would create a second producer for a channel that already has one, to fix
+> nothing a user can see. This is precisely what Tier 10's detector is meant to find mechanically.
+
+### Subtiers
+
+| #    | Status | Step                                                                             | Files                                                            | Depends | Verification                                                       |
+| ---- | ------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------- | ------------------------------------------------------------------ |
+| 12.1 | ✓      | Establish whether the fold is safe before doing it                               | `gate-enhancement-service.ts`, `framework-decision-authority.ts` | —       | **Rejected**: stage 11 primes the cache; fold would be inert       |
+| 12.2 | ✓      | Delete the duplicated derivation block                                           | `stages/12-framework-stage.ts`                                   | 12.1    | −19 ln; cognitive **23 → under 15**                                |
+| 12.3 | ✓      | Record in code why the derivation stays in the stage                             | `stages/12-framework-stage.ts`                                   | 12.1    | comment names the cache-priming caller and the gate-set dependency |
+| 12.4 | ✓      | Remove the structurally-dead `globalActiveFramework` input and the unused import | `stages/12-framework-stage.ts`                                   | 12.2    | `FrameworkSelection` unused-import violation cleared               |
+| 12.5 | ✓      | Differential over the removed block's whole reachable state space                | `tests/unit/execution/pipeline/framework-stage.test.ts`          | 12.2    | **17/17 against unmodified `HEAD` and 17/17 after**                |
+
+**Gate**: the derivation exists once, and its placement is justified rather than assumed.
+
+| Check                        | Result                                                               |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `npm run typecheck`          | clean                                                                |
+| eslint, the stage vs `HEAD`  | 17 → 13; cognitive-complexity and no-unused-vars cleared, none added |
+| `npm run test:unit`          | 150 suites / 1830 tests                                              |
+| `npm run test:integration`   | 34 suites / 434 tests                                                |
+| `npm run validate:arch`      | 441 modules                                                          |
+| `npm run validate:contracts` | in sync                                                              |
+| `npm run verify:mcp`         | 11/11                                                                |
+
+**Left alone deliberately**: `chainStepsRequireFramework`, `stepRequiresFramework`, and
+`hasFrameworkGate` remain private methods on the stage, which `architecture.md` nominally bans
+in orchestration. They read the request-scoped framework-gate set this stage loads and owns;
+moving them without moving that load would put an async dependency behind a synchronous call.
+F2's ownership complaint is answered by the cache finding above, not by relocating three
+predicates.
+
+---
 
 ## Tier 10: Mechanical check for write-never state fields — NEW, from Tier 9
 

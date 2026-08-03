@@ -671,7 +671,7 @@ rejected-alternative note warns about.
 
 - **D20 — the tier's own inventory was wrong in both directions, and re-measuring changed
   the design.** Tier 8 F1 recorded "two code copies + four prose assertions". Probing the
-  regex literal instead of the method names found six *executable* literals (two of the four
+  regex literal instead of the method names found six _executable_ literals (two of the four
   "prose" sites are inlined Zod regexes) and, decisively, an already-exported
   `CHAIN_ID_PATTERN` in `shared/utils/constants.ts` holding the same regex with two live
   importers. Had the codec been written to the plan's inventory it would have become a
@@ -683,7 +683,7 @@ rejected-alternative note warns about.
   Tier 11 first because it "carries a correctness defect rather than a layering one". It does
   not: both strip copies are byte-identical, both parse copies behave identically on every
   input, and every prompt id in the repo conforms to the validating character class, so no id
-  can be minted that validation would later reject. The defect is latent drift. The *ranking*
+  can be minted that validation would later reject. The defect is latent drift. The _ranking_
   still holds for a different reason — it is the smallest and the only pure substitution — so
   the tier ran, with the justification corrected in the plan rather than silently inherited.
 
@@ -712,3 +712,53 @@ uncommitted CLI/release work, so it cannot attribute a violation. Measured inste
 exactly the 11 changed source files against a detached `HEAD` worktree: **332 → 329**, the
 delta being −3 `strict-boolean-expressions` and no rule increased. Two violations I did
 introduce (`import-x/order`, `prettier/prettier`) were found this way and fixed before commit.
+
+## Tier 12 — framework-requirement derivation (2026-08-02)
+
+### Deviations
+
+- **D25 — the tier's prescribed approach was rejected, and the rejection is the finding.**
+  8.4 said "fold framework-requirement derivation into `FrameworkDecisionAuthority`" and
+  priced the risk as cache _timing_. Probing the caller graph first (`rg` for
+  `frameworkAuthority` outside the authority's own directory) showed
+  `GateEnhancementService.getActiveFrameworkId` calls `getFrameworkId` → `decide()` from
+  **stage 11**, one stage earlier, on the main path for both single prompts and chains. Since
+  `decide()` caches on first call, a requirement folded into it would be computed before
+  stage 12 loads `currentRequestFrameworkGates` — so every gate-derived requirement would
+  evaluate against an empty set and read false. Not a timing risk to be differentialled; a
+  fold that cannot work. The stage keeps the derivation, and the code now says why.
+
+- **D26 — the "duplicated block" was strictly weaker than duplicated.** The first block was
+  guarded by `!decision.shouldApply`, which makes the second block's extra
+  `|| decision.shouldApply` term a no-op in precisely that state. Same inputs, same value,
+  same branch, same log message — it could not change an outcome. So the deletion is
+  subsumption rather than equivalence-under-change, which is a stronger claim than the
+  differential alone would give. The differential was still written and still run against
+  unmodified `HEAD` (17/17 both sides), because the argument is only as good as its premise
+  about the guard.
+
+- **D27 — a Tier-9-class dead field was found by hand and removed, not repaired.** The
+  stage's `buildDecisionInput` set `globalActiveFramework` from
+  `context.frameworkContext?.selectedFramework?.id`; `rg` for writers of that property
+  returns two, both in this same stage and both downstream of the read. Structurally always
+  `undefined`. Applying the Zero-Writers rule — the user-facing interface decides whether a
+  reader-with-no-writer means a missing producer or a redundant channel — the channel already
+  has a real producer in `GateEnhancementService`, and `FrameworkManager.selectFramework({})`
+  independently resolves the active framework from the same state store, so nothing is
+  observably broken. Adding a second producer to "fix" it would have been the wrong repair.
+  Removed, with the real producer named in a comment.
+
+- **D28 — three private predicates were left in the stage against `architecture.md`.**
+  `chainStepsRequireFramework`, `stepRequiresFramework`, and `hasFrameworkGate` are private
+  helpers on an orchestration class, which the layer model bans. They close over the
+  request-scoped framework-gate set that this stage loads asynchronously in `execute`. Moving
+  them without moving that load would hide an async dependency behind a synchronous call —
+  the same trap as D25 one level down. Recorded rather than silently accepted.
+
+### Lint accounting
+
+Same method as Tier 11: eslint over the single changed source file against a detached `HEAD`
+worktree. **17 → 13** — `sonarjs/cognitive-complexity` (23 → under 15) and
+`@typescript-eslint/no-unused-vars` (the unused deprecated `FrameworkSelection` import)
+cleared, `no-unnecessary-condition` and `strict-boolean-expressions` each down one, nothing
+added.

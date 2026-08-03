@@ -3,10 +3,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
-import type {
-  FrameworkExecutionContext,
-  FrameworkSelection,
-} from '../../../frameworks/types/index.js';
+import type { FrameworkExecutionContext } from '../../../frameworks/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
 import type { ExecutionContext } from '../../context/index.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
@@ -115,27 +112,12 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       }
     }
 
-    // For non-modifier disabling (no framework configured), check if resolution is needed
-    if (!decision.shouldApply && decision.source === 'disabled' && !decision.reason.includes('%')) {
-      // Framework not configured, but check if we need it
-      const chainRequiresFramework = context.hasChainCommand()
-        ? this.chainStepsRequireFramework(context)
-        : false;
-      const singleRequiresFramework = context.hasSinglePromptCommand()
-        ? this.hasFrameworkGate(context.parsedCommand.inlineGateIds)
-        : false;
-
-      const requiresFramework = Boolean(
-        plan.requiresFramework || chainRequiresFramework || singleRequiresFramework
-      );
-
-      if (!requiresFramework) {
-        this.logExit({ skipped: 'Framework not required' });
-        return;
-      }
-    }
-
-    // If decision says to apply, or if requirements trigger framework resolution
+    // A framework is resolved when the authority says to apply one, or when the plan or a
+    // framework gate requires one regardless. This derivation stays in the stage rather than
+    // folding into FrameworkDecisionAuthority: the authority caches on first `decide()`, and
+    // GateEnhancementService (stage 11) calls it first on the normal path — so a requirement
+    // computed inside `decide()` would be evaluated before `currentRequestFrameworkGates` is
+    // loaded here, and would silently never apply. See Tier 12 in the follow-up plan.
     const chainRequiresFramework = context.hasChainCommand()
       ? this.chainStepsRequireFramework(context)
       : false;
@@ -191,11 +173,11 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       decisionInput.operatorOverride = operatorOverride;
     }
 
-    const globalActiveFramework = context.frameworkContext?.selectedFramework?.id;
-    if (globalActiveFramework) {
-      decisionInput.globalActiveFramework = globalActiveFramework;
-    }
-
+    // `globalActiveFramework` is deliberately absent. Its only source here would be
+    // `context.frameworkContext`, whose sole writer is this stage, further down — so at this
+    // point it is always undefined and the field could never be populated. The channel is
+    // real, but its producer is GateEnhancementService, which resolves the active framework
+    // from its own provider and primes the authority's cache at stage 11.
     return decisionInput;
   }
 
