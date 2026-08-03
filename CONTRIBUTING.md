@@ -228,6 +228,17 @@ Run validations that match what you changed:
 | Documentation only         | Verify references against `server/dist/**`                 | Yes       |
 | Dependencies               | `npm audit` + full test suite                              | Yes       |
 
+Push validation is impact-aware and fail-closed:
+
+| Push contents                                                                             | Hosted/local route                                                               |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Canonical docs/plan Markdown only                                                         | Text hygiene and formatting; protected CI job names still report success/failure |
+| `hooks/**` plus optional docs                                                             | Python validation plus text hygiene                                              |
+| Source, tests, dependency files, workflows, configuration, mixed, empty, or unknown paths | Full validation, CLI, build, and Node test matrix                                |
+
+The canonical routing rules live in `scripts/classify-validation-scope.js`. Do not add
+a competing path list to a hook or required workflow.
+
 ### Minimum Validation (before any commit)
 
 ```bash
@@ -241,7 +252,8 @@ npm run typecheck && npm run lint:ratchet && npm test && npm run validate:all
 ```
 
 > [!TIP]
-> Pre-push hooks run this automatically. If a push is blocked, fix the issue -- don't bypass hooks.
+> Pre-push hooks select the appropriate route automatically. If a push is blocked, fix
+> the issue -- don't bypass hooks.
 
 ## Issues & Pull Requests
 

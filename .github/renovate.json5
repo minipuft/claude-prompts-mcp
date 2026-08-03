@@ -29,8 +29,9 @@
   // override this schedule below.
   schedule: ["* 0-5 * * 1"],
 
-  // Auto-merge configuration
-  platformAutomerge: false,
+  // GitHub-native PR automerge is available only to the narrowly eligible rules
+  // below. The global false remains the fail-closed default for every other update.
+  platformAutomerge: true,
   automerge: false,
   automergeType: "pr",
   automergeStrategy: "squash",
@@ -64,6 +65,7 @@
       matchFileNames: ["server/package.json"],
       matchDepTypes: ["dependencies"],
       semanticCommitType: "fix",
+      automerge: false,
     },
     {
       description: "Group nonbreaking server runtime updates",
@@ -79,10 +81,19 @@
       groupName: "Development dependencies",
     },
     {
+      description: "Automerge stable nonmajor development updates after a 14-day soak",
+      matchDepTypes: ["devDependencies"],
+      matchCurrentVersion: "!/^0/",
+      matchUpdateTypes: ["minor", "patch", "pin", "digest"],
+      minimumReleaseAge: "14 days",
+      automerge: true,
+    },
+    {
       description: "Isolate major updates for manual review",
       matchUpdateTypes: ["major"],
       groupName: null,
       reviewers: ["minipuft"],
+      automerge: false,
     },
     {
       // No `allowedVersions` pin here on purpose. Both holds this file used to carry were
@@ -94,6 +105,7 @@
       matchPackageNames: ["typescript"],
       reviewers: ["minipuft"],
       groupName: "TypeScript",
+      automerge: false,
       prBodyNotes: [
         "### TypeScript 7 is BLOCKED — close this PR unless all three boxes tick",
         "",
@@ -114,11 +126,13 @@
       schedule: ["at any time"],
       reviewers: ["minipuft"],
       groupName: "MCP SDK",
+      automerge: false,
     },
     {
       description: "Testing frameworks - require validation",
       matchPackageNames: ["jest", "ts-jest", "@types/jest", "@jest/**"],
       groupName: "Testing frameworks",
+      automerge: false,
     },
     {
       description: "ESLint and Prettier - require validation",
@@ -129,19 +143,37 @@
         "typescript-eslint",
         "eslint-config-*",
         "eslint-plugin-*",
+        "@commitlint/**",
       ],
       groupName: "Linting and formatting tools",
+      automerge: false,
+    },
+    {
+      description: "Build, packaging, and developer-hook tools require manual review",
+      matchPackageNames: [
+        "@anthropic-ai/mcpb",
+        "dependency-cruiser",
+        "esbuild",
+        "husky",
+        "lint-staged",
+        "ts-morph",
+        "tsx",
+      ],
+      groupName: "Build and developer tooling",
+      automerge: false,
     },
     {
       description: "GitHub Actions - one executable supply-chain boundary",
       matchManagers: ["github-actions"],
       groupName: "GitHub Actions",
+      automerge: false,
     },
     {
       description: "Pinned Python validation tools",
       matchDatasources: ["pypi"],
-      matchPackageNames: ["ruff", "pyrefly"],
+      matchPackageNames: ["ruff", "pyrefly", "pytest", "PyYAML"],
       groupName: "Python validation tools",
+      automerge: false,
     },
     // The zod <4.0.0 hold was removed on 2026-08-01, together with the migration it was
     // deferring. What satisfied it: @modelcontextprotocol/sdk 1.30.0 accepts ^3.25 || ^4.0,
@@ -194,7 +226,7 @@
   lockFileMaintenance: {
     enabled: true,
     schedule: ["* 0-5 * * 1"],
-    automerge: false,
+    automerge: true,
     commitMessageAction: "refresh",
   },
 
@@ -210,7 +242,7 @@
 
   // Tool versions pinned inside workflow `run:` steps are invisible to every built-in
   // manager — nothing parses a shell line. MCPB is deliberately absent here because its
-  // exact root devDependency is the sole update path. The three remaining workflow tools
+  // exact root devDependency is the sole update path. The five remaining workflow tools
   // need exact regex managers so their pins stay maintainable.
   customManagers: [
     {
@@ -231,6 +263,26 @@
         "run: pip install pyrefly==(?<currentValue>[0-9][^\\s\"']*) --quiet",
       ],
       depNameTemplate: "pyrefly",
+      datasourceTemplate: "pypi",
+    },
+    {
+      customType: "regex",
+      description: "Pinned Pytest version in the CI workflow",
+      managerFilePatterns: ["/^\\.github\\/workflows\\/ci\\.yml$/"],
+      matchStrings: [
+        "run: pip install pytest==(?<currentValue>[0-9][^\\s\"']*) --quiet",
+      ],
+      depNameTemplate: "pytest",
+      datasourceTemplate: "pypi",
+    },
+    {
+      customType: "regex",
+      description: "Pinned PyYAML version in the CI workflow",
+      managerFilePatterns: ["/^\\.github\\/workflows\\/ci\\.yml$/"],
+      matchStrings: [
+        "run: pip install PyYAML==(?<currentValue>[0-9][^\\s\"']*) --quiet",
+      ],
+      depNameTemplate: "PyYAML",
       datasourceTemplate: "pypi",
     },
     {

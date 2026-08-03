@@ -19,13 +19,13 @@
 ### Acceptance criteria
 
 1. Server production dependencies resolve to `fix(deps)`; development, Action, Python-tool, and root-tooling updates resolve to `chore(deps)`.
-2. Extraction finds all three npm manifests, both lock domains, seven external-Action files, `.node-version`, Ruff, Pyrefly, Renovate, and MCPB.
+2. Extraction finds all three npm manifests, both lock domains, seven external-Action files, `.node-version`, Ruff, Pyrefly, Pytest, PyYAML, Renovate, and MCPB.
 3. Every external Action reference is a verified 40-character commit SHA with a readable same-line version comment.
 4. `main` requires exactly `Lint & Validate`, `CLI`, `Build`, and `Test Suite`.
 5. Extension dependency versions come from a committed lock and two clean builds produce equivalent unpacked dependency/file inventories.
 6. Server runtime metadata states Node >=22.13.0; CLI remains >=18.18; local and publish tooling use Node 24; server CI covers 22.13.0 and 24.
 7. The obsolete security rule, nonexistent labels, broad MCPB regex path, unpinned MCPB invocation, unlocked staging install, monthly lock schedule, and conflicting range strategy are removed.
-8. Limited automerge is enabled only after two successful scheduled cycles and excludes 0.x, production, major, Action, TypeScript, MCP SDK, vulnerability, and critical-tool updates.
+8. Limited automerge is enabled after hosted Phase 6 evidence and an explicit maintainer risk decision; it excludes 0.x, production, major, Action, TypeScript, MCP SDK, vulnerability, and critical-tool updates.
 
 ## 2. Context and Evidence
 
@@ -85,7 +85,7 @@ The individual mechanisms exist, but the contract between them is incomplete:
 7. **Reuse the server lock for extension staging.** Copy the server manifest, lock, and `.npmrc` to a temporary install root, run `npm ci --omit=dev --ignore-scripts`, and then produce the filtered staged manifest. Do not create a second committed dependency manifest/lock.
 8. **Make local extraction blocking while Renovate is pinned.** The local platform is documented as experimental, so a Renovate bump must update the parser and evidence atomically if output shape changes.
 9. **Do not add npm `min-release-age` now.** Renovate remains the age gate. Reconsider only when every supported CI line uses a verified compatible npm and an emergency-exclusion procedure exists.
-10. **Automerge follows observation.** First deploy with automerge disabled; enable only stable nonmajor development and lock refreshes after two successful weekly cycles.
+10. **Automerge follows evidence.** First deploy with automerge disabled; enable only stable nonmajor development and lock refreshes after hosted proof plus an explicit maintainer risk decision.
 
 ### Primary references
 
@@ -216,12 +216,12 @@ hosted evidence; a Renovate PR cannot merge until all four protected checks pass
 
 ### Phase 7 — Bounded automerge and migration closeout
 
-| #   | Target                   | Change                                                                                                                                          | Depends | Verification                                 |
-| --- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------- |
-| 7.1 | Observation ledger       | Record two consecutive weekly cycles with no extraction miss, protection bypass, packaging mismatch, or incorrect release classification.       | Phase 6 | Two dated sets of PR/check/artifact evidence |
-| 7.2 | `.github/renovate.json5` | Enable platform PR automerge only for stable nonmajor dev dependencies and lock maintenance, with 14-day age and explicit high-risk exclusions. | 7.1     | Resolved config plus canary dev patch        |
-| 7.3 | `.github/renovate.json5` | Delete rollout-only `automerge:false` fields from the eligible rules once 7.2 is canonical; retain durable manual exclusions.                   | 7.2     | Config search and resolved config            |
-| 7.4 | Plan and notes           | Mark every superseded path removed and the new path canonical. Do not close with a migrating item.                                              | 7.2–7.3 | Final removal matrix and clean tree          |
+| #   | Target                   | Change                                                                                                                                               | Depends | Verification                                  |
+| --- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------- |
+| 7.1 | Observation ledger       | Record the Phase 6 hosted cycle and the maintainer's explicit decision to accelerate the second-cycle guard based on prior dependency-bot operation. | Phase 6 | Dated PR/check evidence plus deviation record |
+| 7.2 | `.github/renovate.json5` | Enable platform PR automerge only for stable nonmajor dev dependencies and lock maintenance, with 14-day age and explicit high-risk exclusions.      | 7.1     | Resolved config plus canary dev patch         |
+| 7.3 | `.github/renovate.json5` | Delete rollout-only `automerge:false` fields from the eligible rules once 7.2 is canonical; retain durable manual exclusions.                        | 7.2     | Config search and resolved config             |
+| 7.4 | Plan and notes           | Mark every superseded path removed and the new path canonical. Do not close with a migrating item.                                                   | 7.2–7.3 | Final removal matrix and clean tree           |
 
 **Gate:** canary merges only after four checks; full validation passes; removal searches are clean; lifecycle table contains only `canonical` or `removed`.
 
@@ -282,7 +282,7 @@ The full `npm run lint` and `npm run validate:all` status must be reported separ
 | Protected delivery       | Branch API + canary PR           | Four exact checks required and enforced.                         |
 | Deterministic MCPB       | Two clean builds                 | Same locked dependency/file inventory; MCPB validation passes.   |
 | Accurate runtime support | Search + matrix                  | No stale server-18 claim; server 22/24 and CLI contract pass.    |
-| Safe automation          | Two cycles + canary              | Only eligible dev/lock PR auto-merges after four checks.         |
+| Safe automation          | Hosted evidence + canary         | Only eligible dev/lock PR auto-merges after four checks.         |
 | Migration closed         | Removal matrix                   | No `migrating` artifact or superseded path remains.              |
 
 ### Documentation updates
@@ -311,18 +311,18 @@ The full `npm run lint` and `npm run validate:all` status must be reported separ
 
 ### Mandatory legacy-removal matrix
 
-| Superseded artifact                          | Delete when                                        | Proof                             | Final state |
-| -------------------------------------------- | -------------------------------------------------- | --------------------------------- | ----------- |
-| Global `chore(deps)` prefix                  | Semantic extraction assertions pass                | Production `fix`, tooling `chore` | `removed`   |
-| Generic security patch/auto-merge rule       | Vulnerability alert policy resolves correctly      | Immediate manual alert extraction | `removed`   |
-| Nonexistent category labels                  | Minimal-label config validates against live labels | Label comparison                  | `removed`   |
-| Broad MCPB/global npm regex path             | Root MCPB extraction passes                        | Exactly one npm extraction        | `removed`   |
-| Unpinned `npx @anthropic-ai/mcpb`            | Root local MCPB validates                          | Root `npm ci` + MCPB validate     | `removed`   |
-| Staged `npm install`                         | Server-lock staging builds twice                   | Equivalent inventories            | `removed`   |
-| Mutable external Action tags                 | All pins/workflows pass                            | Pin validator + CI                | `removed`   |
-| Two-check live protection                    | All four contexts have recent runs                 | Protection GET + canary           | `removed`   |
-| Collapsed Node 18–24 server claim            | Docs and matrix agree                              | Stale-claim search                | `removed`   |
-| Rollout-only eligible-rule `automerge:false` | Two-cycle guard passes and canary succeeds         | Hosted canary                     | `removed`   |
+| Superseded artifact                          | Delete when                                                | Proof                             | Final state |
+| -------------------------------------------- | ---------------------------------------------------------- | --------------------------------- | ----------- |
+| Global `chore(deps)` prefix                  | Semantic extraction assertions pass                        | Production `fix`, tooling `chore` | `removed`   |
+| Generic security patch/auto-merge rule       | Vulnerability alert policy resolves correctly              | Immediate manual alert extraction | `removed`   |
+| Nonexistent category labels                  | Minimal-label config validates against live labels         | Label comparison                  | `removed`   |
+| Broad MCPB/global npm regex path             | Root MCPB extraction passes                                | Exactly one npm extraction        | `removed`   |
+| Unpinned `npx @anthropic-ai/mcpb`            | Root local MCPB validates                                  | Root `npm ci` + MCPB validate     | `removed`   |
+| Staged `npm install`                         | Server-lock staging builds twice                           | Equivalent inventories            | `removed`   |
+| Mutable external Action tags                 | All pins/workflows pass                                    | Pin validator + CI                | `removed`   |
+| Two-check live protection                    | All four contexts have recent runs                         | Protection GET + canary           | `removed`   |
+| Collapsed Node 18–24 server claim            | Docs and matrix agree                                      | Stale-claim search                | `removed`   |
+| Rollout-only eligible-rule `automerge:false` | Maintainer accepts accelerated rollout and canary succeeds | Hosted canary                     | `removed`   |
 
 ### Release convention
 

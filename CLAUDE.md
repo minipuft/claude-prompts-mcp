@@ -20,7 +20,7 @@
 
 The server floor is where `node:sqlite` is available without an experimental flag. The standalone CLI remains a separate, self-contained compatibility surface.
 
-## Validation Gates (one contract, two subsets)
+## Validation Gates (one contract, impact-aware subsets)
 
 **CI is the contract; every other gate is a documented strict subset of it.**
 
@@ -28,21 +28,31 @@ The three gates once ran three different suites with no subset relation, so a gr
 `pre-push` did not predict CI and `validate:full` did not either -- that is how a pyrefly
 failure reached `main` from a clean local push.
 
-| Gate | Runs | Relation |
-|------|------|----------|
-| CI `Lint & Validate` + `Build` | typecheck · `validate:all` (23) · build · tests | **The contract** |
-| `.husky/pre-push` | typecheck · lint:ratchet · prettier · validate:python · test:ci · validate:arch · validate:versions · build | strict subset -- every step also runs in CI |
-| `.husky/pre-commit` | contract regen · generated-file guard · lint:staged · validate:python\* · lint:ratchet · typecheck | strict subset, `<10s` budget |
+`scripts/classify-validation-scope.js` is the changed-path SSOT for local push and CI.
+It recognizes two narrow safe scopes and sends every empty, mixed, executable,
+configuration, dependency, deleted-unknown, or unrecognized change to `full`.
+
+| Scope | Trigger | Pre-push | CI |
+|------|---------|----------|----|
+| `docs` | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | changed-line hygiene + Prettier on existing changed files | classifier hygiene; four protected jobs report intentional lightweight passes |
+| `hooks` | only `hooks/**` plus optional docs | docs checks + `validate:python` | pinned Ruff/Pyrefly/Pytest/PyYAML; other protected jobs report intentional lightweight passes |
+| `full` | everything else; empty/unknown input | typecheck · lint ratchet · format · conditional Python · unit tests · architecture · versions · build | typecheck · `validate:all` · CLI · build/smoke/schema · Node 22/24 unit/coverage/integration/E2E |
+
+The CI workflow remains unconditional. Do not add workflow-level `paths` or
+`paths-ignore`: a required workflow skipped before jobs exist leaves its context
+pending. Routing happens inside the workflow while the literal `Lint & Validate`,
+`CLI`, `Build`, and `Test Suite` job names remain stable.
+
+`.husky/pre-commit` remains the fast contract-regeneration, staged-lint, conditional
+Python, lint-ratchet, and typecheck gate. Every local route remains a subset of CI.
 
 **Adding a step to a hook that CI does not run breaks the contract** -- add it to
 `validate:all` first, which CI runs whole. Removing a step CI depends on breaks it too.
 \* conditional on `hooks/` changes.
 
-Formatting is covered by `validate:format` (a `validate:all` member), which checks every
-repo-level JSON/MD/YAML tracked by git. `pre-push` checks only the files in the push
-range, so it stays a subset. Anything a generator owns belongs in `.prettierignore` with
-a reason -- otherwise the generator and Prettier disagree and every commit touching that
-file fails.
+Formatting is covered by `validate:format` in the full route. `pre-push` checks existing
+repo-level JSON/MD/YAML files in the push range. Anything a generator owns belongs in
+`.prettierignore` with a reason -- otherwise the generator and Prettier disagree.
 
 ## Documentation Map
 
