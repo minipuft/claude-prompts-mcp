@@ -1,3 +1,10 @@
+---
+title: "Pipeline Follow-up — Tiers 8-9"
+date: 2026-08-02
+status: backlog
+tags: []
+---
+
 # Pipeline Follow-up — Tiers 8-9
 
 **Date**: 2026-08-02
