@@ -7,8 +7,9 @@
  * How long a server instance lives differs between the two paths, and that
  * difference is the shape of this module under protocol revision 2026-07-28:
  *
- * - STDIO serves one long-lived `McpServer` for the life of the connection, so
- *   it holds a direct reference and connects it to a `StdioServerTransport`.
+ * - STDIO serves one long-lived `McpServer` for the life of the connection.
+ *   `serveStdio` selects the era on the opening exchange and pins one instance
+ *   from the factory for that connection.
  * - HTTP has no protocol session. `createMcpHandler` constructs a fresh server
  *   per request from the supplied factory, so nothing is retained between
  *   exchanges and there is no session registry to keep.
@@ -19,14 +20,15 @@
 
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpHandler } from '@modelcontextprotocol/server';
-import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import express from 'express';
 
 import { ConfigLoader } from '../../config/index.js';
 import { Logger } from '../../logging/index.js';
 
 import type { TransportMode } from '#shared/types/index.js';
-import type { McpHttpHandler, McpServer, McpServerFactory } from '@modelcontextprotocol/server';
+import type { McpHttpHandler, McpServerFactory } from '@modelcontextprotocol/server';
+import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
 /**
  * Transport types supported by the server
@@ -42,19 +44,25 @@ export enum TransportType {
  */
 export class TransportRouter {
   private logger: Logger;
-  private mcpServer: McpServer;
+  private stdioServerFactory: McpServerFactory;
   private mcpServerFactory: McpServerFactory;
   private transport: TransportMode;
   private httpHandler?: McpHttpHandler;
+  private stdioHandle?: StdioServerHandle;
 
+  /**
+   * Two factories, because the two transports pin instances differently:
+   * `stdioServerFactory` is called once for the connection and its instance is
+   * long-lived, while `mcpServerFactory` is called per HTTP request.
+   */
   constructor(
     logger: Logger,
-    mcpServer: McpServer,
+    stdioServerFactory: McpServerFactory,
     mcpServerFactory: McpServerFactory,
     transport: TransportMode
   ) {
     this.logger = logger;
-    this.mcpServer = mcpServer;
+    this.stdioServerFactory = stdioServerFactory;
     this.mcpServerFactory = mcpServerFactory;
     this.transport = transport;
   }
@@ -84,27 +92,34 @@ export class TransportRouter {
   }
 
   /**
-   * Setup STDIO transport
+   * Setup STDIO transport.
+   *
+   * `serveStdio` owns the era decision for the connection: the opening exchange
+   * selects the era, one instance from the factory is pinned for the connection
+   * lifetime, and everything after passes through to it.
+   *
+   * Connecting an `McpServer` to a `StdioServerTransport` directly — the v1
+   * pattern this replaces — leaves the connection permanently 2025-era. It
+   * answers `tools/list` from a modern client because the protocol layer is
+   * permissive, but `server/discover` and `subscriptions/listen` return
+   * `-32601`, and the request `_meta` envelope is never lifted, so per-request
+   * client identity is invisible.
    */
-  async setupStdioTransport(): Promise<void> {
+  setupStdioTransport(): void {
     this.logger.info('Starting server with STDIO transport');
-
-    // Create the STDIO transport - aligned with MCP SDK pattern
-    const stdioTransport = new StdioServerTransport();
 
     // Setup STDIO event handlers
     this.setupStdioEventHandlers();
 
-    // Connect the server to the transport - standard MCP SDK pattern
-    try {
-      await this.mcpServer.connect(stdioTransport);
-      this.logger.info(
-        'STDIO transport connected successfully - server ready for MCP client connections'
-      );
-    } catch (error) {
-      this.logger.error('Error connecting to STDIO transport:', error);
-      process.exit(1);
-    }
+    this.stdioHandle = serveStdio(this.stdioServerFactory, {
+      onerror: (error: Error) => {
+        this.logger.error('STDIO transport error:', error);
+      },
+    });
+
+    this.logger.info(
+      'STDIO transport connected successfully - server ready for MCP client connections'
+    );
   }
 
   /**
@@ -203,6 +218,12 @@ export class TransportRouter {
    * per-request by construction and holds nothing between exchanges.
    */
   async closeAllConnections(): Promise<void> {
+    if (this.stdioHandle) {
+      this.logger.info('Closing STDIO connection');
+      await this.stdioHandle.close();
+      this.stdioHandle = undefined;
+    }
+
     if (!this.httpHandler) {
       return;
     }
@@ -217,9 +238,9 @@ export class TransportRouter {
  */
 export function createTransportRouter(
   logger: Logger,
-  mcpServer: McpServer,
+  stdioServerFactory: McpServerFactory,
   mcpServerFactory: McpServerFactory,
   transport: TransportMode
 ): TransportRouter {
-  return new TransportRouter(logger, mcpServer, mcpServerFactory, transport);
+  return new TransportRouter(logger, stdioServerFactory, mcpServerFactory, transport);
 }

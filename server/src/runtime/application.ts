@@ -20,6 +20,7 @@ import { buildHealthReport } from './health.js';
 import { initializeModules } from './module-initializer.js';
 import { resolveRuntimeLaunchOptions, RuntimeLaunchOptions } from './options.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
+import { registerMcpResources as registerMcpResourcesOn } from './resource-registration.js';
 import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
 import { startServerWithManagers } from './startup-server.js';
 import { TelemetryLifecycle } from './telemetry-lifecycle.js';
@@ -37,11 +38,11 @@ import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js
 import { GateManager } from '#engine/gates/gate-manager.js';
 import { ConfigLoader } from '#infra/config/index.js';
 import { HookRegistry } from '#infra/hooks/index.js';
-import { EnhancedLogger, Logger } from '#infra/logging/index.js';
+import { Logger } from '#infra/logging/index.js';
 import { McpNotificationEmitter } from '#infra/observability/notifications/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { reloadPromptData } from '#modules/prompts/prompt-refresh-service.js';
-import { registerResources } from '#modules/resources/index.js';
+import { notifyResourcesChanged } from '#modules/resources/index.js';
 import { ConversationStore, createConversationStore } from '#modules/text-refs/conversation.js';
 import { TextReferenceStore } from '#modules/text-refs/index.js';
 import { ResolvedFrameworkConfig, TransportMode } from '#shared/types/index.js';
@@ -348,6 +349,20 @@ export class Application {
     // Register MCP resources for token-efficient read-only access
     this.registerMcpResources(this.mcpServer);
 
+    // Route tool-list-changed to whichever transport is serving. HTTP has no
+    // long-lived instance to push from, so it publishes through the handler's
+    // notifier; STDIO pushes from the instance `serveStdio` pinned.
+    this.mcpToolsManager.setToolsChangedNotifier(async () => {
+      // Both publish synchronously; the notifier stays async so the routing can
+      // change without rippling into every caller.
+      const httpHandler = this.transportRouter?.getHttpHandler();
+      if (httpHandler != null) {
+        httpHandler.notify.toolsChanged();
+        return;
+      }
+      this.mcpServer.sendToolListChanged();
+    });
+
     this.logger.info('All modules initialized successfully');
   }
 
@@ -397,71 +412,54 @@ export class Application {
     };
   }
 
-  private registerMcpResources(target: McpServer): void {
-    // Check if resources registration is enabled
-    const resourcesConfig = this.configManager.getResourcesConfig();
-    if (resourcesConfig.registerWithMcp === false) {
-      this.logger.info('[Resources] MCP resources registration disabled by config');
+  /**
+   * The same factory, wrapped to capture the instance STDIO pins.
+   *
+   * `serveStdio` builds exactly one server for the connection's lifetime, and
+   * the handle it returns exposes only `close()` — there is no notifier on it.
+   * The pinned instance is therefore the only thing that can push a
+   * notification over STDIO, so it is recorded as it is built.
+   *
+   * HTTP needs no equivalent: it has no long-lived instance to record, and
+   * publishes through the handler's own `notify` facade instead.
+   */
+  createStdioServerFactory(): McpServerFactory {
+    const build = this.createMcpServerFactory();
+    return async (ctx) => {
+      const server = (await build(ctx)) as McpServer;
+      this.mcpServer = server;
+      this.mcpToolsManager.setPinnedServer(server);
+      this.notificationEmitter.setServer(
+        server as unknown as import('#infra/observability/notifications/index.js').McpNotificationServer
+      );
+      return server;
+    };
+  }
+
+  /**
+   * Tell clients the resource list changed, through whichever transport serves.
+   *
+   * Resources are hot-reloaded, so without this a client holds a stale list
+   * until it re-lists on its own. The channel existed but had no producer; the
+   * prompt hot-reload completion below is it.
+   */
+  private notifyResourcesChanged(): void {
+    const httpHandler = this.transportRouter?.getHttpHandler();
+    if (httpHandler != null) {
+      httpHandler.notify.resourcesChanged();
       return;
     }
+    notifyResourcesChanged(this.mcpServer, this.logger);
+  }
 
-    // Get optional dependencies from managers (members are definite-assigned at this point)
-    const fm = this.frameworkStateStore.getFrameworkManager();
-    const csm = this.mcpToolsManager.getChainSessionStore();
-    const mc = this.mcpToolsManager.getMetricsCollector();
-
-    registerResources(target, {
+  private registerMcpResources(target: McpServer): void {
+    registerMcpResourcesOn(target, {
       logger: this.logger,
-      // Wrap convertedPrompts array as a getter function for hot-reload compatibility
-      promptManager: {
-        getConvertedPrompts: () => this._convertedPrompts,
-      },
-      // Gate manager uses BaseResourceHandler public methods: list() and get()
-      gateManager: this.gateManager
-        ? {
-            list: (enabledOnly?: boolean) => this.gateManager!.list(enabledOnly),
-            get: (id: string) => this.gateManager!.get(id),
-          }
-        : undefined,
-      // Phase 2: Framework resources
-      frameworkManager:
-        fm != null
-          ? {
-              listFrameworks: (enabledOnly?: boolean) => fm.listFrameworks(enabledOnly),
-              getFramework: (id: string) => fm.getFramework(id),
-            }
-          : undefined,
-      // Phase 2: Observability resources
-      chainSessionStore:
-        csm != null
-          ? {
-              listActiveSessions: (limit?: number) => csm.listActiveSessions(limit),
-              getSession: (sessionId: string) => csm.getSession(sessionId),
-              getSessionByChainIdentifier: (chainId: string) =>
-                csm.getSessionByChainIdentifier(chainId),
-              getSessionStats: () => csm.getSessionStats(),
-            }
-          : undefined,
-      metricsCollector: {
-        getAnalyticsSummary: () => mc.getAnalyticsSummary(),
-      },
-      // Phase 3: Log resources (only if logger is EnhancedLogger with ring buffer)
-      logManager:
-        this.logger instanceof EnhancedLogger
-          ? {
-              getRecentLogs: (opts) => (this.logger as EnhancedLogger).getRecentLogs(opts),
-              getLogEntry: (id) => (this.logger as EnhancedLogger).getLogEntry(id),
-              getBufferStats: () => (this.logger as EnhancedLogger).getBufferStats(),
-            }
-          : undefined,
-      // Pass granular resource config for per-type enable/disable
-      resourcesConfig: {
-        prompts: resourcesConfig.prompts,
-        gates: resourcesConfig.gates,
-        frameworks: resourcesConfig.frameworks,
-        observability: resourcesConfig.observability,
-        logs: resourcesConfig.logs,
-      },
+      configManager: this.configManager,
+      frameworkStateStore: this.frameworkStateStore,
+      mcpToolsManager: this.mcpToolsManager,
+      ...(this.gateManager ? { gateManager: this.gateManager } : {}),
+      getConvertedPrompts: () => this._convertedPrompts,
     });
   }
 
@@ -476,8 +474,8 @@ export class Application {
       configManager: this.configManager,
       promptManager: this.promptManager,
       mcpToolsManager: this.mcpToolsManager,
-      mcpServer: this.mcpServer,
       mcpServerFactory: this.createMcpServerFactory(),
+      stdioServerFactory: this.createStdioServerFactory(),
       runtimeOptions: this.runtimeOptions,
       promptsData: this._promptsData,
       categories: this._categories,
@@ -917,6 +915,11 @@ export class Application {
           this.logger.info(`🔁 Re-registered ${count} prompts after hot reload.`);
           await this.promptManager.notifyPromptsListChanged();
         }
+
+        // Prompt resources project `_convertedPrompts`, so a reload changes the
+        // resource list too. Prompts were already announced above; resources
+        // were the half that had no producer.
+        this.notifyResourcesChanged();
 
         this.logger.info('✅ Prompt data refreshed from filesystem changes.');
       } catch (error) {

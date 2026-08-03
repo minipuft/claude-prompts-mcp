@@ -4,8 +4,6 @@
  * Reuses shared utilities and avoids duplicating transport detection.
  */
 
-import { McpServer } from '@modelcontextprotocol/server';
-
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { ConfigLoader } from '#infra/config/index.js';
 import type { ServerLifecycle } from '#infra/http/index.js';
@@ -26,9 +24,10 @@ export interface ServerStartupParams {
   configManager: ConfigLoader;
   promptManager: PromptAssetManager;
   mcpToolsManager: McpToolRouter;
-  mcpServer: McpServer;
   /** Builds a fresh server per HTTP request; see TransportRouter. */
   mcpServerFactory: McpServerFactory;
+  /** Builds the single server STDIO pins for the connection; see TransportRouter. */
+  stdioServerFactory: McpServerFactory;
   runtimeOptions: RuntimeLaunchOptions;
   transportType?: TransportMode;
   promptsData: PromptData[];
@@ -50,8 +49,8 @@ export async function startServerWithManagers(
     configManager,
     promptManager,
     mcpToolsManager,
-    mcpServer,
     mcpServerFactory,
+    stdioServerFactory,
     runtimeOptions,
     transportType,
     promptsData,
@@ -63,7 +62,12 @@ export async function startServerWithManagers(
     transportType ?? TransportRouter.determineTransport(runtimeOptions.args, configManager);
   logger.debug(`[startup-server] Transport selected: ${transport}`);
 
-  const transportRouter = createTransportRouter(logger, mcpServer, mcpServerFactory, transport);
+  const transportRouter = createTransportRouter(
+    logger,
+    stdioServerFactory,
+    mcpServerFactory,
+    transport
+  );
 
   let apiRouter: ApiRouter | undefined;
   // Create ApiRouter for the HTTP transport

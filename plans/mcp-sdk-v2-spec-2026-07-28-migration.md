@@ -7,7 +7,7 @@ tags: []
 
 # MCP SDK v2 + Spec 2026-07-28 Migration
 
-**Status**: Approved — D1 and D2 decided 2026-08-01. **Tiers A, A2 complete.** **Tier B: B0-B4, B6, B8, B9, B10 landed 2026-08-02; B5 and B7 remain, to be done together.** The tier gate is now an automated e2e fixture, not a manual probe.
+**Status**: **Tier B COMPLETE** (2026-08-02) — B0-B10 all landed. Tiers A and A2 complete. Both protocol eras are served on both transports, guarded by e2e fixtures. Next: Tier C (dynamic tool-schema reconfiguration), which depended on B7.
 **Created**: 2026-08-01
 **Work type**: feature (secondary: refactor) · **Risk**: high · **Confidence**: high
 
@@ -260,9 +260,9 @@ Tier B is the plan's highest-risk tier (a breaking transport rewrite, ~−210 li
 | ✓ B2  | `src/infra/http/transport/index.ts`                                | `createMcpHandler(factory, { legacy: 'stateless' })` + `toNodeHandler` into Express                                                             | ~80       | B1      | dual-era smoke test                                            |
 | ✓ B3  | `src/infra/http/transport/index.ts:9,38,145-234,**372,386-387**`   | **Delete SSE** (pending D1)                                                                                                                     | −150      | B2, D1  | `rg 'sseTransports'` → empty                                   |
 | ✓ B4  | `src/infra/http/transport/index.ts:39,252-296,**274**,392`         | Delete session registry + `sessionIdGenerator`                                                                                                  | −60       | B2      | `rg 'sessionIdGenerator'` → empty                              |
-| ☐ B5  | `src/runtime/startup-server.ts`                                    | `serveStdio(factory)`                                                                                                                           | ~20       | B1      | `verify:mcp` on stdio                                          |
+| ✓ B5  | `src/runtime/startup-server.ts`                                    | `serveStdio(factory)`                                                                                                                           | ~20       | B1      | `verify:mcp` on stdio                                          |
 | ✓ B6  | `src/mcp/tools/index.ts:86,305-339`                                | Identity: `getClientVersion()` → `ctx.mcpReq.envelope`                                                                                          | ~40       | B1, A0b | `request-identity-resolver` + `identity-policy-boundary` pass  |
-| ☐ B7  | `src/mcp/tools/index.ts:899`, `src/modules/resources/index.ts:131` | `sendToolListChanged`/`sendResourceListChanged` → `handler.notify.toolsChanged()`/`.resourcesChanged()`                                         | ~25       | B2      | subscriber receives event                                      |
+| ✓ B7  | `src/mcp/tools/index.ts:899`, `src/modules/resources/index.ts:131` | `sendToolListChanged`/`sendResourceListChanged` → `handler.notify.toolsChanged()`/`.resourcesChanged()`                                         | ~25       | B2      | subscriber receives event                                      |
 | ✓ B8  | `src/runtime/application.ts:241-244`                               | `capabilities` block → `server/discover`                                                                                                        | ~15       | B1      | discover advertises all three surfaces                         |
 | ✓ B9  | `tests/e2e/helpers/http-mcp-client.ts`                             | Dual-protocol fixture                                                                                                                           | ~120      | B2      | drives both revisions against one build                        |
 | ✓ B10 | —                                                                  | Cache posture: keep `tools/list` at `ttlMs: 0` (SDK default), recorded as a deliberate choice                                                   | doc       | B2      | stated in this file                                            |
@@ -322,6 +322,29 @@ The envelope is not merely the newer source — **it is the only correct one ove
 **Also fixed:** `startServerWithHttp` still defaulted to `transport: 'sse'`, a dangling reference to the transport B3 deleted. Now defaults to `streamable-http`.
 
 **Remaining: B5 + B7 together.** The open decision is where notifications bind once `serveStdio(factory)` removes the long-lived instance `McpNotificationEmitter.setServer()` targets. `TransportRouter.getHttpHandler()` already exposes the `notify` facade for the HTTP half.
+
+#### B5 + B7 (2026-08-02, final pass) — Tier B complete
+
+**What B5 actually bought, measured before building it.** The old path connected an `McpServer` straight to a `StdioServerTransport`. Probed against that build, STDIO answered a modern `tools/list` — but only because the protocol layer is permissive. `server/discover` and `subscriptions/listen` both returned `-32601`, and the request `_meta` envelope was never lifted, so B6's identity read had nothing to find there. STDIO was 2025-era wearing a modern coat. After `serveStdio`, all three work and the legacy handshake still answers.
+
+**The design fork resolved by reading the type.** `StdioServerHandle` exposes only `close()` — there is no `notify` facade on it, unlike `McpHttpHandler`. So the pinned instance is the only thing that can push over STDIO. `createStdioServerFactory()` wraps the shared factory and captures the instance as `serveStdio` pins it. HTTP needs no equivalent and gets none.
+
+**A defect B5 introduced and B7 had to fix.** `McpToolRouter` was constructed with the server built at foundation time — but `serveStdio` pins a _different_ instance. Both `sendToolListChanged()` and B6's legacy identity fallback were left pointing at a never-connected object, and would have failed silently. `setPinnedServer()` closes it; `setToolsChangedNotifier()` moves the routing to the runtime, the only layer that knows which transport is live. This is precisely why the two steps could not be split.
+
+**A dead channel that turned out to be a missing producer.** `notifyResourcesChanged` had no production caller (A2 had removed its only import), so the first move was to delete it. An integration suite then failed to load — it had a _test_ consumer. `cleanup-standards.md` §Test Surface Audit says to grep `tests/` as well as `src/`; that step was skipped and the suite caught it.
+
+The deletion was also the wrong call on the merits. Resources project `_convertedPrompts`, which prompt hot-reload replaces, so a reload does change the resource list — clients were simply never told. Zero writers with a live reader meant a **missing producer**, not a redundant channel. The function is restored as the STDIO-path primitive, routed alongside `toolsChanged`, and given the producer it never had at the hot-reload completion in `handlePromptHotReload`.
+
+**One extraction, not for arithmetic.** Adding the factory and notifier pushed `application.ts` past the 1000-line ESLint warning and the ratchet blocked it. Rather than raise the baseline, `registerMcpResources` moved to `runtime/resource-registration.ts` — it is a distinct responsibility (projecting runtime managers onto the resources module's dependency bag, where optional subsystems become omitted capabilities rather than crashes) and it is called once per serving unit. `application.ts` 1341 → 1285 lines; the warning cleared on its own.
+
+**Measured after:** typecheck green · lint ratchet 3363 / 1072, no regressions (from 3413 / 1090) · tests-type ratchet 395, no regressions · 148 suites / 1798 unit · 34 suites / 434 integration · 3 suites / 41 e2e · `verify:mcp` 11/11 · `validate:arch` 0 errors, 439 modules · `validate:contracts` green.
+
+**Tier B gate, both transports:**
+
+| Transport | 2025-era                         | 2026-07-28                                                 |
+| --------- | -------------------------------- | ---------------------------------------------------------- |
+| HTTP      | `verify:mcp` 11/11 + e2e fixture | e2e fixture: `tools/list`, `server/discover`, `tools/call` |
+| STDIO     | `initialize` answers             | `server/discover` answers (was `-32601`)                   |
 
 ### Tier C — dynamic tool-schema reconfiguration
 

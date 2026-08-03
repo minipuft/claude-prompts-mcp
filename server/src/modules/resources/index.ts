@@ -120,11 +120,12 @@ export function registerResources(server: McpServer, dependencies: ResourceDepen
 }
 
 /**
- * Notify connected clients that resources have changed.
- * Call this after hot-reload events to prompt clients to refresh.
+ * Notify a connected client that the resource list changed.
  *
- * @param server - The MCP server instance
- * @param logger - Logger for diagnostics
+ * This is the STDIO path: it pushes from the instance `serveStdio` pinned for
+ * the connection. HTTP has no long-lived instance and publishes through the
+ * handler's `notify.resourcesChanged()` facade instead; the runtime picks
+ * between them.
  */
 export function notifyResourcesChanged(server: McpServer, logger: Logger): void {
   try {

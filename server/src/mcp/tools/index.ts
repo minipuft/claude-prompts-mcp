@@ -159,6 +159,7 @@ export class McpToolRouter {
 
   // Callback references
   private onRestart?: (reason: string) => Promise<void>;
+  private toolsChangedNotifier?: () => Promise<void>;
 
   // Pending analytics queue for initialization race condition
   private pendingAnalytics: any[] = [];
@@ -323,6 +324,31 @@ export class McpToolRouter {
    */
   setNotificationEmitter(emitter: McpNotificationEmitterPort): void {
     this.promptExecutor.setNotificationEmitter(emitter);
+  }
+
+  /**
+   * Publish `tools/list` changes through the transport that is actually serving.
+   *
+   * Under protocol revision 2026-07-28 an unsolicited push is replaced by
+   * `subscriptions/listen`, and the publish side differs per transport: HTTP
+   * uses the handler's notifier, STDIO the instance `serveStdio` pinned. Only
+   * the runtime knows which is live, so it supplies the routing.
+   */
+  setToolsChangedNotifier(notifier: () => Promise<void>): void {
+    this.toolsChangedNotifier = notifier;
+  }
+
+  /**
+   * Adopt the instance `serveStdio` pinned for this connection.
+   *
+   * The server handed to the constructor is built before any transport exists
+   * and, on the STDIO path, is never the one that ends up connected — the
+   * factory builds a fresh instance and `serveStdio` pins that. Reads that must
+   * reflect the live connection, such as the 2025-era client handshake behind
+   * {@link getDetectedClientInfo}, would otherwise consult a dead object.
+   */
+  setPinnedServer(server: McpServer): void {
+    this.mcpServer = server;
   }
 
   /**
@@ -943,12 +969,14 @@ export class McpToolRouter {
         this.logger.info('✅ Tool description manager synchronized');
       }
 
-      // Notify MCP clients that tool list has changed (descriptions updated)
-      if (typeof this.mcpServer?.server?.sendToolListChanged === 'function') {
-        await this.mcpServer.server.sendToolListChanged();
-        this.logger.info('✅ Sent tool list changed notification to MCP clients');
+      // Notify MCP clients that the tool list changed. The routing lives in the
+      // runtime, which is the only place that knows whether HTTP or STDIO is
+      // serving; this class holds no instance it could correctly push from.
+      if (this.toolsChangedNotifier == null) {
+        this.logger.warn('⚠️ No tool-list-changed notifier wired; clients will not be told');
       } else {
-        this.logger.warn('⚠️ MCP server does not support sendToolListChanged notification');
+        await this.toolsChangedNotifier();
+        this.logger.info('✅ Sent tool list changed notification to MCP clients');
       }
 
       this.logger.info('🎉 Tool descriptions updated successfully for framework switch!');

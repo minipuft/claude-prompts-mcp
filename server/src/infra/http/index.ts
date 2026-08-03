@@ -80,7 +80,7 @@ export class ServerLifecycle {
     this.logger.info('Starting dual transport mode (STDIO + SSE)');
 
     // Start STDIO transport first
-    await this.transportRouter.setupStdioTransport();
+    this.transportRouter.setupStdioTransport();
     this.logger.info('STDIO transport ready');
 
     // Then start SSE transport if API manager is available
@@ -123,7 +123,7 @@ export class ServerLifecycle {
    */
   private async startStdioServer(): Promise<void> {
     // For STDIO, we don't need an HTTP server
-    await this.transportRouter.setupStdioTransport();
+    this.transportRouter.setupStdioTransport();
   }
 
   /**
