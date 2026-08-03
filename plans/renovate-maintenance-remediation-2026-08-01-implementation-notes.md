@@ -554,3 +554,17 @@ Renovate cycle; no automerge behavior was enabled during rollout.
 - The lock refresh merged through the failed guard is reverted in the same protected
   correction PR. It may be regenerated and merged later after the configured guard
   actually passes.
+
+### Maintainer correction: defer TypeScript 7
+
+- On 2026-08-03 Renovate opened PR #189 for TypeScript 7.0.2. Its protected lint,
+  CLI, build, and aggregate test contexts failed before the test matrix could run.
+- Current upstream contracts still block the migration: ts-jest 29.4.12 declares
+  TypeScript `>=4.3 <7`, while typescript-eslint 8.65.0 declares `>=4.8.4 <6.1.0`.
+- The TypeScript rule now carries `allowedVersions:"<7.0.0"`, so Renovate may still
+  propose 6.x updates but must not recreate a 7.x PR. Delete the hold only after both
+  peer ranges admit 7 and `validate:arch` proves a non-zero module graph under 7.
+- PR #189 was closed after recording the hold. ts-morph 28 was not included: its
+  upstream release explicitly targets TypeScript 6.0, so PR #188 remains a separate
+  manual-review update rather than being misclassified as part of the TypeScript 7
+  migration.
